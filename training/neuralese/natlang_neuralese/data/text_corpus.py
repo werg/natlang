@@ -85,6 +85,139 @@ def _protected_target_sidecar_equivalence(record, receipt, metadata):
             and metadata.get("source_action_target_sha256") == projection_sha)
 
 
+def _provider_action_normalization_equivalence(record, receipt, metadata):
+    """Verify the materializer's lossless raw-call to ordinary target projection."""
+    adapter = receipt.get("target_binding_adapter")
+    if not isinstance(adapter, dict) or metadata.get("target_binding_adapter") != adapter:
+        return False
+    current_target = record.get("target")
+    target = adapter.get("normalized_target")
+    calls = target.get("tool_calls") if isinstance(target, dict) else None
+    source_ref = record.get("source_ref") or {}
+    raw = adapter.get("raw_action")
+    raw_calls = raw.get("raw_calls") if isinstance(raw, dict) else None
+    source_row = source_ref.get("source_row_sha256")
+    expected_raw_sha = _sha(_canonical(raw).encode("utf-8")) if isinstance(raw, dict) else None
+    target_sha = _sha(_canonical(target).encode("utf-8"))
+    conversion = record.get("neuralese_conversion") or {}
+    converted_binding = metadata.get("target_conversion_binding")
+    current_target_sha = (_sha(_canonical(current_target).encode("utf-8"))
+                          if isinstance(current_target, dict) else None)
+    # The shared converter may replace an exact direct typed text result with a
+    # $write target. Authenticate that one documented transformation from the
+    # pre-conversion target itself; hashes in sidecar metadata alone are not a
+    # proof that an arbitrary changed target is equivalent.
+    expected_converted_target = copy.deepcopy(target) if isinstance(target, dict) else None
+    transformed = False
+    target_writes = conversion.get("selected_runtime_result_writes") or []
+    if not isinstance(target_writes, list):
+        return False
+    for write_receipt in target_writes:
+        if not isinstance(write_receipt, dict):
+            return False
+        call_id = write_receipt.get("action_target_call_id")
+        calls_in_target = expected_converted_target.get("tool_calls") if expected_converted_target else None
+        matching = [call for call in calls_in_target or []
+                    if isinstance(call, dict) and call.get("id") == call_id]
+        if (write_receipt.get("schema") != "natlang.selected-runtime-result-write/1"
+                or write_receipt.get("role") != "selected-direct-typed-text-semantic-writer"
+                or write_receipt.get("source_row_sha256") != source_row
+                or write_receipt.get("trajectory_id") != record.get("teacher_trajectory_id")
+                or write_receipt.get("result_type") != "Neuralese<string>"
+                or write_receipt.get("body_source_basis") != "exact-raw-model-result-string"
+                or write_receipt.get("result_path") != ["return"]
+                or not _sha256_hex(write_receipt.get("typed_result_receipt_sha256"))
+                or len(matching) != 1):
+            return False
+        call = matching[0]
+        fn = call.get("function")
+        if not isinstance(fn, dict) or fn.get("name") != "return_result":
+            return False
+        try:
+            original_args = json.loads(fn.get("arguments"))
+        except (TypeError, json.JSONDecodeError):
+            return False
+        if (not isinstance(original_args, dict) or original_args.get("status") != "success"
+                or not isinstance(original_args.get("value"), str)
+                or _sha(_canonical(original_args).encode("utf-8")) != write_receipt.get("action_arguments_sha256")
+                or _sha(original_args["value"].encode("utf-8")) != write_receipt.get("body_sha256")):
+            return False
+        block_id = write_receipt.get("block_id")
+        writer_call_id = write_receipt.get("writer_call_id")
+        writer_node = write_receipt.get("writer_node")
+        if (not isinstance(block_id, str) or not isinstance(writer_call_id, str)
+                or not isinstance(writer_node, str)
+                or write_receipt.get("target_write_name") != _direct_result_event_name(
+                    block_id, write_receipt["trajectory_id"], writer_call_id, writer_node)):
+            return False
+        replacement = {"$write": {"name": write_receipt["target_write_name"],
+            "block_id": block_id, "type": "Neuralese<string>", "source": original_args["value"]}}
+        if _sha(_canonical(replacement).encode("utf-8")) != write_receipt.get("target_write_sha256"):
+            return False
+        converted_args = {**original_args, "value": replacement}
+        call["function"] = {**fn, "arguments": _canonical(converted_args)}
+        transformed = True
+    if target_writes and not transformed:
+        return False
+    def normalized_target_arguments(value):
+        if not isinstance(value, dict):
+            return None
+        normalized = copy.deepcopy(value)
+        for call in normalized.get("tool_calls", []):
+            fn = call.get("function") if isinstance(call, dict) else None
+            if not isinstance(fn, dict):
+                return None
+            try:
+                fn["arguments"] = _canonical(json.loads(fn.get("arguments")))
+            except (TypeError, json.JSONDecodeError):
+                return None
+        return normalized
+
+    structurally_authenticated = (
+        normalized_target_arguments(expected_converted_target) is not None
+        and normalized_target_arguments(current_target) is not None
+        and _canonical(normalized_target_arguments(expected_converted_target)) ==
+            _canonical(normalized_target_arguments(current_target)))
+    if (adapter.get("schema") != "natlang.provider-action-target-normalization/1"
+            or adapter.get("kind") != "exact-raw-provider-calls-to-materialized-tool-calls"
+            or adapter.get("source_row_sha256") != source_row
+            or adapter.get("source_trajectory_index") != (record.get("decision") or {}).get("index")
+            or adapter.get("raw_action_sha256") != expected_raw_sha
+            or adapter.get("normalized_target_sha256") != target_sha
+            or not isinstance(converted_binding, dict)
+            or converted_binding.get("schema") != "natlang.provider-action-converted-target-binding/1"
+            or converted_binding.get("source_materialized_target_sha256") != target_sha
+            or metadata.get("source_materialized_target_sha256") != target_sha
+            or converted_binding.get("converted_target_sha256") != current_target_sha
+            or converted_binding.get("conversion_version") != conversion.get("version")
+            or not structurally_authenticated
+            or receipt.get("source_row_sha256") != source_row
+            or receipt.get("source_trajectory_index") != adapter.get("source_trajectory_index")
+            or receipt.get("source_action_target_sha256") != target_sha
+            or metadata.get("source_action_target_sha256") != target_sha
+            or not isinstance(target, dict) or not isinstance(calls, list) or not isinstance(raw_calls, list)
+            or len(calls) != len(raw_calls) or adapter.get("call_count") != len(calls)
+            or target.get("role") != "assistant" or raw.get("role") != "assistant"
+            or raw.get("content", "") != target.get("content", "")):
+        return False
+    for call_index, (raw_call, call) in enumerate(zip(raw_calls, calls)):
+        fn = raw_call.get("function") if isinstance(raw_call, dict) else None
+        normalized_fn = call.get("function") if isinstance(call, dict) else None
+        expected_index = (record.get("decision") or {}).get("index")
+        if (not isinstance(call, dict) or call.get("id") != f"teacher_{expected_index}_{call_index}"
+                or call.get("type") != "function" or not isinstance(fn, dict) or not isinstance(normalized_fn, dict)):
+            return False
+        try:
+            raw_args = json.loads(fn.get("arguments"))
+            normalized_args = json.loads(normalized_fn.get("arguments"))
+        except (TypeError, json.JSONDecodeError):
+            return False
+        if (fn.get("name") != normalized_fn.get("name")
+                or _canonical(raw_args) != _canonical(normalized_args)):
+            return False
+    return True
+
+
 def _authenticated_derived_semantic_text_write(record):
     """Validate the explicitly transformed pure-literal eval-to-text target view."""
     derived = record.get("derived_target")
@@ -624,7 +757,9 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                     "typed-read-linked-to-existing-writer",
                     "typed-read-from-authenticated-runtime-writer-event-context-only"})
                      or (item.get("origin") == "runtime-definition-context-only"
-                         and item.get("learner_representation") == "runtime-definition-context-only"))]
+                         and item.get("learner_representation") == "runtime-definition-context-only")
+                     or (item.get("origin") == "captured-provider-input-context-only"
+                         and item.get("learner_representation") == "captured-expanded-provider-input-context-only"))]
     if not metadata:
         return []
     reads = list(_message_soft_reads(record.get("messages") or []))
@@ -634,6 +769,82 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
     for item in metadata:
         block_id = item.get("block_id")
         body_sha256 = item.get("body_sha256")
+        if item.get("origin") == "captured-provider-input-context-only":
+            refs = [receipt for receipt in ((record.get("source_ref") or {}).get(
+                "provider_expanded_visible_inputs") or [])
+                    if isinstance(receipt, dict)
+                    and receipt.get("schema") == "natlang.provider-expanded-visible-input/1"
+                    and (receipt.get("block") or {}).get("id") == block_id]
+            if len(refs) != 1:
+                raise ValueError("captured provider input lacks one exact source receipt")
+            receipt = refs[0]
+            block = receipt.get("block") or {}
+            capture = receipt.get("input_capture") or {}
+            source_ref = record.get("source_ref") or {}
+            adapter_valid = _provider_action_normalization_equivalence(record, receipt, item)
+            required_equal = (
+                (item.get("source_row_sha256"), receipt.get("source_row_sha256")),
+                (item.get("trace_sha256"), receipt.get("trace_sha256")),
+                (item.get("invocation_id"), receipt.get("invocation_id")),
+                (item.get("source_trajectory_index"), receipt.get("source_trajectory_index")),
+                (item.get("source_action_target_sha256"), receipt.get("source_action_target_sha256")),
+                (item.get("source_request_sha256"), receipt.get("source_request_sha256")),
+                (item.get("source_response_sha256"), receipt.get("source_response_sha256")),
+                (item.get("raw_request_sha256"), receipt.get("raw_request_sha256")),
+                (item.get("rendered_request_sha256"), receipt.get("rendered_request_sha256")),
+                (item.get("transport_provenance_sha256"), receipt.get("transport_provenance_sha256")),
+                (item.get("input_capture"), receipt.get("input_capture")),
+                (item.get("input_capture_sha256"), receipt.get("input_capture_sha256")),
+            )
+            body = block.get("body")
+            try:
+                capture_sha = _sha(_canonical(capture).encode("utf-8"))
+            except (TypeError, ValueError):
+                capture_sha = None
+            typed_occurrences = typed_neuralese_ref_count(record.get("messages") or [], block_id)
+            if typed_occurrences:
+                visible_occurrences = typed_occurrences
+            else:
+                def count_exact_text(value):
+                    if isinstance(value, str):
+                        return value.count(body) if isinstance(body, str) and body else 0
+                    if isinstance(value, list):
+                        return sum(count_exact_text(part) for part in value)
+                    if isinstance(value, dict):
+                        return sum(count_exact_text(part) for part in value.values())
+                    return 0
+                visible_occurrences = count_exact_text(record.get("messages") or [])
+            if (any(left != right for left, right in required_equal)
+                    or not adapter_valid
+                    or receipt.get("kind") != "captured-provider-input-context-only"
+                    or receipt.get("invocation_id") != reader_invocation
+                    or receipt.get("source_row_sha256") != reader_source_row
+                    or receipt.get("trace_sha256") != ((record.get("provenance") or {}).get("trace_sha256"))
+                    or receipt.get("source_trajectory_index") != (record.get("decision") or {}).get("index")
+                    or receipt.get("writer_target_selected") is not False
+                    or receipt.get("recurrence_edge_created") is not False
+                    or receipt.get("learned_vectors") is not False
+                    or receipt.get("qualification_certificate") is not False
+                    or receipt.get("training_admission") is not False
+                    or item.get("learner_representation") != "captured-expanded-provider-input-context-only"
+                    or capture.get("schema") != "natlang.captured-provider-expanded-input/1"
+                    or capture_sha != receipt.get("input_capture_sha256")
+                    or capture.get("block") != block
+                    or block.get("type") != item.get("type")
+                    or block.get("body_sha256") != body_sha256
+                    or not isinstance(body, str) or _sha(body.encode("utf-8")) != body_sha256
+                    or visible_occurrences < 1
+                    or (typed_occurrences > 0 and visible_occurrences != item.get("context_occurrences"))
+                    or (typed_occurrences == 0 and visible_occurrences < item.get("context_occurrences", 1))
+                    or item.get("context_occurrences") != receipt.get("context_occurrences")
+                    or any(not _sha256_hex(receipt.get(field)) for field in (
+                        "source_request_sha256", "source_response_sha256", "raw_request_sha256",
+                        "rendered_request_sha256", "transport_provenance_sha256"))):
+                raise ValueError("captured provider input context does not match exact body, request and target provenance")
+            attestations.append({key: value for key, value in item.items() if key != "input_capture"} | {
+                "block_id": block_id, "reader_record_id": record.get("id"), "body": body,
+                "source_kind": "provider_expanded_context_only_input"})
+            continue
         if item.get("origin") == "runtime-definition-context-only":
             refs = [receipt for receipt in ((record.get("source_ref") or {}).get(
                 "provider_expanded_read_contexts") or [])
@@ -950,7 +1161,8 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                                       else record.get("target"))
             protected_target_sha = _sha(_canonical(selected_action_target).encode("utf-8"))
             target_adapter = receipt.get("target_binding_adapter")
-            adapter_valid = (_protected_target_sidecar_equivalence(record, receipt, item)
+            adapter_valid = (_provider_action_normalization_equivalence(record, receipt, item)
+                             or _protected_target_sidecar_equivalence(record, receipt, item)
                              if target_adapter is not None else False)
             if (type(receipt.get("source_trajectory_index")) is not int
                     or receipt.get("source_trajectory_index") != (record.get("decision") or {}).get("index")

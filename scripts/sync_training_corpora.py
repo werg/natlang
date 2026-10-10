@@ -348,6 +348,24 @@ def local_references(paths, proc_root=Path('/proc')):
         # Only explicit path operands can establish a directory reference.
         # A file operand's lexical parent is not an implicit directory use.
         operands = list(path_operands(argv, cwd, equals=True))
+        resource_argv = argv
+        if argv and Path(argv[0]).name == 'docker':
+            # Docker's working directory is execution context, like PWD. A
+            # repo-wide -w must not mark every inactive artifact below the
+            # checkout as an input to that container. Explicit input/output
+            # operands, the exact cwd parent and open descriptors still count.
+            resource_argv = []
+            skip_workdir_value = False
+            for value in argv:
+                if skip_workdir_value:
+                    skip_workdir_value = False
+                    continue
+                if value in {'-w', '--workdir'}:
+                    skip_workdir_value = True
+                    continue
+                if value.startswith('--workdir='):
+                    continue
+                resource_argv.append(value)
         env_operands = []
         for item in environment:
             if '=' in item:
@@ -361,7 +379,8 @@ def local_references(paths, proc_root=Path('/proc')):
         # worker owns. The actual cwd is checked separately below; resource
         # variables such as CHECKPOINT or DATA_DIR remain explicit references.
         ambient_directories = {'HOME', 'PWD', 'OLDPWD'}
-        directory_operands = [operand for operand in operands if operand.is_dir()]
+        directory_operands = [operand for operand in path_operands(resource_argv, cwd, equals=True)
+                              if operand.is_dir()]
         directory_operands.extend(operand for key, operand in env_operands
                                   if key.upper() not in ambient_directories and operand.is_dir())
         command_text = ' '.join(argv)

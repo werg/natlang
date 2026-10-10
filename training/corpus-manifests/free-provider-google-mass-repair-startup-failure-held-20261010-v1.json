@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-mass-repair-startup-failure-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v6",
+  "files": [
+    {
+      "path": "startup-failure-closeout-v1.json",
+      "bytes": 2021,
+      "sha256": "5e4841f007c5a9fa6ddb3d732289ef02bfb20adf530be48da119799cb4b8cb1d"
+    },
+    {
+      "path": "worker.log",
+      "bytes": 370,
+      "sha256": "ea44741b1afa8cb049805f5f4327646aec8f85145928b04b0aa29eef18b6e4d5"
+    }
+  ],
+  "bytes": 2391
+}

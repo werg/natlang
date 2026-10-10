@@ -1,0 +1,48 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-sourcebound16-logical-static-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/gemini-poolv3-static-sourcebound-boardgame-ruletaker-16-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1192,
+      "sha256": "44b8bffb5ea48643ea8e8a3122f7410a763ad69ced6265538287ecb34911e527"
+    },
+    {
+      "path": "admission-review.json",
+      "bytes": 7704,
+      "sha256": "1f964a81d216a7748809542286d27987654d83fd853dbaae4f7e179a1bf02e5b"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 68616,
+      "sha256": "8e5adbf82f37162cc03a819e4f9acef2277a4ca479841e5d01809dab4a42546f",
+      "lines": 2
+    },
+    {
+      "path": "native.held.jsonl",
+      "bytes": 3357347,
+      "sha256": "1b1c390d21bde5fa60cb4b285189995bf25bac8075ff8317bf0548a3df45a391",
+      "lines": 36
+    },
+    {
+      "path": "replay.results.jsonl",
+      "bytes": 1075227,
+      "sha256": "662316d830f2188dad666efbdcc7938d08ca2d95461251ca0789da76b8042fb4",
+      "lines": 2
+    },
+    {
+      "path": "source-bound-rows.jsonl",
+      "bytes": 53863,
+      "sha256": "4ff554268baf4b30d7997f87e4866acb93b84f2eb453c32bdab5e02b0123cf4a",
+      "lines": 16
+    },
+    {
+      "path": "summary.json",
+      "bytes": 5039,
+      "sha256": "19fb2db9e6017bb0c8ac6e58a52780e79318218e7231267c90ca3bb2a701914d"
+    }
+  ],
+  "bytes": 4568988
+}

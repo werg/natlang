@@ -1358,8 +1358,20 @@ def main(argv=None):
         continuation=torch.load(a.continue_from,map_location='cpu',weights_only=False,mmap=True)
         if continuation.get('schema')!='natlang.neuralese-text-warmup/1':raise ValueError('full text warm-up state required')
         old=continuation['identity']['options']
-        if any(old[k]!=options[k] for k in ('optimizer','rank','lr','sketch_lr')):
+        if any(old[k]!=options[k] for k in ('optimizer','rank')):
             raise ValueError('continuation optimizer/parameter policy differs')
+        # A declared new lineage may change rates without discarding moments.
+        # Named optimizer restoration below authenticates the parameter groups;
+        # foundation_base_lr is then reset from the new recipe, never inherited.
+        changed_rates={key:[old[key],options[key]] for key in ('lr','sketch_lr')
+                       if old[key]!=options[key]}
+        if changed_rates:
+            handoff={'event':'learning_rate_handoff','step':continuation['step'],
+                     'changed':changed_rates,'optimizer_state_policy':'restore',
+                     'schedule_policy':'same objective retains plateau/pass state',
+                     'qualification_policy':'fresh lineage baseline and gate streak'}
+            code_handoffs.append(handoff)
+            print(json.dumps(handoff),flush=True)
         if a.ar_feedback_fixup and not any(str(key).startswith('input_map.') for key in continuation.get('heads',{})):
             raise ValueError('AR feedback fixup requires structurally present mapped-input heads')
     a.out.mkdir(parents=True,exist_ok=True)

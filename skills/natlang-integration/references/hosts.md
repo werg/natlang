@@ -33,6 +33,8 @@ To show a natlang function working, subscribe to live events: `onLive` on the ru
 
 Named functions can also be loaded directly: `loadNatlang('review.nl')` (Node), `loadVirtualNatlang(files, 'review.nl')`, or `defineNatlang(nlSourceText)` for functions authored at run time (notebook cells, generated tools). `loadCallables('natlang.d')` loads a callable folder as a record. Tests that run application code importing `.nl` files under Vite or Vitest add `plugins: [natlangVitePlugin()]` (from `@natlang/node`): each `.nl` import loads as `loadNatlang` would, with the nearest `package.json` above it as the package root.
 
+Inline `nl<T>` result annotations written in eval are checked against the eval scope's declared type names. A type alias shown only in an earlier natural-language instruction is not in that scope; `nl-undeclared-type` identifies it before the child silently becomes `unknown`. Declare the alias in scope or write the required structure in the annotation.
+
 ## Crisp and natural-language implementations of one part
 
 A hot part with a crisp and a natural-language implementation (validation, settlement, a scheduler's policy, an entry function the host selects) is one `pluggable` call behind a setting, not a hand-written `if`:

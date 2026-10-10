@@ -884,8 +884,38 @@ function capturedProviderSampledChildAction(row: NativeRow, source: Dict, invoca
  * configured body block and that the read flowed into its model turn. The materialized row binds the copied
  * evidence to its source-row and trace digests below.
  */
+function providerActionNormalizationAdapter(source: Dict, target: Dict, sourceRowSha256: string,
+  trajectoryIndex: number): Dict | undefined {
+  const response = source.model_response && typeof source.model_response === 'object' ? source.model_response as Dict : {};
+  const rawCalls = Array.isArray(response.raw_calls) ? response.raw_calls : [];
+  const normalizedCalls = Array.isArray(target.tool_calls) ? target.tool_calls as Dict[] : [];
+  if (!rawCalls.length || rawCalls.length !== normalizedCalls.length ||
+      typeof sourceRowSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sourceRowSha256)) return;
+  for (let index = 0; index < rawCalls.length; index++) {
+    const raw = rawCalls[index] as Dict;
+    const fn = raw && typeof raw.function === 'object' ? raw.function as Dict : {};
+    const normalized = normalizedCalls[index];
+    const normalizedFn = normalized?.function && typeof normalized.function === 'object' ? normalized.function as Dict : {};
+    if (typeof fn.name !== 'string' || typeof fn.arguments !== 'string' ||
+        typeof normalizedFn.name !== 'string' || typeof normalizedFn.arguments !== 'string') return;
+    let rawArgs: unknown, normalizedArgs: unknown;
+    try { rawArgs = JSON.parse(fn.arguments); normalizedArgs = JSON.parse(normalizedFn.arguments); }
+    catch { return; }
+    if (fn.name !== normalizedFn.name || canonical(rawArgs) !== canonical(normalizedArgs)) return;
+  }
+  const rawAction = { role: 'assistant', content: response.text ?? '', raw_calls: structuredClone(rawCalls) };
+  return { schema: 'natlang.provider-action-target-normalization/1',
+    kind: 'exact-raw-provider-calls-to-materialized-tool-calls', source_row_sha256: sourceRowSha256,
+    source_trajectory_index: trajectoryIndex, raw_action: rawAction,
+    normalized_target: structuredClone(target),
+    raw_action_sha256: nativeDecisionTargetDigest(rawAction),
+    normalized_target_sha256: nativeDecisionTargetDigest(target),
+    call_count: rawCalls.length };
+}
+
 function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha256: string,
-  invocationId: string | undefined, trajectoryIndex: number, target: Dict): Dict[] {
+  invocationId: string | undefined, trajectoryIndex: number, target: Dict,
+  targetBindingAdapter?: Dict): Dict[] {
   if (!invocationId) return [];
   const response = source.model_response && typeof source.model_response === 'object' ? source.model_response as Dict : {};
   const transport = response.transport_provenance && typeof response.transport_provenance === 'object' ?
@@ -1064,6 +1094,7 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
       raw_request_sha256: transport.raw_request_sha256, rendered_request_sha256: transport.rendered_request_sha256,
       source_request_sha256: sourceRequestSha256, source_response_sha256: sourceResponseSha256,
       source_trajectory_index: trajectoryIndex, source_action_target_sha256: nativeDecisionTargetDigest(target),
+      ...(targetBindingAdapter ? { target_binding_adapter: structuredClone(targetBindingAdapter) } : {}),
       prompt_revision: transport.prompt_revision ?? null, origin,
       readout: readoutMatch ? structuredClone(readout) : null, block: structuredClone(block),
       definition: definition.length === 1 ? structuredClone(definition[0]!.definition) : null,
@@ -1077,6 +1108,55 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
       ...(origin === 'same-run-producer' ? { writer_target_selected: false,
         writer_source_class: writers.length === 1 ? writerSourceClass(writers[0]!) : null,
         ...(writers.length === 1 ? { writer_witness: legacyResultWitness(writers[0]!)?.witness ?? null } : {}) } : {}),
+      learned_vectors: false, qualification_certificate: false, training_admission: false });
+  }
+  return receipts;
+}
+
+/** Capture provider-expanded typed bodies that were present in this exact model input.
+ * This proves visible context only; it does not assert a writer event or recurrence edge.
+ */
+function providerExpandedVisibleInputs(source: Dict, row: NativeRow, sourceRowSha256: string,
+  invocationId: string | undefined, trajectoryIndex: number, target: Dict,
+  targetBindingAdapter?: Dict): Dict[] {
+  if (!invocationId || !targetBindingAdapter) return [];
+  const response = source.model_response && typeof source.model_response === 'object' ? source.model_response as Dict : {};
+  const transport = response.transport_provenance && typeof response.transport_provenance === 'object' ?
+    response.transport_provenance as Dict : undefined;
+  const expanded = transport?.expanded_input_blocks;
+  const context = Array.isArray(source.context) ? source.context : [];
+  if (!transport || transport.learned_vectors !== false || transport.qualification_certificate !== false ||
+      transport.training_admission !== false || typeof transport.raw_request_sha256 !== 'string' ||
+      typeof transport.rendered_request_sha256 !== 'string' || typeof row.provenance.trace_sha256 !== 'string' ||
+      typeof source.request_sha256 !== 'string' || typeof source.raw_response_sha256 !== 'string' ||
+      !Array.isArray(expanded)) return [];
+  const receipts: Dict[] = [];
+  const seen = new Set<string>();
+  for (const value of expanded) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const block = value as Dict;
+    const id = block.id;
+    if (typeof id !== 'string' || !/^nz1_[a-z2-7]{20,}$/.test(id) || seen.has(id) ||
+        typeof block.type !== 'string' || !block.type.startsWith('Neuralese<') ||
+        typeof block.body !== 'string' || typeof block.body_sha256 !== 'string' ||
+        hexDigest(block.body) !== block.body_sha256 || block.learned_vectors !== false) continue;
+    const occurrences = countTypedNeuraleseReferences(context, id);
+    if (occurrences < 1) continue;
+    seen.add(id);
+    const inputCapture = { schema: 'natlang.captured-provider-expanded-input/1', block: structuredClone(block),
+      raw_request_sha256: transport.raw_request_sha256, rendered_request_sha256: transport.rendered_request_sha256,
+      transport_provenance_sha256: hexDigest(canonical(transport)) };
+    receipts.push({ schema: 'natlang.provider-expanded-visible-input/1',
+      origin: 'captured-provider-input-context-only', kind: 'captured-provider-input-context-only', invocation_id: invocationId,
+      source_row_sha256: sourceRowSha256, trace_sha256: row.provenance.trace_sha256,
+      source_trajectory_index: trajectoryIndex, source_action_target_sha256: nativeDecisionTargetDigest(target),
+      target_binding_adapter: structuredClone(targetBindingAdapter),
+      source_request_sha256: source.request_sha256, source_response_sha256: source.raw_response_sha256,
+      raw_request_sha256: transport.raw_request_sha256, rendered_request_sha256: transport.rendered_request_sha256,
+      transport_provenance_sha256: inputCapture.transport_provenance_sha256,
+      block: structuredClone(block), input_capture: inputCapture,
+      input_capture_sha256: hexDigest(canonical(inputCapture)),
+      context_occurrences: occurrences, writer_target_selected: false, recurrence_edge_created: false,
       learned_vectors: false, qualification_certificate: false, training_admission: false });
   }
   return receipts;
@@ -1482,7 +1562,11 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const decisionApproved = (!authoredRootAction || !!semanticApproval) && !authoredGuidanceBlocked && !semanticHold && !afterChunkCutoff &&
         (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
         !heldDirect && !variantContext && !invalidStatusOnlySuccess;
-      const expandedReadContexts = providerExpandedReadContexts(source, row, rowDigest, invocation, index, target);
+      const targetBindingAdapter = providerActionNormalizationAdapter(source, target, rowDigest, index);
+      const expandedReadContexts = providerExpandedReadContexts(source, row, rowDigest, invocation, index, target,
+        targetBindingAdapter);
+      const expandedVisibleInputs = providerExpandedVisibleInputs(source, row, rowDigest, invocation, index, target,
+        targetBindingAdapter);
       if (authoredRootAction && !decisionApproved) authoredActions.push({ version: 'natlang.authored_action_hold/1',
         id: `${row.id}:authored-action:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest, invocation_id: invocation ?? null,
@@ -1504,7 +1588,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           ...(invocation ? { invocation_id: invocation, ...(instructionSites.has(invocation) ? { inline_instruction_site: instructionSites.get(invocation) } : {}), ...(parents.has(invocation) ? { parent_invocation_id: parents.get(invocation) } : {}),
             ...(lastInvocationDecision.get(invocation) === index && hostOutputs.has(invocation) ?
               { host_result_capture: hostOutputs.get(invocation) } : {}),
-            ...(expandedReadContexts.length ? { provider_expanded_read_contexts: expandedReadContexts } : {}) } : {}),
+            ...(expandedReadContexts.length ? { provider_expanded_read_contexts: expandedReadContexts } : {}),
+            ...(expandedVisibleInputs.length ? { provider_expanded_visible_inputs: expandedVisibleInputs } : {}) } : {}),
           program_ir_id: programId },
         provenance: row.provenance,
         ...(row.collection_guidance ? { collection_guidance: row.collection_guidance } : {}),

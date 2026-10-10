@@ -21618,6 +21618,586 @@
       "admission": "exact provenance subset/review only; root16logical-row source approval pending global protected closure/current admitted derivative",
       "independent_new_worlds": 0,
       "notes": "24 rows bound to pinned official Parquet/physicalrow/hash,3authoredreferencewrappers/54native turns. CivilComments8excludedfrom firstqualitysubset due subjective/context quantization. Separatev20records ZAI V28ordering rejection, no transportfault; review evidence notrawclosedcasebytes."
+    },
+    {
+      "id": "free-provider-zai45-v28-case0-ordering-failure-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev28-five-runtimev6-v1/case-000",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-model-semantic-ordering-failure",
+      "training_admission": false,
+      "admission": "failed actual teacher trajectory/review evidence only; potential same-contract preference negative requires valid paired success",
+      "independent_new_worlds": 0,
+      "notes": "52turns32447completiontokens, correcteligible set and advance but returned ascendingIDs/measures instead of explicit descendingcount ordering. Transportcomplete. SourceV28source-v3 immutable, oldruntimev6 metadata falselyv1 actualnativev2 documented by sharedschemafix; no retrospectivetrace mutation."
+    },
+    {
+      "id": "free-provider-sourcebound16-logical-static-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/gemini-poolv3-static-sourcebound-boardgame-ruletaker-16-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "source-bound-reviewed-logical-static-reference-candidate",
+      "training_admission": false,
+      "admission": "rootcontentreviewpassed; globalprotectedclosureawaitsportableindexes; conditionalstaticreferenceallowlistonly",
+      "independent_new_worlds": 0,
+      "notes": "16explicitpublictrainrows,2authoredwrappercases/36native turns,sourcebindingproviderreceipts preserved; zerooriginal7624heldoutgroup/exactstateoverlap andlocalbenchmarkexacthits. CivilComments excluded. No teacherreasoning/learnedchannel/worldcredit."
+    },
+    {
+      "id": "free-provider-luna-v28-five-runtimev7-queued-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev28-five-runtimev7-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-dispatch-receipt-v1.json",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-native-teacher-generation-queue",
+      "training_admission": false,
+      "admission": "immutable launch inputs only; evolving outputs excluded pending independent source/trajectory quality review",
+      "independent_new_worlds": 0,
+      "notes": "Five disjoint queues against the existing reviewed V28 source-v3. gpt-6-luna/openai-codex, one request per worker, 32K context. Exact source/approval/runtime/supervisor SHA pins in reviewed plan. No gold injected, no teacher outcome or new-world credit. Mutable campaign launch, journals and outputs excluded."
+    },
+    {
+      "id": "free-provider-frozen-runtimev7-generation-evidence-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v7",
+      "include": [
+        "**/*"
+      ],
+      "split": "not-applicable",
+      "source_class": "immutable-generation-runtime-evidence",
+      "training_admission": false,
+      "admission": "execution evidence only, not a training corpus",
+      "independent_new_worlds": 0,
+      "notes": "Frozen runtime artifact for native Luna V28 campaign, 1330 pinned files. Includes shared scope-eval-v2 metadata correction; active older runtimes are unchanged. Source development synchronizes through Git; this snapshot preserves exact generation execution."
+    },
+    {
+      "id": "free-provider-luna-v28-five-closed-native-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev28-five-runtimev7-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-native-teacher-sampled-trajectories",
+      "training_admission": false,
+      "admission": "five case-oracle successes pending independent trajectory/source/split quality review",
+      "independent_new_worlds": 0,
+      "notes": "gpt-6-luna/runtimev7, 5/5 case accepted; 313 saved model replies and78633completion tokens. Exact terminal result accounting verified by supervisor; immutable journals preserve counts. Existing V28 train worlds, not independent new worlds. Case acceptance does not qualify learned neuralese channel or automatic SFT/DPO admission."
+    },
+    {
+      "id": "free-provider-luna-v29-five-runtimev7-queued-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev29-five-runtimev7-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-dispatch-receipt-v1.json",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-native-teacher-generation-queue",
+      "training_admission": false,
+      "admission": "immutable launch inputs only; outputs held pending quality review",
+      "independent_new_worlds": 0,
+      "notes": "Five fresh native workers on exact previously reviewed V29source-v2, two source repairs plus three counterfactuals, unchanged gold. SHA/source approval pinned. gpt-6-luna, runtimev7, one model request per worker, 32K context; evolving journals/results excluded."
+    },
+    {
+      "id": "free-provider-quality-review-v21-luna-v28-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-luna-v28-five",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "independent-native-trajectory-quality-review",
+      "training_admission": false,
+      "admission": "review evidence; exact native data still needs declared admission and text/current-IR derivative review",
+      "independent_new_worlds": 0,
+      "notes": "All five exact V28 oracles pass; three explicit iterateOn traces, all five four typed FileHandle/priorNotes pass children. Scope/WebSocket recoveries retained. Case0 paired-task ordering contrast with ZAI is not automatically a DPO identical-prefix pair. Emulated markers do not qualify learned neuralese."
+    },
+    {
+      "id": "free-provider-google-pool-v4-closed-typed-labels-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v4",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "labels.jsonl",
+        "labels.jsonl.attempts.jsonl",
+        "labels.jsonl.manifest.json",
+        "worker.log",
+        "frozen-adapter-v1/*.py",
+        "frozen-adapter-v1/models.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-typed-decision-label-collection",
+      "training_admission": false,
+      "admission": "1024 typed labels pending source-bound truth/schema/quality review; standalone labels are not native teacher trajectories",
+      "independent_new_worlds": 0,
+      "notes": "Four quota-group workers with soleprojectlock; batch closed and v5 automatically continued. No raw probability annotation conversion or trace/reasoning credit. Independent LunaV22 review pending."
+    },
+    {
+      "id": "free-provider-quality-review-v22-gemini-v4-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v22-gemini-v4",
+      "include": [
+        "review.json",
+        "review.md",
+        "root-mass-diagnosis-v1.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "independent-typed-label-quality-review",
+      "training_admission": false,
+      "admission": "review evidence only; source-binding/admission still pending",
+      "independent_new_worlds": 0,
+      "notes": "846valid/178invalid, allprobabilitymass; 581gradedgates but21ordinaldecisionfalseadmissions. Rootsupplement refinesfailurecause:46allzero/132substantialmass errors, norounding-only. No rawnormalization/teachertrajectorycredit."
+    },
+    {
+      "id": "free-provider-google-v4-mass-repair-v6-queued-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v6",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/*.py",
+        "frozen-adapter-v1/models.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "quota-locked-invalid-typed-output-regeneration-queue",
+      "training_admission": false,
+      "admission": "generation inputs only; repair outputs still require schema/sourcequality review",
+      "independent_new_worlds": 0,
+      "notes": "Exact178failedV4inputs, sourceannotations/splits unchanged, newprompt clarifiesexclusiveprobabilitymass and noallzero. Samefree4quota-group scheduler/soleprojectlock behindV5, no extra immediate calls or paidfallback. Originalinvalidresponses preserved separately. Closed startup importfailure before any requests; replaced by separatelypinned V7 frozenlayout, see startupcloseout."
+    },
+    {
+      "id": "free-provider-google-mass-repair-startup-failure-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v6",
+      "include": [
+        "worker.log",
+        "startup-failure-closeout-v1.json"
+      ],
+      "split": "not-applicable",
+      "source_class": "closed-provider-launch-failure-evidence",
+      "training_admission": false,
+      "admission": "startup failure, no API request or training sample",
+      "independent_new_worlds": 0,
+      "notes": "Shared persistence import missing from flatfrozenlayout. Originalreceipt/snapshot untouched; correctedV7 preserves package layout through sharedfreezehelper."
+    },
+    {
+      "id": "free-provider-google-v4-mass-repair-v7-queued-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v7",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/frozen-runtime.json",
+        "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+        "frozen-adapter-v1/scripts/label_decision_cases.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+        "frozen-adapter-v1/models.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "quota-locked-invalid-typed-output-regeneration-queue",
+      "training_admission": false,
+      "admission": "generation inputs only; regeneratedlabels pending schema/sourcequalityreview",
+      "independent_new_worlds": 0,
+      "notes": "Exact178invalidV4inputs; sharedprompt/strictmassvalidation. Sharedfreezehelper preserves scheduler/sharedJSONwriter relativepackage layout; no sourcepathhardcoding. Confirmedsoleprojectlockwait, V5untouched; no paidfallback."
+    },
+    {
+      "id": "luna-v31-reviewed-twelve-counterfactual-source-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-v31-next-iterate-expansion-20261010-v1",
+      "include": [
+        "build-source.mjs",
+        "source-v2/source.cases.jsonl",
+        "source-v2/source-proof.json",
+        "source-v2/source-manifest.json",
+        "source-v2/root-review-plan.json",
+        "source-v2/root-generation-source-review-v1.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-author-derived-semantic-iterate-counterfactual-sources",
+      "training_admission": false,
+      "admission": "sampling source approval only; generated trajectories need independent visibility/quality review",
+      "independent_new_worlds": 0,
+      "notes": "12unique inherited V25/V26train groups disjointV28/V29; one explicitpredicateedit percase, regeneratedvisiblefactline, exactrecomputedoracle; no goldinvisibleinput. Source-v1intermediate excluded; source-v2metadata corrected. Historicalbuilder pinned; sharedCLI generalization inprogress."
+    },
+    {
+      "id": "free-provider-luna-v31-twelve-runtimev8-queued-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev31-twelve-runtimev8-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-dispatch-receipt-v1.json",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-native-teacher-generation-queue",
+      "training_admission": false,
+      "admission": "queue/launch evidence only; evolvingoutputs excluded until closed review",
+      "independent_new_worlds": 0,
+      "notes": "12singlecase queueentries allocated2/3/3/2/2 acrossfiveworkers; source/proof/rootapproval/runtime/supervisor pins. gpt-6-luna, one requestperworker,32Kcontext,60turn384request resourcebudgets unchanged."
+    },
+    {
+      "id": "free-provider-frozen-runtimev8-generation-evidence-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v8",
+      "include": [
+        "**/*"
+      ],
+      "split": "not-applicable",
+      "source_class": "immutable-generation-runtime-evidence",
+      "training_admission": false,
+      "admission": "execution evidence, not a training corpus",
+      "independent_new_worlds": 0,
+      "notes": "1330pinnedfiles plusfrozenruntime receipt; source/db code throughGit. DirectFileHandle argument.readText example and onefile siblingboundary guidance; olderfrozenruntime untouched."
+    },
+    {
+      "id": "free-provider-v21-contrast-and-v22-partial-reviews-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "quality-review-v21-luna-v28-five-supplement-v1/supplement.json",
+        "quality-review-v21-luna-v28-five-supplement-v1/supplement.md",
+        "quality-review-v22-zai45-v28case001-partial/review.json",
+        "quality-review-v22-zai45-v28case001-partial/review.md"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "independent-contrast-and-incomplete-trajectory-review",
+      "training_admission": false,
+      "admission": "diagnosticreview only; incompleteZAIcase notnegative, finalLuna/ZAIprefixnotprovenidentical",
+      "independent_new_worlds": 0,
+      "notes": "V21contrastsource/task/systempromptmatchbutfinalcaptureddecisionprefixunknown; noautomaticDPOpair. ZAIpartial40searchcallswithoutdirectFileHandle read, zero completediterateOnsteps; collectionlimitnotlanguagefailure."
+    },
+    {
+      "id": "free-provider-sourcebound16-admitted-native-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/gemini-poolv3-static-sourcebound16-admitted-native-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "authored-static-source-bound-logical-reference",
+      "training_admission": true,
+      "admission": "root-approved-exact-reference-native-text-only",
+      "independent_new_worlds": 0,
+      "notes": "Exact 36 reference turns, two wrappers, sixteen inherited train rows. Admission receipt and DGX closure pinned; trace_admission remains false because these are authored references, not teacher trajectories. No learned channel/world/eval credit."
+    },
+    {
+      "id": "free-provider-sourcebound16-admitted-text-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/static-sourcebound16-text-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "lfm25-native-chat-static-reference-text",
+      "training_admission": true,
+      "admission": "root-approved-exact-reference-native-text-only",
+      "independent_new_worlds": 0,
+      "notes": "36 train-only documents; 186350 full-context tokens, 1617 supervised suffix tokens; exact tokenizer and renderer pinned. Existing held parent unchanged."
+    },
+    {
+      "id": "free-provider-v28-conversion-intermediate-v1-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "superseded-held-conversion-review-evidence",
+      "training_admission": false,
+      "admission": "excluded-intermediate-debug-artifacts",
+      "notes": "Preserve exact historical conversion attempts and receipts. Superseded by V5/V6 scoped candidate; no training admission. Verified remote retention before local offload."
+    },
+    {
+      "id": "free-provider-v28-conversion-intermediate-v2-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v2",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "superseded-held-conversion-review-evidence",
+      "training_admission": false,
+      "admission": "excluded-intermediate-debug-artifacts",
+      "notes": "Preserve exact historical conversion attempts and receipts. Superseded by V5/V6 scoped candidate; no training admission. Verified remote retention before local offload."
+    },
+    {
+      "id": "free-provider-v28-conversion-intermediate-v3-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v3",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "superseded-held-conversion-review-evidence",
+      "training_admission": false,
+      "admission": "excluded-intermediate-debug-artifacts",
+      "notes": "Preserve exact historical conversion attempts and receipts. Superseded by V5/V6 scoped candidate; no training admission. Verified remote retention before local offload."
+    },
+    {
+      "id": "free-provider-v28-conversion-intermediate-v4-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v4",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "superseded-held-conversion-review-evidence",
+      "training_admission": false,
+      "admission": "excluded-intermediate-debug-artifacts",
+      "notes": "Preserve exact historical conversion attempts and receipts. Superseded by V5/V6 scoped candidate; no training admission. Verified remote retention before local offload."
+    },
+    {
+      "id": "free-provider-luna-v29-five-runtimev7-closed-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev29-five-runtimev7-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-native-provider-results",
+      "training_admission": false,
+      "admission": "held-source-and-turn-review-required",
+      "notes": "Closed raw and review evidence only. Native accepted outcome is not turn admission; partial collections remain incompletions, not preference negatives. No learned-channel credit."
+    },
+    {
+      "id": "free-provider-luna-v29-v23-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v23-luna-sourcev29-native",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "native-quality-review",
+      "training_admission": false,
+      "admission": "held-source-and-turn-review-required",
+      "notes": "Closed raw and review evidence only. Native accepted outcome is not turn admission; partial collections remain incompletions, not preference negatives. No learned-channel credit."
+    },
+    {
+      "id": "free-provider-zai45-sourcev28-five-runtimev6-closed-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev28-five-runtimev6-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-native-provider-results",
+      "training_admission": false,
+      "admission": "held-source-and-turn-review-required",
+      "notes": "Closed raw and review evidence only. Native accepted outcome is not turn admission; partial collections remain incompletions, not preference negatives. No learned-channel credit."
+    },
+    {
+      "id": "free-provider-v28-local-split-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-source-split-review-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "native-visible-input-conversion-review",
+      "training_admission": false,
+      "admission": "held-root-context-and-source-review",
+      "notes": "Five inherited authored train groups disjoint parent held groups and current8805text heldgroups; global closure pending. Source-bound visible folder inputs for owner closure."
+    },
+    {
+      "id": "free-provider-v28-native-text-v5-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v5",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "native-visible-input-conversion-review",
+      "training_admission": false,
+      "admission": "held-root-context-and-source-review",
+      "notes": "Historical V5 candidate, held. Incorrect 7624-row closure attribution corrected by separately pinned supplement; that audit applied only to static16."
+    },
+    {
+      "id": "free-provider-v28-native-text-v6-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v6",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "native-visible-input-conversion-review",
+      "training_admission": false,
+      "admission": "held-root-context-and-source-review",
+      "notes": "Fresh shared normalization-adapter candidate,256held textdocs/28omissions;157observediterateOn/99manual. No admission or channel claim; source closure explicitly pending."
+    },
+    {
+      "id": "mellum21-self-distill-v3-20261010",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/mellum21-self-distill-v3-20261010",
+      "include": [
+        "records.jsonl",
+        "prompts.jsonl",
+        "probe.jsonl",
+        "receipt.json"
+      ],
+      "split": "records: train/held by id hash in qat_convert teacher (--held 64); probe.jsonl is the generation-gate set (natlang probes from the native test split); prompts exclude source groups shared with execution-eval-v3",
+      "source_class": "teacher-self-distillation-token-ids (BF16 Mellum2.1-12B-A2.5B-Thinking responses, Mellum chat template)",
+      "training_admission": true,
+      "admission": "admitted by the coordinator for Mellum ternary conversion v3 only (BF16-to-ternary KL recovery; plans/mellum-port.md 2026-10-10); not natlang training data",
+      "derived_from": [
+        "runs/luna-v17-actual-quality-proposal-20261008-v9-portable-context-proposal/assembled-v3 (native records, train split)",
+        "BIRD train databases (schemas only)",
+        "repository code snippets",
+        "synthetic math/general/tool-call prompts"
+      ],
+      "license": "model outputs of JetBrains Mellum2.1 (Apache-2.0); BIRD CC-BY-SA-4.0 schemas",
+      "build": {
+        "script": "training/neuralese/natlang_neuralese/maple/distill_data.py",
+        "code_commit": "f4e5f3da",
+        "command": "python -m natlang_neuralese.maple.distill_data prompts --out prompts.jsonl --probe probe.jsonl; generate --concurrency 128 (runs/mellum-convert-v3-20261010/generate.sh)"
+      },
+      "notes": "6536 records (15.0M tokens, 3213 thinking on); 206 prompts omitted for prompts over 7168 tokens (receipt.json omissions). 'length'-truncated responses kept as BF16 behaviour."
+    },
+    {
+      "id": "free-provider-luna-v32-reviewed-source-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-iterate-refill-20261010-v1/source-v2",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "authored-semantic-iterate-generation-evidence",
+      "training_admission": false,
+      "admission": "held-root-review-or-explicit-exclusion",
+      "independent_new_worlds": 0,
+      "notes": "Reviewed23 train sourcecases/20inheritedgroups/3declaredsiblings. Namedauthority wording derivative has no newfacts, goldunchanged; generationauthorizedonly, outputs held."
+    },
+    {
+      "id": "free-provider-luna-v32-source-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-iterate-refill-inputs-20261010-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "authored-semantic-iterate-generation-evidence",
+      "training_admission": false,
+      "admission": "held-root-review-or-explicit-exclusion",
+      "independent_new_worlds": 0,
+      "notes": "Explicit sourcepool/review/spec configurations, SHA-bound sourcegeneration. Historicalbuilderbytes retained in source-v2 snapshot; sharedgenericCLI in Git."
+    },
+    {
+      "id": "free-provider-luna-v31-authority-failure-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-iterate-refill-20261010-v1/failure-case007",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "authored-semantic-iterate-generation-evidence",
+      "training_admission": false,
+      "admission": "held-root-review-or-explicit-exclusion",
+      "independent_new_worlds": 0,
+      "notes": "Two genuineauthority-decision failures, raw/goldpreserved; neither is an admitted exactprefix DPOpair."
+    },
+    {
+      "id": "free-provider-luna-v32-superseded-source-v1-excluded-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-iterate-refill-superseded-20261010-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "authored-semantic-iterate-generation-evidence",
+      "training_admission": false,
+      "admission": "held-root-review-or-explicit-exclusion",
+      "independent_new_worlds": 0,
+      "notes": "Excludedsuperseded source with duplicate siblingcaseIDs; no modelrequests/admission. CorrectedV2 used instead."
+    },
+    {
+      "id": "free-provider-luna-v32-runtimev8-queued-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev32-twentythree-runtimev8-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-dispatch-receipt-v1.json",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "authored-semantic-iterate-generation-evidence",
+      "training_admission": false,
+      "admission": "held-root-review-or-explicit-exclusion",
+      "independent_new_worlds": 0,
+      "notes": "Immutable plan/queues for23disjointcaseentries, fiveworkers5/5/5/4/4, runtimev8 and source/proof/rootapprovalpinned. Mutablejournals/results excluded untilcloseout."
+    },
+    {
+      "id": "free-provider-luna-v31-runtimev8-closed-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev31-twelve-runtimev8-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "authored-semantic-iterate-generation-evidence",
+      "training_admission": false,
+      "admission": "held-root-review-or-explicit-exclusion",
+      "independent_new_worlds": 0,
+      "notes": "Closed12cases:9accepted,2authoritydecisionerrors,1double-encodedJSONartifact with correctfinalanswer. Acceptance is not turn admission; preserve errors for repairreview."
+    },
+    {
+      "id": "free-provider-luna-v31-undeclared-draft-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-iterate-refill-20261010-v1/failure-case009",
+      "include": [
+        "receipt.json",
+        "receipt.md"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "authored-semantic-iterate-generation-evidence",
+      "training_admission": false,
+      "admission": "held-root-review-or-explicit-exclusion",
+      "independent_new_worlds": 0,
+      "notes": "RAIL740 child result unknown because Draft alias absent from eval scope; JSON string double serialized. Strict gold and original failure preserved. Not an admitted DPO pair."
+    },
+    {
+      "id": "free-provider-v28-visible-input-native-text-v9-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v9",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "captured-provider-input-context-text-review",
+      "training_admission": false,
+      "admission": "held-root-review-or-explicit-exclusion",
+      "independent_new_worlds": 0,
+      "notes": "313 native turns,17 failed-action targets excluded,15 duplicate rendered documents removed,281 held ordinary-text documents with zero document omissions. Captured expanded context and exact raw-action normalization adapters; no learned channel, recurrence edge, stopping, runtime qualification or training admission. Separate exact V28 DGX global closure receipt; root review pending."
     }
   ],
   "coverage_backlog": [

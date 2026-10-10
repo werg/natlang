@@ -1369,3 +1369,23 @@ Qualification and checkpoint ranking now share one declared reference: unchanged
 Full optimizer, RNG and unchanged-objective plateau state survive a policy handoff. Old gate streaks and best-checkpoint comparisons do not. Preserve the failed old reports and launch from an exact full-state checkpoint with frozen shared code. Generated-tail projection diagnostics now disclose selected-token counts and error by cohort and semantic role without extra model forward passes.
 
 Validation: source review, AST parsing and whitespace checks; no test suite run. Actual training continuation supplies execution evidence separately.
+
+
+### 2026-10-10 — typed label probability mass
+
+Gemini-v4 closed178invalidprobability distributions:46allzero and132substantialmass errors, not rounding drift. Preserve strict1e-4sumvalidation and originalresponses. Prospective sharedprompt clarifies mutuallyexclusive label alternatives and distributing oneunitmass; expliciterrorrecord includes mass/delta. Do not normalize invalidresponses into labels. Separate178case regeneration uses samefreequota/projectlock and unchangedsource/gold, helduntilactualsourcequalityreview. Existingfrozen runs unchanged.
+
+
+### 2026-10-10 — train-only corpus additions and static reference scope
+
+A reviewed train-only source addition need not manufacture an evaluation split to use the shared gold renderer. The packet CLI exposes an explicit train-only-addition declaration, checks that every input retains its train split, and reports no evaluation credit. The default complete packet still requires independent train and held data. Source admission, cross-split overlap checks, authenticated context and pinned native templates are unchanged.
+
+The source-bound sixteen-row logical batch passed global closure. Admission covers its two authored wrappers and 36 authored static reference turns, plus an independently pinned LFM text rendering. Preserve the previous held receipt and exclude parent data, subjective numeric labels, raw probability targets and sampled-teacher or learned-channel claims. Context token counts are reported separately from supervised suffix tokens.
+
+### 2026-10-10 — stabilize genuine AR foundation drift
+
+V2 showed broad native pass-zero embedding drift as backbone LR ramp reached3e-5 and three-pass feedback: best29696 MSEdelta long/short/medium .0265/.0344/.0487, latest30464 .0697/.1042/.0863. Matching-history agreement also fell below .99; valid-context CE remained small. No clear optimizer restore or pass-loss bug identified. Checkpointed V2 at30515 and continue from exact best29696 under V3, lowering only backbone baseLR to7.5e-6 while retaining3e-4 projectionLR, fixeddata, full optimizer/RNG/schedule, three-pass target and unchanged gates. This is an unmeasured stability intervention, not qualification; preserve old failed reports.
+
+### 2026-10-10 — captured provider inputs and exact target normalization
+
+Shared native materializer/converter/text renderer bind raw provider calls to normalized tool targets by ordered function names, JSON arguments, source-row digest and trajectory index. Converted targets are independently reconstructed from original target plus explicitly authenticated direct typed-result writes; original/converted hashes alone cannot authorize arbitrary target changes. Captured expanded input bodies referenced by exact model context can supply ordinary visible text even when runtime read events are absent. These receipts explicitly create no writer/recurrence edge or learned-channel qualification. V28 V10 yields281held candidate documents withzero documentomissions;17 failedactions excluded,15dedup. Admission remains a separate exact source/group/quality decision and production render.

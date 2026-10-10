@@ -1,7 +1,7 @@
 __pycache__/
 unsloth_compiled_cache/
 *.pyc
-node_modules/
+node_modules
 *.egg-info/
 .venv/
 .venv-wandb-report/

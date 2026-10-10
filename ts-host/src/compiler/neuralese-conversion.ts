@@ -308,6 +308,44 @@ function protectedTargetSidecarEquivalent(record: Record<string, unknown>, recei
   return sha256Text(canonical(projection)) === adapter.materializer_target_sha256;
 }
 
+function providerActionNormalizationEquivalent(record: Record<string, unknown>, receipt: Record<string, unknown>,
+                                               sourceActionDigest: string | undefined): boolean {
+  const adapter = receipt.target_binding_adapter as Record<string, unknown> | undefined;
+  const target = record.target as Record<string, unknown> | undefined;
+  const normalizedTarget = adapter?.normalized_target as Record<string, unknown> | undefined;
+  const calls = normalizedTarget?.tool_calls;
+  const sourceRef = record.source_ref as Record<string, unknown> | undefined;
+  const decision = record.decision as Record<string, unknown> | undefined;
+  const raw = adapter?.raw_action as Record<string, unknown> | undefined;
+  const rawCalls = raw?.raw_calls;
+  if (!adapter || !target || !normalizedTarget || !Array.isArray(calls) || !raw || !Array.isArray(rawCalls) ||
+      adapter.schema !== 'natlang.provider-action-target-normalization/1' ||
+      adapter.kind !== 'exact-raw-provider-calls-to-materialized-tool-calls' ||
+      adapter.source_row_sha256 !== sourceRef?.source_row_sha256 ||
+      receipt.source_row_sha256 !== sourceRef?.source_row_sha256 ||
+      adapter.source_trajectory_index !== decision?.index || receipt.source_trajectory_index !== decision?.index ||
+      raw.role !== 'assistant' || normalizedTarget.role !== 'assistant' ||
+      canonical(normalizedTarget) !== canonical(target) ||
+      raw.content !== (normalizedTarget.content ?? '') ||
+      adapter.call_count !== calls.length || rawCalls.length !== calls.length ||
+      !sourceActionDigest || adapter.normalized_target_sha256 !== sourceActionDigest ||
+      receipt.source_action_target_sha256 !== sourceActionDigest ||
+      adapter.raw_action_sha256 !== sha256Text(canonical(raw))) return false;
+  for (let index = 0; index < calls.length; index++) {
+    const call = calls[index] as Record<string, unknown>;
+    const rawCall = rawCalls[index] as Record<string, unknown>;
+    const fn = call?.function as Record<string, unknown> | undefined;
+    const rawFn = rawCall?.function as Record<string, unknown> | undefined;
+    if (call.id !== `teacher_${String(decision?.index)}_${index}` || call.type !== 'function' ||
+        !fn || !rawFn || typeof fn.name !== 'string' || typeof rawFn.name !== 'string' ||
+        fn.name !== rawFn.name || typeof fn.arguments !== 'string' || typeof rawFn.arguments !== 'string') return false;
+    let normalizedArgs: unknown, rawArgs: unknown;
+    try { normalizedArgs = JSON.parse(fn.arguments); rawArgs = JSON.parse(rawFn.arguments); } catch { return false; }
+    if (canonical(normalizedArgs) !== canonical(rawArgs)) return false;
+  }
+  return true;
+}
+
 /** Authenticate a completed host return against the same decision's successful typed result.
  * This is crisp context evidence, never a model-written Neuralese producer. */
 function observedHostReturn(record: Record<string, unknown>, returned: string, value: unknown):
@@ -539,6 +577,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
   const decisionIndex = decision?.index;
   const rowId = String((record as Record<string, unknown>).id ?? '');
   const trajectoryId = typeof sourceRef?.trajectory_id === 'string' ? sourceRef.trajectory_id : '';
+  const recordInvocation = invocationOf(record as Record<string, unknown>);
   const externalReadContexts = sourceRef?.provider_expanded_read_contexts;
   const externalBodies = new Map<string, { body: string; type: string; receipt: Record<string, unknown> }>();
   if (externalReadContexts !== undefined) {
@@ -562,6 +601,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         derivedTarget.original_messages_sha256 === createHash('sha256').update(canonical(record.messages)).digest('hex');
       const sourceActionTargetMatches = receipt.source_action_target_sha256 === sourceActionDigest ||
         protectedTargetSidecarEquivalent(record as Record<string, unknown>, receipt, sourceActionDigest) ||
+        providerActionNormalizationEquivalent(record as Record<string, unknown>, receipt, sourceActionDigest) ||
         (derivedSourceActionMatches && receipt.source_action_target_sha256 === derivedTarget?.original_target_sha256);
       if (!['natlang.provider-expanded-read-context/1', 'natlang.provider-expanded-read-context/2'].includes(String(receipt.schema)) ||
           receipt.invocation_id !== invocation ||
@@ -677,6 +717,46 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       }
     externalBodies.set(id, { body: block.body, type: block.type, receipt });
   }
+  }
+  const visibleInputs = sourceRef?.provider_expanded_visible_inputs;
+  if (visibleInputs !== undefined && !Array.isArray(visibleInputs))
+    throw new Error(`invalid captured provider-input context receipt for ${rowId}`);
+  for (const candidate of (visibleInputs ?? []) as unknown[]) {
+    if (!candidate || typeof candidate !== 'object') throw new Error(`invalid captured provider-input context receipt for ${rowId}`);
+    const receipt = candidate as Record<string, unknown>;
+    const block = receipt.block as Record<string, unknown> | undefined;
+    const capture = receipt.input_capture as Record<string, unknown> | undefined;
+    const captureBlock = capture?.block as Record<string, unknown> | undefined;
+    const digest = record.target === undefined ? undefined : sha256Text(canonical(record.target));
+    if (receipt.schema !== 'natlang.provider-expanded-visible-input/1' ||
+        receipt.kind !== 'captured-provider-input-context-only' || receipt.invocation_id !== recordInvocation ||
+        receipt.source_row_sha256 !== sourceRef?.source_row_sha256 ||
+        receipt.trace_sha256 !== ((record as Record<string, unknown>).provenance as Record<string, unknown> | undefined)?.trace_sha256 ||
+        receipt.source_trajectory_index !== decisionIndex || !digest ||
+        receipt.source_action_target_sha256 !== digest ||
+        !providerActionNormalizationEquivalent(record as Record<string, unknown>, receipt, digest) ||
+        receipt.writer_target_selected !== false || receipt.recurrence_edge_created !== false ||
+        receipt.learned_vectors !== false || receipt.qualification_certificate !== false || receipt.training_admission !== false ||
+        !block || !captureBlock || canonical(block) !== canonical(captureBlock) ||
+        typeof block.id !== 'string' || typeof block.type !== 'string' || !block.type.startsWith('Neuralese<') ||
+        typeof block.body !== 'string' || createHash('sha256').update(block.body).digest('hex') !== block.body_sha256 ||
+        capture?.schema !== 'natlang.captured-provider-expanded-input/1' ||
+        receipt.input_capture_sha256 !== sha256Text(canonical(capture)) ||
+        receipt.transport_provenance_sha256 !== capture.transport_provenance_sha256 ||
+        receipt.raw_request_sha256 !== capture.raw_request_sha256 ||
+        receipt.rendered_request_sha256 !== capture.rendered_request_sha256 ||
+        !/^[0-9a-f]{64}$/.test(String(receipt.source_request_sha256)) ||
+        !/^[0-9a-f]{64}$/.test(String(receipt.source_response_sha256)) ||
+        !/^[0-9a-f]{64}$/.test(String(receipt.transport_provenance_sha256)) ||
+        !/^[0-9a-f]{64}$/.test(String(receipt.raw_request_sha256)) ||
+        !/^[0-9a-f]{64}$/.test(String(receipt.rendered_request_sha256)) ||
+        !Number.isSafeInteger(receipt.context_occurrences) || Number(receipt.context_occurrences) < 1)
+      throw new Error(`captured provider-input context provenance mismatch for ${rowId}`);
+    const id = block.id as string;
+    const existing = externalBodies.get(id);
+    if (existing && (existing.body !== block.body || existing.type !== block.type))
+      throw new Error(`conflicting captured provider-input context body for ${id}`);
+    if (!existing) externalBodies.set(id, { body: block.body, type: block.type, receipt });
   }
   const typedResultReceipts = (((decision?.assistant as Record<string, unknown> | undefined)?.calls as Record<string, unknown>[] | undefined) ?? [])
     .flatMap(action => {
@@ -1394,52 +1474,67 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     validation_review_sha256: options.softStateEdges?.validation.review_sha256,
     validation_result_sha256: options.softStateEdges?.validation.result_sha256,
   }] : undefined;
-  const externalContextMetadata = [...externalBodies.values()].map(value => ({
-    schema: 'natlang.external-context-input/1', origin: value.receipt.origin,
-    block_id: (value.receipt.block as Record<string, unknown>).id,
-    type: value.type, body_sha256: createHash('sha256').update(value.body).digest('hex'),
-    invocation_id: value.receipt.invocation_id,
-    parent_invocation_id: value.receipt.parent_invocation_id ?? null,
-    transport_provenance_sha256: value.receipt.transport_provenance_sha256,
-    raw_request_sha256: value.receipt.raw_request_sha256,
-    rendered_request_sha256: value.receipt.rendered_request_sha256,
-    ...(value.receipt.source_request_sha256 ? { source_request_sha256: value.receipt.source_request_sha256 } : {}),
-    ...(value.receipt.source_response_sha256 ? { source_response_sha256: value.receipt.source_response_sha256 } : {}),
-    ...(value.receipt.source_trajectory_index !== undefined ? { source_trajectory_index: value.receipt.source_trajectory_index } : {}),
-    ...(value.receipt.source_action_target_sha256 ? { source_action_target_sha256: value.receipt.source_action_target_sha256 } : {}),
-    ...(value.receipt.target_binding_adapter && typeof value.receipt.target_binding_adapter === 'object' ?
-      { target_binding_adapter: value.receipt.target_binding_adapter } : {}),
-    source_row_sha256: value.receipt.source_row_sha256,
-    trace_sha256: (record as Record<string, unknown>).provenance &&
-      ((record as Record<string, unknown>).provenance as Record<string, unknown>).trace_sha256,
-      read_node: (value.receipt.block_read as Record<string, unknown>).node,
-    model_turn_node: (value.receipt.model_turn as Record<string, unknown>).node,
-    ...(Array.isArray(value.receipt.additional_read_turn_pairs) ? { additional_read_nodes:
-      (value.receipt.additional_read_turn_pairs as Record<string, unknown>[]).map(pair =>
-        ((pair.block_read as Record<string, unknown>).node)), additional_model_turn_nodes:
-      (value.receipt.additional_read_turn_pairs as Record<string, unknown>[]).map(pair =>
-        ((pair.model_turn as Record<string, unknown>).node)) } : {}),
-    ...(value.receipt.origin === 'same-run-producer' ? { producer_write_node:
-      (value.receipt.producer_write as Record<string, unknown>).node,
-      producer_call_id: (value.receipt.producer_write as Record<string, unknown>).call_id,
-      target_write_name: (() => {
-        const producer = value.receipt.producer_write as Record<string, unknown>;
-        return producer.source === 'return_result' && producer.source_kind === 'typed-text-result' &&
-          producer.result_type === 'Neuralese<string>' && typeof producer.call_id === 'string' &&
-          typeof producer.node === 'string' ? directTypedResultEventName(String((value.receipt.block as Record<string, unknown>).id),
-            trajectoryId, producer.call_id, producer.node) : `soft-state:${String((value.receipt.block as Record<string, unknown>).id)}`;
-      })(),
-      writer_source_class: value.receipt.writer_source_class,
-      context_occurrences: value.receipt.context_occurrences,
-      ...(Number.isSafeInteger(value.receipt.serialized_literal_id_mentions) ? {
-        serialized_literal_id_mentions: value.receipt.serialized_literal_id_mentions } : {}),
-      ...(value.receipt.writer_witness ? { writer_witness: value.receipt.writer_witness } : {}),
-      writer_target_selected: value.receipt.writer_target_selected === false ? false : null,
-      learner_representation: value.receipt.writer_target_selected === false ?
-        'typed-read-from-authenticated-runtime-writer-event-context-only' : 'typed-read-linked-to-existing-writer' } :
-      { learner_representation: 'crisp-external-function-context' }),
-    learned_vectors: false, qualification_certificate: false, training_admission: false,
-  }));
+  const externalContextMetadata = [...externalBodies.values()].map(value => {
+    const receipt = value.receipt;
+    const block = receipt.block as Record<string, unknown>;
+    const common = { schema: 'natlang.external-context-input/1', origin: receipt.origin, block_id: block.id,
+      type: value.type, body_sha256: createHash('sha256').update(value.body).digest('hex'),
+      invocation_id: receipt.invocation_id, parent_invocation_id: receipt.parent_invocation_id ?? null,
+      transport_provenance_sha256: receipt.transport_provenance_sha256,
+      raw_request_sha256: receipt.raw_request_sha256, rendered_request_sha256: receipt.rendered_request_sha256,
+      ...(receipt.source_request_sha256 ? { source_request_sha256: receipt.source_request_sha256 } : {}),
+      ...(receipt.source_response_sha256 ? { source_response_sha256: receipt.source_response_sha256 } : {}),
+      ...(receipt.source_trajectory_index !== undefined ? { source_trajectory_index: receipt.source_trajectory_index } : {}),
+      ...(receipt.source_action_target_sha256 ? { source_action_target_sha256: receipt.source_action_target_sha256 } : {}),
+      ...(receipt.target_binding_adapter && typeof receipt.target_binding_adapter === 'object' ? {
+        source_materialized_target_sha256: (receipt.target_binding_adapter as Record<string, unknown>).normalized_target_sha256,
+        target_conversion_binding: {
+          schema: 'natlang.provider-action-converted-target-binding/1',
+          source_materialized_target_sha256:
+            (receipt.target_binding_adapter as Record<string, unknown>).normalized_target_sha256,
+          converted_target_sha256: target ? sha256Text(canonical(target)) : null,
+          conversion_version: NEURALESE_CONVERSION_VERSION,
+        },
+      } : {}),
+      ...(receipt.target_binding_adapter && typeof receipt.target_binding_adapter === 'object' ?
+        { target_binding_adapter: receipt.target_binding_adapter } : {}),
+      source_row_sha256: receipt.source_row_sha256,
+      trace_sha256: (record as Record<string, unknown>).provenance &&
+        ((record as Record<string, unknown>).provenance as Record<string, unknown>).trace_sha256,
+      learned_vectors: false, qualification_certificate: false, training_admission: false };
+    if (receipt.schema === 'natlang.provider-expanded-visible-input/1') return { ...common,
+      context_occurrences: receipt.context_occurrences, writer_target_selected: false,
+      recurrence_edge_created: false, learner_representation: 'captured-expanded-provider-input-context-only',
+      input_capture: receipt.input_capture, input_capture_sha256: receipt.input_capture_sha256 };
+    return { ...common,
+      read_node: (receipt.block_read as Record<string, unknown>).node,
+      model_turn_node: (receipt.model_turn as Record<string, unknown>).node,
+      ...(Array.isArray(receipt.additional_read_turn_pairs) ? { additional_read_nodes:
+        (receipt.additional_read_turn_pairs as Record<string, unknown>[]).map(pair =>
+          ((pair.block_read as Record<string, unknown>).node)), additional_model_turn_nodes:
+        (receipt.additional_read_turn_pairs as Record<string, unknown>[]).map(pair =>
+          ((pair.model_turn as Record<string, unknown>).node)) } : {}),
+      ...(receipt.origin === 'same-run-producer' ? { producer_write_node:
+        (receipt.producer_write as Record<string, unknown>).node,
+        producer_call_id: (receipt.producer_write as Record<string, unknown>).call_id,
+        target_write_name: (() => {
+          const producer = receipt.producer_write as Record<string, unknown>;
+          return producer.source === 'return_result' && producer.source_kind === 'typed-text-result' &&
+            producer.result_type === 'Neuralese<string>' && typeof producer.call_id === 'string' &&
+            typeof producer.node === 'string' ? directTypedResultEventName(String(block.id),
+              trajectoryId, producer.call_id, producer.node) : `soft-state:${String(block.id)}`;
+        })(),
+        writer_source_class: receipt.writer_source_class,
+        context_occurrences: receipt.context_occurrences,
+        ...(Number.isSafeInteger(receipt.serialized_literal_id_mentions) ? {
+          serialized_literal_id_mentions: receipt.serialized_literal_id_mentions } : {}),
+        ...(receipt.writer_witness ? { writer_witness: receipt.writer_witness } : {}),
+        writer_target_selected: receipt.writer_target_selected === false ? false : null,
+        learner_representation: receipt.writer_target_selected === false ?
+          'typed-read-from-authenticated-runtime-writer-event-context-only' : 'typed-read-linked-to-existing-writer' } :
+        { learner_representation: 'crisp-external-function-context' }),
+    };
+  });
   if ((record as Record<string, unknown>).derived_target !== undefined && derivedTextWrites.length !== 1)
     throw new Error(`derived typed-text target did not produce exactly one validated derived writer for ${rowId}`);
   return { record: { ...record, messages, ...(target ? { target } : {}),
