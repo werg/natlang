@@ -1,0 +1,94 @@
+{
+ "schema": "natlang.raw-alias-closure-check/1",
+ "request": "2026-10-10T08:33:04.369328Z-pop-a058",
+ "what": "original raw source groups/ids (source_groups_original, source_ids_original), dataset_records (source:id), namespaced source_groups/source_ids and their un-prefixed forms, looked up in the split groups of both indexes and the protected BGKit id map",
+ "indexes": [
+  "cross-corpus-index-s1-full-final-20261003-v1",
+  "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1"
+ ],
+ "protected_sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf",
+ "keys_checked": 320,
+ "verdict": "no hits",
+ "rows": {
+  "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_0511463eb238_639fc546dd7da7ed5dc78270:exact-choice-with-held-confidence-receipt-v1": {
+   "keys_checked": 40,
+   "group_hits": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {},
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {}
+   },
+   "protected_id_hits": {}
+  },
+  "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_0511463eb238_afd10066c50f4a512bfe938e:exact-choice-with-held-confidence-receipt-v1": {
+   "keys_checked": 40,
+   "group_hits": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {},
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {}
+   },
+   "protected_id_hits": {}
+  },
+  "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_0511463eb238_cb7a8315971f42a36815686b:exact-choice-with-held-confidence-receipt-v1": {
+   "keys_checked": 40,
+   "group_hits": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {},
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {}
+   },
+   "protected_id_hits": {}
+  },
+  "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_0511463eb238_bb15849d2b142d1f13e605da:exact-choice-with-held-confidence-receipt-v1": {
+   "keys_checked": 40,
+   "group_hits": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {},
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {}
+   },
+   "protected_id_hits": {}
+  },
+  "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_0511463eb238_cd8de6abd7daad0eb79d2f2b:exact-choice-with-held-confidence-receipt-v1": {
+   "keys_checked": 30,
+   "group_hits": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {},
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {}
+   },
+   "protected_id_hits": {}
+  },
+  "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_0511463eb238_4776082b227c1f37a7a21ee4:exact-choice-with-held-confidence-receipt-v1": {
+   "keys_checked": 40,
+   "group_hits": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {},
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {}
+   },
+   "protected_id_hits": {}
+  },
+  "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_0511463eb238_ee3dd31cc7d9d0a65e827456:exact-choice-with-held-confidence-receipt-v1": {
+   "keys_checked": 40,
+   "group_hits": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {},
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {}
+   },
+   "protected_id_hits": {}
+  },
+  "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_0511463eb238_bf732f9cec57e7c2ca0a71b5:exact-choice-with-held-confidence-receipt-v1": {
+   "keys_checked": 40,
+   "group_hits": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {},
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {}
+   },
+   "protected_id_hits": {}
+  },
+  "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_0511463eb238_d1790954c2239a3c7f80ba84:exact-choice-with-held-confidence-receipt-v1": {
+   "keys_checked": 5,
+   "group_hits": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {},
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {}
+   },
+   "protected_id_hits": {}
+  },
+  "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_0511463eb238_f5ec9f6430c1acf53cf1b4ec:exact-choice-with-held-confidence-receipt-v1": {
+   "keys_checked": 5,
+   "group_hits": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {},
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {}
+   },
+   "protected_id_hits": {}
+  }
+ }
+}

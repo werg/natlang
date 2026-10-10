@@ -1,0 +1,175 @@
+{
+  "schema": "natlang.authored-source-case-closure-report/1",
+  "status": "held-closed-no-cross-corpus-violations",
+  "training_admission": false,
+  "source": {
+    "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/quality-review-v28-google-choice-confidence-v9-source-admission/closure-input-v2/closure-source-cases.jsonl",
+    "sha256": "d9d4639e9a1efde6bd03baa8de2ef1b93bed31b54d434f3e84036c154b46f70d",
+    "rows": 10,
+    "manifest": {
+      "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/quality-review-v28-google-choice-confidence-v9-source-admission/closure-input-v2/closure-source-manifest.json",
+      "sha256": "6702d7e508c6bd6a189fa8641ee731a75dbac8421a888850c1c622d88cf96e9b",
+      "source_path_declared": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v28-google-choice-confidence-v9-source-admission/closure-input-v2/closure-source-cases.jsonl",
+      "source_path_used": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/quality-review-v28-google-choice-confidence-v9-source-admission/closure-input-v2/closure-source-cases.jsonl",
+      "source_sha256_declared": "d9d4639e9a1efde6bd03baa8de2ef1b93bed31b54d434f3e84036c154b46f70d",
+      "source_sha256_used": "d9d4639e9a1efde6bd03baa8de2ef1b93bed31b54d434f3e84036c154b46f70d",
+      "source_binding_matches": true
+    },
+    "raw_lineage": null
+  },
+  "candidate_rows": {
+    "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/quality-review-v28-google-choice-confidence-v9-source-admission/closure-input-v2/closure-candidate-root-actions.jsonl",
+    "sha256": "f9e21e168825c36dc20989c0c5b2d2b64ebc67d827b515934c9ef9ac135b59a5",
+    "rows": 10,
+    "binding_path": "/home/werg/.claude/jobs/9c849f00/tmp/a058-out/candidate-source-case-bindings.json",
+    "binding_sha256": "32844252ae7393f1cecb58728b697f02302fc91a7665fe2f6754ff98c7dc65ee"
+  },
+  "projection": {
+    "path": "/home/werg/.claude/jobs/9c849f00/tmp/a058-out/source-case-port-projection.jsonl",
+    "sha256": "77a42516df670938a8615636342dd2f4b473e759ba70a609266a56c1a6c4c5fc",
+    "records": 10,
+    "basis": "one port record per source case; exact callable root and visible input files as sources; actual user request as consumer; authored semantics.expected as target"
+  },
+  "closed_projection": {
+    "path": "/home/werg/.claude/jobs/9c849f00/tmp/a058-out/closed-source-case-port-projection.jsonl",
+    "sha256": "77a42516df670938a8615636342dd2f4b473e759ba70a609266a56c1a6c4c5fc",
+    "records": 10,
+    "omitted_projection_ids": []
+  },
+  "indexes": [
+    {
+      "reference": "cross-corpus-index-s1-full-final-20261003-v1",
+      "registered_id": "cross-corpus-index-s1-full-final-20261003-v1",
+      "path": "/home/werg/data/natlang-corpora/cross-corpus-index/s1-full-final-20261003",
+      "registered": true,
+      "manifest_path": "/home/werg/.claude/jobs/9c849f00/tmp/wt-a058/training/corpus-manifests/cross-corpus-index-s1-full-final-20261003-v1.json",
+      "manifest_sha256": "914893de2e0ce260e4000ca7609e51f8997b66e8d15a845064d812bc68c7514e",
+      "manifest_verified": true,
+      "index_sha256": "eb78bbdfc5673a7b4e97c42881beae49a14de1a3f7db1741f80a311d15f087a4",
+      "format": "port",
+      "records": 1870591,
+      "groups": 985434,
+      "files": [
+        {
+          "path": "/home/werg/data/natlang-corpora/cross-corpus-index/s1-full-final-20261003/digests.npz",
+          "bytes": 115212068,
+          "sha256": "6432ff67414718ec95ea34d9683941f3488557df26256eee7846e3e8aa36ea80",
+          "manifest_bytes": 115212068,
+          "manifest_sha256": "6432ff67414718ec95ea34d9683941f3488557df26256eee7846e3e8aa36ea80",
+          "matches": true
+        },
+        {
+          "path": "/home/werg/data/natlang-corpora/cross-corpus-index/s1-full-final-20261003/groups.json",
+          "bytes": 47084554,
+          "sha256": "accb6981c6be55d117b05f8633632fc6b77452dd45a870ce75a10412483711ed",
+          "manifest_bytes": 47084554,
+          "manifest_sha256": "accb6981c6be55d117b05f8633632fc6b77452dd45a870ce75a10412483711ed",
+          "matches": true
+        },
+        {
+          "path": "/home/werg/data/natlang-corpora/cross-corpus-index/s1-full-final-20261003/index.json",
+          "bytes": 15277,
+          "sha256": "eb78bbdfc5673a7b4e97c42881beae49a14de1a3f7db1741f80a311d15f087a4",
+          "manifest_bytes": 15277,
+          "manifest_sha256": "eb78bbdfc5673a7b4e97c42881beae49a14de1a3f7db1741f80a311d15f087a4",
+          "matches": true
+        },
+        {
+          "path": "/home/werg/data/natlang-corpora/cross-corpus-index/s1-full-final-20261003/sketches.npz",
+          "bytes": 1273593899,
+          "sha256": "c2ae4b4a691e953db7527b7c9eaf3dbd8dc123efef692ef17adfa6e6170f37c8",
+          "manifest_bytes": 1273593899,
+          "manifest_sha256": "c2ae4b4a691e953db7527b7c9eaf3dbd8dc123efef692ef17adfa6e6170f37c8",
+          "matches": true
+        }
+      ]
+    },
+    {
+      "reference": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+      "registered_id": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+      "path": "/mnt/external/natlang-development-data/data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+      "registered": true,
+      "manifest_path": "/home/werg/.claude/jobs/9c849f00/tmp/wt-a058/training/corpus-manifests/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1.json",
+      "manifest_sha256": "18bf74c8c2b599e19af99a46ede0553b0b9c91d574b6f0aaaea9498b4a8f0f1b",
+      "manifest_verified": true,
+      "index_sha256": "7df97307d0702ab06ad44e2c6a868b50040cdf665a9d44bdd76b158e06f9595f",
+      "format": "turn",
+      "records": 3843,
+      "groups": 769,
+      "files": [
+        {
+          "path": "/mnt/external/natlang-development-data/data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1/digests.npz",
+          "bytes": 1570,
+          "sha256": "0678d15fe2bdb3179b5e82246cc4ecabe6c600afb1ed5279afd8b9a7d6c24e8d",
+          "manifest_bytes": 1570,
+          "manifest_sha256": "0678d15fe2bdb3179b5e82246cc4ecabe6c600afb1ed5279afd8b9a7d6c24e8d",
+          "matches": true
+        },
+        {
+          "path": "/mnt/external/natlang-development-data/data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1/groups.json",
+          "bytes": 41889,
+          "sha256": "3d67d4c227b536a06320c6ab84defdefc95adb96196532e7b7a2e5f46e6100dc",
+          "manifest_bytes": 41889,
+          "manifest_sha256": "3d67d4c227b536a06320c6ab84defdefc95adb96196532e7b7a2e5f46e6100dc",
+          "matches": true
+        },
+        {
+          "path": "/mnt/external/natlang-development-data/data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1/index.json",
+          "bytes": 802,
+          "sha256": "7df97307d0702ab06ad44e2c6a868b50040cdf665a9d44bdd76b158e06f9595f",
+          "manifest_bytes": 802,
+          "manifest_sha256": "7df97307d0702ab06ad44e2c6a868b50040cdf665a9d44bdd76b158e06f9595f",
+          "matches": true
+        },
+        {
+          "path": "/mnt/external/natlang-development-data/data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1/sketches.npz",
+          "bytes": 756,
+          "sha256": "1a0f905a83eb0bbb4728cf31eab23f5f2cb33e34ed16e7b6fcb52de2974d0ac0",
+          "manifest_bytes": 756,
+          "manifest_sha256": "1a0f905a83eb0bbb4728cf31eab23f5f2cb33e34ed16e7b6fcb52de2974d0ac0",
+          "matches": true
+        }
+      ]
+    }
+  ],
+  "protected": {
+    "path": "/mnt/external/natlang-development-data/data/neuralese/protected/bgkit-benchmarks.protected.json",
+    "sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf",
+    "hits_by_source_case": {
+      "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_0511463eb238_639fc546dd7da7ed5dc78270:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_0511463eb238_afd10066c50f4a512bfe938e:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_0511463eb238_cb7a8315971f42a36815686b:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_0511463eb238_bb15849d2b142d1f13e605da:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_0511463eb238_cd8de6abd7daad0eb79d2f2b:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_0511463eb238_4776082b227c1f37a7a21ee4:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_0511463eb238_ee3dd31cc7d9d0a65e827456:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_0511463eb238_bf732f9cec57e7c2ca0a71b5:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_0511463eb238_d1790954c2239a3c7f80ba84:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_0511463eb238_f5ec9f6430c1acf53cf1b4ec:exact-choice-with-held-confidence-receipt-v1": null
+    },
+    "scope": "the protected map indexes question hashes and IDs, not source text"
+  },
+  "apply": {
+    "records_in": 10,
+    "indexes": [
+      "s1-full-final-20261003",
+      "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+    ],
+    "internal": {},
+    "external_links": {},
+    "protected_hits": {},
+    "components": 10,
+    "moved": {},
+    "dropped": {},
+    "records_out": 10,
+    "by_split": {
+      "train": 10
+    }
+  },
+  "cross_corpus_check_errors": [],
+  "internal_split_group_errors": [],
+  "limits": [
+    "Candidate native action targets remain provenance only; they are not interpreted as source-case answers.",
+    "Closure does not certify source semantic correctness, trajectory quality, or training/native qualification."
+  ]
+}
