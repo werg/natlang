@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v50-transport-recovery-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v50-v48-case17-transport-recovery-v1",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 8603,
+      "sha256": "c8c9776790c11644f6519f6c7773358daea252be3b7df8b3f0f0131d31a2cda4"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 1929,
+      "sha256": "f109aa7bb1cb3dc82de82969a48c5ac3cd709cb93396835545a14841165d2698"
+    }
+  ],
+  "bytes": 10532
+}
