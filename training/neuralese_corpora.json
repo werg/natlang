@@ -27361,6 +27361,102 @@
       "training_admission": false,
       "admission": "held-pending-recurrence-proof-and-source-quality-review",
       "notes": "16 accepted exact-file/source cases yield485 materialized/converted turns. No child-result or inline-instruction soft-edge conversion established: parent approval flags false, unsupported captures/interpolation and missing producer/writer proof are being separated. Native originals preserved;10 typed target writes preserve exact source values per correction. No fabricated writer or recurrence coverage claim. Four original train families, no independent-world credit."
+    },
+    {
+      "id": "free-provider-google-v23-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v23",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Closed512 labels with originals, attempts, frozen runner and exact launch inputs.397 annotation agreements,115 differences; no source-truth admission."
+    },
+    {
+      "id": "free-provider-google-v23-static-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v23-adapter-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "397 retained items in53 static programs;53 full reference/visibility checks passed and894 native turns. Explicit canonical quality holds applied; full-S1 closure pending."
+    },
+    {
+      "id": "free-provider-google-v23-quality-closure-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v23-gemini-choice-confidence-and-static-replay-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Provider quality audit and full-S1 source closure packet, pin clarification separate; no admission."
+    },
+    {
+      "id": "free-provider-luna-v60-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v60-runtimev15-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Five Luna workers on53 V23 folder programs397items.384requests32K/medium currentV15. Active outputs excluded; generation approval only.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-source-review.json",
+        "worker-*/queue.jsonl"
+      ]
+    },
+    {
+      "id": "free-provider-luna-v21-filtered-v4-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-pubmedqa-full-abstract-v21-v4-runtimev15-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Closed five filtered full-abstract reducers37items.30 correct decisions,seven differences; two exact-map/file successes. Original attempts and graphs retained, no admission."
+    },
+    {
+      "id": "free-provider-luna-v21-filtered-v4-final-quality-held-20261010-v4",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-luna-pubmedqa-full-abstract-final-v4",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Corrected shared per-invocation visibility proof:35 source states in child requests,two exact same-invocation captures,37 covered;124 saved request turns. Preserve distinction between requests/captures/wire bytes."
+    },
+    {
+      "id": "free-provider-luna-v58-request-visibility-shared-held-20261010-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-request-visibility-shared-v2",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Shared request audit preserves1059 request turns and explicit per-item invocationIDs;394/394 states exact in saved requests. Supersedes narrower prior visibility counts, not outcome/admission decisions."
     }
   ],
   "coverage_backlog": [

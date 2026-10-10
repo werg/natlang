@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v21-filtered-v4-final-quality-held-20261010-v4",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-luna-pubmedqa-full-abstract-final-v4",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 133973,
+      "sha256": "1cbfc1006fc43a24aaae2b5bdd1e0e5a9829254d17c078224a5956022974af97"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 740,
+      "sha256": "c593cd6819af7bdb452ee03478969b4f529499b874e68c347d6b99abe5cd504a"
+    }
+  ],
+  "bytes": 134713
+}

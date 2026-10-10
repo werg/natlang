@@ -1,0 +1,105 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v23-quality-closure-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v23-gemini-choice-confidence-and-static-replay-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 54859,
+      "sha256": "d8b8d104b3e609d30e5d7b7cde59b59ee63ee84c3999c240d70174aff6d05558"
+    },
+    {
+      "path": "review.md",
+      "bytes": 1479,
+      "sha256": "75f530b6dc1cb97af02144072d8ae4c669574f7d0d4c351cd12758e41b2ba42b"
+    },
+    {
+      "path": "source-closure-v1/README.md",
+      "bytes": 1280,
+      "sha256": "f80cae4207e939c601baa297ef28b2c8bc7765a27e399f4307de5db55e947a5f"
+    },
+    {
+      "path": "source-closure-v1/build_v23_closure_inputs.py",
+      "bytes": 11455,
+      "sha256": "ba7b243d5a1118196681621379816fd116c0556e437db8154acf1086352a06c2"
+    },
+    {
+      "path": "source-closure-v1/check_raw_group_keys.py",
+      "bytes": 1933,
+      "sha256": "b945cbe89c3fe6ad76b562d59a1206a5d85b051620b64ec4bf541ec0f7ee8c4a"
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v1/candidate-source-case-bindings.json",
+      "bytes": 30328,
+      "sha256": "8fe79e9d8f0dc5e37318db22e9a25881d341b506686e0744c81e36af2898d731"
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v1/closed-source-case-port-projection.jsonl",
+      "bytes": 1087272,
+      "sha256": "ac73ab463e2dc856888becf0c2c1c3c3b761b866423cfe4af809272d9fd097c0",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v1/closure-report.json",
+      "bytes": 16574,
+      "sha256": "f69bf6ba1e0e1d310230f33eb5276cf305d30862088c3fadc0aca54473a009d4"
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v1/source-case-port-projection.jsonl",
+      "bytes": 1087272,
+      "sha256": "ac73ab463e2dc856888becf0c2c1c3c3b761b866423cfe4af809272d9fd097c0",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-candidate-root-actions.jsonl",
+      "bytes": 6344275,
+      "sha256": "3a1ef236981b300a2f4a984cf99e6020db4d0de7b31fb9e9b297f0cf2c5f1a9a",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-source-cases.jsonl",
+      "bytes": 1861617,
+      "sha256": "c4413a36615f1fc0b6782a46edb2b775c027c1aa06cd4355d1e3612c76edd973",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-source-manifest.json",
+      "bytes": 7388,
+      "sha256": "33f64f6888ba2c79a38c6d7ed82c40a85f932884cd62ee43400a0c973a20e078"
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/selected-program-index.jsonl",
+      "bytes": 249743,
+      "sha256": "3e89508483d054851429ba7b5cccbf2d025d12d77dde54b4f5b97f0186b61223",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/selected-source-case-index.jsonl",
+      "bytes": 407514,
+      "sha256": "713d4dadfb83a83941508c17cbc7ad1ca04e3d9380a899574803247d9111f2c9",
+      "lines": 397
+    },
+    {
+      "path": "source-closure-v1/closure-packet-v1.json",
+      "bytes": 35333,
+      "sha256": "972ecbabe2fb02f2ce4dc5b9adb2efa568c10c8f3ce62b6667551b2f93da8fcd"
+    },
+    {
+      "path": "source-closure-v1/raw-key-harness-v1.json",
+      "bytes": 1082,
+      "sha256": "8061982b94e63fb0508c33b06f43e63e62d551dd791f575d17b0d854daec87a4"
+    },
+    {
+      "path": "source-policy-pin-correction-v1.json",
+      "bytes": 1604,
+      "sha256": "25748908bbe539bc5a0fe30838f8031c6ad9001dc37641df7f4d2e20ba859bd7"
+    },
+    {
+      "path": "source-policy-pin-correction-v1.md",
+      "bytes": 628,
+      "sha256": "4593572c97497296a966dff99ebc0ea04e1efcc55f2bbad9d381e85650c7abb6"
+    }
+  ],
+  "bytes": 11201636
+}
