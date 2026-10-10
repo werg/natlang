@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-annotation-folder-v63-answerability-candidates-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v63-source-answerability-followup-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 32515,
+      "sha256": "64d588659da0c3cb77c3a8bd8af566adae47a0b0f86a976ed55478245d3a5566"
+    },
+    {
+      "path": "review.md",
+      "bytes": 1003,
+      "sha256": "6ca483d428a39f125f32c7df314e5fe4a75f5b250381a9a45453cc9f5fb91b19"
+    }
+  ],
+  "bytes": 33518
+}

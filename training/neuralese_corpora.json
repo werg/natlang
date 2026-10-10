@@ -28008,6 +28008,26 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "All82 disagreement complete sourceobjects, original annotations and returned outcomes preserved. Provisional candidates require rootreview; no automatic relabel, DPOnegative or trainingadmission."
+    },
+    {
+      "id": "decision-visible-answerability-root-review-held-20261011-v9",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Root full-state review holds9 additional strict-label sources,45total. Includes intent/completion and nonexclusive profession errors in proposed clear-model-error candidates;8 candidates retained. No relabel or admission."
+    },
+    {
+      "id": "luna-annotation-folder-v63-answerability-candidates-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v63-source-answerability-followup-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Helper source and model-error proposals retained with no automatic exclusion. Rootv9 separately reviews full states and corrects two proposed clear-error interpretations."
     }
   ],
   "coverage_backlog": [

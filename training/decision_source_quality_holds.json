@@ -1,6 +1,6 @@
 {
   "schema": "natlang.decision-source-quality-holds/1",
-  "policy_id": "decision-visible-answerability-holds-v8",
+  "policy_id": "decision-visible-answerability-holds-v9",
   "status": "canonical_forward_source_filter",
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
@@ -22,7 +22,7 @@
       "item_id": "dc-69522cb3e1b5d8c52d11",
       "original_source_group": "g-36762ffd97b257fedc14536d",
       "split": "train",
-      "reason": "Source-internal comparator-direction conflict: the abstract says \u201ctamoxifen versus AI\u201d RR=1.31 while its separate long_answer attributes higher CVAE risk to AI; the task label cannot be safely source-aligned without adjudication.",
+      "reason": "Source-internal comparator-direction conflict: the abstract says “tamoxifen versus AI” RR=1.31 while its separate long_answer attributes higher CVAE risk to AI; the task label cannot be safely source-aligned without adjudication.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "official_row_sha256": "a8d5e6dfa98ffe62094173cb9e74bafea2018f2fe5ec4ebfb69787cdb69fb270",
@@ -48,7 +48,7 @@
       "item_id": "dc-4c2f9df175a623b83303",
       "original_source_group": "g-ffe725df39df7940c00e77ca",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract says it evaluates feasibility of GFRUP limitation-of-treatment guidelines and describes case inclusion, meetings, decisions, and implementation timing. It does not state a direct feasibility result or explicitly conclude that the recommendations are applicable. \u201cMaybe\u201d is plausible; the gold \u201cyes\u201d is not established by the reported outcomes alone.",
+      "reason": "Root hold for strict single-label supervision: The abstract says it evaluates feasibility of GFRUP limitation-of-treatment guidelines and describes case inclusion, meetings, decisions, and implementation timing. It does not state a direct feasibility result or explicitly conclude that the recommendations are applicable. “Maybe” is plausible; the gold “yes” is not established by the reported outcomes alone.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "166fdd888a8174180c4bf6eba403e57d3806f4604a6ec1c7bacd3c51784167cd",
@@ -61,7 +61,7 @@
       "item_id": "dc-845c16d1dc3af5b9d3e0",
       "original_source_group": "g-6a51fa7e97e5b89fe5aaa49d",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract lists common characteristics among young men who died (poisoning, unemployment, single status, self-destructive behavior). It is a retrospective description of cases and does not test whether these factors are preventable or whether changing them reduces mortality. \u201cMaybe\u201d appropriately reflects the unsupported amenability step; \u201cyes\u201d is not established by this abstract.",
+      "reason": "Root hold for strict single-label supervision: The abstract lists common characteristics among young men who died (poisoning, unemployment, single status, self-destructive behavior). It is a retrospective description of cases and does not test whether these factors are preventable or whether changing them reduces mortality. “Maybe” appropriately reflects the unsupported amenability step; “yes” is not established by this abstract.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "01d8e0c917a17d2102f693ee48325ab2eea1e3e31e8ca8182f88672c6f14cf51",
@@ -74,7 +74,7 @@
       "item_id": "dc-e3eb31373ee4d551eef9",
       "original_source_group": "g-fa9a289591200ad71f6b0e4b",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract proposes progression criteria and states thresholds make future surgery probable, but gives no accuracy statistic, calibration, sensitivity/specificity, or validation result. The gold \u201cyes\u201d is stronger than the visible evidence about accurate prediction. \u201cMaybe\u201d is a defensible answer to the stated accuracy question.",
+      "reason": "Root hold for strict single-label supervision: The abstract proposes progression criteria and states thresholds make future surgery probable, but gives no accuracy statistic, calibration, sensitivity/specificity, or validation result. The gold “yes” is stronger than the visible evidence about accurate prediction. “Maybe” is a defensible answer to the stated accuracy question.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "6319779c26e6cd81e122d71d7cbb3fd84976ba2e51bd63c54ab9c1b2c3554cde",
@@ -87,7 +87,7 @@
       "item_id": "dc-e68969a87c8a662215b3",
       "original_source_group": "g-4341e8795b6c6a09e6682c94",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract reports a higher response rate for exon 11 than non-exon-11 mutations (84% vs 40%, p=.01), which supports a possible predictive role. It then says there were no differences between exon variants in outcomes and responses. Because these statements conflict at the level relevant to \u201cpathfinder,\u201d the abstract alone does not yield a clear yes/no; \u201cmaybe\u201d is defensible, while the gold \u201cyes\u201d is not unambiguous.",
+      "reason": "Root hold for strict single-label supervision: The abstract reports a higher response rate for exon 11 than non-exon-11 mutations (84% vs 40%, p=.01), which supports a possible predictive role. It then says there were no differences between exon variants in outcomes and responses. Because these statements conflict at the level relevant to “pathfinder,” the abstract alone does not yield a clear yes/no; “maybe” is defensible, while the gold “yes” is not unambiguous.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "0c85d22028deb08fe3c89d25ee53aca77628d3bcec917246c2156e351c1e79e1",
@@ -100,7 +100,7 @@
       "item_id": "dc-ee6743fb9c22812bd3e5",
       "original_source_group": "g-82d4ca091a2fd32fc7a2c2a1",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract reports inverse cross-sectional relationships in both sexes and prospective inverse associations in women, but prospective results among men were equivocal and no association appeared for recurrence among people with baseline pain. \u201cYes\u201d is supported for some endpoints/subgroups, not uniformly for the broad question; \u201cmaybe\u201d is a plausible cautious interpretation.",
+      "reason": "Root hold for strict single-label supervision: The abstract reports inverse cross-sectional relationships in both sexes and prospective inverse associations in women, but prospective results among men were equivocal and no association appeared for recurrence among people with baseline pain. “Yes” is supported for some endpoints/subgroups, not uniformly for the broad question; “maybe” is a plausible cautious interpretation.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "1a0a49819e0a328c17c96316ff09199e190c53601dd42d7669eb020b73aa06ae",
@@ -445,6 +445,105 @@
         "review_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
       },
       "decision_receipt_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
+    },
+    {
+      "item_id": "dc-61bae329f11a0eb43997",
+      "original_source_group": "g-be2837445174f29e001a2e8a",
+      "split": "train",
+      "reason": "Generic aphorism has no recoverable topical or destination-group evidence; original newsgroup provenance is omitted.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-39aa1bd2421659adcb21",
+      "original_source_group": "g-659703a2b6c0f471d7c69ea0",
+      "split": "train",
+      "reason": "Generic principles/nutcase reply omits thread and group provenance needed to distinguish the original destination.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-17afc0eb42ffd655709c",
+      "original_source_group": "g-f2b5037058ab8488081910a9",
+      "split": "train",
+      "reason": "Suffocation and charm express competing affects without a visible dominant-affect rule; strict joy target is not unique.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-180e88b106954433dd4b",
+      "original_source_group": "g-8eb4ccee80d61f0df6c47c3d",
+      "split": "train",
+      "reason": "Belonging and isolation are both explicit, with no dominant-affect rule resolving love versus sadness.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-18118794fb2fdd3f844b",
+      "original_source_group": "g-a860fe16f63abcf9f9dc6567",
+      "split": "train",
+      "reason": "Love of work and difficulty feeling content coexist; strict joy is not uniquely grounded without a selection rule.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-e1593d8a2944dc48d2ee",
+      "original_source_group": "g-e16eda14c0afe8a2c7af6c89",
+      "split": "train",
+      "reason": "Selected roles including an extra do not entail an exclusive career-long bit-parts claim.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-ffd94f75681a7d205b77",
+      "original_source_group": "g-922b8c677f2b3ecf6bd7beec",
+      "split": "train",
+      "reason": "Even treating the evidence pronoun as Tiger, being a golfer does not refute also being a musician. An exclusivity premise is absent.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-d93488639a3c8466e653",
+      "original_source_group": "g-9f44f3f67b204a1d2b3a3c3f",
+      "split": "train",
+      "reason": "Deciding to transform Libya does not entail completing that transformation. Intent versus accomplishment distinguishes the evidence from the claim.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-dea9153eb4181d87cd02",
+      "original_source_group": "g-47c2f80a296518957d18985d",
+      "split": "train",
+      "reason": "A single co-occurrence and explicit putative causal discussion, with normal immunological work-up, do not resolve the claimed causative link as yes.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
     }
   ],
   "root_review": {
