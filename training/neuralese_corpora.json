@@ -22169,6 +22169,35 @@
       "admission": "held-root-review-or-explicit-exclusion",
       "independent_new_worlds": 0,
       "notes": "Closed12cases:9accepted,2authoritydecisionerrors,1double-encodedJSONartifact with correctfinalanswer. Acceptance is not turn admission; preserve errors for repairreview."
+    },
+    {
+      "id": "free-provider-luna-v31-undeclared-draft-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-iterate-refill-20261010-v1/failure-case009",
+      "include": [
+        "receipt.json",
+        "receipt.md"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "authored-semantic-iterate-generation-evidence",
+      "training_admission": false,
+      "admission": "held-root-review-or-explicit-exclusion",
+      "independent_new_worlds": 0,
+      "notes": "RAIL740 child result unknown because Draft alias absent from eval scope; JSON string double serialized. Strict gold and original failure preserved. Not an admitted DPO pair."
+    },
+    {
+      "id": "free-provider-v28-visible-input-native-text-v9-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v9",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "captured-provider-input-context-text-review",
+      "training_admission": false,
+      "admission": "held-root-review-or-explicit-exclusion",
+      "independent_new_worlds": 0,
+      "notes": "313 native turns,17 failed-action targets excluded,15 duplicate rendered documents removed,281 held ordinary-text documents with zero document omissions. Captured expanded context and exact raw-action normalization adapters; no learned channel, recurrence edge, stopping, runtime qualification or training admission. Separate exact V28 DGX global closure receipt; root review pending."
     }
   ],
   "coverage_backlog": [

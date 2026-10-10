@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v31-undeclared-draft-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-iterate-refill-20261010-v1/failure-case009",
+  "files": [
+    {
+      "path": "receipt.json",
+      "bytes": 3999,
+      "sha256": "84173917b55536b95be08cb0ae5ff5f93de1dfb320fd63ef612f1aa9d04979a5"
+    },
+    {
+      "path": "receipt.md",
+      "bytes": 2380,
+      "sha256": "a98dcd8b8cb22900d7cdb37747b2da4efb3ff31c97518753e085da049b7f608c"
+    }
+  ],
+  "bytes": 6379
+}

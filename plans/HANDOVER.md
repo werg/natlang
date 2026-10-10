@@ -10115,7 +10115,7 @@ Pop05:24 UTC corrections: V6repairstartup failedbeforeAPIrequests because freshl
 - Closed V29 raw/review, ZAI V28 raw and conversion candidates V5/V6 are registered and SSH verified. Historical conversion V1–V4 bytes are verified remotely and locally offloaded with restore receipts. Fixed a false-positive where Docker -w checkout marked all descendant artifacts live. Checkpoint and actual input reference checks remain intact.
 - Merged DGX self-distillation registry and check-main worktree dependency fix. Append conflict in corpus registry resolved by preserving both complete entries; code remains Git-synchronized. GPU step30336+ continues, target32889; latest native MSE gaps increased, qualification still fails. Continue diagnosis without lowering gates.
 
-### 2026-10-10 06:15 UTC — visible inputs and rejected Draft result
+### 2026-10-10 06:09 UTC — visible inputs and rejected Draft result
 
 - All six V32 source/queue and V31 closed-evidence manifests transferred and verified by SSH on DGX; code through ec919689 pushed to origin/main. Five Luna V32 workers are running against immutable runtime v8.
 - GPU training reached 30464/32889 at 100% sampled utilization, 7319/8188 MiB. Foundation remains unqualified; preserve failing gates.
