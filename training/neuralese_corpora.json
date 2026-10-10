@@ -26960,6 +26960,19 @@
       "training_admission": false,
       "admission": "held-source-semantic-native-runtime-quality-review",
       "notes": "54 fully closed folder programs,36 exact annotation maps, outputs equal saved decisions and original files preserved. Exact state visible in688of789state-bearing invocations,101 unknown retained context; diagnosis pending. No semantic truth or trace admission."
+    },
+    {
+      "id": "free-provider-luna-v57-closed-recovery-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-safe512-file-write-recovery-v57-runtimev15-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-independent-quality-review",
+      "notes": "SAFE-512 unchanged original source recovery accepted, all6files exact, genuine four-pass typed iterateOn and final Draft. Previous V54 correct return/missing file preserved separately, not silently repaired or automatic DPO admission. Audit6686b074a856e8eb6c96339547d37c446fb1174a9c79cecadc18d3f0d15d1579; no new source-world credit."
     }
   ],
   "coverage_backlog": [
