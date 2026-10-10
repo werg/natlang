@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-render-cache-cleanup-execution-evidence-20261010-v1",
+  "owner": "pop",
+  "path": "runs/storage-render-cache-cleanup-20261010-v1",
+  "files": [
+    {
+      "path": "execution-receipt.jsonl",
+      "bytes": 254910,
+      "sha256": "ec664a9e5d783280254d18b2565aac5f3deb4364c96e28cdaf63d24ac299f6fb",
+      "lines": 870
+    },
+    {
+      "path": "execution-summary.json",
+      "bytes": 728,
+      "sha256": "ce026f0eb405c0ac825eae30f31bdb063a27bcc8e9134a2035a3895e490321f7"
+    }
+  ],
+  "bytes": 255638
+}
