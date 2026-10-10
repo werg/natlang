@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v27-policy-clarification-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v27-gemini-choice-confidence-and-static-replay-v1",
+  "files": [
+    {
+      "path": "static-policy-application-clarification-v1.json",
+      "bytes": 1901,
+      "sha256": "be7c2fe3b79203aded470df75bba3f950e4ce1918be39d087f01e36b9c750270"
+    },
+    {
+      "path": "static-policy-application-clarification-v1.md",
+      "bytes": 702,
+      "sha256": "ce6aec720e23895a2917d5730fcce5a383409b6752f28fcac8c1756eee9fd57b"
+    }
+  ],
+  "bytes": 2603
+}

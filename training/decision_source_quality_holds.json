@@ -1,6 +1,6 @@
 {
   "schema": "natlang.decision-source-quality-holds/1",
-  "policy_id": "decision-visible-answerability-holds-v9",
+  "policy_id": "decision-visible-answerability-holds-v10",
   "status": "canonical_forward_source_filter",
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
@@ -552,6 +552,72 @@
         "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
       },
       "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-0d624d9d8a0707494a5b",
+      "original_source_group": "g-4339dac57126821286443375",
+      "split": "train",
+      "reason": "Emoticon-only post contains no topical or original destination-group evidence.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v10/root-review.json",
+        "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+      },
+      "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+    },
+    {
+      "item_id": "dc-185c7f36c484c1b886db",
+      "original_source_group": "g-eeeeeeef403d72f310031403",
+      "split": "train",
+      "reason": "Weird vibe alone does not resolve surprise versus unease or another emotion.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v10/root-review.json",
+        "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+      },
+      "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+    },
+    {
+      "item_id": "dc-186c3727de8f5b255f18",
+      "original_source_group": "g-6dbac44a4a42567d81b8c192",
+      "split": "train",
+      "reason": "Reduced bother describes diminished reactivity, not an unambiguous current anger expression.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v10/root-review.json",
+        "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+      },
+      "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+    },
+    {
+      "item_id": "dc-18dd8663bcbceb238162",
+      "original_source_group": "g-f13e2467003f40082d11ca25",
+      "split": "train",
+      "reason": "Agitation can reflect anger or anxious fear; supplied input lacks a distinguishing circumstance.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v10/root-review.json",
+        "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+      },
+      "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+    },
+    {
+      "item_id": "dc-18e903af83b266b1a4e0",
+      "original_source_group": "g-daf775fd0994b1f3d74fc7c0",
+      "split": "train",
+      "reason": "Feeling better and explicit frustration coexist without a dominant-affect criterion.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v10/root-review.json",
+        "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+      },
+      "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+    },
+    {
+      "item_id": "dc-1951a4794de17639de9d",
+      "original_source_group": "g-7bc3682ed14c74a41894012f",
+      "split": "train",
+      "reason": "General reasoning about feeling bad as motivation does not uniquely express present joy.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v10/root-review.json",
+        "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+      },
+      "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
     }
   ],
   "root_review": {

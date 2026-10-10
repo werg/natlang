@@ -10543,3 +10543,7 @@ V27closed512typedvalid decisions404match suppliedannotations108differ,563attempt
 ### Provider reservation and lineage fix, 2026-10-10 23:52 UTC
 
 Sharedproviderpreparer nowvalidates exactannotationreservationmanifest/sourceindex/rowhash/group/trainsplit, omitsbothreservedIDs/groups, and scans prior nestedsource_ids/source_groups aswell asprogramidentities. Thisclosesfutureannotation-source reusegap. Rootcaught andfixed emptyreservationreturnarityregressionbeforepublication; normalnoreservationpath returnsfivevalues. V28exactcode/policypreserved; freshV29actualpreparation source512matchesV28bytes, updatedexclusionreceipts. Actualninefamilies57eachfirsteight/56Yahoo; intentlists>20omitted,PubMedQAfullpool exhausted. Rootverifiedall512trainuniquecomplete/currentholds/V21nooverlap. FrozenfreepoolstartedPID975483 withsharedquotabackoff, no paidfallback. V7at35840scheduledevaluation.
+
+### V27 root full-input review, 2026-10-10 23:54 UTC
+
+Rootread8completecandidates:6newforwardholds(51total) for emoticon-onlynewsgroupandunsupported/mixedaffectsingletargets. Retaineduncertainty/reluctancefearinterpretation; no requirement tosayemotionliterally. SportsleagueTREC humanbeings targetdeferredfortaxonomycriteriareview: coarseHUM includesgroups/orgs, so goldrelabelmaybewrongfix. TheseV27disagreementswerealreadyexcludedstatic, V65/V29sourcesdisjoint. Policytimingclarificationpreserves45holdbefore/aftersharedrulebytechange; originalV27snapshotverifiedunchanged.

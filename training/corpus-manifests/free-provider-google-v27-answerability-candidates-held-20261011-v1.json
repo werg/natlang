@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v27-answerability-candidates-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v27-answerability-candidates-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1270,
+      "sha256": "9e81c12c850c93af41fb051e1b3310f579ce5b75217c5c1ba3674e2073f01ee0"
+    },
+    {
+      "path": "candidates.json",
+      "bytes": 8356,
+      "sha256": "90015ae22502ec307070acefbe5c63122d88bead21181a27047e670fafb92be0"
+    }
+  ],
+  "bytes": 9626
+}
