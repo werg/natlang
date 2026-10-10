@@ -23,6 +23,9 @@
   `scripts/sync_training_corpora.py`. Copies, availability, and successful schema
   checks do not grant training admission. Keep split/source/quality decisions
   explicit. Register omissions and required conversions rather than losing them.
+- Licenses (owner, 2026-10-10): every dataset and model license is acceptable,
+  including the most restrictive. Include them; record license provenance as a
+  fact, but never omit or hold data for license review, and do not ask the owner.
 
 # Natlang-native work (owner rules)
 
