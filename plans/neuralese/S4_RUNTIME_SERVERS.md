@@ -185,6 +185,36 @@ Ordered by dependency; items without a dependency on S3 weights proceed before G
 
 - With trained S3 weights, every S0 conformance case passes on the Python reference server and on llama.cpp, and the read and write parity checks of §5 pass on llama.cpp, vLLM and the browser build.
 - A Natlang program that writes, stores, imports, rebinds, combines and reads Neuralese values runs identically on Node and in the browser.
+  *Status 2026-10-10:* automated parity test, `npm run test:browser-neuralese-parity` in ts-host
+  (`scripts/browser-neuralese-parity.mjs`, program `test/neuralese-parity/program.mjs`, page and pi worker beside it;
+  headless, under the memory ledger at 14 GB). One compiled natlang project (a `Neuralese<string>` template write, its
+  `read`, a `readout: decision` over the block, the builtin generic `view` at both representations, `ask`, after the
+  standard library is encoded on the host's server) runs on Node (`dist/index.js`) against the fork's native
+  `build-cpu` server and in headless Chromium (`dist/browser/natlang.js`) against the vendored wasm engine in a Web
+  Worker, with the same GGUF pair (LFM2.5-350M f32, untrained heads, cutoff 6, max block 6; exported once to
+  `~/data/natlang-browser-ci/lfm350m-untrained`), both at context 8192. Compared: every model request as sent
+  (blocks named by order of appearance), replies, block lengths and payloads, stop logits, decision requests and
+  scores, step values, streamed turns (deltas assembled equal the reply and the non-streamed reply, a written block
+  arrives as a part, both hosts stream the same). Then the page reloads: the OPFS block store still holds every
+  archived block and a fresh engine, which lacks the note, reads it back through the archive to the same text. Last,
+  pi's browser bundle runs in a dedicated worker with a scripted agent model and executor (pi-durable's harness and
+  pi's coding tools, as `applications/pi/test/browser-bundle.test.mjs` composes them): the session is an OPFS SQLite
+  database, and after a reload the same conversation continues and the agent receives its earlier turns.
+  Results (fork 2d6557813, Chromium 145, DGX): 27 checks pass, the run exits 0 (Node 58 s, browser 551 s on one
+  wasm thread). Rendered prompts (7 requests of up to 21k characters), replies, step values, stop decisions and
+  streamed turns are identical; the 9 standard-library bodies have bit-identical IDs on both hosts. Measurements, not
+  gates: (1) payloads drift with prompt length on the one-thread CPU build: 0.0014 after the first write, 0.020 and
+  0.027 for later writes after longer prompts, so the conformance suite's 2e-2 (met on its short prompts) fails for
+  one block; the gate is 5e-2, and stop logits differ by up to 0.040 (gate 5e-2). Headed Chromium under `xvfb-run`
+  with `--gpu --headed` (WebGPU on the GB10, every layer on the GPU) meets 2e-2 throughout (payloads 0.0052, stop
+  logits 0.0022) and runs the browser half in 27 s; headless Chromium here offers no WebGPU adapter. (2) The decision
+  step fails identically on both hosts: the fork's `/v1/neuralese/decide` answers `neuralese-decision: the template
+  renders the reply's prompt differently` for the runtime's decision prompt (its opening has a `scope_` assistant turn
+  with `reasoning_content`, which LFM2.5's template drops once a later assistant turn follows, so prompt + option is
+  not an extension of the prompt; the reference renders through `_target_items` instead). Open: fix the fork's
+  decision render (then rebuild wasm), run the parity test with trained heads (`--model/--heads`), the threaded build
+  (`--build neuralese-wasm-mt`), and pi's own `openBrowserPi` path, whose natural-language task kinds need a real
+  executor model.
 - `grad` through a context item and an `iterateOn` training loop with `adam` run end to end and save a `.nz` file.
 - Every applied compiler rewrite appears in the trace with its gating measurement.
 - A backend without Neuralese support fails such programs with `neuralese-unsupported-backend`.

@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Neuralese parity</title>
+<main id="state">READY</main>
+<script type="module">
+  // The browser half of scripts/browser-neuralese-parity.mjs: the parity program on the WebAssembly engine, the block
+  // store's restore after a reload, and pi's browser entry in a dedicated worker. The driver calls these functions.
+  import * as natlang from '../../dist/browser/natlang.js';
+  import { runParityProgram, payloadFloats } from './program.mjs';
+
+  const load = url => fetch(url).then(response => { if (!response.ok) throw new Error(`${url}: ${response.status}`); return response.blob(); });
+  const start = async ({ build = 'neuralese-wasm', threads = 1, gpuLayers = 0, nCtx = 8192, model, heads }) => {
+    const worker = new Worker(new URL('../../dist/browser/neuralese-worker.js', import.meta.url), { type: 'module' });
+    let adapter = null;
+    if (navigator.gpu) {
+      const found = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+      adapter = found ? { vendor: found.info?.vendor, description: found.info?.description, f16: found.features.has('shader-f16') } : null;
+    }
+    const started = performance.now();
+    const service = await natlang.startBrowserNeuralese({ worker, model: await load(model), heads: await load(heads), maxBlock: 6,
+      nCtx, threads, gpuLayers, moduleUrl: new URL(`../../dist/browser/${build}.mjs`, import.meta.url).href });
+    return { service, environment: { build, threads, gpu_layers: service.gpu_layers ?? null, devices: service.devices ?? null, adapter,
+      store: service.store?.constructor?.name ?? null, cross_origin_isolated: self.crossOriginIsolated, load_ms: Math.round(performance.now() - started),
+      user_agent: navigator.userAgent } };
+  };
+
+  window.runParity = async options => {
+    const { service, environment } = await start(options);
+    try {
+      const viewSource = await (await fetch('../../src/builtin/view.nl')).text();
+      const trace = await runParityProgram({ natlang, endpoint: service.endpoint, store: service.store, viewSource, target: 'browser',
+        log: line => console.log(line) });
+      return { environment, trace };
+    } finally { await service.close(); }
+  };
+
+  // After a reload: the OPFS archive still holds every block, and a fresh engine (which has none of them) reads the
+  // written note back through the archive (withRestoredBlocks) to the same text as before the reload.
+  window.checkRestore = async ({ ids, note, library, expected, ...options }) => {
+    const store = await natlang.openBrowserNeuraleseStore();
+    const present = {};
+    for (const id of ids) {
+      const block = await store.get(id).catch(error => ({ error: String(error) }));
+      present[id] = block?.meta ? { ok: true, length: block.meta.length, sum: payloadFloats(block).reduce((a, b) => a + b, 0) } : { ok: false, error: block?.error ?? null };
+    }
+    const { service, environment } = await start(options);
+    try {
+      const engineHad = await natlang.fetchModel(`${service.endpoint}/v1/neuralese/blocks/${note.$neuralese.id}`).then(response => response.status);
+      const driver = natlang.neuraleseServerModelTurn({ endpoint: service.endpoint, model: 'natlang-neuralese', store, request: { temperature: 0 } });
+      const info = await (await natlang.fetchModel(`${service.endpoint}/v1/neuralese/info`)).json();
+      const runtime = natlang.createNatlangRuntime({ model: { driver, maxTurns: 3, turnTokens: 96, temperature: 0 },
+        neuralese: { store, dialect: info.dialects[0] }, services: { neuralese: library }, calls: false, specialization: 'off', seed: { mode: 'backend' } });
+      const lib = natlang.createNeuraleseLibrary(library);
+      let value, error;
+      try { value = String(await runtime.run(() => lib.read(note))); } catch (failure) { error = String(failure?.message ?? failure); }
+      return { environment, store: store.constructor.name, present, engine_had_note: engineHad, read_back: value ?? null, error: error ?? null,
+        matches: value === expected };
+    } finally { await service.close(); }
+  };
+
+  // pi's browser entry in a dedicated worker (OPFS sessions need one), with a scripted agent model on the driver's server.
+  window.runPi = ({ phase, agent, entry }) => new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./pi-worker.mjs', import.meta.url), { type: 'module' });
+    worker.onmessage = event => { worker.terminate(); resolve(event.data); };
+    worker.onerror = event => { worker.terminate(); reject(new Error(event.message || 'pi worker failed')); };
+    worker.postMessage({ phase, agent, entry });
+  });
+  document.querySelector('#state').textContent = 'LOADED';
+  window.__parityReady = true;
+</script>
