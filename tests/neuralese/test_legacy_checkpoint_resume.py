@@ -42,6 +42,11 @@ def test_a_checkpoint_written_by_the_pre_loop_trainer_still_resumes(tmp_path, mo
         by_name = {path.name: str(path.resolve()) for path in moved.values()}
         saved['identity']['inputs'] = {by_name[key.rsplit('/', 1)[1]]: digest
                                        for key, digest in saved['identity']['inputs'].items()}
+        # Later recipe fields (the cohort sampler's declaration) are an identity change of newer code, not of the
+        # skeleton: declare them at their defaults the way a continuation on that code would.
+        saved['identity']['supervision_policy'] = {
+            **text_warmup.text_supervision_policy(), 'context_weight': 1.0, 'feedback_weight': .25,
+            'sampler': 'cohort-then-document-then-window/1', 'cohort_weights': None}
         torch.save(saved, run / 'checkpoint.pt')
         text_warmup.main(['--heads', str(heads_path), '--records', str(records), '--text-data', str(text),
             '--out', str(run), '--device', 'cpu', '--steps', '6', '--tokens', '8',

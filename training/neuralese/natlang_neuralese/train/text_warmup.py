@@ -1162,7 +1162,11 @@ def main(argv=None):
         option_changes=sorted(k for k in old_options.keys()&new_options.keys() if old_options[k]!=new_options[k])
         recipe_changes=[k for k in option_changes if k not in RESUME_OPERATIONAL_OPTIONS]
         if not same_resume_identity(resumed['identity'], identity):
-            raise ValueError('warm-up resume identity changed'+(f' (options {recipe_changes})' if recipe_changes else ''))
+            skipped={'code','options','display'}
+            fields=sorted(k for k in (resumed['identity'].keys()|identity.keys())-skipped
+                          if resumed['identity'].get(k)!=identity.get(k))
+            raise ValueError('warm-up resume identity changed'+(f' (options {recipe_changes})' if recipe_changes else '')
+                             +(f' (identity fields {fields})' if fields else ''))
         code_handoffs=list(resumed.get('code_handoffs',[]))
         old_code,new_code=resumed['identity'].get('code',{}),identity['code']
         added_options=sorted(new_options.keys()-old_options.keys())
