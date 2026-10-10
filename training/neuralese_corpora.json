@@ -25426,6 +25426,79 @@
       "training_admission": false,
       "admission": "held-review-no-training-admission",
       "notes": "SingleoriginaltrainSCHED540recoveryruntimeV13/medium/512requests. Priorpartialheld. Mayoverlap4freshworkers,max5total; noindependentworldcredit."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v14-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v14",
+      "include": [
+        "*",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-static-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "512closedtypedchoices368annotationmatches144disagreements;648attemptsallfinal. Notsemantictruth."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v14-static-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v14-adapter-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-static-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "47referenceprograms368itemsactualreplay47/47accepted/capturevisible. Sourcequality/trajectoryadmissionheld."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v14-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v14-gemini-choice-confidence-and-static-replay-v1",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-static-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "Independentclosedchoiceconfidence/sourceagreementaudit, nocausalmodelcomparison orcalibratedconfidence."
+    },
+    {
+      "id": "free-provider-luna-v43-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v43-fortyseven-runtimev13-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-launch-receipt-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-static-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "Fourworkers47trainfoldercases368sourceitemsruntimeV13, sourcequalityheld; max5includingindependentrecovery."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v16-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v16",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-static-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "512freshtraininheritedrowsdisjointIDsANDgroupspriorproviders; sharedprojectqueuebehindV15, activeoutputsnotincluded."
     }
   ],
   "coverage_backlog": [
