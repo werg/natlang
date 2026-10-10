@@ -105,7 +105,8 @@ specialization reports include it.
 1. `model/scheduler.ts` with the capability declaration, routed through all backends (with B3 in the architecture
    plan), plus mock tests.
 2. `scoreMany` and the prefix+continuations scoring endpoint in the neuralese server and the llama.cpp fork, with
-   fallbacks. The TypeScript half is done (below); the server half is pending.
+   fallbacks. Done: both servers have `POST /v1/natlang/score` (also `/v1/neuralese/decide_many`), and the Neuralese
+   driver sends one batched request (section 9).
 3. Server slot sizing in `local-server.ts` and `doctor`.
 4. Prompt layout audit and fixture test, with prefix caching on.
 5. Trace fields and the `natlang traces` occupancy view.
@@ -154,8 +155,8 @@ Done: steps 1, 3, 4, 5, 6 and the TypeScript half of step 2. Tests: `test/schedu
   meaning of `DecisionScores` (over the tokens where the options differ, end of message included), so results must
   agree with the one-request-per-option path within tolerance (gate 3). One request occupies one scheduler slot.
   404, 405 and 501 mean "no such endpoint": the client falls back to concurrent scoring and does not ask again. An
-  item that fails returns `{ "error" }` and fails alone. For the Neuralese server the same shape belongs at
-  `/v1/neuralese/decide_many` (with block uploads handled as `decide` does); not implemented.
+  item that fails returns `{ "error" }` and fails alone. The Neuralese server
+  driver (`neuraleseServerModelTurn`) wires `scoreMany` to it, see section 9.
 
 **Server slots (`model/server-slots.ts`, `local-server.ts`).** `slots = clamp(floor((budget - modelBytes) /
 (contextTokens * kvBytesPerToken)), 1, 8)`, default KV budget = min(half of available memory, 4 GiB), shown by `natlang doctor` and the server start line (an explicit `local.memoryBudgetMiB`, which covers weights and KV, is not capped),
@@ -193,7 +194,7 @@ is `nl-sequential-loop` (severity warning). `natlang check` now prints warnings 
   currently build their own `requestLimit`/drivers if they set `concurrency`).
 - `skills/natlang-authoring/references/language.md`: one line telling authors that `Promise.all(items.map(f))`
   batches and a `for…of` that awaits does not.
-- llama.cpp fork and `serve/grad.py`: the scoring endpoint above; `--kv-unified` where supported.
+- llama.cpp fork and `serve/grad.py`: the scoring endpoint above is done; `--kv-unified` where supported is not.
 
 ## 8. Gates 2 and 3 on DGX (through the ledger)
 
@@ -213,3 +214,59 @@ Time each run (`/usr/bin/time -v`); p50/p95 call latency are the `wall_ms` of `n
 `batching: { mode: 'explicit-batch', scoreEndpoint: true }` with the same profile without `scoreEndpoint`, over
 1,000 `readout: decision` classifications issued with `Promise.all`; compare the `decision_readout` events'
 `log_probs` (events: `natlang traces show CALL --events`).
+
+## 9. Results (2026-10-10, DGX, through the ledger)
+
+Files: `runs/batched-execution-gates-20261010/` (the numbers are in `p1-classify.json`,
+`sized-classify.json`, `p1-urgent.json`, `gate3-score.json`; launchers and profiles beside them). Scripts:
+`scripts/bench_batched_gen.py`, `scripts/bench_batched_phase.py`, `scripts/bench_batched_score.mjs`.
+
+**Wiring.** `neuraleseServerModelTurn(...).decide` is now a `coalescingScorer` whose `scoreMany` uploads the blocks
+and resolves the adapters of each item (an item that fails there fails alone), sorts items so equal prompts are adjacent,
+and posts one `/v1/natlang/score`. A 404, 405 or 501 falls back to per-item `/v1/neuralese/decide` and is not asked
+again. Test: `test/neuralese-score-many.test.mjs` (fake server: one POST, adjacency, item error with its caller,
+fallback). The OpenAI-compatible driver keeps its config gate (`batching.scoreEndpoint`); the llama.cpp `llama-server`
+has no `prompt_logprobs` and no score endpoint, so decision readouts there are served only by the Neuralese servers.
+
+**Setup.** One model at a time, each admitted by the ledger (budget 12 GB): gate 2 on the fork's `llama-server`
+(`build-cuda`, commit 8bd8c95a0) with LFM2.5-2.6B Q6_K, `-ngl 99`, the GPU shared with training and a Mellum conversion
+(14 to 25 tokens/s decode); gate 3 on the Python reference server with LFM2.5-350M on CPU (12 threads, also shared).
+Reduced scale, because at these speeds 1,000 triage tickets would take days: gate 2 used 60 tickets.
+
+**Gate 2, classify fan-out of `examples/triage`, 60 tickets** (`natlang run examples/triage --no-adaptation`; profiles
+in `profiles.json`; server `--parallel 1 -c 8192` against `--parallel 4 -c 32768` with `batching.maxConcurrent` 4;
+`cache_prompt: true` in both):
+
+| | calls | wall (s) | calls/min | latency p50 / p95 (s) | model requests | mean in flight |
+|---|---|---|---|---|---|---|
+| bench-p1 | 60 | 1326 | 2.71 | 671 / 1261 | 158 | 1.00 |
+| bench-sized | 60 | 589 | 6.11 | 268 / 530 | 132 | 3.91 |
+
+Verdict: pass for the mechanism. Throughput is 2.25 times higher, latency 2.5 times lower, and the scheduler kept 3.9
+of 4 slots busy. It is below the 4 times the slot count suggests because the decode is shared with training on the same
+GPU (4 sequences decode in one step but each step is slower). Latencies include queue wait (mean 242 s and 111 s)
+because all 60 calls start together. Occupancy comes from `scheduling` on the `model_request` events; `mean_batch_size`
+1.09 is the scheduler's release batch, not the server's. The second stage (`is_urgent`, a boolean) was not
+measured end to end: with the 2.6B model the `bench-p1` run needed 204 model requests for 12 calls (17 per call, 7631 s)
+and was stopped by hand after 2 h 39 min, the sized run was stopped at the first `is_urgent` trace. The full-run
+wall time of the plan's gate is therefore not reported. That `is_urgent` loop (a small model that keeps failing a
+return-value contract) is a model-facing problem to look at separately, not a scheduling one.
+
+**Gate 3, 1,000 decision readouts, 3 labels each** (`node scripts/bench_batched_score.mjs http://127.0.0.1:18743 1000`,
+distinct prompts, shared rubric):
+
+| path | requests | total (s) | decisions/s |
+|---|---|---|---|
+| A: N x K single-option `/v1/neuralese/decide` | 3000 | 2121 | 0.47 |
+| B: N per-item `/v1/neuralese/decide` (K options, one prompt pass) | 1000 | 1173 | 0.85 |
+| C: driver `decide` via `Promise.all` to `/v1/natlang/score` | 16 | 1302 | 0.77 |
+
+Scores agree exactly (max |diff| 0 between A, B and C, argmax 1000/1000). Verdict: pass on agreement, and 1.63 times
+the throughput of N x K requests (the prefix is prefilled once per item, not K times). C is 0.9 times B: with distinct
+prompts per item the server does the same work, so batching only removes round trips, and on a loaded CPU the
+difference is noise; the gain of one request per 64 items shows when requests carry a network or scheduler cost, and
+when items share prompts. Not measured: the shared-prompt case, the fork's C++ `decide_many` (its working tree has
+uncommitted changes owned by another session; a GGUF export of trained heads is needed to serve it), and GPU.
+
+**Cleanup.** The three servers I started (`natlang-bench-llama-p1`, `natlang-bench-llama-s4`, `natlang-bench-ref`) are
+stopped.

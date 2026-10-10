@@ -17,7 +17,7 @@ tech = ["The export job fails with error E{n} every time I click Download.",
         "The mobile app crashes on startup after update 4.{n}.",
         "API responses are taking over {n} seconds and customers are timing out."]
 spam = ["Buy cheap watches now!!! Limit {n} pieces, click here.",
-        "You won a free cruise #{n}. Reply with your bank details.",
+        "Limited offer: 70% off sunglasses, click here now, only {n} left!",
         "Boost your SEO ranking in {n} days, guaranteed."]
 other = ["Could you add dark mode? Not urgent (idea {n}).",
          "How do I change the avatar on my profile? (ref {n})",

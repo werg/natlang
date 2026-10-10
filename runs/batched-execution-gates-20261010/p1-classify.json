@@ -1,0 +1,1 @@
+{"definition": "classify", "calls": 60, "phase_span_s": 1326.2, "calls_per_min": 2.71, "latency_p50_s": 671.4, "latency_p95_s": 1261.4, "model_requests": 158, "mean_batch_size": 1.0, "mean_in_flight": 1.0, "mean_queue_wait_ms": 242315.75}

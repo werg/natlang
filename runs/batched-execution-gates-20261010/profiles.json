@@ -1,0 +1,4 @@
+{"profiles": {
+ "bench-p1": {"endpoint": "http://127.0.0.1:18741", "model": "lfm", "apiKeyEnv": "BENCH_KEY", "batching": {"maxConcurrent": 1, "priority": false}, "request": {"cache_prompt": true}},
+ "bench-sized": {"endpoint": "http://127.0.0.1:18741", "model": "lfm", "apiKeyEnv": "BENCH_KEY", "batching": {"maxConcurrent": 4}, "request": {"cache_prompt": true}}
+}}
