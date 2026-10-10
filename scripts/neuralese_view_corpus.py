@@ -7,8 +7,8 @@ Subcommands:
           corpora: --cross-index, see neuralese_data/cross_corpus.py), validate, write a manifest
   filter  copy a built corpus keeping only records whose licence review class is allowed (a licence review's cut)
 
-v2 (view-ask-20261010-v2): fetch --v2 into a new raw directory, then build --preset v2 --cross-index <S1 index>
---cross-index <harness-bench index> (VIEW_CORPUS.md §4 and §5).
+v2 (view-ask-20261010-v2): fetch --v2 into a new raw directory, then build --preset v2 --cross-index cross-corpus-index-s1-full-final-20261003-v1
+--cross-index cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1 (VIEW_CORPUS.md §4 and §5).
 
 Example (under the ledger; <repo> and <data_nvme> are natlang_neuralese.common.paths roots):
   python3 scripts/memory_ledger.py run --unit natlang-view-corpus-HHMM --budget-gb 8 --class experiment --wait 600 \
@@ -47,8 +47,9 @@ def main(argv=None) -> int:
     b.add_argument("--protected", type=Path, default=view_corpus.PROTECTED_INDEX)
     b.add_argument("--only", action="append", default=None, help="restrict to these source adapters")
     b.add_argument("--preset", choices=("v1", "v2"), default="v1", help="caps preset (v2 adds the v2 sources)")
-    b.add_argument("--cross-index", action="append", type=Path, default=[],
-                   help="published-corpus index directory (cross_corpus.index_corpus); repeatable")
+    b.add_argument("--cross-index", action="append", default=[],
+                   help="published-corpus index: a directory (cross_corpus.index_corpus) or a registered "
+                        "cross-corpus-index id (neuralese_data/cross_corpus_registry.py); repeatable")
     fl = sub.add_parser("filter")
     fl.add_argument("--src", type=Path, required=True)
     fl.add_argument("--out", type=Path, required=True)

@@ -176,3 +176,30 @@ def test_cross_corpus_index_and_apply(tmp_path):
     assert any("own validation vs published train" in k for k in report["dropped"])
     assert any("exact example already published" in k for k in report["dropped"])
     assert cc.check(kept, [ix]) == []
+
+
+def test_cross_corpus_registry_resolves_ids(tmp_path):
+    from neuralese_data import cross_corpus_registry as reg
+    root = tmp_path / "data/ix"
+    root.mkdir(parents=True)
+    (root / "index.json").write_text("{}")
+    (tmp_path / "training").mkdir()
+    (tmp_path / "training/neuralese_corpora.json").write_text(json.dumps({"corpora": [
+        {"id": "cross-corpus-index-x-v1", "kind": "cross-corpus-index", "path": "data/ix"},
+        {"id": "x", "path": "data/x"}]}))
+    assert reg.resolve("cross-corpus-index-x-v1", tmp_path) == (root, "cross-corpus-index-x-v1")
+    assert reg.resolve(root, tmp_path) == (root, None)
+    for bad in ("x", "missing"):
+        with pytest.raises(FileNotFoundError):
+            reg.resolve(bad, tmp_path)
+
+
+def test_registered_view_v2_indexes_are_portable():
+    from neuralese_data import cross_corpus_registry as reg
+    entries = {e["id"]: e for e in json.loads((reg.REPO / reg.REGISTRY).read_text())["corpora"]}
+    for ix in entries["view-ask-20261010-v2"]["build"]["cross_corpus_indexes"]:
+        assert "path" not in ix
+        entry = entries[ix["registry_id"]]
+        assert entry["kind"] == "cross-corpus-index" and entry["training_admission"] is False
+        assert entry["derived_from"] == [ix["corpus_id"]] and not entry["path"].startswith("/")
+        assert (reg.REPO / "training/corpus-manifests" / (entry["id"] + ".json")).is_file()

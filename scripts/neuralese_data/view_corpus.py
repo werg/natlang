@@ -41,7 +41,7 @@ from pathlib import Path
 from . import view_extract as vx
 from .common import Reject
 from .records import VERSION, exact_refs_from, group_key, leakage, license_, seal, source, text_hash, validate_with_schema
-from . import cross_corpus
+from . import cross_corpus, cross_corpus_registry
 from .splits import check_closed
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training" / "neuralese"))
@@ -1591,7 +1591,8 @@ def build(raw: Path, out: Path, *, corpus_id: str, caps: dict, max_source_chars:
     and deduplicate against; the build fails if a kept record still shares a group, source or question with a
     published record of another split."""
     ctx = Ctx(raw, caps, max_source_chars, min_source_chars, seed)
-    indexes = [cross_corpus.Index(Path(p)) for p in cross_indexes]
+    resolved = [cross_corpus_registry.resolve(p) for p in cross_indexes]
+    indexes = [cross_corpus.Index(root) for root, _ in resolved]
     adapters = adapters or ADAPTERS
     docs: list[Doc] = []
     for name, adapter in adapters.items():
@@ -1714,8 +1715,8 @@ def build(raw: Path, out: Path, *, corpus_id: str, caps: dict, max_source_chars:
         "by_split": dict(Counter(r["split"] for r in kept)),
         "licenses": dict(Counter(f"{r['lineage']['store']}:{r['license']['spdx']}" for r in kept)),
         "closure": closure,
-        "cross_corpus_indexes": [{"corpus_id": ix.corpus_id, "path": str(ix.root), "records": ix.meta["records"]}
-                                 for ix in indexes],
+        "cross_corpus_indexes": [{"corpus_id": ix.corpus_id, **({"registry_id": rid} if rid else {"path": str(ix.root)}),
+                                  "records": ix.meta["records"]} for ix, (_, rid) in zip(indexes, resolved)],
         "license_review": {
             "by_class": dict(Counter(r["lineage"]["notes"]["license_provenance"]["class"] for r in kept)),
             "by_dataset_class": dict(Counter(f"{r['lineage']['store']}:{r['lineage']['notes']['license_provenance']['class']}"

@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "cross-corpus-index-s1-full-final-20261003-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/cross-corpus-index-s1-full-final-20261003-v1",
+  "files": [
+    {
+      "path": "digests.npz",
+      "bytes": 115212068,
+      "sha256": "6432ff67414718ec95ea34d9683941f3488557df26256eee7846e3e8aa36ea80"
+    },
+    {
+      "path": "groups.json",
+      "bytes": 47084554,
+      "sha256": "accb6981c6be55d117b05f8633632fc6b77452dd45a870ce75a10412483711ed"
+    },
+    {
+      "path": "index.json",
+      "bytes": 15277,
+      "sha256": "eb78bbdfc5673a7b4e97c42881beae49a14de1a3f7db1741f80a311d15f087a4"
+    },
+    {
+      "path": "sketches.npz",
+      "bytes": 1273593899,
+      "sha256": "c2ae4b4a691e953db7527b7c9eaf3dbd8dc123efef692ef17adfa6e6170f37c8"
+    }
+  ],
+  "bytes": 1435905798
+}

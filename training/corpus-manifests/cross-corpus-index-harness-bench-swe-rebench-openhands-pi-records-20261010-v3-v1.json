@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1",
+  "files": [
+    {
+      "path": "digests.npz",
+      "bytes": 1570,
+      "sha256": "b1d11e24194cb00aa5b9af8f970851ea0e904e9997b00de1682d4bf1b792a979"
+    },
+    {
+      "path": "groups.json",
+      "bytes": 42019,
+      "sha256": "47479c9b5f23a1138fa19d8ab3635a66f4257f503e09207eb9dce078dc171bea"
+    },
+    {
+      "path": "index.json",
+      "bytes": 802,
+      "sha256": "1465a916258ad5e43bd717ae2bcdbb0b9b3f0b7c93957b0d91f711021c1dda2f"
+    },
+    {
+      "path": "sketches.npz",
+      "bytes": 756,
+      "sha256": "0d1dc155fb076f2c876c6d443622b2dabd85af37b3c2e7a953afa9249b1689f2"
+    }
+  ],
+  "bytes": 45147
+}

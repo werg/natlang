@@ -166,7 +166,9 @@ Published corpora are immutable, so a new corpus adapts to them (`scripts/neural
    of every whole example, and the finalizer's bottom-64 MinHash sketch (word 5-shingles) of every source text of a
    consume/reconstruct/compare record up to 60k characters. A source text seen under three or more groups is
    background (as in the finalizer) and never used as document identity. Indexes live on NVMe at
-   `/home/werg/data/natlang-corpora/cross-corpus-index/<corpus-id>/` (`index.json` has the counts). S1: 1,870,591
+   `/home/werg/data/natlang-corpora/cross-corpus-index/<corpus-id>/` (`index.json` has the counts) and are published
+   as registry snapshots `cross-corpus-index-<corpus-id>-v1` (kind `cross-corpus-index`, not training data; sync them
+   with `scripts/sync_training_corpora.py`; `--cross-index` takes the id, `neuralese_data/cross_corpus_registry.py`). S1: 1,870,591
    records, 985,434 groups (no group in two splits), 5.45M source texts (16,265 background), 1.54M questions, 4.73M
    sketches; 23 minutes. Harness bench v3: 3,843 records, 769 groups.
 3. **Apply** (in `build`, after validation): our records are closed internally by group keys plus links computed
