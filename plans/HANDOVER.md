@@ -10265,3 +10265,5 @@ V38's exhausted SCHED-540 attempt has concrete model-code mistakes (free `decisi
 - Cleanup remains complete: exactoffload/dedup/cache/container receipts preserved. Small isolated diagnostics remain because they can contain unique evidence; anotherPopreader has disposablecache scope and has not yet reported completion.
 
 - V13closedaudit:382/512sourceannotationmatches,130disagreements;50staticprograms382items864heldnativeturns, all50actualreferenceacceptedandcapturevisible. Registeredraw/static/qualityheld. V41root-reviewedfourworkerqueuePID879992 waitsforallV40predecessorscomplete, thenusesruntimeV13guidance; planSHA0bccce1528dfd9a6657e1ea53421cb3efb4c72eb5bf419e755d579e27befa90f. Noadditionalconcurrentworkerswhilewaiting.
+
+- V13sourceclosure authoritative closure-input-v1/harness4-v1:50programs382items764question/state leaves, all50keptwithzeroharnessgroupclosureerrors; rawdc-/g-/aliaseszeroharnesshits. FullS1/textclosurependingDGX; sourcequality/admissionheld. PacketSHA5aafdebc945be5b539ac9f0f2957a1f38d4ac4f72e995436c5dc6da3d224b494.
