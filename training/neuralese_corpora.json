@@ -27773,6 +27773,32 @@
         "launch-receipt-v1.json",
         "frozen-adapter-v1/**/*"
       ]
+    },
+    {
+      "id": "annotation-inline-folder-static-held-20261011-v17",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v17",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "104 annotation-grounded inline directory reducer programs,416 full train items,52 per eight families. Exact V16 ID/group exclusions and complete source lineage receipts.104 reference/visibility gates accepted,0 provider label calls. Execution-source snapshots preserve exact12 generation component hashes before later group-exclusion strengthening. Held, no new-world or training admission."
+    },
+    {
+      "id": "luna-annotation-folder-v63-reviewed-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-annotation-folder-v63-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Five-worker104-program successor waits for V62 complete accounting.416items disjoint from V16 and current29 sourceholds. Reviewed generation only; active outputs excluded.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-approved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ]
     }
   ],
   "coverage_backlog": [

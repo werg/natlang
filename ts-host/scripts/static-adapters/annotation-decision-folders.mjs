@@ -97,8 +97,9 @@ function captureVisibility(row, record) {
 
 async function main() {
   const { values } = parseArgs({ options: { help: { type: 'boolean' }, cases: { type: 'string' }, out: { type: 'string' },
-    'items-per-family': { type: 'string', default: '12' }, 'batch-size': { type: 'string', default: '4' } } });
-  const usage = 'usage: annotation-decision-folders.mjs --cases SOURCE_CASES.jsonl --out NEW_DIR [--items-per-family N] [--batch-size N]';
+    'items-per-family': { type: 'string', default: '12' }, 'batch-size': { type: 'string', default: '4' },
+    'exclude-cases': { type: 'string' } } });
+  const usage = 'usage: annotation-decision-folders.mjs --cases SOURCE_CASES.jsonl --out NEW_DIR [--items-per-family N] [--batch-size N] [--exclude-cases PRIOR_CASES.jsonl]';
   if (values.help) { console.log(usage); return; }
   if (!values.cases || !values.out) throw new Error(usage);
   const itemsPerFamily = Number(values['items-per-family']), batchSize = Number(values['batch-size']);
@@ -120,12 +121,53 @@ async function main() {
   const holds = new Map(policy.excluded_items.map(item => [item.item_id, item]));
   const rows = sourceBytes.toString('utf8').split(/\r?\n/).filter(Boolean).map((line, index) => ({ row: parse(line), index, raw: line }));
   requireValue(rows.length === declaredCaseCount && new Set(rows.map(({row}) => row.id)).size === rows.length, 'invalid_source_rows');
+  const sourceById = new Map(rows.map(entry => [entry.row.id, entry]));
+  const excludedIds = new Set(), excludedGroups = new Set(), exclusionCases = [];
+  let exclusionBytes = Buffer.alloc(0), exclusionPath = null;
+  if (values['exclude-cases']) {
+    exclusionPath = resolve(values['exclude-cases']);
+    exclusionBytes = await readFile(exclusionPath);
+    const lines = exclusionBytes.toString('utf8').split(/\r?\n/).filter(Boolean);
+    const priorPrograms = new Set();
+    for (const [lineIndex, line] of lines.entries()) {
+      const prior = parse(line), programId = prior.id;
+      requireValue(typeof programId === 'string' && programId.length > 0 && !priorPrograms.has(programId),
+        `invalid_or_duplicate_excluded_program:${lineIndex}`);
+      priorPrograms.add(programId);
+      const priorSource = prior.external_source;
+      requireValue(priorSource?.snapshot_sha256 === sourceSha &&
+        priorSource?.source_manifest_sha256 === sha(sourceManifestBytes), 'excluded_source_snapshot_mismatch');
+      requireValue(Array.isArray(prior.source_ids) && Array.isArray(prior.source_groups) &&
+        Array.isArray(priorSource.source_rows) && prior.source_ids.length === priorSource.source_rows.length,
+        'invalid_excluded_lineage_shape');
+      const rowEntries = [];
+      for (const [index, id] of prior.source_ids.entries()) {
+        requireValue(typeof id === 'string' && !excludedIds.has(id), `duplicate_excluded_source_id:${id}`);
+        const declared = priorSource.source_rows[index];
+        const actual = sourceById.get(id);
+        requireValue(actual && declared.id === id && declared.row_index === actual.index &&
+          declared.row_sha256 === sha(actual.raw) && declared.group === actual.row.group &&
+          declared.split === actual.row.role && actual.row.role === 'train' && actual.row.kind === 'choice',
+        `excluded_source_lineage_mismatch:${id}`);
+        requireValue(!excludedGroups.has(actual.row.group), `duplicate_excluded_source_group:${actual.row.group}`);
+        excludedIds.add(id); excludedGroups.add(actual.row.group);
+        rowEntries.push({ id, row_index: actual.index, row_sha256: sha(actual.raw), group: actual.row.group,
+          split: actual.row.role });
+      }
+      requireValue(equal([...new Set(rowEntries.map(entry => entry.group))], prior.source_groups),
+        `excluded_program_group_mismatch:${programId}`);
+      exclusionCases.push({ program_id: programId, source_ids: prior.source_ids,
+        source_groups: prior.source_groups, source_rows: rowEntries });
+    }
+  }
   const omittedHeld = rows.filter(({row}) => holds.has(row.id));
   for (const {row} of omittedHeld) {
     const hold = holds.get(row.id);
     requireValue(hold.original_source_group === row.group && hold.split === row.role, 'hold_lineage_mismatch');
   }
-  const eligible = rows.filter(({row}) => !holds.has(row.id) && row.role === 'train' && row.kind === 'choice');
+  const eligible = rows.filter(({row}) => !holds.has(row.id) && !excludedIds.has(row.id) &&
+    !excludedGroups.has(row.group) &&
+    row.role === 'train' && row.kind === 'choice');
   const byFamily = new Map();
   for (const entry of eligible) {
     const list = byFamily.get(entry.row.family) ?? [];
@@ -260,6 +302,14 @@ async function main() {
     rejected_rows: materializer.reduce((sum, item) => sum + item.rejected_rows, 0),
     emitted_turns: materializer.reduce((sum, item) => sum + item.turns, 0), per_program: materializer }, null, 2) + '\n';
   const familyText = JSON.stringify(familySummary, null, 2) + '\n';
+  const exclusionReceipt = { schema: 'natlang.annotation-decision-folder-exclusions/1',
+    prior_cases_path: exclusionPath, prior_cases_sha256: exclusionPath ? sha(exclusionBytes) : null,
+    source_cases_sha256: sourceSha, source_manifest_sha256: sha(sourceManifestBytes),
+    excluded_programs: exclusionCases.length, excluded_source_ids: [...excludedIds].sort(),
+    excluded_source_groups: [...excludedGroups].sort(), programs: exclusionCases,
+    receipt_sha256: null };
+  exclusionReceipt.receipt_sha256 = jsonSha({ ...exclusionReceipt, receipt_sha256: null });
+  const exclusionText = JSON.stringify(exclusionReceipt, null, 2) + '\n';
   const failuresText = failures.map(item => JSON.stringify(item)).join('\n') + (failures.length ? '\n' : '');
   const summary = { schema: 'natlang.static-annotation-decision-folders/1', status: 'prepared_held_reference_only',
     training_admission: false, provider_calls: 0, independent_new_worlds: 0,
@@ -267,6 +317,9 @@ async function main() {
       source_manifest_sha256: sha(sourceManifestBytes), selected_rows: declaredCaseCount },
     quality_policy: { path: policyPath, sha256: sha(policyBytes), policy_id: policy.policy_id,
       canonical_holds_present_in_source: omittedHeld.map(({row}) => row.id) },
+    exclusions: { path: exclusionPath, sha256: exclusionPath ? sha(exclusionBytes) : null,
+      programs: exclusionCases.length, source_ids: excludedIds.size, source_groups: excludedGroups.size,
+      receipt_sha256: sha(exclusionText) },
     selection: { families: familySummary, selected_annotations: selected.length, programs: records.length,
       items_per_family: itemsPerFamily, batch_size_limit: batchSize,
       source_groups_preserved: sourceGroups.size,
@@ -279,11 +332,12 @@ async function main() {
     execution_components: componentPins,
     adapter: { path: fileURLToPath(import.meta.url), sha256: sha(await readFile(fileURLToPath(import.meta.url)) ) },
     artifacts: { cases_sha256: sha(casesText), replay_sha256: sha(replayText), materializer_review_sha256: sha(materializerText),
-      families_sha256: sha(familyText), failures_sha256: sha(failuresText) } };
+      families_sha256: sha(familyText), exclusions_sha256: sha(exclusionText), failures_sha256: sha(failuresText) } };
   await writeExclusive(out, 'cases.jsonl', casesText);
   await writeExclusive(out, 'replay.results.jsonl', replayText);
   await writeExclusive(out, 'materializer.review.json', materializerText);
   await writeExclusive(out, 'families.json', familyText);
+  await writeExclusive(out, 'exclusions.json', exclusionText);
   await writeExclusive(out, 'replay.failures.jsonl', failuresText);
   await writeExclusive(out, 'summary.json', JSON.stringify(summary, null, 2) + '\n');
   console.log(JSON.stringify({ out, programs: records.length, annotations: selected.length,
