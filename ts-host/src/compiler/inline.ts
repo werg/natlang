@@ -13,7 +13,7 @@ export type NatlangDiagnostic = SourceSpan & {
   code: 'nl-unknown-return' | 'nl-unknown-parameter' | 'nl-not-called' | 'nl-not-tag' | 'nl-shadowed' | 'nl-ambiguous-signature' | 'nl-sync-callback' |
     'nl-parameter-collision' | 'nl-unknown-name' | 'nl-spread' | 'nl-const-capture-write' |
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
-    'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript' |
+    'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript' | 'nl-undeclared-type' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-interpolation' | 'neuralese-untyped-literal' |
     'neuralese-nested' | 'neuralese-readout-sync' | 'neuralese-crisp-result' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments' | 'undeclared-field' | 'untrusted-instruction';
   message: string;
@@ -342,6 +342,25 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     // 1. Explicit annotation (`nl<F>`, or `nl.with<F>({ … })`).
     const annotation = node.typeArguments?.[0] ?? (twoArgumentWith ? withCall?.typeArguments?.[1] : withCall?.typeArguments?.[0]);
     if (annotation) {
+      // Inline calls written later by an interpreter run in eval's declared scope. A type alias
+      // mentioned only in an earlier natural-language instruction is not in that scope; TypeScript
+      // represents that unresolved reference as an open type, which would silently erase the child's
+      // declared result contract. Catch it before target() converts unknown/any to `unknown`.
+      let unresolved: ts.TypeReferenceNode | undefined;
+      const findUnresolved = (typeNode: ts.Node): void => {
+        if (unresolved) return;
+        if (ts.isTypeReferenceNode(typeNode) && !checker.getSymbolAtLocation(typeNode.typeName)) {
+          unresolved = typeNode;
+          return;
+        }
+        ts.forEachChild(typeNode, findUnresolved);
+      };
+      findUnresolved(annotation);
+      if (unresolved) {
+        const name = unresolved.typeName.getText(file);
+        report(unresolved, 'nl-undeclared-type', `Type name ${JSON.stringify(name)} is not declared in this eval scope, so the inline result is untyped; declare it in scope or use a type written in this annotation.`);
+        return;
+      }
       if (ts.isFunctionTypeNode(annotation)) {
         signature.parameters = [];
         for (const parameter of annotation.parameters) {
