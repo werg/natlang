@@ -47,6 +47,8 @@ const slug = value => String(value).toLowerCase().replace(/[^a-z0-9]+/g, '_').re
 const sourceSnapshot = 'generic-typed-decision-cases-v1';
 const labelSchema = 'natlang.decision-labels/1';
 const poolSchema = 'natlang.gemini-decision-pool/1';
+const probabilityContract = 'natlang.typed-decision-probabilities/1';
+const choiceConfidenceContract = 'natlang.choice-label-confidence/1';
 const reviewedSourceFields = new Set(['id', 'family', 'kind', 'role', 'source', 'group', 'license', 'state',
   'question', 'options', 'levels', 'criteria', 'version', 'answer']);
 
@@ -55,11 +57,20 @@ function reject(rejections, id, reason, detail = {}) {
     training_admission: false });
 }
 
-function metricAndDecision(source, answer) {
+function metricAndDecision(source, answer, decisionContract) {
   if (source.kind === 'choice') {
     const options = source.options;
     if (!Array.isArray(options) || !options.length || !options.every(nonempty) || new Set(options).size !== options.length)
       return { error: 'invalid_source_options' };
+    if (decisionContract === choiceConfidenceContract) {
+      if (!answer || !exactSet(answer, ['choice', 'confidence']) || !options.includes(answer.choice) ||
+          typeof answer.confidence !== 'number' || !Number.isFinite(answer.confidence) ||
+          answer.confidence < 0 || answer.confidence > 1)
+        return { error: 'strict_choice_confidence_schema' };
+      return { predicted: answer.choice, sourceDecision: stringLabel(source.answer),
+        raw: { choice: answer.choice, confidence: answer.confidence }, score: null };
+    }
+    if (decisionContract !== probabilityContract) return { error: 'unsupported_decision_contract' };
     if (!answer || !exactSet(answer, ['probabilities']) || !validDistribution(answer.probabilities, options))
       return { error: 'strict_probability_schema' };
     const predicted = top(answer.probabilities, options);
@@ -68,6 +79,7 @@ function metricAndDecision(source, answer) {
     return { predicted, sourceDecision: stringLabel(source.answer), raw: { probabilities: answer.probabilities }, score };
   }
   if (source.kind === 'noul') {
+    if (decisionContract !== probabilityContract) return { error: 'unsupported_decision_contract' };
     const raw = answer?.noul;
     if (!exactSet(answer, ['noul']) || typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0 || raw > 1)
       return { error: 'strict_probability_schema' };
@@ -79,6 +91,7 @@ function metricAndDecision(source, answer) {
     return { predicted, sourceDecision: target, raw: { noul: raw }, score };
   }
   if (source.kind === 'score') {
+    if (decisionContract !== probabilityContract) return { error: 'unsupported_decision_contract' };
     const levels = source.levels;
     if (!Array.isArray(levels) || levels.length < 2 || !levels.every(nonempty) || new Set(levels).size !== levels.length)
       return { error: 'invalid_source_levels' };
@@ -100,22 +113,41 @@ function metricAndDecision(source, answer) {
 
 function checkedLabel(source, label) {
   if (!label || label.answer?.error) return { error: 'label_error', detail: { error: label?.answer?.error ?? 'missing_answer' } };
-  const judged = metricAndDecision(source, label.answer);
+  const decisionContract = label.decision_contract ?? probabilityContract;
+  const judged = metricAndDecision(source, label.answer, decisionContract);
   if (judged.error) return judged;
-  if (!judged.score || typeof judged.score.quality !== 'number' || !Object.values(judged.score.gates ?? {}).every(Boolean))
+  if (decisionContract === probabilityContract &&
+      (!judged.score || typeof judged.score.quality !== 'number' || !Object.values(judged.score.gates ?? {}).every(Boolean)))
     return { error: 'scoreGraded_gate_failure', detail: { score: judged.score ?? null } };
   if (judged.predicted !== judged.sourceDecision)
     return { error: 'top_decision_disagrees_with_source', detail: { top: judged.predicted, source: judged.sourceDecision } };
-  return judged;
+  return { ...judged, decisionContract };
 }
 
-function verifyManifestBinding(manifest, row, casesSha) {
+function verifyManifestBinding(manifest, row, source, casesSha) {
   const provider = row?.provider;
   if (!provider || typeof provider !== 'object') return { error: 'provider_receipt_missing' };
   if (provider.cases_sha256 !== casesSha) return { error: 'provider_cases_hash_not_pinned', got: provider.cases_sha256 ?? null };
   if (provider.endpoint !== manifest.endpoint) return { error: 'provider_endpoint_not_in_manifest', got: provider.endpoint ?? null };
   const model = provider.model;
   if (!nonempty(model)) return { error: 'provider_model_missing' };
+  const requestedChoiceContract = manifest.schema === labelSchema
+    ? manifest.request_settings?.choice_contract
+    : manifest.choice_contract;
+  if (requestedChoiceContract !== undefined && !['label-confidence', 'probabilities'].includes(requestedChoiceContract))
+    return { error: 'unsupported_manifest_choice_contract', got: requestedChoiceContract };
+  // Confidence is a label format only for categorical choice rows. Mixed
+  // manifests still carry probability distributions for score and noul rows.
+  // If the source row is absent, the caller will reject its ID after provider
+  // binding; there is no safe kind-specific contract to infer yet.
+  if (source) {
+    const expectedContract = source.kind === 'choice' && requestedChoiceContract === 'label-confidence'
+      ? choiceConfidenceContract : probabilityContract;
+    const declaredContract = row.decision_contract ?? probabilityContract;
+    if (declaredContract !== expectedContract)
+      return { error: 'label_contract_not_bound_to_manifest_choice_contract',
+        got: declaredContract, expected: expectedContract, source_kind: source.kind };
+  }
   if (manifest.schema === labelSchema) {
     if (!nonempty(manifest.model) || model !== manifest.model) return { error: 'provider_model_not_in_manifest', got: model };
     if (manifest.backend && provider.backend !== manifest.backend) return { error: 'provider_backend_not_in_manifest', got: provider.backend ?? null };
@@ -133,17 +165,19 @@ function verifyManifestBinding(manifest, row, casesSha) {
   return { error: 'unsupported_label_manifest_schema', got: manifest.schema ?? null };
 }
 
-function contractOf(source) {
+function contractOf(source, decisionContract) {
   const options = source.kind === 'choice' ? source.options : source.kind === 'score' ? source.levels : ['false', 'true'];
   const choiceLabels = source.kind === 'noul' ? ['false', 'true'] : options;
   if (!Array.isArray(choiceLabels) || choiceLabels.length < 2 || !choiceLabels.every(nonempty)) return null;
   const defaultCriteria = source.kind === 'noul' ? { false: 'No', true: 'Yes' } :
     Object.fromEntries(choiceLabels.map(label => [label, label]));
   const criteria = Object.hasOwn(source, 'criteria') ? source.criteria : defaultCriteria;
-  return { kind: source.kind, family: source.family, source: source.source, options: source.options ?? [],
+  const signature = { kind: source.kind, family: source.family, source: source.source,
+    options: source.options ?? [], levels: source.levels ?? [], criteria, license: source.license, role: source.role };
+  if (decisionContract === choiceConfidenceContract) signature.decision_contract = decisionContract;
+  return { kind: source.kind, decisionContract, family: source.family, source: source.source, options: source.options ?? [],
     levels: source.levels ?? [], labels: choiceLabels, criteria, license: source.license,
-    signature: jsonSha({ kind: source.kind, family: source.family, source: source.source,
-      options: source.options ?? [], levels: source.levels ?? [], criteria, license: source.license, role: source.role }) };
+    signature: jsonSha(signature) };
 }
 
 function createRecord(contract, batch, sourceMeta) {
@@ -195,7 +229,9 @@ return decisions;`;
   const record = curriculumCase({
     family: `teacher_decision_labels_${slug(first.family)}_${contract.kind}`,
     shape: `source_${sourceMeta.cases_sha256.slice(0, 12)}_${batchKey}`,
-    variant: 'strict-top-label-v2-ordinal-source-mapping', split: 'train', splitGroup: `source-groups:${groupIds.join(',')}`,
+    variant: contract.decisionContract === choiceConfidenceContract
+      ? 'exact-choice-with-held-confidence-receipt-v1' : 'strict-top-label-v2-ordinal-source-mapping',
+    split: 'train', splitGroup: `source-groups:${groupIds.join(',')}`,
     slice: 'inline_placement', domain: 'other', mode: 'single_call', inline: 'required',
     root: { name: 'reduce_decisions', kind: 'directory-reducer', args: {}, returns: outputType,
       instructions: 'Read the task contract and every item in the directory. For each item, bind its case ID, state, question, criteria, options, and levels as separate scope values. Compose the item question into the inline natural-language instruction at runtime, and also pass question, state, criteria, options, and levels as separate arguments. Do not combine the fields into a serialized prompt variable. Save decisions.json and return that exact map.' },
@@ -215,6 +251,15 @@ return decisions;`;
   record.gold_sources = [`source-decision-annotation:${sourceMeta.cases_sha256}`];
   record.dataset = { source: first.source, family: first.family, kind: first.kind, source_split: 'train' };
   record.dataset_records = ids.map(id => `${first.source}:${id}`);
+  const transformations = contract.decisionContract === choiceConfidenceContract
+    ? { kind: contract.kind, decision_contract: contract.decisionContract,
+      from: 'typed exact choice with a bounded scalar confidence receipt',
+      to: 'the exact teacher choice, admitted only when it equals the source annotation',
+      probabilities_normalized: false, synthetic_probabilities_created: false,
+      confidence_retained_as_scalar: true, gold_in_prompt: false, reasoning_inferred: false }
+    : { kind: contract.kind, from: 'strict probability judgment',
+      to: contract.kind === 'noul' ? 'Boolean threshold at p >= 0.5; true means yes is at least as likely as no' : 'highest-probability source option/level',
+      probabilities_normalized: false, gold_in_prompt: false, reasoning_inferred: false };
   record.generation = {
     ...record.generation,
     generator: 'natlang.static_teacher_decision_labels_adapter/1',
@@ -229,15 +274,17 @@ return decisions;`;
     label_manifest_sha256s: [...new Set(batch.map(entry => entry.label.artifact.manifest_sha256))],
     scorer_source_sha256: sourceMeta.scorer_source_sha256,
     scorer_dist_sha256: sourceMeta.scorer_dist_sha256,
-    transformations: { kind: contract.kind, from: 'strict probability judgment', to: contract.kind === 'noul' ? 'Boolean threshold at p >= 0.5; true means yes is at least as likely as no' : 'highest-probability source option/level',
-      probabilities_normalized: false, gold_in_prompt: false, reasoning_inferred: false },
+    transformations,
     label_receipts: batch.map(entry => ({ id: entry.source.id, label_file_sha256: entry.label.file_sha256,
       label_manifest_sha256: entry.label.artifact.manifest_sha256, label_manifest_schema: entry.label.artifact.schema,
       manifest_binding: entry.label.binding, label_row_sha256: entry.label.row_sha256,
       response_sha256: entry.label.value.provider?.response_sha256 ?? null,
       response_content_sha256: entry.label.value.provider?.response_content_sha256 ?? null,
       request_sha256: entry.label.value.provider?.request_sha256 ?? null,
-      decision: entry.decision, probabilities: entry.raw, score: entry.score,
+      decision: entry.decision,
+      ...(entry.label.value.decision_contract === choiceConfidenceContract
+        ? { decision_contract: choiceConfidenceContract, confidence_receipt: entry.raw }
+        : { probabilities: entry.raw }), score: entry.score,
       teacher: entry.label.value.teacher ?? null, provider_model: entry.label.value.provider?.model ?? null })),
   };
   return record;
@@ -312,7 +359,7 @@ async function main() {
       manifest_path: manifestPath, manifest_sha256: manifestSha, manifest: labelManifest };
     artifacts.push(artifact);
     for (const row of labelFile.rows) {
-      const binding = verifyManifestBinding(labelManifest, row.value, casesSha);
+      const binding = verifyManifestBinding(labelManifest, row.value, cases.get(row.value?.id), casesSha);
       if (binding.error) { reject(rejections, row.value?.id, binding.error, { label_file: path, line: row.line,
         detail: binding }); continue; }
       const label = { value: row.value, row_sha256: sha(row.raw), line: row.line, file: path,
@@ -344,7 +391,7 @@ async function main() {
     const result = checkedLabel(source, label.value);
     if (result.error) { reject(rejections, id, result.error, { detail: result.detail ?? null,
       label_file: label.file, label_row_sha256: label.row_sha256 }); continue; }
-    const contract = contractOf(source);
+    const contract = contractOf(source, result.decisionContract);
     if (!contract || !nonempty(source.state) || !nonempty(source.question) || !nonempty(source.group) ||
         !nonempty(source.source) || typeof source.license !== 'string') {
       reject(rejections, id, 'incomplete_or_incompatible_source_contract', { family: source.family, kind: source.kind }); continue;
@@ -404,7 +451,7 @@ async function main() {
     }
   }
   const replayOptsSha = jsonSha({ ...options, systemPrompt_sha256: sha(TOOLS_PROMPT) });
-  const rootContext = `Label-derived static controller/reference generation; zero provider calls; no teacher-generated scaffold/reasoning. Gold/probability labels are absent from model-facing folder files and prompts.`;
+  const rootContext = `Label-derived static controller/reference generation; zero provider calls; no teacher-generated scaffold/reasoning. Gold annotations and teacher judgment receipts are absent from model-facing folder files and prompts.`;
   const summary = { schema: 'natlang.held-static-decision-adapter-summary/1', created_at: new Date().toISOString(),
     training_admission: false, cases: records.length, source_labels_accepted: eligible.length,
     source_cases: cases.size, label_rows: artifacts.reduce((sum, item) => sum + item.label_rows, 0),
@@ -426,10 +473,11 @@ async function main() {
     training_admission: false, ...sourceMeta, labels: artifacts.map(item => ({ path: item.path,
       labels_sha256: item.labels_sha256, label_rows: item.label_rows, manifest_path: item.manifest_path, manifest_sha256: item.manifest_sha256,
       manifest: item.manifest })), adapter_sha256: adapterSha,
-    transformations: 'Raw probability receipt retained. Selection is argmax (first declared option wins ties); binary noul uses p>=0.5. No normalization. Only rows passing existing scoreGraded gates and exact source top decision are converted.',
+    decision_contracts: [...new Set(eligible.map(entry => entry.label.value.decision_contract ?? probabilityContract))],
+    transformations: 'Probability-contract rows retain raw probability receipts, use argmax (first declared option wins ties), and pass existing scoreGraded gates without normalization. Choice-label-confidence rows retain choice and bounded confidence as separate typed values, create no probability distribution, and pass only when choice exactly matches the source annotation. Binary noul uses p>=0.5. Gold annotations stay out of model-facing files and prompts.',
     model_visible_fields: [...new Set([...sourceFields.filter(key => key !== 'answer'), 'criteria'])],
     criteria_provenance: 'source criteria is preserved exactly when present; otherwise a criteria map naming each declared label is generated',
-    hidden_fields: ['source answer annotation', 'teacher probability payload', 'provider response content/hash receipt'],
+    hidden_fields: ['source answer annotation', 'teacher judgment payload', 'provider response content/hash receipt'],
     source_field_review: { observed_fields: sourceFields, reviewed_visible_fields: sourceFields.filter(key => key !== 'answer'),
       hidden_source_fields: sourceFields.filter(key => key === 'answer'),
       unreviewed_fields_rejected_without_prompt_exposure: true },
@@ -450,18 +498,26 @@ async function main() {
       response_sha256: entry.label.value.provider?.response_sha256 ?? null,
       response_content_sha256: entry.label.value.provider?.response_content_sha256 ?? null,
       request_sha256: entry.label.value.provider?.request_sha256 ?? null,
-      strict_top: entry.decision, raw_probability_receipt: entry.raw, score: entry.score })),
+      decision_contract: entry.label.value.decision_contract ?? probabilityContract,
+      strict_top: entry.decision, raw_judgment_receipt: entry.raw,
+      ...((entry.label.value.decision_contract ?? probabilityContract) === probabilityContract
+        ? { raw_probability_receipt: entry.raw } : {}),
+      score: entry.score })),
     training_admission: false }, null, 2) + '\n');
   await writeExclusive(outDir, 'scorer-manifest.json', JSON.stringify({ schema: 'natlang.held-static-decision-scorer-manifest/1',
     training_admission: false, scorer: 'scoreGraded', scorer_schema: 'natlang.skill-graded/1',
     source_file: resolve(here, '../../src/skills/graded.ts'), source_sha256: sourceMeta.scorer_source_sha256,
     loaded_module: resolve(here, '../../dist/skills/graded.js'), module_sha256: sourceMeta.scorer_dist_sha256,
-    strict_schema: 'exact answer object and distribution keys; finite numeric [0,1] values; total within 1e-4 of 1; no normalization by adapter',
-    gates: { choice: ['distribution', 'top_correct'], noul: ['probability', 'correct_side'], score: ['distribution', 'within_half_level'] },
-    exact_top: 'argmax in source option/level order (first on ties); noul p>=0.5; choice must equal source label, ordinal must equal argmax of shared ordinalDistribution(source answer, levels), including zero-based numeric and fractional positions',
+    strict_schema: 'Probability contract: exact answer/distribution keys, finite numeric [0,1] values and total within 1e-4 of 1, without normalization. Choice-label-confidence contract: exact choice/confidence keys, declared choice, finite confidence in [0,1].',
+    gates: { choice: ['distribution', 'top_correct'], choice_label_confidence: ['strict choice and confidence schema', 'exact source-choice match'], noul: ['probability', 'correct_side'], score: ['distribution', 'within_half_level'] },
+    exact_top: 'Probability choices use argmax in source option order (first on ties); choice-label-confidence uses the directly supplied declared choice; noul p>=0.5; ordinal must equal argmax of shared ordinalDistribution(source answer, levels), including zero-based numeric and fractional positions',
     invocation: `Imported scoreGraded directly by ${basename(fileURLToPath(import.meta.url))}; see source-manifest.json for adapter and source paths.`,
-    accepted_score_details: eligible.map(entry => ({ id: entry.source.id, kind: entry.source.kind,
-      quality: entry.score.quality, gates: entry.score.gates, detail: entry.score.detail })) }, null, 2) + '\n');
+    accepted_score_details: eligible.filter(entry => entry.score).map(entry => ({ id: entry.source.id, kind: entry.source.kind,
+      quality: entry.score.quality, gates: entry.score.gates, detail: entry.score.detail })),
+    accepted_choice_confidence_details: eligible.filter(entry =>
+      (entry.label.value.decision_contract ?? probabilityContract) === choiceConfidenceContract).map(entry => ({
+      id: entry.source.id, choice: entry.raw.choice, confidence: entry.raw.confidence,
+      exact_source_choice_match: entry.raw.choice === entry.source.answer })) }, null, 2) + '\n');
   await writeExclusive(outDir, 'summary.json', JSON.stringify(summary, null, 2) + '\n');
   console.log(JSON.stringify({ out: outDir, cases: records.length, eligible_labels: eligible.length,
     rejections: rejections.length, replay_attempted: replayRows.length, replay_failures: replayFailures.length,
