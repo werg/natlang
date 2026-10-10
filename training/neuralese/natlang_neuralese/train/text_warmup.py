@@ -841,7 +841,6 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
                or not r['text'].strip() or not r.get('source_groups') for r in rows):
             raise ValueError('text JSONL needs nonempty text, train/test split and source_groups')
     else:
-        import hashlib
         from ..data.text_corpus import gold_text_rows
         records_path=Path(records)
         record_lines=[line for line in records_path.read_bytes().splitlines() if line]
