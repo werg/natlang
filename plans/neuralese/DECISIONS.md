@@ -1344,3 +1344,17 @@ annotations select the nearest level, with exact half ties choosing the earlier
 level. This explicitly defines the crisp target without altering annotations,
 provider probabilities, or scorer gates. Rebuild affected derivatives under the
 new variant and publish conversion obligations for the previous snapshots.
+
+### 2026-10-10 — Full projection retains a target after generated history forks
+
+Gold embedding supervision still includes the first difficult decision, then stops
+where its continuation no longer belongs to the generated history. Beyond that
+fork, the full projector learns the raw embedding of the live ordinary consumer
+next-token argmax on that same history, through its first generated close. States
+and targets are detached: this term trains the projector only, alongside the
+existing reader distribution loss. It reuses the ordinary forward pass; it is
+self-distillation, not an independent teacher or qualification certificate.
+The shared text warm-up implementation supplies this signal without a separate
+mode. Pop carries the complete optimizer checkpoint at step 28793 into the
+admitted 75% native / 25% harness text mixture. Native remains the qualification
+cohort; harness held-out results remain a separate diagnostic stratum.

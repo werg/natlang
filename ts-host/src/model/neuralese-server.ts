@@ -24,6 +24,7 @@
  */
 import { assembleChatCompletion, chatCompletionModelTurn, fetchModel, httpChatTransport, isStream, type ChatCompletionOptions, type ChatTransport,
   type HttpChatOptions } from './chat-completion.js';
+import { coalescingScorer, explicitBatchScoreMany } from './scoring.js';
 import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { activeAdapters, activeRecorder } from '../neuralese/recording.js';
 import { serves } from './neuralese-info.js';
@@ -298,11 +299,17 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     ...(neuraleseMaxLength === undefined ? {} : { neuralese_max_length: neuraleseMaxLength }) };
   const driver = chatCompletionModelTurn(transport, { request, onExchange, onTurn });
   // Decision readout: one prompt pass, every option scored from its cache (serve/grad.py `decide`).
-  const decide: DecisionScorer = async ({ messages, options: replies, adapters: bound }, signal) => {
+  type Item = Parameters<DecisionScorer>[0];
+  type Settled = PromiseSettledResult<DecisionScores>;
+  const prepare = async (messages: unknown[], replies: readonly string[], bound: readonly { id: string; scale: number }[] | undefined) => {
     const adapters = await adapterParts(bound ?? []);
     activeRecorder()?.record({ messages: structuredClone(messages), reply: { role: 'assistant', content: null }, blocks: [],
       decision: { options: [...replies] }, ...(adapters.length ? { adapters: [...adapters] } : {}) });
-    return await withRestoredBlocks(remote, store, blockIds(messages, adapters), async () => {
+    return adapters;
+  };
+  const decideRequest = async (messages: unknown[], replies: readonly string[], adapters: readonly { id: string; scale: number }[],
+      signal?: AbortSignal) =>
+    await withRestoredBlocks(remote, store, blockIds(messages, adapters), async () => {
       const response = await fetchModel(http.endpoint.replace(/\/$/, '') + '/v1/neuralese/decide', { method: 'POST', signal,
         headers: { 'content-type': 'application/json', ...http.headers },
         body: JSON.stringify({ messages, options: replies, ...(adapters.length ? { adapters } : {}) }) });
@@ -310,6 +317,31 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       if (!response.ok) throw new Error(`neuralese decide HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
       return await response.json() as DecisionScores;
     }, uploaded);
+  const decide: DecisionScorer = async ({ messages, options: replies, adapters: bound }, signal) =>
+    decideRequest(messages, replies, await prepare(messages, replies, bound), signal);
+
+  // Batched decision readouts: decisions that arrive together are scored by one POST /v1/natlang/score when the server
+  // serves `score` (the reference server and the fork both do); items sharing a prompt are sent adjacently. A server
+  // without it (not in its capabilities, or 404, 405, 501) is asked per item through `/v1/neuralese/decide`, and not
+  // asked again. An item whose blocks cannot be restored fails alone, and so does an item the server rejects.
+  const perItem = (items: Item[], signal?: AbortSignal) =>
+    Promise.allSettled(items.map(item => decideRequest(item.messages, item.options, (item.adapters ?? []) as { id: string; scale: number }[], signal)));
+  const batched = explicitBatchScoreMany({ url: http.endpoint.replace(/\/$/, '') + '/v1/natlang/score', headers: http.headers }, perItem);
+  const scoreMany = async (items: Item[], signal?: AbortSignal): Promise<Settled[]> => {
+    if (!serves((await serverInfo()) ?? {}, 'score')) return perItem(items, signal);
+    const prepared: ({ index: number; item: Item; key: string } | undefined)[] = [];
+    const results: Settled[] = new Array(items.length);
+    await Promise.all(items.map(async (item, index) => {
+      try {
+        const adapters = await prepare(item.messages, item.options, item.adapters);
+        await withRestoredBlocks(remote, store, blockIds(item.messages, adapters), async () => undefined, uploaded);
+        prepared[index] = { index, item: { ...item, ...(adapters.length ? { adapters } : {}) }, key: JSON.stringify([item.messages, adapters]) };
+      } catch (error) { results[index] = { status: 'rejected', reason: error }; }
+    }));
+    const order = prepared.filter(entry => entry !== undefined).sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : a.index - b.index);
+    const scored = await batched(order.map(entry => entry.item), signal);
+    order.forEach((entry, position) => { results[entry.index] = scored[position]!; });
+    return results;
   };
-  return Object.assign(driver, { neuralese: true as const, blocks: remote, decide });
+  return Object.assign(driver, { neuralese: true as const, blocks: remote, decide: coalescingScorer(Object.assign((...args: Parameters<DecisionScorer>) => decide(...args), { scoreMany })) });
 }

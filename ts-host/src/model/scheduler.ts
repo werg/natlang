@@ -58,6 +58,8 @@ export type SchedulerOptions = {
   adjacency?: boolean;
   /** Time source, for tests. */
   now?: () => number;
+  /** Timer source for the coalescing window, for tests that run on a virtual clock. Default: setTimeout and clearTimeout. */
+  timers?: { set(run: () => void, ms: number): unknown; clear(handle: unknown): void };
 };
 
 export type OccupancySummary = {
@@ -110,11 +112,12 @@ export function createScheduler(options: SchedulerOptions = {}): Scheduler {
   const coalesceMs = options.coalesceMs ?? (mode === 'explicit-batch' ? 2 : 0);
   const usePriority = options.priority ?? true, useAdjacency = options.adjacency ?? mode !== 'serial';
   const now = options.now ?? (() => performance.now());
+  const timers = options.timers ?? { set: (run: () => void, ms: number) => setTimeout(run, ms), clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
   let active = 0, sequence = 0, batchCounter = 0, closed = false;
   const queue: Waiter[] = [];
   const seen = new Map<string, number>();   // invocation id -> requests so far (insertion order = age)
   const records: ScheduleInfo[] = [];
-  let timer: ReturnType<typeof setTimeout> | undefined, flushing = false;
+  let timer: unknown, flushing = false;
   const groupOrder = new Map<string, number>();
 
   const take = (): Waiter | undefined => {
@@ -156,12 +159,12 @@ export function createScheduler(options: SchedulerOptions = {}): Scheduler {
   const schedule = (): void => {
     if (timer !== undefined || flushing || !queue.length) return;
     if (active >= maxConcurrent) return;   // a release will dispatch
-    timer = setTimeout(() => { timer = undefined; dispatch(); }, coalesceMs);
+    timer = timers.set(() => { timer = undefined; dispatch(); }, coalesceMs);
   };
   // A freed slot is refilled at once, from the queue in priority order: no window, requests are already waiting.
   const afterRelease = (): void => {
     flushing = true;
-    try { if (timer !== undefined) { clearTimeout(timer); timer = undefined; } dispatch(); }
+    try { if (timer !== undefined) { timers.clear(timer); timer = undefined; } dispatch(); }
     finally { flushing = false; }
     schedule();
   };
@@ -226,7 +229,7 @@ export function createScheduler(options: SchedulerOptions = {}): Scheduler {
     },
     close(reason = new Error('model scheduler is closed')) {
       closed = true;
-      if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
+      if (timer !== undefined) { timers.clear(timer); timer = undefined; }
       for (const waiter of queue.splice(0)) { waiter.detach(); waiter.reject(reason); }
     },
     get queued() { return queue.length; },

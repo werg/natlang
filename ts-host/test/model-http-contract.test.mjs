@@ -49,6 +49,8 @@ const stream = (res, text, split) => {
   next();
 };
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+/** Poll until a condition holds (a bounded wait for an event the test cannot observe directly); fails with an error, not a guessed delay. */
+const until = async (condition, limitMs = 10_000) => { const deadline = Date.now() + limitMs; while (!condition()) { if (Date.now() > deadline) throw new Error("condition not reached"); await wait(5); } };
 
 // --- streaming assembly --------------------------------------------------------------------------------------------
 
@@ -175,8 +177,7 @@ test('a request limit can be shared by several drivers, and an aborted waiter le
     const a = openAICompatibleModelTurn({ endpoint: server.endpoint, model: 'a', concurrency: limit });
     const b = openAICompatibleModelTurn({ endpoint: server.endpoint, model: 'b', concurrency: limit });
     const first = a(request());
-    await wait(30);
-    assert.equal(gate.length, 1);
+    await until(() => gate.length === 1);
     const controller = new AbortController();
     const waiting = b(request(), controller.signal);
     waiting.catch(() => {});
@@ -187,8 +188,7 @@ test('a request limit can be shared by several drivers, and an aborted waiter le
     gate.shift()();
     assert.equal((await first).text, 'ok');
     const third = b(request());
-    await wait(30);
-    assert.equal(gate.length, 1, 'the slot is free again for the next request');
+    await until(() => gate.length === 1);      // arrives only if the slot was freed
     gate.shift()();
     assert.equal((await third).text, 'ok');
   } finally { await server.close(); }

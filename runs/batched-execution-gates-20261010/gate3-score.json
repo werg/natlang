@@ -1,0 +1,40 @@
+{
+  "endpoint": "http://127.0.0.1:18743",
+  "items": 1000,
+  "options_per_item": 3,
+  "rows": [
+    {
+      "name": "A: N*K single-option /v1/neuralese/decide",
+      "total_s": 2120.61,
+      "requests": 3000,
+      "decisions_per_s": 0.47,
+      "latency_p50_ms": 524,
+      "latency_p95_ms": 1583
+    },
+    {
+      "name": "B: N per-item /v1/neuralese/decide (K options)",
+      "total_s": 1172.6,
+      "requests": 1000,
+      "decisions_per_s": 0.85,
+      "latency_p50_ms": 1141.5,
+      "latency_p95_ms": 1651
+    },
+    {
+      "name": "C: driver decide + Promise.all -> /v1/natlang/score",
+      "total_s": 1302.49,
+      "requests": 16,
+      "decisions_per_s": 0.77,
+      "paths": [
+        "/v1/natlang/score"
+      ],
+      "failed": 0
+    }
+  ],
+  "agreement": {
+    "max_abs_diff_A_vs_B": 0,
+    "max_abs_diff_B_vs_C": 0,
+    "argmax_agree_A_vs_C": "1000/1000"
+  },
+  "speedup_C_over_A": 1.63,
+  "speedup_C_over_B": 0.9
+}

@@ -1,0 +1,67 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-pool-v3-and-quality-review-v15-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/cases.jsonl",
+      "bytes": 641958,
+      "sha256": "e80fa6a36eb0697e40a78e57ab07bb9ecf55ef4a36587de8da26ffb3c39ccb59",
+      "lines": 1024
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/label_decision_cases.py",
+      "bytes": 25872,
+      "sha256": "f31de7ae93ffc0abc6373b8393ec69cad49c0bbf4543ea75326a54f5ea775a65"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/run_gemini_decision_pool.py",
+      "bytes": 9403,
+      "sha256": "23e0d7c577144b4d3ad88ed2c33bd189e7e42f139c921b1cbd110eb0bacb73c3"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/labels.jsonl",
+      "bytes": 1196654,
+      "sha256": "2365acfdb3f4fc564a33d42e735ab8dcc0adc963f95d91d9ab11bf3c16c4f7f7",
+      "lines": 1024
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/labels.jsonl.attempts.jsonl",
+      "bytes": 1149994,
+      "sha256": "ae910b0e5cb9f9a953f725581d963cd0fcb1280d7463873e4e5b2764968cbcd2",
+      "lines": 1143
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/labels.jsonl.manifest.json",
+      "bytes": 2350,
+      "sha256": "d2bfc2e2b44540e0c3146ff5261ba8bb5b106312b0d5b0993f82b50a8c22cc67"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/launch-receipt-v1.json",
+      "bytes": 1027,
+      "sha256": "52ac7a48fbe3754aeae6dad06cd75c44f38353afa2900458b0770b89fef7051c"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/source-manifest.json",
+      "bytes": 1150,
+      "sha256": "766531c1be9b6e72db67845bd1befb6d7471c8b96797397e9fde19cbaca1c582"
+    },
+    {
+      "path": "quality-review-v15/review.json",
+      "bytes": 12482,
+      "sha256": "c4503fcb650060ecfcdb03f201b8ea70f740aa5b404846276f2f126cbb32c4b9"
+    },
+    {
+      "path": "quality-review-v15/review.md",
+      "bytes": 2453,
+      "sha256": "c8c3f30bd53fb9f529f0067be6d84afd1bb5bc61e80ddf742ea8e3e472e9be1c"
+    }
+  ],
+  "bytes": 3046149
+}

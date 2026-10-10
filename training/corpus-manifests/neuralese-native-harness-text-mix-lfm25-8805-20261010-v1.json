@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-harness-text-mix-lfm25-8805-20261010-v1",
+  "owner": "pop",
+  "path": ".local/prepared/neuralese-native-harness-text-mix-20261010-v1",
+  "files": [
+    {
+      "path": "receipt.json",
+      "bytes": 2108,
+      "sha256": "0566d983b0aa21d912e77cf48ed13e37f53fe7d44fb45bd0b09bec3d7c89afec"
+    },
+    {
+      "path": "text.jsonl",
+      "bytes": 1025606559,
+      "sha256": "d1dd5e15b8766c10d3112af97e99b35e1acb9d6c9c7c6a53e0236729dda69671",
+      "lines": 8805
+    }
+  ],
+  "bytes": 1025608667
+}

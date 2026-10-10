@@ -1,0 +1,1 @@
+{"definition": "is_urgent", "calls": 12, "phase_span_s": 7631.4, "calls_per_min": 0.09, "latency_p50_s": 1434.7, "latency_p95_s": 7631.4, "model_requests": 204, "mean_batch_size": 1.0, "mean_in_flight": 1.0, "mean_queue_wait_ms": 160076.07}

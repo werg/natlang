@@ -66,3 +66,33 @@ def generated_history_channel_loss(backbone, plain_states, projected_states,
     return loss, {'channel_consistency_kl': loss.detach(),
                   'channel_consistency_agreement': (agreement.float() * mask).sum().detach() / count,
                   'channel_consistency_tokens': count.detach()}
+
+
+def generated_tail_projection_loss(backbone, heads, ordinary_states, generated_tokens,
+                                   gold_prefix_mask, close_id, *, chunk_size=128):
+    """Distill the full projector after gold targets stop belonging to this history.
+
+    The live ordinary consumer already ran on these same generated decisions.
+    Its detached next-token choice supplies raw embedding targets, requiring no
+    additional backbone pass. The added gradient reaches only the full projector;
+    gold supervision, including the first difficult decision, remains separate.
+    """
+    from .projection_anchor import relative_mse_positions
+    if (ordinary_states.shape[:2] != generated_tokens.shape or
+            gold_prefix_mask.shape != generated_tokens.shape or
+            gold_prefix_mask.dtype != torch.bool or chunk_size < 1):
+        raise ValueError('aligned generated history and boolean gold prefix required')
+    mask = through_first_close(generated_tokens, close_id) & ~gold_prefix_mask
+    errors = []
+    for start in range(0, ordinary_states.shape[1], chunk_size):
+        states = ordinary_states[:, start:start + chunk_size].detach()
+        with torch.no_grad(), eager_rms_norm():
+            next_ids = backbone.logits(states).argmax(-1)
+            targets = backbone.embed(next_ids).detach()
+        projected = heads.content(torch.zeros_like(states), states)
+        errors.append(relative_mse_positions(projected, targets))
+    positions = torch.cat(errors, dim=1)
+    count = mask.sum()
+    loss = (positions * mask).sum() / count.clamp_min(1)
+    return loss, {'generated_tail_projection_mse': loss.detach(),
+                  'generated_tail_projection_tokens': count.detach()}

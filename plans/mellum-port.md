@@ -196,3 +196,27 @@ stacks); passing it means "not detectably worse", not "equal".
   windows, ~2.4 epochs). Final state = `convert-v2/checkpoint.pt` at step 1200 (λ=1, deployed held CE 1.551, KL 0.80
   to the BF16 original; teacher CE 1.756). The qualification pipeline exports step 1200 and checks the export against
   1.551. A longer conversion needs more (or fresh) recovery windows, not more steps on these 512.
+
+## 2026-10-10 — Conversion v2 FAILED qualification (degenerate generation)
+
+- Pipeline (runs/mellum-qualify-20261010): export of step 1200 in N0 order (`/home/werg/data/models/mellum21-ternary-
+  convert-v2`, 5488 matrices); export held CE matched the trainer's 1.551 within 0.01; packed copy 3.6 GB.
+- Harness (protected 24-case packet, vLLM, served exactly as BF16): **0/23 complete in both modes** (BF16 13/23
+  thinking, 9/23 no thinking); all 23 cases `incomplete_task` (median 40 s thinking, 54 s no thinking). Criterion
+  fails on every check.
+- Coordinator diagnosis: the export is consistent (plain transformers held CE 1.512 vs BF16 1.902 on 8 windows; no
+  router/expert mismatch), but greedy generation is degenerate. "What is 17+25" loops "Preserve the original question
+  and answers." with no `<think>` and no `<|im_end|>`; a tool prompt loops nested JSON. BF16 answers `<think>…</think>
+  42<|im_end|>` and emits a correct `<tool_call>`.
+- Causes: recovery windows were Maple-rendered corpus text with system messages stripped, so chat-structure positions
+  (assistant start/`<think>`, tool-call format, end of turn) were barely or wrongly trained; CE weight 0.25 pulled
+  toward that text; 512 windows memorised; the gate was teacher-forced CE, not generation. Held KL 0.80 to the BF16
+  original was the warning sign: a low CE with a high KL means the model moved, not that it recovered.
+- Artifact `mellum21-ternary-convert-v2-20261010` registered with qualification `failed` (files kept).
+- N1 on the v2 export (no longer the target weights, but the structure carries over; held NLL / KL from full / top-1):
+  28x32 1.26 / 0.18 / 0.87, 28x24 1.48 / 0.42 / 0.80, 28x16 2.38 / 1.36 / 0.60, 21x32 7.00 / 5.82 / 0.23,
+  14x16 13.7 / 12.7 / 0.00, 14x32 13.0 / 12.0 / 0.00 (full model 1.05). Untrained depth members are unusable (early
+  exit without training); width members 28x32/28x24 are viable starting points. Rerun on the v3 export.
+- Step profile on the v2 export, 4 layers × 8192 tokens: 2.22 s/step, 15.6 GB peak (TernaryExperts fused path).
+- Next: conversion v3 — recovery data = BF16 Mellum's own generations in Mellum's chat template (system prompts
+  kept), KL-only distillation with prompt positions down-weighted, and a generation gate during training.

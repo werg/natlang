@@ -9970,3 +9970,42 @@ The owner authorized deleting the old candidate code. Retired: the Sharp-MiniCPM
 - Native-only is temporary while DGX hb-trainer's shared cohort assembler is unpublished. Carry this run's full checkpoint into the0.75/0.25 native/harness mix once it lands, preserving these updates. DGX architecture agent confirmed the untracked assembler belongs to a different helper and has pinged its owner; do not copy source or commit someone else's uncommitted work.
 - V14 found the concrete cause of empty scoped listings: **/ required at least one slash, excluding the actual root-level FileHandle. ebf0be4c fixes shared globstar zero-component matching, with Node build success and no unit tests added/run. Keep folder tools available. Frozen ZAI research-pair runtime remains unchanged until a controlled boundary; adopt rebuilt runtime for future jobs. The one-request counter discrepancy is reconciled as one local completion retry inside84 collector sends.
 - Main8ee5beb9 pulls DGX test-only cleanup; DGX reports767 passed /190 skipped /0 failed, not a local test run. Current trainer remains on its frozen code. Root storage5.9GiB before first new checkpoint; preserve active checkpoints and check headroom every monitoring cycle.
+
+## Pop check-in 2026-10-10 02:35 UTC — full-state mixed text continuation
+
+- Native continuation stopped gracefully at step 28793. Full authoritative checkpoint
+  remains in `runs/luna-ar-channelkl-native-4962-final28032-20261010-v1/direct-stage-run/autoregressive_text_fixup/checkpoint.pt`
+  (SHA a1eb48cf378f4762635b2d7178c9c947cd1a3f7ab55020cd7d25979b067d55c2).
+  Its serving heads lagged at 28416; centralized `warmup_export` reconstructed exact
+  28793 heads under `.local/handoff-exports/luna-ar-channelkl-28793-20261010-v1`,
+  SHA 5ee2035b0d52794ac57ee075dc33c4d3cf2fe622f581672faba07b5436492586.
+- Shared fix ec36ec06 supplies full-projector raw embedding targets after the gold
+  history fork from detached live ordinary-greedy outputs on the same history.
+  Gold supervision includes the first difficult decision. Existing reader KL remains.
+  No extra transformer pass, independent teacher claim or qualification shortcut.
+  Luna source review found no masking/pass-weight/gradient mismatch; no tests run.
+- Recipe `luna-ar-native-harness-8805-final28793-20261010-v1` (b3f037e5)
+  launched container `luna-ar-native-harness-8805-v1`, root process 792261, child 792352.
+  Complete Muon optimizer restored: 335 kept, zero initialized. Target 32889;
+  32K context capacity, batch 1, checkpointing and existing adaptive memory policy.
+  75% native / 25% admitted harness sampling; native is qualification cohort.
+  Shared assembler output 8805 documents is registered with exact manifest.
+  Outputs: `/srv/storage/natlang-artifacts/luna-ar-native-harness-8805-final28793-20261010-v1`.
+  User-owned container output avoids prior root-owned cleanup friction. Parent remains
+  unqualified; no recurrence/compression admission. GPU reached 100% after corpus preprocessing.
+- Gemini v3 closed: 1024 labels, 852 typed-valid, 549 existing scorer all-gates.
+  V15 exact audit is held, probabilities unmodified. V4 process 792434 collects
+  another 1024 disjoint inherited train cases, same sole project lock and persisted
+  per-model cooldowns. Conversion/replay review is assigned to existing Luna helper.
+- ZAI research index1 passed exact scoped gold checks, 20 turns, 12382 tokens.
+  Index2's old storage pause remains immutable. Fresh process 792680 uses isolated
+  `runtime-small-teachers-v6` with globstar root visibility fix; unchanged source/seed,
+  gates and collection budgets. Its journal/results now reside on `/srv/storage`
+  through the run alias; retained 4096 MiB floor. Do not edit frozen live inputs.
+- Inactive Maple GGUF safely copied and SSH-hash verified on canonical DGX repo
+  before local unlink, registry `pop-inactive-maple-gguf-preservation-20261010-v1`.
+  Restore via manifest tooling before using local original model alias. No active
+  weights or full optimizer parent removed. Root free ~2.4GiB; /srv free ~9.6GiB
+  before new checkpoints. Monitor checkpoint storage during next 50-minute cycle.
+- Shared view-stage glue b4e1b6e1 pulled and frozen. DGX owns digest-to-view native
+  conversion and DGX jobs. Shared fix and Pop handoff sent in coord pop-fa4d.

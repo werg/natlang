@@ -21113,6 +21113,91 @@
       "corpus_publication_for_training": false,
       "independent_new_worlds": 0,
       "notes": "Unused Maple preview GGUF, exact retained bytes6349082144 SHA2fad7b4903781aca6b1171881f2d273989fe1735b6b3ea704bc486b472d98039. Canonical Pop registry alias resolves to /srv/storage/natlang-artifacts/models/maple-preview-GGUF. Original models/maple-preview-GGUF alias requires manifest restore before use after verified offload. No active model, training data or optimizer state removed; model bytes copied and SSH-verified before unlink."
+    },
+    {
+      "id": "neuralese-native-harness-text-mix-lfm25-8805-20261010-v1",
+      "owner": "pop",
+      "path": ".local/prepared/neuralese-native-harness-text-mix-20261010-v1",
+      "include": [
+        "text.jsonl",
+        "receipt.json"
+      ],
+      "split": "preserved-source-group-train-test",
+      "source_class": "declared-cohort-assembly",
+      "training_admission": true,
+      "admission": "LFM2.5-350M core_text_warmup / autoregressive_text_fixup only, native 0.75 / harness_bench 0.25; native qualification cohort; harness test stratum diagnostic only; recipe b3f037e5 and DECISIONS.md 2026-10-10 owner admission",
+      "independent_new_worlds": 0,
+      "notes": "Shared assembler, pinned source bytes and tokenizer. Admission is the declared cohort decision, not assembly receipt. Does not grant weight, recurrence, compression or other-backbone admission."
+    },
+    {
+      "id": "free-provider-google-pool-v3-and-quality-review-v15-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "provider-google-model-pool-mixed-decisions-v3/cases.jsonl",
+        "provider-google-model-pool-mixed-decisions-v3/labels.jsonl",
+        "provider-google-model-pool-mixed-decisions-v3/labels.jsonl.attempts.jsonl",
+        "provider-google-model-pool-mixed-decisions-v3/labels.jsonl.manifest.json",
+        "provider-google-model-pool-mixed-decisions-v3/source-manifest.json",
+        "provider-google-model-pool-mixed-decisions-v3/launch-receipt-v1.json",
+        "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/*.py",
+        "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/models.json",
+        "quality-review-v15/review.json",
+        "quality-review-v15/review.md"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "provider-typed-labels-and-read-only-quality-review",
+      "training_admission": false,
+      "admission": "held pending corrected static conversion, replay and explicit source admission",
+      "independent_new_worlds": 0,
+      "notes": "1024 final labels, 852 typed-valid, 549 all existing scorer gates; invalid distributions unchanged and rejected. Review also records ZAI research index1 accepted exact scoped result; underlying ZAI artifacts need separate publication."
+    },
+    {
+      "id": "free-provider-static-decision-inline-lambdas-held-20261010-v5",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-decision-labels-google-poolv3-v1",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "typed-provider-label-derived-static-trajectories",
+      "training_admission": false,
+      "admission": "held pending source admission and full-case replay; representative scripted replay is not teacher trace evidence",
+      "independent_new_worlds": 0,
+      "notes": "Corrected shared ordinal source mapping; 527 strict labels in72 cases;497 rejected;36 representative replays passed;614 held native turns. No hidden answer/provider probabilities in visible prompts. Static plans and tool results are authored. V16 receipt pins all inputs."
+    },
+    {
+      "id": "free-provider-static-google-poolv3-quality-review-v16-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v16",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "not-training-data",
+      "source_class": "quality-and-conversion-review",
+      "training_admission": false,
+      "admission": "read-only evidence",
+      "independent_new_worlds": 0
+    },
+    {
+      "id": "free-provider-zai45-sourcev5-research-index1-closeout-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "provider-zai45-sourcev5-research-pair-v1/case-001/**/*",
+        "provider-zai45-sourcev5-research-pair-v1/queue.jsonl",
+        "provider-zai45-sourcev5-research-pair-v1/journal.jsonl",
+        "provider-zai45-sourcev5-research-pair-v1/launch-receipt-v1.json",
+        "runtime-small-teachers-v5/frozen-runtime.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "provider-native-trajectory",
+      "training_admission": false,
+      "admission": "held for native admission and teacher trace review",
+      "independent_new_worlds": 0,
+      "notes": "RES-832 passed six scoped checks with COHORT-C4-A34 /240/include. 20 turns,12382tokens. Exact V15 review pins source/runtime/output/trace. Old index2 storage pause remains preserved; fresh runtimev6 retry separate."
     }
   ],
   "coverage_backlog": [
