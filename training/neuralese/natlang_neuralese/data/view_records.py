@@ -2,7 +2,8 @@
 
 The view operator stage (TRAINING_RECIPE.md "The view operator stage"; DECISIONS 2026-10-09, one summarizer family)
 trains the Neuralese instance of the builtin `view(value, instructions?)` through its readers. Its data is the
-`view-ask` corpus (plans/neuralese/VIEW_CORPUS.md): port records whose one source is the value, whose
+`view-ask` corpus (plans/neuralese/VIEW_CORPUS.md): port records whose source is the value (several sources: the
+list of documents, rendered by `value_text`), whose
 `writer.instructions` is the purpose and whose consumer request and target are what a reader of the view must
 produce. This module turns each record into one `natlang.teacher_training_turn.native/1` record of the trajectory
 trainer (`train.trajectories`), so the stage reuses its written-view path unchanged:
@@ -30,7 +31,7 @@ from pathlib import Path
 from ..view import INSTRUCTIONS
 
 VERSION = "natlang.teacher_training_turn.native/1"
-CONVERTER = "natlang_neuralese.data.view_records@1"
+CONVERTER = "natlang_neuralese.data.view_records@2"
 COHORT = "view"
 NOTE = "  // view of the value; the value itself is not shown"
 PIECES = [{"name": "prompt:view", "kind": "system-prompt", "text": INSTRUCTIONS}]
@@ -44,9 +45,19 @@ def _target_text(target: dict) -> str:
     return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
 
 
+def value_text(port: dict) -> str:
+    """The viewed value as text. A multi-source record (several documents, one purpose: Multi-News, VIEW_CORPUS.md
+    §1) is `view(xs, instructions)` over the list; its value is rendered as the documents in order, each under a
+    `Document k of n` line."""
+    sources = port["sources"]
+    if len(sources) == 1:
+        return sources[0]["text"]
+    return "\n\n".join(f"Document {k} of {len(sources)}:\n{s['text']}" for k, s in enumerate(sources, 1))
+
+
 def view_part(port: dict) -> dict:
     """The record's value as a view part: faithful for reconstruction, written for the purpose otherwise."""
-    source = port["sources"][0]["text"]
+    source = value_text(port)
     part = {"type": "view", "name": "view:" + hashlib.sha256(port["id"].encode("utf-8")).hexdigest()[:16],
             "holder": "the value", "value_type": "string", "source": source, "preview": source, "note": NOTE}
     if port["task"] == "reconstruct":
@@ -76,8 +87,10 @@ def consumer_messages(port: dict, shown: dict) -> list[dict]:
 def stage_record(port: dict, *, corpus: str, by_id: dict | None = None) -> dict | None:
     """One trajectory-trainer record for a view port record (None for splits the trainer does not take)."""
     split = SPLITS.get(port["split"])
-    if split is None or len(port["sources"]) != 1 or "text" not in port["sources"][0]:
+    if split is None or not port["sources"] or any("text" not in s for s in port["sources"]):
         return None
+    if len(port["sources"]) > 1 and port["task"] == "reconstruct":
+        return None  # one value per reconstruction
     notes = port["lineage"].get("notes") or {}
     pairs = [(by_id or {}).get(i) for i in (port.get("contrasts") or {}).get("purpose_pairs") or []]
     contrast = [p["writer"]["instructions"] for p in pairs if p and p["writer"]["instructions"] != port["writer"]["instructions"]]
@@ -99,7 +112,7 @@ def stage_record(port: dict, *, corpus: str, by_id: dict | None = None) -> dict 
         "source_ids": [port["id"]],
         "outcome": {"label": port["outcome"]["label"], "checked": port["outcome"].get("checked")},
         "training_admission": {"kind": "view-stage/1", "approved": False,
-                               "reason": "the view-ask corpus is held (licence review, view-stage qualification)"},
+                               "reason": "the view operator stage awaits its qualification (TRAINING_RECIPE.md)"},
         "cohort": COHORT,
         "messages": [{"role": "user", "content": [view_part(port), {"type": "text", "text": "\n\n" + request_of(port)}]}],
         "target": {"role": "assistant", "content": _target_text(port["target"])},

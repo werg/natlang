@@ -162,24 +162,24 @@ def _recovery(none, block, full) -> float | None:
 
 
 def run_corpus_checks(reader: Reader, chosen: dict, log=print) -> dict:
-    from ..data.view_records import consumer_messages
+    from ..data.view_records import consumer_messages, value_text
 
     report = {"reconstruction": {}, "qa": {}, "shuffle": {}, "purpose": {}}
     blocks: dict[str, tuple[str, int]] = {}
 
     def block_for(port, instructions, key):
         if key not in blocks:
-            blocks[key] = reader.view(port["sources"][0]["text"], instructions)
+            blocks[key] = reader.view(value_text(port), instructions)
         return blocks[key]
 
     for artifact, rows in sorted(chosen["reconstruct"].items()):
         stats = defaultdict(list)
         for port in rows:
-            block, length = block_for(port, None, ("faithful", port["sources"][0]["text"]))
+            block, length = block_for(port, None, ("faithful", value_text(port)))
             target = _target(port)
             ce_block = reader.ce(consumer_messages(port, {"block": block}), target)
             ce_none = reader.ce(consumer_messages(port, {}), target)
-            ce_full = reader.ce(consumer_messages(port, {"text": port["sources"][0]["text"]}), target)
+            ce_full = reader.ce(consumer_messages(port, {"text": value_text(port)}), target)
             tokens = reader.score(consumer_messages(port, {}), target)[1]
             stats["ce_block"].append(ce_block)
             stats["ce_none"].append(ce_none)
@@ -193,19 +193,19 @@ def run_corpus_checks(reader: Reader, chosen: dict, log=print) -> dict:
         others = [r for a, rs in chosen["purposeful"].items() if a == artifact for r in rs]
         for k, port in enumerate(rows):
             instructions = port["writer"]["instructions"]
-            block, _ = block_for(port, instructions, ("purpose", port["sources"][0]["text"], instructions))
+            block, _ = block_for(port, instructions, ("purpose", value_text(port), instructions))
             target = _target(port)
             ce_block = reader.ce(consumer_messages(port, {"block": block}), target)
             ce_none = reader.ce(consumer_messages(port, {}), target)
-            ce_full = reader.ce(consumer_messages(port, {"text": port["sources"][0]["text"]}), target)
+            ce_full = reader.ce(consumer_messages(port, {"text": value_text(port)}), target)
             stats["ce_block"].append(ce_block)
             stats["ce_none"].append(ce_none)
             stats["ce_full"].append(ce_full)
             stats["recovery"].append(_recovery(ce_none, ce_block, ce_full))
-            other = next((o for o in others[k + 1:] + others[:k] if o["sources"][0]["text"] != port["sources"][0]["text"]), None)
+            other = next((o for o in others[k + 1:] + others[:k] if value_text(o) != value_text(port)), None)
             if other is not None:
                 oi = other["writer"]["instructions"]
-                shuffled, _ = block_for(other, oi, ("purpose", other["sources"][0]["text"], oi))
+                shuffled, _ = block_for(other, oi, ("purpose", value_text(other), oi))
                 stats["ce_shuffled"].append(reader.ce(consumer_messages(port, {"block": shuffled}), target))
         report["qa"][artifact] = {k: _mean(v) for k, v in stats.items() if k != "ce_shuffled"} | {"records": len(rows)}
         report["shuffle"][artifact] = {"ce_block": _mean(stats["ce_block"]), "ce_shuffled": _mean(stats["ce_shuffled"]),
@@ -216,7 +216,7 @@ def run_corpus_checks(reader: Reader, chosen: dict, log=print) -> dict:
     for artifact, pairs in sorted(chosen["compare"].items()):
         stats = defaultdict(list)
         for port, partner in pairs:
-            text = port["sources"][0]["text"]
+            text = value_text(port)
             own_i, partner_i = port["writer"]["instructions"], partner["writer"]["instructions"]
             general = port["writer"].get("instructions_general")
             target = _target(port)

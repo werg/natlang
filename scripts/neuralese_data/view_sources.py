@@ -19,6 +19,11 @@ Sources fetched here:
   SHA-256 of each licence text). The pickles themselves are kept beside it for provenance.
 - (v2) TabFact (wenhuchen/Table-Fact-Checking, data CC-BY-4.0 per the dataset card, code MIT): the collected
   statements (r1/r2), the official split ids, `table_to_page.json`, and the CSV tables of a seeded selection.
+- (v3) BookSum (kmfoda/booksum chapter level: train/dev/test CSV), XSum (EdinburghNLP/xsum parquets), GovReport
+  (ccdv/govreport-summarization parquets), five Mind2Web train JSON files (osunlp/Mind2Web; the test set is not
+  fetched), LogHub (logpai/loghub: every system's 2k-line log with its structured CSV and templates), and a prefix of
+  one Common Crawl WARC file (whole gzip members of the first FETCH_CC_BYTES bytes, by an HTTP range request).
+  Multi-News, arXiv (S2ORC-parsed) and PubMed Central (Markdown) are read from local copies (view_corpus.py).
 """
 from __future__ import annotations
 
@@ -54,6 +59,27 @@ TABFACT = {"repo": "wenhuchen/Table-Fact-Checking", "revision": "2ab782ba42b5808
            "license": "CC-BY-4.0",
            "files": ["collected_data/r1_training_all.json", "collected_data/r2_training_all.json", "data/train_id.json",
                      "data/val_id.json", "data/test_id.json", "data/table_to_page.json", "LICENSE"]}
+V3_HF = {
+    "booksum": {"repo": "kmfoda/booksum", "revision": "c62321036e5647db5767ecaff139912b554dc938", "license": "BSD-3-Clause",
+                "files": ["train.csv", "dev.csv", "test.csv", "LICENSE.txt", "README.md"]},
+    "xsum": {"repo": "EdinburghNLP/xsum", "revision": "7d4d486c2f8ef850b1a11aead99b894ff3dd7da9", "license": "LicenseRef-unknown",
+             "files": ["data/train-00000-of-00001.parquet", "data/validation-00000-of-00001.parquet",
+                       "data/test-00000-of-00001.parquet", "README.md"]},
+    "govreport": {"repo": "ccdv/govreport-summarization", "revision": "4e21184e01ae8017e2c036e180fe5e541fef60a0",
+                  "license": "LicenseRef-not-stated",
+                  "files": ["document/train-00000-of-00002.parquet", "document/train-00001-of-00002.parquet",
+                            "document/validation-00000-of-00001.parquet", "document/test-00000-of-00001.parquet", "README.md"]},
+    "mind2web": {"repo": "osunlp/Mind2Web", "revision": "17ece8eb89862368edc0cc806acee6fca5163474", "license": "CC-BY-4.0",
+                 "files": ["data/train/train_10.json", "data/train/train_6.json", "data/train/train_0.json", "data/train/train_2.json",
+                           "data/train/train_8.json", "README.md"]},
+}
+LOGHUB = {"repo": "logpai/loghub", "revision": "dd61d0952749ee7963bde24220d1be5ede023033", "license": "LicenseRef-loghub",
+          "systems": ["Android", "Apache", "BGL", "HDFS", "HPC", "Hadoop", "HealthApp", "Linux", "Mac", "OpenSSH",
+                      "OpenStack", "Proxifier", "Spark", "Thunderbird", "Windows", "Zookeeper"]}
+COMMON_CRAWL = {"crawl": "CC-MAIN-2025-38", "license": "LicenseRef-commoncrawl-terms",
+                "path": "crawl-data/CC-MAIN-2025-38/segments/1757047532641.17/warc/"
+                        "CC-MAIN-20250905112101-20250905142101-00000.warc.gz"}
+FETCH_CC_BYTES = 256 << 20
 WEBSRC = {"repo": "X-LANCE/WebSRC_v1.0", "revision": "7aa0bc6efc7ef43f68c192e2091108541acbaf1a", "license": "CC-BY-4.0",
           "file": "WebSRC_v1.0_train+dev.zip"}
 
@@ -291,10 +317,64 @@ def fetch_websrc(raw: Path, pages_per_site: int, log=print) -> list[dict]:
     return out
 
 
+def _download(url: str, dest: Path, *, limit: int | None = None, attempts: int = 4) -> None:
+    """Stream `url` to `dest` (atomically); `limit` fetches only the first `limit` bytes (HTTP range)."""
+    headers = {"User-Agent": "natlang-view-corpus"}
+    if limit:
+        headers["Range"] = f"bytes=0-{limit - 1}"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".pending")
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=300) as r, open(tmp, "wb") as out:
+                for block in iter(lambda: r.read(8 << 20), b""):
+                    out.write(block)
+            tmp.replace(dest)
+            return
+        except OSError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(2 ** attempt)
+
+
+def fetch_v3(raw: Path, log=print) -> list[dict]:
+    """The v3 sources: BookSum, XSum, GovReport and Mind2Web files from the Hugging Face Hub, LogHub from GitHub,
+    and a Common Crawl WARC prefix."""
+    out = []
+    for name, spec in V3_HF.items():
+        for f in spec["files"]:
+            url = f"https://huggingface.co/datasets/{spec['repo']}/resolve/{spec['revision']}/{f}"
+            dest = raw / name / f
+            if not dest.exists():
+                _download(url, dest)
+            out.append(_entry(raw, dest, dataset=name, url=url, upstream=f"hf:{spec['repo']}", revision=spec["revision"],
+                              license=spec["license"]))
+            log(f"{name}: {f} {dest.stat().st_size} bytes")
+    base = f"https://raw.githubusercontent.com/{LOGHUB['repo']}/{LOGHUB['revision']}"
+    for f in ["LICENSE", "README.md"] + [f"{s}/{s}_2k.{ext}" for s in LOGHUB["systems"]
+                                         for ext in ("log", "log_structured.csv", "log_templates.csv")]:
+        dest = raw / "loghub" / f
+        if not dest.exists():
+            _write(dest, _get(f"{base}/{f}"))
+        out.append(_entry(raw, dest, dataset="loghub", url=f"{base}/{f}", upstream=f"github:{LOGHUB['repo']}",
+                          revision=LOGHUB["revision"], license=LOGHUB["license"]))
+    log(f"loghub: {len(LOGHUB['systems'])} systems")
+    url = f"https://data.commoncrawl.org/{COMMON_CRAWL['path']}"
+    dest = raw / "common_crawl" / Path(COMMON_CRAWL["path"]).name.replace(".warc.gz", f".first{FETCH_CC_BYTES}.warc.gz")
+    if not dest.exists():
+        _download(url, dest, limit=FETCH_CC_BYTES)
+    out.append(_entry(raw, dest, dataset="common_crawl", url=url, upstream=f"commoncrawl:{COMMON_CRAWL['crawl']}",
+                      revision=COMMON_CRAWL["crawl"], license=COMMON_CRAWL["license"],
+                      notes=f"bytes 0-{FETCH_CC_BYTES - 1} of the WARC file (whole gzip members are read; the cut one is skipped)"))
+    log(f"common_crawl: {dest.stat().st_size} bytes")
+    return out
+
+
 def fetch(raw: Path = DEFAULT_RAW, *, csn_train_rows: int = 20000, websrc_pages_per_site: int = 12,
           csn_languages=("python",), csn_lang_train_rows: int | None = None, csn_licenses: bool = False,
-          tabfact_tables: dict | None = None, log=print) -> dict:
-    """v1 used the defaults; v2 adds the other CodeSearchNet languages, their licence files and TabFact."""
+          tabfact_tables: dict | None = None, v3: bool = False, log=print) -> dict:
+    """v1 used the defaults; v2 adds the other CodeSearchNet languages, their licence files and TabFact; v3 adds
+    BookSum, XSum, GovReport, Mind2Web, LogHub and a Common Crawl WARC prefix."""
     raw.mkdir(parents=True, exist_ok=True)
     files = []
     files += fetch_github(raw, log)
@@ -305,9 +385,12 @@ def fetch(raw: Path = DEFAULT_RAW, *, csn_train_rows: int = 20000, websrc_pages_
     files += fetch_websrc(raw, websrc_pages_per_site, log)
     if tabfact_tables:
         files += fetch_tabfact(raw, tabfact_tables, log)
+    if v3:
+        files += fetch_v3(raw, log)
     report = {"schema": "natlang.view-corpus-sources/1", "raw": str(raw), "files": files,
               "options": {"csn_train_rows": csn_train_rows, "websrc_pages_per_site": websrc_pages_per_site,
                           "csn_languages": list(csn_languages), "csn_lang_train_rows": csn_lang_train_rows,
-                          "csn_licenses": csn_licenses, "tabfact_tables": tabfact_tables}}
-    (raw / "sources.json").write_text(json.dumps(report, indent=1, sort_keys=True) + "\n")
+                          "csn_licenses": csn_licenses, "tabfact_tables": tabfact_tables, "v3": v3}}
+    _write(raw / "sources.json", (json.dumps(report, indent=1, sort_keys=True) + "\n").encode())  # never in place: raw
+    # directories start as hard-linked copies of their predecessor
     return report
