@@ -22995,6 +22995,25 @@
       "training_admission": false,
       "admission": "held-per-turn-semantic-quality-and-root-review-required",
       "notes": "Shared9d106d05db source_case_closure final V3 report42fca8ec6cb25248e7de4a6598d25c51cbd2c62a99e499b2b0b920bdf96d9793. Five source components bind321clean actions, no S1/harness split/hits or exact protected question/ID hits. EarlierV1/V2immutable audits included as evidence, not duplicated samples. Real row2/3 skipped requested passes and row1 reader pattern require per-turn selection; no wholetrajectory/native/recurrence admission."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v9-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v9",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-case-review-only",
+      "source_class": "provider-decision-label-confidence-generation-inputs",
+      "training_admission": false,
+      "admission": "generation-only-pending-strict-schema-semantic-quality-and-root-review",
+      "notes": "92same-IDchoice cases from V8; direct enum choice plus confidence, no fabricated probabilities or independent world credit. PID837661/free shared model quota lock; fresh committed9d106d05db adapter snapshot. Prompt qualification still unmeasured/48paired-pervariant debt, archived baseline model allocation differs."
     }
   ],
   "coverage_backlog": [
