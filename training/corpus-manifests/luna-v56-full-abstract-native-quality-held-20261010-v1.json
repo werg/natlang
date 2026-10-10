@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v56-full-abstract-native-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/v56-pubmedqa-full-abstract-audit-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 497,
+      "sha256": "b12946a31fe2fb5000bb7f75d6db66045ab78f7aff03be62eec7334bd3cfdb95"
+    },
+    {
+      "path": "audit.json",
+      "bytes": 32254,
+      "sha256": "073e8454c2ef10f286f5ee21003276fa74a5bbe9ffae5c4ce72d1824df002676"
+    }
+  ],
+  "bytes": 32751
+}

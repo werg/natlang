@@ -88,6 +88,9 @@ def main():
     signal.signal(signal.SIGTERM, stop)
     with record.open('x') as stream:
         json.dump({'status': 'starting', 'plan': str(args.plan), 'time': time.time()}, stream)
+    # The launch record now owns current status. Do not leave a live waiting
+    # marker behind after all pinned predecessors have completed.
+    record.with_suffix('.waiting.json').unlink(missing_ok=True)
     processes, launched = [], []
     try:
         for worker in workers:

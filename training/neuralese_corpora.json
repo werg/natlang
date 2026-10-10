@@ -26809,6 +26809,65 @@
         "root-generation-source-review-v1.json",
         "worker-*/queue.jsonl"
       ]
+    },
+    {
+      "id": "free-provider-google-v23-reviewed-unclipped-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v23",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "512 full original train inputs across eight families,64 each; prior source IDs and groups excluded; 669 clipped historical rows and two explicit source-quality holds omitted. Shared free quota lock; active output not sealed. No semantic admission.",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ]
+    },
+    {
+      "id": "free-provider-luna-v55-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v55-runtimev14-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "Closed 54 source queues from V20; actual final/file/topology audit pending. No independent source truth or training admission."
+    },
+    {
+      "id": "free-provider-luna-v56-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-pubmedqa-full-abstract-v56-runtimev15-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "Closed six corrected full-abstract source queues from V21 using scope4096 runtime V15; actual final/file/visibility quality audit pending. Repeated original groups, no new source-world credit."
+    },
+    {
+      "id": "luna-v56-full-abstract-native-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/v56-pubmedqa-full-abstract-audit-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "Six closed full-abstract programs; two exact maps,33/42 item annotation matches. Complete42 child context strings visible; output maps equal saved decisions. No causal comparison, source truth unadjudicated, no training admission."
     }
   ],
   "coverage_backlog": [
