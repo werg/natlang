@@ -87,6 +87,28 @@ def refine_field(types_text: str, owner: str, field: str, base: str, predicate: 
     return types_text[:span[0]] + refined + types_text[span[1]:]
 
 
+def alias_predicate(types_text: str, owner: str, field: str, base: str) -> str | None:
+    """The predicate a field already carries through a named refined alias (`quantity?: Quantity`, with
+    `type Quantity = Is<number, "...">`), following alias chains; None when the field is not declared with such an alias."""
+    span = declaration_span(types_text, owner)
+    if span is None:
+        return None
+    match = re.search(rf"\b{re.escape(field)}\??:\s*([A-Z][A-Za-z0-9]*)(?=\s*[,}};\n])", types_text[span[0]:span[1]])
+    seen: set[str] = set()
+    name = match[1] if match else None
+    while name and name not in seen:
+        seen.add(name)
+        alias = declaration_span(types_text, name)
+        if alias is None:
+            return None
+        body = types_text[alias[0]:alias[1]].split("=", 1)[1].strip()
+        refined = re.fullmatch(rf"Is<\s*{re.escape(base)}\s*,\s*(\"(?:[^\"\\]|\\.)*\")\s*>", body, re.S)
+        if refined:
+            return json.loads(refined[1])
+        name = body if re.fullmatch(r"[A-Z][A-Za-z0-9]*", body) else None
+    return None
+
+
 def closure(types_text: str, names: set[str]) -> set[str]:
     """Type names reachable from `names` through the declarations of types.ts."""
     seen, todo = set(), list(names)
@@ -151,10 +173,16 @@ def build_example(entry: dict, candidates: list[Candidate], repo: Path = REPO) -
                 return None, f"slot {slot} is not Owner.field"
             if owner not in reachable:
                 return None, f"{owner} is not reachable from the function's return type {returns!r}"
-            refined = refine_field(new_types, owner, field, base, predicate)
-            if refined is None:
-                return None, f"field {slot} of type {base} not found in {types_path}"
-            new_types = refined
+            carried = alias_predicate(new_types, owner, field, base)
+            if carried is not None:
+                # The field is already a refined alias: the example teaches moving the guard into the type that exists,
+                # and records the predicate the type states.
+                predicate = carried
+            else:
+                refined = refine_field(new_types, owner, field, base, predicate)
+                if refined is None:
+                    return None, f"field {slot} of type {base} not found in {types_path}"
+                new_types = refined
         predicates.append(predicate)
         slots.append(slot)
         refined_types.append(is_type(returns or base, predicate) if entry.get('return_type') else is_type(base, predicate))

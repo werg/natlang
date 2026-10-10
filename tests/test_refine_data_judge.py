@@ -19,18 +19,35 @@ from refine_data.common import (DECISION_SCHEMA, canonical_json_str, judge_messa
 
 def test_harvest_reads_every_decomposition_table():
     found, skipped = predicates.harvest()
+    # The expected set comes from the files on disk, so a new DECOMPOSITION.md with a refinement table cannot be missed:
+    # every document with a table row proposing an `Is<...>` type must be harvested, and every such row must yield a candidate.
+    on_disk = {}
+    for path in sorted((REPO / "applications").glob("*/DECOMPOSITION.md")):
+        section, rows = False, 0
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("## "):
+                section = line.lower().startswith("## refinement")
+            elif section and line.startswith("|") and "`Is<" in line:
+                rows += 1
+        if rows:
+            on_disk[path.parent.name] = rows
     apps = {item.app for item in found}
-    assert apps == {"build", "games", "logs", "migration", "scheduling", "wiki", "workflow"}
-    assert len(found) >= 110
+    assert apps == set(on_disk) and len(apps) >= 16
+    for app, rows in on_disk.items():
+        assert sum(item.app == app for item in found) >= rows, app
+    assert len(found) >= 180
     by_slot = {slot: item for item in found for slot in item.slots}
     assert by_slot["Outgoing.subject"].predicate == "one line of at most 60 characters, without a trailing period"
     assert by_slot["Outgoing.subject"].base == "string"
     # An escaped pipe inside a union type survives; the Untrusted rows are reported, not silently dropped.
     assert by_slot["LinkStatus.resolves_to"].base == "string | null"
-    assert all(item["reason"] == "not-an-Is-type" for item in skipped) and len(skipped) >= 3
+    # Rows without an Is type (host-filled fields, closed unions, "the same predicate" repeats) are reported with their reason.
+    assert {item["reason"] for item in skipped} == {"not-an-Is-type", "no-type"} and len(skipped) >= 3
     # The runbook row carries an Untrusted type and an Is type; the Is type is harvested.
     assert any(item.predicate.startswith("a relative path under the files folder") for item in found)
-    assert len({item.id for item in found}) == len(found), "predicate texts are unique across the tables"
+    # Predicate texts are unique within an app's table; two apps may share one (Claim.quote), and unique_predicates merges those.
+    assert len({(item.app, item.id) for item in found}) == len(found)
+    assert len(predicates.unique_predicates(found)) == len({item.id for item in found})
 
 
 def test_parse_table_handles_pipes_and_notes():
