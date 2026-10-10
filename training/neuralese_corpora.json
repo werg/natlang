@@ -27668,6 +27668,16 @@
         "source-closure-v1/**/*"
       ],
       "notes": "Closed V25 provider quality review, exact 110 disagreements and full source closure packet. Pop harness-only 53/53. Full S1 requested from DGX; semantic admission remains separate. Later answerability review is a separate immutable corpus."
+    },
+    {
+      "id": "decision-visible-answerability-root-review-held-20261011-v5",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v5",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Root reviewed nine complete PubMedQA states from V25. Four forward strict-label holds: missing efficacy results, missing comparator, opinion survey without clinical recommendation, mixed exposure-attribution evidence. Five statistical/study-level cases retained for further model-quality review. All original annotations and attempts preserved."
     }
   ],
   "coverage_backlog": [

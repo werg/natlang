@@ -1,6 +1,6 @@
 {
   "schema": "natlang.decision-source-quality-holds/1",
-  "policy_id": "decision-visible-answerability-holds-v4",
+  "policy_id": "decision-visible-answerability-holds-v5",
   "status": "canonical_forward_source_filter",
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
@@ -324,6 +324,50 @@
         "source_record_sha256": "9d47fa582678624872de897ef3318b165b6584dd048176b6a48bd188c6cd2fa1"
       },
       "decision_receipt_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
+    },
+    {
+      "item_id": "dc-8281dd16aa9b164bfcb0",
+      "original_source_group": "g-5d5d31856f79a2b56b341ee8",
+      "split": "train",
+      "reason": "Question attributes diabetes to arsenic exposure. Exposure is inferred from job title, pooled intervals cross the null and one unspecified-worker subgroup is positive. Neither a categorical no nor a demonstrated arsenic effect is uniquely established.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v5/root-review.json",
+        "review_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+      },
+      "decision_receipt_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+    },
+    {
+      "item_id": "dc-4b7b2a501f82807d11ca",
+      "original_source_group": "g-1b91205d2f84b3dae0fa85f6",
+      "split": "train",
+      "reason": "Question asks whether all patients should be excluded. Visible survey describes centers opinions, not clinical outcomes or a resolved recommendation.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v5/root-review.json",
+        "review_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+      },
+      "decision_receipt_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+    },
+    {
+      "item_id": "dc-36cd51756fdd5d6a832c",
+      "original_source_group": "g-2b414dbe4e2f9210ad51a307",
+      "split": "train",
+      "reason": "Question asks whether the new fixation improves outcome; visible case series gives success and complications without the promised historical comparison or any comparison outcomes.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v5/root-review.json",
+        "review_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+      },
+      "decision_receipt_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+    },
+    {
+      "item_id": "dc-a83a4b6e16bdb58f5ac0",
+      "original_source_group": "g-26a3ec44ac01008bb8073ed1",
+      "split": "train",
+      "reason": "Visible trial abstract contains design and endpoints but no outcome results. A yes efficacy target cannot be inferred.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v5/root-review.json",
+        "review_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+      },
+      "decision_receipt_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
     }
   ],
   "root_review": {
