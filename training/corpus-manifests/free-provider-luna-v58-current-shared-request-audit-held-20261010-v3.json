@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v58-current-shared-request-audit-held-20261010-v3",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-request-visibility-shared-v3",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 820472,
+      "sha256": "27d8989ff938a32c39f0e6ce917743b699d7f01f1e4db69cb72995c5e7b54bf2"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 598,
+      "sha256": "6b63e3d491550204cd3d845838ee51f23696782e66c07c84c0952cb560cdbfad"
+    }
+  ],
+  "bytes": 821070
+}

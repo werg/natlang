@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "semantic-iterate-v35-v5-direct-return-derivation-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-direct-return-derivation-v1",
+  "files": [
+    {
+      "path": "diagnostic.json",
+      "bytes": 23499,
+      "sha256": "49c865d89f91d010629ab3c353c7a60db817d48d3fbfcb9a874167a63ce977ac"
+    }
+  ],
+  "bytes": 23499
+}

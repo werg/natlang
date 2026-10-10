@@ -40,7 +40,8 @@ function hostValue(result, callId) {
 }
 
 /** Recover only the exact complete text body that the model action returned. */
-export function writerActionBody(row, expectedBodySha256, { allowStagedEvalCode = false } = {}) {
+export function writerActionBody(row, expectedBodySha256, { allowStagedEvalCode = false,
+  allowPlainReturnResult = false } = {}) {
   const calls = row?.target?.tool_calls ?? [];
   const bodies = [];
   for (const call of calls) {
@@ -51,6 +52,12 @@ export function writerActionBody(row, expectedBodySha256, { allowStagedEvalCode 
         if (args?.status === 'success' && typeof value === 'string' && value.startsWith(open) && value.endsWith(close)) {
           const body = value.slice(open.length, -close.length);
           if (sha256(Buffer.from(body, 'utf8')) === expectedBodySha256) bodies.push(body);
+        } else if (allowPlainReturnResult && args?.status === 'success' && typeof value === 'string' &&
+            !value.includes(open) && !value.includes(close) &&
+            sha256(Buffer.from(value, 'utf8')) === expectedBodySha256) {
+          // The caller separately binds the exact raw provider call to the
+          // graph writer invocation. Never use a host result as authorship.
+          bodies.push(value);
         }
       } catch { /* invalid marker is not a writer target */ }
     } else if (call?.function?.name === 'eval') {
@@ -76,7 +83,8 @@ function actionForCall(rows, callId, trajectoryId, sourceRowSha, role, edge, bod
     row.decision?.training_approved === true && row.decision?.failed_action === false);
   if (role === 'writer') {
     matches = matches.filter(row => writerActionBody(row, bodySha,
-      { allowStagedEvalCode: edge?.marker_context === 'eval-code' }) !== undefined);
+      { allowStagedEvalCode: edge?.marker_context === 'eval-code',
+        allowPlainReturnResult: edge?.marker_context === 'return-result' }) !== undefined);
   } else {
     matches = matches.filter(row => {
       const opening = row.messages?.find(message => message.role === 'user')?.content;
@@ -97,7 +105,8 @@ function actionForCall(rows, callId, trajectoryId, sourceRowSha, role, edge, bod
 }
 
 function markerBody(row, blockId, bodySha, markerContext) {
-  const body = writerActionBody(row, bodySha, { allowStagedEvalCode: markerContext === 'eval-code' });
+  const body = writerActionBody(row, bodySha, { allowStagedEvalCode: markerContext === 'eval-code',
+    allowPlainReturnResult: markerContext === 'return-result' });
   if (body === undefined) fail(`producer ${row.id} lacks one exact complete text Neuralese writer action`);
   if (!body.length && !blockId) fail(`empty producer marker for ${row.id}`);
   return body;
@@ -140,6 +149,31 @@ function providerMarkerOutput(result, writerCallId, bodySha) {
     outputs.push(...(transport.marker_outputs ?? []).filter(item => item.body_sha256 === bodySha));
   }
   if (!outputs.length) fail(`no provider marker output matches graph writer body ${bodySha}`);
+}
+
+export function exactPlainReturnResultWitness(result, writerCallId, bodySha) {
+  const witnesses = [];
+  for (const turn of result.trajectory ?? []) {
+    if (turn.invocation_id !== writerCallId) continue;
+    const rawCalls = turn.model_response?.raw_calls ?? [];
+    const normalizedCalls = turn.model_response?.calls ?? [];
+    for (const raw of rawCalls) {
+      if (raw?.type !== 'function' || raw.function?.name !== 'return_result') continue;
+      let args;
+      try { args = JSON.parse(raw.function.arguments); } catch { continue; }
+      const value = args?.value;
+      if (args?.status !== 'success' || typeof value !== 'string' ||
+          value.includes('<|neuralese|>') || value.includes('<|/neuralese|>') ||
+          sha256(Buffer.from(value, 'utf8')) !== bodySha) continue;
+      const normalizedMatches = normalizedCalls.filter(call => Array.isArray(call) && call[0] === 'return_result' &&
+        call[1]?.status === 'success' && call[1]?.value === value);
+      if (normalizedMatches.length !== 1) continue;
+      witnesses.push({ invocation_id: turn.invocation_id, raw_call_id: raw.id,
+        body_sha256: bodySha, body_utf8_bytes: Buffer.byteLength(value, 'utf8'),
+        evidence: 'same-invocation raw model return_result plain string; exact graph writer body digest' });
+    }
+  }
+  return witnesses.length === 1 ? witnesses[0] : undefined;
 }
 
 function checkReaderAction(row, edge) {
@@ -240,8 +274,11 @@ export function validateSoftStateConversionEvidence({ resultPath, reviewPath, ac
         !/^[0-9a-f]{64}$/.test(write.text_body_sha256 ?? ''))
       fail(`graph writer ${blockId} lacks text stand-in body provenance`);
     const expansion = providerExpansion(result, readerCallId, blockId);
-    if (write.marker_context === 'return-result')
-      providerMarkerOutput(result, writerCallId, write.text_body_sha256);
+    let writerAuthorship;
+    if (write.marker_context === 'return-result') {
+      writerAuthorship = exactPlainReturnResultWitness(result, writerCallId, write.text_body_sha256);
+      if (!writerAuthorship) providerMarkerOutput(result, writerCallId, write.text_body_sha256);
+    }
     if (expansion.body_sha256 !== write.text_body_sha256)
       fail(`provider-visible body digest differs from graph writer for ${blockId}`);
     if (expansion.type === null && write.result_type !== 'Neuralese<string>')
@@ -262,6 +299,7 @@ export function validateSoftStateConversionEvidence({ resultPath, reviewPath, ac
       reader_call_id: readerCallId, reader_node: validated.block_read_node, reader_record_id: reader.row.id,
       reader_decision_index: reader.index, consumer_argument: argument,
       consumer_signature: validated.consumer_signature, expected_type: 'Neuralese<string>',
+      ...(writerAuthorship ? { writer_authorship: writerAuthorship } : {}),
       provider_expansion_type: expansion.type,
       ...(expansion.type === null ? { provider_type_inference: {
         inferred_type: 'Neuralese<string>', basis: 'authenticated-typed-writer-and-reader-contract-with-matching-body-sha256',
