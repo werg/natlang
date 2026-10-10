@@ -26534,6 +26534,128 @@
       "training_admission": false,
       "admission": "held-fresh-teacher-native-source-quality-review",
       "notes": "43 original PubMedQA train items with complete pinned abstracts, same IDs/groups/labels as corrected source derivative. Two source conflicts excluded in parent; no new-world credit. Same project quota waits for V20, no paid fallback. Active outputs require separate sealed publication."
+    },
+    {
+      "id": "luna-v51-remaining-source-clipping-diagnosis-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v18-remaining-source-clipping-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "source-input-loss-quality-diagnosis",
+      "training_admission": false,
+      "admission": "held-source-provenance-full-evidence-repair-required",
+      "notes": "Read-only exact input clipping review. V18 Newsgroups 7 / 64 clipped, VitaminC 2 / 64, AG News zero. Historical 2300-per-family census finds BoardgameQA 664 clipped, HelpSteer 1531, Yelp 239, BoolQ 38, Newsgroups 319, VitaminC 3, AG News zero. Missing historical immutable upstream pins block safe tail backfill; preserve originals and record omission. Fresh source builds must retain full evidence with explicit downstream budget exclusions."
+    },
+    {
+      "id": "luna-v51-remaining-source-clipping-diagnosis-held-20261010-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v18-remaining-source-clipping-v2",
+      "split": "inherited-train-evidence",
+      "source_class": "source-input-loss-quality-diagnosis",
+      "training_admission": false,
+      "admission": "held-source-provenance-full-evidence-repair-required",
+      "notes": "Read-only exact input clipping review. V18 Newsgroups 7 / 64 clipped, VitaminC 2 / 64, AG News zero. Historical 2300-per-family census finds BoardgameQA 664 clipped, HelpSteer 1531, Yelp 239, BoolQ 38, Newsgroups 319, VitaminC 3, AG News zero. Missing historical immutable upstream pins block safe tail backfill; preserve originals and record omission. Fresh source builds must retain full evidence with explicit downstream budget exclusions."
+    },
+    {
+      "id": "free-provider-luna-v54-current-status-train-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "iterative-guidance-trajectories-inputs",
+      "training_admission": false,
+      "admission": "held-source-native-quality-review",
+      "notes": "Fifteen V35 V5 train worlds indices 0\u201314, original V4 golds/facts/groups unchanged; corrected shared current-status note guidance. SCHED-543 index15 already recovered separately. Three workers beside at most two remaining V53 workers, total at most five. Repeated original worlds, no independent-world credit. Input-only while active."
+    },
+    {
+      "id": "free-provider-google-v20-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v20",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-generation-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "512 typed-valid final decisions, 408 saved annotation matches, 104 disagreements. Actual final models are Gemma 4 26B/31B. Preserve failures and outcomes, no annotation truth adjudication."
+    },
+    {
+      "id": "free-provider-google-v20-static-reference-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v20-adapter-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-generation-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "54 authored programs / 408 original train items, all actual replays and visibility pass. Cases actual SHA 64d68adce9320ef2367216cd332e67d616aedddd16b27261ddfa7df030f27704, independent of copied helper-message hash error. No semantic admission."
+    },
+    {
+      "id": "free-provider-google-v20-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v20-gemini-choice-confidence-and-static-replay-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-generation-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "Sealed provider/static/Pop source closure review; full S1 and semantic quality remain required. Record source evidence clipping obligations separately."
+    },
+    {
+      "id": "free-provider-luna-v54-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-generation-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "15 V5 train trajectories closed, 14 exact gold/file results and one pending placeholder rejection. Repeated original worlds, not new sources. Actual iterative and carry fidelity audit governs admission."
+    },
+    {
+      "id": "luna-v54-iterative-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/v54-sched543-train-audit-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-generation-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "11 genuine complete iterateOn typed carries; accepted indices5/6/8 bypass iterator, index8 stale authority despite correct final answer. Index2 pending-placeholder rejection. Keep topology and carry quality separate from final grading; no admission."
+    },
+    {
+      "id": "free-provider-luna-v55-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v55-runtimev14-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-generation-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "54 V20 train source programs / 408 items with complete authored reference replay and visibility, five workers after V53/V54 closed. Active outputs excluded until sealed publication.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "unapproved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ]
     }
   ],
   "coverage_backlog": [
@@ -26561,6 +26683,7 @@
     "free-provider-google-pool-v1-closed-held-20261009-v1 has an explicit currentIR derivative free-provider-static-decision-inline-lambdas-held-20261010-v1 for131 strict source-consistent labels/36 authored controller cases. Remaining125 labels stay rejected with reasons. Static reference/data quality admission remains pending; no automatic train promotion and no new-world credit. Other provider cohorts still require explicit conversion.",
     "free-provider-static-decision-inline-lambdas-held-20261010-v2 supersedes v1: all23 authored IR cases replayed, kind-specific probability\u2192crisp instructions qualified for runtime/capture shape only. Source/static-reference-quality admission still required.308native turns are held authored references, not teacher-generated traces, and are excluded from target training until reviewed.",
     "free-provider-zai45-first3-native-and-partial-held-20261010-v1: rawtwoaccepted andoneincomplete remainheld; thirdscopebehaviorcorrect, sharednote prompt clarification+freshsource derivative/recoverypending. Resource-limit partial is not a DPO semanticnegative. Source quality review still blocks new data admission.",
-    "luna-v22-current-pass-pending-facts-source-held-20261010-v1: prompt-only derivative, original source gold/group/file scopes unchanged, actual recovery PID777319 is running separately and must receive immutable closeout/review. No retroactive migration of old teacher traces, no new worlds or source admission."
+    "luna-v22-current-pass-pending-facts-source-held-20261010-v1: prompt-only derivative, original source gold/group/file scopes unchanged, actual recovery PID777319 is running separately and must receive immutable closeout/review. No retroactive migration of old teacher traces, no new worlds or source admission.",
+    "Silent 1500-character source-state clipping affects historical decision corpora: BoardgameQA, HelpSteer, Newsgroups, Yelp, BoolQ and PubMedQA. Preserve original rows and raw outcomes. Historical rows lacking immutable upstream source revisions/source_refs cannot be safely backfilled from current dataset versions; register as unresolved full-evidence conversion, exclude evidence-insufficient cases explicitly. Fresh builds retain full source text; downstream context eligibility skips oversized inputs with reasons, never silently truncates. Corrected input derivatives keep original source groups and receive no independent-world credit."
   ]
 }

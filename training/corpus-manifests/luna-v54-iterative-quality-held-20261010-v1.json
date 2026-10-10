@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v54-iterative-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/v54-sched543-train-audit-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1740,
+      "sha256": "5e98160e7f0d8dd46092e1bf8d6f9e30988b3bae7302952670f018d07fd831dc"
+    },
+    {
+      "path": "audit.json",
+      "bytes": 89625,
+      "sha256": "5423be482c78842e5767befe05fccad720b51f715f5c19b06fb8a2725cbc0129"
+    }
+  ],
+  "bytes": 91365
+}

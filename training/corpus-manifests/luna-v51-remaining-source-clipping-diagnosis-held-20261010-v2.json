@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v51-remaining-source-clipping-diagnosis-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v18-remaining-source-clipping-v2",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 17256,
+      "sha256": "de18c9822ce545b3e2856157d934566e5d5bb6e8e7e17ef385f78b5a5b1dd22b"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 4894,
+      "sha256": "7ed4af084c852044e9b4e532507222a2e5265600f31fdf870d075bc67d181ebd"
+    }
+  ],
+  "bytes": 22150
+}
