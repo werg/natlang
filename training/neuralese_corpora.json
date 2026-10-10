@@ -27925,6 +27925,39 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "All20 exact disagreement source objects and raw outcomes pinned. Provisional review candidates are not automatic holds; root receipt v7 separately adjudicates four."
+    },
+    {
+      "id": "decision-visible-answerability-root-review-held-20261011-v8",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v8",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Nine V24 PubMedQA candidate states independently read by root; three forward strict-label holds for missing necessity comparator, undefined multiendpoint equality and mixed care-delivery endpoint. Six supported study-level targets retained. No relabel or admission."
+    },
+    {
+      "id": "free-provider-google-v24-quality-closure-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v24-gemini-choice-confidence-and-static-replay-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "V24 provider quality, complete source disagreements/candidates, exact source/Pop closure and additive policy clarification.54 programs406items920native turns. Full S1 pending; source_refs absent, local snapshot bound only. Actual static adapter unconditionally applied canonical30holds; zero intersections."
+    },
+    {
+      "id": "free-provider-google-v25-policy-clarification-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v25-gemini-choice-confidence-and-static-replay-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Additive correction: static adapter always applies canonical source holds before label eligibility. Exact V25 policy25pin with zero intersections. Existing reviews/closure artifacts unchanged.",
+      "include": [
+        "static-policy-application-clarification-v1.json"
+      ]
     }
   ],
   "coverage_backlog": [

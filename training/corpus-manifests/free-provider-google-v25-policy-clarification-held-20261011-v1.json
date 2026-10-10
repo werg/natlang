@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v25-policy-clarification-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v25-gemini-choice-confidence-and-static-replay-v1",
+  "files": [
+    {
+      "path": "static-policy-application-clarification-v1.json",
+      "bytes": 2713,
+      "sha256": "c6b1010052123b2409f352c79a7965c373f633af04901c2a01ae18074ca891a0"
+    }
+  ],
+  "bytes": 2713
+}

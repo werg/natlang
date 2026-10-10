@@ -10503,3 +10503,9 @@ Google V24 closed512 typed-valid labels,406 annotation agreements106 differences
 ### V62 source answerability decisions, 2026-10-10 23:04 UTC
 
 Root read four full candidate states. Three new forward strict-label holds bring canonical policy to33: a one-sentence metaphor without recoverable newsgroup context; cross-topic surreal satire without destination provenance; and evidence of over90 million views cannot strictly entail below100 million. Declined a York City relabel/hold: relegation during a season does not establish it occurred near the seasons end, so the source NOT ENOUGH INFO answer remains defensible. Preserve annotations and all20 disagreements. V63 excludes the prior96 V16 items, so these new holds do not overlap its active source.
+
+### V24 full-state review and policy correction, 2026-10-10 23:10 UTC
+
+Root reviewed nine full PubMedQA states and held three forward strict-label sources: no comparator resolves fasting necessity; multiple imaging endpoints do not establish equality without a defined margin; care-program adoption is distinct from the explicitly absent care-delivery process shift. Six suggested holds declined where study-level findings support the supplied judgment; retain uncertainty without requiring perfect certainty. Canonical36 holds now; new three are V24 teacher/source disagreements already excluded from V64 programs.
+
+Helper retracted its claim that static conversion does not consult canonical holds. Exact static manifests and source show unconditional filtering before label eligibility. V24 pins policy30 (zero intersections); V25 pins policy25 (zero intersections). Additive clarification receipts preserve existing evidence. V24 complete packet has54 programs406items920 native turns and all Pop harness/source checks pass; full-S1 closure pending from DGX.

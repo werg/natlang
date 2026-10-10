@@ -1,6 +1,6 @@
 {
   "schema": "natlang.decision-source-quality-holds/1",
-  "policy_id": "decision-visible-answerability-holds-v7",
+  "policy_id": "decision-visible-answerability-holds-v8",
   "status": "canonical_forward_source_filter",
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
@@ -412,6 +412,39 @@
         "review_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
       },
       "decision_receipt_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
+    },
+    {
+      "item_id": "dc-c8547712353a863f66f2",
+      "original_source_group": "g-8fed014e25481f00c7e3fa2f",
+      "split": "train",
+      "reason": "Variable fasting periods leave gastric contents and raise glucose, but visible study lacks a nonfasting safety comparator or outcome resolving whether fasting is necessary. A categorical no is not uniquely established.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v8/root-review.json",
+        "review_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
+      },
+      "decision_receipt_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
+    },
+    {
+      "item_id": "dc-4c33492efe7f0f3b3326",
+      "original_source_group": "g-98e7454f636137dfc0ad4adb",
+      "split": "train",
+      "reason": "Equality question spans fracture identification, fracture type and dislocation with differing counts. No equivalence margin or common endpoint establishes equal performance; nonsignificant contrasts alone are not an equality proof.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v8/root-review.json",
+        "review_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
+      },
+      "decision_receipt_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
+    },
+    {
+      "item_id": "dc-59cf28dde1c16f446ac3",
+      "original_source_group": "g-8d1e3f2405f7b9ff5e46bd8c",
+      "split": "train",
+      "reason": "Visible findings distinguish adoption of care programs/process-oriented measures from explicitly absent functional-to-process care-delivery change. Without specifying which outcome counts as development, strict yes versus maybe is ambiguous.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v8/root-review.json",
+        "review_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
+      },
+      "decision_receipt_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
     }
   ],
   "root_review": {
