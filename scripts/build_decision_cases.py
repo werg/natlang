@@ -18,9 +18,11 @@ Outputs:
 import argparse
 import ast
 import glob
+import hashlib
 import json
 import math
 import os
+import re
 import sys
 from collections import defaultdict
 
@@ -32,6 +34,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 ROOT = resolve_str('data_hdd', 'natlang-development-data', 'data', 'decision-sources')
+SOURCE_FILES_READ = {}
 
 
 
@@ -39,13 +42,81 @@ ROOT = resolve_str('data_hdd', 'natlang-development-data', 'data', 'decision-sou
 MAX_ROWS = 60000
 
 
-def rows(repo, splits):
-    """Rows of the named splits (first shard each), with their label-name metadata.
+def _file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as stream:
+        for block in iter(lambda: stream.read(1 << 20), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def load_source_pins(path):
+    """Load explicit upstream pins and require their shard hashes to bind the local bytes.
+
+    Receipt shape: {"schema":"natlang.decision-source-pins/1","datasets":{
+      "repo/name":{"revision":"full-immutable-revision","config":"optional",
+        "shards":[{"local_path":"repo__name/train/shard.parquet",
+                   "upstream_path":"data/train-....parquet","lfs_sha256":"64 hex chars"}]}}}.
+    Local paths are relative to ROOT. Missing dataset receipts stay unpinned; a receipt for a dataset must bind
+    every local shard encountered for it.
+    """
+    if not path:
+        return None, None
+    receipt_path = os.path.realpath(path)
+    with open(receipt_path, 'rb') as stream:
+        receipt_bytes = stream.read()
+    receipt = json.loads(receipt_bytes)
+    if receipt.get('schema') != 'natlang.decision-source-pins/1' or not isinstance(receipt.get('datasets'), dict):
+        raise ValueError('source pin receipt must use natlang.decision-source-pins/1 with a datasets object')
+    pins = {}
+    for repo, dataset in receipt['datasets'].items():
+        revision = dataset.get('revision') if isinstance(dataset, dict) else None
+        if not isinstance(revision, str) or not re.fullmatch(r'[0-9a-fA-F]{40}', revision):
+            raise ValueError(f'{repo}: source pin revision must be an immutable 40-character Hugging Face commit SHA')
+        shards = dataset.get('shards')
+        if not isinstance(shards, list):
+            raise ValueError(f'{repo}: source pin needs a shards array')
+        by_path = {}
+        for shard in shards:
+            if not isinstance(shard, dict) or not isinstance(shard.get('local_path'), str):
+                raise ValueError(f'{repo}: each pinned shard needs local_path')
+            local_path = _canonical_relative_path(shard['local_path'], f'{repo} local_path')
+            upstream_path = shard.get('upstream_path')
+            declared_shas = [shard[key] for key in ('lfs_sha256', 'sha256') if shard.get(key) is not None]
+            if not isinstance(upstream_path, str):
+                raise ValueError(f'{repo}:{local_path}: source pin needs upstream_path')
+            upstream_path = _canonical_relative_path(upstream_path, f'{repo} upstream_path')
+            if not declared_shas or any(not isinstance(value, str) or len(value) != 64 or
+                                        any(c not in '0123456789abcdefABCDEF' for c in value)
+                                        for value in declared_shas):
+                raise ValueError(f'{repo}:{local_path}: source pin needs a 64-character SHA-256/LFS OID')
+            if len({value.lower() for value in declared_shas}) != 1:
+                raise ValueError(f'{repo}:{local_path}: sha256 and lfs_sha256 declarations disagree')
+            pinned_sha = declared_shas[0]
+            if local_path in by_path:
+                raise ValueError(f'{repo}: duplicate pinned local shard {local_path}')
+            by_path[local_path] = {**shard, 'local_path': local_path, 'pinned_sha256': pinned_sha.lower()}
+        pins[repo] = {'revision': dataset['revision'], 'config': dataset.get('config'), 'shards': by_path}
+    return pins, {'path': receipt_path, 'sha256': hashlib.sha256(receipt_bytes).hexdigest()}
+
+
+def _canonical_relative_path(path, label):
+    """Require a canonical slash-separated relative path without traversal or platform-specific aliases."""
+    if not isinstance(path, str) or not path or path.startswith('/') or '\\' in path:
+        raise ValueError(f'{label} must be a nonempty canonical relative path')
+    parts = path.split('/')
+    if any(part in ('', '.', '..') for part in parts):
+        raise ValueError(f'{label} must not contain empty, dot, or parent path components')
+    return path
+
+
+def rows(repo, splits, source_pins=None):
+    """Rows of the named splits, label metadata, and physical Parquet row references.
 
     At most MAX_ROWS rows per split, taken from row groups spread evenly over the file: some sources are sorted by
     label, and reading whole large shards into Python objects would cost gigabytes for no gain.
     """
-    out, names = [], {}
+    out, names, refs = [], {}, []
     for split in splits:
         for path in sorted(glob.glob(f'{ROOT}/{repo.replace("/", "__")}/**/{split}/*.parquet', recursive=True)):
             parquet = pq.ParquetFile(path)
@@ -53,14 +124,82 @@ def rows(repo, splits):
             per = max(1, parquet.metadata.num_rows // groups)
             wanted = min(groups, max(1, MAX_ROWS // per))
             picks = sorted({round(i * (groups - 1) / max(1, wanted - 1)) for i in range(wanted)}) if wanted > 1 else [0]
-            table = parquet.read_row_groups(picks)
             meta = parquet.schema_arrow.metadata or {}
             if b'huggingface' in meta:
                 for key, feature in json.loads(meta[b'huggingface']).get('info', {}).get('features', {}).items():
                     if isinstance(feature, dict) and feature.get('names'):
                         names[key] = feature['names']
-            out += table.to_pylist()
-    return out, names
+            logical_root = os.path.abspath(ROOT)
+            logical_path = os.path.abspath(path)
+            if os.path.commonpath([logical_root, logical_path]) != logical_root:
+                raise ValueError(f'{path}: parquet source is outside configured source root {ROOT}')
+            local_path = _canonical_relative_path(os.path.relpath(logical_path, logical_root).replace(os.sep, '/'),
+                                                  f'{repo} local_path')
+            # Keep the logical cache path above, but hash the actual bytes reached through any symlink.
+            byte_path = os.path.realpath(path)
+            file_sha = _file_sha256(byte_path)
+            pin = (source_pins or {}).get(repo)
+            pinned_shard = (pin or {}).get('shards', {}).get(local_path)
+            if pinned_shard:
+                expected_sha = pinned_shard['pinned_sha256']
+                if file_sha != expected_sha:
+                    raise ValueError(f'{repo}:{local_path}: local bytes {file_sha} do not match pinned upstream shard {expected_sha}')
+            elif pin:
+                raise ValueError(f'{repo}:{local_path}: source pin receipt does not bind this local shard')
+            source_file_key = (repo, local_path)
+            source_file = SOURCE_FILES_READ.setdefault(source_file_key, {
+                'dataset': repo, 'local_path': local_path, 'local_file_sha256': file_sha,
+                'splits_read': [], 'sampled_row_groups': [], 'upstream': None,
+                'upstream_metadata_status': 'unknown_requires_pinned_source_receipt'
+            })
+            if source_file['local_file_sha256'] != file_sha:
+                raise ValueError(f'{repo}:{local_path}: local file changed while building the corpus')
+            if split not in source_file['splits_read']:
+                source_file['splits_read'].append(split)
+            source_file['sampled_row_groups'] = sorted(set(source_file['sampled_row_groups']) | set(picks))
+            if pin and pinned_shard:
+                upstream = {
+                    'revision': pin['revision'], 'config': pin.get('config'),
+                    'path': pinned_shard['upstream_path'], 'lfs_sha256': pinned_shard['pinned_sha256']
+                }
+                if source_file['upstream'] not in (None, upstream):
+                    raise ValueError(f'{repo}:{local_path}: conflicting upstream source pins')
+                source_file['upstream'] = upstream
+                source_file['upstream_metadata_status'] = 'pinned_and_byte_bound'
+            physical_starts = []
+            physical = 0
+            for group in range(groups):
+                physical_starts.append(physical)
+                physical += parquet.metadata.row_group(group).num_rows
+            for group in picks:
+                group_rows = parquet.read_row_group(group).to_pylist()
+                for row_in_group, item in enumerate(group_rows):
+                    out.append(item)
+                    ref = {
+                        'dataset': repo,
+                        'split': split,
+                        'local_path': local_path,
+                        'local_file_sha256': file_sha,
+                        'row_group': group,
+                        'row_in_group': row_in_group,
+                        'physical_row': physical_starts[group] + row_in_group,
+                        'upstream': None,
+                        'upstream_metadata_status': 'unknown_requires_pinned_source_receipt'
+                    }
+                    if 'config' in item and isinstance(item['config'], (str, int, float, bool)):
+                        ref['config'] = item['config']
+                    if pin and pinned_shard:
+                        ref['upstream'] = {
+                            'revision': pin['revision'],
+                            'config': pin.get('config'),
+                            'path': pinned_shard['upstream_path'],
+                            'lfs_sha256': pinned_shard['pinned_sha256']
+                        }
+                        ref['upstream_metadata_status'] = 'pinned_and_byte_bound'
+                    refs.append(ref)
+            if _file_sha256(byte_path) != file_sha:
+                raise ValueError(f'{repo}:{local_path}: local file changed while reading sampled Parquet rows')
+    return out, names, refs
 
 
 def clip(text, limit=1500):
@@ -134,24 +273,24 @@ SPECS = {
 }
 
 
-def special(name, repo, split_names):
+def special(name, repo, split_names, source_pins=None):
     """Rows for specs whose mapping needs the whole table (label texts, aggregation)."""
-    data, names = rows(repo, split_names)
+    data, names, refs = rows(repo, split_names, source_pins)
     out = []
     if name == 'trec-question':
         options = sorted({r['label_coarse_text'] for r in data})
-        out = [(r['text'], r['label_coarse_text'], options) for r in data]
+        out = [(r['text'], r['label_coarse_text'], options, [ref]) for r, ref in zip(data, refs)]
     elif name == 'newsgroups':
         options = sorted({r['label_text'] for r in data})
-        out = [(r['text'], r['label_text'], options) for r in data]
+        out = [(r['text'], r['label_text'], options, [ref]) for r, ref in zip(data, refs)]
     elif name == 'massive-intent':
         options = sorted({r['label_text'] for r in data})
-        out = [(r['text'], r['label_text'], options) for r in data]
+        out = [(r['text'], r['label_text'], options, [ref]) for r, ref in zip(data, refs)]
     elif name == 'language-id':
         options = sorted({r['labels'] for r in data})
-        out = [(r['text'], r['labels'], options) for r in data]
+        out = [(r['text'], r['labels'], options, [ref]) for r, ref in zip(data, refs)]
     elif name == 'pubmedqa':
-        for r in data:
+        for r, ref in zip(data, refs):
             context = r['context']
             if isinstance(context, str):
                 try:
@@ -159,36 +298,40 @@ def special(name, repo, split_names):
                 except (ValueError, SyntaxError):
                     context = {'contexts': [context]}
             out.append((f"Question: {r['question']}\nAbstract: {' '.join(context.get('contexts', []))}",
-                        r['final_decision'], ['yes', 'no', 'maybe']))
+                        r['final_decision'], ['yes', 'no', 'maybe'], [ref]))
     return out
 
 
-def hate_speech(split_names):
+def hate_speech(split_names, source_pins=None):
     """Mean annotator `hatespeech` rating (0 not hateful, 1 unclear, 2 hateful) per comment: a fractional target."""
-    data, _ = rows('ucberkeley-dlab/measuring-hate-speech', split_names)
+    data, _, refs = rows('ucberkeley-dlab/measuring-hate-speech', split_names, source_pins)
     by = defaultdict(list)
     text = {}
-    for r in data:
+    source_refs = defaultdict(list)
+    for r, ref in zip(data, refs):
         by[r['comment_id']].append(float(r['hatespeech']))
         text[r['comment_id']] = r['text']
-    return [(text[c], sum(v) / len(v), ['not hateful', 'unclear', 'hateful']) for c, v in by.items() if len(v) >= 2]
+        source_refs[r['comment_id']].append(ref)
+    return [(text[c], sum(v) / len(v), ['not hateful', 'unclear', 'hateful'], source_refs[c])
+            for c, v in by.items() if len(v) >= 2]
 
 
-def build_cases(name, spec, per_train, per_heldout, licenses):
+def build_cases(name, spec, per_train, per_heldout, licenses, source_pins=None, source_catalog_provenance=None):
     repo, kind, question, train_splits, held_splits, mapper = spec
     out = []
     shared = train_splits == held_splits  # one split only: hold out a hash-selected tail
     seen = set()  # across roles: a text in the training selection never reappears held out
     for role, split_names, limit in (('train', train_splits, per_train), ('heldout', held_splits, per_heldout)):
         if name == 'hate-speech':
-            mapped = hate_speech(split_names)
+            mapped = hate_speech(split_names, source_pins)
         elif mapper is None:
-            mapped = special(name, repo, split_names)
+            mapped = special(name, repo, split_names, source_pins)
         else:
-            data, names = rows(repo, split_names)
-            mapped = [m for m in (mapper(r, names) for r in data) if m is not None]
+            data, names, refs = rows(repo, split_names, source_pins)
+            mapped = [(m[0], m[1], m[2], [ref]) for r, ref in zip(data, refs)
+                      if (m := mapper(r, names)) is not None]
         chosen = []
-        for state, answer, options in sorted(mapped, key=lambda m: digest(f'{name}:{m[0]}')):
+        for state, answer, options, source_refs in sorted(mapped, key=lambda m: digest(f'{name}:{m[0]}')):
             state = clip(state)
             key = digest(state)
             if not state or key in seen:
@@ -198,13 +341,22 @@ def build_cases(name, spec, per_train, per_heldout, licenses):
             if isinstance(answer, float) and math.isnan(answer):
                 continue
             seen.add(key)
-            chosen.append((state, answer, options))
+            chosen.append((state, answer, options, source_refs))
             if len(chosen) >= limit:
                 break
-        for state, answer, options in chosen:
+        for state, answer, options, source_refs in chosen:
             case = {'version': 'natlang.decision-case/1', 'id': 'dc-' + digest(f'{name}:{state}')[:20], 'source': repo,
                     'family': f'decision:{name}', 'role': role, 'kind': kind, 'question': question, 'state': state,
-                    'group': 'g-' + digest(f'decision:{state}')[:24], 'license': licenses.get(repo)}
+                    'group': 'g-' + digest(f'decision:{state}')[:24], 'license': licenses.get(repo),
+                    'source_refs': source_refs}
+            if source_catalog_provenance:
+                case['license_provenance'] = {
+                    'legacy_catalog_value': licenses.get(repo),
+                    'catalog_path': source_catalog_provenance['path'],
+                    'catalog_sha256': source_catalog_provenance['sha256'],
+                    'status': 'local_catalog_value_not_bound_to_upstream_revision',
+                    'upstream_license_status': 'unknown'
+                }
             if kind == 'choice':
                 case.update(options=list(options), answer=answer)
             elif kind == 'noul':
@@ -289,32 +441,76 @@ def main():
     parser.add_argument('--per-train', type=int, default=2000)
     parser.add_argument('--per-heldout', type=int, default=300)
     parser.add_argument('--episodes-per-family', type=int, default=20)
+    parser.add_argument('--source-pins', help=(
+        'optional natlang.decision-source-pins/1 JSON mapping dataset repos to explicit upstream revisions and '
+        'local shard paths/upstream paths/SHA-256 or LFS OIDs. Every pinned local shard must match its declared bytes; '
+        'unprovided upstream provenance remains explicitly unknown.'))
     args = parser.parse_args()
-    manifest = json.load(open(f'{ROOT}/MANIFEST.json'))
+    SOURCE_FILES_READ.clear()
+    source_catalog_path = os.path.realpath(f'{ROOT}/MANIFEST.json')
+    with open(source_catalog_path, 'rb') as stream:
+        source_catalog_bytes = stream.read()
+    source_catalog = json.loads(source_catalog_bytes)
+    builder_path = os.path.realpath(__file__)
+    builder_sha256 = _file_sha256(builder_path)
+    source_catalog_provenance = {
+        'path': os.path.relpath(source_catalog_path, os.path.realpath(ROOT)).replace(os.sep, '/'),
+        'sha256': hashlib.sha256(source_catalog_bytes).hexdigest()
+    }
     licenses = {repo: (info.get('license') if isinstance(info.get('license'), str) else json.dumps(info.get('license')))
-                for repo, info in manifest.items() if 'error' not in info}
+                for repo, info in source_catalog.items() if 'error' not in info}
+    source_pins, source_pin_receipt = load_source_pins(args.source_pins)
     specs = dict(SPECS)
     specs['hate-speech'] = ('ucberkeley-dlab/measuring-hate-speech', 'score', 'How hateful is this comment?',
                             ['train'], ['train'], None)
     cases, counts = [], {}
     for name, spec in specs.items():
-        built = build_cases(name, spec, args.per_train, args.per_heldout, licenses)
+        built = build_cases(name, spec, args.per_train, args.per_heldout, licenses, source_pins,
+                            source_catalog_provenance)
         counts[name] = {role: sum(1 for c in built if c['role'] == role) for role in ('train', 'heldout')}
         cases += built
         print(name, counts[name], flush=True)
     ids = [c['id'] for c in cases]
     assert len(ids) == len(set(ids)), 'case ids repeat'
     episodes = build_episodes(cases, args.episodes_per_family)
+    source_files = {}
+    unknown_repos = set()
+    for key, entry in SOURCE_FILES_READ.items():
+        source_files[key] = {
+            **entry,
+            'splits_read': sorted(entry['splits_read']),
+            'sampled_row_groups': sorted(entry['sampled_row_groups'])
+        }
+        if entry['upstream_metadata_status'] != 'pinned_and_byte_bound':
+            unknown_repos.add(entry['dataset'])
     os.makedirs(args.out, exist_ok=True)
     bodies = {}
     for name, items in (('decision-cases.jsonl', cases), ('decision-episodes.jsonl', episodes)):
         bodies[name] = ''.join(json.dumps(item, sort_keys=True) + '\n' for item in items)
         with open(os.path.join(args.out, name), 'x') as stream:
             stream.write(bodies[name])
+    source_provenance = {
+        'schema': 'natlang.decision-source-provenance/1',
+        'builder_path': builder_path,
+        'builder_sha256': builder_sha256,
+        'source_catalog_path': os.path.relpath(source_catalog_path, os.path.realpath(ROOT)).replace(os.sep, '/'),
+        'source_catalog_sha256': hashlib.sha256(source_catalog_bytes).hexdigest(),
+        'source_catalog_license_status': 'local_catalog_values_recorded_but_not_bound_to_upstream_revision',
+        'source_pin_receipt': source_pin_receipt,
+        'source_files_read': [source_files[k] for k in sorted(source_files)],
+        'upstream_metadata_unknown_datasets': sorted(unknown_repos),
+        'conversion_obligation': (
+            'For every dataset with unknown upstream metadata, recover an authoritative immutable dataset revision, '
+            'upstream shard path and upstream shard SHA-256/LFS OID; match local bytes and publish a new source-bound '
+            'derivative. Do not infer a commit from repository name, cache path, or current remote state.'
+            if unknown_repos else None
+        )
+    }
     summary = {'schema': 'natlang.decision-data/1', 'cases': len(cases), 'episodes': len(episodes), 'per_dataset': counts,
                'episode_splits': {s: sum(1 for e in episodes if e['split'] == s) for s in ('train', 'validation', 'test')},
                'kinds': {k: sum(1 for c in cases if c['kind'] == k) for k in ('choice', 'noul', 'score')},
                'sha256': {name: digest(body) for name, body in bodies.items()}, 'model_calls': 0,
+               'source_provenance': source_provenance,
                'licenses': licenses}
     with open(os.path.join(args.out, 'decision-data.manifest.json'), 'x') as stream:
         stream.write(json.dumps(summary, indent=2) + '\n')
