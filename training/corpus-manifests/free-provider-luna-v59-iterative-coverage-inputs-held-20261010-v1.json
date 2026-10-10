@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v59-iterative-coverage-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-iterative-modality-recovery-v59-runtimev15-v1",
+  "files": [
+    {
+      "path": "candidate-unapproved-plan-v1.json",
+      "bytes": 4650,
+      "sha256": "0b1801ee8a88dce721a538f3fd100941a5644a2885acf20f5efe2c559ce68e18"
+    },
+    {
+      "path": "preparation-review.json",
+      "bytes": 8788,
+      "sha256": "ca29d994075ebf212a11484ca007d835f84d25fa7500e3f3979bd7bfd6a1c82f"
+    },
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 4901,
+      "sha256": "ba498bf8ea38d2deb89bba46dd4e04f4d2d1ebd3df426cbd411b2fabfd1e6c5b"
+    },
+    {
+      "path": "root-launch-receipt-v1.json",
+      "bytes": 155,
+      "sha256": "2053fa70a4e444308a5366fc2de5e64d78f6c995ae1f9ed2a9903c0c51154ec6"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 2829,
+      "sha256": "93be49c4dbc60018473342a64bbef05cbac55a56341139a86e3975bb0db2b48e",
+      "lines": 3
+    }
+  ],
+  "bytes": 21323
+}

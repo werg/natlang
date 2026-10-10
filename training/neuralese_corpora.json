@@ -26973,6 +26973,77 @@
       "training_admission": false,
       "admission": "held-independent-quality-review",
       "notes": "SAFE-512 unchanged original source recovery accepted, all6files exact, genuine four-pass typed iterateOn and final Draft. Previous V54 correct return/missing file preserved separately, not silently repaired or automatic DPO admission. Audit6686b074a856e8eb6c96339547d37c446fb1174a9c79cecadc18d3f0d15d1579; no new source-world credit."
+    },
+    {
+      "id": "luna-ar-native-harness-v6-full-state-closeout-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-refine-31744-20261010-v6/direct-stage-run",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Completed33792 with8strict gate failures; entire model/optimizer/RNG and best/final heads preserved. No qualification inherited."
+    },
+    {
+      "id": "luna-ar-native-harness-v7-continuation-frozen-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-continue-33792-20261010-v7",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Exact V6 final complete state continued into V7; fixed admitted cohorts and unchanged objective/rates/gates; eval1024. Code inventory and inputs pinned in shared recipe. Active logs/outputs excluded.",
+      "include": [
+        "frozen-package-v1/**/*",
+        "root-launch-receipt-v1.json",
+        "direct-stage-launch-v1.json"
+      ]
+    },
+    {
+      "id": "free-provider-luna-v59-iterative-coverage-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-iterative-modality-recovery-v59-runtimev15-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Three unchanged original train cases5/6/8; original V54 accepted/manual results preserved. One worker seeks iterative topology, not semantic failure repair. No admission/world credit.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "candidate-unapproved-plan-v1.json",
+        "preparation-review.json",
+        "root-launch-receipt-v1.json",
+        "worker-*/queue.jsonl"
+      ]
+    },
+    {
+      "id": "free-provider-google-v24-reviewed-unclipped-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v24",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "512 untouched complete train inputs, eight families64each. Shared quota lock waits V23; source IDs/groups disjoint; clipped and quality-held historical evidence explicitly omitted. Active outputs excluded.",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ]
     }
   ],
   "coverage_backlog": [
