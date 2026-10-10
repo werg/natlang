@@ -10267,3 +10267,8 @@ V38's exhausted SCHED-540 attempt has concrete model-code mistakes (free `decisi
 - V13closedaudit:382/512sourceannotationmatches,130disagreements;50staticprograms382items864heldnativeturns, all50actualreferenceacceptedandcapturevisible. Registeredraw/static/qualityheld. V41root-reviewedfourworkerqueuePID879992 waitsforallV40predecessorscomplete, thenusesruntimeV13guidance; planSHA0bccce1528dfd9a6657e1ea53421cb3efb4c72eb5bf419e755d579e27befa90f. Noadditionalconcurrentworkerswhilewaiting.
 
 - V13sourceclosure authoritative closure-input-v1/harness4-v1:50programs382items764question/state leaves, all50keptwithzeroharnessgroupclosureerrors; rawdc-/g-/aliaseszeroharnesshits. FullS1/textclosurependingDGX; sourcequality/admissionheld. PacketSHA5aafdebc945be5b539ac9f0f2957a1f38d4ac4f72e995436c5dc6da3d224b494.
+
+### Pop 2026-10-10 11:38 UTC — provider transition and owner closure
+
+- V40all51queueentriescomplete. IndependentV3audit356/389sourceannotationmatches27/51fullmapsexact, returned/savedmapsconsistent,inputfilesunmodified. 996childinvocations994outputcaptures; oneconnectionresetinfrastructure, fourdepthlimits; mostrejectstype/API/scopeerrors. V3SHA bdaee112718c49729de73dd3c304e9c50141f70a0d1e0c20e2d105e25860b625; earlierdraftsnotcounted. Rawandqualityheldregistered. V41actualworkers881332-881335activeusingruntimeV13guidance, noextraoverlap.
+- DGXownerV12fullS1+harness4/protectedclosure51/51trainkeptclean, originaldc-/g-rawkeyszerohits; originreceiptcommitf16b08c0. Sourcequality/admissionremainseparate. V13fullclosurerequestpop-feb8pending. V5training30818/32889active, gatesunchanged. Popfree41GiBroot/46GiBstorage.

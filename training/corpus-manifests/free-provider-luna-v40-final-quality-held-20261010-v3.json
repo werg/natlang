@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v40-final-quality-held-20261010-v3",
+  "owner": "pop",
+  "path": "runs/quality-review-v40-choice-folder-final-20261010-v3",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 432001,
+      "sha256": "bdaee112718c49729de73dd3c304e9c50141f70a0d1e0c20e2d105e25860b625"
+    },
+    {
+      "path": "review.md",
+      "bytes": 991,
+      "sha256": "eb6d62ecd67443b5f2a95b730e901c92bee825abd8cf8219db2de8bf6eae732e"
+    }
+  ],
+  "bytes": 432992
+}

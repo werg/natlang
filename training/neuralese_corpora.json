@@ -25257,7 +25257,7 @@
       "source_class": "source-closure-evidence",
       "training_admission": false,
       "admission": "held-full-s1-and-source-quality-review",
-      "notes": "Authoritative closure-input-v4 and harness4-v3 only. 51programs389items778exactquestion/state leaves; harness group-only closure clean. FullS1/rawkeys pendingDGX. types.ts scaffold excluded; noallvisiblecodecoverageclaim. Expectedmaptargetonly. Noindependentworldcredit."
+      "notes": "Authoritative closure-input-v4 and harness4-v3 only. 51programs389items778exactquestion/state leaves; harness group-only closure clean. FullS1/rawkeys pendingDGX. types.ts scaffold excluded; noallvisiblecodecoverageclaim. Expectedmaptargetonly. Noindependentworldcredit. DGXfullS1+harness4/protectedclosure51/51clean; raw389dc-/389g-keyszerohits. Ownerreceiptcommitf16b08c0. Semantic/sourcequalityadmissionstillheld."
     },
     {
       "id": "free-provider-google-choice-confidence-v15-inputs-held-20261010-v1",
@@ -25356,6 +25356,33 @@
       "training_admission": false,
       "admission": "held-full-s1-and-source-quality-review",
       "notes": "50programs382items764exactquestion/state leaves; harness group-only closure clean. FullS1/rawkeys pendingDGX. Generic types.ts scaffoldexcluded; noallvisiblecodecoverageclaim. Expectedmaptargetonly; noindependentworldcredit."
+    },
+    {
+      "id": "free-provider-luna-v40-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v40-fiftyone-runtimev12-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-quality-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "51/51 operationallyclosed;356/389source-labelmatches27/51wholemapsexact. Rawtrace/nativepreserved; notsemanticadmission."
+    },
+    {
+      "id": "free-provider-luna-v40-final-quality-held-20261010-v3",
+      "owner": "pop",
+      "path": "runs/quality-review-v40-choice-folder-final-20261010-v3",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-quality-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "V3authoritativeindependentaudit. 51outputs returned/savedmatchandinputsunmodified;996childinvocations994outputcaptures. Requestbodiesnotretained, nowirepromptclaim. V1/V2draftsnotcounted."
     }
   ],
   "coverage_backlog": [
