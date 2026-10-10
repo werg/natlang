@@ -26731,6 +26731,84 @@
       "training_admission": false,
       "admission": "held-source-semantic-full-visibility-runtime-review",
       "notes": "Sealed raw teacher audit and static replay, original metadata-allowlist failure preserved. Validated narrow pinned provenance excluded from model-facing state but retained in attribution. Source closure retains six programs, not replay admission. One full2290-character state visibility failure remains held. Full S1 and near-duplicate closure pending."
+    },
+    {
+      "id": "free-provider-runtime-small-teachers-v15-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v15",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-runtime-visibility-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-live-model-quality-review",
+      "notes": "Fresh isolated compiled shared runtime includes4096-character scope/input display, separate2000 tool/page limit, upstream runtime feedback updates. Immutable; old activeV55 frozenV14 unchanged. Live model qualification pending."
+    },
+    {
+      "id": "free-provider-google-v21-static-reference-v3-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-pubmedqa-full-abstract-v21-adapter-v3",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-runtime-visibility-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-live-model-quality-review",
+      "notes": "Six unchanged full-abstract programs /42 items now replay with zero full-state visibility failures under shared scope display fix. OriginalV2 failure retained; authored rendering evidence, not model performance or admission."
+    },
+    {
+      "id": "free-provider-google-v21-scope-display-fix-evidence-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-pubmedqa-full-abstract-and-static-replay-v1/scope-value-display-fix-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-runtime-visibility-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-live-model-quality-review",
+      "notes": "Sealed diagnosis and fresh replay evidence. Authoritative review-v2 corrects diagnostic JSON-rendered-literal checks; original receipt preserved. Previous state2290 cut at2000, now full. Model-facing debt unmeasured until live teacher audit."
+    },
+    {
+      "id": "free-provider-google-v22-reviewed-unclipped-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v22",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-runtime-visibility-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-live-model-quality-review",
+      "notes": "512 unchanged original train rows, eight families64each; disjoint IDs/groups from26prior inputs. Shared preparer logs6073 omissions including669 legacy clipped inputs and two source-quality holds. No tail reconstruction or gold rewrite. Active outputs excluded.",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ]
+    },
+    {
+      "id": "free-provider-luna-v56-full-abstract-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-pubmedqa-full-abstract-v56-runtimev15-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-runtime-visibility-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-live-model-quality-review",
+      "notes": "Six full-abstract source-bound train programs /42items, V15 immutable runtime; five workers queued after allV55fullyaccounted. Original source groups retained, no new worlds. Reference replay visible; live model quality/admission pending.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "unapproved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ]
     }
   ],
   "coverage_backlog": [

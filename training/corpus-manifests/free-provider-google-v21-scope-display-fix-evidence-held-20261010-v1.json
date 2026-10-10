@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v21-scope-display-fix-evidence-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-pubmedqa-full-abstract-and-static-replay-v1/scope-value-display-fix-v1",
+  "files": [
+    {
+      "path": "review-v2.json",
+      "bytes": 7147,
+      "sha256": "dfb9a59c7c745ea0fe8ba68f49a87b01746b318a411de8e47047adef79135228"
+    },
+    {
+      "path": "review-v2.md",
+      "bytes": 1560,
+      "sha256": "2a9924b61b92db6fbcda1462db2b4f70098e048b1a2db76bf2dc54e8eae536af"
+    },
+    {
+      "path": "review.json",
+      "bytes": 6883,
+      "sha256": "c886f379eea73f018a7556de7f8f34b3d46fca59559a257c7c8122993c040142"
+    },
+    {
+      "path": "review.md",
+      "bytes": 1648,
+      "sha256": "723a6483e1cf4a0d326d12711ff0a2fb8b6b01a1ed38f5264a2cd84556b67588"
+    }
+  ],
+  "bytes": 17238
+}
