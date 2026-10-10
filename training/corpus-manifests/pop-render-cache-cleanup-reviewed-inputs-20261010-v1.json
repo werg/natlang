@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-render-cache-cleanup-reviewed-inputs-20261010-v1",
+  "owner": "pop",
+  "path": "runs/storage-render-cache-cleanup-20261010-v1",
+  "files": [
+    {
+      "path": "execute-review.py",
+      "bytes": 1660,
+      "sha256": "5eb090c21404daf2f5c67a73c897760e7c5825fc63f3487bf611c293f1abddde"
+    },
+    {
+      "path": "original-render-cache-manifest.json",
+      "bytes": 438184,
+      "sha256": "1a4e8b62db3a043149633a6d33337ce4c976f95dda033676da455c2b50e7ffe8"
+    },
+    {
+      "path": "prepare-review.py",
+      "bytes": 1844,
+      "sha256": "98874a0adb6e6862b82069178cedcc219d26a1ca2b8b7ff5b196969f389478f9"
+    },
+    {
+      "path": "reviewed-plan.json",
+      "bytes": 326195,
+      "sha256": "86c0d816cffe93b6a4bc5d6ec7abfe58420a41fe8bae2803bf14533c57b3184a"
+    }
+  ],
+  "bytes": 767883
+}
