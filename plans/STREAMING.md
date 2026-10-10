@@ -41,6 +41,19 @@ Background helpers subscribe to the live stream instead of waiting for the finis
 Helpers act on deltas as hints; anything they commit is tied to the final message, so a turn that changes course
 discards speculative work. Helper policy is natural language behind `pluggable()`.
 
+Done (2026-10-10) for the companion (applications/pi COMPANION.md §7, `extensions/companion/stream.ts`): pi-durable's
+generation hands each provider event of a streamed attempt to `onStream` observers (vendored generation.ts
+`streamResponse`, synchronous, before pi.live's throttle). The companion's hint policy (`hints`, `--hints`:
+crisp paths and quoted names, `hints.nl`, or shadow) turns streamed reasoning and text into lookups (files learned and
+summarized, symbol definitions found); a tool call whose arguments parse as a whole object is prepared at once (its
+view intent captured, a read's file learned, an edit's or write's file read once). The terminal message settles it:
+work whose source text or call (same ID, name, arguments) it keeps is committed (file knowledge; research notes the
+next request's companion section shows), the rest is aborted; a reset (parts restarting at a content index already
+seen), a failed or aborted attempt and a new attempt discard it at once. Bounded: 2 jobs at a time, 8 per turn, 3
+summaries per turn; crisp mode costs a regular expression when nothing is named. Tests:
+applications/pi/test/stream-helpers.test.mjs. Not yet: early checks that would produce a correction (a forbidden
+command), and helpers besides the companion.
+
 ## 3. User input as a stream
 
 The harness UI sends edit deltas of the draft while the user types (a draft document per conversation, updated live,
@@ -48,10 +61,25 @@ never part of the transcript until sent). Helpers may react: show relevant conte
 clarifying offers next to the draft. Sending the message is the only event that enters the transcript; help shown
 while typing is an offer the user takes or ignores.
 
+Done (2026-10-10), applications/pi `host/drafts.ts` (`openDrafts`, exported by index.ts; `BrowserPi.drafts` in the
+browser host): the draft is a conversation document (`pi.draft`, `{ text, version }`) changed by edit deltas
+(`{ from, to, insert }` or `{ text }`), never an entry. Helpers run debounced (400 ms; a newer edit aborts a running
+pass) and write offers (`pi.draft.offers`: context, warning or question with the text taking it adds), committed only
+for the draft version they read. `take` adds an offer to the draft; `send` submits the draft as input and clears the
+draft and its offers in one commit (restored if the submission fails). The companion's helper
+(`extensions/companion/draft.ts`) is pluggable (`offers`: crisp checks of what the draft names, `offers.nl`, or
+shadow). Not yet: a UI that sends the deltas (the harness UI is the consumer; the API is in place on both hosts).
+
 ## 4. Order
 
 1. Contract and delta assembly (§1.1), Neuralese driver (§1.2), pi mapping (§1.4).
 2. Fork SSE and conformance (§1.3), with the fork parity fixes.
 3. Live events for natlang functions (§1.6).
-4. Background helpers on the stream (§2), starting with the companion.
-5. Draft deltas and help while typing (§3).
+4. Background helpers on the stream (§2), starting with the companion. Done for the companion (2026-10-10).
+5. Draft deltas and help while typing (§3). Done: the drafts API and the companion's offers (2026-10-10).
+
+Driver wrappers forward `ModelTurnOptions` (the driver's third argument): ts-host evaluation/usage.ts
+(`UsageGateway.request(..., role, options)`), self-play evaluation, the CLI's model-session wrappers (main.ts,
+adaptation.ts, improvement.ts). A model session's `turn` takes `SessionTurnOptions` (contracts.ts): the turn options
+plus `onProgress`, the aggregate stream progress that was its third argument; a Pi provider backend maps pi-ai's
+events to `onDelta`, a managed local server passes `onDelta` to its HTTP driver.

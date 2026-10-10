@@ -64,7 +64,8 @@ conversation without the extension is exactly today's harness.
 | A section (`addSection`, re-rendered at each prepare; planSystem appends only the delta) | `<companion>`: the current briefing. It is short and replaced each turn. An unchanged briefing costs nothing, and a changed one costs a section patch. |
 | A tool | `recall(handle)` expands a compressed output or a knowledge-base entry; `ask(question)` queries the knowledge base synchronously (a natlang call with a small budget). |
 | `afterTool` hook | Stores each long result (over 2,000 characters) as a call of `view` (§6): the exact result is kept in the companion's store (its `recall` handle), and the result message holds its text form with a reference to the call. Past 6,000 characters the text form is shaped: the agent sees part of the output plus a `recall` handle. Which part is a pluggable hot path (`shaping`, `--shaping`, modes `crisp`, `nl` and `shadow` through `pluggable()`). Crisp keeps the head and tail. Natural language (`shape.nl`) chooses the lines that matter for the next step and writes a gist of the rest; its choice is memoized for the call (`HookApi.memo`), and the host clamps it to the budget. If the natural-language call fails, the crisp shape stands in. With a Neuralese reader the hook also starts the view's block at once (latency). |
-| `afterResponse` hook | With a Neuralese reader: records the intent of each tool call (the call and the turn's reasoning and text, as the harness bench's `intent()`), the view's instructions. |
+| `onStream` hook (natlang port patch to pi-durable) | The agent's reply as it streams: research on what its reasoning names, and each tool call prepared as soon as its arguments are complete (§7). Speculative until the terminal message confirms it. |
+| `afterResponse` hook | Records the intent of each tool call (the call and the turn's reasoning and text, as the harness bench's `intent()`), the view's instructions; a call that completed while streaming has its intent captured then, and the terminal message confirms it. Settles the turn's speculative work (§7). |
 | `beforeRequest` hook | Last-moment additions: a finished background result the briefing has not shown yet. |
 | Owned tasks (`pi.companion`) | Background work: indexing, research, tests in a scratch copy, critique. |
 | Steering submission (inbox, `steer` mode) | Urgent findings only, such as a loop or a destructive command about to run. A policy decides, and the default is rare. |
@@ -163,7 +164,48 @@ When the agent's model is Neuralese-capable (its driver advertises `neuralese: t
 This depends on the runtime qualification gates of the Neuralese programme. Until a channel is qualified for those
 exact weights, the companion delivers text. The bench (HARNESS_BENCH.md) is where these encodings are learned.
 
-## 7. Order of work
+## 7. On the live streams (built, plans/STREAMING.md §2 and §3)
+
+The companion does not wait for the agent's finished message, and helps before the user's message is sent.
+
+**The agent's reply (`extensions/companion/stream.ts`).** pi-durable's generation hands every provider event of a
+streamed request to its `onStream` observers (a patch to the vendored generation.ts `streamResponse`: synchronous,
+not awaited, before pi.live's throttle; `api.signal` aborts with the task). The companion reads them as hints:
+
+- reasoning and text, a piece at a time (crisp: every 80 new characters up to the last space, and at the part's end;
+  natural language: at the part's end or every 1,500 characters), go through the hint policy, a pluggable hot path
+  (`hints`, `--hints`): `crisp` takes the paths the text writes and the names it quotes (`name`, `name()`), `nl` is
+  `hints.nl` (what the agent is about to need, including a file that answers a question it asks itself), `shadow`
+  runs both. A named file is read and, when its version is unknown, summarized (`summarize.nl`, as the background
+  task does; at most 3 per turn); a named symbol's definitions are found with grep. Each gives a research note;
+- a tool call is prepared as soon as its arguments are complete (they parse as a whole JSON object, or the call
+  ended): its view intent is captured, the file a `read` names is learned (knowledge only: the agent reads it whole),
+  and the file an `edit` or `write` names is read once (a warm, read-only read).
+
+Everything is speculative until the terminal message (`afterResponse`). Work counts only when that message still holds
+what started it: the streamed text the hint came from, or the call with the same ID, name and arguments. Confirmed
+results are committed (file knowledge to `pi.companion.files`; research notes to `pi.companion` as `research`, for that
+turn, shown by the companion section in the next request under "Looked up while you were writing your last reply");
+the rest is aborted and dropped. A re-sent request (its parts start again at a content index already seen: the
+natlang transport's `reset`, or a final turn that replaced the streamed parts), a failed, deferred or aborted attempt,
+and a new attempt discard the turn's speculation at once. Cost: the observer is a regular expression over new text
+in crisp mode; at most 2 jobs run at a time for the whole companion and 8 per turn, so nothing named means nothing
+done, and the agent never waits. Confirmed jobs that finish after the turn commit then, in the background.
+`onSpeculation` reports each step (`job`, `start`, `prepare`, `discard`, `commit`); the CLI logs commits and discards.
+
+**The user's draft (`host/drafts.ts`, `extensions/companion/draft.ts`).** A draft per conversation is a document
+(`pi.draft`, never an entry), changed by edit deltas from the harness UI (`drafts.edit(id, { from, to, insert })` or
+`{ text }`). Helpers run debounced (400 ms after the last edit; a newer edit aborts a running pass) and write offers
+(`pi.draft.offers`: context, warning, question, each with the text taking it adds) for the draft version they read;
+offers for an older version never overwrite newer ones. The companion's draft helper is a pluggable policy
+(`offers`): `crisp` checks the paths and quoted names the draft writes (a missing file is a warning, a known file or a
+symbol's definition is context), `nl` is `offers.nl` (reads the draft and the recent conversation, searches the
+workspace read-only), `shadow` runs both. `drafts.take(id, offer)` adds an offer to the draft; `drafts.send(id)` submits
+the draft as the conversation's input and clears it and its offers in one commit. Sending is the only event that
+enters the transcript. The browser host exposes it as `BrowserPi.drafts`; a Node host opens it with `openDrafts`
+(index.ts) on its harness.
+
+## 8. Order of work
 
 1. **Port solid.** Conformance suite green on current code, the pure natural-language variant measured, live eval
    tasks (README Status).
@@ -182,7 +224,7 @@ exact weights, the companion delivers text. The bench (HARNESS_BENCH.md) is wher
 Each part gets its unit decision (function, instruction, crisp helper) before implementation (owner: port
 granularity).
 
-## 8. Open questions
+## 9. Open questions
 
 - Web research needs network access and a policy for what may leave the machine. The default is local sources only,
   with web lookups as an opt-in setting.

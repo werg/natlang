@@ -96,6 +96,17 @@ once per call: memoized in the session, pinned on the server, restored from the 
 server lost it. The view is started right after the tool result; a view that cannot be written fails the turn
 (retried by pi's retry policy when the server was unreachable or overloaded).
 
+The companion also reads the agent's reply while it streams (COMPANION.md §7): what the reasoning names is looked up
+before the turn ends (`--hints crisp|nl|shadow`: written paths and quoted names, or `hints.nl`), and a tool call is
+prepared as soon as its arguments are complete. Only what the finished message keeps is committed; the next request's
+companion section shows the notes. The phase log shows what was committed or discarded.
+
+Help while the user types (plans/STREAMING.md §3): `openDrafts(harness, { env, helpers })` (index.ts) keeps a draft per
+conversation as a document, changed by edit deltas (`drafts.edit(id, { from, to, insert })`); helpers (the
+companion's `companionDraftHelper`, extensions/companion/draft.ts, policy `offers` crisp|nl|shadow) write offers
+beside it (`drafts.read(id).offers`); `drafts.take` adds one to the draft and `drafts.send` submits it. Only the sent
+message enters the transcript.
+
 ## In the browser
 
 The same harness runs in a browser page or worker (`browser.ts`, `openBrowserPi`). The code is split in three:
@@ -126,8 +137,10 @@ In the browser:
   here; `transport: 'pi-ai'` uses pi-ai's OpenAI-compatible provider): an HTTP endpoint, or the in-page WebAssembly
   Neuralese engine's endpoint (`startBrowserNeuralese`). A Neuralese reader (`reader: DIALECT`) is checked against the
   server as on the CLI, and its blocks are archived in the OPFS block store (ts-host `OpfsNeuraleseStore`).
-- The companion (`companion: true`) reads, lists and searches the workspace through the conversation's environment,
-  so it sees the folder; its search is the environment's grep.
+- The companion (`companion: true`, or `{ shaping, hints, offers }` to choose its policies) reads, lists and searches
+  the workspace through the conversation's environment, so it sees the folder; its search is the environment's grep.
+- `pi.drafts` is the drafts API above: the page sends the draft's edit deltas while the user types, shows the offers,
+  and sends the message with `pi.drafts.send`.
 - The prompt has no project context files or skills (they are loaded from the file system on Node); its docs section
   names `packageDir` (default `/pi`).
 
@@ -162,7 +175,9 @@ await pi.close();
   `browser-bundle.test.mjs` (the entry builds under the browser policy; the built bundle, loaded with the browser
   runtime and Node's `process` hidden, runs a coding task end to end on a virtual folder with a scripted executor and
   a fake agent server, the companion searching the folder; the session's memory fallback; the OPFS block archive with
-  a stand-in OPFS). A Chromium smoke of test/browser/index.html is for browser CI.
+  a stand-in OPFS). A Chromium smoke of test/browser/index.html is for browser CI. `stream-helpers.test.mjs`: the
+  companion on the live stream (research started before the turn ends, a reset discarding it, a tool call prepared at
+  completion, with a scripted natlang driver that holds its turn) and the drafts (deltas, offers, take, send).
 - `npm run test:vendor`: pi-durable's own suite with the crisp defaults (967 tests; three files need other packages
   of pi's monorepo and do not load). `npm run test:policy`: the same suite through the guarded read-decide-commit
   policy path.
