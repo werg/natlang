@@ -286,3 +286,45 @@ precision (Q4_0 GGUF; TQ2_0 via qat_export) from latents.
   the ramp in the recipe. The v3 export/harness pipeline (runs/mellum-qualify-v3-20261010) was never run.
 - Lesson for long-running QAT jobs: a signal checkpoint of the full latent+optimizer state does not fit docker's stop
   window; rely on a short rolling cadence (or a weights-only signal snapshot).
+
+## 2026-10-10 — Foundation embedding_distillation gate failure (cutoff 27): a recipe error, not a Mellum limit
+
+`runs/mellum-foundation-qat-20261010` (raw-recurrence-mellum-v5, BF16 start) passed token_identity, trained
+embedding_distillation for 8,192 steps, and failed the gate (agreement ≥ 0.9 and KL ≤ 0.25 per stratum). The
+failed attempt is preserved in `run/embedding_distillation*`.
+
+| stratum (held) | positions | KL | agreement | gate |
+|---|---|---|---|---|
+| source | 4,833 | 0.105 | 0.857 (plateau 0.852–0.857 for the last ~1,000 steps) | fail |
+| context | 524,800 | 0.072 | 0.915 | pass |
+
+**Cause.** The metric (causal_bootstrap.metrics) compares the argmax of a projection of the layer-`cutoff` state
+with the argmax of the full 28-layer model at the same position. At cutoff 27 the projection has to emulate the last
+layer, including its attention over the prefix, from one position's state, so its ceiling is below 1. Owner
+decision 2026-10-06 (DECISIONS.md "out port at the top") makes the foundation reference `cutoff: "full"` on every
+backbone; the shared base `foundation-v1` declares `cutoff: "full"` with `stop_on_gate`. The Mellum recipes
+(raw-recurrence-mellum-v1…v5, HISTORY.md "cutoff 27 = layers - 1") re-introduced the Maple c12–c23 shallow cutoff as a
+"backbone-inherent" override. That lesson came from lineages the 2026-10-06 decision had already declared to be
+"measuring the wrong thing", so the override is not backbone-inherent and breaks the unify rule.
+
+**Evidence** (ledgered, 2026-10-10, same heads/records/pieces/512 contexts; `runs/mellum-foundation-qat-20261010/diagnostics/`):
+- Cutoff `full` with `--stop-on-gate`: `qualified_at_initialization`, KL 0, agreement 1.0 on all 529,633 held positions
+  (source 4,833, context 524,800), bit-exact, 0 optimizer updates (`full-depth-qualification-eval.jsonl`). Pop's LFM
+  qualified the same way (132,883 positions).
+- Gate diagnostic of the cutoff-27 checkpoint (`gate-diagnostic-c27.json`, maple/gate_diagnostic.py): the projection's
+  token is in the teacher's top 5 at 99.3% (source) / 99.7% (context). Disagreement sits where the teacher is
+  uncertain: source has 30.6% of positions with top-1 probability < 0.3 (agreement 0.66) and 19.3% at 0.3–0.5 (0.84);
+  context has 13% / 14%. Above 0.7 agreement is ≥ 0.99. Source (program text) is higher-entropy, so it sits lower
+  under any shallow cutoff; 3.7% of source positions are exact bf16 ties.
+- Shallow cutoffs failed this gate on every backbone: Maple c12–c23 best 0.856 overall / source 0.79; LFM cutoff 14
+  62% (82% with contexts), LFM cutoff 15 >92% aggregate but ~88% source (HANDOVER 2026-10-05). Mellum c27's 0.914 /
+  0.857 is the best shallow result so far. The 0.9 bound is not LFM-calibrated: no backbone passes it at a shallow
+  cutoff, and every backbone passes it exactly at full depth.
+
+**Fix (next launch).** Drop the cutoff override; inherit the shared foundation unchanged. Recipes are immutable, so add
+`raw-recurrence-mellum-v6` = `raw-recurrence-mellum-v5` minus `overrides.stages.embedding_distillation.parameters.cutoff`
+(27) and minus `...contexts` (512). Full depth qualifies at initialization, so the windows only change the held sample
+size; keep 512 only if the extra held positions are wanted, declared as such. Heads: `foundation_heads --cutoff` must
+match (full depth). Relaunch the lineage from token_identity with v6 (the heads/init-gate receipts are reusable if the
+heads' cutoff is not baked in; otherwise rebuild them). No threshold change: a shallow-cutoff projection is a separate,
+optional efficiency variant (sketch/MTP initializer), gated on its own and not part of the foundation.
