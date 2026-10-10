@@ -21113,6 +21113,44 @@
       "corpus_publication_for_training": false,
       "independent_new_worlds": 0,
       "notes": "Unused Maple preview GGUF, exact retained bytes6349082144 SHA2fad7b4903781aca6b1171881f2d273989fe1735b6b3ea704bc486b472d98039. Canonical Pop registry alias resolves to /srv/storage/natlang-artifacts/models/maple-preview-GGUF. Original models/maple-preview-GGUF alias requires manifest restore before use after verified offload. No active model, training data or optimizer state removed; model bytes copied and SSH-verified before unlink."
+    },
+    {
+      "id": "neuralese-native-harness-text-mix-lfm25-8805-20261010-v1",
+      "owner": "pop",
+      "path": ".local/prepared/neuralese-native-harness-text-mix-20261010-v1",
+      "include": [
+        "text.jsonl",
+        "receipt.json"
+      ],
+      "split": "preserved-source-group-train-test",
+      "source_class": "declared-cohort-assembly",
+      "training_admission": true,
+      "admission": "LFM2.5-350M core_text_warmup / autoregressive_text_fixup only, native 0.75 / harness_bench 0.25; native qualification cohort; harness test stratum diagnostic only; recipe b3f037e5 and DECISIONS.md 2026-10-10 owner admission",
+      "independent_new_worlds": 0,
+      "notes": "Shared assembler, pinned source bytes and tokenizer. Admission is the declared cohort decision, not assembly receipt. Does not grant weight, recurrence, compression or other-backbone admission."
+    },
+    {
+      "id": "free-provider-google-pool-v3-and-quality-review-v15-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "provider-google-model-pool-mixed-decisions-v3/cases.jsonl",
+        "provider-google-model-pool-mixed-decisions-v3/labels.jsonl",
+        "provider-google-model-pool-mixed-decisions-v3/labels.jsonl.attempts.jsonl",
+        "provider-google-model-pool-mixed-decisions-v3/labels.jsonl.manifest.json",
+        "provider-google-model-pool-mixed-decisions-v3/source-manifest.json",
+        "provider-google-model-pool-mixed-decisions-v3/launch-receipt-v1.json",
+        "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/*.py",
+        "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/models.json",
+        "quality-review-v15/review.json",
+        "quality-review-v15/review.md"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "provider-typed-labels-and-read-only-quality-review",
+      "training_admission": false,
+      "admission": "held pending corrected static conversion, replay and explicit source admission",
+      "independent_new_worlds": 0,
+      "notes": "1024 final labels, 852 typed-valid, 549 all existing scorer gates; invalid distributions unchanged and rejected. Review also records ZAI research index1 accepted exact scoped result; underlying ZAI artifacts need separate publication."
     }
   ],
   "coverage_backlog": [
