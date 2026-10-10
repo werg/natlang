@@ -28092,6 +28092,36 @@
         "provider-static-annotation-decision-folders-v19-input/**/*",
         "provider-static-annotation-decision-folders-v20-input/**/*"
       ]
+    },
+    {
+      "id": "free-provider-google-v27-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v27",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "512 typedvalid labels404exact annotations108disagreements,563attempts; sevenfamilies/PubMedQAexplicitlyexhausted. Sourceonlylocalpinned,no upstream revision/source_refs; allheld."
+    },
+    {
+      "id": "free-provider-google-v27-static-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v27-adapter-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "54 directoryreducer referenceprograms404 annotation-agreeingitems916nativeturns; completevisibleinputs45holdpolicyapplied,0holdhits. No semantic ortrainingadmission."
+    },
+    {
+      "id": "free-provider-google-v27-quality-closure-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v27-gemini-choice-confidence-and-static-replay-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Closedsource/staticreview, exactlocaloriginalobjects512/512,54/54reference/visibilityaccepted, Popportableharnessclosure. FullS1requestpending pop-4634; closureevidenceonly."
     }
   ],
   "coverage_backlog": [
