@@ -6,7 +6,7 @@ from pathlib import Path
 import signal
 import subprocess
 import time
-from start_reviewed_generation_successor import atomic_json, digest
+from start_reviewed_generation_successor import atomic_json, digest, running
 from freeze_training_runtime import tree_identity
 
 
@@ -54,6 +54,35 @@ def main():
             keys.add(entry['key'])
             indices.add(identity)
     record = Path(plan['launch_record'])
+    # A reviewed refill can wait without borrowing any of its predecessor's
+    # worker slots. Failed or incomplete predecessors require agent review.
+    predecessors = plan.get('predecessors', [])
+    for predecessor in predecessors:
+        if digest(predecessor['queue']) != predecessor['queue_sha256']:
+            raise ValueError('Predecessor queue changed')
+    while any(running(p['pid']) for p in predecessors):
+        atomic_json(record.with_suffix('.waiting.json'),
+                    {'status': 'waiting_for_predecessors', 'plan': str(args.plan), 'time': time.time()})
+        time.sleep(30)
+    for predecessor in predecessors:
+        if digest(predecessor['queue']) != predecessor['queue_sha256']:
+            raise ValueError('Predecessor queue changed while waiting')
+        finishes = {}
+        for line in Path(predecessor['journal']).read_text().splitlines():
+            event = json.loads(line)
+            if event.get('event') == 'finish' and not event.get('batch_key'):
+                finishes[event['key']] = event
+        for line in Path(predecessor['queue']).read_text().splitlines():
+            event = finishes.get(json.loads(line)['key'], {})
+            if event.get('status') not in {'complete', 'complete_with_skips', 'skipped'} or not event.get(
+                    'output_accounting', {}).get('complete'):
+                raise ValueError('Predecessor incomplete; agent review required')
+    # Recheck pins after a potentially long wait, before creating any worker.
+    for path, expected in plan['artifact_hashes'].items():
+        if digest(path) != expected:
+            raise ValueError(f'Reviewed artifact changed while waiting: {path}')
+    if tree_identity(runtime) != json.loads((runtime / 'frozen-runtime.json').read_text())['files']:
+        raise ValueError('Frozen runtime changed while waiting')
     def stop(signum, frame):
         raise KeyboardInterrupt('operator stopped campaign')
     signal.signal(signal.SIGTERM, stop)
