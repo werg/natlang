@@ -1,0 +1,67 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-mixed-decisions-v5-closed-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v5",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 639892,
+      "sha256": "9b05be433ca215750490577600a096b114271f1fdf49fdf1fb04c44f121baea9",
+      "lines": 1024
+    },
+    {
+      "path": "frozen-adapter-v1/__pycache__/label_decision_cases.cpython-310.pyc",
+      "bytes": 19399,
+      "sha256": "b1619181fc5659304edc23d0d74c6e0ed865d3d545020dd989a0c9f685d15b2a"
+    },
+    {
+      "path": "frozen-adapter-v1/label_decision_cases.py",
+      "bytes": 25872,
+      "sha256": "f31de7ae93ffc0abc6373b8393ec69cad49c0bbf4543ea75326a54f5ea775a65"
+    },
+    {
+      "path": "frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "frozen-adapter-v1/run_gemini_decision_pool.py",
+      "bytes": 9403,
+      "sha256": "23e0d7c577144b4d3ad88ed2c33bd189e7e42f139c921b1cbd110eb0bacb73c3"
+    },
+    {
+      "path": "labels.jsonl",
+      "bytes": 1202689,
+      "sha256": "8ccc3aea4e0d481c4c05d7318beaf7e554036338b2d90588a95cbd638f203366",
+      "lines": 1024
+    },
+    {
+      "path": "labels.jsonl.attempts.jsonl",
+      "bytes": 1125157,
+      "sha256": "a8e7c104c3dbe85cfd0c75c3683f3d1856d0e6865f5f8beae9ccf4e4541d0ff9",
+      "lines": 1100
+    },
+    {
+      "path": "labels.jsonl.manifest.json",
+      "bytes": 2350,
+      "sha256": "0d1450485c86783c4df8ada160249c52f7b4ad832a67b4fdf81f7ee812255b42"
+    },
+    {
+      "path": "launch-receipt-v1.json",
+      "bytes": 1007,
+      "sha256": "ddac64bd05d98659a9d1f5f2dab85c85d5a04adc4d5981c7953819a7d2513699"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 1183,
+      "sha256": "b30c50dbec239917ec7a80320f13d87fe2360b2db3783ff8ffd93055aab506be"
+    },
+    {
+      "path": "worker.log",
+      "bytes": 77209,
+      "sha256": "31750105eec044659fd8e23d1f0212107e07c362fb3d7746cd93908075dc1ee6"
+    }
+  ],
+  "bytes": 3106967
+}

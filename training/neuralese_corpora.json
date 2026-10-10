@@ -22311,6 +22311,129 @@
       "admission": "admitted-ordinary-text-only-no-native-IR-trace-recurrence",
       "independent_new_worlds": 0,
       "notes": "Root exact296cleanrowreceipt cc2d7c63da21af781f9e9a72aa7facf0705e0209d81fb2c30fa9b7455e48d0c7; sharedproductionrenderer280globallydedupdocs/0omissions preserves296bindings. 2360661context+target tokens/41946supervisedsuffix/max15975; LFM2pinnedtemplate last_turn_only history policy retains currenttarget reasoning. NativeIR/trace/wholetrajectory/recurrence/channelqual held; currentGPUinputunchanged, zeroheldevalcredit. Text99b4cf11ea72ce4f0ce44eab6219f8ac1c678b3944cb0888717adfc0e382a836."
+    },
+    {
+      "id": "free-provider-runtime-small-teachers-v10-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v10",
+      "include": [
+        "dist/**/*",
+        "scripts/**/*",
+        "src/**/*",
+        "training/source-reviews/**/*",
+        "prelude.js",
+        "package.json",
+        "package-lock.json",
+        "frozen-runtime.json"
+      ],
+      "split": "not-training-data",
+      "source_class": "frozen-provider-runtime-with-workspace-dependency-overlay",
+      "training_admission": false,
+      "admission": "excluded-incomplete-manifest-replaced-v2",
+      "notes": "Sharedfreezer9610fb65 merges local+roothostinstalleddependency links with localprecedence; actual frozenproviderESMimport passed noAPIcalls. Dependency packages remain installed/shared and mustnotchange whilejobsrun; transferredsource snapshotalone does not install dependencylinks on destination. RuntimeV9initialmissingroot-hoistedpi-aifailurepreserved. Originalinclude globs omitted127root-leveldist/scripts/sourcefiles; metadatafailure, notcomplete runtime snapshot. Usev2."
+    },
+    {
+      "id": "free-provider-luna-v33-runtimev9-startup-failed-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev33-five-runtimev9-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "zero-model-call-runtime-deployment-failure",
+      "training_admission": false,
+      "admission": "infrastructure-failure-evidence-not-model-negatives",
+      "notes": "Fivecollectorstarts failedERR_MODULE_NOT_FOUND pi-ai beforemodelreplies/completiontokens. OldcampaignstatusfinishedOS0misleading; supervisor0bec13b2nowpropagatesincomplete2/storagepause75. Originalmanifest/journal/logspreserved."
+    },
+    {
+      "id": "free-provider-luna-v33-runtimev10-reviewed-queues-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev33-five-runtimev10-v2",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-infrastructure-retry-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-infrastructure-retry-queues",
+      "training_admission": false,
+      "admission": "immutable-dispatch-evidence-live-output-excluded",
+      "notes": "Fivefreshsinglecasequeues, sameV33v4source/gold/sampling aszero-callfailedV9attempt; runtimeV10importpreflight passed, corrected supervisor. Liveoutputs intentionallynotinimmutablemanifest."
+    },
+    {
+      "id": "free-provider-runtime-small-teachers-v10-held-20261010-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v10",
+      "include": [
+        "**/*"
+      ],
+      "split": "not-training-data",
+      "source_class": "frozen-provider-runtime-with-workspace-dependency-overlay",
+      "training_admission": false,
+      "admission": "runtime-evidence-only",
+      "notes": "Complete1331runtimefiles plusmanifest; node_modules links excluded fromtransfers. Sharedfreezer9610fb65merged hostlocal+rootinstalleddependencies, actualESMproviderimportpassed noAPIcalls. Destinationmustinstall/recreate own localdeps; archivealone notdeployable. Originalmanifestv1incompleteglob excluded/preserved.",
+      "exclude_dirs": [
+        "node_modules"
+      ]
+    },
+    {
+      "id": "free-provider-google-mixed-decisions-v5-closed-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v5",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-free-provider-typed-decision-labels",
+      "training_admission": false,
+      "admission": "held-typed-and-semantic-quality-review",
+      "notes": "1024sourcecases18families:848typedvalid/176invalid(175mass1JSON); raw labels and attempts immutable; validformat notsemanticadmission. Wholepool repair176separatelyqueuedV8, no renormalization or goldprompt."
+    },
+    {
+      "id": "free-provider-google-v5-repair-v8-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v5-mass-json-repair-v8",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*",
+        "frozen-adapter-v1/frozen-runtime.json",
+        "frozen-adapter-v1/models.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "pinned-invalid-typed-response-repair-inputs",
+      "training_admission": false,
+      "admission": "generation-inputs-only-live-output-excluded",
+      "notes": "176V5invalidcases unchanged IDs/gold/groups; sharedexplicitone-unitmass promptstrictvalidation unchanged;4quotagroupworkers behindV7projectlock, no paidfallback. Frozen6payloadfiles+manifest; outputsreviewheld."
+    },
+    {
+      "id": "free-provider-luna-v32-twentythree-closed-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev32-twentythree-runtimev8-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-native-provider-semantic-iterate-trajectories",
+      "training_admission": false,
+      "admission": "held-root-per-turn-quality-and-source-closure",
+      "independent_new_worlds": 0,
+      "notes": "23closed21exact/2reject, known0sourceunderverified/1-2ambiguousquarantine/4numericpunctuationnotmodelnegative. Other19exact candidates, notadmitted;367956completiontokens,16observediterateOn/7directinvocation,55scopefailureevents reviewongoing. Runtime8immutable."
+    },
+    {
+      "id": "free-provider-luna-v32-complete-quality-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/luna-sourcev32-runtimev8-complete-quality-review-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "read-only-source-bound-native-quality-review",
+      "training_admission": false,
+      "admission": "review-evidence-only",
+      "independent_new_worlds": 0,
+      "notes": "IndependentLunareviewer all23outcomes/notes/gold; sourcea947...activeV32exactpins. 21exact/2reject/3sourcequarantined/1formatambiguity. 19exactcandidates only; scopeerrorclusters stillunderreview. Receipt2a675b1470a8019f7bd07f898570de5ecf939ac1b48b539c0d7a5ded8ede2894."
     }
   ],
   "coverage_backlog": [

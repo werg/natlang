@@ -1,0 +1,80 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v5-repair-v8-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v5-mass-json-repair-v8",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 103472,
+      "sha256": "ea1a8afaef1984b3003262facd9cbb45880f74de3f79d09298391f6fa557338c",
+      "lines": 176
+    },
+    {
+      "path": "frozen-adapter-v1/frozen-runtime.json",
+      "bytes": 1193,
+      "sha256": "96b687a44b712b87b73c17ebcb39d18e5b2a1e666e6909383f015cc0e1c2853f"
+    },
+    {
+      "path": "frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/__pycache__/label_decision_cases.cpython-310.pyc",
+      "bytes": 20233,
+      "sha256": "882a4a682216f4919b2e2bcb5598838b6847e4ec78abf814a9ab538b1c929fb2"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/label_decision_cases.py",
+      "bytes": 26639,
+      "sha256": "36aafdd16b4faa52b20b69ea405ab55754065d1d0ea07031a22f10049a8e64f7"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+      "bytes": 9435,
+      "sha256": "d7d03c7bb84106530ab8619edb8f8d29c42f5cb151fa71c38c4c48a1b60ca8d4"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/__pycache__/__init__.cpython-310.pyc",
+      "bytes": 358,
+      "sha256": "e827e5b27e622fae0222e6067ff1b29a9ec336b6b34cb0065769f0968939bbd6"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+      "bytes": 157,
+      "sha256": "8352a509d51ef0dc0be958bdd4492caa968933866b171360be39fda43217364f"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__pycache__/__init__.cpython-310.pyc",
+      "bytes": 446,
+      "sha256": "9d3b444d727f0fbc385e0e39365ff0290fff52abd56aa28e762d3d615fb4255d"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__pycache__/jsonio.cpython-310.pyc",
+      "bytes": 2491,
+      "sha256": "0dd338c4611f6b439a10030fc9f9f5b056bb6572d467e92670d16e044eaaa9ba"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+      "bytes": 1755,
+      "sha256": "d4e71ae9211cd625ea5d74706f9e0d4cc7fbf59e731dd0cba34fddd04674e4d2"
+    },
+    {
+      "path": "launch-receipt-v1.json",
+      "bytes": 1320,
+      "sha256": "ae9227791987d594b2a100400ea02ff5dd919094c726e9a3dc510c4d4c73926d"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 776,
+      "sha256": "dbbbe5762715beb4339e20c9b0fe6df66b2705c23b5d6b32ee5fcdca2ccdd5f2"
+    }
+  ],
+  "bytes": 171157
+}
