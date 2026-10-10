@@ -7482,6 +7482,24 @@
       ]
     },
     {
+      "id": "luna-v17-v9-portable-context-view-20261010-v1",
+      "owner": "dgx",
+      "path": "runs/luna-v17-actual-quality-proposal-20261010-v9-portable-context-view-v1",
+      "include": [
+        "assembled-v3/*"
+      ],
+      "admission": "root-admitted-exact-source-grounded-native-sft-closed-recurrence-and-derived-gold-text;not-runtime-qualified",
+      "derived_from": [
+        "luna-v17-v9-portable-context-proposal-20261008"
+      ],
+      "build": {
+        "script": "scripts/neuralese_data/digest_to_view.py",
+        "converter": "scripts/neuralese_data/digest_to_view.py@1",
+        "requested_by": "pop (coord 2026-10-10T02:18 reply re dgx-085e)"
+      },
+      "notes": "The registered digest->view conversion (DECISIONS.md 2026-10-09, one summarizer family) of the source corpus's assembled-v3 records, which the trajectory trainer refuses while they carry digest parts. native-records.jsonl (5,242 records, 16 digest parts in 16 records) with native-pieces.jsonl, recurrence-records.jsonl (4,961 records, 16 digest parts in 16 records) with recurrence-pieces.jsonl, and delta-native-records.jsonl (26 records, none) converted; no prompt:digest piece existed (0 renamed); proposal-manifest.json and recurrence-audit.json copied byte for byte; conversion-<part>.json record input/output SHA-256 and counts. No digest part remains; 32 view parts. Not converted (unchanged in the source corpus, still with their own forms): context-bound-delta/, inputs/, review/, text-proposal-26-v3/ (text, no record parts). Admission is the source's, unchanged; the source corpus stays as published. No recipe pinned assembled-v3 at conversion time."
+    },
+    {
       "id": "neuralese-v9-root-review-20261008-v1",
       "owner": "pop",
       "path": "runs/neuralese-v9-root-review-20261008-v1",

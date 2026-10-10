@@ -1,0 +1,64 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v17-v9-portable-context-view-20261010-v1",
+  "owner": "dgx",
+  "path": "runs/luna-v17-actual-quality-proposal-20261010-v9-portable-context-view-v1",
+  "files": [
+    {
+      "path": "assembled-v3/conversion-delta-native.json",
+      "bytes": 621,
+      "sha256": "81859187774c2638e23cbd8115715668fa3ae554a0a320b594168ab38e8a449c"
+    },
+    {
+      "path": "assembled-v3/conversion-native.json",
+      "bytes": 803,
+      "sha256": "37670caed4ef5be487941878c26d9cf6c75e1a63b90582165ac3d0a1b53987fe"
+    },
+    {
+      "path": "assembled-v3/conversion-recurrence.json",
+      "bytes": 819,
+      "sha256": "4e519d91b42b63aa592b9a0f7c455ce5308f26986f83d560a59ee7ae47343560"
+    },
+    {
+      "path": "assembled-v3/delta-native-records.jsonl",
+      "bytes": 3548838,
+      "sha256": "6c9dc6d2314752eb1ac2c5bdf1e79e9ee16f8f982bd9ab0560aa582d55d89a2d",
+      "lines": 26
+    },
+    {
+      "path": "assembled-v3/native-pieces.jsonl",
+      "bytes": 210385,
+      "sha256": "dbf728ceadd6dc25a4486081e8b90919feb3464facea484af9f3b512c9fdf671",
+      "lines": 159
+    },
+    {
+      "path": "assembled-v3/native-records.jsonl",
+      "bytes": 319915900,
+      "sha256": "47988bc5092bf3c07131611c20c43697db1cc47a83b158401103d1acf1c89afe",
+      "lines": 5242
+    },
+    {
+      "path": "assembled-v3/proposal-manifest.json",
+      "bytes": 11094,
+      "sha256": "a7c32e032b3461f824bf677359214a7d7fd6c1fe527d7ebefb6d8c3cce8669f6"
+    },
+    {
+      "path": "assembled-v3/recurrence-audit.json",
+      "bytes": 4281,
+      "sha256": "228ac18b0ed7e4920269556e119b8e01ebb064f9d4f78b21fd705980d328830b"
+    },
+    {
+      "path": "assembled-v3/recurrence-pieces.jsonl",
+      "bytes": 363049,
+      "sha256": "8a171c5062a413e5bf735af63750a03e7c26b76446e2e5d61b12e2609d319260",
+      "lines": 351
+    },
+    {
+      "path": "assembled-v3/recurrence-records.jsonl",
+      "bytes": 272214157,
+      "sha256": "1cbf807ab940b8ecee3c3b77075ffce264c8a121f891e07822871d145a32ae9b",
+      "lines": 4961
+    }
+  ],
+  "bytes": 596269947
+}
