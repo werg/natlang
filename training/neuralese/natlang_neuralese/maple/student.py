@@ -22,9 +22,39 @@ MAPLE_PREVIEW_MODEL = resolve_str("models", "maple-preview-bf16")
 DEFAULT_CACHE = resolve_str("models", "maple-preview-converted")
 
 
-def student_identity(model: str, state: str | None) -> dict:
-    """What the port's checkpoints record as their frozen base (a resume refuses a different one)."""
+def load_init_latents(maple, path) -> int:
+    """Copy a full-latent QAT checkpoint's latents (``qat_convert``: ``{"step", "latents": {name: tensor}}``, e.g.
+    conversion v3's best-weights.pt) into a BF16 family member loaded with ``precision="bf16"``. Every latent must name
+    an attention projection or expert matrix of the model with the same shape. Returns the checkpoint's step."""
+    from ..train.backbone_policy import plain_named_tensors
+
+    state = torch.load(path, map_location="cpu", mmap=True, weights_only=False)
+    tensors = plain_named_tensors(maple)
+    latents = state["latents"]
+    missing = [name for name in latents if name not in tensors or tensors[name].shape != latents[name].shape]
+    if missing:
+        raise ValueError(f"init latents do not match the model: {missing[:4]}")
+    with torch.no_grad():
+        for name, value in latents.items():
+            tensors[name].copy_(value.to(tensors[name]))
+    return int(state.get("step", 0))
+
+
+def student_identity(model: str, state: str | None, precision: str | None = None, init: dict | None = None) -> dict:
+    """What the port's checkpoints record as their frozen base (a resume refuses a different one). ``precision``
+    ``"bf16"``: a non-ternary family member (Mellum) loaded as published, attention not ternarized, for the ``latent``
+    backbone policy (QAT inside the recipe's stages, train/quantization.py)."""
     identity = {"backbone": "maple", "base": str(model)}
+    if precision is not None:
+        if precision != "bf16":
+            raise ValueError("student precision is bf16 or absent")
+        identity["precision"] = precision
+    if init is not None:
+        # The lineage's init decision (recipe ``init``; train/quantization.py ``init-gate``): the latents it started
+        # from (artifact, file, sha256, step, λ) or the BF16 fallback, with the gate receipt that chose it.
+        if precision != "bf16":
+            raise ValueError("an init decision belongs to a BF16 student")
+        identity["init"] = init
     if state:
         identity.update(student_state=str(Path(state).resolve()), student_sha256=_sha256(Path(state)))
     return identity
@@ -37,7 +67,8 @@ def default_cache(model: str) -> str | None:
 
 
 def load_student(model: str, state: str | None = None, device: str = "cuda",
-                 cache: str | None = "default", order: str | None = None):
+                 cache: str | None = "default", order: str | None = None, precision: str | None = None,
+                 init: dict | None = None):
     """Returns (MapleForCausalLM, tokenizer). Without ``state``: published Maple (or another family member's
     deployed checkpoint) with attention ternarized once. With it: the adapters, scales and member parts of the state,
     in its expert order, every parameter frozen. ``cache="default"``: Maple's converted cache for published Maple."""
@@ -47,7 +78,18 @@ def load_student(model: str, state: str | None = None, device: str = "cuda",
         cache = default_cache(model)
 
     tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=False)
-    if state is None:
+    if precision == "bf16":
+        if state is not None:
+            raise ValueError("a BF16 student has no nested-family state")
+        maple = load_maple(model, device=device, ternary_attention=False, cache=None)
+        maple.natlang_precision = "bf16"
+        if init is not None and init.get("source") == "artifact":
+            from ..artifacts import resolve
+            path, sha = resolve(init["artifact"], init["file"])
+            if sha != init["sha256"]:
+                raise ValueError("init latents changed since the lineage pinned them")
+            load_init_latents(maple, path)
+    elif state is None:
         maple = load_maple(model, device=device, ternary_attention=True, cache=cache)
     else:
         saved = torch.load(state, map_location="cpu")

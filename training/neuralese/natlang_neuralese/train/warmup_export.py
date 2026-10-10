@@ -86,6 +86,11 @@ def assemble_heads_export(*, initial, heads_state, port_config, control_rows, ba
     return exported
 
 
+def _plain_named(module):
+    from .backbone_policy import plain_named_tensors
+    return plain_named_tensors(module)
+
+
 def build_heads_export(*, initial_heads_path, heads, backbone, backbone_names, backbone_training, rank, identity,
                        out, report=None, export_step, snapshot=False):
     """The export of the live model inside a running trainer. ``snapshot`` keeps tensors on their device so a
@@ -102,7 +107,7 @@ def build_heads_export(*, initial_heads_path, heads, backbone, backbone_names, b
         port_config={'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
         control_rows=control_rows,
         backbone_trainables={n: (q.detach() if snapshot else q.detach().cpu())
-                             for n, q in backbone.hf.named_parameters() if n in backbone_names},
+                             for n, q in _plain_named(backbone.hf).items() if n in backbone_names},
         lora=lora_state(backbone), lora_layers=adapter_layers(backbone), backbone_training=backbone_training,
         rank=rank, identity=identity, step=export_step, report=report,
         report_path=str((out / 'report.json').resolve()),

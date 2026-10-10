@@ -63,6 +63,12 @@ from .chat import RequestError, opens_thinking, render_messages, render_with_emp
 from .store import Block, make_block
 
 
+
+def _bf16_teacher():
+    """Self-distillation teachers see the BF16 latents: no recipe precision point applies inside."""
+    from ..maple.ternary import active_precision
+    return active_precision(None)
+
 class Unavailable(RequestError):
     def __init__(self, detail: str):
         super().__init__("neuralese-grad-unavailable", detail)
@@ -511,7 +517,7 @@ class GradSession:
             if not teacher_messages:
                 raise RequestError("neuralese-grad-term", "selfDistill needs teacher_messages")
             student = self._score(prompt, rest, leaves, write_terms=False)["token_logits"]
-            with torch.no_grad(), self._adapted(term.get("teacher_adapters"), {}):
+            with torch.no_grad(), self._adapted(term.get("teacher_adapters"), {}), _bf16_teacher():
                 t_prompt, t_rest = self._target_items(teacher_messages, tools, target)
                 teacher = self._score(t_prompt, t_rest, {}, write_terms=False)["token_logits"]
             if student is None or teacher is None or student.shape != teacher.shape:
@@ -589,7 +595,8 @@ class GradSession:
         if distill_weight:
             if not teacher_messages:
                 raise RequestError('neuralese-grad-term', 'distillation needs teacher_messages')
-            with torch.no_grad(), self._adapted(term.get('teacher_adapters'), {}):
+            # The teacher runs at BF16 (no recipe precision point; train/quantization.py).
+            with torch.no_grad(), self._adapted(term.get('teacher_adapters'), {}), _bf16_teacher():
                 tp, tr = self._target_items(teacher_messages, tools, target)
                 teacher = self._score(tp, tr, {}, write_terms=False)['token_logits']
         prompt, rest = self._target_items(messages, tools, target)

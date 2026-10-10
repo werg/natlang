@@ -486,6 +486,14 @@ def load_recipe(path):
     if not identity_stages or not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages']):
         raise ValueError('neuralese recipe must declare identity and embedding distillation stages')
     validate_input_bindings(recipe)
+    if 'quantization' in recipe:
+        # QAT woven into the stages (owner 2026-10-10; train/quantization.py): one component, inherited by every
+        # stage it names.
+        from .quantization import validate_spec
+        validate_spec(recipe['quantization'], {stage['id']: stage['kind'] for stage in recipe['stages']})
+    if 'init' in recipe:
+        from .quantization import validate_init
+        validate_init(recipe['init'], recipe.get('quantization'))
     return recipe
 
 
@@ -543,7 +551,26 @@ def validate_direct_stage_recipe(recipe):
     return recipe
 
 
+def stage_quantization(recipe, stage, parameters, reports, init_mix=None):
+    """The recipe's quantization component for one stage, with its update range: a mapped warm-up from 0 to its
+    steps, an AR fixup from its predecessor's step to its effective steps, a recurrence stage from 0 to its steps."""
+    from .quantization import stage_component
+    spec = recipe.get('quantization')
+    if not spec or stage['id'] not in spec.get('stage_progress', {}):
+        return None
+    start = 0
+    if stage['kind'] == 'core_text_warmup' and parameters.get('ar_feedback_fixup', False):
+        start = next(r for r in reports if r['id'] in stage['requires'] and r['kind'] == 'core_text_warmup')['gate']['step']
+    end = parameters.get('steps', 4096 if stage['kind'] == 'core_text_warmup' else 500)  # the trainers' defaults
+    return stage_component(spec, stage['id'], start=start, end=end, init_mix=init_mix)
+
+
 def require_gate(report, kind):
+    quantization = report.get('quantization') if isinstance(report, dict) else None
+    if isinstance(quantization, dict) and quantization.get('precisions_qualified') is False:
+        raise ValueError('stage did not pass every required precision: ' +
+                         ', '.join(sorted(set(quantization.get('precisions_required', [])) -
+                                          set(quantization.get('precisions_passed', [])))))
     if kind == 'token_identity':
         if report.get('token_aligned_reference_passed') is not True:
             raise ValueError('token identity gate failed')
@@ -912,6 +939,14 @@ def main(argv=None):
                               'recipe_plan_sha256': sha(plan_path),
                               'frozen_runtime_sha256': plan.get('code', {}),
                               'stage_inputs': stage_inputs})
+    init_mix = {}
+    if recipe.get('quantization') or recipe.get('init'):
+        # The lineage's init decision is recorded in its heads (foundation_heads --init-receipt): check it against
+        # the recipe's ``init`` and carry the latents' ramp position into every quantized stage.
+        import torch
+        from .quantization import init_mix_for
+        heads_identity = torch.load(args.heads, map_location='cpu', weights_only=False, mmap=True).get('backbone')
+        init_mix = init_mix_for(recipe, heads_identity)
     with _ChildSignalForwarder() as signal_forwarder:
         stopped = signal_forwarder.stopped
         reports = []
@@ -981,6 +1016,9 @@ def main(argv=None):
                 if 'text_data' in stage_inputs[stage['id']]:
                     stage_parameters = {key: value for key, value in stage_parameters.items() if key != 'text_data'}
                 command += stage_parameter_args(stage_parameters)
+                component = stage_quantization(recipe, stage, stage_parameters, reports, init_mix)
+                if component is not None:
+                    command += ['--quantization', json.dumps(component, sort_keys=True, separators=(',', ':'))]
                 environment = dict(os.environ)
                 environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
                 print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)

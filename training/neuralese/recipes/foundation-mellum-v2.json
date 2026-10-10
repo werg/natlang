@@ -1,0 +1,7 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "token-preserving-foundation-mellum-v2",
+  "extends": "token-preserving-foundation-mellum-v1",
+  "description": "foundation-mellum-v1 started from BF16 Mellum (owner 2026-10-10: QAT inside the stages, no up-front ternary conversion): its heads checkpoint comes from maple/foundation_heads.py --precision bf16 on the published Mellum, so the frozen backbone of these stages is BF16 (attention not ternarized, dense experts). The precision points begin in the trained-backbone stages (raw-recurrence-mellum-v5). History: recipes/HISTORY.md.",
+  "overrides": {}
+}

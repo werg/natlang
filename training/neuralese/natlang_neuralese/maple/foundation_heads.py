@@ -27,11 +27,26 @@ def main(argv=None):
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--device', default='cpu')
+    parser.add_argument('--init-receipt', type=Path, default=None,
+                        help='with --precision bf16: the init gate receipt (python -m natlang_neuralese.train.quantization '
+                             'init-gate) choosing the starting latents (its artifact when it passed, BF16 otherwise)')
+    parser.add_argument('--precision', choices=['bf16'], default=None,
+                        help='bf16: the published non-ternary model (Mellum) as is, for the latent policy and the '
+                             'recipe quantization component (QAT inside the stages)')
     args = parser.parse_args(argv)
     if args.out.exists():
         parser.error('fresh output required')
     state = str(Path(args.state).resolve()) if args.state else None
-    model, tokenizer = load_student(args.model, state, device=args.device)
+    init = None
+    if args.init_receipt is not None:
+        from ..common.hashing import sha256_file_hex
+        import json
+        receipt = json.loads(args.init_receipt.read_text())
+        init = ({'source': 'artifact', 'artifact': receipt['artifact'], 'file': receipt['file'],
+                 'sha256': receipt['sha256'], 'step': receipt['step'], 'mix': receipt['mix']}
+                if receipt['passed'] else {'source': 'bf16', 'declined': receipt['artifact']})
+        init.update(receipt=str(args.init_receipt.resolve()), receipt_sha256=sha256_file_hex(args.init_receipt))
+    model, tokenizer = load_student(args.model, state, device=args.device, precision=args.precision, init=init)
     torch.manual_seed(args.seed)
     backbone = MaplePortBackbone(model, family_controls(model, tokenizer))
     if not 0 < args.cutoff < backbone.num_layers:
@@ -41,7 +56,7 @@ def main(argv=None):
         'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
         'heads': heads.state_dict(),
         'control_rows': backbone.control_rows.detach().cpu(),
-        'backbone': student_identity(args.model, state),
+        'backbone': student_identity(args.model, state, args.precision, init),
         'note': 'untrained Maple port heads for the foundation recipe; not a trained port',
     }
     if not backbone.tied:

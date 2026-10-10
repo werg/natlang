@@ -158,3 +158,8 @@ with the backbone-inherent overrides of mellum-v4 except the ternary ones: cutof
 policy in place of `qat`/`qat_latent_lr`, and no member terms (a BF16 student has no nested-family state).
 token-preserving-foundation-mellum-v2 is foundation-mellum-v1 started from BF16 Mellum heads
 (`foundation_heads.py --precision bf16`); its stages are unchanged.
+Same day, before any run: the ternary points use Maple's per-row rule as conversion v3 and the TQ2_0 export do (no
+nesting), ramps re-sized from v3's trend (q4 0.15–0.3, ternary-experts 0.3–0.7, ternary 0.55–0.95), and
+raw-recurrence-mellum-v5 reuses conversion v3 (backbone-inherent: Mellum-tokenized): `init` from its gated best
+latents with a ramp floor on `ternary`, `quantization.preserve` (teacher-v3 top-64 KL stream, weight 0.5) and
+`quantization.gate` (v3's generation gate and held KL per precision, BF16 reference 0.75).

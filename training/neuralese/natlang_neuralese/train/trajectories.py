@@ -745,7 +745,11 @@ def main(argv=None):
     parser.add_argument("--lora-lr", type=float, default=2e-4)
     parser.add_argument("--backbone-lr", type=float, default=3e-5,
                         help="learning rate for native full-layer backbone training")
-    parser.add_argument("--backbone-training", choices=["auto", "full", "lora", "qat"], default="auto",
+    parser.add_argument("--quantization", default=None,
+                        help="the recipe quantization component for this stage (JSON; train/quantization.py): one "
+                             "precision point per update, drawn by weight among BF16 and the active points; a gate "
+                             "column per deploy precision at each evaluation. Absent: BF16 only")
+    parser.add_argument("--backbone-training", choices=["auto", "full", "lora", "qat", "latent"], default="auto",
                         help="auto selects native full-layer training or Maple QAT; lora is an explicit diagnostic policy")
     parser.add_argument("--max-tokens", type=int, default=6144, help="skip records whose crisp prompt is longer")
     parser.add_argument("--train", type=int, default=2000, help="training records to read")
@@ -1571,6 +1575,19 @@ def main(argv=None):
     if args.backbone_training=='lora' and args.rank<1:
         raise ValueError('explicit LoRA policy requires --rank positive')
     backbone_named = configure_backbone_training(engine.backbone,args.backbone_training,rank=args.rank or 16)
+    from .quantization import load_component
+    from ..common.paths import root as path_root
+    quant = load_component(args.quantization, root=path_root('repo'))
+    preserve = behaviour = None
+    if quant is not None:
+        installed = quant.install(engine.backbone.hf, layer_count=engine.backbone.num_layers)
+        print(json.dumps({'event': 'quantization_installed', 'groups': installed, 'stage': quant.stage}), flush=True)
+        from .quantization import Behaviour, Preserve
+        if quant.component.get('preserve') and quant.component['preserve'].get('weight', 0) > 0:
+            preserve = Preserve(quant.component['preserve'], quant.stage['id'])
+        if quant.component.get('gate'):
+            behaviour = Behaviour(quant.component['gate'], engine.tokenizer, preserve.held if preserve else None,
+                                  root=path_root('repo'))
     from ..maple.family import evaluate_members, family_members, member_backward, private_parameters, window_labels
     family = family_members(engine.backbone)
     codes = None
@@ -1616,9 +1633,9 @@ def main(argv=None):
         return ids, window_labels(ids, min(max(1, context - start), ids.shape[1] - 1))
     lora = [parameter for _,parameter in backbone_named]
     lora_names = ([name for name,_ in backbone_named]
-                  if args.backbone_training in ('full','qat') else None)
+                  if args.backbone_training in ('full','qat','latent') else None)
     qat_named = backbone_named if args.backbone_training=='qat' else []
-    backbone_lr = args.backbone_lr if args.backbone_training=='full' else args.lora_lr
+    backbone_lr = args.backbone_lr if args.backbone_training in ('full','latent') else args.lora_lr
 
     def policy_state():
         return backbone_trainable_state(backbone_named)
@@ -2102,7 +2119,7 @@ def main(argv=None):
             'optimizer_param_names': optimizer_param_names(optimizer, optimizer_named),
             'backbone_training': args.backbone_training,
             **({'maple_qat': True} if qat_named else {}),
-            **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat') else {}), 'anchor_origin': anchor_origin,
+            **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat','latent') else {}), 'anchor_origin': anchor_origin,
             'init': {k: v.detach().cpu() for k, v in init.items()}, 'initial_report': report,
             'probe_selection_sha256': probe_selection_hash,
             'baseline': baseline, 'python_rng': random.getstate(), 'write_rng': write_choice.getstate(),
@@ -2141,6 +2158,10 @@ def main(argv=None):
         loop = TrainingLoop(start_step, args.steps, stop, stop_before_step=False)
         for step in loop:
             anchor_now[0] = scheduled_anchor(step)
+            # One precision point per update (train/quantization.py, sampled by weight; BF16 teachers unaffected).
+            if quant is not None:
+                step_precision = quant.sampled(step)
+                quant.set_active(*step_precision[:2])
             step_started = time.perf_counter()
             phase_wall_seconds = {}
             step_gc_seconds, step_gc_calls = host_gc_seconds, host_gc_calls
@@ -2329,9 +2350,16 @@ def main(argv=None):
                 family_record = {'member': member.key, 'ce': parts.ce / max(parts.tokens, 1),
                                  'kl': parts.kl / max(parts.tokens, 1), 'tokens': parts.tokens}
             # The writer's gradient from its readers: zero would mean written values do not train the writer.
+            if preserve is not None:
+                # Behaviour preservation at this update's precision (train/quantization.py).
+                preserve_loss, preserved = preserve.loss(engine.backbone.hf, step)
+                preserve_loss.backward()
+                del preserve_loss
             optimizer_phase = start_phase('gradient_clip_and_optimizer', step)
             writer_grad = float(gradient_norm(head_params)) if head_params else None
             clip_finite_gradients(trainables, 1.0)
+            if quant is not None:
+                quant.set_active('bf16', 0.0)  # evaluations and checkpoints after the update see BF16
             commit_optimizer_step(optimizer)
             stop_phase(optimizer_phase)
             entry = {"step": step, "iteration_index": step, "completed_updates": step + 1, "reader_record_ids": step_record_ids, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
@@ -2361,6 +2389,9 @@ def main(argv=None):
                         if view_lengths else {}),
                      "max_write_length_this_update": max(lengths[step_lengths_start:], default=0),
                      "write_capacity": heads.max_length, **({"family": family_record} if family_record else {})}
+            if quant is not None:
+                entry['precision'] = {'point': step_precision[0], 'mix': step_precision[1],
+                                      **(preserved if preserve is not None else {})}
             if args.device.startswith("cuda"):
                 entry["peak_gb"] = round(max(step_peak_bytes, torch.cuda.max_memory_allocated()) / 2**30, 2)
                 entry['released_graph_gib'] = round(released_graph_bytes / 2**30, 3)
@@ -2377,6 +2408,18 @@ def main(argv=None):
                 from .trajectory_state import evaluation_state
                 with evaluation_state(write_choice, stop_generator, baseline):
                     evaluation = {'step': step + 1, 'soft': evaluate('periodic-soft', leaves)}
+                    if quant is not None:
+                        evaluation['quantization'] = {**quant.describe(step + 1), 'precision': step_precision[0],
+                                                      'columns': {}}
+                        if behaviour is not None:
+                            evaluation['quantization']['bf16_behaviour'] = behaviour.report(engine.backbone.hf)
+                        for point in quant.gated_points():
+                            with quant.context(point, 1.0):
+                                evaluation['quantization']['columns'][point] = evaluate(f'periodic-soft-{point}', leaves)
+                                if behaviour is not None:
+                                    measured = behaviour.report(engine.backbone.hf)
+                                    evaluation['quantization']['columns'][point + ':behaviour'] = {
+                                        **measured, 'passed': behaviour.passed(measured)}
                     if codes is not None:
                         evaluation['qat_codes'] = codes.update()
                     if family and args.member_eval:
@@ -2407,6 +2450,15 @@ def main(argv=None):
         print(json.dumps({'status': 'checkpointed_on_signal', 'checkpoint': str(checkpoint_path)}), flush=True)
         return 0
     report["soft-trained"] = evaluate("soft-trained", leaves)
+    if quant is not None:
+        report["quantization"] = {**quant.describe(args.steps), "columns": {}}
+        for point in quant.gated_points():
+            with quant.context(point, 1.0):
+                report["quantization"]["columns"][point] = evaluate(f"soft-trained-{point}", leaves)
+                if behaviour is not None:
+                    measured = behaviour.report(engine.backbone.hf)
+                    report["quantization"]["columns"][point + ":behaviour"] = {**measured,
+                                                                               "passed": behaviour.passed(measured)}
     if cohort_strata_held:
         report["cohort_strata-trained"] = {cohort: {"soft": evaluate(f"soft-trained-{cohort}", leaves, records=chosen)}
                                            for cohort, chosen in cohort_strata_held.items()}
@@ -2431,7 +2483,7 @@ def main(argv=None):
             'lora_layers': adapter_layers(backbone), 'lora_rank': next(iter(ranks), 0),
             'backbone_training': args.backbone_training,
             **({'maple_qat': True} if qat_named else {}),
-            **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat') else {}), 'anchor_origin': anchor_origin,
+            **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat','latent') else {}), 'anchor_origin': anchor_origin,
             'backbone': source_metadata.get('backbone') or {'base': args.base},
             'training_identity': identity})
     # Every soft parameter's movement: also those only producers' contexts hold, which move by their readers' losses.

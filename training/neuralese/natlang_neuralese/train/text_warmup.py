@@ -23,6 +23,7 @@ from .trajectory_state import (AsyncAtomicCheckpointWriter, atomic_checkpoint,
                                drop_file_cache, gradient_norm, immutable_cpu_snapshot)
 from .foundation_schedule import ProjectionFirstSchedule
 from . import warmup_export
+from .backbone_policy import plain_named_tensors
 from .loop import (Cadence, StopSignal, TrainingLoop, capture_training_rng_state,
                    commit_optimizer_step, restore_training_rng_state)
 from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout
@@ -1206,7 +1207,11 @@ def main(argv=None):
     p.add_argument('--cutoff',type=int,default=4)
     p.add_argument('--batch',type=int,default=2,help='same-shape text rows per optimizer update')
     p.add_argument('--eval-batch',type=int,default=4,help='same-shape held rows per inference batch')
-    p.add_argument('--backbone-training',choices=['auto','full','adapters','qat'],default='auto');p.add_argument('--rank',type=int,default=16)
+    p.add_argument('--backbone-training',choices=['auto','full','adapters','qat','latent'],default='auto');p.add_argument('--rank',type=int,default=16)
+    p.add_argument('--quantization',default=None,
+                   help='the recipe quantization component for this stage (JSON; train/quantization.py): precision '
+                        'points ramped over curriculum progress, a multi-precision objective and a gate column per '
+                        'deploy precision. Absent: BF16 only')
     from .optim_restore import add_optimizer_restore_arguments;add_optimizer_restore_arguments(p)
     p.add_argument('--optimizer',choices=['muon','adamw'],default='muon');p.add_argument('--lr',type=float,default=3e-5)
     p.add_argument('--sketch-lr',type=float,default=3e-4);p.add_argument('--embedding-weight',type=float,default=1.)
@@ -1401,6 +1406,19 @@ def main(argv=None):
     if a.read_adapter:
         heads.add_read_adapter()
     named=configure_student(engine,a.backbone_training,a.rank,secondary_head='input_map')
+    from .quantization import load_component
+    from ..common.paths import root as path_root
+    quant=load_component(a.quantization,root=path_root('repo'))
+    preserve=behaviour=None
+    if quant is not None:
+        installed=quant.install(backbone.hf,layer_count=backbone.num_layers)
+        print(json.dumps({'event':'quantization_installed','groups':installed,'stage':quant.stage}),flush=True)
+        from .quantization import Behaviour, Preserve
+        if quant.component.get('preserve') and quant.component['preserve'].get('weight',0)>0:
+            preserve=Preserve(quant.component['preserve'],quant.stage['id'])
+        if quant.component.get('gate'):
+            behaviour=Behaviour(quant.component['gate'],engine.tokenizer,preserve.held if preserve else None,
+                                root=path_root('repo'))
     if a.read_adapter:
         for n,q in heads.read_adapter.named_parameters():
             q.requires_grad_(True);named.append(('heads.read_adapter.'+n,q))
@@ -1831,7 +1849,7 @@ def main(argv=None):
         except Exception:traceback.print_exc()
     atexit.register(drain_checkpoint_writer_at_exit)
     last_report=None
-    def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False):
+    def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False,record=True):
         nonlocal last_schedule_step,last_report
         evaluation_passes=text_history_pass_count(3, ar_feedback_fixup=a.ar_feedback_fixup)
         strata={};cohort_strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
@@ -2017,7 +2035,7 @@ def main(argv=None):
                     'held_selection':held_selection_eval,
                     'window_tokens':a.tokens,'prefix_tokens':a.prefix_tokens,
                     'evaluation_passes':evaluation_passes},
-                'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
+                'weights_digest':weights_digest({n:q for n,q in plain_named_tensors(backbone.hf).items() if n in backbone_names},heads.state_dict()),
                 'updates':display_update_flags(updates),
                 'update_state_ids':dict(updates), 'display_labels':identity['display'],
                 'schedule':schedule.controls(),'schedule_display_labels':identity['display'],
@@ -2075,7 +2093,31 @@ def main(argv=None):
             min_agreement=a.min_agreement)
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         if codes is not None:report['qat_codes']=codes.update()
+        if not record:return report
         log('eval.jsonl',report);last_report=report;return report
+
+    def evaluate_precisions(report):
+        """The gate column of every gated precision point at its deploy precision (train/quantization.py), next to
+        the BF16 report; the stage qualifies only when BF16 and every required point pass."""
+        if quant is None:return report
+        from .quantization import gate_columns, precision_verdict
+        def column():
+            column_report=evaluate(observe_schedule=False,record=False)
+            if behaviour is not None:column_report['behaviour']=behaviour.report(backbone.hf)
+            return column_report
+        def column_passed(column_report):
+            return bool(column_report.get('alignment_gate_passed')) and (
+                behaviour is None or behaviour.passed(column_report['behaviour']))
+        bf16_ok=bool(report.get('alignment_gate_passed'))
+        if behaviour is not None:
+            report['behaviour']=behaviour.report(backbone.hf)
+            bf16_ok=bf16_ok and behaviour.passed(report['behaviour'])
+        columns=gate_columns(quant,column,column_passed)
+        summary={name:{'passed':column['passed'],
+                       **{k:v for k,v in column['report'].items() if k not in ('strata','cohort_strata','matched_history')}}
+                 for name,column in columns.items()}
+        report['quantization']={**quant.describe(step),'columns':summary,**precision_verdict(quant,columns,bf16_ok)}
+        return report
     serving_heads_step=0
     if was_resumed:
         status_path=a.out/'heads-export-status.json'
@@ -2239,11 +2281,36 @@ def main(argv=None):
         with offload_attention_tensors(int(offload_budget_bytes),activations=True,
                                        persistent_tensors=persistent) as offload_stats:
             with shared_parametrized_weights(backbone.hf) as next_pass:
-                for loss,metrics in objective(batch,passes,bootstrap,
-                        readout_chunk_tokens=int(memory_plan['readout_chunk_tokens'])):
-                    if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
-                    (loss/passes).backward();next_pass()
-                    pass_losses.append(loss.detach());pass_metrics.append(metrics)
+                if quant is None:
+                    for loss,metrics in objective(batch,passes,bootstrap,
+                            readout_chunk_tokens=int(memory_plan['readout_chunk_tokens'])):
+                        if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
+                        (loss/passes).backward();next_pass()
+                        pass_losses.append(loss.detach());pass_metrics.append(metrics)
+                else:
+                    # Multi-precision objective (train/quantization.py): the same objective under each planned
+                    # precision point, weighted; the first planned point's passes report the usual metrics.
+                    precision_losses={}
+                    for point,mix,weight in quant.plan(step):
+                        values=[]
+                        with quant.context(point,mix):
+                            next_pass()
+                            for loss,metrics in objective(batch,passes,bootstrap,
+                                    readout_chunk_tokens=int(memory_plan['readout_chunk_tokens'])):
+                                if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss at '+point)
+                                (weight*loss/passes).backward();next_pass()
+                                values.append(float(loss.detach()))
+                                if not precision_losses:
+                                    pass_losses.append(loss.detach());pass_metrics.append(metrics)
+                            preserved={}
+                            if preserve is not None:
+                                # Behaviour preservation: KL to BF16 on its own responses, at this precision.
+                                preserve_loss,preserved=preserve.loss(backbone.hf,step)
+                                (weight*preserve_loss).backward();next_pass()
+                        precision_losses[point]={'loss':sum(values)/max(len(values),1),'mix':mix,'weight':weight,
+                                                 **preserved}
+                    next_pass()
+                    for metrics in pass_metrics:metrics['precision']=precision_losses
                 family_record=None
                 if a.member_weight and not bootstrap:
                     # The family term (MAPLE_NESTED §4a): one member per update, in rotation.
@@ -2518,11 +2585,12 @@ def main(argv=None):
         log('train.jsonl',m)
         report=None
         if eval_cadence.due(step):
-            report=evaluate()
+            report=evaluate_precisions(evaluate())
             qualification_depth=_alignment_qualification_pass_depth(
                 schedule=schedule)
+            precisions_ok=report.get('quantization',{}).get('precisions_qualified',True)
             streak=streak+1 if (qualification_depth is not None and passes==qualification_depth and
-                report['alignment_gate_passed'] and all(updates.values())) else 0
+                report['alignment_gate_passed'] and precisions_ok and all(updates.values())) else 0
             report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
                           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
             score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,

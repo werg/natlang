@@ -237,3 +237,31 @@ stacks); passing it means "not detectably worse", not "equal".
   check is vacuous rather than proof. The 24-case packet (execution-eval-v3) shares no source group with the
   used records, none of its 112 group/source ids occurs in them or in any prompt, and none of its 214 long text
   leaves occurs in any prompt. Gate probes' natlang cases come from the test split and are never trained.
+
+## 2026-10-10 — QAT moves into the stages (owner); the conversion no longer gates the foundation
+
+Owner decision (plans/neuralese/DECISIONS.md, 2026-10-10 "QAT inside every training stage"): the Mellum line starts
+the Neuralese foundation from **BF16 Mellum**, not from a qualified ternary conversion. Conversion v3 and its
+qualification pipeline (runs/mellum-qualify-v3-20261010) run out unchanged; their results are a data point for how
+far a short conversion gets, not a precondition.
+
+New lineage:
+1. Heads: `python -m natlang_neuralese.maple.foundation_heads --model <bf16 Mellum> --precision bf16 --cutoff 27
+   --stop-source final --out heads.pt` (the backbone identity records `precision: bf16`; `serve.load_engine` loads
+   dense experts and unternarized attention).
+2. Recipe `raw-recurrence-mellum-v5` (foundation stages = `token-preserving-foundation-mellum-v2`): the `latent`
+   policy and the shared quantization component of `raw-recurrence-v6`: `q4` (Q4_0 everywhere, required, ramp
+   0.15–0.3, i.e. the late warm-up), `ternary-experts` (experts ternary by Maple's rule, attention int4; required,
+   ramp 0.3–0.7 through the AR fixup into the recurrence), `ternary` (everything ternary; reported, ramp 0.55–0.95).
+   Sampled multi-precision objective, BF16 the teacher, backbone rate 7.5e-6.
+3. Conversion v3 reused: init from its best latents when they pass the init gate at λ = 0 (else BF16), its teacher
+   shards as the behaviour-preservation KL stream (weight 0.5, prompt 0.25, 4,096 tokens), its generation gate and
+   held KL as every precision's gate column (pass: ≥ 0.65 generation pass rate against BF16's 0.75, held KL ≤ 0.25;
+   init gate: ≤ 0.05 drop, held KL ≤ 0.05). These thresholds are proposals, not yet measured on a QAT stage.
+4. Launch script: runs/mellum-foundation-qat-20261010/launch.sh (prepared, not launched): registers the v3 latents,
+   runs the init gate, builds heads with the decision, then the recipe through `adapted_runtime`. Waits for memory: v3
+   holds 85 GB until ~15:05 and its qualification pipeline runs after it.
+
+Open: nested-family members have no BF16 state yet (member terms are off in v5); per-latent learning rates in units
+of the ternary scale for the `latent` policy (measure on the gate columns first); deploy exports at a chosen
+precision (Q4_0 GGUF; TQ2_0 via qat_export) from latents.

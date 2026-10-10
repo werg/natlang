@@ -61,7 +61,8 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
 
         if saved.get("student_state") and student_identity(saved["base"], saved["student_state"]) != saved:
             raise ValueError(f"Maple student state {saved['student_state']} changed since the port was trained on it")
-        model, tokenizer = load_student(saved["base"], saved.get("student_state"), device=device)
+        model, tokenizer = load_student(saved["base"], saved.get("student_state"), device=device,
+                                        precision=saved.get("precision"), init=saved.get("init"))
         backbone = MaplePortBackbone(model, family_controls(model, tokenizer))
     else:
         model, tokenizer = load_backbone(base, lora, dtype=dtype, device="cpu")

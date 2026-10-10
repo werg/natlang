@@ -1,0 +1,129 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-v6",
+  "extends": "raw-recurrence-v5",
+  "description": "raw-recurrence-v5 with QAT inside the stages (owner 2026-10-10): the shared quantization component (precision points q4, ternary-experts, ternary over curriculum progress, ramps sized from conversion v3's trend; train/quantization.py) and the conservative backbone rate 7.5e-6 (Pop's full-backbone drift at 3e-5, coord pop-f309/8133). Shared by every line. History: recipes/HISTORY.md.",
+  "overrides": {
+    "quantization": {
+      "schema": "natlang.neuralese-quantization/1",
+      "description": "QAT woven into the stages (owner 2026-10-10, plans/neuralese/DECISIONS.md 'QAT inside every training stage'): a ladder of precision points over curriculum progress, the multi-precision objective sampled per update, BF16 the teacher. Experts (and dense FFN) first, attention later; full ternary reported, not required. Ternary uses Maple's per-row rule as conversion v3 and the TQ2_0 export do. Ramp lengths from v3's trend (held lambda=1 KL 10.0, 6.2, 4.5, 5.3, 4.5, 4.0 and agreement 0.03 to 0.35 over its first 500 updates while lambda reached ~0.42): ternary needs thousands of updates, so each ternary ramp spans ~40% of the curriculum (~2,900 of ~7,200 updates).",
+      "loss": {
+        "mode": "sample",
+        "bf16_weight": 1.0,
+        "seed": 0
+      },
+      "stage_progress": {
+        "core_text_warmup": [
+          0.0,
+          0.35
+        ],
+        "autoregressive_text_fixup": [
+          0.35,
+          0.45
+        ],
+        "view_operator": [
+          0.45,
+          1.0
+        ],
+        "recurrence_warmup": [
+          0.45,
+          1.0
+        ]
+      },
+      "points": [
+        {
+          "name": "q4",
+          "gate": "required",
+          "weight": 0.5,
+          "ramp": {
+            "start": 0.15,
+            "end": 0.3
+          },
+          "modules": {
+            "experts": {
+              "format": "int4",
+              "group": 32
+            },
+            "mlp": {
+              "format": "int4",
+              "group": 32
+            },
+            "attention": {
+              "format": "int4",
+              "group": 32
+            },
+            "conv": {
+              "format": "int4",
+              "group": 32
+            }
+          }
+        },
+        {
+          "name": "ternary-experts",
+          "gate": "required",
+          "weight": 1.0,
+          "ramp": {
+            "start": 0.3,
+            "end": 0.7
+          },
+          "modules": {
+            "experts": {
+              "format": "ternary"
+            },
+            "mlp": {
+              "format": "ternary"
+            },
+            "attention": {
+              "format": "int4",
+              "group": 32
+            },
+            "conv": {
+              "format": "int4",
+              "group": 32
+            }
+          }
+        },
+        {
+          "name": "ternary",
+          "gate": "report",
+          "weight": 0.5,
+          "ramp": {
+            "start": 0.55,
+            "end": 0.95
+          },
+          "modules": {
+            "experts": {
+              "format": "ternary"
+            },
+            "mlp": {
+              "format": "ternary"
+            },
+            "attention": {
+              "format": "ternary"
+            },
+            "conv": {
+              "format": "ternary"
+            }
+          }
+        }
+      ]
+    },
+    "stage_parameter_defaults": {
+      "core_text_warmup": {
+        "lr": 7.5e-06
+      }
+    },
+    "stages": {
+      "recurrence_warmup": {
+        "parameters": {
+          "backbone_lr": 7.5e-06
+        }
+      },
+      "view_operator": {
+        "parameters": {
+          "backbone_lr": 7.5e-06
+        }
+      }
+    }
+  }
+}

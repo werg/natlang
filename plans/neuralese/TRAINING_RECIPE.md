@@ -664,6 +664,25 @@ so both lines share it (`raw-recurrence-v6`).
   thresholds. A stage qualifies only when BF16 and every `required` point whose ramp ends within the stage pass; the
   report's `quantization.precisions_passed` names what passed (`report` points are measured, not required). The
   recipe runner refuses a stage whose report says `precisions_qualified: false`.
+- **Behaviour preservation.** `preserve` names a registered BF16 teacher top-k artifact (Mellum:
+  `mellum21-teacher-v3-top64-20261010`, conversion v3's dump of BF16 Mellum's own responses,
+  corpus `mellum21-self-distill-v3-20261010`). Every update of every QAT stage adds `weight · KL(BF16 ‖ student)` on
+  one of its records (prompt positions at `prompt_weight`, cropped to `max_tokens`), at the update's precision: it
+  keeps chat, thinking and tool-call behaviour while the precision ramps. The teacher is fixed data, so no second
+  model is held.
+- **Behaviour gate.** `gate` adds conversion v3's generation gate (fixed probes: thinking, end of turn, tool-call
+  JSON, loops, exact answers) and held KL to the BF16 teacher to every gate column, through the one shared
+  implementation (`maple.generation_gate.behaviour_report`, also behind v3's verify_export). A precision passes when
+  its pass rate is at most `max_gate_drop` below the declared BF16 reference and its held KL at most `max_held_kl`;
+  the stage's own BF16 column is gated the same way. Deploy candidates then go through v3's export, verify_export and
+  24-case harness pipeline.
+- **Init.** A recipe may declare `init.source` = a registered latents artifact (Mellum: conversion v3's
+  best-weights.pt as `mellum21-convert-v3-latents-20261010`) with `fallback: bf16`. The init gate
+  (`python -m natlang_neuralese.train.quantization init-gate`) evaluates those latents at λ = 0 with the behaviour
+  gate against BF16; `foundation_heads.py --init-receipt` records the decision in the heads, and the recipe runner
+  refuses heads whose recorded decision disagrees with the recipe and receipt. Taken latents carry their ramp
+  position: `init.ramp_floor` keeps that point at least at their λ. The optimizer starts fresh (`optimizer: fresh`):
+  v3's LionSR state belongs to another objective, and a new objective's optimizer handoff is never implicit.
 - **Learning rate.** Latents train with the backbone optimizer at the backbone rate (7.5e-6 in v6). Whether ternary
   codes then move enough is measured by the gate columns; a per-latent rate in units of the ternary scale
   (`qat_latent_lr`, the conversion's mechanism) is not yet wired to the `latent` policy.

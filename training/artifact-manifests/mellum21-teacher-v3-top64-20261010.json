@@ -1,0 +1,155 @@
+{
+  "schema": "natlang.neuralese-artifact-snapshot/1",
+  "id": "mellum21-teacher-v3-top64-20261010",
+  "kind": "data-block",
+  "dialect": "nd:natlang@1",
+  "backbone": {
+    "model": "JetBrains/Mellum2.1-12B-A2.5B-Thinking",
+    "revision": "92ddae9fc7665e9f801d141d2e5a6b2caf2460c4",
+    "family": "maple"
+  },
+  "path": "data/neuralese/artifacts/mellum21-teacher-v3-top64-20261010",
+  "files": [
+    {
+      "path": "teacher.json",
+      "bytes": 838,
+      "sha256": "46fadcb018fc6723706c50e2bb2d45215a8c665e4f7086a050f22be52b1bcd13"
+    },
+    {
+      "path": "test-0000.pt",
+      "bytes": 67282525,
+      "sha256": "8af058459ac96ee478c057d62e138b2722a0b80be6c67cc199e72c9bf0fe9bfe"
+    },
+    {
+      "path": "train-0000.pt",
+      "bytes": 228470435,
+      "sha256": "7cd09f5b70351e867f7172fa585599cdfc8aaad0d6c8366e85782988c03611c4"
+    },
+    {
+      "path": "train-0001.pt",
+      "bytes": 250421347,
+      "sha256": "40a1c7fde85d6e0846b2c514ae03b1ecd376652ccd91f58962738b561ba75755"
+    },
+    {
+      "path": "train-0002.pt",
+      "bytes": 228357795,
+      "sha256": "3d48558b35414d8ce0bc71e56140dce25293af1d55d3465463d18bd0cc16cb31"
+    },
+    {
+      "path": "train-0003.pt",
+      "bytes": 232656611,
+      "sha256": "ba0f25862bd4e5769e604d9be61fc64f8d02f844bccede3f445fee2cac089ffb"
+    },
+    {
+      "path": "train-0004.pt",
+      "bytes": 205524643,
+      "sha256": "2dd4b457aeeb537554ffd92f85f6edf9c79ed3a5f309f195436c89f92245ccd4"
+    },
+    {
+      "path": "train-0005.pt",
+      "bytes": 259660515,
+      "sha256": "cbffcb7e66a263c76485c749d9c1e9126397802a66d38e9d897d4ff8c71a0b14"
+    },
+    {
+      "path": "train-0006.pt",
+      "bytes": 210101411,
+      "sha256": "a2a421703f0365887b443ba776a07e6e65ec797d287ece2070df3fde2e94117b"
+    },
+    {
+      "path": "train-0007.pt",
+      "bytes": 208458723,
+      "sha256": "d7c251271a8465665be6c111058a28b4bd75fc097313b101b32392e5ca072ed8"
+    },
+    {
+      "path": "train-0008.pt",
+      "bytes": 218683747,
+      "sha256": "085d2740b2176617197337b5e29b6a5ef3bfb9ecbe19ba0cd2c1498507d229f0"
+    },
+    {
+      "path": "train-0009.pt",
+      "bytes": 208730723,
+      "sha256": "0bf8e74fbd6bafd1e6d707e40ffb9067e590b01651686d823085b46cd69b4e12"
+    },
+    {
+      "path": "train-0010.pt",
+      "bytes": 214352035,
+      "sha256": "c1d982c14c7f25eb271192d03598988cc9aa79c4c0786d4ce10806ea683e314d"
+    },
+    {
+      "path": "train-0011.pt",
+      "bytes": 231454883,
+      "sha256": "58021c871c6fb59dfba784034c4fa944184bc10a77c06f7595850351bfb3a349"
+    },
+    {
+      "path": "train-0012.pt",
+      "bytes": 219415267,
+      "sha256": "94aa063608cc43a0a61f0509ca4784b0ccfb5e0942b2a3f3151fa79df575a42b"
+    },
+    {
+      "path": "train-0013.pt",
+      "bytes": 241891171,
+      "sha256": "de7cd26097ad0467d4c67cf0764540e1a5a9eafa62ca1c1bbd7b0c49a68e67f3"
+    },
+    {
+      "path": "train-0014.pt",
+      "bytes": 234471907,
+      "sha256": "7927b94d979a5012340b3f17d2495ebeacac78b45de3542d4d00634420579bd8"
+    },
+    {
+      "path": "train-0015.pt",
+      "bytes": 238102499,
+      "sha256": "3b956ca755af043b0f5d6cc4a54eb8edf3c7c01639b4642dd89adbe2eb684799"
+    },
+    {
+      "path": "train-0016.pt",
+      "bytes": 238576611,
+      "sha256": "1db8020f4ffea51e4b50329073b44f5e8083241fe80c4d69147c7d0aa729cb3a"
+    },
+    {
+      "path": "train-0017.pt",
+      "bytes": 222415267,
+      "sha256": "d1238c9ad95457d7d4486a13b694f3cceb1d5cc8730dfcd3ff4f4887258a640d"
+    },
+    {
+      "path": "train-0018.pt",
+      "bytes": 238684259,
+      "sha256": "da68075267a9bc3072d3f3aa1d2a22e29824c9bad00898e861bc4a6d17dad0da"
+    },
+    {
+      "path": "train-0019.pt",
+      "bytes": 239958051,
+      "sha256": "9500b5ae448ed35557fd8e4ee352df402bb7568e0514ea9a6e8279e874d6f10f"
+    },
+    {
+      "path": "train-0020.pt",
+      "bytes": 225513763,
+      "sha256": "448558baa046545d11890bfa648e2f75f3b74ffff68eb43b38a91ae3f503984d"
+    },
+    {
+      "path": "train-0021.pt",
+      "bytes": 218987619,
+      "sha256": "7aac5e23b37ef5bdc1d3a4c2ccde4bfe878fbe89ef5c6683e3392ff570680fd3"
+    },
+    {
+      "path": "train-0022.pt",
+      "bytes": 224831715,
+      "sha256": "154fd5bdd2af95dceca43bb28abf24d1cd9b3b478edabf8c21301ea1c979696e"
+    },
+    {
+      "path": "train-0023.pt",
+      "bytes": 223817123,
+      "sha256": "01b0f3da615f7e0a2e08f72f1ad4997ec9330de2089a85b23bf189caadb931f0"
+    },
+    {
+      "path": "train-0024.pt",
+      "bytes": 244186211,
+      "sha256": "89e0b9970b8a0f9b984bcb58210f19cfbc0f76ce07bd34f44194c15e813d6115"
+    },
+    {
+      "path": "train-0025.pt",
+      "bytes": 64082819,
+      "sha256": "4f543b87bdc3f3f4a649d67d47ed706b3fb360a8c60494074361f3d1aad018e1"
+    }
+  ],
+  "bytes": 5839090513
+}

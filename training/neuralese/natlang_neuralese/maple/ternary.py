@@ -103,6 +103,110 @@ def ramped_ternarize_ste(weight: torch.Tensor) -> torch.Tensor:
     return weight + mix * (ternarize(weight.detach()) - weight.detach())
 
 
+# Precision points of the recipe ``quantization`` component (train/quantization.py; owner 2026-10-10: QAT is woven
+# into every training stage). While a point is active, ``PRECISION["groups"]`` maps a module group (experts, attention,
+# ...) to (format, mix, options) and every selected weight's forward value is w + mix·(Q(w) − w), straight-through
+# to the BF16 latent. ``None`` (the default, and always for the BF16 teacher) leaves weights untouched.
+PRECISION: dict = {"groups": None, "point": None}
+QK4_0 = 32
+
+
+def q4_0(weight: torch.Tensor, group: int = QK4_0) -> torch.Tensor:
+    """llama.cpp's ``quantize_row_q4_0_ref`` then dequantization, along the last dim in blocks of ``group``: per block
+    ``d = max / -8`` (``max`` the signed value of largest magnitude), ``q = min(15, floor(x / d + 8.5)) - 8``, ``d``
+    stored as FP16. The values a Q4_0 GGUF of this weight multiplies by (bit-exact rule, so int4 is deployable)."""
+    columns = weight.shape[-1]
+    if columns % group:
+        raise ValueError(f"row length {columns} is not a multiple of the Q4_0 block {group}")
+    blocks = weight.float().reshape(*weight.shape[:-1], columns // group, group)
+    index = blocks.abs().argmax(dim=-1, keepdim=True)
+    signed_max = blocks.gather(-1, index)
+    d = signed_max / -8.0
+    inverse = torch.where(d != 0, 1.0 / d, torch.zeros_like(d))
+    q = torch.clamp(torch.floor(blocks * inverse + 8.5), max=15.0) - 8.0
+    return (q * d.to(torch.float16).float()).reshape(weight.shape)
+
+
+def quantized_value(weight: torch.Tensor, fmt: str, options: dict | None = None) -> torch.Tensor:
+    """The deployed value of ``weight`` at one precision format (no gradient; FP32):
+
+    - ``int4``: Q4_0 (``options["group"]``, default 32);
+    - ``ternary``: Maple's per-row rule; with ``options["nested_group"]`` it is applied to the Q4_0 values of that
+      block size, so the ternary weights are a function of the int4 codes and scales (the coarsest level of the int4
+      grid: an int4 artifact determines the ternary one, Matryoshka style);
+    - ``bf16``: the weight itself."""
+    options = options or {}
+    w = weight.detach()
+    if fmt == "bf16":
+        return w.float()
+    if fmt == "int4":
+        return q4_0(w, int(options.get("group", QK4_0)))
+    if fmt == "ternary":
+        if options.get("nested_group"):
+            w = q4_0(w, int(options["nested_group"]))
+        return ternarize(w.float()).float()
+    raise ValueError(f"unknown precision format: {fmt}")
+
+
+def precision_value(weight: torch.Tensor, group: str) -> torch.Tensor:
+    """``weight`` under the active precision point for its module ``group`` (``group@layer`` for a layer's module):
+    w + mix·(Q(w) − w), straight-through (identity gradient to the latent). Unchanged when no point is active, the
+    point does not select the group, or the point's layer selection (``options["layers"]``) excludes the layer."""
+    groups = PRECISION["groups"]
+    if not groups:
+        return weight
+    name, _, layer = group.partition("@")
+    if name not in groups:
+        return weight
+    fmt, mix, options = groups[name]
+    if mix <= 0.0 or fmt == "bf16":
+        return weight
+    if layer and options.get("layers") is not None and int(layer) not in options["layers"]:
+        return weight
+    return _PrecisionRamp.apply(weight, quantized_value(weight, fmt, options), float(mix))
+
+
+class _PrecisionRamp(torch.autograd.Function):
+    """``w + mix·(q − w)`` computed in FP32 and cast once (λ = 1 gives exactly the deployed values), identity
+    gradient to ``w``."""
+
+    @staticmethod
+    def forward(ctx, weight, quantized, mix):
+        x = weight.detach().float()
+        return (x + mix * (quantized.float() - x)).to(weight.dtype)
+
+    @staticmethod
+    def backward(ctx, grad):
+        return grad, None, None
+
+
+class active_precision:
+    """Context manager: run the forward passes inside at one resolved precision point (``{group: (format, mix,
+    options)}``, from ``train.quantization``); ``None`` is BF16 (the teacher and the BF16 gate column)."""
+
+    def __init__(self, groups: dict | None, point: str | None = None):
+        self.groups, self.point = groups, point
+
+    def __enter__(self):
+        self.previous = (PRECISION["groups"], PRECISION["point"])
+        PRECISION["groups"], PRECISION["point"] = self.groups, self.point
+        return self
+
+    def __exit__(self, *exc):
+        PRECISION["groups"], PRECISION["point"] = self.previous
+
+
+class PrecisionSTE(nn.Module):
+    """Parametrization of a selected weight: its value under the active precision point (``precision_value``)."""
+
+    def __init__(self, group: str):
+        super().__init__()
+        self.group = group
+
+    def forward(self, latent: torch.Tensor) -> torch.Tensor:
+        return precision_value(latent, self.group)
+
+
 # Global switches read by every adapter: which nested member is running (its private deltas apply) and whether
 # adapters apply at all (off = the frozen original model, used as the anchor teacher).
 STATE = {"size": None, "enabled": True, "teacher": False}

@@ -119,3 +119,28 @@ def run_gate(model, tokenizer, probes: list[dict], render, eos: int, max_new: in
         report["gate_kinds"][kind] = round(sum(r["pass"] for r in rows) / len(rows), 3)
     report["gate_results"] = results
     return report
+
+
+def behaviour_report(model, tokenizer, probes: list[dict], render, eos: int, held: dict | None = None,
+                     held_rows: int = 48, prompt_weight: float = 0.25) -> dict:
+    """The conversion's behaviour gate as one report: the generation gate on ``probes`` and, with ``held`` (teacher
+    shards from ``qat_convert._load_record_shards``), the held KL to the BF16 teacher's top-k (``weighted_topk_kl``,
+    prompt positions weighted ``prompt_weight``) and greedy agreement. Shared by conversion v3's verify_export, the
+    quantization component's per-precision gate columns and its init gate (train/quantization.py): one
+    implementation at whatever precision point is active."""
+    from .qat_convert import weighted_topk_kl
+
+    gate = run_gate(model, tokenizer, probes, render, eos)
+    report = {"gate_pass": gate["gate_pass"], "gate_checks": gate["gate_checks"], "gate_kinds": gate["gate_kinds"]}
+    if held is not None:
+        device = next(model.parameters()).device
+        sums: dict = {}
+        rows = range(min(held_rows, len(held["ids"])))
+        with torch.no_grad():
+            for i in rows:
+                scores = weighted_topk_kl(model, held["ids"][i][None].long().to(device), held["top_ids"][i],
+                                          held["top_logp"][i], held["prompt_len"][i], prompt_weight)
+                for key, value in scores.items():
+                    sums[key] = sums.get(key, 0.0) + float(value)
+        report.update({"held_" + k.replace("loss_", ""): v / max(len(rows), 1) for k, v in sums.items()})
+    return report

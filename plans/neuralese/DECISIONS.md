@@ -1402,3 +1402,35 @@ Flood source verification fixes add declared fictional facts to fresh successors
 
 ### 2026-10-10 — exclude split-inconsistent mixed ancestors, restart before harness exposure
 Harness v1 repository splits disagreed with S1 in53/321groups. Pop mixedV1/V2/V4 are evidence-only ancestors; do not continue a clean foundation lineage from them or credit their held scores. V5 restores full native-only28793 optimizer state, with corrected harness textv2 and independently checked assembled source-group closure. Native parent has no demonstrated harness exposure but this does not certify full S1 duplicate closure. Gates unchanged; no inherited qualification. Shared cohort assembly rejects all cross-cohort group split conflicts.
+
+## 2026-10-10 — QAT inside every training stage; no up-front ternary gate (owner)
+
+Owner ("OK great let's do that", after the v3 conversion's mid-ramp numbers): ternary quantization-aware training
+moves into the general training instead of a separate conversion that had to qualify before the Neuralese foundation
+could start. Reasons: a 12B MoE converted to full ternary in 1,600 updates on ~15M tokens is unrealistic (v2 failed
+the harness 0/23; v3's KL at the current mix rose with the mix: 0.66, 0.87, 0.96 at steps 100–300); and every later
+stage changes the weights again, so a certificate earned before them would not carry over.
+
+- The ternary conversion certificate no longer blocks the foundation. Conversion v3
+  (runs/mellum-convert-v3-20261010, pipeline runs/mellum-qualify-v3-20261010) runs out unchanged as an informative
+  data point.
+- The Mellum line starts from BF16 Mellum (`maple/foundation_heads.py --precision bf16`, recipe
+  `token-preserving-foundation-mellum-v2`) and trains BF16 latents under the `latent` backbone policy.
+- A recipe-level `quantization` component (train/quantization.py, TRAINING_RECIPE.md "QAT inside the stages") declares
+  precision points (Q4_0 int4, ternary experts, full ternary; ternary by Maple's rule, optionally nested in the
+  int4 grid) with module selectors and ramps over
+  curriculum progress spanning the warm-up, the AR fixup and the recurrence; the objective is taken under several
+  points per update (sum or sampled); BF16 stays the teacher.
+- Every stage reports a gate column per deploy precision at λ = 1; a stage qualifies only when BF16 and every
+  `required` point whose ramp ends inside it pass, and its report names the precisions that passed. Deploy whichever
+  precision passes.
+- Shared recipe `raw-recurrence-v6` (both lines: the component and backbone rate 7.5e-6, Pop's drift observation at
+  3e-5) and `raw-recurrence-mellum-v5` (backbone-inherent: cutoff 27, 512 contexts, `latent` policy; no member terms
+  until a BF16 nested-family state exists).
+- Conversion v3 is reused, not discarded (coordinator, same day): its latents may initialize the Mellum lineage
+  (recipe `init`, artifact `mellum21-convert-v3-latents-20261010`, only when at λ = 0 they pass the BF16 behaviour
+  gate; else BF16 Mellum; the ternary point keeps v3's λ), its teacher top-64 shards
+  (`mellum21-teacher-v3-top64-20261010`) are the behaviour-preservation KL stream of every QAT stage, and its
+  generation gate and held KL are the per-precision gate (one implementation, `maple.generation_gate`). Ramp lengths
+  follow v3's trend (λ=1 held KL 10.0 → 4.0 and agreement 0.03 → 0.35 over its first 500 updates): each ternary ramp
+  spans ~40% of the curriculum.

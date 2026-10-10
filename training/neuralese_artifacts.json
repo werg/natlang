@@ -43,6 +43,97 @@
       ]
     },
     {
+      "id": "mellum21-teacher-v3-top64-20261010",
+      "kind": "data-block",
+      "owner": "dgx",
+      "dialect": "nd:natlang@1",
+      "backbone": {
+        "model": "JetBrains/Mellum2.1-12B-A2.5B-Thinking",
+        "revision": "92ddae9fc7665e9f801d141d2e5a6b2caf2460c4",
+        "family": "maple"
+      },
+      "init": {
+        "method": "converted",
+        "source": "/home/werg/data/models/mellum21-12b-a2.5b-thinking",
+        "builder": "natlang_neuralese.maple.qat_convert teacher --records"
+      },
+      "training": {
+        "corpora": [
+          "mellum21-self-distill-v3-20261010"
+        ],
+        "trainer": "natlang_neuralese.maple.qat_convert",
+        "commit": "91a9abd8fbab04d64a9e441413a67c555666ad21",
+        "run": "/home/werg/data/mellum-qat/teacher-v3"
+      },
+      "qualification": {
+        "status": "unqualified",
+        "evidence": []
+      },
+      "origin": {
+        "teacher.json": "/home/werg/data/mellum-qat/teacher-v3/teacher.json",
+        "test-0000.pt": "/home/werg/data/mellum-qat/teacher-v3/test-0000.pt",
+        "train-0000.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0000.pt",
+        "train-0001.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0001.pt",
+        "train-0002.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0002.pt",
+        "train-0003.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0003.pt",
+        "train-0004.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0004.pt",
+        "train-0005.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0005.pt",
+        "train-0006.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0006.pt",
+        "train-0007.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0007.pt",
+        "train-0008.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0008.pt",
+        "train-0009.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0009.pt",
+        "train-0010.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0010.pt",
+        "train-0011.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0011.pt",
+        "train-0012.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0012.pt",
+        "train-0013.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0013.pt",
+        "train-0014.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0014.pt",
+        "train-0015.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0015.pt",
+        "train-0016.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0016.pt",
+        "train-0017.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0017.pt",
+        "train-0018.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0018.pt",
+        "train-0019.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0019.pt",
+        "train-0020.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0020.pt",
+        "train-0021.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0021.pt",
+        "train-0022.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0022.pt",
+        "train-0023.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0023.pt",
+        "train-0024.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0024.pt",
+        "train-0025.pt": "/home/werg/data/mellum-qat/teacher-v3/train-0025.pt"
+      },
+      "registered": "2026-10-10T09:20:18+00:00",
+      "notes": "Top-64 next-token log-probabilities of BF16 Mellum over every position of its own self-distillation records (corpus mellum21-self-distill-v3-20261010; 6472 train / 64 test records, 9216-token cap): the KL-to-BF16 behaviour-preservation stream of the quantization component (train/quantization.py) and the held KL of the per-precision gate. Not trained weights.",
+      "path": "data/neuralese/artifacts/mellum21-teacher-v3-top64-20261010",
+      "files": [
+        "teacher.json",
+        "test-0000.pt",
+        "train-0000.pt",
+        "train-0001.pt",
+        "train-0002.pt",
+        "train-0003.pt",
+        "train-0004.pt",
+        "train-0005.pt",
+        "train-0006.pt",
+        "train-0007.pt",
+        "train-0008.pt",
+        "train-0009.pt",
+        "train-0010.pt",
+        "train-0011.pt",
+        "train-0012.pt",
+        "train-0013.pt",
+        "train-0014.pt",
+        "train-0015.pt",
+        "train-0016.pt",
+        "train-0017.pt",
+        "train-0018.pt",
+        "train-0019.pt",
+        "train-0020.pt",
+        "train-0021.pt",
+        "train-0022.pt",
+        "train-0023.pt",
+        "train-0024.pt",
+        "train-0025.pt"
+      ]
+    },
+    {
       "id": "mellum21-ternary-convert-v2-20261010",
       "kind": "bundle",
       "owner": "dgx",

@@ -1,0 +1,70 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-mellum-v5",
+  "extends": "raw-recurrence-v6",
+  "description": "The Mellum line on raw-recurrence-v6, from BF16 Mellum or, when they pass its init gate, conversion v3's latents (heads from maple/foundation_heads.py --precision bf16 --init-receipt; foundation stages = token-preserving-foundation-mellum-v2): the latent backbone policy (BF16 latents; the shared quantization component makes them int4/ternary over the curriculum). Backbone-inherent overrides only: cutoff 27, 512 contexts, the latent policy (the Maple-family port's auto policy is the ternary qat), no nested-family member terms (a BF16 student has no member state yet), and the Mellum-tokenized parts of conversion v3 reused: the init (v3 latents, gated), the behaviour-preservation stream (KL to BF16 on mellum21-self-distill-v3-20261010 via the teacher-v3 top-64 shards) and the per-precision behaviour gate (v3's generation gate and held KL). History: recipes/HISTORY.md.",
+  "overrides": {
+    "stage_parameter_defaults": {
+      "core_text_warmup": {
+        "backbone_training": "latent"
+      }
+    },
+    "stages": {
+      "embedding_distillation": {
+        "parameters": {
+          "cutoff": 27,
+          "contexts": 512
+        }
+      },
+      "recurrence_warmup": {
+        "parameters": {
+          "backbone_training": "latent"
+        }
+      },
+      "view_operator": {
+        "parameters": {
+          "backbone_training": "latent"
+        }
+      }
+    },
+    "init": {
+      "description": "Start from conversion v3's best latents when, at lambda=0, they still pass the BF16 behaviour gate (python -m natlang_neuralese.train.quantization init-gate); otherwise BF16 Mellum. The ternary point keeps at least v3's lambda at that step. Fresh optimizer: v3's LionSR state belongs to another objective (no implicit optimizer handoff).",
+      "source": {
+        "artifact": "mellum21-convert-v3-latents-20261010",
+        "file": "best-weights.pt"
+      },
+      "fallback": "bf16",
+      "gate": {
+        "max_gate_drop": 0.05,
+        "max_held_kl": 0.05
+      },
+      "ramp_floor": "ternary",
+      "optimizer": "fresh"
+    },
+    "quantization": {
+      "preserve": {
+        "teacher": {
+          "artifact": "mellum21-teacher-v3-top64-20261010"
+        },
+        "weight": 0.5,
+        "prompt_weight": 0.25,
+        "max_tokens": 4096,
+        "seed": 0
+      },
+      "gate": {
+        "probes": {
+          "path": "data/neuralese/corpora/mellum21-self-distill-v3-20261010/probe.jsonl",
+          "sha256": "0fbd7d42863fddaf8faf751507e9628aa756610a33fc0bf4f7ca35d20c547cd4"
+        },
+        "held_rows": 48,
+        "prompt_weight": 0.25,
+        "max_gate_drop": 0.1,
+        "max_held_kl": 0.25,
+        "reference": {
+          "gate_pass": 0.75,
+          "source": "BF16 Mellum, conversion v3 gate.jsonl step 0 (18/24 probes)"
+        }
+      }
+    }
+  }
+}

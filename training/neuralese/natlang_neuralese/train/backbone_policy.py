@@ -35,6 +35,8 @@ def configure_backbone_training(backbone, policy='full', *, rank=16):
         inject_lora(backbone,list(range(backbone.num_layers)),rank=rank,alpha=2*rank)
         named=[(name,parameter) for name,parameter in backbone.hf.named_parameters()
                if parameter.requires_grad and 'lora_' in name]
+    elif policy == 'latent':
+        named=latent_backbone_parameters(backbone)
     elif policy == 'qat':
         if not getattr(backbone, 'ternary', False):
             raise ValueError('qat is the ternary backbone policy')
@@ -45,6 +47,47 @@ def configure_backbone_training(backbone, policy='full', *, rank=16):
     if not named:
         raise ValueError('backbone policy has no trainable parameters: '+str(policy))
     return named
+
+
+def latent_backbone_parameters(backbone):
+    """The ``latent`` policy (owner 2026-10-10: QAT woven into training): every native layer weight trains as a BF16
+    latent, quantized only by the recipe's precision points (train/quantization.py). On a dense backbone (LFM, Qwen)
+    it selects what ``full`` selects. On a BF16 Maple-family backbone (Mellum loaded with ``precision: bf16``) the
+    attention projections, the dense experts (made trainable parameters), the routers and the layer norms; never a
+    ternary-deployed checkpoint (its weights are codes, not latents)."""
+    if not getattr(backbone, 'ternary', False):
+        selected=full_backbone_parameter_names(backbone)
+        named=[(name,parameter) for name,parameter in backbone.hf.named_parameters() if name in selected]
+    else:
+        from ..maple.model import DenseExperts
+        if getattr(backbone.hf,'natlang_precision',None)!='bf16':
+            raise ValueError('the latent policy needs the BF16 backbone (heads identity precision bf16), '
+                             'not ternarized attention')
+        for layer in backbone.hf.model.layers:
+            experts=layer.mlp.experts
+            if not isinstance(experts,DenseExperts):
+                raise ValueError('the latent policy needs BF16 (dense) experts')
+            experts.make_latent(quantize=False)
+        prefixes=('.self_attn.q_proj.weight','.self_attn.k_proj.weight','.self_attn.v_proj.weight',
+                  '.self_attn.o_proj.weight','.mlp.experts.gate_up','.mlp.experts.down','.mlp.gate.weight',
+                  'input_layernorm.weight','post_attention_layernorm.weight','q_norm.weight','k_norm.weight')
+        named=[(name,parameter) for name,parameter in backbone.hf.named_parameters()
+               if name.startswith('model.layers.') and name.endswith(prefixes)]
+    for _,parameter in named:
+        parameter.requires_grad_(True)
+    return named
+
+
+def plain_named_tensors(module):
+    """Named parameters and buffers of ``module``, each parametrized weight also under its plain name (``x.weight``
+    for ``x.parametrizations.weight.original``): the names backbone trainables are saved and restored under, so a
+    BF16 serving model (no parametrizations, experts as buffers) and a training model agree."""
+    from .quantization import plain_parameter_name
+    values={}
+    for name,tensor in list(module.named_parameters())+list(module.named_buffers()):
+        values.setdefault(name,tensor)
+        values.setdefault(plain_parameter_name(name),tensor)
+    return values
 
 
 def full_backbone_parameter_names(backbone):
@@ -62,7 +105,7 @@ def backbone_trainable_state(named):
 
 def restore_backbone_trainables(backbone, state, *, expected_names=None):
     """Restore named backbone values and reject omissions or incompatible names."""
-    parameters=dict(backbone.hf.named_parameters())
+    parameters=plain_named_tensors(backbone.hf)
     values=dict(state or {})
     if expected_names is not None and set(values) != set(expected_names):
         raise ValueError('backbone trainable names differ from declared policy')
