@@ -21714,6 +21714,43 @@
       "admission": "immutable launch inputs only; outputs held pending quality review",
       "independent_new_worlds": 0,
       "notes": "Five fresh native workers on exact previously reviewed V29source-v2, two source repairs plus three counterfactuals, unchanged gold. SHA/source approval pinned. gpt-6-luna, runtimev7, one model request per worker, 32K context; evolving journals/results excluded."
+    },
+    {
+      "id": "free-provider-quality-review-v21-luna-v28-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-luna-v28-five",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "independent-native-trajectory-quality-review",
+      "training_admission": false,
+      "admission": "review evidence; exact native data still needs declared admission and text/current-IR derivative review",
+      "independent_new_worlds": 0,
+      "notes": "All five exact V28 oracles pass; three explicit iterateOn traces, all five four typed FileHandle/priorNotes pass children. Scope/WebSocket recoveries retained. Case0 paired-task ordering contrast with ZAI is not automatically a DPO identical-prefix pair. Emulated markers do not qualify learned neuralese."
+    },
+    {
+      "id": "free-provider-google-pool-v4-closed-typed-labels-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v4",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "labels.jsonl",
+        "labels.jsonl.attempts.jsonl",
+        "labels.jsonl.manifest.json",
+        "worker.log",
+        "frozen-adapter-v1/*.py",
+        "frozen-adapter-v1/models.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-typed-decision-label-collection",
+      "training_admission": false,
+      "admission": "1024 typed labels pending source-bound truth/schema/quality review; standalone labels are not native teacher trajectories",
+      "independent_new_worlds": 0,
+      "notes": "Four quota-group workers with soleprojectlock; batch closed and v5 automatically continued. No raw probability annotation conversion or trace/reasoning credit. Independent LunaV22 review pending."
     }
   ],
   "coverage_backlog": [
