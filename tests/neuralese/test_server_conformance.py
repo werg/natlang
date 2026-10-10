@@ -351,6 +351,7 @@ def test_one_capability_model_on_every_runtime(servers):
         "grad": ("POST", "/v1/neuralese/grad", {"terms": []}),
         "optim": ("POST", "/v1/neuralese/optim", {"optimizer": "sgd", "params": [], "grads": []}),
         "adapters.create": ("POST", "/v1/neuralese/adapters", {"kind": "xs", "rank": 2}),
+        "init-body": ("POST", "/v1/neuralese/init_body", {"messages": [], "placeholder": "<block>", "text": "x"}),
         "adapters.lora-export": ("GET", "/v1/neuralese/adapters/nz1_aaaa/lora", None),
     }
     for capability, (method, path, body) in lacking.items():
