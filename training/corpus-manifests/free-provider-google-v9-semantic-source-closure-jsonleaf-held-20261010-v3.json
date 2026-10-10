@@ -1,0 +1,48 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v9-semantic-source-closure-jsonleaf-held-20261010-v3",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v30-v9-semantic-source-closure",
+  "files": [
+    {
+      "path": "closure-harness-only-v3-final/candidate-source-case-bindings.json",
+      "bytes": 5915,
+      "sha256": "32844252ae7393f1cecb58728b697f02302fc91a7665fe2f6754ff98c7dc65ee"
+    },
+    {
+      "path": "closure-harness-only-v3-final/closed-source-case-port-projection.jsonl",
+      "bytes": 133220,
+      "sha256": "23a1dfa1c3fd922719c0e85507ce4fff4d71f83856387d29e74e37954f2616b2",
+      "lines": 10
+    },
+    {
+      "path": "closure-harness-only-v3-final/closure-report.json",
+      "bytes": 8900,
+      "sha256": "8950f94f08f9a0ab545c1166c24fbf06951b1411301f108ae21afb48d1b2b6de"
+    },
+    {
+      "path": "closure-harness-only-v3-final/source-case-port-projection.jsonl",
+      "bytes": 133220,
+      "sha256": "23a1dfa1c3fd922719c0e85507ce4fff4d71f83856387d29e74e37954f2616b2",
+      "lines": 10
+    },
+    {
+      "path": "closure-input-v3/closure-candidate-root-actions.jsonl",
+      "bytes": 1076295,
+      "sha256": "f9e21e168825c36dc20989c0c5b2d2b64ebc67d827b515934c9ef9ac135b59a5",
+      "lines": 10
+    },
+    {
+      "path": "closure-input-v3/closure-source-cases.jsonl",
+      "bytes": 249535,
+      "sha256": "d9d4639e9a1efde6bd03baa8de2ef1b93bed31b54d434f3e84036c154b46f70d",
+      "lines": 10
+    },
+    {
+      "path": "closure-input-v3/closure-source-manifest.json",
+      "bytes": 2624,
+      "sha256": "963c2e97d269d15a4721a4c3e64fd41d86f2a2c9df17943b98eeb5bd8dd53cc2"
+    }
+  ],
+  "bytes": 1609709
+}
