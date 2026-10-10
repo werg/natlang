@@ -1380,6 +1380,13 @@ def test_document_windows_keep_context_tokens_out_of_targets():
     for w in masked:assert w['ids'][:w['prefix']]==([1]+tokens+[2])[w['start']:w['start']+w['prefix']]
 
 
+def _marker_tokens_only(text):
+    """Only the tool-response marker prefixes are tokenized; row text must come from native token IDs."""
+    if not text.endswith('<tool_response>'):
+        raise AssertionError('native token IDs should be used')
+    return [40,41]
+
+
 def test_prepare_text_windows_shares_roles_mask_suffix_and_first_last_policy():
     from types import SimpleNamespace
     from natlang_neuralese.train.text_warmup import (
@@ -1398,7 +1405,7 @@ def test_prepare_text_windows_shares_roles_mask_suffix_and_first_last_policy():
 
     engine=SimpleNamespace(tokenizer=SyntheticTokenizer(),
         backbone=SimpleNamespace(controls=Controls()),
-        _tokens=lambda _text: (_ for _ in ()).throw(AssertionError('native token IDs should be used')))
+        _tokens=_marker_tokens_only)
     token_ids=[99,10,30,31,99,11,32,99,12,33,34,35,36]
     rows=[{'text':'train body','token_ids':token_ids,'split':'train','source_groups':['train-group'],
            'supervised_suffix_start':9},
@@ -1408,7 +1415,8 @@ def test_prepare_text_windows_shares_roles_mask_suffix_and_first_last_policy():
     windows,receipt=prepare_text_windows(engine,rows,tokens=8,prefix_tokens=3,
         target_tokens=3,mask_system_prompt=True)
     assert receipt=={'enabled':True,'requested':True,'role_start_id':99,
-                     'masked_system_tokens':8,'documents':2}
+                     'masked_system_tokens':8,'documents':2,
+                     'tool_response_prefixes':[[40,41],[40,41]]}
     expected=document_windows(token_ids,open_id=1,close_id=2,tokens=8,prefix_tokens=3,
                               target_tokens=3,context_tokens=4,supervised_suffix_start=9)
     for split in ('train','test'):
