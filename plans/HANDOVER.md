@@ -10500,12 +10500,16 @@ V62 closed24 annotation-only programs:11 accepted and76/96 decisions match annot
 
 Google V24 closed512 typed-valid labels,406 annotation agreements106 differences. Shared static conversion has54 programs and all reference/visibility gates pass. V64 is a reviewed five-worker successor waiting behind V63, supervisor966468, plan SHA701e511b1e8ddfaedb2a12ac571ee1935ca55144f071e4b6250b6472a8a6395b. V27 is now generating on its fresh seven-family pool.
 
-### V62 source answerability decisions, 2026-10-10 23:04 UTC
+### V62 source answerability decisions, 2026-10-10 23:02 UTC
 
 Root read four full candidate states. Three new forward strict-label holds bring canonical policy to33: a one-sentence metaphor without recoverable newsgroup context; cross-topic surreal satire without destination provenance; and evidence of over90 million views cannot strictly entail below100 million. Declined a York City relabel/hold: relegation during a season does not establish it occurred near the seasons end, so the source NOT ENOUGH INFO answer remains defensible. Preserve annotations and all20 disagreements. V63 excludes the prior96 V16 items, so these new holds do not overlap its active source.
 
-### V24 full-state review and policy correction, 2026-10-10 23:10 UTC
+### V24 full-state review and policy correction, 2026-10-10 23:03 UTC
 
 Root reviewed nine full PubMedQA states and held three forward strict-label sources: no comparator resolves fasting necessity; multiple imaging endpoints do not establish equality without a defined margin; care-program adoption is distinct from the explicitly absent care-delivery process shift. Six suggested holds declined where study-level findings support the supplied judgment; retain uncertainty without requiring perfect certainty. Canonical36 holds now; new three are V24 teacher/source disagreements already excluded from V64 programs.
 
 Helper retracted its claim that static conversion does not consult canonical holds. Exact static manifests and source show unconditional filtering before label eligibility. V24 pins policy30 (zero intersections); V25 pins policy25 (zero intersections). Additive clarification receipts preserve existing evidence. V24 complete packet has54 programs406items920 native turns and all Pop harness/source checks pass; full-S1 closure pending from DGX.
+
+### Pop annotation V63 closeout, 2026-10-10 23:30 UTC
+
+V63 closed104 programs416 items,44 accepted and334 annotation matches. All416 choices are typed valid; all104 saved maps equal returns and520 source folder files match. Current v2 audit proves388 states in exact child invocations;28 have only program-scope evidence and remain unresolved. V1 overcount preserved and superseded; shared request/capture lineage review continues.82 disagreements remain source/semantic review candidates, not automatic negatives. V64 automatically started with five workers. Google V27 at318of512; GPU V7 active35585of37888. All outputs remain held.
