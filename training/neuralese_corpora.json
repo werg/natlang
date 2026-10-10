@@ -25551,6 +25551,33 @@
       "training_admission": false,
       "admission": "held-review-no-training-admission",
       "notes": "Independentfixture/gold/result/trace/runtimeaudit. FouriterateOnstatehandoffsbytypedblockID;noscopefailures1accuratelyrejectedlibraryobjectread. V38partialcomparisonnotcausal(seed/runtime/budgetdiffer). Noautomaticadmission."
+    },
+    {
+      "id": "free-provider-luna-v43-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v43-fortyseven-runtimev13-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-quality-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "47operationallyclosed,334/368annotationmatches27exactmaps.415inputfilesintact;1062childedges1061outputcaptures. OneError:terminatedinfrastructure, notsemanticnegative."
+    },
+    {
+      "id": "free-provider-luna-v43-final-quality-held-20261010-v3",
+      "owner": "pop",
+      "path": "runs/quality-review-v43-choice-folder-final-20261010-v3",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-quality-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "AuthoritativeV3audit;1880savedturns261099observedcompletiontokensnotbilling. Exactstateinchildsavedtoolcontext349/368items, conservativeobservedvisibilitymetricnotinvisibilityclaim. Nowireprompt/admissionclaim."
     }
   ],
   "coverage_backlog": [
