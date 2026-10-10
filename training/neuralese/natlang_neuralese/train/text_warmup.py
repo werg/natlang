@@ -1279,6 +1279,8 @@ def main(argv=None):
                         'layer\'s gradient is complete and frees it, so no backbone gradient buffer exists. Same update '
                         'as separate backwards plus one step, except that the latents are not norm-clipped (the global '
                         'norm still counts them and clips heads and norms)')
+    p.add_argument('--moe-kernel',choices=['loop','grouped'],default='loop',
+                   help='dense (BF16, trainable) MoE experts on CUDA: loop = one matmul pair per expert (reference); grouped = two grouped GEMMs over the expert-sorted routed tokens (maple/fused_moe.dense_grouped_experts; BF16 accumulation-order differences only)')
     p.add_argument('--qat-latent-lr',type=float,default=0.,
                    help='Maple QAT dense latents get their own AdamW groups at this rate times their matrix ternary scale '
                         '(a code flips after its latent moves ~0.5 of it); 0: Muon at the backbone rate, under which '
@@ -1296,6 +1298,8 @@ def main(argv=None):
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
     a=p.parse_args(argv)
+    from ..maple.model import set_dense_moe_kernel
+    set_dense_moe_kernel(a.moe_kernel)
     if a.ar_feedback_fixup and not a.continue_from:
         p.error('--ar-feedback-fixup requires a mapped --continue-from checkpoint')
     if min(a.steps,a.tokens,a.prefix_tokens,a.batch,a.eval_batch,a.eval_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3 or a.checkpoint_every<0:

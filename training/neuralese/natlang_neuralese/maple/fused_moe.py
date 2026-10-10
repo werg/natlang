@@ -334,3 +334,28 @@ def fused_experts(experts, x: torch.Tensor, index: torch.Tensor, weights: torch.
     h = _fused(_swiglu)(gate_up, experts.ff, clamp)
     out = _ExpertProjection.apply(h, None, down_w, plan, down_w.scale if down_w.trainable else None)
     return _fused(_gather_sum)(out, plan.position, tokens, top_k, weights)
+
+
+def dense_grouped_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.Tensor, gate_up: torch.Tensor,
+                          down: torch.Tensor, clamp: float | None) -> torch.Tensor:
+    """``SparseMoE``'s per-expert loop for dense BF16 experts (Mellum before and during QAT) as two grouped GEMMs
+    (``torch._grouped_mm``) over the routed (token, expert) pairs sorted by expert, with autograd to ``x`` and to the
+    stacked weights ``gate_up`` [E, 2*ff, d] and ``down`` [E, d, ff] (their latents train through the precision ramp).
+    One grouped GEMM per projection instead of ~10 launches per expert (2.75x forward+backward on a Mellum layer at
+    3k tokens; on the GB10 torch's grouped GEMM still syncs with the host once per call). Same pairs, same order
+    and combine as the loop; only the GEMMs' accumulation order differs (BF16 rounding level)."""
+    tokens, top_k = index.shape
+    experts, ff = gate_up.shape[0], down.shape[-1]
+    flat = index.reshape(-1)
+    order = flat.argsort()
+    # Group ends from the sorted expert ids.
+    offsets = torch.searchsorted(flat[order], torch.arange(experts, device=flat.device), right=True).to(torch.int32)
+    rows = x[order // top_k]
+    hidden = torch._grouped_mm(rows, gate_up.transpose(-2, -1), offs=offsets)
+    gate, up = hidden[:, :ff], hidden[:, ff:]
+    if clamp is not None:
+        gate, up = gate.clamp(max=clamp), up.clamp(-clamp, clamp)
+    out = torch._grouped_mm(F.silu(gate) * up, down.transpose(-2, -1), offs=offsets)
+    out = out[torch.argsort(order)]  # back to (token, slot) order
+    return (out.view(tokens, top_k, -1).float() * weights[..., None]).sum(1)
+

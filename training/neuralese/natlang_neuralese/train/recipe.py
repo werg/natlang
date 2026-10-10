@@ -26,7 +26,7 @@ HANDLERS = {
                           'cohort_weights','qualification_cohort','context_weight','feedback_weight',
                           'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
                           'projection_patience','projection_min_evals','projection_min_improvement',
-                          'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','eval_every','latent_optimizer','latent_step_in_backward',
+                          'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','eval_every','latent_optimizer','latent_step_in_backward','moe_kernel',
                           'held_documents','seed','checkpoint_layers',
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates',
                           'input_map_kernel','input_map_rank','ar_feedback_fixup','channel_consistency_weight','qat_latent_lr',
@@ -48,7 +48,7 @@ HANDLERS = {
                                                'projection_anchor_weight', 'projection_anchor_backbone_scale',
                                                'projection_anchor_decay_steps', 'read_adapter',
                                                'local_stage_batch_size', 'train_control_rows', 'token_cache_mib',
-                                               'qat_latent_lr', 'latent_optimizer', 'latent_step_in_backward', 'member_weight', 'member_tokens', 'member_eval',
+                                               'qat_latent_lr', 'latent_optimizer', 'latent_step_in_backward', 'moe_kernel', 'member_weight', 'member_tokens', 'member_eval',
                                                'member_mask_system', 'member_full_weight',
                                                'view', 'view_window', 'context_weight', 'feedback_weight',
                                                'context_coverage', 'cohort_weights', 'qualification_cohort',
@@ -138,6 +138,8 @@ def validate_stage_parameters(kind, parameters):
         return
     if kind == 'raw_recurrence_training':
         validate_recurrence_parameters(parameters)
+    if 'moe_kernel' in parameters and parameters['moe_kernel'] not in ('loop', 'grouped'):
+        raise ValueError('moe_kernel must be loop or grouped')
     if ('optimizer_state' in parameters and
             parameters['optimizer_state'] not in ('restore', 'fresh')):
         raise ValueError('optimizer_state must be restore or fresh')

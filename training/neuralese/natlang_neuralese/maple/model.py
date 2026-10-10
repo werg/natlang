@@ -370,18 +370,34 @@ class DenseExperts(nn.Module):
         layer: most of a Mellum QAT step); unbind's backward stacks all expert gradients once."""
         from .ternary import QUANT_MIX
 
+        gate_up, down = self.stacked(dtype)
+        return gate_up.unbind(0), down.unbind(0)
+
+    def stacked(self, dtype) -> tuple[torch.Tensor, torch.Tensor]:
+        """All experts' (precision-ramped) weights as [E, 2*ff, d] and [E, d, ff], one op per tensor."""
+        from .ternary import QUANT_MIX
+
         if QUANT_MIX.get("cache") is not None:  # generation under no_grad: compute the deployed values once
             key = (id(self), dtype)
             if key not in QUANT_MIX["cache"]:
                 with torch.no_grad():
-                    QUANT_MIX["cache"][key] = (self._value(self.gate_up, dtype).unbind(0),
-                                               self._value(self.down, dtype).unbind(0))
+                    QUANT_MIX["cache"][key] = (self._value(self.gate_up, dtype), self._value(self.down, dtype))
             return QUANT_MIX["cache"][key]
-        return self._value(self.gate_up, dtype).unbind(0), self._value(self.down, dtype).unbind(0)
+        return self._value(self.gate_up, dtype), self._value(self.down, dtype)
 
     def run_weights(self, x: torch.Tensor, gate_up: torch.Tensor, down: torch.Tensor) -> torch.Tensor:
         y = x @ gate_up.T
         return swiglu(y[..., :self.ff], y[..., self.ff:], self.clamp) @ down.T
+
+
+# The dense-expert MoE kernel (a trainer's --moe-kernel; recipe parameter ``moe_kernel``): "loop" or "grouped".
+DENSE_MOE = {"kernel": os.environ.get("NATLANG_MAPLE_DENSE_MOE", "loop")}
+
+
+def set_dense_moe_kernel(kernel: str) -> None:
+    if kernel not in ("loop", "grouped"):
+        raise ValueError(f"unknown dense MoE kernel {kernel!r}; expected loop or grouped")
+    DENSE_MOE["kernel"] = kernel
 
 
 class SparseMoE(nn.Module):
@@ -425,6 +441,12 @@ class SparseMoE(nn.Module):
         from .fused_moe import expert_weights
         return expert_weights(self.experts)
 
+    def _grouped(self, x) -> bool:
+        """Dense (BF16, trainable) experts on CUDA under ``set_dense_moe_kernel("grouped")`` run as two grouped GEMMs
+        (maple/fused_moe.dense_grouped_experts) instead of the per-expert loop below (the reference, the default)."""
+        return (DENSE_MOE["kernel"] == "grouped" and x.is_cuda and x.dtype == torch.bfloat16
+                and isinstance(self.experts, DenseExperts) and hasattr(torch, "_grouped_mm"))
+
     def forward(self, h):
         shape = h.shape
         x = h.reshape(-1, shape[-1])
@@ -435,6 +457,10 @@ class SparseMoE(nn.Module):
         if projections is not None:
             from .fused_moe import fused_experts
             return fused_experts(self.experts, x, index, weights, self.clamp, projections).to(h.dtype).view(shape)
+        if self._grouped(x):
+            from .fused_moe import dense_grouped_experts
+            gate_up, down = self.experts.stacked(x.dtype)
+            return dense_grouped_experts(x, index, weights, gate_up, down, self.clamp).to(h.dtype).view(shape)
         flat = index.reshape(-1)
         order = flat.argsort()
         token = order // self.top_k

@@ -735,6 +735,8 @@ def main(argv=None):
                         help="lionsr: the latent policy steps backbone weight matrices with LionSR (one BF16 momentum, "
                              "stochastic rounding, --qat-latent-lr per row ternary scale; Mellum conversion v3), as the "
                              "text warm-up does")
+    parser.add_argument("--moe-kernel", choices=["loop", "grouped"], default="loop",
+                        help="dense (BF16, trainable) MoE experts on CUDA: loop = one matmul pair per expert (reference); grouped = two grouped GEMMs over the expert-sorted routed tokens (maple/fused_moe.dense_grouped_experts; BF16 accumulation-order differences only)")
     parser.add_argument("--latent-step-in-backward", action=argparse.BooleanOptionalAction, default=False,
                         help="with --latent-optimizer lionsr: the update's objectives (reader loss, crisp SFT, "
                              "preserve stream) are backpropagated together, layer by layer across all of them "
@@ -879,6 +881,8 @@ def main(argv=None):
     apply_consumer_defaults(parser)
     parser.add_argument("--inspect-training-config", action="store_true", help="print effective defaults and overrides without loading models or starting training")
     args = parser.parse_args(argv)
+    from ..maple.model import set_dense_moe_kernel
+    set_dense_moe_kernel(args.moe_kernel)
     option_defaults = {action.dest: action.default for action in parser._actions if action.dest != 'help'}
     anchor_now = [args.projection_anchor_weight]  # the scheduled projection-anchor weight of the current update
     if args.inspect_training_config:
