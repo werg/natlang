@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pubmedqa-full-abstract-source-derivative-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/pubmedqa-full-abstract-derivative-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 3158,
+      "sha256": "03abaae3b74ed616254bc4e881b14d9bfccc0849f82b06d4d0e004020bb4a18f"
+    },
+    {
+      "path": "build_derivative.py",
+      "bytes": 10184,
+      "sha256": "3d0ddbf7a8de026cdfc8b6a555b5d6138584b134878cd5209a3e57bf797bcd4a"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 109601,
+      "sha256": "a0433d18ff2436d7fde9882d34d109783576568d73f522e2f3341b7f9ce3bc73",
+      "lines": 43
+    },
+    {
+      "path": "source/pqa_labeled-train.parquet",
+      "bytes": 1075513,
+      "sha256": "3d56bd1abc11884579ecc3aab9dd3cdfce8b7cf54715daeca93b8022b7be231c"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 36289,
+      "sha256": "67dcbd9cfed786c7295d5a943443c6c1b6a45ee5f7dbb45e79e228e5953a740d"
+    }
+  ],
+  "bytes": 1234745
+}

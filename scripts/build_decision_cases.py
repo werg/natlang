@@ -332,7 +332,14 @@ def build_cases(name, spec, per_train, per_heldout, licenses, source_pins=None, 
                       if (m := mapper(r, names)) is not None]
         chosen = []
         for state, answer, options, source_refs in sorted(mapped, key=lambda m: digest(f'{name}:{m[0]}')):
-            state = clip(state)
+            # PubMedQA is an evidence-grounded task: clipping its abstract at an
+            # arbitrary character boundary can remove the conclusion needed to
+            # answer the question. Preserve the complete question + abstract
+            # for newly built PubMedQA cases. The generic cap remains in place
+            # for the other sources, whose current mappings use text as a
+            # bounded classification input rather than a complete evidence
+            # record.
+            state = state if name == 'pubmedqa' else clip(state)
             key = digest(state)
             if not state or key in seen:
                 continue

@@ -26505,6 +26505,16 @@
       "training_admission": false,
       "admission": "held-source-quality-fix-required",
       "notes": "45 source-bound PubMedQA items independently matched pinned official Parquet. 21 abstracts clipped by 1500-character builder limit, including six of eleven disagreements. Exact child state arguments visible, provider wire bodies not saved. PubMed 18041059 comparator conflict and 12690589 unsupported annotation inference require explicit holds. Fresh full-abstract derivative pending; no retroactive source repair or semantic negative inferred."
+    },
+    {
+      "id": "pubmedqa-full-abstract-source-derivative-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/pubmedqa-full-abstract-derivative-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-complete-evidence-derivative",
+      "training_admission": false,
+      "admission": "held-fresh-teacher-native-source-quality-review",
+      "notes": "43 exact pinned official PubMedQA question/full-abstract cases, original retained IDs/groups/train splits/labels. Excludes 18041059 and 12690589 with explicit source-quality reasons. 20 abstracts exceed old 1500-character cap. No long_answer or gold in task state; old source/traces preserved. Repeated original worlds, no independent-world credit."
     }
   ],
   "coverage_backlog": [
