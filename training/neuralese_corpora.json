@@ -27736,6 +27736,43 @@
       "include": [
         "pubmedqa-answerability-candidates-v1.json"
       ]
+    },
+    {
+      "id": "free-provider-luna-v61-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v61-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Closed 53 V25 folder programs with 402 decisions; 34 accepted,19 rejected and32 target disagreements. All saved output maps equal returned maps. Actual trajectories and errors preserved, no training admission."
+    },
+    {
+      "id": "free-provider-luna-v61-closed-quality-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v61-choice-folder-final-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Final outcome audit:370/402 target matches, all saved source inputs exact. Initial strict visibility audit covers152 items and leaves250 without invocation-bound evidence; investigation pending. Program-scope state presence must not be promoted to child visibility. All held."
+    },
+    {
+      "id": "free-provider-google-v27-reviewed-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v27",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "512 full train inputs, actual seven families after eligible PubMedQA local pool exhaustion. Current29 holds excluded and8096 prior IDs/groups reserved. Shared quota waiter behind V24, frozen10 model pool, no paid fallback. Active outputs excluded.",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ]
     }
   ],
   "coverage_backlog": [
