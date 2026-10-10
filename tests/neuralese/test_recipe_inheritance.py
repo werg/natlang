@@ -179,3 +179,65 @@ def test_harness_bench_cohort_is_declared_held_and_shared_by_both_lines():
         assert 'DECISIONS.md 2026-10-10' in entry['admission'] and 'DECISIONS.md 2026-10-10' in twin['admission']
         assert entry['build']['text_jsonl_sha256'] == twin['text_jsonl_sha256']
         assert cohort['source']['corpus'] in entry['derived_from']
+
+
+def test_view_operator_stage_is_declared_held_and_shared_by_both_lines():
+    """raw-recurrence-v4 / raw-recurrence-mellum-v3 add only the held view operator stage and its gate to v3 /
+    mellum-v2 (stages_added after adapted_runtime; recurrence_warmup additionally requires the gate)."""
+    added = {'view_operator', 'view_gate'}
+    ignore = {'id', 'description', 'input_bindings', 'view_operator', 'stages', 'cohorts'}
+    for new, old in (('raw-recurrence-v4', 'raw-recurrence-v3'), ('raw-recurrence-mellum-v3', 'raw-recurrence-mellum-v2')):
+        resolved, previous = load_recipe(RECIPES / f'{new}.json'), load_recipe(RECIPES / f'{old}.json')
+        assert {k: v for k, v in resolved.items() if k not in ignore} == \
+            {k: v for k, v in previous.items() if k not in ignore}
+        # The harness cohort's recurrence gains only the declared view length (an addition).
+        recurrence = copy.deepcopy(previous['cohorts']['harness_bench']['recurrence'])
+        recurrence['trajectory_trainer']['view_tokens_per_vector'] = 4
+        recurrence['view_length'] = resolved['cohorts']['harness_bench']['recurrence']['view_length']
+        expected = copy.deepcopy(previous['cohorts'])
+        expected['harness_bench']['recurrence'] = recurrence
+        assert resolved['cohorts'] == expected
+        assert 'view_operator' not in previous and 'input_bindings' not in previous
+        old_stages = {s['id']: s for s in previous['stages']}
+        new_stages = [s for s in resolved['stages'] if s['id'] not in added]
+        assert [s['id'] for s in new_stages] == [s['id'] for s in previous['stages']]
+        for stage in new_stages:
+            expected = dict(old_stages[stage['id']])
+            if stage['id'] == 'recurrence_warmup':
+                expected['requires'] = expected['requires'] + ['view_gate']
+            assert stage == expected
+        ids = [s['id'] for s in resolved['stages']]
+        assert ids.index('adapted_runtime') + 1 == ids.index('view_operator') == ids.index('view_gate') - 1
+        view = next(s for s in resolved['stages'] if s['id'] == 'view_operator')
+        gate = next(s for s in resolved['stages'] if s['id'] == 'view_gate')
+        assert view['admitted'] is False and gate['admitted'] is False and resolved['view_operator']['admitted'] is False
+        assert view['kind'] == 'raw_recurrence_training' and gate['kind'] == 'view_operator_gate'
+        assert view['parameters']['view'] == 'written' and view['parameters']['purpose_contrast'] > 0
+        assert view['parameters']['distill'] == 1.0 and view['parameters']['stop_pg'] > 0
+        assert gate['inputs']['records'] == view['inputs']['records']
+    lfm, mellum = load_recipe(RECIPES / 'raw-recurrence-v4.json'), load_recipe(RECIPES / 'raw-recurrence-mellum-v3.json')
+    assert lfm['view_operator'] == mellum['view_operator'] and lfm['input_bindings'] == mellum['input_bindings']
+    lfm_view = next(s for s in lfm['stages'] if s['id'] == 'view_operator')['parameters']
+    mellum_view = next(s for s in mellum['stages'] if s['id'] == 'view_operator')['parameters']
+    mellum_rec = next(s for s in mellum['stages'] if s['id'] == 'recurrence_warmup')['parameters']
+    lfm_rec = next(s for s in lfm['stages'] if s['id'] == 'recurrence_warmup')['parameters']
+    # The only differences between the lines' view stages are the Mellum line's declared recurrence overrides.
+    assert {k: v for k, v in mellum_view.items() if lfm_view.get(k) != v} == \
+        {k: v for k, v in mellum_rec.items() if lfm_rec.get(k) != v}
+
+
+def test_stages_added_insert_after_a_named_stage(tmp_path):
+    (tmp_path / 'base.json').write_text(json.dumps(base_recipe()))
+    extra = {'id': 'token_identity_again', 'kind': 'token_identity', 'requires': ['token_identity'],
+             'parameters': {'limit': 8, 'max_tokens': 64}}
+    child = {'schema': 'natlang.neuralese-training-recipe/1', 'id': 'child-r', 'extends': 'base-r',
+             'overrides': {'stages_added': [{'after': 'token_identity', 'stage': extra}]}}
+    (tmp_path / 'child.json').write_text(json.dumps(child))
+    resolved = resolve_recipe_data(tmp_path / 'child.json')
+    assert [s['id'] for s in resolved['stages']] == ['token_identity', 'token_identity_again', 'embedding_distillation']
+    for bad in ({'after': 'nowhere', 'stage': extra}, {'after': 'token_identity', 'stage': {**extra, 'id': 'token_identity'}},
+                {'stage': extra}):
+        child['overrides']['stages_added'] = [bad]
+        (tmp_path / 'child.json').write_text(json.dumps(child))
+        with pytest.raises(ValueError):
+            resolve_recipe_data(tmp_path / 'child.json')

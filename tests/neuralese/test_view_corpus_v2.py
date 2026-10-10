@@ -45,6 +45,8 @@ def test_license_detection_and_classes():
     p = vc.provenance("CC-BY-4.0", "card", content_source="web pages", content_unverified=True)
     assert p["class"] == "unverified"
     assert vc.provenance("Apache-2.0", "card", content_spdx="CC-BY-SA-4.0")["class"] == "share-alike"
+    assert vc.provenance("LicenseRef-repository-content", "card", content_spdx="MIT")["class"] == "permissive"
+    assert vc.provenance("LicenseRef-repository-content", "card")["class"] == "unverified"
 
 
 def test_restricted_unpickler_refuses_classes():

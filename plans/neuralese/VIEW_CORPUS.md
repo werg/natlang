@@ -46,8 +46,9 @@ Code-computed targets (`view_extract.py`, all deterministic):
 
 ## 2. Source inventory
 
-Status: **used** = in the first slice; **queued** = a named candidate for scale-up; **omitted** = not used, reason given.
-Licences were checked on the dataset card or repository on 2026-10-09; "unverified" ones are open items (§6).
+Status: **used** = in the first slice (v1); **v2** = added in `view-ask-20261010-v2` (§5.2); **queued** = a named
+candidate for scale-up; **omitted** = not used, reason given. Licences were checked on the dataset card or repository on
+2026-10-09/10; the review table is §6.
 
 ### 2.1 Prose
 
@@ -60,7 +61,7 @@ Licences were checked on the dataset card or repository on 2026-10-09; "unverifi
 | Multi-News | multi-document summaries | `other` (card), non-commercial research terms | 56k | `/mnt/external/bgkit-data/multi_news_v1/raw` | **queued**: needs a multi-source record (several articles, one summary) and a licence decision |
 | arXiv / PubMed (ccdv) | abstract as summary | arXiv per-paper licences; PMC OA mixed | 215k / 133k | `/mnt/external/bgkit-data/{arxiv,pubmed}_v1/raw_ccdv_flat` | **omitted** in this form: the text is lower-cased and tokenized (Cohan et al. preprocessing), which is wrong for reconstruction and verbatim identifiers. **Queued** from the raw S2ORC/Markdown copies (`arxiv_v1/raw_s2orc`, `pubmed_v1/raw_md`) after a per-paper licence filter |
 | GovReport (`ccdv/govreport-summarization`) | long-report summaries | not stated on the card | 19.5k | no | **omitted**: licence unverified; reports usually exceed the 32k-character cap |
-| BookSum (`kmfoda/booksum`) | chapter/book summaries | BSD-3-Clause | 12k chapters | no | **queued**: chapter level fits the cap |
+| BookSum (`kmfoda/booksum`) | chapter/book summaries | BSD-3-Clause (card; covers the Salesforce release code) | 12k chapters | no | **omitted** (v2 licence check): the summaries are scraped from study-guide websites (SparkNotes, CliffsNotes, GradeSaver, …) whose text is the sites' copyright; the original release ships only scraping scripts for that reason |
 | XSum (`EdinburghNLP/xsum`) | one-sentence summaries | unknown (BBC content) | 227k | no | **omitted**: licence unknown |
 | NarrativeQA, HotpotQA, MuSiQue, TriviaQA | QA | Apache-2.0 / CC-BY-SA-4.0 / CC-BY-4.0 / Apache-2.0 | — | bgkit stores, HF cache | **not duplicated**: already port records in s1-full-final-20261003 (`qa_*`); they serve `ask` as they are |
 
@@ -69,7 +70,8 @@ Licences were checked on the dataset card or repository on 2026-10-09; "unverifi
 | Dataset | Supervision | Licence | Size | Local | Status |
 | --- | --- | --- | --- | --- | --- |
 | CodeSearchNet Python (`code-search-net/code_search_net`) | docstring as human-written summary | per repository; the dataset kept only repositories whose licence permits redistribution | 412k train functions | downloaded: train row slice (20k rows), full valid/test | **used**: summary with the docstring removed from the source, parameter and call extraction, reconstruction of the whole function |
-| CodeSearchNet Go/Java/JS/PHP/Ruby | docstring summaries | as above | 1.6M | no | **queued**: summaries and reconstruction; extraction needs per-language parsers |
+| CodeSearchNet Go/Java/JS/PHP/Ruby | docstring summaries | as above, plus per-repository licence files (below) | 1.6M | downloaded: 15k leading train rows per language, full valid/test | **v2**: summaries (the documentation comment is not in `whole_func_string` for these languages; a remaining one is stripped, else rejected) and reconstruction; extraction still needs per-language parsers |
+| CodeSearchNet licence files (`<language>_licenses.pkl`, original release, HF revision fdc6a9e) | none: repository → licence files | — | 114k repositories | downloaded; converted to `codesearchnet/<language>-licenses.json` by a restricted unpickler (no classes) | **v2**: per-function licence provenance (detected SPDX of the repository's licence file; GNU licences by title) |
 | CodeQA (`jadecxliu/CodeQA`) | QA over Java/Python functions | MIT (repo) | 120k | no (Google Drive download) | **queued**: its questions are rule-generated from comments; usable as `ask` QA |
 | bgkit bare repositories (12,083) | none; code-computed targets | per repository | 12k repos | `/mnt/external/bgkit-data/repos` | **used** for JSON/YAML (§2.4); **queued** for files and identifier extraction at scale |
 | The Stack | none | per-file licences, gated | huge | no | **omitted**: the local repositories already cover the need |
@@ -80,7 +82,7 @@ Licences were checked on the dataset card or repository on 2026-10-09; "unverifi
 | Dataset | Supervision | Licence | Size | Local | Status |
 | --- | --- | --- | --- | --- | --- |
 | WebSRC v1.0 (`X-LANCE/WebSRC_v1.0`) | QA over web-page segments (key-value, comparison, table) | CC-BY-4.0 | 6.4k pages, 400k QAs (train+dev) | downloaded: every site's `dataset.csv` and 12 pages per site (718 pages), read member by member from the remote zip | **used**: dataset QA, CSS-selector extraction, reconstruction; scripts, styles, SVG, comments and WebSRC's `tid` attributes removed |
-| Mind2Web (`osunlp/Mind2Web`) | action targets on page snapshots | CC-BY-4.0 | 2.3k tasks, large cleaned HTML | no | **queued** for extraction targets on real full pages (needs size reduction to fit the cap) |
+| Mind2Web (`osunlp/Mind2Web`) | action targets on page snapshots | CC-BY-4.0 (card); test set password-protected against contamination | 2.3k tasks, 11 train JSON files of several hundred MB | no | **queued** (not in v2): pages are hundreds of kB after the dataset's cleaning; a DOM reduction to the 32k cap that keeps the target element is needed before code-computed extraction; train split only |
 | WebArena | environment | Apache-2.0 | — | no | **omitted**: an environment, not a dataset of pages with answers |
 | Common Crawl | none | no per-page licence | — | no | **omitted**: licence |
 
@@ -92,7 +94,7 @@ No permissively licensed public QA dataset over JSON/YAML documents was found, s
 | --- | --- | --- | --- | --- | --- |
 | xLAM function calling 60k (`Salesforce/xlam-function-calling-60k`) | user query → gold calls over the tool-schema JSON | CC-BY-4.0 | 60k | `/mnt/external/sdkb-archive/raw/agentic-20260927/xlam-function-calling-60k` | **used**: the query is the purpose, the gold calls the target (`calls`), plus JSONPath extraction and reconstruction |
 | Repository configs (bgkit repositories) | none | MIT, Apache-2.0, BSD, ISC or Unlicense, detected from the repository's licence file at HEAD; others rejected | ≤ 2 files per repository | `/mnt/external/bgkit-data/repos` | **used**: `package.json`, CI workflows, `tsconfig`, i18n, compose files and other configs, with JSONPath extraction and reconstruction |
-| ToolACE | tool schemas and dialogues | Apache-2.0 | 11k | sdkb raw | **queued** |
+| ToolACE (`Team-ACE/ToolACE`) | tool schemas and dialogues | Apache-2.0 | 11.3k | sdkb raw | **v2**: the tool-schema list and one JSON tool result per dialogue as sources, with JSONPath extraction and reconstruction only. Its dialogues are model-generated, so no assistant turn is used as a target |
 | tau-bench database JSON | none | MIT | — | sdkb raw | **omitted**: it is the tau-bench evaluation environment (contamination risk) |
 | APIGen-MT-5k | — | CC-BY-NC-4.0, gated | 5k | sdkb raw | **omitted**: tau-bench overlap and NC |
 
@@ -102,15 +104,16 @@ No permissively licensed public QA dataset over JSON/YAML documents was found, s
 | --- | --- | --- | --- | --- | --- |
 | WikiTableQuestions (`ppasupat/WikiTableQuestions`) | QA, several per table | CC-BY-SA-4.0 | 22k questions, 2.1k tables | downloaded (repository tarball at 7d455a5) | **used**: training set → train/carve; pristine unseen tables → test; plus row-count, cell and arg-max extraction |
 | FeTaQA (`Yale-LILY/FeTaQA`) | free-form answers over Wikipedia tables | CC-BY-SA-4.0 (GitHub; the HF mirror's MIT tag was not relied on) | 10.3k | downloaded | **used** |
-| TabFact (`wenhu/tab_fact`) | statement verification | CC-BY-4.0 | 118k statements | no | **queued** as yes/no `ask` |
-| Spider / BIRD | SQL questions over SQLite databases | CC-BY-SA-4.0 | 8.7k / 9.4k | `/mnt/external/sdkb-archive/raw/agentic-20260927/{spider,bird}`, `/home/werg/data/bird-sqlite` | **queued**: table rows as CSV, with answers from executing the gold SQL (code-computed) |
+| TabFact (`wenhuchen/Table-Fact-Checking` at 2ab782b) | statement verification (crowd-written, entailed/refuted) | CC-BY-4.0 (HF card; repository code MIT); tables from Wikipedia | 118k statements, 16k tables | downloaded: statements, split ids, page titles, 2,920 tables (seeded) | **v2**: yes/no `ask` (both labels per table where available), one table extract, reconstruction; groups `tabfact-table:` and `wiki:<page>` |
+| Spider / BIRD | SQL questions over SQLite databases | CC-BY-SA-4.0 | 8.7k / 9.4k | `/mnt/external/sdkb-archive/raw/agentic-20260927/{spider,bird}`, `/home/werg/data/bird-sqlite` | **v2**: the tables a gold query reads (each ≤ 400 rows) as CSV; the dataset question (BIRD with its evidence hint) as the purpose; the answer computed by executing the gold SQL read-only on the shipped database (≤ 20 rows, `a | b` per row). Spider's test set is left out; groups `sql-db:<dataset>:<db>` as S1 |
 
 ### 2.6 Logs and tool outputs
 
 | Source | Supervision | Licence | Size | Local | Status |
 | --- | --- | --- | --- | --- | --- |
 | SWE-rebench OpenHands trajectories (`nebius/SWE-rebench-openhands-trajectories`) | none; code-computed facts | CC-BY-4.0 (card); repository content under its own licences | 67k trajectories | registered corpus `nebius-swe-rebench-openhands-trajectories-20261009-v1` | **used**: bash outputs ≥ 800 characters, normalized and workspace-renamed exactly as in the harness bench, with exit code, failing tests, pytest summary, exception, innermost frame and grep facts; splits by repository as in the harness bench |
-| Open-SWE-Traces, Nemotron SWE, AgentTrove, SWE-smith trajectories | none | CC-BY-4.0 / Apache-2.0 | large | HF cache, `/mnt/external/bgkit-data/trajectories_ext` | **queued**: more tool-output diversity (terminal agents, non-Python repositories) |
+| Open-SWE-Traces, Nemotron SWE, AgentTrove (as registered in s1-full-final-20261003) | none; code-computed facts | CC-BY-4.0 / CC-BY-4.0 / Apache-2.0 (per S1 record) | 45 GB of S1 trajectory records | registered corpus | **v2** (`s1_tool_outputs`): tool results sampled by seeded seeks from `trajectory_continuation_swe` (Open-SWE-Traces, Nemotron SWE; the SWE-rebench OpenHands rows are skipped, already used) and `trajectory_continuation_terminal` (AgentTrove terminal screens); each keeps its S1 record's split and groups |
+| SWE-smith trajectories | none | MIT | 5k | HF cache | **queued**: not registered as a corpus yet |
 | LogHub (`logpai/loghub`) | log templates | no licence (NOASSERTION; "for research") | 16 systems | no | **omitted**: licence |
 | bgkit `tool_digest_v2`, `tool_digest_ext_v3` | digests written by a bgkit teacher | — | 7.4k / 14.3k | bgkit | **excluded as targets** (generated); their raw outputs come from the same trajectories used above |
 
@@ -147,8 +150,47 @@ No permissively licensed public QA dataset over JSON/YAML documents was found, s
 - Leakage: the writer's inputs never contain the target (`records.leakage`). Docstrings are removed from code
   sources, and extraction targets are never exact refs.
 - Exact duplicates (same family, source, request and target) keep the first copy.
-- **Open:** cross-corpus closure against s1-full-final-20261003 (shared `wiki:` and `repo:` groups) and near-duplicate
-  dedup across corpora (S1 §6.4) are not run. They are needed before this corpus is mixed with S1 records.
+
+### 4.1 Cross-corpus closure and dedup (v2)
+
+Published corpora are immutable, so a new corpus adapts to them (`scripts/neuralese_data/cross_corpus.py`):
+
+1. **Which corpora.** Every registered corpus that shares sources with this one (registry scan of 2026-10-10):
+   `s1-full-final-20261003` (bgkit SQuAD/QuALITY QA, `repo:` file and tool-digest records, xLAM, Spider/BIRD,
+   SWE-rebench/Open-SWE/Nemotron/AgentTrove trajectories) and `harness-bench-swe-rebench-openhands-pi-records-20261010-v3`
+   (the same SWE-rebench tool outputs). Derived corpora inherit their parent's splits (`s3-subset-20261005` from S1;
+   the harness-bench text twins from v3) and need no index of their own.
+2. **Index** (once per published corpus; `python -m neuralese_data.cross_corpus --corpus-id … --files … --out …`, under
+   the ledger): one streaming pass, parallel over 256 MB byte ranges, records each group key's split, the
+   finalizer's digest (`finalize._digest`) of every source text, of every question (consumer request + target) and
+   of every whole example, and the finalizer's bottom-64 MinHash sketch (word 5-shingles) of every source text of a
+   consume/reconstruct/compare record up to 60k characters. A source text seen under three or more groups is
+   background (as in the finalizer) and never used as document identity. Indexes live on NVMe at
+   `/home/werg/data/natlang-corpora/cross-corpus-index/<corpus-id>/` (`index.json` has the counts). S1: 1,870,591
+   records, 985,434 groups (no group in two splits), 5.45M source texts (16,265 background), 1.54M questions, 4.73M
+   sketches; 23 minutes. Harness bench v3: 3,843 records, 769 groups.
+3. **Apply** (in `build`, after validation): our records are closed internally by group keys plus links computed
+   once per distinct source text (same source, same question when the request identifies it, near-duplicate source
+   at estimated Jaccard ≥ 0.8; exact example duplicates dropped). Templated requests (code-computed extraction,
+   reconstruction) never link by question, since equal answers over unrelated sources ("exit code 1") would chain
+   them. Each component then collects the published splits it touches: a shared group key, an identical non-background
+   source, an identical identifying question, or a near-duplicate published source. A component touching one
+   published split takes it if its own upstream split (or a protected-benchmark hit, which means test) does not rank
+   higher; otherwise, and when it touches two published splits, the whole component is dropped (the published side
+   cannot move, and test never moves to train). A record whose whole example is already published is dropped.
+4. **Check**: the build fails unless no kept record shares a group, non-background source or identifying question
+   with a published record of another split (`cross_corpus.check`); the manifest's `closure` has every count.
+5. **Group conventions for closure.** Groups follow S1 where the sources overlap: `wiki:`, `repo:`, `quality-doc:`,
+   `sql-db:<dataset>:<db>`, `tool-schema:<sorted tool names>` (xLAM and ToolACE gained it in v2), and the SWE-rebench
+   tool outputs carry both the harness bench's `swe-rebench-repo:`/`swe-rebench-instance:` and S1's
+   `repo:`/`swe-instance:` keys.
+
+Dry run on the v1 slice (25,067 records): 1,026 records left. 953 were exact examples already in S1 (816 SQuAD,
+137 QuALITY: S1's bgkit QA asks the same questions over the same passages); 73 components could not be placed (32
+CodeSearchNet and 32 repository-config records whose upstream test/validation repository S1 has in train, 8 config
+records whose repository chains to two S1 splits). 407 records moved (SQuAD and configs to test, where S1 has them;
+WebSRC/xLAM/CNN to validation). Links: 2,169 S1 groups, 2,070 harness groups, 1,378 same-source, 1,464 near-duplicate
+sources, 953 same-question. No violations after closure. v1 itself is unchanged (immutable) and superseded by v2.
 
 ## 5. The first slice
 
@@ -187,20 +229,80 @@ Rebuild (≈1.5 h, most of it reading the bare repositories on the contended ext
 `scripts/neuralese_view_corpus.py fetch` (only if the raw directory is missing), then `build --out <dir>`, both under
 the memory ledger.
 
-## 6. Open items
+### 5.2 v2: `view-ask-20261010-v2` (supersedes v1)
 
-1. **Licences.** QuALITY annotation licence (expected CC-BY-4.0, to be confirmed against nyu-mll/quality); CNN/DM
-   article copyright beyond the card's Apache-2.0; per-repository licences of CodeSearchNet functions (not recorded
-   per function by the dataset); WebSRC page content from third-party websites; regex licence detection for the
-   repository configs (a reviewer should spot-check). All of this is recorded per record in `license.notes`.
-2. **Admission.** `training_admission: false` until the `view` stage is declared in both students' recipes and
-   qualified (TRAINING_RECIPE.md: identity, distillation and runtime qualification first), and the licence review
-   above is done.
-3. **Gate data.** The decision's gate needs, per artifact type, reconstruction fidelity against compression ratio, QA
-   with block vs full text vs none, correct vs shuffled block, and purpose sensitivity. The records support all of
-   these: reconstruct and QA share sources, `compare` pairs carry `purpose_pairs`, and `instructions_general` gives
-   the purpose-free write. pi's next-action loss with view blocks comes from the harness bench, not from this corpus.
-4. **Cross-corpus closure and dedup** with S1 (§4).
+Registry `training/neuralese_corpora.json`; manifest `training/corpus-manifests/view-ask-20261010-v2.json` (21 files,
+1.9 GB); stored at `/home/werg/data/natlang-corpora/view-ask-20261010-v2`, linked from `data/neuralese/corpora/`.
+Built at code commit 4e31658b with `--preset v2` (`view_corpus.V2_CAPS`), the 32,000-character cap and seed 0, closed
+against the S1 and harness-bench v3 indexes (§4.1). Raw inputs: `view-sources-20261010-v2` (5,391 files, 1.24 GB, on
+/mnt/external; v1's raw directory plus the v2 fetch). `training_admission: false`.
+
+129,559 records over 49,673 sources: 110,856 train, 10,511 validation, 8,192 test.
+
+| Artifact | Records | reconstruct | summary | qa | extract | Datasets (records) |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| prose | 9,878 | 4,546 | 5,245 | 87 | — | CNN/DM 7,990; QMSum 1,250; SQuAD 395; QuALITY 243 |
+| code | 32,884 | 11,666 | 11,666 | — | 9,552 | CodeSearchNet Python 19,486, Java 3,000, PHP 3,000, Ruby 3,000, JavaScript 2,996, Go 1,402 |
+| html | 12,805 | 2,000 | — | 8,000 | 2,805 | WebSRC (2,000 pages) |
+| data (JSON/YAML) | 23,642 | 5,565 | — | 2,662 | 15,415 | xLAM 9,946; ToolACE 7,968; repository configs 5,728 |
+| table | 33,778 | 5,104 | — | 20,222 | 8,452 | WTQ 12,392; TabFact 10,866; FeTaQA 4,975; Spider 4,433; BIRD 1,112 |
+| log | 16,572 | 5,564 | — | — | 11,008 | SWE-rebench bash outputs 9,367; S1 tool outputs 7,205 (Open-SWE, Nemotron SWE, AgentTrove) |
+
+- Tasks: 82,167 `compare`, 12,947 `consume`, 34,445 `reconstruct`. Target origin: 51,006 code-computed (including
+  Spider/BIRD answers from executing the gold SQL), 27,197 dataset QA, 5,245 dataset summaries, 11,666 upstream
+  docstrings, 34,445 identity.
+- Closure (§4.1): 136,341 records built; 2,023 exact examples already in S1 dropped (SQuAD 1,486, QuALITY 537);
+  4,757 records in components that could not be placed dropped; none violate the check. The largest group of drops,
+  2,826 SWE-rebench tool outputs, is a conflict between the two published corpora: the harness bench splits by
+  `split_of(repo, 5)`, S1 by its own closure, and they disagree on those repositories (so the harness bench and S1
+  themselves already share repositories across train/test; reported to the harness-bench owner). xLAM drops (1,252)
+  come from S1's `tool-schema:` groups. Protected benchmark hits: 1,098 records.
+- Licence classes (§6): 42,204 permissive, 24,260 attribution, 34,173 share-alike, 2,061 weak-copyleft, 4,457
+  copyleft, 22,404 unverified (CNN/DM 7,990, WebSRC 12,805, QuALITY 243, CodeSearchNet repositories without a
+  detected licence 817, S1 tool outputs 549).
+- `view-stage/`: the trajectory-trainer conversion (`natlang_neuralese.data.view_records`): 119,048 records (110,856
+  train, 8,192 test; validation stays with the corpus), `records.jsonl` SHA-256 3e276b32…, pinned by the recipes.
+- Rejections, by reason, are in `manifest.json`. New in v2: Spider/BIRD queries whose tables exceed 400 rows
+  (2,621 / 8,992) or whose answer is empty or longer than 20 rows; BIRD gold queries that fail on the shipped database
+  (235); CodeSearchNet docstrings that are not prose (3,119 over six languages).
+
+## 6. Licence review (for the owner) and open items
+
+### 6.1 Licence review table
+
+Every record carries `lineage.notes.license_provenance`: the dataset licence and where it was read, the underlying
+content's licence and holder when known, a review **class** (the most restrictive known licence: permissive,
+attribution, share-alike, weak-copyleft, copyleft; `unverified` when the content's licence is unknown and substantial;
+noncommercial) and concerns. `scripts/neuralese_view_corpus.py filter --src <corpus> --out <dir> --allow <classes>`
+cuts a corpus by class (purpose pairs are pruned; the copy inherits the hold). Recommendations are proposals.
+
+| Dataset | Licence (dataset / content) | Concern | Recommendation |
+| --- | --- | --- | --- |
+| CNN/DailyMail 3.0.0 | Apache-2.0 card / articles © CNN, Daily Mail | The card's licence covers the release; the article and highlight text is the publishers'. Widely used for summarization research | **Decide**: admit for internal research training, or drop (class `unverified`; ~1/8 of prose records) |
+| SQuAD v1.1 (train) | CC-BY-SA-4.0 / Wikipedia CC-BY-SA | Share-alike; already in S1, where it is all test | Admit (attribution + share-alike recorded); it contributes test records only |
+| QMSum | MIT / AMI, ICSI CC-BY-4.0; parliament records under open government licences | Committee transcripts are OGL-style, not CC | Admit |
+| QuALITY | none stated (repo and HF mirror) / articles mostly Project Gutenberg (per-row licence field) | Annotation licence unknown; most of its QA is already in S1 (dropped as duplicates) | Hold until the authors' licence is confirmed, or keep reconstruction records only (articles are public domain per row) |
+| CodeSearchNet Python/Go/Java/JS/PHP/Ruby | per repository (dataset kept redistributable repositories) / detected per repository from the release's licence files | About 15% of Python repositories are GPL/AGPL/LGPL (copyleft, weak-copyleft); ~1-2% undetected (`unverified`) | Admit `permissive`; decide on copyleft code (training on GPL code is common practice but the owner may exclude it); filter by class |
+| WebSRC v1.0 | CC-BY-4.0 / third-party websites | Page text and markup belong to the sites | **Decide** (class `unverified`): admit for research, or drop the HTML artifact's WebSRC part |
+| xLAM 60k | CC-BY-4.0 / generated by the APIGen pipeline | Queries and calls were model-generated upstream (not by us) | Admit (attribution); note the upstream generation |
+| Repository configs (bgkit mirror) | MIT/Apache/BSD/ISC/Unlicense detected at HEAD | Regex detection; spot-check | Admit after a spot-check of ~20 repositories |
+| WikiTableQuestions, FeTaQA | CC-BY-SA-4.0 / Wikipedia | Share-alike | Admit |
+| Spider, BIRD | CC-BY-SA-4.0 / the datasets' databases | Share-alike; BIRD databases include scraped public data | Admit |
+| TabFact | CC-BY-4.0 (card; repository code MIT) / Wikipedia tables CC-BY-SA | Share-alike via the tables | Admit |
+| ToolACE | Apache-2.0 / model-synthesized schemas and results | Synthetic source content (never targets) | Admit |
+| SWE-rebench OpenHands tool outputs | CC-BY-4.0 / outputs over public repositories | Outputs can quote repository files under their licences | Admit (attribution); repository licences are not resolved per output |
+| S1 tool outputs: Open-SWE-Traces, Nemotron SWE, AgentTrove | CC-BY-4.0, CC-BY-4.0, Apache-2.0 (per S1 record) / repository licence when S1 recorded it | As above; AgentTrove tasks come from listed source datasets | Admit (attribution) |
+| BookSum | BSD-3-Clause card / study-guide summaries © the sites | Summaries scraped from commercial study guides | **Omitted** (not in v2) |
+| Mind2Web | CC-BY-4.0 / web pages | Third-party pages; test set protected | Queued, not in v2 |
+
+### 6.2 Open items
+
+1. **Licence decisions** above (CNN/DM, WebSRC, QuALITY, copyleft CodeSearchNet repositories).
+2. **Admission.** `training_admission: false` until the licence decisions and the `view` stage's qualification
+   (raw-recurrence-v4 / raw-recurrence-mellum-v3 declare it held: TRAINING_RECIPE.md "The view operator stage").
+3. **Gate.** `natlang_neuralese.eval.view_gate` measures every metric of the decision's gate; the thresholds are the
+   recipe's proposals (§8).
+4. Mind2Web and SWE-smith (§2) are queued; arXiv/PubMed from the raw copies after a per-paper licence filter.
 
 ## 7. Scaling up
 
@@ -208,9 +310,9 @@ Caps are per source (`view_corpus.DEFAULT_CAPS`, overridable with `--caps '{"cod
 `--max-source-chars`, `QUESTIONS_PER_SOURCE` and `EXTRACTS_PER_SOURCE`. A larger build needs a new corpus id and
 manifest; it never replaces a published one.
 
-1. Raise the caps of the sources already fetched. CNN/DM, SQuAD, QuALITY and the repositories are local in full. For
-   CodeSearchNet, raise `--csn-train-rows`; for WebSRC, `--websrc-pages-per-site` (up to all 6.4k pages).
-2. Add the queued sources in this order: Spider/BIRD tables with executed answers; other trajectory sets for tool
-   outputs; BookSum chapters; CodeSearchNet's other languages; TabFact; ToolACE; Mind2Web pages; arXiv/PubMed from
-   the raw copies after a licence filter.
-3. Before admission: run S1's cross-corpus closure and near-duplicate dedup, then a per-family leakage audit sample.
+1. Done in v2: larger caps for the local sources; Spider/BIRD, S1 tool outputs, CodeSearchNet's other languages,
+   TabFact and ToolACE added; BookSum omitted (§2.1); cross-corpus closure and dedup (§4.1).
+2. Next: Mind2Web pages (DOM reduction), SWE-smith trajectories (register first), arXiv/PubMed from the raw copies
+   after a per-paper licence filter, extraction for the non-Python CodeSearchNet languages, and a per-family leakage
+   audit sample before admission. SQuAD and QuALITY add little beyond S1 (their QA is already there) and are not
+   worth raising.
