@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-river-retry-whole-trajectory-recurrence-review-20261009-v1-glob-supplement-20261010-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/calls.sqlite",
+      "bytes": 241664,
+      "sha256": "354ae062998c091f533027595322567866c9173e8d20d29b8caa7d5862dc55ef"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/provenance.json",
+      "bytes": 72996,
+      "sha256": "773dccc325311e6bd286c2dd7d345b307e13a40c7d932a520d9b285193342599"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/unresolved-calls.json",
+      "bytes": 419211,
+      "sha256": "603c5e8140a947d9c3dcc5d735f727b1da0c8b1851dabef1c4a38e0ee2e50afa"
+    }
+  ],
+  "bytes": 733871
+}

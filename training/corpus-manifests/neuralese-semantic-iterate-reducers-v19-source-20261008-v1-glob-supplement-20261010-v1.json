@@ -1,0 +1,94 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-semantic-iterate-reducers-v19-source-20261008-v1-glob-supplement-20261010-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v19-20261008-v1",
+  "files": [
+    {
+      "path": "authored-reference-cb892/case-000.reference.json",
+      "bytes": 4250054,
+      "sha256": "1d45b162f8baec62f62acc1fe92224bb7b366d7b2d72957e03d747281289b366"
+    },
+    {
+      "path": "authored-reference-cb892/case-001.reference.json",
+      "bytes": 4227766,
+      "sha256": "172ba1febd11bc30c450cd17fa346c07d2317f5197ff6ae90845777eee403b7d"
+    },
+    {
+      "path": "authored-reference-cb892/case-002.reference.json",
+      "bytes": 3870208,
+      "sha256": "c92efaabff0510e178c6ef3c380bf7f7734ee5faa754e2e938f39c53ca03831e"
+    },
+    {
+      "path": "authored-reference-cb892/case-003.reference.json",
+      "bytes": 3883146,
+      "sha256": "e447f35ca83e8b557f2f72c7d80b31c06fdedd2e764aedeb584c4bfecb93da52"
+    },
+    {
+      "path": "authored-reference-cb892/case-004.reference.json",
+      "bytes": 4264112,
+      "sha256": "e178636da1861c19b884150b0c34fb5ef63629b2dbd1bb9351d46f5bc91d490a"
+    },
+    {
+      "path": "authored-reference-cb892/case-005.reference.json",
+      "bytes": 4217608,
+      "sha256": "64ae0c6f9ffb29492536ae4d2fa8c30cc9f0d94e6b95630f28de09aa132e7b53"
+    },
+    {
+      "path": "authored-reference-cb892/case-006.reference.json",
+      "bytes": 3907485,
+      "sha256": "8d72bff85c371ad8ef4991ce61ea8a9b6a8177691a9258a6c113a83e566c615e"
+    },
+    {
+      "path": "authored-reference-cb892/case-007.reference.json",
+      "bytes": 4217878,
+      "sha256": "f75f4b5e6bb22e0a6b03e9c719c7b4b3be4f3f3f2d6a2273b0b955acc656519c"
+    },
+    {
+      "path": "authored-reference-cb892/case-008.reference.json",
+      "bytes": 4258151,
+      "sha256": "28389a8eeb7371b49b3a62b688313596fada4d2db2a60f081a89cc00e12d3fd1"
+    },
+    {
+      "path": "authored-reference-cb892/materializer-runtime-flags-attestation.jsonl",
+      "bytes": 48924,
+      "sha256": "cb498aabbc204a465cb1c842d8e7057808a6da17248d5aca03bebd2af6a29127",
+      "lines": 108
+    },
+    {
+      "path": "authored-reference-cb892/native-decisions.jsonl",
+      "bytes": 14940877,
+      "sha256": "9ad5ad9a4fffdbaa4d4282599144f42c18b650fc46e4161533499ca9ef6433ba",
+      "lines": 108
+    },
+    {
+      "path": "authored-reference-cb892/reference-trajectories.jsonl",
+      "bytes": 5605030,
+      "sha256": "6eec79f49c919b184bf63bd10b201747f7b02b33209d7ebc748bcd3a7ff730a2",
+      "lines": 9
+    },
+    {
+      "path": "authored-reference-cb892/review-artifact-manifest.json",
+      "bytes": 2484,
+      "sha256": "8d2da55276e25d5b3ec09e4318dd3ad12f22d313b9ddb24698331d9526226fc7"
+    },
+    {
+      "path": "authored-reference-cb892/runtime-reference-proof.json",
+      "bytes": 221628,
+      "sha256": "47b5b3de29a5fb77d4f1ae239db38e417785d3a7857230227dec5c118988e2ea"
+    },
+    {
+      "path": "authored-reference-cb892/source-action-review.jsonl",
+      "bytes": 208215,
+      "sha256": "8faad43e8f13367942c2e36f090dfab3dd8c54259a02764a2d5803e73f567629",
+      "lines": 108
+    },
+    {
+      "path": "authored-reference-cb892/source.cases.jsonl",
+      "bytes": 415026,
+      "sha256": "62b2b338ff3c6894962407a3d6f947bd4487a1540fccd0c67160a0ebc7f55522",
+      "lines": 9
+    }
+  ],
+  "bytes": 58538592
+}

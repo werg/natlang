@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-lfm-input-map-launch-preparation-20261008-v1-glob-supplement-20261010-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
+  "files": [
+    {
+      "path": "runtime/manifest.json",
+      "bytes": 10710,
+      "sha256": "32d7b8a94251d389b92dd75d17721e36915f09210ec968d49d4b66dfb6cb5bb1"
+    }
+  ],
+  "bytes": 10710
+}

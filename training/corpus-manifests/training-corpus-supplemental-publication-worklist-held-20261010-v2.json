@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "training-corpus-supplemental-publication-worklist-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/training-corpus-supplemental-publication-worklist-20261010-v2",
+  "files": [
+    {
+      "path": "worklist.json",
+      "bytes": 169301,
+      "sha256": "7e1c822ad1e8457f8967573b8fb52eb55113059f4abcbe541bb3e99fabe12298"
+    },
+    {
+      "path": "worklist.md",
+      "bytes": 3474,
+      "sha256": "6310c6842188f620d72470576af6b42761df1b1301cf335feb1a1dba71f27c03"
+    }
+  ],
+  "bytes": 172775
+}

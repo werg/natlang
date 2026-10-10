@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-semantic-iterate-reducers-v24-v3-closed-raw-20261008-glob-supplement-20261010-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-semantic-iterate-reducers-v24-closed-raw-review-20261008-v1/README.md",
+      "bytes": 566,
+      "sha256": "5e75060d419ce739e04af9509e9c062d56d77e51a7d5606844a861bcdc14269a"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v24-closed-raw-review-20261008-v1/review.json",
+      "bytes": 17730,
+      "sha256": "3cbc8f638bf29201b2bfe93e0560b64f6fe4ecf9f53ccef6f095069e88a25f0e"
+    }
+  ],
+  "bytes": 18296
+}

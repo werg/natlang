@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-semantic-iterate-reducers-v25-luna-campaign-v1-raw-20261008-glob-supplement-20261010-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-semantic-iterate-reducers-v25-20261008-v1/generation-review-v1/luna/closed-raw-review-v1/review.json",
+      "bytes": 30025,
+      "sha256": "37dc0b7db59f4688fa357d1388cf30ba1a7898cb23d325cc1148363499bbaa4f"
+    }
+  ],
+  "bytes": 30025
+}

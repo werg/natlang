@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-zai45-sourcev5-research-index1-closeout-held-20261010-v1-glob-supplement-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "provider-zai45-sourcev5-research-pair-v1/case-001/results.jsonl",
+      "bytes": 1961125,
+      "sha256": "bf3bca498e73ae5d4648e453f6d65cce64db82ba7cb44b2ab3c50078e9335208",
+      "lines": 1
+    },
+    {
+      "path": "provider-zai45-sourcev5-research-pair-v1/case-001/results.jsonl.manifest.json",
+      "bytes": 1704,
+      "sha256": "856876f6e0c784bd98443e3fddc14c208e6be1391d79434e454885f327f4b56d"
+    }
+  ],
+  "bytes": 1962829
+}

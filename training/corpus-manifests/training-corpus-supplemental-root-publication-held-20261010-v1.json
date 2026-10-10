@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "training-corpus-supplemental-root-publication-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/training-corpus-supplemental-root-publication-20261010-v1",
+  "files": [
+    {
+      "path": "root-receipt.json",
+      "bytes": 3416,
+      "sha256": "de456c47385e6f6abd0cff35e1aaf086969ba0990a52e8e2821b3bf8064a1927"
+    }
+  ],
+  "bytes": 3416
+}

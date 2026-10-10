@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-semantic-iterate-reducers-v25-v1-static-generation-packet-20261008-glob-supplement-20261010-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-semantic-iterate-reducers-v25-runtime-20261008-45c15184/frozen-runtime/frozen-runtime.json",
+      "bytes": 114099,
+      "sha256": "fa07d19db853e2256e780078ed2f9342eaad7e597e7489cd5cec57be4a1bd951"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v25-runtime-20261008-45c15184/frozen-runtime/package-lock.json",
+      "bytes": 92350,
+      "sha256": "85380ae3ef7e5cfb0b3c450e00b5e6991959ef8063eb38348ebfd1005ab8c6b6"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v25-runtime-20261008-45c15184/frozen-runtime/package.json",
+      "bytes": 3208,
+      "sha256": "e1fade7ae9c4aa9ad528925df63ff65c3941a5882968e210a5f559763e7aaf97"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v25-runtime-20261008-45c15184/frozen-runtime/prelude.js",
+      "bytes": 3771,
+      "sha256": "d88a9c92e9a12ab3037c1dd9cc228db93010d221f8afc6f952a7f8856b4bbafc"
+    }
+  ],
+  "bytes": 213428
+}
