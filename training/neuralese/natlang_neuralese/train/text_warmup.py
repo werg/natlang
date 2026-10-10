@@ -56,6 +56,8 @@ _OBJECTIVE_METRIC_SCALARS = (
     'premature_close_top1', 'supervised_ce', 'supervised_embedding_mse',
     'context_valid_gold_tokens', 'context_valid_gold_fraction',
     'channel_consistency_kl', 'channel_consistency_agreement', 'channel_consistency_tokens',
+    'channel_consistency_last256_kl', 'channel_consistency_last256_agreement',
+    'channel_consistency_last256_tokens',
     'generated_tail_projection_mse', 'generated_tail_projection_tokens',
 )
 

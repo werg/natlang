@@ -3,6 +3,7 @@ import { TEXT_NEURALESE_EMULATION_VERSION, TEXT_NEURALESE_PROMPT_REVISION } from
 import { chatRequestControls } from './chat-request-controls.js';
 import { providerRequestControls } from './provider-request-controls.js';
 import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
+import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';
 import { readFile } from 'node:fs/promises';
 import { createReadStream, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -179,7 +180,7 @@ async function main(): Promise<void> {
   await writeAtomic(`${output}.manifest.json`, JSON.stringify({
     version: 'natlang.teacher_batch.native/1', source: ir, source_sha256: sha256(source),
     range: { start: records[0]?.index ?? 0, count: records.length }, model: config.modelId,
-    root_seed: config.rootSeed, tool_schema: 'scope-eval-v1', context_tokens: config.contextTokens,
+    root_seed: config.rootSeed, tool_schema: NATIVE_TOOL_SCHEMA, context_tokens: config.contextTokens,
     text_neuralese_transport: config.textNeuraleseEmulation ? TEXT_NEURALESE_EMULATION_VERSION : null,
     text_neuralese_prompt_revision: config.textNeuraleseEmulation ? TEXT_NEURALESE_PROMPT_REVISION : null,
     workers: config.workers, completed: result.completed,

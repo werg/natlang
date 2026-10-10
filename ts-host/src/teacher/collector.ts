@@ -34,11 +34,12 @@ import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT,
   TEXT_NEURALESE_DIALECT, TEXT_NEURALESE_EMULATION_VERSION, TEXT_NEURALESE_PROMPT_REVISION,
   TEXT_NEURALESE_WIDTH } from '../model/text-neuralese-emulation.js';
 import { registerTrace, releaseTrace } from '../native/graph.js';
+import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
 export const TEACHER_PARTIAL_VERSION = 'natlang.teacher_partial.native/1';
-const TOOL_SCHEMA = 'scope-eval-v1';
+const TOOL_SCHEMA = NATIVE_TOOL_SCHEMA;
 export const EXECUTION_PLAN_VERSION = 'execution-plan-tool/2';
 export const PROVIDER_REQUEST_TIMEOUT_POLICY_VERSION = 'pi-provider-request-timeout/1';
 export const PROVIDER_ACTION_CYCLE_POLICY_VERSION = 'pi-provider-action-cycle/1';
