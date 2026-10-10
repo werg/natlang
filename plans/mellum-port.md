@@ -265,3 +265,24 @@ New lineage:
 Open: nested-family members have no BF16 state yet (member terms are off in v5); per-latent learning rates in units
 of the ternary scale for the `latent` policy (measure on the gate columns first); deploy exports at a chosen
 precision (Q4_0 GGUF; TQ2_0 via qat_export) from latents.
+
+## 2026-10-10 — Conversion v3 stopped by decision (QAT moved into the training stages)
+
+- Run `/home/werg/data/mellum-qat/convert-v3` (runs/mellum-convert-v3-20261010/train.sh): KL only to BF16 on
+  mellum21-self-distill-v3-20261010 (prompt positions 0.25), ramp 0→1 over 1200 updates, Lion 3e-4 per-row scale,
+  generation gate (24 probes) every 100 updates at λ=1. Step 0: BF16 (mix 0) gate 0.75 (natlang probes partly run
+  past the 256/512-token limit), held response KL 0.0002; untrained ternary (λ=1) gate 0/24, held KL 10.0.
+- λ=1 trend: held KL 10.0 → 6.2 → 4.5 → 5.3 → 4.5 → 4.0 → **2.5** (steps 0–600), greedy-token agreement 0.03 → 0.53,
+  gate 0/24 throughout; at mix 0.5 the thinking check (`<think>` opens and closes) reached 0.79, end/tool/exact 0.
+  KL at the current mix held at ~0.95–1.0 from step 300 to 600 while the mix doubled (latents kept pace with the ramp).
+  Peak 69 GB with the gate's deployed-weights cache; ~21 min per 100 updates including evaluations.
+- 11:28: the memory guard stopped the run (free memory below the floor, caused by another probe). The SIGTERM
+  checkpoint (47 GB) cannot be written before docker's kill (exit 137, partial `checkpoint.pending` removed);
+  the rolling slot (step 500) was intact. Resumed from step 500 with a 20-minute slot cadence.
+- **Stopped at step ~520 (last logged 516) by coordinator decision**: under the owner's new plan QAT runs inside the
+  training stages (1324fd2b, recipe raw-recurrence-mellum-v5). The best latents (`best-weights.pt`, step 600,
+  metric = (1 − gate) + held KL = 3.52) are handed to the foundation init gate
+  (runs/mellum-foundation-qat-20261010/launch.sh), which registers them, gates them at λ=0 against BF16 and continues
+  the ramp in the recipe. The v3 export/harness pipeline (runs/mellum-qualify-v3-20261010) was never run.
+- Lesson for long-running QAT jobs: a signal checkpoint of the full latent+optimizer state does not fit docker's stop
+  window; rely on a short rolling cadence (or a weights-only signal snapshot).
