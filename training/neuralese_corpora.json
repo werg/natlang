@@ -24951,7 +24951,7 @@
       "source_class": "storage-or-source-review-evidence",
       "training_admission": false,
       "admission": "evidence-only-no-training-admission",
-      "notes": "Finalcorrectedbindinginventory5590exactrefs215canonicalID/hash sourcepairs2694refs; trace696verified193callonly149pointer4552unmatched. Noautomaticadmission,143unresolvedunchanged."
+      "notes": "Finalcorrectedbindinginventory5590exactrefs215canonicalID/hash sourcepairs2694refs; trace696verified193callonly149pointer4552unmatched. Noautomaticadmission,143unresolvedunchanged. Narrowfilenamecoverage supersededbyV5broaderexactlookup."
     },
     {
       "id": "free-provider-google-choice-confidence-v13-inputs-held-20261010-v1",
@@ -25053,7 +25053,20 @@
       "source_class": "native-source-closure-corrected-inventory",
       "training_admission": false,
       "admission": "held-source-integrity-and-quality-review-required",
-      "notes": "SupersedesV4filename-scopefalse negatives.472/479directexactprogram/source-rowpairs5573/5590refs;336filesindexed177withmatcheszero sameIDhashmismatches.7childpairs17refsdeclaredsourcecaserowSHA mismatchesactualpinnedparentrows integrityheld. Noautomaticadmission."
+      "notes": "SupersedesV4filename-scopefalse negatives.472/479directexactprogram/source-rowpairs5573/5590refs;336filesindexed177withmatcheszero sameIDhashmismatches.7childpairs17refsdeclaredsourcecaserowSHA mismatchesactualpinnedparentrows integrityheld. Noautomaticadmission. Childintegritymismatchinterpretation supersededbyV6:7/7declaredSHA matchrawJSONLrowbyteswithoutLF; remainingobligationisruntimeinvocation/traceproof, not source-rowhashrepair."
+    },
+    {
+      "id": "neuralese-native4962-child-source-row-hash-audit-held-20261010-v6",
+      "owner": "pop",
+      "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v6-child-row-hash-audit",
+      "include": [
+        "*"
+      ],
+      "split": "evidence-only",
+      "source_class": "native-source-hash-convention-correction",
+      "training_admission": false,
+      "admission": "held-runtime-invocation-trace-and-quality-review-required",
+      "notes": "V5childintegrityflagwaswronghashencodingcomparison.7/7childdeclaredsource_case_row_sha256 equalexactrawJSONLrowbytesexcludingLF(documentedproducercontract). Exactparentfile/ID/context/resultpinsverified17refs; no runtimeparent-childinvocationproof/admission."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native4962-child-source-row-hash-audit-held-20261010-v6",
+  "owner": "pop",
+  "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v6-child-row-hash-audit",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 20877,
+      "sha256": "f84aab4ca1eafd7a24bc94b651cc58cccf87994af457572fb44f12f1c2c530bb"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 1025,
+      "sha256": "37cff8452136a8310bf352aeac917ea6b16d25d97ec14fdd842627ca173e570c"
+    }
+  ],
+  "bytes": 21902
+}
