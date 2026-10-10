@@ -22297,6 +22297,20 @@
       "admission": "review-evidence-not-training-targets",
       "independent_new_worlds": 0,
       "notes": "Exact296clean assistantaction rows bound to rawinputline/source/target/split/groups; approves only ordinarytext render. No native IR/trace/recurrence/channeladmission; currentGPUinput unchanged."
+    },
+    {
+      "id": "free-provider-v28-admitted-ordinary-text-280-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v28-admitted-ordinary-text-packet-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "root-approved-ordinary-text-only-provider-actions",
+      "training_admission": true,
+      "admission": "admitted-ordinary-text-only-no-native-IR-trace-recurrence",
+      "independent_new_worlds": 0,
+      "notes": "Root exact296cleanrowreceipt cc2d7c63da21af781f9e9a72aa7facf0705e0209d81fb2c30fa9b7455e48d0c7; sharedproductionrenderer280globallydedupdocs/0omissions preserves296bindings. 2360661context+target tokens/41946supervisedsuffix/max15975; LFM2pinnedtemplate last_turn_only history policy retains currenttarget reasoning. NativeIR/trace/wholetrajectory/recurrence/channelqual held; currentGPUinputunchanged, zeroheldevalcredit. Text99b4cf11ea72ce4f0ce44eab6219f8ac1c678b3944cb0888717adfc0e382a836."
     }
   ],
   "coverage_backlog": [
