@@ -750,6 +750,57 @@ def _attested_neuralese_message_bodies(record, writer_sources=None, *, split, so
     return bodies, attestations
 
 
+def _provider_expanded_writer_source_valid(source_class, write, witness, block_type):
+    witness = witness if isinstance(witness, dict) else {}
+    return (
+        source_class in (None, "modern-typed-text-result")
+        and write.get("producer") == "text-marker-emulation"
+        and write.get("source_kind") == "typed-text-result"
+    ) or (
+        source_class == "legacy-text-marker-standin-eval-code"
+        and write.get("emulation_version") == "text-marker-standin/2"
+        and write.get("marker_context") == "eval-code"
+        and write.get("learned_vectors") is False
+    ) or (
+        source_class == "legacy-text-marker-standin-return-result"
+        and write.get("producer") == "text-marker-emulation"
+        and write.get("source_kind") == "typed-text-result"
+        and write.get("source") == "return_result"
+        and write.get("marker_context") == "return-result"
+        and witness.get("kind") == "raw-return-result-value-equals-expanded-body"
+        and witness.get("source") == "return_result"
+        and witness.get("host_result_call_id") == write.get("call_id")
+        and witness.get("host_result_type") == block_type
+        and _sha256_hex(witness.get("host_result_value_sha256"))
+        and _sha256_hex(witness.get("raw_response_sha256"))
+    ) or (
+        source_class == "legacy-text-marker-standin-eval-finish"
+        and write.get("producer") == "text-marker-emulation"
+        and write.get("source_kind") == "typed-text-result"
+        and write.get("source") == "eval-finish"
+        and write.get("marker_context") == "return-result"
+        and witness.get("kind") == "completed-eval-finish-host-reference"
+        and witness.get("source") == "eval-finish"
+        and witness.get("host_result_call_id") == write.get("call_id")
+        and witness.get("host_result_type") == block_type
+        and _sha256_hex(witness.get("host_result_value_sha256"))
+    ) or (
+        source_class == "legacy-text-marker-standin-eval-return"
+        and write.get("producer") == "text-marker-emulation"
+        and write.get("source_kind") == "typed-text-result"
+        and write.get("source") == "eval-return"
+        and write.get("marker_context") == "return-result"
+        and witness.get("kind") == "completed-eval-return-host-reference"
+        and witness.get("source") == "eval-return"
+        and witness.get("host_result_call_id") == write.get("call_id")
+        and witness.get("host_result_type") == block_type
+        and witness.get("completion_status") == "done"
+        and witness.get("completion_source") == "execution_graph"
+        and witness.get("completion_detail") == f"\uE000{write.get('block')}\uE001"
+        and _sha256_hex(witness.get("host_result_value_sha256"))
+    )
+
+
 def _attested_provider_expanded_reads(record, writer_sources=None, *, split, source_groups):
     """Attest exact crisp stand-in reads against their authenticated same-run writer.
 
@@ -926,7 +977,8 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
         context_refs = [receipt for receipt in ((record.get("source_ref") or {}).get(
             "provider_expanded_read_contexts") or [])
                         if isinstance(receipt, dict)
-                        and receipt.get("schema") == "natlang.provider-expanded-read-context/2"
+                        and receipt.get("schema") in {"natlang.provider-expanded-read-context/2",
+                                                        "natlang.provider-expanded-read-context/3"}
                         and receipt.get("origin") == "same-run-producer"
                         and (receipt.get("block") or {}).get("id") == block_id]
         if len(context_refs) > 1 or (item.get("target_write_name") is not None and len(context_refs) != 1):
@@ -964,7 +1016,8 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
             context_receipts = [receipt for receipt in ((record.get("source_ref") or {}).get(
                 "provider_expanded_read_contexts") or [])
                                 if isinstance(receipt, dict)
-                                and receipt.get("schema") == "natlang.provider-expanded-read-context/2"
+                                and receipt.get("schema") in {"natlang.provider-expanded-read-context/2",
+                                                                "natlang.provider-expanded-read-context/3"}
                                 and receipt.get("origin") == "same-run-producer"
                                 and (receipt.get("block") or {}).get("id") == block_id]
             if len(context_receipts) != 1:
@@ -1014,7 +1067,8 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
             raise ValueError("provider-expanded read has no unique same-split, same-source writer")
         source_ref = record.get("source_ref") or {}
         receipts = [receipt for receipt in source_ref.get("provider_expanded_read_contexts", [])
-                    if isinstance(receipt, dict) and receipt.get("schema") == "natlang.provider-expanded-read-context/2"
+                    if isinstance(receipt, dict) and receipt.get("schema") in {
+                        "natlang.provider-expanded-read-context/2", "natlang.provider-expanded-read-context/3"}
                     and receipt.get("origin") == "same-run-producer" and receipt.get("block", {}).get("id") == block_id]
         if len(receipts) != 1:
             raise ValueError("context-only read lacks one hash-bound provider receipt")
@@ -1029,56 +1083,8 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                                  receipt.get("source_response_sha256"))
         source_binding_present = any(value is not None for value in source_binding_fields)
         writer_source_class = receipt.get("writer_source_class")
-        writer_source_valid = (
-            writer_source_class in (None, "modern-typed-text-result")
-            and write.get("producer") == "text-marker-emulation"
-            and write.get("source_kind") == "typed-text-result"
-        ) or (
-            writer_source_class == "legacy-text-marker-standin-eval-code"
-            and write.get("emulation_version") == "text-marker-standin/2"
-            and write.get("marker_context") == "eval-code"
-            and write.get("learned_vectors") is False
-        ) or (
-            writer_source_class == "legacy-text-marker-standin-return-result"
-            and write.get("producer") == "text-marker-emulation"
-            and write.get("source_kind") == "typed-text-result"
-            and write.get("source") == "return_result"
-            and write.get("marker_context") == "return-result"
-            and isinstance(receipt.get("writer_witness"), dict)
-            and receipt["writer_witness"].get("kind") == "raw-return-result-value-equals-expanded-body"
-            and receipt["writer_witness"].get("source") == "return_result"
-            and receipt["writer_witness"].get("host_result_call_id") == write.get("call_id")
-            and receipt["writer_witness"].get("host_result_type") == block.get("type")
-            and _sha256_hex(receipt["writer_witness"].get("host_result_value_sha256"))
-            and _sha256_hex(receipt["writer_witness"].get("raw_response_sha256"))
-        ) or (
-            writer_source_class == "legacy-text-marker-standin-eval-finish"
-            and write.get("producer") == "text-marker-emulation"
-            and write.get("source_kind") == "typed-text-result"
-            and write.get("source") == "eval-finish"
-            and write.get("marker_context") == "return-result"
-            and isinstance(receipt.get("writer_witness"), dict)
-            and receipt["writer_witness"].get("kind") == "completed-eval-finish-host-reference"
-            and receipt["writer_witness"].get("source") == "eval-finish"
-            and receipt["writer_witness"].get("host_result_call_id") == write.get("call_id")
-            and receipt["writer_witness"].get("host_result_type") == block.get("type")
-            and _sha256_hex(receipt["writer_witness"].get("host_result_value_sha256"))
-        ) or (
-            writer_source_class == "legacy-text-marker-standin-eval-return"
-            and write.get("producer") == "text-marker-emulation"
-            and write.get("source_kind") == "typed-text-result"
-            and write.get("source") == "eval-return"
-            and write.get("marker_context") == "return-result"
-            and isinstance(receipt.get("writer_witness"), dict)
-            and receipt["writer_witness"].get("kind") == "completed-eval-return-host-reference"
-            and receipt["writer_witness"].get("source") == "eval-return"
-            and receipt["writer_witness"].get("host_result_call_id") == write.get("call_id")
-            and receipt["writer_witness"].get("host_result_type") == block.get("type")
-            and receipt["writer_witness"].get("completion_status") == "done"
-            and receipt["writer_witness"].get("completion_source") == "execution_graph"
-            and receipt["writer_witness"].get("completion_detail") == f"\uE000{block_id}\uE001"
-            and _sha256_hex(receipt["writer_witness"].get("host_result_value_sha256"))
-        )
+        writer_source_valid = _provider_expanded_writer_source_valid(
+            writer_source_class, write, receipt.get("writer_witness"), block.get("type"))
         repeated_pairs = receipt.get("additional_read_turn_pairs") or []
         required_hashes = (body_sha256, item.get("source_row_sha256"), item.get("trace_sha256"),
                            item.get("transport_provenance_sha256"), item.get("raw_request_sha256"),
@@ -1089,23 +1095,56 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
         if source_binding_present:
             required_hashes += (receipt.get("source_action_target_sha256"), receipt.get("source_request_sha256"),
                                 receipt.get("source_response_sha256"))
+        def valid_repeated_pair(pair):
+            if not isinstance(pair, dict):
+                return False
+            pair_read, pair_turn = pair.get("block_read"), pair.get("model_turn")
+            if not isinstance(pair_read, dict) or not isinstance(pair_turn, dict):
+                return False
+            schema = receipt.get("schema")
+            # /3 binds each recurrence observation to its own exact producer. /2
+            # intentionally retains its historical shared top-level writer binding.
+            if schema == "natlang.provider-expanded-read-context/3":
+                pair_write = pair.get("producer_write")
+                pair_source_class = pair.get("writer_source_class")
+                pair_witness = pair.get("writer_witness")
+            else:
+                pair_write = write
+                pair_source_class = writer_source_class
+                pair_witness = receipt.get("writer_witness")
+            if not isinstance(pair_write, dict):
+                return False
+            same_call_prior = pair_write.get("call_id") != reader_invocation or (
+                receipt.get("writer_target_selected") is False
+                and type(pair_write.get("seq")) is int
+                and type(pair_read.get("seq")) is int
+                and pair_write["seq"] < pair_read["seq"])
+            return (pair_read.get("kind") == "block_read"
+                and pair_turn.get("kind") == "model_turn"
+                and _nonempty_string(pair_read.get("node"))
+                and _nonempty_string(pair_turn.get("node"))
+                and pair_read.get("turn") == pair_turn.get("node")
+                and pair_read.get("call_id") == reader_invocation
+                and pair_read.get("block") == block_id
+                and pair_turn.get("call_id") == reader_invocation
+                and pair_write.get("kind") == "block_write"
+                and pair_write.get("block") == block_id
+                and pair_write.get("result_type") == block.get("type")
+                and pair_write.get("truncated") is False
+                and pair_write.get("text_body_sha256") == body_sha256
+                and _nonempty_string(pair_write.get("node"))
+                and _nonempty_string(pair_write.get("call_id"))
+                and same_call_prior
+                and _provider_expanded_writer_source_valid(pair_source_class, pair_write,
+                                                           pair_witness, block.get("type"))
+                and any(isinstance(inp, dict) and inp.get("node") == pair_write.get("node")
+                        and inp.get("block") == block_id for inp in pair_read.get("inputs", []))
+                and any(isinstance(inp, dict) and inp.get("node") == pair_read.get("node")
+                        and inp.get("port") == "read" and inp.get("block") == block_id
+                        for inp in pair_turn.get("inputs", [])))
+
         valid_repeated_pairs = isinstance(repeated_pairs, list) and all(
-            isinstance(pair, dict) and isinstance(pair.get("block_read"), dict)
-            and isinstance(pair.get("model_turn"), dict)
-            and pair["block_read"].get("kind") == "block_read"
-            and pair["model_turn"].get("kind") == "model_turn"
-            and _nonempty_string(pair["block_read"].get("node"))
-            and _nonempty_string(pair["model_turn"].get("node"))
-            and pair["block_read"].get("turn") == pair["model_turn"].get("node")
-            and pair["block_read"].get("call_id") == reader_invocation
-            and pair["block_read"].get("block") == block_id
-            and pair["model_turn"].get("call_id") == reader_invocation
-            and any(isinstance(inp, dict) and inp.get("node") == write.get("node")
-                    and inp.get("block") == block_id for inp in pair["block_read"].get("inputs", []))
-            and any(isinstance(inp, dict) and inp.get("node") == pair["block_read"].get("node")
-                    and inp.get("port") == "read" and inp.get("block") == block_id
-                    for inp in pair["model_turn"].get("inputs", []))
-            for pair in repeated_pairs)
+            valid_repeated_pair(pair) for pair in repeated_pairs)
         if (receipt.get("invocation_id") != reader_invocation
                 or receipt.get("source_row_sha256") != reader_source_row
                 or item.get("trace_sha256") != ((record.get("provenance") or {}).get("trace_sha256"))
@@ -1145,7 +1184,8 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 or any(pair.get("block_read", {}).get("call_id") != reader_invocation
                        or pair.get("block_read", {}).get("block") != block_id
                        or pair.get("model_turn", {}).get("call_id") != reader_invocation
-                       or not any(inp.get("node") == write.get("node") and inp.get("block") == block_id
+                       or not any(inp.get("node") == (pair.get("producer_write") or write).get("node") and
+                                  inp.get("block") == block_id
                                   for inp in pair.get("block_read", {}).get("inputs", []))
                        or not any(inp.get("node") == pair.get("block_read", {}).get("node")
                                   and inp.get("port") == "read" and inp.get("block") == block_id

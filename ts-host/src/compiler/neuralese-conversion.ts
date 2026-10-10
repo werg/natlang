@@ -557,6 +557,37 @@ const LISTING_LINE = /^(\w+): ([^=\n]*?) = (.*<<cut off: [^\n]*)$/gm;
 const OPENING_CALL = /^You are inside this call: (\w+)\(/;
 
 /** The record's parts and soft pieces, with site counts. */
+function providerContextWriterSourceValid(writer: Record<string, unknown> | null | undefined, sourceClass: unknown,
+  witness: Record<string, unknown> | null | undefined, blockType: unknown, blockId: string): boolean {
+  return sourceClass === 'modern-typed-text-result' ?
+    writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' :
+    sourceClass === 'legacy-text-marker-standin-eval-code' ?
+      writer?.emulation_version === 'text-marker-standin/2' && writer.marker_context === 'eval-code' &&
+        writer.learned_vectors === false :
+    sourceClass === 'legacy-text-marker-standin-return-result' ?
+      writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' &&
+        writer.source === 'return_result' && writer.marker_context === 'return-result' &&
+        witness?.kind === 'raw-return-result-value-equals-expanded-body' && witness.source === 'return_result' &&
+        witness.host_result_call_id === writer.call_id && witness.host_result_type === blockType &&
+        witness.raw_response_sha256 !== null && /^[0-9a-f]{64}$/.test(String(witness.raw_response_sha256)) &&
+        /^[0-9a-f]{64}$/.test(String(witness.host_result_value_sha256)) :
+    sourceClass === 'legacy-text-marker-standin-eval-finish' ?
+      writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' &&
+        writer.source === 'eval-finish' && writer.marker_context === 'return-result' &&
+        witness?.kind === 'completed-eval-finish-host-reference' && witness.source === 'eval-finish' &&
+        witness.host_result_call_id === writer.call_id && witness.host_result_type === blockType &&
+        /^[0-9a-f]{64}$/.test(String(witness.host_result_value_sha256)) :
+    sourceClass === 'legacy-text-marker-standin-eval-return' ?
+      writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' &&
+        writer.source === 'eval-return' && writer.marker_context === 'return-result' &&
+        witness?.kind === 'completed-eval-return-host-reference' && witness.source === 'eval-return' &&
+        witness.host_result_call_id === writer.call_id && witness.host_result_type === blockType &&
+        witness.completion_status === 'done' && witness.completion_source === 'execution_graph' &&
+        witness.completion_detail === `\uE000${blockId}\uE001` &&
+        /^[0-9a-f]{64}$/.test(String(witness.host_result_value_sha256)) :
+    writer?.learned_vectors === false;
+}
+
 export function convertTrajectory<R extends { messages: Message[]; target?: Message }>(record: R, options: ConversionOptions = {}):
     { record: R & { neuralese_conversion: { version: string; sites: SiteCounts; soft_state_edges?: unknown[] } }; pieces: SoftPiece[] } {
   const registered = options.pieces ?? promptPieces();
@@ -603,7 +634,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         protectedTargetSidecarEquivalent(record as Record<string, unknown>, receipt, sourceActionDigest) ||
         providerActionNormalizationEquivalent(record as Record<string, unknown>, receipt, sourceActionDigest) ||
         (derivedSourceActionMatches && receipt.source_action_target_sha256 === derivedTarget?.original_target_sha256);
-      if (!['natlang.provider-expanded-read-context/1', 'natlang.provider-expanded-read-context/2'].includes(String(receipt.schema)) ||
+      if (!['natlang.provider-expanded-read-context/1', 'natlang.provider-expanded-read-context/2',
+            'natlang.provider-expanded-read-context/3'].includes(String(receipt.schema)) ||
           receipt.invocation_id !== invocation ||
           receipt.source_row_sha256 !== sourceRef?.source_row_sha256 ||
           receipt.trace_sha256 !== ((record as Record<string, unknown>).provenance as Record<string, unknown> | undefined)?.trace_sha256 ||
@@ -634,7 +666,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
           !/^[0-9a-f]{64}$/.test(String(receipt.raw_request_sha256)) ||
           !/^[0-9a-f]{64}$/.test(String(receipt.rendered_request_sha256)))
         throw new Error(`provider-expanded context graph or transport binding mismatch for ${id}`);
-      if (receipt.schema === 'natlang.provider-expanded-read-context/2' &&
+      if (['natlang.provider-expanded-read-context/2', 'natlang.provider-expanded-read-context/3'].includes(String(receipt.schema)) &&
           (receipt.origin !== 'same-run-producer' || receipt.writer_target_selected !== false ||
           !['modern-typed-text-result', 'legacy-text-marker-standin-eval-code',
              'legacy-text-marker-standin-return-result', 'legacy-text-marker-standin-eval-finish',
@@ -656,39 +688,9 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         const readInputs = Array.isArray(read.inputs) ? read.inputs as Record<string, unknown>[] : [];
         const witness = receipt.writer_witness as Record<string, unknown> | null;
         // Trace seq is invocation-local. The explicit writer node on this read's input is the cross-call causal link.
-        const writerSourceValid = receipt.schema === 'natlang.provider-expanded-read-context/2' &&
-          receipt.writer_source_class === 'modern-typed-text-result' ?
-          writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' :
-          receipt.schema === 'natlang.provider-expanded-read-context/2' &&
-          receipt.writer_source_class === 'legacy-text-marker-standin-eval-code' ?
-            writer?.emulation_version === 'text-marker-standin/2' && writer.marker_context === 'eval-code' &&
-              writer.learned_vectors === false :
-          receipt.schema === 'natlang.provider-expanded-read-context/2' &&
-          receipt.writer_source_class === 'legacy-text-marker-standin-return-result' ?
-            writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' &&
-              writer.source === 'return_result' && writer.marker_context === 'return-result' &&
-              witness?.kind === 'raw-return-result-value-equals-expanded-body' &&
-              witness.source === 'return_result' && witness.host_result_call_id === writer.call_id &&
-              witness.host_result_type === block.type && witness.raw_response_sha256 !== null &&
-              /^[0-9a-f]{64}$/.test(String(witness.raw_response_sha256)) &&
-              /^[0-9a-f]{64}$/.test(String(witness.host_result_value_sha256)) :
-          receipt.schema === 'natlang.provider-expanded-read-context/2' &&
-          receipt.writer_source_class === 'legacy-text-marker-standin-eval-finish' ?
-            writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' &&
-              writer.source === 'eval-finish' && writer.marker_context === 'return-result' &&
-              witness?.kind === 'completed-eval-finish-host-reference' && witness.source === 'eval-finish' &&
-              witness.host_result_call_id === writer.call_id && witness.host_result_type === block.type &&
-              /^[0-9a-f]{64}$/.test(String(witness.host_result_value_sha256)) :
-          receipt.schema === 'natlang.provider-expanded-read-context/2' &&
-          receipt.writer_source_class === 'legacy-text-marker-standin-eval-return' ?
-            writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' &&
-              writer.source === 'eval-return' && writer.marker_context === 'return-result' &&
-              witness?.kind === 'completed-eval-return-host-reference' && witness.source === 'eval-return' &&
-              witness.host_result_call_id === writer.call_id && witness.host_result_type === block.type &&
-              witness.completion_status === 'done' && witness.completion_source === 'execution_graph' &&
-              witness.completion_detail === `\uE000${id}\uE001` &&
-              /^[0-9a-f]{64}$/.test(String(witness.host_result_value_sha256)) :
-          writer?.learned_vectors === false;
+        const writerSourceValid = ['natlang.provider-expanded-read-context/2', 'natlang.provider-expanded-read-context/3']
+          .includes(String(receipt.schema)) &&
+          providerContextWriterSourceValid(writer, receipt.writer_source_class, witness, block.type, id);
         const sameInvocationPriorContext = writer?.call_id === invocation && receipt.writer_target_selected === false &&
           typeof writer.seq === 'number' && Number.isSafeInteger(writer.seq) && typeof read.seq === 'number' &&
           Number.isSafeInteger(read.seq) && writer.seq < read.seq;
@@ -698,18 +700,32 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
             writer.truncated !== false || !writerSourceValid || writer.result_type !== block.type ||
             writer.text_body_sha256 !== block.body_sha256)
           throw new Error(`provider-expanded producer context lacks an earlier writer: ${id}`);
-        if (receipt.schema === 'natlang.provider-expanded-read-context/2') {
+        if (receipt.schema === 'natlang.provider-expanded-read-context/2' ||
+            receipt.schema === 'natlang.provider-expanded-read-context/3') {
           const pairs = receipt.additional_read_turn_pairs ?? [];
           if (!Array.isArray(pairs) || pairs.some(value => {
             if (!value || typeof value !== 'object') return true;
             const pair = value as Record<string, unknown>;
             const pairRead = pair.block_read as Record<string, unknown> | undefined;
             const pairTurn = pair.model_turn as Record<string, unknown> | undefined;
+            const pairWriter = receipt.schema === 'natlang.provider-expanded-read-context/3' ?
+              pair.producer_write as Record<string, unknown> | undefined : writer;
+            const pairWriterClass = receipt.schema === 'natlang.provider-expanded-read-context/3' ?
+              pair.writer_source_class : receipt.writer_source_class;
+            const pairWitness = receipt.schema === 'natlang.provider-expanded-read-context/3' ?
+              pair.writer_witness as Record<string, unknown> | undefined : witness;
             const pairInputs = Array.isArray(pairRead?.inputs) ? pairRead.inputs as Record<string, unknown>[] : [];
             const turnInputs = Array.isArray(pairTurn?.inputs) ? pairTurn.inputs as Record<string, unknown>[] : [];
+            const pairPrior = pairWriter?.call_id !== invocation || (receipt.writer_target_selected === false &&
+              typeof pairWriter?.seq === 'number' && Number.isSafeInteger(pairWriter.seq) &&
+              typeof pairRead?.seq === 'number' && Number.isSafeInteger(pairRead.seq) && pairWriter.seq < pairRead.seq);
             return !pairRead || pairRead.kind !== 'block_read' || pairRead.call_id !== invocation ||
               pairRead.block !== id || typeof pairRead.node !== 'string' ||
-              !pairInputs.some(input => input.node === writer.node && input.block === id) ||
+              !pairWriter || pairWriter.kind !== 'block_write' || pairWriter.block !== id ||
+              typeof pairWriter.node !== 'string' || !pairPrior || pairWriter.truncated !== false ||
+              pairWriter.result_type !== block.type || pairWriter.text_body_sha256 !== block.body_sha256 ||
+              !providerContextWriterSourceValid(pairWriter, pairWriterClass, pairWitness, block.type, id) ||
+              !pairInputs.some(input => input.node === pairWriter.node && input.block === id) ||
               !pairTurn || pairTurn.kind !== 'model_turn' || pairTurn.call_id !== invocation ||
               !turnInputs.some(input => input.node === pairRead.node && input.port === 'read' && input.block === id);
           })) throw new Error(`provider-expanded context has an invalid repeated read/turn binding: ${id}`);

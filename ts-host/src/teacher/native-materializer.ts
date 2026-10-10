@@ -977,7 +977,6 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
     const readoutMatch = !!readout && readout.read_body_id === blockId && readout.read_source_sha256 === block.body_sha256 &&
       readout.schema === 'natlang.text-template-readout/1' && readout.call === 'return_result' &&
       readout.value === 'decode' && readout.value_type === 'string';
-    const readInputs = Array.isArray(primaryPair.read.inputs) ? primaryPair.read.inputs as Dict[] : [];
     // Sequence numbers are scoped to each invocation. The exact block input edge into this read is the causal
     // proof across invocations; comparing writer/read seq values from different calls would reject valid links.
     const legacyResultWitness = (event: Dict): { writerSourceClass: string; witness: Dict } | undefined => {
@@ -1077,16 +1076,24 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
         return 'legacy-text-marker-standin-eval-code';
       return undefined;
     };
-    const writers = graph.filter(event => event.kind === 'block_write' && event.block === blockId &&
-      typeof event.node === 'string' && readInputs.some(input => input.node === event.node && input.block === blockId) &&
-      event.truncated === false && writerSourceClass(event) !== undefined && event.result_type === block.type &&
-      event.text_body_sha256 === block.body_sha256);
+    const pairWriters = orderedReadTurnPairs.map(pair => {
+      const inputs = Array.isArray(pair.read.inputs) ? pair.read.inputs as Dict[] : [];
+      const candidates = graph.filter(event => event.kind === 'block_write' && event.block === blockId &&
+        typeof event.node === 'string' && inputs.some(input => input.node === event.node && input.block === blockId) &&
+        event.truncated === false && writerSourceClass(event) !== undefined && event.result_type === block.type &&
+        event.text_body_sha256 === block.body_sha256 &&
+        (event.call_id !== invocationId || Number.isSafeInteger(event.seq) && Number.isSafeInteger(pair.read.seq) &&
+          Number(event.seq) < Number(pair.read.seq)));
+      return candidates.length === 1 ? candidates[0] : undefined;
+    });
+    const writers = pairWriters.length && pairWriters.every((writer): writer is Dict => !!writer) ? pairWriters : [];
+    const primaryWriter = writers[0];
     const origin = readoutMatch && definition.length === 1 && visibleCount <= 1 ? 'configured-function-definition' :
-      writers.length === 1 && visibleCount >= 1 ? 'same-run-producer' : undefined;
+      writers.length === orderedReadTurnPairs.length && visibleCount >= 1 ? 'same-run-producer' : undefined;
     if (!origin || (origin === 'same-run-producer' && visibleCount < 1)) continue;
     const invocationLedger = Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger as Dict[] : [];
     const invocationEntry = invocationLedger.find(item => item.invocation_id === invocationId);
-    receipts.push({ schema: origin === 'same-run-producer' ? 'natlang.provider-expanded-read-context/2' :
+    receipts.push({ schema: origin === 'same-run-producer' ? 'natlang.provider-expanded-read-context/3' :
         'natlang.provider-expanded-read-context/1', invocation_id: invocationId,
       parent_invocation_id: invocationEntry?.parent_invocation_id ?? null,
       source_row_sha256: sourceRowSha256, trace_sha256: row.provenance.trace_sha256,
@@ -1100,14 +1107,20 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
       definition: definition.length === 1 ? structuredClone(definition[0]!.definition) : null,
       signature: definition.length === 1 ? definition[0]!.signature ?? null : null,
       block_read: structuredClone(primaryPair.read), model_turn: structuredClone(primaryPair.turn),
-      ...(orderedReadTurnPairs.length > 1 ? { additional_read_turn_pairs: orderedReadTurnPairs.slice(1).map(pair => ({
-        block_read: structuredClone(pair.read), model_turn: structuredClone(pair.turn) })) } : {}),
+      ...(orderedReadTurnPairs.length > 1 ? { additional_read_turn_pairs: orderedReadTurnPairs.slice(1).map((pair, index) => {
+        if (origin !== 'same-run-producer')
+          return { block_read: structuredClone(pair.read), model_turn: structuredClone(pair.turn) };
+        const writer = writers[index + 1]!;
+        return { block_read: structuredClone(pair.read), model_turn: structuredClone(pair.turn),
+          producer_write: structuredClone(writer), writer_source_class: writerSourceClass(writer),
+          writer_witness: legacyResultWitness(writer)?.witness ?? null };
+      }) } : {}),
       context_occurrences: visibleCount,
       serialized_literal_id_mentions: literalIdMentions,
-      producer_write: writers.length === 1 ? structuredClone(writers[0]) : null,
+      producer_write: primaryWriter ? structuredClone(primaryWriter) : null,
       ...(origin === 'same-run-producer' ? { writer_target_selected: false,
-        writer_source_class: writers.length === 1 ? writerSourceClass(writers[0]!) : null,
-        ...(writers.length === 1 ? { writer_witness: legacyResultWitness(writers[0]!)?.witness ?? null } : {}) } : {}),
+        writer_source_class: primaryWriter ? writerSourceClass(primaryWriter) : null,
+        ...(primaryWriter ? { writer_witness: legacyResultWitness(primaryWriter)?.witness ?? null } : {}) } : {}),
       learned_vectors: false, qualification_certificate: false, training_admission: false });
   }
   return receipts;
