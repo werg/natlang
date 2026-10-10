@@ -25067,6 +25067,19 @@
       "training_admission": false,
       "admission": "held-runtime-invocation-trace-and-quality-review-required",
       "notes": "V5childintegrityflagwaswronghashencodingcomparison.7/7childdeclaredsource_case_row_sha256 equalexactrawJSONLrowbytesexcludingLF(documentedproducercontract). Exactparentfile/ID/context/resultpinsverified17refs; no runtimeparent-childinvocationproof/admission."
+    },
+    {
+      "id": "pop-v12-teacher-distinct-payload-correction-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/data-lineage-20261002/storage-review-readonly-v1",
+      "include": [
+        "v12-teacher-correction.json"
+      ],
+      "split": "evidence-only",
+      "source_class": "storage-review-correction",
+      "training_admission": false,
+      "admission": "evidence-only",
+      "notes": "V12teacheractualc09424fd...8445878237B differsV13r2registered a55d1c9c...8445872885B. Sameinputs/differentbuilderoutputs notproofduplicate. Originalreviewwrongcitecorrected; uniqueV12retained."
     }
   ],
   "coverage_backlog": [

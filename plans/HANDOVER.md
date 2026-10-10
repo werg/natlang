@@ -10240,3 +10240,7 @@ V4's215/479direct program bindings reflected a filename search restricted to `so
 #### Native child hash interpretation corrected (V6)
 
 V5's seven child-row “integrity mismatches” were audit comparison errors: `source_case_row_sha256` hashes exact JSONL row bytes excluding the LF, as explicitly named by the producer's source visibility audit; the helper had compared canonicalized JSON instead. V6 independently verifies all7/7raw row hashes, exact source-file/parent-ID/context/result pins. No source data or runtime code fix is warranted. Registered V6 evidence supersedes that V5 interpretation; registry notes identify the correction. Remaining obligation is exact runtime parent-child invocation/trace qualification, not source-row migration. No admission granted. AuditSHA f84aab4ca1eafd7a24bc94b651cc58cccf87994af457572fb44f12f1c2c530bb.
+
+#### V12 teacher cleanup comparison resolved
+
+Independent hash confirms V12 teacher is distinct: 8,445,878,237B SHA c09424fda35f6bd25de5ad0a427e429304a38e5bc66625fbda6d42a1b25a4147. The already offloaded V13-r2 teacher is8,445,872,885B SHA a55d1c9cb51693ea8b4ea07eac9dee8226ae5fa84efacd4f08a3fbc971ff7252. Same13inputs/split-policy but different builder hashes; do not deduplicate by source identity. Original cleanup proposal's V12 SHA citation was wrong, now explicitly superseded by immutable `v12-teacher-correction.json` (SHA6b90104362a8d981942557206b660ba6daba8c5ec2bc9260f134c7f22c5dd061). V12 retained, no data loss.
