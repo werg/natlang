@@ -27248,6 +27248,22 @@
       "training_admission": false,
       "admission": "held-unqualified-alignment-or-source-quality-evidence",
       "notes": "Closed53-case Luna V58 original outputs, traces, queues and journals.33 accepted exact map/files,20 differing maps. Scope errors and semantic differences retained; no automatic negative preference label or admission."
+    },
+    {
+      "id": "free-provider-luna-v58-child-request-visibility-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-child-request-visibility-supplement-v1",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Immutable correction to V58 final v2 visibility claim.877 nested child rendered request transcripts saved with raw/request/response hashes.361/394 source items exact literal in child request;18 additional source-matching capture snapshots;15 unresolved. Saved rendered requests do not imply stored original byte wire. Original final audit preserved."
     }
   ],
   "coverage_backlog": [

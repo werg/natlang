@@ -10427,3 +10427,7 @@ V25 is queued behind V23/V24 through the shared Google quota lock, with 512 full
 ### Pop continuation 2026-10-10 21:01 UTC
 
 V58 closed all53 programs:33 exact-map/file successes,20 rejected,30/394 differing source decisions. Eighteen scope failure events across12 cases are being diagnosed separately; no runtime cause asserted yet. New five-worker filtered V21 full-abstract generation started after all V58 worker accounting completed. Approved plan SHA d1704ead4ffc2feec0724de46b2bf3b0d01400f7e1fcc09405d55f6f816b9e68, supervisor945340. V21 filtered V4 full-S1 closure packet is ready and sent to DGX owner. V6 diagnostic correction confirms the token embedding table is fixed; only transformer layers move. No frozen embedding teacher is needed to correct nonexistent target-table drift. Original diagnosis preserved with separate superseding correction.
+
+### V58 visibility audit correction, 2026-10-10 21:06 UTC
+
+The final v2 audit incorrectly claimed nested child requests were absent. Applying the V55 matcher found877/877 saved child rendered request transcripts with request/response hashes:361 source items have exact state text in child requests,18 more have exact capture snapshots,15 remain unresolved. The separate immutable visibility supplement supersedes only that claim; original outcome counts remain33/53 accepted with30 differing decisions. Saved request text is stronger than a capture snapshot but is not stored original byte wire. All artifacts remain held.
