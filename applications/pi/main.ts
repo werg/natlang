@@ -25,7 +25,11 @@
  *   --planning MODE                         the system-entry plan and the context estimate
  *   --shaping MODE                          with --companion: how long tool outputs are shortened (crisp: head and
  *                                           tail; nl: by judgment)
- *   --pure                                  nl for every point not set explicitly (with --companion, shaping too)
+ *   --hints MODE                            with --companion: what the agent's streamed reasoning names that the
+ *                                           companion looks up before the turn ends (crisp: written paths and quoted
+ *                                           names; nl: hints.nl judges)
+ *   --pure                                  nl for every point not set explicitly (with --companion, shaping and hints
+ *                                           too)
  *   --companion                             run the companion beside the agent (COMPANION.md): background briefings
  *   --executor-context N                    the executor's context budget in tokens (default: natlang's, sized from
  *                                           the window the executor's server reports)
@@ -57,7 +61,7 @@ import { openPi, runPiTask, type Implementations, type RunResult } from './index
 const context = BACKGROUND_CONTEXT;
 const VALUED = ['--executor-context', '--agent-endpoint', '--agent-model', '--agent-key-env', '--context-window', '--max-tokens', '--thinking', '--cwd',
   '--agent-transport', '--agent-reader',
-  '--session', '--context', '--scheduler', '--admission', '--planning', '--shaping', '--out', '--minutes', '--in', '--repos'];
+  '--session', '--context', '--scheduler', '--admission', '--planning', '--shaping', '--hints', '--out', '--minutes', '--in', '--repos'];
 const option = (args: string[], name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
 const taskDirectory = ['../../tasks', '../../pi/tasks', './tasks'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
@@ -146,7 +150,11 @@ export async function runTask(target: TargetContext, args: string[], task: strin
   let opened: Harness | undefined;
   // The companion (COMPANION.md) watches the agent's work in the background and briefs it each request.
   if (args.includes('--companion')) registry.install(companion(natlang, { harness: () => opened!,
-    shaping: mode(args, 'shaping'),
+    shaping: mode(args, 'shaping'), hints: mode(args, 'hints'),
+    onSpeculation: event => {
+      if (event.type === 'commit' && event.notes.length + event.files.length) log(`  [companion] ${event.job}: ${[...event.notes, ...event.files].join('; ').slice(0, 200)}`);
+      if (event.type === 'discard' && event.jobs.length) log(`  [companion] discarded (${event.reason}): ${event.jobs.join(', ').slice(0, 200)}`);
+    },
     onReport: error => log(`  [companion] ${error instanceof Error ? error.message : String(error)}`) }));
   const harness = await openPi({
     storage: await openNodeSqliteStorage(sessionPath),

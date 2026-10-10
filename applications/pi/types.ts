@@ -607,3 +607,17 @@ export type OutputShape = {
   /** What the output as a whole says, including the parts left out, in one or two sentences. */
   gist: string;
 };
+
+/**
+ * What the agent's streamed reasoning and text name that it will probably need next (plans/STREAMING.md §2): workspace
+ * files (paths relative to the workspace, as written) and code symbols (bare names). Empty lists when nothing is named.
+ */
+export type StreamHints = { files: string[]; symbols: string[] };
+
+/**
+ * Help offered beside the user's draft while they type (plans/STREAMING.md §3), never sent unless the user takes it.
+ * `context`: something relevant the workspace or the conversation holds; `warning`: a problem with what the draft says
+ * (a file that does not exist, a request that conflicts with earlier work); `question`: what the agent would need
+ * clarified. `insert`: the text taking the offer adds to the draft (absent: the offer's text).
+ */
+export type DraftOffer = { kind: 'context' | 'warning' | 'question'; text: string; insert?: string };

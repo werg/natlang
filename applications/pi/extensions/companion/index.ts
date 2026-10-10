@@ -2,45 +2,36 @@
  * The companion (COMPANION.md): a second mind beside the agent. After each tool round it runs in the background as a
  * durable `pi.companion` task of the conversation: it learns the workspace files the agent touched and writes a
  * briefing, which the `companion` section shows in the agent's next request. The companion's judgment is natural
- * language (`observe.nl`, `observe/summarize.nl`); this file is the mechanism: documents, the task, the trigger and
+ * language (`observe.nl`, `summarize.nl`); this file is the mechanism: documents, the task, the trigger and
  * the section. Without this extension a conversation is today's harness.
  */
 import type { Context } from '@earendil-works/chord';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import type { AssistantMessage, Message, Models, ToolCall } from '@earendil-works/pi-ai';
 import { pluggable, pluggableMode, type NatlangRuntime, type PluggableSetting } from 'natlang:runtime';
-import { defineDoc } from '../../vendor/durable/src/documents.ts';
 import { GenerationTask } from '../../vendor/durable/src/harness/generation.ts';
 import { ToolTask } from '../../vendor/durable/src/harness/tool.ts';
 import { hook } from '../../vendor/durable/src/harness/define.ts';
 import type { Harness } from '../../vendor/durable/src/harness/harness.ts';
 import type { Extension, HookApi, ToolExecutionResult } from '../../vendor/durable/src/harness/types.ts';
 import { defineTask } from '../../vendor/durable/src/tasks.ts';
-import type { ConversationId, TaskRuntime } from '../../vendor/durable/src/types.ts';
-import type { ExecutionEnv } from '../../vendor/durable/src/env/index.ts';
-import { isAbsolutePath, relativePath, resolvePath } from '../../host/paths.ts';
+import type { ConversationId } from '../../vendor/durable/src/types.ts';
 import { ProviderDoc } from '../../vendor/durable/src/harness/provider.ts';
-import type { Briefing, FileKnowledge, FileSummary, Observation, OutputShape } from '../../types.ts';
-import { modelReader, transcriptText } from '../../host/natlang-provider.ts';
+import type { Briefing, Observation, OutputShape } from '../../types.ts';
+import { modelReader } from '../../host/natlang-provider.ts';
 import { forceView, ToolOutputs, VIEW_LIMIT, ViewIntents, viewIntent, type ViewDocs } from '../../host/views.ts';
+import { COMPANION_DECLARATION, CompanionDoc, CompanionFiles, companionService, renderMessage, workspacePath } from './workspace.ts';
+import { CompanionStream, hintsOf, type SpeculationEvent } from './stream.ts';
 import observe from './observe.nl';
 import shape from './shape.nl';
-
-/** The briefing shown to this conversation's agent, and the entry it was written after. */
-export const CompanionDoc = defineDoc<{ briefing?: Briefing; basis?: number }>({
-  kind: 'pi.companion', version: 1, scope: 'conversation', history: 'latest', fork: 'current', initial: () => ({}),
-});
-
-/** What the companion knows about workspace files, shared by every conversation of the session. */
-export const CompanionFiles = defineDoc<{ files: Record<string, FileKnowledge> }>({
-  kind: 'pi.companion.files', version: 1, scope: 'session', initial: () => ({ files: {} }),
-});
 
 /**
  * The full text of a long tool output, by tool call ID (its recall handle): the value input of the output's stored view
  * call (host/views.ts).
  */
 export const CompanionOutputs = ToolOutputs;
+
+export { COMPANION_DECLARATION, CompanionDoc, CompanionFiles, hintsOf, type SpeculationEvent };
 
 const TASK = 'pi.companion';
 /**
@@ -50,46 +41,8 @@ const TASK = 'pi.companion';
 const SHAPE_LIMIT = 6_000;
 const SHAPE_HEAD = 2_500;
 const SHAPE_TAIL = 2_000;
-/** Lines a search returns. */
-const SEARCH_LINES = 40;
-/** Characters of grep's output a search reads. */
-const SEARCH_BYTES = 4 << 20;
 /** Messages of the transcript tail an observation shows. */
 const RECENT_MESSAGES = 16;
-/** Characters of a file the companion reads. */
-const FILE_LIMIT = 24_000;
-
-type Runtime = TaskRuntime<{ basis?: number }, { phase: 'observe' }, null, object>;
-
-export const COMPANION_DECLARATION = `/** The workspace as the companion sees it. Paths are relative to the workspace. */
-/** A file's current hash and text (cut at ${FILE_LIMIT} characters), and what you know about this version (null when you know nothing about it, or only about an older version). Null when the file does not exist. */
-export function file(path: string): Promise<{ hash: string; text: string; known: FileKnowledge | null } | null>;
-/** Remember summary as what you know about path, as file(path) last showed it. */
-export function remember(path: string, summary: FileSummary): Promise<void>;
-/** Lines matching the regular expression pattern (grep -E syntax) in the workspace's text files, as "path:line:text", at most ${SEARCH_LINES}; glob limits the files (for example "*.py"). Hidden directories are skipped. */
-export function search(pattern: string, glob?: string): Promise<string[]>;
-/** The entries of a workspace directory ("." for the root), directories with a trailing "/". Hidden entries are skipped. */
-export function list(directory: string): Promise<string[]>;`;
-
-/** A file version's identity: the first 16 hex digits of its text's SHA-256. */
-async function hashOf(text: string): Promise<string> {
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
-  return Array.from(digest.subarray(0, 8), byte => byte.toString(16).padStart(2, '0')).join('');
-}
-
-/** A message part as the transcript reads it; Neuralese blocks (types.ts NeuraleseContent) are not in pi-ai's union. */
-type Part = { type: string; text?: string; id?: string };
-
-/** The text of a message, compact: tool calls with their arguments, results cut; a Neuralese block named by its ID. */
-function render(message: Message): string {
-  const cut = (text: string, limit: number) => text.length > limit ? `${text.slice(0, limit)} …[${text.length - limit} more chars]` : text;
-  if (message.role === 'user') return `USER: ${cut(typeof message.content === 'string' ? message.content : (message.content as Part[]).map(transcriptText).join(''), 2000)}`;
-  if (message.role === 'assistant') return (message.content as Part[]).map(part => part.type === 'text' || part.type === 'neuralese' ?
-    `AGENT: ${cut(transcriptText(part), 1500)}` : part.type === 'toolCall' ? `AGENT CALLS ${(part as ToolCall).name} ` +
-    `${cut(JSON.stringify((part as ToolCall).arguments), 400)}` : '').filter(Boolean).join('\n');
-  if (message.role === 'toolResult') return `RESULT of ${message.toolName}${message.isError ? ' (error)' : ''}: ${cut((message.content as Part[]).map(transcriptText).join(''), 800)}`;
-  return '';
-}
 
 /** Workspace paths the tool calls of `messages` read, edited or wrote. */
 function touched(messages: readonly Message[], cwd: string): string[] {
@@ -100,72 +53,11 @@ function touched(messages: readonly Message[], cwd: string): string[] {
       if (part.type !== 'toolCall' || !['read', 'edit', 'write'].includes(part.name)) continue;
       const path = (part.arguments as { path?: unknown }).path;
       if (typeof path !== 'string' || !path) continue;
-      const local = relativePath(cwd, resolvePath(cwd, path));
-      if (local && !local.startsWith('..') && !isAbsolutePath(local) && !paths.includes(local)) paths.push(local);
+      const local = workspacePath(cwd, path);
+      if (local && !paths.includes(local)) paths.push(local);
     }
   }
   return paths;
-}
-
-/** The value of an environment result, or its error thrown. */
-function valueOf<T>(result: { ok: true; value: T } | { ok: false; error: unknown }): T {
-  if (!result.ok) throw result.error;
-  return result.value;
-}
-
-/**
- * The companion's view of the workspace: the conversation's execution environment (`env`, rooted at `cwd`), so it reads
- * the files the agent's tools change and searches them with the environment's own grep, on any host. Without an
- * environment (the agent's tools then have none either) no file exists and searches find nothing.
- */
-function companionService(runtime: Runtime, context: Context, env: ExecutionEnv | undefined, cwd: string) {
-  // The version of each file this run showed the model: what it summarizes is that version.
-  const shown = new Map<string, string>();
-  /** `path` (relative to the workspace) as an absolute path inside it, or undefined when it leaves the workspace. */
-  const inside = (path: string) => {
-    const absolute = resolvePath(cwd, path), local = relativePath(cwd, absolute);
-    return local.startsWith('..') || isAbsolutePath(local) ? undefined : absolute;
-  };
-  return {
-    async file(path: string): Promise<{ hash: string; text: string; known: FileKnowledge | null } | null> {
-      if (!env) return null;
-      const absolute = resolvePath(cwd, path);
-      const info = await env.fileInfo(absolute, context);
-      if (!info.ok || info.value.kind !== 'file') return null;
-      const full = valueOf(await env.readTextFile(absolute, context));
-      const hash = await hashOf(full);
-      shown.set(path, hash);
-      const known = (await runtime.snapshot(CompanionFiles, context))?.files[path];
-      const text = full.length > FILE_LIMIT ? `${full.slice(0, FILE_LIMIT)}\n[cut: ${full.length - FILE_LIMIT} more characters]` : full;
-      return { hash, text, known: known?.hash === hash ? known : null };
-    },
-    async search(pattern: string, glob?: string): Promise<string[]> {
-      // grep itself, run by the environment without a shell. What every grep the environments run understands: no -I
-      // (a binary match is reported on stderr, which is not read), and hidden directories as `.?*`, which leaves out
-      // the searched directory `.` itself.
-      if (!env) return [];
-      const args = ['grep', '-rnE', '--exclude-dir=.?*', '-m', '5', ...(glob ? [`--include=${glob}`] : []), '-e', pattern, '.'];
-      let output = '';
-      const ran = await env.exec(args, { cwd, timeout: 10, onOutput: (text, _context, info) => {
-        if (info.stream === 'stdout' && output.length < SEARCH_BYTES) output += text;
-      } }, context);
-      if (!ran.ok && ran.error.code !== 'timeout') return [];
-      return output.split('\n').filter(Boolean).slice(0, SEARCH_LINES).map(line => line.replace(/^\.\//, '').slice(0, 300));
-    },
-    async list(directory: string): Promise<string[]> {
-      const absolute = inside(directory);
-      if (absolute === undefined) throw new Error(`${directory} is outside the workspace`);
-      if (!env) throw new Error('No execution environment is configured');
-      return valueOf(await env.listDir(absolute, context)).filter(entry => !entry.name.startsWith('.'))
-        .map(entry => entry.kind === 'directory' ? `${entry.name}/` : entry.name).sort().slice(0, 200);
-    },
-    async remember(path: string, summary: FileSummary): Promise<void> {
-      const hash = shown.get(path);
-      if (hash === undefined) throw new Error(`remember(${JSON.stringify(path)}) needs file(${JSON.stringify(path)}) first: it remembers the version file showed you`);
-      const knowledge = JSON.parse(JSON.stringify({ path, hash, purpose: summary.purpose, symbols: summary.symbols, notes: summary.notes })) as FileKnowledge;
-      await runtime.commit(async tx => { (await tx.doc(CompanionFiles)).files[path] = knowledge as never; return undefined; }, context);
-    },
-  };
 }
 
 /**
@@ -216,6 +108,11 @@ export function briefingText(briefing: Briefing): string {
     ...list('Consider', briefing.suggestions)].join('\n');
 }
 
+/** What the companion looked up while the agent's last reply streamed, as the agent reads it. */
+export function researchText(notes: string[]): string {
+  return ['Looked up while you were writing your last reply:', ...notes.map(note => `- ${note}`)].join('\n');
+}
+
 export type CompanionOptions = {
   /** The opened Harness, for starting companion tasks from a hook (hooks have no commit). */
   harness(): Harness;
@@ -226,11 +123,21 @@ export type CompanionOptions = {
    * chooses the lines and says what the rest holds; `shadow`: both, the natural-language shape shown and the two compared.
    */
   shaping?: PluggableSetting;
+  /**
+   * Pluggable hot path: what the agent's streamed reasoning and text name that the companion looks up before the turn
+   * ends (stream.ts, plans/STREAMING.md §2). `crisp` (default): written paths and quoted names; `nl`: `hints.nl`
+   * judges; `shadow`: both, the natural-language hints used and the two compared.
+   */
+  hints?: PluggableSetting;
+  /** Called with each step of the companion's work on the live stream (stream.ts `SpeculationEvent`). */
+  onSpeculation?(event: SpeculationEvent): void;
 };
 
 /** The companion extension; its functions run on `natlang`. */
 export function companion(natlang: NatlangRuntime, options: CompanionOptions): Extension {
   const shaping = pluggableMode(options.shaping, 'crisp');
+  const stream = new CompanionStream({ natlang, harness: options.harness, hints: options.hints,
+    ...(options.onReport ? { onReport: options.onReport } : {}), ...(options.onSpeculation ? { onSpeculation: options.onSpeculation } : {}) });
   const task = defineTask<{ basis?: number }, { phase: 'observe' }, null, object>({
     name: TASK, version: 1, initial: () => ({ phase: 'observe' }),
     phases: {
@@ -243,8 +150,8 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
         const goal = [...messages].reverse().find(message => message.role === 'user');
         const recent = messages.slice(-RECENT_MESSAGES);
         const observation: Observation = JSON.parse(JSON.stringify({
-          goal: goal ? render(goal).replace(/^USER: /, '') : '',
-          recent: recent.map(render).filter(Boolean).join('\n'),
+          goal: goal ? renderMessage(goal).replace(/^USER: /, '') : '',
+          recent: recent.map(renderMessage).filter(Boolean).join('\n'),
           touched: touched(recent, cwd),
           previous: (await runtime.snapshot(CompanionDoc, runtime.conversationId, context))?.briefing ?? null,
           known: Object.values((await runtime.snapshot(CompanionFiles, context))?.files ?? {}).slice(-40),
@@ -252,7 +159,8 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
         let briefing: Briefing | undefined, failure: string | undefined;
         try {
           briefing = await natlang.run(() => observe(observation as never), {
-            services: { companion: companionService(runtime as Runtime, context, env, cwd) },
+            services: { companion: companionService(runtime, context, env, cwd, knowledge => runtime.commit(async tx => {
+              (await tx.doc(CompanionFiles)).files[knowledge.path] = knowledge as never; return undefined; }, context)) },
             serviceDeclarations: { companion: COMPANION_DECLARATION }, signal: runtime.signal,
             name: `${TASK}#${current.id}` }) as Briefing;
         } catch (error) {
@@ -349,8 +257,9 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
     sections: [{
       key: 'companion',
       async render(input, context) {
-        const briefing = (await input.read.snapshot(CompanionDoc, input.conversationId, context))?.briefing;
-        return briefing ? briefingText(briefing) : undefined;
+        const doc = await input.read.snapshot(CompanionDoc, input.conversationId, context);
+        const text = [doc?.briefing ? briefingText(doc.briefing) : '', doc?.research ? researchText(doc.research.notes) : ''].filter(Boolean);
+        return text.length ? text.join('\n') : undefined;
       },
     }],
     hooks: [hook(ToolTask, {
@@ -374,14 +283,20 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
       // view of the call's output (host/views.ts viewIntent, the harness bench's records.py intent()). Recorded for a
       // text reader too, so a conversation switched to a Neuralese reader can force the views of earlier calls;
       // forcing itself happens only for a Neuralese reader.
+      // The intent of a call that completed while the reply streamed was captured then (stream.ts); the terminal message
+      // confirms it, and settles the rest of the turn's speculative work.
       async afterResponse(message, api, context) {
+        const captured = await stream.settle(message, api.conversationId, api.taskId, context);
         const calls = message.content.filter((part): part is ToolCall => part.type === 'toolCall');
         if (!calls.length) return;
         const conversation = await options.harness().conversation(api.conversationId, context);
         await conversation?.commit(async tx => {
-          for (const call of calls) await tx.doc(ViewIntents, api.conversationId, call.id, { intent: viewIntent(message as AssistantMessage, call) });
+          for (const call of calls) await tx.doc(ViewIntents, api.conversationId, call.id,
+            { intent: captured.get(call.id) ?? viewIntent(message as AssistantMessage, call) });
         }, context);
       },
+      // The agent's reply as it streams: hints for early research and tool-call preparation (stream.ts).
+      onStream(event, attempt, api, context) { stream.observe(event, attempt, api, context); },
       // After every tool round: the agent has new information, and the companion catches up while it thinks.
       async afterTools(assistant, _results, api, context) { await start(api.conversationId, assistant as number, context); },
     })],
