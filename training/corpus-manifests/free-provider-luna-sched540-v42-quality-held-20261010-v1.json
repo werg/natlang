@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-sched540-v42-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v42-sched540-case12-quality-audit-v1",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 10319,
+      "sha256": "61137311259511c8be75e0f560ad5a6799374554276272351b15b00bdc2adf47"
+    }
+  ],
+  "bytes": 10319
+}
