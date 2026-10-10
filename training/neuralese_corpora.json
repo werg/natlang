@@ -27988,6 +27988,26 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "Corrective closed audit:388/416 exact invocation-bound states;28 program-level-only pending investigation.334 annotation matches,82 disagreements, all416 declared options. No admission or original wire-byte claim."
+    },
+    {
+      "id": "luna-annotation-folder-v63-visibility-correction-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v63-visibility-invocation-closure-v3",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Exact originating eval/toolcall/codeSHA and unique full state joins bind the28 previously unresolved items to saved childrequests;416/416 total request-backed. Preserve prior v1/v2; no original wire or admission claim."
+    },
+    {
+      "id": "luna-annotation-folder-v63-disagreements-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v63-disagreement-full-source-supplement-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "All82 disagreement complete sourceobjects, original annotations and returned outcomes preserved. Provisional candidates require rootreview; no automatic relabel, DPOnegative or trainingadmission."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-annotation-folder-v63-disagreements-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v63-disagreement-full-source-supplement-v1",
+  "files": [
+    {
+      "path": "disagreements.json",
+      "bytes": 383407,
+      "sha256": "c88264945fda693ac0d0e2cd0292633b7d9e5796b09e4fed0ec3fe04f1fca60a"
+    },
+    {
+      "path": "disagreements.md",
+      "bytes": 1797,
+      "sha256": "1e2df879a79f1052e30849901ee305faf376d5d716dbf5774590e555fbc8f66c"
+    }
+  ],
+  "bytes": 385204
+}

@@ -10510,6 +10510,10 @@ Root reviewed nine full PubMedQA states and held three forward strict-label sour
 
 Helper retracted its claim that static conversion does not consult canonical holds. Exact static manifests and source show unconditional filtering before label eligibility. V24 pins policy30 (zero intersections); V25 pins policy25 (zero intersections). Additive clarification receipts preserve existing evidence. V24 complete packet has54 programs406items920 native turns and all Pop harness/source checks pass; full-S1 closure pending from DGX.
 
-### Pop annotation V63 closeout, 2026-10-10 23:30 UTC
+### Pop annotation V63 closeout, 2026-10-10 23:28 UTC
 
 V63 closed104 programs416 items,44 accepted and334 annotation matches. All416 choices are typed valid; all104 saved maps equal returns and520 source folder files match. Current v2 audit proves388 states in exact child invocations;28 have only program-scope evidence and remain unresolved. V1 overcount preserved and superseded; shared request/capture lineage review continues.82 disagreements remain source/semantic review candidates, not automatic negatives. V64 automatically started with five workers. Google V27 at318of512; GPU V7 active35585of37888. All outputs remain held.
+
+### V63 exact child visibility closure, 2026-10-10 23:33 UTC
+
+Additive v3 receipt resolves28 previously unbound source states through saved child first requests, unique state identity, exact invocation parent and origin parent, parent eval tool_call_id and writtenCodeSha256. All416 items now have request-backed evidence; no sibling inference or original wire-byte claim. Prior v1/v2 preserved. Full82 disagreements pinned separately for source/semantic review. V64 continues; no source/training admission inferred.

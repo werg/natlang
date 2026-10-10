@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-annotation-folder-v63-visibility-correction-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v63-visibility-invocation-closure-v3",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 187421,
+      "sha256": "05d4d37ee0dfe66c9c3df4d7d9f7e8130bba9ef294e41438cde2369d248a972b"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 1108,
+      "sha256": "64324f8f3fd2209c901538ac471c760fd1a7a461983f734d9575196f29b2b9c0"
+    }
+  ],
+  "bytes": 188529
+}
