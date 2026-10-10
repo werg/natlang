@@ -43,18 +43,16 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
-import { createModels, createProvider, type AssistantMessage, type Models } from '@earendil-works/pi-ai';
-import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
-import { FileNeuraleseStore, NatlangRuntime, neuraleseServerModelTurn, openAICompatibleModelTurn, pluggableMode, type NeuraleseStore, type PluggableMode, type TargetContext } from '@natlang/node';
-import { declareReader, natlangApi, type AgentReader, type ModelDriver } from './host/natlang-provider.ts';
+import { FileNeuraleseStore, NatlangRuntime, pluggableMode, type NeuraleseStore, type PluggableMode, type TargetContext } from '@natlang/node';
+import { declareReader, type AgentReader } from './host/natlang-provider.ts';
+import { agentModels as agentModelsFor, type AgentModels } from './host/agent-models.ts';
+import { createEnvs, nodeCodingRegistry } from './host/node.ts';
 import { openNodeSqliteStorage } from './vendor/durable/src/storage/sqlite/node.ts';
-import type { EntryId } from './vendor/durable/src/types.ts';
-import { codingRegistry, createEnvs } from './extensions/index.ts';
 import { companion } from './extensions/companion/index.ts';
 import { agentSurface } from './surface.ts';
 import { replayFile } from './bench/replay.ts';
 import type { Harness } from './vendor/durable/src/harness/harness.ts';
-import { openPi, type Implementations } from './index.ts';
+import { openPi, runPiTask, type Implementations, type RunResult } from './index.ts';
 
 const context = BACKGROUND_CONTEXT;
 const VALUED = ['--executor-context', '--agent-endpoint', '--agent-model', '--agent-key-env', '--context-window', '--max-tokens', '--thinking', '--cwd',
@@ -76,12 +74,12 @@ function profileEndpoint(): { endpoint: string; model: string } | undefined {
 }
 
 /**
- * pi-ai models with one provider, "agent", serving the agent model: pi-ai's OpenAI-compatible provider, or with
- * `--agent-transport natlang` natlang's own transport, whose model declares its reader (`--agent-reader`, checked
- * against the server here). `store`: the runtime's Neuralese store, which a Neuralese server's blocks are archived in.
+ * pi-ai models with one provider, "agent", serving the agent model (host/agent-models.ts) as the flags name it:
+ * pi-ai's OpenAI-compatible provider, or with `--agent-transport natlang` natlang's own transport, whose model declares
+ * its reader (`--agent-reader`, checked against the server here). `store`: the runtime's Neuralese store, which a
+ * Neuralese server's blocks are archived in.
  */
-export async function agentModels(args: string[], launcher?: { endpoint: string; model: string }, store?: NeuraleseStore):
-    Promise<{ models: Models; ref: { provider: string; modelId: string } }> {
+export async function agentModels(args: string[], launcher?: { endpoint: string; model: string }, store?: NeuraleseStore): Promise<AgentModels> {
   // The launcher's own endpoint (the profile `natlang run --profile` selected) before the configured default profile.
   const profile = launcher ?? profileEndpoint();
   const endpoint = option(args, '--agent-endpoint') ?? process.env.PI_AGENT_ENDPOINT ?? profile?.endpoint;
@@ -89,40 +87,15 @@ export async function agentModels(args: string[], launcher?: { endpoint: string;
   if (!endpoint || !modelId) throw new Error('name the agent model: --agent-endpoint URL --agent-model ID');
   const keyVariable = option(args, '--agent-key-env');
   const apiKey = keyVariable ? process.env[keyVariable] : undefined;
-  const root = endpoint.replace(/\/+$/, '').replace(/\/v1$/, '');
-  const baseUrl = `${root}/v1`;
   const transport = option(args, '--agent-transport') ?? 'pi-ai';
   if (transport !== 'pi-ai' && transport !== 'natlang') throw new Error(`--agent-transport is pi-ai or natlang, not ${transport}`);
   if (transport !== 'natlang' && option(args, '--agent-reader')) throw new Error('--agent-reader needs --agent-transport natlang');
+  const root = endpoint.replace(/\/+$/, '').replace(/\/v1$/, '');
   const reader: AgentReader = transport === 'natlang' ? await declareReader(option(args, '--agent-reader') ?? 'text', root, { apiKey }) :
     { kind: 'text' };
-  // One natlang driver per thinking setting, sent as the template argument pi-ai's qwen-chat-template format sends; for a
-  // Neuralese server also one per owner (the conversation's provider session ID), whose blocks its requests hold.
-  const drivers = new Map<string, ModelDriver>();
-  const driver = (reasoning: boolean, owner?: string): ModelDriver => {
-    const settings = { endpoint: root, model: modelId, apiKey,
-      request: { chat_template_kwargs: { enable_thinking: reasoning, preserve_thinking: true } } };
-    const key = reader.kind === 'neuralese' ? `${reasoning}\0${owner ?? ''}` : String(reasoning);
-    if (!drivers.has(key)) drivers.set(key, reader.kind === 'neuralese' ?
-      neuraleseServerModelTurn({ ...settings, store, ...(owner ? { owner } : {}) }) : openAICompatibleModelTurn(settings));
-    return drivers.get(key)!;
-  };
-  const models = createModels();
-  models.setProvider(createProvider({
-    id: 'agent', name: 'Agent', baseUrl,
-    // pi-ai's OpenAI-compatible provider needs some key; the natlang transport sends one only when it is given (its
-    // drivers, and the view requests of host/views.ts, read it from here).
-    auth: { apiKey: { name: 'agent key', resolve: async () => ({ auth: transport === 'natlang' ? (apiKey ? { apiKey } : {}) :
-      { apiKey: apiKey ?? 'none' } }) } },
-    models: [{ id: modelId, name: modelId, api: transport === 'natlang' ? 'natlang-model-turn' : 'openai-completions', provider: 'agent',
-      baseUrl, input: ['text'], reasoning: true, reader,
-      contextWindow: Number(option(args, '--context-window') ?? 65536), maxTokens: Number(option(args, '--max-tokens') ?? 16384),
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      compat: { thinkingFormat: 'qwen-chat-template', supportsDeveloperRole: false, supportsStore: false, supportsReasoningEffort: false,
-        maxTokensField: 'max_tokens' } } as never],
-    api: transport === 'natlang' ? natlangApi((_model, { reasoning, owner }) => driver(reasoning, owner), store) : openAICompletionsApi(),
-  }));
-  return { models, ref: { provider: 'agent', modelId } };
+  return agentModelsFor({ endpoint: root, modelId, ...(apiKey === undefined ? {} : { apiKey }), transport, reader,
+    contextWindow: Number(option(args, '--context-window') ?? 65536), maxTokens: Number(option(args, '--max-tokens') ?? 16384),
+    ...(store ? { store } : {}) });
 }
 
 /** The mode a pluggable point's flag names: its value, else nl under --pure, else crisp. */
@@ -131,9 +104,6 @@ const mode = (args: string[], name: string): PluggableMode => pluggableMode(opti
 function implementations(args: string[]): Implementations {
   return { context: mode(args, 'context'), scheduler: mode(args, 'scheduler'), admission: mode(args, 'admission'), planning: mode(args, 'planning') };
 }
-
-const textOf = (message: AssistantMessage | undefined) =>
-  (message?.content ?? []).flatMap(item => item.type === 'text' ? [item.text] : []).join('\n').trim();
 
 /**
  * The launcher's runtime, with the executor's context budget when --executor-context sets it, and `store` as its
@@ -161,11 +131,10 @@ export async function sessionBlockStore(args: string[], sessionPath: string): Pr
   return neuralese ? FileNeuraleseStore.open(`${sessionPath}.blocks`) : undefined;
 }
 
-export type RunResult = { status: string; answer: string; reason?: string; ms: number };
+export type { RunResult };
 
 /** Run one task to its answer on a session at `sessionPath`. */
 export async function runTask(target: TargetContext, args: string[], task: string, cwd: string, sessionPath: string, signal?: AbortSignal): Promise<RunResult> {
-  const started = Date.now();
   const natlang = executor(target, args, await sessionBlockStore(args, sessionPath));
   const { models, ref } = await agentModels(args, (target as { modelEndpoint?: { endpoint: string; model: string } }).modelEndpoint,
     natlang.options.neuralese?.store);
@@ -173,7 +142,7 @@ export async function runTask(target: TargetContext, args: string[], task: strin
   const log = (line: string) => { if (!quiet) target.io.error.write(`${line}\n`); };
   const envs = createEnvs(cwd);
   mkdirSync(join(sessionPath, '..'), { recursive: true });
-  const registry = codingRegistry(natlang, { cwd });
+  const registry = nodeCodingRegistry(natlang, { cwd });
   let opened: Harness | undefined;
   // The companion (COMPANION.md) watches the agent's work in the background and briefs it each request.
   if (args.includes('--companion')) registry.install(companion(natlang, { harness: () => opened!,
@@ -191,17 +160,9 @@ export async function runTask(target: TargetContext, args: string[], task: strin
       `${event.attempt > 1 ? ` attempt ${event.attempt}` : ''}: ${event.error ? `failed: ${event.error.slice(0, 300)}` : (event.summary ?? '').slice(0, 200)}`),
   }, context);
   opened = harness;
-  const onAbort = () => { void harness.root(context).then(root => root.abort(context)).catch(() => {}); };
-  signal?.addEventListener('abort', onAbort, { once: true });
   try {
-    const root = await harness.root(context, { agent: { model: ref, thinkingLevel: (option(args, '--thinking') ?? 'off') as never, cwd } });
-    const submission = await root.submit({ type: 'input', content: task }, context);
-    const settled = await submission.wait(context);
-    if (settled.status !== 'done') return { status: settled.status, answer: '', reason: settled.reason, ms: Date.now() - started };
-    const entry = (await root.entries({ minEntryId: settled.answer as EntryId, maxEntryId: settled.answer as EntryId }, 1, undefined, context)).items[0];
-    return { status: 'done', answer: textOf(entry?.model?.[0] as AssistantMessage | undefined), ms: Date.now() - started };
+    return await runPiTask(harness, { model: ref, thinkingLevel: option(args, '--thinking') ?? 'off', cwd }, task, context, signal);
   } finally {
-    signal?.removeEventListener('abort', onAbort);
     await harness.close(context);
     await envs.cleanup(context);
   }

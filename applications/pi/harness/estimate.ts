@@ -3,7 +3,7 @@
  * planning: `crisp` (default) pi-durable's estimateContext (through durable.estimate, over ai.estimateTokens); `nl` `estimate/rules.nl`;
  * `shadow` both, compared.
  */
-import { pluggable } from '@natlang/node';
+import { pluggable } from 'natlang:runtime';
 import { ai, durable } from 'natlang:services';
 import rules from './estimate/rules.nl';
 import type { ContextView, Message } from '../types.js';

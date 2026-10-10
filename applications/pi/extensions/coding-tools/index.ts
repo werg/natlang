@@ -5,7 +5,7 @@
  * a function that fails becomes a thrown error, which the tool task turns into pi's tool_error result.
  */
 import type { Context } from '@earendil-works/chord';
-import type { NatlangRuntime } from '@natlang/node';
+import type { NatlangRuntime } from 'natlang:runtime';
 import { Type } from 'typebox';
 import type { Extension, ToolExecutionApi, ToolExecutionResult, ToolRegistration } from '../../vendor/durable/src/harness/types.ts';
 import { ENV_DECLARATION, envService } from '../../host/env.ts';

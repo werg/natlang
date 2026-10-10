@@ -4,10 +4,39 @@
  * verbatim, including the bash guideline about PI_* environment variables (owner decision 14). Renderers must be
  * deterministic: any change in rendered text appends a system delta and breaks provider caches (§7.4).
  */
-import { fileURLToPath } from 'node:url';
-import { join, resolve } from 'node:path';
 import type { Extension, PromptInput, PromptSection } from '../../vendor/durable/src/harness/types.ts';
-import { formatSkillsForPrompt, Resources, type ContextFile, type Skill } from '../../host/resources.ts';
+import { joinPath } from '../../host/paths.ts';
+
+export type ContextFile = { path: string; content: string };
+export type Skill = { name: string; description: string; filePath: string; baseDir: string; disableModelInvocation: boolean };
+/**
+ * Where a directory's project context files and skills come from: the Node host loads them from the file system as pi
+ * does (host/resources.ts); a host without one has none.
+ */
+export type PromptResources = { for(cwd: string): { contextFiles: ContextFile[]; skills: Skill[] } };
+
+const escapeXml = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+
+/** pi's skills prompt (Agent Skills XML); `fileReadTool` names the tool that loads skill files. */
+export function formatSkillsForPrompt(skills: Skill[], fileReadTool: 'read' | 'bash' | 'indirect' = 'read'): string {
+  const visible = skills.filter(skill => !skill.disableModelInvocation);
+  if (visible.length === 0) return '';
+  const lines = [
+    '\n\nThe following skills provide specialized instructions for specific tasks.',
+    fileReadTool === 'read' ? "Use the read tool to load a skill's file when the task matches its description." :
+      fileReadTool === 'bash' ? "Use bash to load a skill's file when the task matches its description." :
+        "Load a skill's file when the task matches its description.",
+    'When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.',
+    '',
+    '<available_skills>',
+  ];
+  for (const skill of visible) {
+    lines.push('  <skill>', `    <name>${escapeXml(skill.name)}</name>`, `    <description>${escapeXml(skill.description)}</description>`,
+      `    <location>${escapeXml(skill.filePath)}</location>`, '  </skill>');
+  }
+  lines.push('</available_skills>');
+  return lines.join('\n');
+}
 
 /** The tools' contributions to the prompt (core/tools/{read,bash,edit,write}.ts). */
 export const CONTRIBUTIONS: Record<string, { snippet: string; guidelines: readonly string[] }> = {
@@ -62,8 +91,8 @@ function buildRules(selectedTools: string[], toolGuidelines: Record<string, stri
 /** pi's buildSystemPromptSections for the default prompt (no custom prompt, addendum or extra sections). */
 export function buildSystemPromptSections(input: PromptBuild): Record<string, string> {
   const { selectedTools, toolSnippets, toolGuidelines, cwd, contextFiles, skills } = input;
-  const readme = resolve(join(input.packageDir, 'README.md')), docs = resolve(join(input.packageDir, 'docs')),
-    examples = resolve(join(input.packageDir, 'examples'));
+  const readme = joinPath(input.packageDir, 'README.md'), docs = joinPath(input.packageDir, 'docs'),
+    examples = joinPath(input.packageDir, 'examples');
   const sections: Record<string, string> = {};
   sections.preamble = 'You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.';
   const visible = selectedTools.filter(name => !!toolSnippets[name]);
@@ -93,20 +122,18 @@ export function buildSystemPromptSections(input: PromptBuild): Record<string, st
 export type PiPromptOptions = {
   /** The directory used when neither the environment nor the agent names one. */
   cwd: string;
-  /** pi's package directory for the docs section: default $PI_PACKAGE_DIR, else this application's directory. */
-  packageDir?: string;
-  /** Extra skill paths (pi's settings `skills`). */
-  skillPaths?: string[];
-  /** pi's agent directory; default $PI_CODING_AGENT_DIR or ~/.pi/agent. */
-  agentDir?: string;
+  /** pi's package directory, as the docs section names it. */
+  packageDir: string;
+  /** Each directory's context files and skills (default: none). */
+  resources?: PromptResources;
 };
 
-const APP_DIR = fileURLToPath(new URL('../..', import.meta.url));
+const NO_RESOURCES: PromptResources = { for: () => ({ contextFiles: [], skills: [] }) };
 
 /** pi's system prompt as an extension of seven untagged sections (each carries its own tag). */
 export function piPrompt(options: PiPromptOptions): Extension {
-  const resources = new Resources({ ...(options.agentDir ? { agentDir: options.agentDir } : {}), skillPaths: options.skillPaths ?? [] });
-  const packageDir = options.packageDir ?? process.env.PI_PACKAGE_DIR ?? APP_DIR;
+  const resources = options.resources ?? NO_RESOURCES;
+  const packageDir = options.packageDir;
   // The sections of one request render from one build.
   const built = new WeakMap<PromptInput, Record<string, string>>();
   const build = (input: PromptInput): Record<string, string> => {

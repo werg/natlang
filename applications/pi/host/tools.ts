@@ -5,7 +5,7 @@
  * order of checks and hooks, intent, the error-to-result rules, assembly, bounding and settlement — is `tool/call` and
  * `tool/run`.
  */
-import { ONCE_EFFECTS } from '@natlang/node';
+import { ONCE_EFFECTS } from 'natlang:runtime';
 import { type Context, copyJson } from '@earendil-works/chord';
 import { awaitWithContext } from '@earendil-works/chord/context';
 import type { ToolCall } from '@earendil-works/pi-ai';

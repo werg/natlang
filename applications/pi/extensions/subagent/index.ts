@@ -7,7 +7,7 @@
 import type { Context } from '@earendil-works/chord';
 import type { AssistantMessage } from '@earendil-works/pi-ai';
 import { Type } from 'typebox';
-import type { NatlangRuntime } from '@natlang/node';
+import type { NatlangRuntime } from 'natlang:runtime';
 import { AssistantEntry } from '../../vendor/durable/src/entries.ts';
 import { configure } from '../../vendor/durable/src/harness/agent.ts';
 import type { Extension, ToolExecutionApi, ToolExecutionResult } from '../../vendor/durable/src/harness/types.ts';

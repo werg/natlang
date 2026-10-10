@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { piPrompt } from '../extensions/pi-prompt/sections.ts';
+import { nodePiPrompt } from '../extensions/pi-prompt/node.ts';
 import { loadProjectContextFiles, loadSkills } from '../host/resources.ts';
 
 function tree() {
@@ -41,7 +41,7 @@ test('skills: SKILL.md roots and described .md files; undescribed ones are skipp
 
 test('sections: pi order, own tags, tool snippets and rules, deterministic', async () => {
   const { agent, cwd } = tree();
-  const extension = piPrompt({ cwd, agentDir: agent, packageDir: '/opt/pi' });
+  const extension = nodePiPrompt({ cwd, agentDir: agent, packageDir: '/opt/pi' });
   assert.equal(extension.name, 'pi-prompt');
   assert.deepEqual(extension.sections.map(section => [section.key, section.tag]),
     [['preamble', false], ['tools', false], ['rules', false], ['docs', false], ['project_context', false], ['skills', false], ['cwd', false]]);

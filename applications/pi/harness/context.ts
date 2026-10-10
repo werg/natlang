@@ -4,7 +4,7 @@
  * pi-durable's derivation with its incremental cache (`durable.view`); `nl` the raw active range (`durable.scan`)
  * derived by `deriveContext`, the natural-language statement of the same rules; `shadow` both, compared.
  */
-import { pluggable } from '@natlang/node';
+import { pluggable } from 'natlang:runtime';
 import { ai, durable } from 'natlang:services';
 import deriveContext from './context/deriveContext.nl';
 import type { ContextView } from '../types.js';

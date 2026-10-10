@@ -9,7 +9,7 @@
  * faults the task, as pi faults a phase that throws (owner decision 16).
  */
 import type { Context } from '@earendil-works/chord';
-import type { NatlangRuntime } from '@natlang/node';
+import type { NatlangRuntime } from 'natlang:runtime';
 import { defineTask } from '../vendor/durable/src/tasks.ts';
 import type { RunningTask, TaskRuntime } from '../vendor/durable/src/types.ts';
 import type { Agent as PiAgent, AnyTask, Settings as PiSettings } from '../vendor/durable/src/harness/types.ts';

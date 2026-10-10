@@ -5,7 +5,7 @@
  */
 import type { Context } from '@earendil-works/chord';
 import type { Message } from '@earendil-works/pi-ai';
-import { ONCE_EFFECTS, type PluggableMode } from '@natlang/node';
+import { ONCE_EFFECTS, type PluggableMode } from 'natlang:runtime';
 import { getCurrentTools } from '@earendil-works/pi-ai/utils/transcript';
 import type { ConversationId, EntryId, TaskId, TaskRuntime } from '../vendor/durable/src/types.ts';
 import type { Agent as PiAgent, ContextView as PiContextView, SubmissionDraft as PiSubmissionDraft } from '../vendor/durable/src/harness/types.ts';

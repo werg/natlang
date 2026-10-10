@@ -5,14 +5,10 @@
  * language (`observe.nl`, `observe/summarize.nl`); this file is the mechanism: documents, the task, the trigger and
  * the section. Without this extension a conversation is today's harness.
  */
-import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { Context } from '@earendil-works/chord';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import type { AssistantMessage, Message, Models, ToolCall } from '@earendil-works/pi-ai';
-import { pluggable, pluggableMode, type NatlangRuntime, type PluggableSetting } from '@natlang/node';
+import { pluggable, pluggableMode, type NatlangRuntime, type PluggableSetting } from 'natlang:runtime';
 import { defineDoc } from '../../vendor/durable/src/documents.ts';
 import { GenerationTask } from '../../vendor/durable/src/harness/generation.ts';
 import { ToolTask } from '../../vendor/durable/src/harness/tool.ts';
@@ -21,6 +17,8 @@ import type { Harness } from '../../vendor/durable/src/harness/harness.ts';
 import type { Extension, HookApi, ToolExecutionResult } from '../../vendor/durable/src/harness/types.ts';
 import { defineTask } from '../../vendor/durable/src/tasks.ts';
 import type { ConversationId, TaskRuntime } from '../../vendor/durable/src/types.ts';
+import type { ExecutionEnv } from '../../vendor/durable/src/env/index.ts';
+import { isAbsolutePath, relativePath, resolvePath } from '../../host/paths.ts';
 import { ProviderDoc } from '../../vendor/durable/src/harness/provider.ts';
 import type { Briefing, FileKnowledge, FileSummary, Observation, OutputShape } from '../../types.ts';
 import { modelReader, transcriptText } from '../../host/natlang-provider.ts';
@@ -54,6 +52,8 @@ const SHAPE_HEAD = 2_500;
 const SHAPE_TAIL = 2_000;
 /** Lines a search returns. */
 const SEARCH_LINES = 40;
+/** Characters of grep's output a search reads. */
+const SEARCH_BYTES = 4 << 20;
 /** Messages of the transcript tail an observation shows. */
 const RECENT_MESSAGES = 16;
 /** Characters of a file the companion reads. */
@@ -71,7 +71,11 @@ export function search(pattern: string, glob?: string): Promise<string[]>;
 /** The entries of a workspace directory ("." for the root), directories with a trailing "/". Hidden entries are skipped. */
 export function list(directory: string): Promise<string[]>;`;
 
-const hashOf = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
+/** A file version's identity: the first 16 hex digits of its text's SHA-256. */
+async function hashOf(text: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
+  return Array.from(digest.subarray(0, 8), byte => byte.toString(16).padStart(2, '0')).join('');
+}
 
 /** A message part as the transcript reads it; Neuralese blocks (types.ts NeuraleseContent) are not in pi-ai's union. */
 type Part = { type: string; text?: string; id?: string };
@@ -96,39 +100,64 @@ function touched(messages: readonly Message[], cwd: string): string[] {
       if (part.type !== 'toolCall' || !['read', 'edit', 'write'].includes(part.name)) continue;
       const path = (part.arguments as { path?: unknown }).path;
       if (typeof path !== 'string' || !path) continue;
-      const local = relative(cwd, resolve(cwd, path));
-      if (local && !local.startsWith('..') && !isAbsolute(local) && !paths.includes(local)) paths.push(local);
+      const local = relativePath(cwd, resolvePath(cwd, path));
+      if (local && !local.startsWith('..') && !isAbsolutePath(local) && !paths.includes(local)) paths.push(local);
     }
   }
   return paths;
 }
 
-function companionService(runtime: Runtime, context: Context, cwd: string) {
+/** The value of an environment result, or its error thrown. */
+function valueOf<T>(result: { ok: true; value: T } | { ok: false; error: unknown }): T {
+  if (!result.ok) throw result.error;
+  return result.value;
+}
+
+/**
+ * The companion's view of the workspace: the conversation's execution environment (`env`, rooted at `cwd`), so it reads
+ * the files the agent's tools change and searches them with the environment's own grep, on any host. Without an
+ * environment (the agent's tools then have none either) no file exists and searches find nothing.
+ */
+function companionService(runtime: Runtime, context: Context, env: ExecutionEnv | undefined, cwd: string) {
   // The version of each file this run showed the model: what it summarizes is that version.
   const shown = new Map<string, string>();
+  /** `path` (relative to the workspace) as an absolute path inside it, or undefined when it leaves the workspace. */
+  const inside = (path: string) => {
+    const absolute = resolvePath(cwd, path), local = relativePath(cwd, absolute);
+    return local.startsWith('..') || isAbsolutePath(local) ? undefined : absolute;
+  };
   return {
     async file(path: string): Promise<{ hash: string; text: string; known: FileKnowledge | null } | null> {
-      const absolute = join(cwd, path);
-      try { if (!statSync(absolute).isFile()) return null; } catch { return null; }
-      const full = readFileSync(absolute, 'utf8');
-      const hash = hashOf(full);
+      if (!env) return null;
+      const absolute = resolvePath(cwd, path);
+      const info = await env.fileInfo(absolute, context);
+      if (!info.ok || info.value.kind !== 'file') return null;
+      const full = valueOf(await env.readTextFile(absolute, context));
+      const hash = await hashOf(full);
       shown.set(path, hash);
       const known = (await runtime.snapshot(CompanionFiles, context))?.files[path];
       const text = full.length > FILE_LIMIT ? `${full.slice(0, FILE_LIMIT)}\n[cut: ${full.length - FILE_LIMIT} more characters]` : full;
       return { hash, text, known: known?.hash === hash ? known : null };
     },
     async search(pattern: string, glob?: string): Promise<string[]> {
-      const args = ['-rnIE', '--exclude-dir=.*', '-m', '5', ...(glob ? [`--include=${glob}`] : []), '-e', pattern, '.'];
-      const output = await new Promise<string>(done => execFile('grep', args, { cwd, timeout: 10_000, maxBuffer: 4 << 20 },
-        (_error, stdout) => done(String(stdout ?? ''))));
+      // grep itself, run by the environment without a shell. What every grep the environments run understands: no -I
+      // (a binary match is reported on stderr, which is not read), and hidden directories as `.?*`, which leaves out
+      // the searched directory `.` itself.
+      if (!env) return [];
+      const args = ['grep', '-rnE', '--exclude-dir=.?*', '-m', '5', ...(glob ? [`--include=${glob}`] : []), '-e', pattern, '.'];
+      let output = '';
+      const ran = await env.exec(args, { cwd, timeout: 10, onOutput: (text, _context, info) => {
+        if (info.stream === 'stdout' && output.length < SEARCH_BYTES) output += text;
+      } }, context);
+      if (!ran.ok && ran.error.code !== 'timeout') return [];
       return output.split('\n').filter(Boolean).slice(0, SEARCH_LINES).map(line => line.replace(/^\.\//, '').slice(0, 300));
     },
     async list(directory: string): Promise<string[]> {
-      const absolute = resolve(cwd, directory);
-      const local = relative(cwd, absolute);
-      if (local.startsWith('..') || isAbsolute(local)) throw new Error(`${directory} is outside the workspace`);
-      return readdirSync(absolute, { withFileTypes: true }).filter(entry => !entry.name.startsWith('.'))
-        .map(entry => entry.isDirectory() ? `${entry.name}/` : entry.name).sort().slice(0, 200);
+      const absolute = inside(directory);
+      if (absolute === undefined) throw new Error(`${directory} is outside the workspace`);
+      if (!env) throw new Error('No execution environment is configured');
+      return valueOf(await env.listDir(absolute, context)).filter(entry => !entry.name.startsWith('.'))
+        .map(entry => entry.kind === 'directory' ? `${entry.name}/` : entry.name).sort().slice(0, 200);
     },
     async remember(path: string, summary: FileSummary): Promise<void> {
       const hash = shown.get(path);
@@ -207,7 +236,8 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
     phases: {
       async observe(current, runtime, context) {
         const agent = await runtime.agent(context);
-        const cwd = agent.cwd ?? process.cwd();
+        const env = await runtime.env(context);
+        const cwd = agent.cwd ?? env?.cwd ?? '/';
         const view = await runtime.context(runtime.conversationId, context);
         const messages = view.messages as Message[];
         const goal = [...messages].reverse().find(message => message.role === 'user');
@@ -222,7 +252,7 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
         let briefing: Briefing | undefined, failure: string | undefined;
         try {
           briefing = await natlang.run(() => observe(observation as never), {
-            services: { companion: companionService(runtime as Runtime, context, cwd) },
+            services: { companion: companionService(runtime as Runtime, context, env, cwd) },
             serviceDeclarations: { companion: COMPANION_DECLARATION }, signal: runtime.signal,
             name: `${TASK}#${current.id}` }) as Briefing;
         } catch (error) {

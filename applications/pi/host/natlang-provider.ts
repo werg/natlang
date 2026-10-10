@@ -18,7 +18,7 @@ import type { Api, AssistantMessage, AssistantMessageEvent, Message, Model, Prov
 import { transformMessages } from '@earendil-works/pi-ai/api/transform-messages';
 import { checkNeuraleseReader, NeuraleseUnsupportedError, supportsNeuralese, textToParts, hasNeuraleseSentinel,
   type ModelContentPart, type ModelTurn, type ModelTurnDelta, type ModelTurnOptions, type ModelTurnRequest,
-  type NeuraleseBlockMeta, type NeuraleseStore } from '@natlang/node';
+  type NeuraleseBlockMeta, type NeuraleseStore } from 'natlang:runtime';
 import { parseStreamingJson } from '@earendil-works/pi-ai/utils/json-parse';
 import type { NeuraleseContent } from '../types.ts';
 

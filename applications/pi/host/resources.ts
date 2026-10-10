@@ -10,11 +10,10 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'n
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import type { ContextFile, PromptResources, Skill } from '../extensions/pi-prompt/sections.ts';
 
+export type { ContextFile, Skill };
 export const CONFIG_DIR_NAME = '.pi';
-
-export type ContextFile = { path: string; content: string };
-export type Skill = { name: string; description: string; filePath: string; baseDir: string; disableModelInvocation: boolean };
 
 const stripBom = (text: string) => text.startsWith('﻿') ? text.slice(1) : text;
 const expandTilde = (path: string) => path === '~' ? homedir() : path.startsWith('~/') ? join(homedir(), path.slice(2)) : path;
@@ -168,31 +167,8 @@ export function loadSkills(cwd: string, options: { agentDir?: string; skillPaths
   return [...byName.values()];
 }
 
-const escapeXml = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
-
-/** pi's skills prompt (Agent Skills XML); `fileReadTool` names the tool that loads skill files. */
-export function formatSkillsForPrompt(skills: Skill[], fileReadTool: 'read' | 'bash' | 'indirect' = 'read'): string {
-  const visible = skills.filter(skill => !skill.disableModelInvocation);
-  if (visible.length === 0) return '';
-  const lines = [
-    '\n\nThe following skills provide specialized instructions for specific tasks.',
-    fileReadTool === 'read' ? "Use the read tool to load a skill's file when the task matches its description." :
-      fileReadTool === 'bash' ? "Use bash to load a skill's file when the task matches its description." :
-        "Load a skill's file when the task matches its description.",
-    'When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.',
-    '',
-    '<available_skills>',
-  ];
-  for (const skill of visible) {
-    lines.push('  <skill>', `    <name>${escapeXml(skill.name)}</name>`, `    <description>${escapeXml(skill.description)}</description>`,
-      `    <location>${escapeXml(skill.filePath)}</location>`, '  </skill>');
-  }
-  lines.push('</available_skills>');
-  return lines.join('\n');
-}
-
 /** Context files and skills of each directory, loaded once per directory, as pi loads them at startup. */
-export class Resources {
+export class Resources implements PromptResources {
   readonly #loaded = new Map<string, { contextFiles: ContextFile[]; skills: Skill[] }>();
   readonly options: { agentDir?: string; skillPaths?: string[] };
   constructor(options: { agentDir?: string; skillPaths?: string[] } = {}) { this.options = options; }

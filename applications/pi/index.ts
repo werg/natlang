@@ -11,11 +11,11 @@
  */
 import type { Context } from '@earendil-works/chord';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
-import type { Models } from '@earendil-works/pi-ai';
-import type { NatlangRuntime } from '@natlang/node';
+import type { AssistantMessage, Models } from '@earendil-works/pi-ai';
+import type { NatlangRuntime } from 'natlang:runtime';
 import { Harness, type HarnessOptions, type HarnessSettings } from './vendor/durable/src/index.ts';
 import type { Extension, Registry } from './vendor/durable/src/harness/types.ts';
-import type { Storage } from './vendor/durable/src/types.ts';
+import type { EntryId, Storage } from './vendor/durable/src/types.ts';
 import { portOptions, type Implementations } from './host/harness.ts';
 import { substituteTasks } from './host/registry.ts';
 import type { Entry, TaskHost } from './host/tasks.ts';
@@ -61,6 +61,36 @@ export async function openPi(options: PiOptions, context: Context = BACKGROUND_C
   const harness = await Harness.open(options.storage, port.options, context);
   port.bind(harness);
   return harness;
+}
+
+export type RunResult = { status: string; answer: string; reason?: string; ms: number };
+
+/** The agent settings of a run: its model, thinking level and working directory. */
+export type RunAgent = { model: { provider: string; modelId: string }; thinkingLevel?: string; cwd?: string };
+
+const textOf = (message: AssistantMessage | undefined) =>
+  (message?.content ?? []).flatMap(item => item.type === 'text' ? [item.text] : []).join('\n').trim();
+
+/**
+ * Run `task` as input to the root conversation with `agent`'s settings and wait until it settles: its answer's text, or
+ * the status and reason it ended without one. Aborting `signal` aborts the conversation.
+ */
+export async function runPiTask(harness: Harness, agent: RunAgent, task: string, context: Context = BACKGROUND_CONTEXT,
+    signal?: AbortSignal): Promise<RunResult> {
+  const started = Date.now();
+  const onAbort = () => { void harness.root(context).then(root => root.abort(context)).catch(() => {}); };
+  signal?.addEventListener('abort', onAbort, { once: true });
+  try {
+    const root = await harness.root(context, { agent: { model: agent.model, thinkingLevel: (agent.thinkingLevel ?? 'off') as never,
+      ...(agent.cwd === undefined ? {} : { cwd: agent.cwd }) } });
+    const submission = await root.submit({ type: 'input', content: task }, context);
+    const settled = await submission.wait(context);
+    if (settled.status !== 'done') return { status: settled.status, answer: '', reason: settled.reason, ms: Date.now() - started };
+    const entry = (await root.entries({ minEntryId: settled.answer as EntryId, maxEntryId: settled.answer as EntryId }, 1, undefined, context)).items[0];
+    return { status: 'done', answer: textOf(entry?.model?.[0] as AssistantMessage | undefined), ms: Date.now() - started };
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
+  }
 }
 
 export type { Extension, Harness, Implementations };

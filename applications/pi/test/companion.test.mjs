@@ -27,7 +27,8 @@ before(async () => {
   const load = path => import(pathToFileURL(join(outDir, path)).href);
   const { scriptedModel } = await import(pathToFileURL(join(hostDist, '../test/support/natlang.mjs')).href);
   m = { natlang, scriptedModel, durable: await load('vendor/durable/src/index.js'), companion: await load('extensions/companion/index.js'),
-    memory: await load('vendor/durable/src/storage/memory.js'), ai: await import('@earendil-works/pi-ai'),
+    memory: await load('vendor/durable/src/storage/memory.js'), nodeEnv: await load('vendor/durable/src/env/node.js'),
+    ai: await import('@earendil-works/pi-ai'),
     chord: await import('@earendil-works/chord/context') };
 });
 
@@ -66,7 +67,9 @@ test('a tool round starts the companion, which learns the read file and briefs t
     m.ai.fauxAssistantMessage('done'),
     m.ai.fauxAssistantMessage('again'),
   ]);
-  harness = await m.durable.Harness.open(new m.memory.MemoryStorage(), { models, registry, onReport: error => reports.push(error) }, context);
+  // The companion reads the workspace through the conversation's execution environment.
+  harness = await m.durable.Harness.open(new m.memory.MemoryStorage(), { models, registry, onReport: error => reports.push(error),
+    env: ({ cwd: dir = cwd }) => new m.nodeEnv.NodeExecutionEnv({ cwd: dir }) }, context);
   const conversation = await harness.root(context, { agent: { model: { provider: 'faux', modelId: 'faux-1' }, cwd } });
   harness.resume();
   assert.equal((await (await conversation.submit({ type: 'input', content: 'read a.txt' }, context)).wait(context)).status, 'done');

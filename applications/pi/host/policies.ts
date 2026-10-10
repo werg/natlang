@@ -13,7 +13,7 @@
  * bound to the conversation: committed reads, and one guarded commit of admission operations.
  */
 import type { Context } from '@earendil-works/chord';
-import { pluggable, pluggableMode, type NatlangRuntime, type PluggableSetting } from '@natlang/node';
+import { pluggable, pluggableMode, type NatlangRuntime, type PluggableSetting } from 'natlang:runtime';
 import { copyJson } from '@earendil-works/chord';
 import { UserEntry } from '../vendor/durable/src/entries.ts';
 import { ConversationBusy } from '../vendor/durable/src/errors.ts';

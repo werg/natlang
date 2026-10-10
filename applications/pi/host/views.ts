@@ -28,7 +28,7 @@
  */
 import type { Context } from '@earendil-works/chord';
 import type { Api, Model, Models } from '@earendil-works/pi-ai';
-import { HttpNeuraleseStore, OWNER_HEADER, serverViewer, withRestoredBlocks, type NeuraleseStore } from '@natlang/node';
+import { HttpNeuraleseStore, OWNER_HEADER, serverViewer, withRestoredBlocks, type NeuraleseStore } from 'natlang:runtime';
 import { defineDoc, defineDocFamily } from '../vendor/durable/src/documents.ts';
 import type { ConversationId, DocumentReader, Tx } from '../vendor/durable/src/types.ts';
 import type { StoredCallRef } from '../types.ts';

@@ -12,7 +12,7 @@ import { validateToolArguments } from '@earendil-works/pi-ai/utils/validation';
 import type { TaskRuntime } from '../vendor/durable/src/types.ts';
 import { streamResponse } from '../vendor/durable/src/harness/generation.ts';
 import type { DeferredHandle, ModelInfo, ModelRef, RetryPolicy, StreamOptions, ThinkingLevel } from '../types.ts';
-import { ONCE_EFFECTS, type NeuraleseStore } from '@natlang/node';
+import { ONCE_EFFECTS, type NeuraleseStore } from 'natlang:runtime';
 import { plain } from './durable.ts';
 import { blockPositions, modelReader, isNeuraleseContent, neuraleseBlockIds, neuraleseBlocks, noteBlockMeta } from './natlang-provider.ts';
 import { ProviderDoc } from '../vendor/durable/src/harness/provider.ts';

@@ -4,7 +4,7 @@
  * admission policies. Shared by `openPi` and the conformance shim, so both open the same port.
  */
 import type { Context } from '@earendil-works/chord';
-import { pluggableMode, type NatlangRuntime, type PluggableMode, type PluggableSetting } from '@natlang/node';
+import { pluggableMode, type NatlangRuntime, type PluggableMode, type PluggableSetting } from 'natlang:runtime';
 import type { Harness, HarnessOptions } from '../vendor/durable/src/index.ts';
 import type { ConversationId, EntryId, EntryRecord as PiEntryRecord, SubmissionId } from '../vendor/durable/src/types.ts';
 import { LiveDoc } from '../vendor/durable/src/harness/live.ts';

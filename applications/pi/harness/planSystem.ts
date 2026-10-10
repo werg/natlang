@@ -3,7 +3,7 @@
  * (default) pi-durable's planSystemEntries (through durable.planSystem); `nl` `planSystem/rules.nl`, the same rules in
  * natural language; `shadow` both, compared.
  */
-import { pluggable } from '@natlang/node';
+import { pluggable } from 'natlang:runtime';
 import { durable } from 'natlang:services';
 import rules from './planSystem/rules.nl';
 import type { AgentTool, ContextEdit, ContextView, SystemMessage } from '../types.js';
