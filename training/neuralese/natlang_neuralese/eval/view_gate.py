@@ -21,7 +21,10 @@ stage; proposals until the owner confirms them). `view_gate_passed` is true only
 are the corpus's held split (`--split test`); the gate never trains.
 
 Run (under the memory ledger), e.g. a smoke on the untrained port of LFM2.5-350M:
-    python -m natlang_neuralese.eval.view_gate --corpus <view-ask corpus> --out <dir> --per-artifact 2 --harness-records 2
+    python -m natlang_neuralese.eval.view_gate --corpus <view-ask corpus> --out <dir> --per-artifact 2 \
+        --harness <harness-bench records dir> --harness-limit 2
+The recipe's view_gate stage runs it with --checkpoint (the view stage's recurrence checkpoint), --records (the
+stage's view-stage records; their held split) and --harness-records/--harness-pieces.
 """
 
 from __future__ import annotations
@@ -51,6 +54,24 @@ def _records(corpus: Path, split: str) -> list[dict]:
             for line in path.open(encoding="utf-8") if line.strip() and json.loads(line)["split"] == split]
 
 
+def from_stage_record(r: dict) -> dict:
+    """The port-record fields the gate reads, from a view-stage record (data/view_records.stage_record)."""
+    part = next(p for p in r["messages"][0]["content"] if p.get("type") == "view")
+    stage = r.get("view_stage") or {}
+    return {"id": r["source_ids"][0], "task": r["task_kind"], "split": r["split"],
+            "sources": [{"role": "document", "text": part["source"]}],
+            "writer": {"instructions": part.get("instructions") or "", "instructions_general": stage.get("instructions_general")},
+            "consumer": {"context": [{"role": "user", "content": r["task"]}]},
+            "target": {"value": r["target"]["content"]},
+            "contrasts": {"purpose_pairs": [i.removeprefix("view-stage:") for i in stage.get("purpose_pairs") or []]},
+            "lineage": {"notes": {"artifact": r.get("task_modality")}}}
+
+
+def stage_records(path: Path, split: str) -> list[dict]:
+    with open(path, encoding="utf-8") as stream:
+        return [from_stage_record(r) for r in map(json.loads, stream) if r.get("split") == split]
+
+
 def select(records: list[dict], per_artifact: int, seed: int) -> dict:
     """Per artifact: reconstruct records, purposeful records (consume/compare) and compare records with a partner
     purpose over the same value; seeded."""
@@ -77,18 +98,20 @@ def select(records: list[dict], per_artifact: int, seed: int) -> dict:
 class Reader:
     """In-process view writes and reader scores on one engine (serve.load_engine)."""
 
-    def __init__(self, engine, window: int | None = None):
+    def __init__(self, engine, window: int | None = None, system=None):
         from ..serve.grad import GradSession
+        from ..view import INSTRUCTIONS
 
         self.engine = engine
         self.session = GradSession(engine)
         self.window = window
+        self.system = system if system is not None else INSTRUCTIONS  # view's body: text, or its trained soft form
         self.writes = 0
 
     def view(self, value: str, instructions: str | None) -> tuple[str, int]:
         """A view block of `value` (view.write_view at view's template site) and its length in vectors."""
         from ..serve.engine import GenerationRequest
-        from ..view import INSTRUCTIONS, TEMPLATE, TOOLS, window_of, write_view
+        from ..view import TEMPLATE, TOOLS, window_of, write_view
 
         engine = self.engine
 
@@ -101,8 +124,8 @@ class Reader:
             self.writes += 1
             return blocks[0]["id"]
 
-        window = window_of(engine, instructions, self.window)
-        block, _parts = write_view(write, INSTRUCTIONS, value, instructions, engine.tokenizer, window)
+        window = window_of(engine, instructions, self.window, system=self.system)
+        block, _parts = write_view(write, self.system, value, instructions, engine.tokenizer, window)
         return block, int(engine.lookup(block).length)
 
     def score(self, messages: list[dict], target: dict, tools=None) -> tuple[float, int]:
@@ -279,12 +302,21 @@ def verdict(report: dict, thresholds: dict) -> dict:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--corpus", type=Path, required=True, help="view-ask corpus directory (port records)")
+    parser.add_argument("--corpus", type=Path, default=None, help="view-ask corpus directory (port records)")
+    parser.add_argument("--records", type=Path, default=None,
+                        help="view-stage records (data/view_records.py), the stage's own input; instead of --corpus")
+    parser.add_argument("--pieces", type=Path, default=None, help="accepted for the recipe runner; unused")
+    parser.add_argument("--harness-records", dest="harness_file", type=Path, default=None,
+                        help="harness-bench records.jsonl (with --harness-pieces), instead of --harness")
+    parser.add_argument("--harness-pieces", type=Path, default=None)
     parser.add_argument("--split", default="test")
     parser.add_argument("--per-artifact", type=int, default=32)
-    parser.add_argument("--harness-records", type=int, default=32)
+    parser.add_argument("--harness-limit", type=int, default=32, help="held harness-bench records scored")
     parser.add_argument("--harness", type=Path, default=None, help="harness-bench records directory (records.jsonl, pieces.jsonl)")
     parser.add_argument("--heads", default=None, help="port heads checkpoint (exact weights); none: untrained heads (smoke only)")
+    parser.add_argument("--checkpoint", default=None,
+                        help="the view stage's recurrence checkpoint (serve/recurrence_checkpoint.py): its exact weights "
+                             "and its trained soft form of view's body")
     parser.add_argument("--base", default=None)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--max-block", type=int, default=None)
@@ -297,22 +329,38 @@ def main(argv=None) -> int:
     from ..serve import load_engine
 
     started = time.time()
-    engine = load_engine(args.base, heads_checkpoint=args.heads, device=args.device, max_block=args.max_block)
-    reader = Reader(engine, args.view_window)
-    records = _records(args.corpus, args.split)
+    system = None
+    if args.checkpoint:
+        from ..serve.recurrence_checkpoint import load_recurrence_checkpoint
+        from ..serve.store import make_block
+
+        engine, state = load_recurrence_checkpoint(args.checkpoint, device=args.device)
+        soft = (state.get("params") or {}).get("prompt:view")
+        if soft is not None:  # the trained soft form of view's body, as the stage wrote with it
+            block = engine.store.put(make_block(soft, engine.dialect, type="Neuralese<SystemPrompt>"))
+            system = [{"type": "neuralese", "id": block.id}]
+    else:
+        engine = load_engine(args.base, heads_checkpoint=args.heads, device=args.device, max_block=args.max_block)
+    reader = Reader(engine, args.view_window, system=system)
+    if (args.corpus is None) == (args.records is None):
+        parser.error("give exactly one of --corpus and --records")
+    records = _records(args.corpus, args.split) if args.corpus else stage_records(args.records, args.split)
     chosen = select(records, args.per_artifact, args.seed)
     report = run_corpus_checks(reader, chosen, log=lambda m: print(m, flush=True))
-    if args.harness and args.harness_records:
-        report["harness"] = run_harness_check(reader, args.harness / "records.jsonl", args.harness / "pieces.jsonl",
-                                              args.harness_records, args.seed, log=lambda m: print(m, flush=True))
+    harness = (args.harness_file, args.harness_pieces) if args.harness_file else \
+        ((args.harness / "records.jsonl", args.harness / "pieces.jsonl") if args.harness else None)
+    if harness and args.harness_limit:
+        report["harness"] = run_harness_check(reader, harness[0], harness[1], args.harness_limit, args.seed,
+                                              log=lambda m: print(m, flush=True))
     thresholds = {name: getattr(args, name) for name in DEFAULTS}
-    result = {"schema": GATE_SCHEMA, "corpus": str(args.corpus), "split": args.split, "heads": args.heads,
-              "base": args.base, "trained": args.heads is not None, "thresholds": thresholds,
+    result = {"schema": GATE_SCHEMA, "corpus": str(args.corpus or args.records), "split": args.split, "heads": args.heads,
+              "checkpoint": args.checkpoint, "base": args.base, "trained": bool(args.heads or args.checkpoint),
+              "soft_view_body": system is not None, "thresholds": thresholds,
               "per_artifact": args.per_artifact, "view_writes": reader.writes,
               "seconds": round(time.time() - started), **report, **verdict(report, thresholds)}
-    if args.heads is None:
+    if not args.checkpoint:
         result["view_gate_passed"] = False
-        result["note"] = "untrained heads: a smoke run, never a qualification"
+        result["note"] = "not the view stage's checkpoint: a smoke or diagnostic run, never the stage's qualification"
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "view-gate.json").write_text(json.dumps(result, indent=1) + "\n")
     print(json.dumps({k: result[k] for k in ("view_gate_passed", "checks", "missing_artifacts", "view_writes", "seconds")}, indent=1))
