@@ -45,25 +45,26 @@ from . import cross_corpus
 from .splits import check_closed
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training" / "neuralese"))
+from natlang_neuralese.common.paths import resolve  # noqa: E402
 from natlang_neuralese.data.records import RecordError, parse_record  # noqa: E402
 
 CONVERTER = "scripts/neuralese_data/view_corpus.py@2"
 RESULT_TYPE = "Neuralese<string>"
 MAX_SOURCE_CHARS = 32_000
 MIN_SOURCE_CHARS = 200
-PROTECTED_INDEX = Path("/mnt/external/natlang-development-data/data/neuralese/protected/bgkit-benchmarks.protected.json")
+PROTECTED_INDEX = resolve("data_hdd", "natlang-development-data/data/neuralese/protected/bgkit-benchmarks.protected.json")
 HF = Path.home() / ".cache/huggingface/hub"
-NEBIUS = Path("/home/werg/natlang/data/neuralese/corpora/nebius-swe-rebench-openhands-trajectories-20261009-v1/trajectories.parquet")
-XLAM = Path("/mnt/external/sdkb-archive/raw/agentic-20260927/xlam-function-calling-60k/xlam_function_calling_60k.json")
-REPOS = Path("/mnt/external/bgkit-data/repos")
-AGENTIC = Path("/mnt/external/sdkb-archive/raw/agentic-20260927")
+NEBIUS = resolve("repo", "data/neuralese/corpora/nebius-swe-rebench-openhands-trajectories-20261009-v1/trajectories.parquet")
+XLAM = resolve("archive", "raw/agentic-20260927/xlam-function-calling-60k/xlam_function_calling_60k.json")
+REPOS = resolve("data_hdd", "bgkit-data/repos")
+AGENTIC = resolve("archive", "raw/agentic-20260927")
 SPIDER = AGENTIC / "spider/official/spider_data"
-BIRD = {"train": (AGENTIC / "bird/train/train.json", Path("/home/werg/data/bird-sqlite/train/train_databases")),
+BIRD = {"train": (AGENTIC / "bird/train/train.json", resolve("data_nvme", "bird-sqlite/train/train_databases")),
         "validation": (AGENTIC / "bird/dev_20240627/dev.json", AGENTIC / "bird/dev_20240627/dev_databases")}
 TOOLACE = AGENTIC / "toolace/data.json"
-S1 = Path("/home/werg/natlang/data/neuralese/corpora/s1-full-final-20261003")
-CROSS_INDEXES = [Path("/home/werg/data/natlang-corpora/cross-corpus-index/s1-full-final-20261003"),
-                 Path("/home/werg/data/natlang-corpora/cross-corpus-index/harness-bench-swe-rebench-openhands-pi-records-20261010-v3")]
+S1 = resolve("repo", "data/neuralese/corpora/s1-full-final-20261003")
+CROSS_INDEXES = [resolve("data_nvme", "natlang-corpora/cross-corpus-index/s1-full-final-20261003"),
+                 resolve("data_nvme", "natlang-corpora/cross-corpus-index/harness-bench-swe-rebench-openhands-pi-records-20261010-v3")]
 
 # Documents (or functions, pages, tables, files, tool outputs) per source in the default balanced slice.
 DEFAULT_CAPS = {

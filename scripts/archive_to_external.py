@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Move finished large files (checkpoints, dumps, exports) from the DGX NVMe to the external HDD.
 
-The NVMe holds latency-critical working data; finished artifacts belong on /mnt/external. A candidate is a regular
+The NVMe holds latency-critical working data; finished artifacts belong on the external HDD. A candidate is a regular
 file of at least --min-gb under one of the roots, neither modified nor read for --min-age-hours, not open by any process (host
 /proc fds and memory maps, which include container processes), and not excluded (built-in paths, files and out dirs
 named by active memory-ledger claims, the user exclude file, a `.keep-on-nvme` marker in any parent directory).
@@ -26,10 +26,13 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.paths import resolve  # noqa: E402
+
 GIB = 2**30
 HOME = Path.home()
 ROOTS = (HOME / 'natlang' / 'runs', HOME / 'data')
-ARCHIVE = Path('/mnt/external/natlang-development-data/archive')
+ARCHIVE = resolve('data_hdd', 'natlang-development-data/archive')
 MANIFEST_NAME = 'manifest.jsonl'
 EXCLUDE_FILE = HOME / '.config' / 'natlang' / 'archive-exclude.txt'
 LEDGER = Path(os.environ.get('NATLANG_MEMORY_LEDGER', HOME / '.local/state/natlang/memory-ledger.json'))

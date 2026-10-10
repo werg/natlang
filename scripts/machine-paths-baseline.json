@@ -6,7 +6,6 @@
     "scripts/build_neuralese_counterfactual_reader_proposal.py",
     "scripts/consolidate_dgx_checkout.py",
     "scripts/coord.py",
-    "scripts/maple_gguf_verify.py",
     "scripts/maple_llamacpp_parity.py",
     "scripts/memory_ledger.py",
     "scripts/neuralese_data/agents.py",
@@ -30,7 +29,6 @@
     "tests/test_prepare_training_exclusion_plan.py",
     "tests/test_sync_development_data.py",
     "tests/test_sync_training_corpora.py",
-    "training/neuralese/natlang_neuralese/maple/routing.py",
     "training/neuralese/natlang_neuralese/train/joint.py"
   ]
 }

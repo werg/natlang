@@ -13,7 +13,7 @@ training/neuralese/natlang_neuralese/artifacts.py.
     scripts/neuralese_artifacts.py verify [--id ID]
     scripts/neuralese_artifacts.py resolve --id ID [--file NAME]
     scripts/neuralese_artifacts.py list
-    scripts/neuralese_artifacts.py push --host pop-os --id ID   # copy bytes, then verify on the peer
+    scripts/neuralese_artifacts.py push --id ID   # copy bytes (default host: the Pop peer), then verify on the peer
     scripts/neuralese_artifacts.py pull --host dgx --id ID      # copy bytes from the peer, then verify here
 """
 import argparse
@@ -27,6 +27,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "training/neuralese"))
 from natlang_neuralese import artifacts  # noqa: E402
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
+
+sys.path.insert(0, str(REPO / "scripts"))
+from coord import PEERS  # noqa: E402
 
 
 def parse_files(values):
@@ -140,8 +144,8 @@ def main(argv=None):
     parser.add_argument("--evidence", action="append")
     parser.add_argument("--notes")
     parser.add_argument("--run-dir", type=Path, help="register-run: a finished trainer run (summary.json + system-prompts.nz)")
-    parser.add_argument("--host", default="pop-os")
-    parser.add_argument("--remote-repo", default="/home/werg/natlang")
+    parser.add_argument("--host", default=PEERS["pop"])
+    parser.add_argument("--remote-repo", default=resolve_str("repo"))
     args = parser.parse_args(argv)
     try:
         if args.action == "register":

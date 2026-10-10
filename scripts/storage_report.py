@@ -2,7 +2,7 @@
 """Storage report: sizes per root, category and retention tier (plans/STORAGE_POLICY.md).
 
 Scans the policy's roots with scripts/storage_retention.py (dry run, nothing deleted), adds `docker system df`,
-~/.cache by top-level directory and the other /mnt/external top directories (report only), and writes JSON +
+~/.cache by top-level directory and the other top directories of the HDD root `data_hdd` (report only), and writes JSON +
 Markdown. The HDD walk takes long: run it at the lowest best-effort I/O priority (idle class starves behind the archiver and syncs).
 
     ionice -c2 -n7 nice python3 scripts/storage_report.py [--out-dir DIR]
@@ -19,6 +19,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import storage_retention as retention  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.paths import root  # noqa: E402
 
 GIB = 2**30
 
@@ -46,13 +49,13 @@ def extras(policy: dict, scanned: list[str], timeout: int) -> dict:
     report['cache'] = sorted(((child.name, du(child, timeout)) for child in cache.iterdir()
                               if child.is_dir() and not child.is_symlink()), key=lambda x: -(x[1] or 0)) \
         if cache.is_dir() else []
-    external = Path('/mnt/external')
+    external = root('data_hdd')
     report['external_top'] = sorted(((str(child), du(child, timeout)) for child in external.iterdir()
                                      if child.is_dir() and not any(str(child) == s or s.startswith(str(child) + '/')
                                                                    for s in scanned)),
                                     key=lambda x: -(x[1] or 0)) if external.is_dir() else []
     report['disks'] = {str(p): dict(zip(('total', 'used', 'free'), shutil.disk_usage(p)))
-                       for p in ('/', '/mnt/external') if Path(p).exists()}
+                       for p in ('/', str(external)) if Path(p).exists()}
     report['docker'] = docker_df()
     return report
 
@@ -82,7 +85,7 @@ def markdown(report: dict, top: int = 25) -> str:
     lines += [f'| `{d}` | {gb(b)} |' for d, b in sorted(revisions.items(), key=lambda kv: -kv[1])[:15]]
     lines += ['', '## ~/.cache', '', '| Dir | GB |', '|---|---|']
     lines += [f'| {name} | {gb(size)} |' for name, size in report['extras']['cache'][:15]]
-    lines += ['', '## Other /mnt/external top directories (report only)', '', '| Dir | GB |', '|---|---|']
+    lines += ['', f"## Other {root('data_hdd')} top directories (report only)", '', '| Dir | GB |', '|---|---|']
     lines += [f'| {name} | {gb(size)} |' for name, size in report['extras']['external_top']]
     lines += ['', '## Docker', '', '| Type | Total | Size | Reclaimable |', '|---|---|---|---|']
     lines += [f'| {d.get("Type")} | {d.get("TotalCount")} | {d.get("Size")} | {d.get("Reclaimable")} |'

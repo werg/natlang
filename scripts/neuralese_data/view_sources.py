@@ -25,13 +25,17 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import sys
 import tarfile
 import time
 import urllib.request
 import zipfile
 from pathlib import Path
 
-DEFAULT_RAW = Path("/mnt/external/natlang-development-data/data/neuralese/raw/view-sources-20261009")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training" / "neuralese"))
+from natlang_neuralese.common.paths import resolve  # noqa: E402
+
+DEFAULT_RAW = resolve("data_hdd", "natlang-development-data/data/neuralese/raw/view-sources-20261009")
 
 GITHUB = {
     "qmsum": {"repo": "Yale-LILY/QMSum", "revision": "83d7768c1f2b4dfeb091385d3dc7e239b8e5bb7e", "license": "MIT",

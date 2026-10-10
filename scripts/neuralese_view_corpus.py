@@ -10,10 +10,10 @@ Subcommands:
 v2 (view-ask-20261010-v2): fetch --v2 into a new raw directory, then build --preset v2 --cross-index <S1 index>
 --cross-index <harness-bench index> (VIEW_CORPUS.md §4 and §5).
 
-Example (under the ledger):
+Example (under the ledger; <repo> and <data_nvme> are natlang_neuralese.common.paths roots):
   python3 scripts/memory_ledger.py run --unit natlang-view-corpus-HHMM --budget-gb 8 --class experiment --wait 600 \
-    --workdir /home/werg/natlang -- sh -c ".venv-neuralese/bin/python scripts/neuralese_view_corpus.py build \
-    --out /home/werg/data/natlang-corpora/view-corpus-slice-20261009-v1 > /tmp/vc.log 2>&1; echo EXIT \\$? >> /tmp/vc.log"
+    --workdir <repo> -- sh -c ".venv-neuralese/bin/python scripts/neuralese_view_corpus.py build \
+    --out <data_nvme>/natlang-corpora/view-corpus-slice-20261009-v1 > /tmp/vc.log 2>&1; echo EXIT \\$? >> /tmp/vc.log"
 """
 from __future__ import annotations
 
