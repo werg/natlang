@@ -1713,3 +1713,22 @@ def test_warmup_evaluates_and_writes_only_at_declared_points_and_links_best_to_a
     assert best in [s for s in range(4,end,4)]+[end]
     if best==end:
         assert (out/'best-checkpoint.pt').stat().st_ino==(out/'checkpoint.pt').stat().st_ino
+
+
+def test_restored_values_leave_no_view_of_the_mmap_checkpoint_behind(tmp_path):
+    import gc
+    import weakref
+
+    import torch
+
+    from natlang_neuralese.train.text_warmup import copy_restored_values
+
+    torch.save({'student_parameters': {'a': torch.randn(4, 3), 'b': torch.randn(2)}}, tmp_path / 'state.pt')
+    saved = torch.load(tmp_path / 'state.pt', mmap=True, weights_only=False)
+    targets = {'a': torch.zeros(4, 3), 'b': torch.zeros(2)}
+    copy_restored_values(targets, saved['student_parameters'])
+    assert torch.equal(targets['a'], saved['student_parameters']['a'])
+    probes = [weakref.ref(v) for v in saved['student_parameters'].values()]
+    del saved
+    gc.collect()
+    assert all(probe() is None for probe in probes)  # nothing else holds a view: the file mapping can close

@@ -370,6 +370,15 @@ RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_min
                                       'moe_kernel'})
 
 
+def copy_restored_values(targets, values):
+    """Copy saved values into live tensors by name. A function of its own, so no loop variable outlives it in main():
+    one left bound there is a view of the mmap'd checkpoint and kept the whole state mapping, with the pages the
+    device copies dirtied (~46 GB of host memory on Mellum's resume), alive for the rest of the run."""
+    with torch.no_grad():
+        for name,value in values.items():
+            targets[name].copy_(value.to(targets[name]))
+
+
 def same_resume_identity(previous, current):
     """Whether an in-place code handoff preserves the saved recipe identity."""
     old_options, new_options = previous.get('options', {}), current.get('options', {})
@@ -1794,9 +1803,7 @@ def main(argv=None):
         # current optimizer's trainable set; it remains part of the same model.
         restore_parameters={**parameters,**{'heads.'+n:q for n,q in heads.named_parameters()},
                             **{'backbone.'+n:q for n,q in private_parameters(backbone)}}
-        with torch.no_grad():
-            for n,v in restored['student_parameters'].items():
-                restore_parameters[n].copy_(v.to(restore_parameters[n]))
+        copy_restored_values(restore_parameters,restored['student_parameters'])
         del restore_parameters
         fresh_map=not any(k.startswith('input_map.') for k in restored['heads'])
         if fresh_map:
