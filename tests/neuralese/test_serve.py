@@ -177,6 +177,34 @@ def test_generation_writes_a_block_inside_eval_code_and_reads_it_back(engine):
                                           max_tokens=1))
 
 
+def test_forced_leading_tokens_prefill_with_the_prompt_as_the_causal_reference(engine):
+    """Mellum runtime qualification (2026-10-10): feeding a forced reply prefix one decode step per token flipped a
+    BF16 near-tie the joint causal forward does not. Its leading tokens prefill with the prompt instead."""
+    from concurrent.futures import Future
+    from natlang_neuralese.serve.engine import GenerationRequest, Sequence, WRITE
+
+    messages = [{"role": "user", "content": "Write a note."}]
+    seq = Sequence(GenerationRequest(messages=messages, forced=FORCED), Future())
+    fed = []
+    original = engine._text_batch
+    engine._text_batch = lambda rows: (fed.extend(token for _, token in rows), original(rows))
+    try:
+        with torch.no_grad():
+            engine._prefill_all([seq])
+            prefix = engine._tokens(FORCED[0])
+            assert seq.items == prefix and seq.generated_positions == len(prefix) and seq.forced[0] is WRITE
+            joint = torch.cat([engine.prompt_embeddings(messages, None),
+                               engine.backbone.embed(torch.tensor([prefix], device=engine.device))], 1)
+            out = engine.backbone.forward_embeds(joint, logits=False)
+            assert torch.equal(seq.logits, engine.backbone.logits(out["h_final"][:, -1:])[:, -1])
+            assert seq.prompt_positions + seq.generated_positions == joint.shape[1]
+        response = engine.generate(GenerationRequest(messages=messages, forced=FORCED))
+    finally:
+        engine._text_batch = original
+    assert fed[:len(prefix)] != prefix  # the prefix did not go through decode steps (only the suffix after the block)
+    assert response["choices"][0]["finish_reason"] == "tool_calls"
+
+
 def test_http_endpoints_and_interleaved_requests(engine):
     from natlang_neuralese.serve.http import serve
 

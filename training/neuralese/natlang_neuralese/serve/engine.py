@@ -213,6 +213,7 @@ class Sequence:
     prompt_positions: int = 0
     generated_positions: int = 0
     forced: list | None = None
+    prefilled_forced: list = field(default_factory=list)  # the forced plan's leading tokens, prefilled with the prompt
     free_after_forced: bool = False  # template readout that decodes the value: sample once the forced plan is spent
     guide: object = None  # serve.guidance.Guide over this reply
     pieces: list = field(default_factory=list)  # decoded text of each item ("__nz" for a block), for the guide
@@ -616,8 +617,14 @@ class Engine:
         for seq in seqs:
             try:
                 seq.adapters = self.resolve_adapters(seq.request.adapters)
-                ready.append((seq, self.prompt_embeddings(seq.request.messages, seq.request.tools,
-                                                           prepared=seq.prompt_plan)))
+                embeds = self.prompt_embeddings(seq.request.messages, seq.request.tools, prepared=seq.prompt_plan)
+                self._plan(seq)
+                if seq.prefilled_forced:
+                    # The forced reply's leading tokens are prefilled with the prompt, as training and the causal
+                    # reference run them: one pass, not one decode step per token (a BF16 near-tie can flip there).
+                    embeds = torch.cat([embeds, self.backbone.embed(
+                        torch.tensor([seq.prefilled_forced], device=self.device)).to(embeds)], 1)
+                ready.append((seq, embeds))
             except Exception as error:
                 self._fail(seq, error)
         ready.sort(key=lambda row: row[1].shape[1])
@@ -671,14 +678,29 @@ class Engine:
     def _prefill(self, seq: Sequence):
         self._prefill_all([seq])
 
+    def _plan(self, seq: Sequence):
+        """The request's forced plan, and its leading text tokens that prefill with the prompt (not under guidance,
+        whose backtracking snapshots start after the prompt)."""
+        request = seq.request
+        seq.forced = self._forced_plan(request.forced) if request.forced is not None else None
+        if request.template is not None and request.forced is None:  # the test hook's plan replaces the template
+            seq.forced, seq.free_after_forced = self._template_plan(request.template)
+        lead = []
+        if seq.forced and request.guidance is None:
+            # Only what the decode steps would have fed: within max_tokens, up to a stop or block opening.
+            while (len(lead) < min(len(seq.forced), request.max_tokens) and type(seq.forced[len(lead)]) is int
+                   and seq.forced[len(lead)] not in self.stop_ids
+                   and seq.forced[len(lead)] != self.backbone.controls.open_id):
+                lead.append(seq.forced[len(lead)])
+            del seq.forced[:len(lead)]
+        seq.prefilled_forced = lead
+
     def _prefilled(self, seq: Sequence, cache, logits, positions: int, cut_state=None, top_state=None):
         request = seq.request
         seq.cache, seq.logits = cache, logits
         seq.cut_state, seq.top_state = cut_state, top_state
-        seq.prompt_positions = positions
-        seq.forced = self._forced_plan(request.forced) if request.forced is not None else None
-        if request.template is not None and request.forced is None:  # the test hook's plan replaces the template
-            seq.forced, seq.free_after_forced = self._template_plan(request.template)
+        lead = seq.prefilled_forced
+        seq.prompt_positions = positions - len(lead)
         if request.guidance is not None:
             from .guidance import Guide
 
@@ -687,6 +709,10 @@ class Engine:
             if prefix and seq.forced is None:
                 seq.forced, seq.free_after_forced = self._tokens(prefix), True
             seq.snapshots = [(0, seq.cache, seq.logits, 0, seq.cut_state, seq.top_state)]
+        for token in lead:  # already in the cache: emitted as the decode steps would have
+            seq.items.append(token)
+            seq.generated_positions += 1
+            self._emit(seq, token)
         seq.rng = torch.Generator().manual_seed(
             derive_seed("text", request.seed if request.seed is not None else request.request_id))
         seq.phase = "text"
