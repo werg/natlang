@@ -17,6 +17,11 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # A linked worktree has no venv of its own: use the main checkout's.
 MAIN=$(cd "$ROOT" && cd "$(git rev-parse --git-common-dir)/.." && pwd)
 PY=${NATLANG_PYTHON:-$( [ -x "$ROOT/.venv-neuralese/bin/python" ] && echo "$ROOT" || echo "$MAIN")/.venv-neuralese/bin/python}
+# Nor its own node packages: npm installs them at the workspace root and in ts-host, so link the main checkout's
+# (one missing level leaves e.g. undici or @wllama unresolved and reads as TS2307/TS7006 errors).
+for dir in . ts-host; do
+  if [ ! -e "$ROOT/$dir/node_modules" ] && [ -d "$MAIN/$dir/node_modules" ]; then ln -s "$MAIN/$dir/node_modules" "$ROOT/$dir/node_modules"; fi
+done
 export PATH="$HOME/.local/bin:$PATH"
 # Python tests must not depend on a warm Hugging Face cache (the ts-host Neuralese tests do use the local tiny model).
 HF_EMPTY=$(mktemp -d)
