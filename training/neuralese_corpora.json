@@ -25233,6 +25233,47 @@
       "training_admission": false,
       "admission": "runtime-only-not-training-admission",
       "notes": "V13sharedbuiltcompiler/runtimeguidance forunsupportedinferredcallabletypes,fixedcaptures-vs-callarguments,creation-timetemplateinterpolation; nosemanticvalidationchanges. ActiveV40remainsfrozenV12."
+    },
+    {
+      "id": "free-provider-google-v12-source-closure-jsonleaf-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v12-gemini-choice-confidence-and-static-replay-v1/source-closure-v1",
+      "include": [
+        "README.md",
+        "check_raw_group_keys.py",
+        "closure-harness4-v3/candidate-source-case-bindings.json",
+        "closure-harness4-v3/closed-source-case-port-projection.jsonl",
+        "closure-harness4-v3/closure-report.json",
+        "closure-harness4-v3/source-case-port-projection.jsonl",
+        "closure-input-v4/closure-candidate-root-actions.jsonl",
+        "closure-input-v4/closure-source-cases.jsonl",
+        "closure-input-v4/closure-source-manifest.json",
+        "closure-input-v4/selected-program-index.jsonl",
+        "closure-input-v4/selected-source-case-index.jsonl",
+        "closure-packet-v1.json",
+        "raw-key-harness-precheck-v3.json"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "source-closure-evidence",
+      "training_admission": false,
+      "admission": "held-full-s1-and-source-quality-review",
+      "notes": "Authoritative closure-input-v4 and harness4-v3 only. 51programs389items778exactquestion/state leaves; harness group-only closure clean. FullS1/rawkeys pendingDGX. types.ts scaffold excluded; noallvisiblecodecoverageclaim. Expectedmaptargetonly. Noindependentworldcredit."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v15-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v15",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-input-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "512fresh inheritedtrain rows IDsANDgroupsdisjointallpriorprovider cases; sharedprojectquotaqueuebehindV14. Activeoutputs excluded; sourcequalityheld."
     }
   ],
   "coverage_backlog": [
