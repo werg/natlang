@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v28-local-split-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-v28-source-split-review-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 1724,
+      "sha256": "df859658f9998ed23c7f0056cbc35ef39c591f9f518b8bacdfd9b90715aa51a5"
+    },
+    {
+      "path": "source-bound-rows.jsonl",
+      "bytes": 46139,
+      "sha256": "f748e4e132414b820fb1e848a2a6132ee0dbbfd93b4c7664e636a30c19c081f0",
+      "lines": 5
+    }
+  ],
+  "bytes": 47863
+}
