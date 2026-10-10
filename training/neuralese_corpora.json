@@ -22810,6 +22810,59 @@
       "training_admission": false,
       "admission": "held-semantic-quality-and-explicit-root-review-required",
       "notes": "ImmutableV4/V7pins andperfamilymodelquality review. Proposedsinglechoiceboundedconfidence formatfuturecontrolledvariant only; nooldrownormalization/admission."
+    },
+    {
+      "id": "free-provider-luna-v35-source-reviewed-32-20261010-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "node_modules",
+        "__pycache__"
+      ],
+      "split": "inherited-source-review-16train16held",
+      "source_class": "authored-static-semantic-self-improvement-source",
+      "training_admission": false,
+      "admission": "generation-input-or-quality-review-only-not-training-data",
+      "notes": "Reviewed32fictionalrequests8relatedfamilies/16train16held,40requestanddomain sourcegroups; noindependentworldcredit; generationapprovedonly, trajectory/qualityadmissionpending."
+    },
+    {
+      "id": "free-provider-luna-v35-runtimev11-reviewed-queues-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-dispatch-receipt-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "exclude_dirs": [
+        "node_modules",
+        "__pycache__"
+      ],
+      "split": "not-applicable-generation-inputs",
+      "source_class": "provider-reviewed-generation-inputs",
+      "training_admission": false,
+      "admission": "generation-input-or-quality-review-only-not-training-data",
+      "notes": "32casesfiveworker7/7/6/6/6 successorwaits V34fivecompleteworkers/durableexports. PID833850queued, plan29add758101e2df5f583ca0f21e0ccb1c056e580bdc69da8082b456140ab6a7d; noliveoutputsnapshot/admission."
+    },
+    {
+      "id": "free-provider-runtime-small-teachers-v11-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v11",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "node_modules",
+        "__pycache__"
+      ],
+      "split": "not-applicable-generation-inputs",
+      "source_class": "frozen-provider-generation-runtime",
+      "training_admission": false,
+      "admission": "generation-input-or-quality-review-only-not-training-data",
+      "notes": "1333payloadfiles +manifest; cleancommittedd7ba3c07 sourceisolatedcompile; positive nl.with<ResultType>/freshfinishing sharedguidance99d0f6ab unmeasuredpaired48variantdebt. Sourcevendor canonicaldependencyoverlay; remoteartifactalone doesnotinstalllocalnode dependencies."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,50 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v35-source-reviewed-32-20261010-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1130,
+      "sha256": "0209d83a1156e54340289bda530373d215f7e75c2c9e20f76e13f620cbe0c864"
+    },
+    {
+      "path": "proposal-lineage.json",
+      "bytes": 1722,
+      "sha256": "92fb13aa3cb94590c15439b53a4f0ad81e4383d6eb7a9e71d351c23fa3c7c800"
+    },
+    {
+      "path": "readable-facts-and-golds.md",
+      "bytes": 38621,
+      "sha256": "1b45edd1092f0d3699872c62f67618b0e8e4806c4314eb669bac1f7d48914e86"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 1479,
+      "sha256": "b22aa8e12882fd76d0f3d0f2041aaa7f09a7aba3e343025bdf323496933517c2"
+    },
+    {
+      "path": "root-review-plan.json",
+      "bytes": 632,
+      "sha256": "c6064910216ee37ac5248c6d5816b616d1c4c017e457ddcd40112990dd7ae253"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 1880,
+      "sha256": "a377219eb29376547b6312a86b2694041191f65464d632b8cdc885d26829f094"
+    },
+    {
+      "path": "source-proof.json",
+      "bytes": 61956,
+      "sha256": "58e1c578844b9f40d34f1a52998677b2c4a5382da744c38e70c995ae819772d9"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 1659213,
+      "sha256": "559059ee46976e9f2572a809428882aca517c3835c09fdaf2b0586b1ce080a46",
+      "lines": 32
+    }
+  ],
+  "bytes": 1766633
+}
