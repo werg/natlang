@@ -80,6 +80,33 @@ def _layout_matches(optimizer, saved):
 
 
 def restore_optimizer_state(optimizer, saved, named_params, declared_added=(), *, saved_names=None, fresh=False):
+    report = _restore_optimizer_state(optimizer, saved, named_params, declared_added, saved_names=saved_names,
+                                      fresh=fresh)
+    own_host_tensors(optimizer)
+    return report
+
+
+def own_host_tensors(optimizer):
+    """Replace every host tensor left in the optimizer's state and groups by an owned copy. torch's loader keeps CPU
+    values as given (AdamW's ``step`` counters, group values), and one tensor still viewing an ``mmap=True``
+    checkpoint keeps the whole file mapping alive, with every page the device copies dirtied (Mellum's resume:
+    ~38-46 GB of host memory for the rest of the run)."""
+    def own(value):
+        return value.clone() if torch.is_tensor(value) and value.device.type == "cpu" else value
+    children = [child for _, child in _children(optimizer)]
+    if getattr(optimizer, "latent", None) is not None:
+        children.append(optimizer.latent)
+    for child in children:
+        for state in child.state.values():
+            for key, value in list(state.items()):
+                state[key] = own(value)
+        for group in child.param_groups:
+            for key, value in list(group.items()):
+                if key != "params":
+                    group[key] = own(value)
+
+
+def _restore_optimizer_state(optimizer, saved, named_params, declared_added=(), *, saved_names=None, fresh=False):
     """Restore ``saved`` (an ``optimizer.state_dict()``) into ``optimizer``; returns a JSON-able report.
 
     ``named_params``: ``{name: Parameter}`` covering every optimizer parameter. ``saved_names``: the checkpoint's

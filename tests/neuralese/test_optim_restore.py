@@ -215,3 +215,26 @@ def test_round_trip_through_checkpoint_save_and_load(tmp_path):
     assert report["initialized"] == ["heads.read_adapter.proj.bias"]
     before, after = state_by_name(opt, named), state_by_name(opt2, named2)
     assert all(equal(before[n], after[n]) for n in before)
+
+
+def test_restore_from_an_mmap_checkpoint_keeps_no_view_of_the_file(tmp_path):
+    from natlang_neuralese.train.optim_restore import restore_optimizer_state
+
+    def model():
+        torch.manual_seed(0)
+        return {'w': torch.nn.Parameter(torch.randn(8, 4)), 'b': torch.nn.Parameter(torch.randn(4))}
+
+    named = model()
+    optimizer = torch.optim.AdamW(list(named.values()), lr=1e-3)
+    sum(p.square().sum() for p in named.values()).backward()
+    optimizer.step()
+    torch.save({'optimizer': optimizer.state_dict()}, tmp_path / 'state.pt')
+    saved = torch.load(tmp_path / 'state.pt', mmap=True, weights_only=False)['optimizer']
+    mapped = set()
+    for state in saved['state'].values():
+        mapped |= {v.untyped_storage().data_ptr() for v in state.values() if torch.is_tensor(v)}
+    fresh_named = model()
+    fresh = torch.optim.AdamW(list(fresh_named.values()), lr=1e-3)
+    restore_optimizer_state(fresh, saved, fresh_named, saved_names=['w', 'b'])
+    kept = {v.untyped_storage().data_ptr() for state in fresh.state.values() for v in state.values() if torch.is_tensor(v)}
+    assert kept and not (kept & mapped)  # AdamW's CPU 'step' and moments are owned copies: the mapping can close
