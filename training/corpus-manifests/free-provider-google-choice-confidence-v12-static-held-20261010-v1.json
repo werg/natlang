@@ -1,0 +1,59 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-choice-confidence-v12-static-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/held-static-choice-confidence-v12-adapter-v1",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 1507759,
+      "sha256": "1b316159bb8d8cff64331414ebfd4010f2d3c7366c26e0a6a3eec7794c82e128",
+      "lines": 51
+    },
+    {
+      "path": "label-manifest.json",
+      "bytes": 699589,
+      "sha256": "b1d5d5b662d579eab2c05dae4031f3b836884663ba44ca38c6520a2578d09459"
+    },
+    {
+      "path": "native.held.jsonl",
+      "bytes": 78205537,
+      "sha256": "95d34b348d263ad6a6acb396262b533a867d4565156d5c323bfc0ed5f6b4fc83",
+      "lines": 880
+    },
+    {
+      "path": "rejections.jsonl",
+      "bytes": 51911,
+      "sha256": "e540aadd9f4821667f39b063c36e1b27a8913316557dc318150e4d68cbec2409",
+      "lines": 123
+    },
+    {
+      "path": "replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "replay.results.jsonl",
+      "bytes": 25917456,
+      "sha256": "68177ba4685520ab116e5308780e9e2a5b3c159c8efe9aeaff974660ff25d2a8",
+      "lines": 51
+    },
+    {
+      "path": "scorer-manifest.json",
+      "bytes": 57893,
+      "sha256": "978a6a2e491b40c34a5188490410746d5488f7bb50a9dffc371d930bb8e6913d"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 10984,
+      "sha256": "6111b44415cea38cabe24c8105bc6536f8cbd117a7368f8f0d971db17cc0ec87"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 1221,
+      "sha256": "bc2f7f661a212747dac37ae18f88c6c8c6d5195cbf94a698526c14bae1943ad4"
+    }
+  ],
+  "bytes": 106452350
+}

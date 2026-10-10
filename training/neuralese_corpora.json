@@ -25135,6 +25135,61 @@
       "training_admission": false,
       "admission": "held-review-no-training-admission",
       "notes": "Closed48case operationalresults after rootreviewv2; failedv1launch retained. Semantic/capture/actionauditongoing. Originalsourcegroups/splitsheld noautomaticadmission."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v12-static-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/held-static-choice-confidence-v12-adapter-v1",
+      "include": [
+        "*"
+      ],
+      "split": "train-inherited-evidence-only",
+      "source_class": "provider-static-derivative-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "51authoredgroups389sourceannotationmatches123rejects51actualreferenceaccepted/capturevisible880nativeheldturns. Noautomaticsemantic/sourceadmission."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v12-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v12-gemini-choice-confidence-and-static-replay-v1",
+      "include": [
+        "*"
+      ],
+      "split": "train-inherited-evidence-only",
+      "source_class": "provider-static-derivative-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "512valid389match123disagree confidencesoverconfident. Recovered66HTTP500/15HTTP503. Allheld no calibratedtargets/DPO."
+    },
+    {
+      "id": "free-provider-luna-v40-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v40-fiftyone-runtimev12-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-launch-receipt-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "train-inherited-evidence-only",
+      "source_class": "provider-static-derivative-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "4actualworkers875499-87550251V12folderprograms389items distinctpreviousgroups inheritedtrain. Freshsourcequalityheldoperatorreferenceaccepted. Activeoutputs excluded."
+    },
+    {
+      "id": "free-provider-luna-v39-final-quality-held-20261010-v4",
+      "owner": "pop",
+      "path": "runs/quality-review-v39-choice-folder-final-20261010-v4",
+      "include": [
+        "*"
+      ],
+      "split": "train-inherited-evidence-only",
+      "source_class": "provider-final-semantic-and-trace-quality",
+      "training_admission": false,
+      "admission": "held-source-quality-capture-and-native-review-required",
+      "notes": "48complete324/357sourceannotations23exactmaps. Savedmapsreturnmatchedinputsunchanged;903childcalls/calleredges/outputcaptures108rejected104scopefailureevents. Exactproviderrequestbodiesnotretained; no inferred promptvisibility orautomaticadmission. RegisteronlyV4auditpreviousdraftsnotcounted."
     }
   ],
   "coverage_backlog": [

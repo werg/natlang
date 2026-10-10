@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-choice-confidence-v12-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/quality-review-v12-gemini-choice-confidence-and-static-replay-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 14832,
+      "sha256": "279e621045bce6bfc474bb5f0b6fddf52c1358802b8dd8119e8e28d96ee24d71"
+    },
+    {
+      "path": "review.md",
+      "bytes": 3008,
+      "sha256": "dba0ba7d0c64c4a436ad5fc3570e3ae4e26d115e90822a5a50dba7cae12e39fc"
+    }
+  ],
+  "bytes": 17840
+}
