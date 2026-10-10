@@ -25896,6 +25896,39 @@
       "admission": "held-source-trace-curriculum-quality-review",
       "independent_new_worlds": 0,
       "notes": "New actual trajectories for four other existing train worlds with unchanged source/instructions/gold. Retain original prior results; no claim of failed predecessors or forced iterateOn fidelity."
+    },
+    {
+      "id": "free-provider-luna-v46-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v46-runtimev14-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "closed-source-bound-folder-trajectory-review",
+      "training_admission": false,
+      "admission": "held-source-semantic-trace-quality-review",
+      "notes": "50 closed results, unchanged inputs; no automatic admission."
+    },
+    {
+      "id": "free-provider-luna-v46-final-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v46-choice-folder-final-20261010-v1",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "closed-source-bound-folder-trajectory-review",
+      "training_admission": false,
+      "admission": "held-source-semantic-trace-quality-review",
+      "notes": "25/50 exact maps and351/389 saved-source-label agreements; all439 source input files unchanged. 995 child invocations990 output captures;5 unfinished/failed children in one ambiguous emotion item. Item quality/trajectory review held; no valid returns lost."
     }
   ],
   "coverage_backlog": [
