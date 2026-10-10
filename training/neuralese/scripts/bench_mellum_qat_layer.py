@@ -11,7 +11,7 @@ import time
 
 import torch
 
-sys.path.insert(0, "/home/werg/natlang/training/neuralese")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from natlang_neuralese.maple.model import MapleConfig, SparseMoE  # noqa: E402
 from natlang_neuralese.maple import ternary  # noqa: E402
 from natlang_neuralese.train import optim  # noqa: E402
