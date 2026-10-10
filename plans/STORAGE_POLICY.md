@@ -104,3 +104,20 @@ Biggest structural consumers are KEEP by rule: registered corpora (~166 GB acros
 conversion. The levers are therefore (1) checkpoint cadence and end-of-run handling (§2), (2) compact ternary
 milestones (§3), (3) owner approval of superseded corpus versions and exports, and (4) the full HDD report
 (`~/.local/state/natlang/storage/report-latest.md`, weekly) for the rest of `/mnt/external`.
+
+## Exact duplicates in closed runs
+
+For reviewed byte-identical historical payloads on the same filesystem, use
+`scripts/deduplicate_closed_artifacts.py PLAN --sha256 HASH --receipt RECEIPT --execute`.
+The plan lists each canonical keeper, duplicate path, byte length and SHA-256.
+The implementation verifies both files, rejects live references and preserves
+both paths using an atomic hardlink replacement. Shared payloads become read-only;
+future revisions must use new files rather than modifying a shared inode.
+Run-specific logs, manifests and receipts remain separate. Execution journals
+record physical bytes reclaimed. This changes storage, not dataset membership,
+source grouping, splits or training admission. Unique old artifacts still require
+manifest-driven verified offload or an explicit reproducibility review.
+
+On Pop, run the storage-report/retention tools with `python3.11`; their shared
+configuration reader uses Python's `tomllib`. Override scan roots for the local
+machine rather than using the DGX external-drive roots.
