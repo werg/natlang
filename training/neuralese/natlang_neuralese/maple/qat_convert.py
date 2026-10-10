@@ -323,7 +323,7 @@ def run_train_records(a, teacher_dir: Path, meta: dict):
         for tag, mix in mixes:
             QUANT_MIX["value"] = mix
             report.update({k + tag: v for k, v in held_scores().items()})
-            if gate and probes:
+            if gate and probes and (mix == 1.0 or tag == "_bf16"):  # the gate judges the deployed model
                 model.eval()
                 result = run_gate(model, tokenizer, probes, render, eos, keep_text=a.gate_text)
                 model.train()
