@@ -319,3 +319,18 @@ On Mellum, QAT points train on the same targets, with no BF16 KL teacher (flagge
 
 Design: plans/neuralese/NEURALESE_DIRECT_V1.md. Evidence: plans/mellum-port.md "Behaviour gate bug hunt" and
 plans/neuralese/WARMUP_AUDIT_20261011.md.
+
+## neuralese-direct-v1 qualification and cadence (2026-10-11, before the first full run)
+
+- Qualification now also requires a useful Neuralese value (Pop review, accepted by the coordinator). The final held
+  `value_relative_mse_delta` (NeuraleseProjection minus the soft-token mixture, relative MSE to the gold next-token
+  embedding) must be below `-value_margin`, with `value_margin` 0.05. Smokes measured −0.15 to −0.27 within 60
+  steps. The report records this as `value_gate`.
+- Eval and checkpoint cadence is 1000, so they happen at the stage end only, plus the step-0 base eval. At the
+  measured 5.5 s/update, a 3 h cadence is about 1960 updates, more than the 1000-step stage. A gated eval costs about
+  190 s, so one intermediate eval would put evals above 3% of wall time. The final eval is the gate. If the gate
+  already ran at that step on a warn, the final gate reuses it instead of running again.
+- Best (Pop 20f57d6d): an eval that improves held CE writes the full state with that metric, and CheckpointPolicy
+  hard-links it as `best-checkpoint.pt`.
+- The behaviour gate is no longer restricted to Maple. `run_gate` decodes through the shared `greedy_any` (Pop
+  178a6160), so LFM gets the same gate.

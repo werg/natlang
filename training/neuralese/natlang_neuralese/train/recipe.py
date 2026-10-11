@@ -31,7 +31,7 @@ HANDLERS = {
                            'latent_optimizer','latent_lr','head_lr','neuralese_weight','projection_blocks',
                            'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows',
                            'drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop','drift_gate','gate_held_rows','monitor',
-                           'seed'},'result':'report.json'},
+                           'value_margin','seed'},'result':'report.json'},
     'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads','student_checkpoint'},
                         'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','target_tokens','cutoff',
                           'cohort_weights','qualification_cohort','context_weight','feedback_weight',

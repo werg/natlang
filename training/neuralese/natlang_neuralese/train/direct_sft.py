@@ -32,7 +32,7 @@ from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_
 from .checkpoint_policy import CheckpointPolicy
 
 SCHEMA = 'natlang.neuralese-direct/1'
-OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'device', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
+OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'device', 'value_margin', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows'})
 
@@ -84,6 +84,9 @@ def parse(argv=None):
     p.add_argument('--drift-gate', action=argparse.BooleanOptionalAction, default=True,
                    help='run the behaviour gate at an eval whose drift is past warn, and stop on a gate regression')
     p.add_argument('--gate-held-rows', type=int, default=48)
+    p.add_argument('--value-margin', type=float, default=0.0,
+                   help='qualification needs the final held value_relative_mse_delta (NeuraleseProjection minus the '
+                        'soft-token mixture) below minus this margin: the Neuralese value must be useful')
     p.add_argument('--seed', type=int, default=0)
     a = p.parse_args(argv)
     if min(a.steps, a.tokens, a.target_tokens, a.batch, a.eval_batch, a.eval_every, a.held_documents) < 1:
@@ -365,6 +368,8 @@ def main(argv=None):
         with (a.out / name).open('a') as handle:
             handle.write(json.dumps(value) + '\n')
 
+    gate_by_step = {}  # the full behaviour gate already run at a step (at a warn), reused as the final gate
+
     def evaluate():
         nonlocal base_eval
         sums, count, agreement = {}, 0, []
@@ -391,7 +396,7 @@ def main(argv=None):
                 drift = held_kl(backbone.hf, gate_held, a.drift_rows, 0.25)
                 drift['guard'] = behaviour_drift_level(drift, a)
                 if drift['guard'] == 'warn' and a.drift_gate and behaviour is not None:
-                    gate = gate_report()
+                    gate = gate_by_step[step] = gate_report()
                     floor = behaviour.config['reference']['gate_pass'] - behaviour.config.get('max_gate_drop', 0.0)
                     drift['gate_at_warn'] = {k: gate[k] for k in ('gate_pass', 'gate_checks', 'gate_kinds',
                                                                   'gate_results')}
@@ -471,16 +476,17 @@ def main(argv=None):
             policy.save(full_state())
             saved_step = step
     finished = step >= a.steps
-    gate = gate_report() if finished else None
+    gate = (gate_by_step.get(step) or gate_report()) if finished else None
     final = json.loads((a.out / 'report.json').read_text()) if (a.out / 'report.json').exists() else {}
     drift_stopped = any((json.loads(line).get('behaviour_drift') or {}).get('guard') == 'stop'
                         for line in (a.out / 'eval.jsonl').open())
     value_delta = final.get('value_relative_mse_delta', math.inf)
-    value_qualified = math.isfinite(value_delta) and value_delta < 0
+    value_qualified = math.isfinite(value_delta) and value_delta < -a.value_margin
     qualified = bool(finished and final.get('ce_delta', 0.0) < 0 and value_qualified and not drift_stopped and
                      (gate is None or gate['passed']))
     final.update(status='complete' if finished else 'checkpointed_on_signal', steps=step, best=best,
                  behaviour_gate=gate, drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
+                 value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta')},
                  seconds=time.time() - started, scope='Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md)')
     if saved_step != step:
         policy.save(full_state())
