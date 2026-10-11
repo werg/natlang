@@ -28485,6 +28485,43 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "Five previously reviewed additiveholds folded into canonical62afterpinnedrecoveryclosed; prior/currentpolicybytes exact. Oldsourcesandsealedartifacts unchanged."
+    },
+    {
+      "id": "luna-choice-confidence-v66-composed-source-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v66-source-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Exact54V29programs plusone original V65index135relatedretry,55cases400sourceIDs/groups; fullS1closureonly54V29sources. Originalprovider/staticcriteria timing explicit."
+    },
+    {
+      "id": "luna-choice-confidence-v66-reviewed-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v66-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Fiveworkers55programs400itemscurrent62holdsdisjoint, runtimeV15, approval22ff99a9. Movingoutputs excluded; noadmission.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-approved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-current-policy-at-approval-v1.json",
+        "worker-*/queue.jsonl"
+      ]
+    },
+    {
+      "id": "luna-v64-seven-source-recovery-closed-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v64-seven-source-recovery-v65-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Bothrelatedrecoveryprograms closed after explicitowner V65failedpredecessordisposition; original sevenDBpedia sourceinputs unchanged, noadmission/newworldcredit. Detailedauditpending."
     }
   ],
   "coverage_backlog": [

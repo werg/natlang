@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v66-composed-source-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v66-source-v1",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 1765283,
+      "sha256": "b225338ea6c691e49beeb39939f4d3078078bc48a4f8f2ad83146bb410d4bcc4",
+      "lines": 55
+    },
+    {
+      "path": "reference-replay.jsonl",
+      "bytes": 28031390,
+      "sha256": "dd2f069d5a9d5774a20b143e5f962eb2f473763a6e1ceb6ce4fe0689e940fc55",
+      "lines": 55
+    },
+    {
+      "path": "source-composition-v1.json",
+      "bytes": 9579,
+      "sha256": "d3d7dbdb0890be188a84f55f3e74c79ebdb79e0b787f8d1fc6edcbc2808ad59c"
+    }
+  ],
+  "bytes": 29806252
+}
