@@ -1,5 +1,19 @@
 # Storage policy (DGX; Pop may opt in)
 
+## Standing owner order — 2026-10-11
+
+Discarded approaches and runs are deleted, including checkpoints, optimizer
+states, exports, diagnostic outputs, frozen runtimes, obsolete recipes, registry
+entries, manifests and run tracking. They are not archived or relocated as a
+substitute for deletion. Historical references do not protect discarded work.
+Keep current lineage dependencies and reusable training/source/evaluation data;
+check live references before deleting. Deduplicate exact immutable copies, prune
+superseded conversions/review packets/caches, and retain rejected outputs only
+for an assigned repair, unresolved bug, or actual failure/DPO training consumer.
+Clean at monitoring cycles and after large runs. Coordinate mirror cleanup with
+the machine owner. See `AGENTS.md`; this order overrides older preservation and
+PRUNE-ASK requirements below for explicitly discarded work.
+
 Owner, 2026-10-09: "we will also be running out of space on the external drive if we keep on going. Let's consider
 our checkpoint frequency and other space-saving measures." and "we may need to delete stuff that isn't absolutely
 necessary over time."

@@ -52,6 +52,35 @@ differences from a known-good path. Record what was ruled out and how.
   including the most restrictive. Include them; record license provenance as a
   fact, but never omit or hold data for license review, and do not ask the owner.
 
+# Storage hygiene and discarded work (standing owner order, 2026-10-11)
+
+- Delete discarded approaches and runs: their checkpoints, optimizer states,
+  exports, frozen runtime copies, diagnostic outputs, obsolete recipes and run
+  tracking. Do not archive them, move them to another disk or machine to avoid
+  deleting them, or retain them because an old note or manifest references them.
+  Remove obsolete registry entries, manifests and handover tracking as well.
+- Keep the active lineage and its required parents, reusable training/source
+  data, and protected/held evaluation data. Distinguish these from discarded run
+  artifacts before deleting; check live process references and current recipe
+  dependencies. A regression still needs diagnosis before rejecting an approach.
+- Deduplicate exact copies and prune superseded intermediate conversions,
+  rendered packets, review previews, replays and caches. Keep one current useful
+  representation with its source provenance, rather than every attempted version.
+  Use existing deduplication and retention tools; preserve content hashes and
+  logical paths where a current consumer needs them. Never hardlink mutable files.
+- Prune rejected outputs in general. Retain one only for a concrete current use:
+  an assigned repair, an unresolved bug investigation, or an actual failure/DPO
+  training input. Record that use and its consumer; "might be useful someday"
+  is insufficient. After the use ends, remove it. Keep independently useful
+  correct rows from a partly rejected batch; remove bad rows and redundant copies.
+- Check storage during the normal monitoring cadence and after large runs or
+  conversions. Clean autonomously under this order. Brief the other machine so
+  discarded artifacts and obsolete registry entries are removed there by its
+  owner too, rather than silently surviving in mirrors. Record the current
+  decision and reclaimed totals, without building another archive of discarded
+  approaches. This order supersedes older blanket preservation/PRUNE-ASK rules
+  for explicitly discarded work.
+
 # Natlang-native work (owner rules)
 
 These rules apply to every agent on every machine. Paste the short form into any

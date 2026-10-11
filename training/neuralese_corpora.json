@@ -1820,7 +1820,7 @@
       "derived_from": [
         "local-raw-checkpoint-policy-20261006-v14"
       ],
-      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076–1092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
+      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076\u20131092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
     },
     {
       "id": "local-raw-content-identity-diagnostics-20261007-v16",
@@ -1842,7 +1842,7 @@
       "derived_from": [
         "local-raw-replay-policy-failure-20261006-v15"
       ],
-      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076–1093; its failing iteration1093 was attempted update1094."
+      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076\u20131093; its failing iteration1093 was attempted update1094."
     },
     {
       "id": "local-raw-native-length-diagnostics-20261006-v17",
@@ -3248,7 +3248,7 @@
       "owner": "pop",
       "path": "runs/luna-semantic-lambdas-refill-20261006-v17",
       "admission": "current-native-reference-verified-source-only; no-teacher-admission",
-      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6–9 unchanged."
+      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6\u20139 unchanged."
     },
     {
       "id": "luna-semantic-lambdas-source-v18-20261006",
@@ -5777,7 +5777,7 @@
         "**/*"
       ],
       "admission": "root-approved-generation-only-source-proof-no-teacher-or-training-admission",
-      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row’s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
+      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row\u2019s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
       "derived_from": [
         "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
         "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
@@ -5972,7 +5972,7 @@
         "**/*"
       ],
       "admission": "closed-audit-only-explicitly-held-no-training-admission-no-DPO",
-      "notes": "Immutable closed snapshots and action-level audit for V57/V59/V61/V63/V64. 60 queue slots finished: 59 exact native result exports (33 parent whole-world accepted, 26 rejected) and one V57 whole-case request-budget exhaustion with partial evidence and no native row. Repeated seeds cover existing reviewed source groups only; 0 new independent worlds. V63/V64 rejection review finds seven explicit model omissions/value-copy failures, with no source confounds; no local actions approved. Parent acceptance does not confer action admission. Includes exact raw campaign copies, queue/journal/export/trace evidence, source/runtime pins, and V57 supervisor recovery; V57 plan’s missing runtime frozen-manifest SHA is recorded as a gap.",
+      "notes": "Immutable closed snapshots and action-level audit for V57/V59/V61/V63/V64. 60 queue slots finished: 59 exact native result exports (33 parent whole-world accepted, 26 rejected) and one V57 whole-case request-budget exhaustion with partial evidence and no native row. Repeated seeds cover existing reviewed source groups only; 0 new independent worlds. V63/V64 rejection review finds seven explicit model omissions/value-copy failures, with no source confounds; no local actions approved. Parent acceptance does not confer action admission. Includes exact raw campaign copies, queue/journal/export/trace evidence, source/runtime pins, and V57 supervisor recovery; V57 plan\u2019s missing runtime frozen-manifest SHA is recorded as a gap.",
       "derived_from": [
         "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
         "neuralese-v16-caption-role-clarification-publication-20261007-v1",
@@ -6007,7 +6007,7 @@
         "neuralese-successor-v14-v10r3-generation-only-20261007-v1",
         "luna-semantic-v65-v67-closed-audit-20261007-v1"
       ],
-      "notes": "Corrected same-world V14 source packet for the Westmere district-name boundary. Source SHA 235924d4a61224f797c7c0329a19fd7a84cd95d96df2454178de3ea14b725e95; only the meeting-notice phrase was clarified, preserving all 24 IDs, golds, groups, and splits. Root generation review SHA 76f04918f0a466407ef2fedf5161ef414122cd6c7136f765dd495e0986113a62 and frozen V69 proof SHA 83b9f86b9070490a3fe6116f02d10d34e63a0342a8721a41b656603b80f8d011 are included. Scripted CPU proof: 24 cases, 216 decisions, 84 reads; 0 model/provider calls. V68’s original case-14 output and original V10r3 bundle remain unchanged and held for source ambiguity. Generation-only; no teacher, trace, or training admission."
+      "notes": "Corrected same-world V14 source packet for the Westmere district-name boundary. Source SHA 235924d4a61224f797c7c0329a19fd7a84cd95d96df2454178de3ea14b725e95; only the meeting-notice phrase was clarified, preserving all 24 IDs, golds, groups, and splits. Root generation review SHA 76f04918f0a466407ef2fedf5161ef414122cd6c7136f765dd495e0986113a62 and frozen V69 proof SHA 83b9f86b9070490a3fe6116f02d10d34e63a0342a8721a41b656603b80f8d011 are included. Scripted CPU proof: 24 cases, 216 decisions, 84 reads; 0 model/provider calls. V68\u2019s original case-14 output and original V10r3 bundle remain unchanged and held for source ambiguity. Generation-only; no teacher, trace, or training admission."
     },
     {
       "id": "neuralese-semantic-iterate-v15-lineage-20261007-v1",
@@ -6017,7 +6017,7 @@
         "**/*"
       ],
       "admission": "source-generation-approved-v8; teacher-observation-trace-and-training-held",
-      "notes": "Immutable V1–V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
+      "notes": "Immutable V1\u2013V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
     },
     {
       "id": "neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1",
@@ -6030,7 +6030,7 @@
       "derived_from": [
         "neuralese-semantic-iterate-v15-lineage-20261007-v1"
       ],
-      "notes": "Held publication bundle for V15 soft-state source V10, SHA 4a8f95f6ba6703437651c6c827b4042d89f536ab59cb2b7cc9496ed8199b7084. Includes V1–V10 variants, failed and passing scripted proofs, runtime feasibility probe, builder, V8 source lineage, and independent/root review evidence. V10 keeps 12 worlds/groups/splits/gold; 2 documented input clarifications. Latest CPU proof passes 12/12 with 48 source reads and 60 actual Neuralese writer-to-reader edges. Zero model/provider calls and zero teacher trajectories; scripted runtime success is not semantic truth or training admission."
+      "notes": "Held publication bundle for V15 soft-state source V10, SHA 4a8f95f6ba6703437651c6c827b4042d89f536ab59cb2b7cc9496ed8199b7084. Includes V1\u2013V10 variants, failed and passing scripted proofs, runtime feasibility probe, builder, V8 source lineage, and independent/root review evidence. V10 keeps 12 worlds/groups/splits/gold; 2 documented input clarifications. Latest CPU proof passes 12/12 with 48 source reads and 60 actual Neuralese writer-to-reader edges. Zero model/provider calls and zero teacher trajectories; scripted runtime success is not semantic truth or training admission."
     },
     {
       "id": "luna-semantic-v68-v71-closed-action-audit-20261007-v1",
@@ -6040,7 +6040,7 @@
         "**/*"
       ],
       "admission": "closed-actual-campaign-audit-only-held-no-native-action-approval-no-training-admission-no-DPO",
-      "notes": "Immutable 1453-file V68–V71 raw and audit snapshot. Four campaigns repeat 24 V14 fact worlds (12 train/12 test), not new independent worlds. 89 exports: 84 accepted parents, 5 rejected; 961 materialized actions remain held. This publication grants no action, recurrence, DPO, or training admission."
+      "notes": "Immutable 1453-file V68\u2013V71 raw and audit snapshot. Four campaigns repeat 24 V14 fact worlds (12 train/12 test), not new independent worlds. 89 exports: 84 accepted parents, 5 rejected; 961 materialized actions remain held. This publication grants no action, recurrence, DPO, or training admission."
     },
     {
       "id": "neuralese-reviewed-restart-cohort-20261007-v15-final",
@@ -6822,7 +6822,7 @@
       "include": [
         "**/*"
       ],
-      "notes": "Closed corrected-source campaign: Luna accepted indices0–5,7–11;6 request-budget partial lacks full execution graph and remains held. Bunny accepted15,16,20,23; transport timeouts/started-abandoned/unstarted cases retained and not model negatives. Recovery is separately reviewed; no automatic parent acceptance to action admission."
+      "notes": "Closed corrected-source campaign: Luna accepted indices0\u20135,7\u201311;6 request-budget partial lacks full execution graph and remains held. Bunny accepted15,16,20,23; transport timeouts/started-abandoned/unstarted cases retained and not model negatives. Recovery is separately reviewed; no automatic parent acceptance to action admission."
     },
     {
       "id": "luna-v17-recovery-runtime-20261008-a2a53630",
@@ -8392,7 +8392,7 @@
       "derived_from": [
         "s1-question-collection-v8-luna-campaign-20261008-v1"
       ],
-      "notes": "Corrected V8 independent review of closed indices 0–14 with nested execution graph/action ledgers, actual nL type signatures and transport provenance. Case19 and other rows are excluded pending closure; later successor required. V1 is preserved but explicitly superseded. No raw outcome changes or training admission."
+      "notes": "Corrected V8 independent review of closed indices 0\u201314 with nested execution graph/action ledgers, actual nL type signatures and transport provenance. Case19 and other rows are excluded pending closure; later successor required. V1 is preserved but explicitly superseded. No raw outcome changes or training admission."
     },
     {
       "id": "s1-question-collection-v8-quality-review-20261008-v3",
@@ -9339,7 +9339,7 @@
         "verified-reasoning-pools-v19-answer-key-v2-20261008-v1",
         "opencode-ling-sdk-collector-integration-closeout-20261008-v1"
       ],
-      "notes": "Exact approved source index 0 Ling CLI smoke, origin-only server amendment, effective OpenCode config, action-MCP/CLI/collector raw evidence and empty collector result are pinned. The official CLI emitted one finished step (16,111 total tokens), one bridge tool-use event and one execution_plan candidate, then a scheduled retry event reported ‘Upstream request failed: Endpoint is unavailable.’ The collector exited 2 with no result row; this is one request observation and does not establish general model availability. Captured isolated CLI caches and generated dependency source trees are preserved locally but excluded from transfer; output includes exact generated package.json/package-lock.json, with versions/integrities and omitted path sizes/counts in the outcome receipt. No rerun, paid fallback, or training admission."
+      "notes": "Exact approved source index 0 Ling CLI smoke, origin-only server amendment, effective OpenCode config, action-MCP/CLI/collector raw evidence and empty collector result are pinned. The official CLI emitted one finished step (16,111 total tokens), one bridge tool-use event and one execution_plan candidate, then a scheduled retry event reported \u2018Upstream request failed: Endpoint is unavailable.\u2019 The collector exited 2 with no result row; this is one request observation and does not establish general model availability. Captured isolated CLI caches and generated dependency source trees are preserved locally but excluded from transfer; output includes exact generated package.json/package-lock.json, with versions/integrities and omitted path sizes/counts in the outcome receipt. No rerun, paid fallback, or training admission."
     },
     {
       "id": "verified-reasoning-pools-v20-source-and-closed-luna-20261008-v1",
@@ -9566,7 +9566,7 @@
         ".git"
       ],
       "admission": "held generation/source evidence only; no training admission",
-      "notes": "Held duplicate source proposal: all96 records overlapped previous V11–V17 source cases. No generation, fresh-world credit, or training admission."
+      "notes": "Held duplicate source proposal: all96 records overlapped previous V11\u2013V17 source cases. No generation, fresh-world credit, or training admission."
     },
     {
       "id": "verified-reasoning-pools-v19-closed-raw-v2-v5-20261008-v1",
@@ -13363,7 +13363,7 @@
       "derived_from": [
         "neuralese-semantic-iterate-v17-guided-source-v7-20261008"
       ],
-      "notes": "Separate held record for rejected pre-correction V8 source SHA 5df1922d…; model-visible initial decision.json exposed gold. Retains exact rejected source/proposal/review and disposition. Deliberately omits all scripted runtime-proof directories; no provider campaign launched, generation count zero, never admitted.",
+      "notes": "Separate held record for rejected pre-correction V8 source SHA 5df1922d\u2026; model-visible initial decision.json exposed gold. Retains exact rejected source/proposal/review and disposition. Deliberately omits all scripted runtime-proof directories; no provider campaign launched, generation count zero, never admitted.",
       "include_root_prefixes": [
         "semantic-lambda-topology-v17-v8-review-v1",
         "neuralese-v17-v8-publication-20261008-v1"
@@ -14608,19 +14608,6 @@
         "v18-v19-full-approved-consolidation-5467-native-4699-text-4961-r-20261009-v1"
       ],
       "notes": "Root composition adoption runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-native-text-composition-adoption-v1.json SHA-256 9e85bdee9137fafae5de3c2d49cf0c1f6a307d33edb394fd377b530d4650268c approves exactly seven native + seven ordinary-text additions, all train, zero recurrence. The base prefix is 5467 native / 4699 text / 4961 recurrence; this delta gives virtual 5474/4706/4961, and with the separately adopted River-derived one-row delta the prospective union is 5475/4707/4961. Source/action decisions are the four ABD-1A ordinary actions and three independently selected case-01 actions; all exact row IDs, source/context/trace, native admission overlay, text derivations, tokenizer fingerprints and root adoption/review receipts are included. Provider route is official OpenCode Zen Step 5 Preview Free, main/small alias equal, low; physical/upstream and title calls are unknown. Simple-four capture provenance includes a stop-time snapshot because earlier CLI capture references were mutable/reused; it is not retroactively attributed to the original attempt. Case-01 includes original attempt and separate post-stop snapshot. No new-world credit, whole trajectories, recurrence, model/runtime/learned-writer qualification, automatic training selection or active input change."
-    },
-    {
-      "id": "neuralese-v18-v19-selected17-full-recurrence-static-qualification-20261009-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-v18-v19-selected17-full-recurrence-static-qualification-20261009-v1",
-      "include": [
-        "**/*"
-      ],
-      "admission": "static-exact-weight-foundation-and-runtime-qualification-evidence-plus-authenticated-context-audit-only;not-training-data;live-recurrence-outcome-excluded",
-      "derived_from": [
-        "v18-v19-full-selected17-native-text-5467-4699-r4961-20261009-v1"
-      ],
-      "notes": "Frozen v3 recipe/runtime, fresh token-identity rerun, exact-input reused v1 embedding/raw/adapted runtime gate reports and referenced artifacts, warmup report/heads, source context crosswalk, and root assembly receipts. Live recurrence log/checkpoints/terminal results are excluded; no new training admission or recurrence performance claim."
     },
     {
       "id": "v18-v19-opencode-step5-selected-eight-native-text-delta-20261009-v1",
@@ -18651,7 +18638,7 @@
         "criteria": "harness-bench-criteria/2",
         "working_copy": "/home/werg/data/harness-bench/build-20261009-1000"
       },
-      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v2 (2026-10-10): 6 of its records carry OpenHands' bash soft-timeout notice (\"no new output after 30 seconds ... send keys ... use the timeout parameter in execute_bash\") in a pi bash result, which pi never shows; v2 replays with that notice as the divergence point. Kept for provenance; do not use. Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md §2) built 2026-10-09/10 by harness_bench_build.sh at code commit 744bdd4f (applications/pi/bench/replay.ts, training/neuralese/natlang_neuralese/harness_bench/*): 492 resolved trajectories prepared, 489 replayed in pi-durable's tools over their base commits (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,538 of 22,722 steps verified. Divergences: task_tracker 113, execute_bash interactive input 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, str_replace_editor other 1. 3,852 records (3,740 train / 112 test), 20,359 digest parts; only steps before a divergence are kept. Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,852 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. prepared.jsonl and replayed.jsonl carry the normalized transcripts and the replay verification; gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md §7 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v2 (2026-10-10): 6 of its records carry OpenHands' bash soft-timeout notice (\"no new output after 30 seconds ... send keys ... use the timeout parameter in execute_bash\") in a pi bash result, which pi never shows; v2 replays with that notice as the divergence point. Kept for provenance; do not use. Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md \u00a72) built 2026-10-09/10 by harness_bench_build.sh at code commit 744bdd4f (applications/pi/bench/replay.ts, training/neuralese/natlang_neuralese/harness_bench/*): 492 resolved trajectories prepared, 489 replayed in pi-durable's tools over their base commits (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,538 of 22,722 steps verified. Divergences: task_tracker 113, execute_bash interactive input 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, str_replace_editor other 1. 3,852 records (3,740 train / 112 test), 20,359 digest parts; only steps before a divergence are kept. Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,852 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. prepared.jsonl and replayed.jsonl carry the normalized transcripts and the replay verification; gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
       "required_conversion": {
         "reason": "built with natlang.harness-bench-conversion/1: tool-output parts have type 'digest' and the piece is prompt:digest; DECISIONS.md 2026-10-09 (one summarizer family) renamed them to 'view' and prompt:view (view's body), by rewrite. train.trajectories refuses 'digest' parts before any model work.",
         "conversion": "scripts/neuralese_data/digest_to_view.py --source <this corpus> --out <new corpus dir> --copy summary.json surface.json prepared.jsonl replayed.jsonl replay.log",
@@ -18693,7 +18680,7 @@
         "criteria": "harness-bench-criteria/2",
         "working_copy": "/home/werg/data/harness-bench/build-20261010-1000"
       },
-      "notes": "SUPERSEDED for training use by harness-bench-swe-rebench-openhands-pi-records-20261010-v3 (2026-10-10, the registered digest→view conversion; this corpus stays as published and the trainer refuses its digest parts). Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md §2), supersedes harness-bench-swe-rebench-openhands-pi-records-20261010-v1. Built 2026-10-10 by harness_bench_build.sh at code commit b4543ebd: same surface.json and prepared.jsonl as v1 (copied, byte-identical), replay and records re-run with the fix that an OpenHands bash timeout notice ('[The command has no new output after N seconds. ... send keys (\"C-c\", \"C-z\", \"C-d\") ... or use the timeout parameter in execute_bash for future commands.]', or its 'timed out after N seconds' form) is a divergence point: pi's bash waits for the command, so pi would never show that notice; replay stops before that step and records keep only the verified prefix. 492 resolved trajectories prepared, 489 replayed (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,468 of 22,652 steps verified. Divergences: task_tracker 112, bash soft timeout (OpenHands-only interaction) 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, execute_bash interactive input 1, str_replace_editor other 1. 3,843 records (3,731 train / 112 test), 20,302 digest parts; no record contains the soft-timeout notice (v1: 6). Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,843 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. Gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md §7 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
+      "notes": "SUPERSEDED for training use by harness-bench-swe-rebench-openhands-pi-records-20261010-v3 (2026-10-10, the registered digest\u2192view conversion; this corpus stays as published and the trainer refuses its digest parts). Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md \u00a72), supersedes harness-bench-swe-rebench-openhands-pi-records-20261010-v1. Built 2026-10-10 by harness_bench_build.sh at code commit b4543ebd: same surface.json and prepared.jsonl as v1 (copied, byte-identical), replay and records re-run with the fix that an OpenHands bash timeout notice ('[The command has no new output after N seconds. ... send keys (\"C-c\", \"C-z\", \"C-d\") ... or use the timeout parameter in execute_bash for future commands.]', or its 'timed out after N seconds' form) is a divergence point: pi's bash waits for the command, so pi would never show that notice; replay stops before that step and records keep only the verified prefix. 492 resolved trajectories prepared, 489 replayed (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,468 of 22,652 steps verified. Divergences: task_tracker 112, bash soft timeout (OpenHands-only interaction) 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, execute_bash interactive input 1, str_replace_editor other 1. 3,843 records (3,731 train / 112 test), 20,302 digest parts; no record contains the soft-timeout notice (v1: 6). Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,843 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. Gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
       "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v1",
       "required_conversion": {
         "reason": "built with natlang.harness-bench-conversion/1: tool-output parts have type 'digest' and the piece is prompt:digest; DECISIONS.md 2026-10-09 (one summarizer family) renamed them to 'view' and prompt:view (view's body), by rewrite. train.trajectories refuses 'digest' parts before any model work.",
@@ -18744,7 +18731,7 @@
           "working_copy": "/home/werg/data/harness-bench/build-20261010-1000"
         }
       },
-      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v4 (2026-10-10): its split_of(repo, 5) splits disagree with S1's for 53 of its 321 repositories (cross-corpus closure); v4 follows S1. Kept for provenance and for lineages already pinned to it. Harness-bench native records of harness-bench-swe-rebench-openhands-pi-records-20261010-v2 after the registered view rename (DECISIONS.md 2026-10-09, one summarizer family; HARNESS_BENCH.md §3), converted 2026-10-10 by scripts/neuralese_data/digest_to_view.py@1: every 'digest' part is a 'view' part (name view:<sha12>, note '  // view of the ...'), the piece prompt:digest is prompt:view with view's body (natlang_neuralese.view.INSTRUCTIONS), neuralese_conversion.version natlang.harness-bench-conversion/2 with sites.view, views_in_trajectory, provenance view_chars, and each record carries view_rename (converter, from_version natlang.harness-bench-conversion/1, digest_parts). 3,843 records (3,731 train / 112 test), 20,302 view parts in 3,670 records, 1 piece renamed; summary.json, surface.json, prepared.jsonl, replayed.jsonl and replay.log copied byte for byte. conversion.json records input and output SHA-256 and the counts. Validated 2026-10-10 with the trajectory trainer's record loading (train.trajectories reject_digest_part on every part, no prompt:digest piece, authenticated_recurrence_context_view, crisp_messages rendering; no model load): all 3,843 records load and render, none held, no digest part remains, every receipt hash verifies. Per-record admission unchanged from v2 (harness-bench-criteria/2). Corpus-level training admission is held as for v2: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md §7 step 2). Stored on /mnt/external with the other corpora (data/neuralese/corpora is a symlink there; a finished, held corpus is not latency-critical). 2026-10-10: text twins rendered with the fixed renderer (harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1, -text-mellum21-12b-20261010-v1) and the harness_bench cohort declared, held, in raw-recurrence-v3 / raw-recurrence-mellum-v2.",
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v4 (2026-10-10): its split_of(repo, 5) splits disagree with S1's for 53 of its 321 repositories (cross-corpus closure); v4 follows S1. Kept for provenance and for lineages already pinned to it. Harness-bench native records of harness-bench-swe-rebench-openhands-pi-records-20261010-v2 after the registered view rename (DECISIONS.md 2026-10-09, one summarizer family; HARNESS_BENCH.md \u00a73), converted 2026-10-10 by scripts/neuralese_data/digest_to_view.py@1: every 'digest' part is a 'view' part (name view:<sha12>, note '  // view of the ...'), the piece prompt:digest is prompt:view with view's body (natlang_neuralese.view.INSTRUCTIONS), neuralese_conversion.version natlang.harness-bench-conversion/2 with sites.view, views_in_trajectory, provenance view_chars, and each record carries view_rename (converter, from_version natlang.harness-bench-conversion/1, digest_parts). 3,843 records (3,731 train / 112 test), 20,302 view parts in 3,670 records, 1 piece renamed; summary.json, surface.json, prepared.jsonl, replayed.jsonl and replay.log copied byte for byte. conversion.json records input and output SHA-256 and the counts. Validated 2026-10-10 with the trajectory trainer's record loading (train.trajectories reject_digest_part on every part, no prompt:digest piece, authenticated_recurrence_context_view, crisp_messages rendering; no model load): all 3,843 records load and render, none held, no digest part remains, every receipt hash verifies. Per-record admission unchanged from v2 (harness-bench-criteria/2). Corpus-level training admission is held as for v2: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (data/neuralese/corpora is a symlink there; a finished, held corpus is not latency-critical). 2026-10-10: text twins rendered with the fixed renderer (harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1, -text-mellum21-12b-20261010-v1) and the harness_bench cohort declared, held, in raw-recurrence-v3 / raw-recurrence-mellum-v2.",
       "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v2",
       "superseded_by": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
     },
@@ -18805,7 +18792,7 @@
           }
         }
       },
-      "notes": "Harness-bench native records rebuilt 2026-10-10 from harness-bench-swe-rebench-openhands-pi-records-20261010-v3's replay outputs by the records stage at 621de060, which writes view parts directly (no digest_to_view step). Only the splits changed: harness-bench v3 split by split_of(repo, 5) while S1 (s1-full-final-20261003, repo: and swe-instance: groups) holds every one of these 321 repositories, 53 of them in the other split, so the view corpus v2 closure dropped 2,826 tool-output records (VIEW_CORPUS.md §4.1). Now all 321 repositories take S1's split (275 train / 46 test; moved from split_of: {\"test->train\": 8, \"train->test\": 45}; none unplaceable). 3843 records (2969 train / 874 test; v3: 3,731 / 112), 20302 view parts; every record equals its v3 record except split, provenance.split_placement (new: rule, touched corpora) and the absent view_rename (v3's converter receipt); pieces.jsonl byte-identical. Per-record admission unchanged (harness-bench-criteria/2, all approved). Admission as v3's (recurrence held). Cross-corpus index: cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1.",
+      "notes": "Harness-bench native records rebuilt 2026-10-10 from harness-bench-swe-rebench-openhands-pi-records-20261010-v3's replay outputs by the records stage at 621de060, which writes view parts directly (no digest_to_view step). Only the splits changed: harness-bench v3 split by split_of(repo, 5) while S1 (s1-full-final-20261003, repo: and swe-instance: groups) holds every one of these 321 repositories, 53 of them in the other split, so the view corpus v2 closure dropped 2,826 tool-output records (VIEW_CORPUS.md \u00a74.1). Now all 321 repositories take S1's split (275 train / 46 test; moved from split_of: {\"test->train\": 8, \"train->test\": 45}; none unplaceable). 3843 records (2969 train / 874 test; v3: 3,731 / 112), 20302 view parts; every record equals its v3 record except split, provenance.split_placement (new: rule, touched corpora) and the absent view_rename (v3's converter receipt); pieces.jsonl byte-identical. Per-record admission unchanged (harness-bench-criteria/2, all approved). Admission as v3's (recurrence held). Cross-corpus index: cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1.",
       "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
     },
     {
@@ -18868,7 +18855,7 @@
           "tokens": 72442697
         }
       },
-      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Training admission kept for lineages that already assembled it (e.g. neuralese-native-harness-text-mix-lfm25-8805-20261010-v1); new recipes pin v2. LFM2.5-350M tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 74,552,953 tokens (72,442,697 train / 2,110,256 test), of which 791,583 (1.1%) are the supervised assistant suffix; max document 102,005 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md §6/§7). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Training admission kept for lineages that already assembled it (e.g. neuralese-native-harness-text-mix-lfm25-8805-20261010-v1); new recipes pin v2. LFM2.5-350M tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 74,552,953 tokens (72,442,697 train / 2,110,256 test), of which 791,583 (1.1%) are the supervised assistant suffix; max document 102,005 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md \u00a76/\u00a77). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
       "superseded_by": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2"
     },
     {
@@ -19003,7 +18990,7 @@
           "tokens": 92621371
         }
       },
-      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Mellum2.1-12B-A2.5B-Thinking tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 95,410,999 tokens (92,621,371 train / 2,789,628 test), of which 821,583 (0.9%) are the supervised assistant suffix; max document 105,093 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md §6/§7). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Mellum2.1-12B-A2.5B-Thinking tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 95,410,999 tokens (92,621,371 train / 2,789,628 test), of which 821,583 (0.9%) are the supervised assistant suffix; max document 105,093 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md \u00a76/\u00a77). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
       "superseded_by": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2"
     },
     {
@@ -20808,7 +20795,7 @@
       ],
       "license": "Inherited authored source identities/license in referenced V22 source artifact",
       "independent_new_worlds": 0,
-      "notes": "Additional now-closed NVIDIA/Gemini3.5Lite source1–4 plus Kilo source0. Completes byte availability for independent reviewed10-row NVIDIA/Gemini comparison; Kilo wrong-output case preserved. Model done is not oracle pass. Do not mutate first closed corpus manifest; preserve all partial/error/success artifacts; native replay and source-quality admission pending."
+      "notes": "Additional now-closed NVIDIA/Gemini3.5Lite source1\u20134 plus Kilo source0. Completes byte availability for independent reviewed10-row NVIDIA/Gemini comparison; Kilo wrong-output case preserved. Model done is not oracle pass. Do not mutate first closed corpus manifest; preserve all partial/error/success artifacts; native replay and source-quality admission pending."
     },
     {
       "id": "free-provider-google-lite-and-new-free-screens-held-20261009-v1",
@@ -21055,7 +21042,7 @@
       ],
       "license": "Inherited exact source licenses, preserved per compatible batch",
       "independent_new_worlds": 0,
-      "notes": "131 strict source-consistent labels→23 authored collection IR cases (8 choice/14 binary/1 ordinal) at batch-size8. All23 actual scripted references accepted with visible captures and kind-specific runtime output instructions;308 held native turns. Binary probability source questions kept verbatim, typed output explicitly p>=0.5→boolean; choice/ordinal select exact source label, no probability envelope. Zero provider calls/teacher scaffold claims/new worlds/admission. Fully replayed static reference is not source-quality approval or learned-channel qualification. All125 rejected label rows preserved. V1 derivative superseded, not combined as additional worlds. Superseded by v3 shared ordinal source-mapping correction. Earlier snapshots remain held historical evidence, never mixed as additional worlds.",
+      "notes": "131 strict source-consistent labels\u219223 authored collection IR cases (8 choice/14 binary/1 ordinal) at batch-size8. All23 actual scripted references accepted with visible captures and kind-specific runtime output instructions;308 held native turns. Binary probability source questions kept verbatim, typed output explicitly p>=0.5\u2192boolean; choice/ordinal select exact source label, no probability envelope. Zero provider calls/teacher scaffold claims/new worlds/admission. Fully replayed static reference is not source-quality approval or learned-channel qualification. All125 rejected label rows preserved. V1 derivative superseded, not combined as additional worlds. Superseded by v3 shared ordinal source-mapping correction. Earlier snapshots remain held historical evidence, never mixed as additional worlds.",
       "superseded_by": "free-provider-static-decision-inline-lambdas-held-20261010-v3"
     },
     {
@@ -26204,22 +26191,6 @@
       "notes": "Supplemental immutable packet produced after initial quality snapshot; original manifest remains unchanged. Exact packet SHA8c2040464d91383c1560db083778035ba43f712d59ef3f90d16a7d9b5ff24842. DGX full S1/harness4 closure retained47/47."
     },
     {
-      "id": "luna-ar-native-harness-v5-full-state-closeout-held-20261010-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-splitfixed-28793-20261010-v5/closed-output-v1",
-      "include": [
-        "**/*"
-      ],
-      "exclude_dirs": [
-        "__pycache__"
-      ],
-      "split": "model-checkpoint-and-execution-evidence-not-training-data",
-      "source_class": "clean-lineage-full-state-and-frozen-runtime",
-      "training_admission": false,
-      "admission": "unqualified; exact resume and diagnostic evidence only",
-      "notes": "Clean corrected split-safe lineage completed32889; final fulloptimizer/headscurrent, final gatefails6/30. Bestfullstate31744 distinct, fails3/30. No foundation/runtime certificate."
-    },
-    {
       "id": "luna-ar-native-harness-v6-refine-frozen-inputs-held-20261010-v1",
       "owner": "pop",
       "path": "runs/luna-ar-native-harness-alignment-refine-31744-20261010-v6",
@@ -26701,7 +26672,7 @@
       "source_class": "iterative-guidance-trajectories-inputs",
       "training_admission": false,
       "admission": "held-source-native-quality-review",
-      "notes": "Fifteen V35 V5 train worlds indices 0–14, original V4 golds/facts/groups unchanged; corrected shared current-status note guidance. SCHED-543 index15 already recovered separately. Three workers beside at most two remaining V53 workers, total at most five. Repeated original worlds, no independent-world credit. Input-only while active."
+      "notes": "Fifteen V35 V5 train worlds indices 0\u201314, original V4 golds/facts/groups unchanged; corrected shared current-status note guidance. SCHED-543 index15 already recovered separately. Three workers beside at most two remaining V53 workers, total at most five. Repeated original worlds, no independent-world credit. Input-only while active."
     },
     {
       "id": "free-provider-google-v20-closed-raw-held-20261010-v1",
@@ -27103,19 +27074,6 @@
       "training_admission": false,
       "admission": "held-independent-quality-review",
       "notes": "SAFE-512 unchanged original source recovery accepted, all6files exact, genuine four-pass typed iterateOn and final Draft. Previous V54 correct return/missing file preserved separately, not silently repaired or automatic DPO admission. Audit6686b074a856e8eb6c96339547d37c446fb1174a9c79cecadc18d3f0d15d1579; no new source-world credit."
-    },
-    {
-      "id": "luna-ar-native-harness-v6-full-state-closeout-held-20261010-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-refine-31744-20261010-v6/direct-stage-run",
-      "exclude_dirs": [
-        "__pycache__"
-      ],
-      "split": "inherited-train-evidence",
-      "source_class": "source-bound-native-quality-evidence",
-      "training_admission": false,
-      "admission": "held-unqualified-alignment-or-source-quality-evidence",
-      "notes": "Completed33792 with8strict gate failures; entire model/optimizer/RNG and best/final heads preserved. No qualification inherited."
     },
     {
       "id": "luna-ar-native-harness-v7-continuation-frozen-inputs-held-20261010-v1",
@@ -29197,7 +29155,7 @@
       "source_class": "held-generation-quality-and-source-closure",
       "training_admission": false,
       "admission": "held-pending-explicit-quality-and-source-review",
-      "notes": "Actual2native rows→29turns. Preservedfirstwrongapprovalbitsdiagnostic; correctedall29held then9exactreviewedactions only,20held. Selectednative9candidate,neuralese9held7unsupportedinterpolation/0childresult conversions. No blanketcorpus/operatoradmission."
+      "notes": "Actual2native rows\u219229turns. Preservedfirstwrongapprovalbitsdiagnostic; correctedall29held then9exactreviewedactions only,20held. Selectednative9candidate,neuralese9held7unsupportedinterpolation/0childresult conversions. No blanketcorpus/operatoradmission."
     },
     {
       "id": "luna-v64-seven-source-original-inputs-held-20261011-v1",
@@ -29322,30 +29280,6 @@
       ]
     },
     {
-      "id": "luna-ar-native-harness-alignment-v7-final-review-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-v7-final-review-held-20261011-v1",
-      "include": [
-        "**/*"
-      ],
-      "training_admission": false,
-      "admission": "held",
-      "source_class": "declared-neuralese-training-run-evidence",
-      "notes": "Exact V7 final unqualified metadata or V8 immutable executed recipe/package/launch evidence. Large V7 weights are hash references, not copied weight payloads. Preparation draft retained distinct from executed recipe."
-    },
-    {
-      "id": "luna-ar-native-harness-alignment-v8-launch-evidence-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-v8-launch-evidence-held-20261011-v1",
-      "include": [
-        "**/*"
-      ],
-      "training_admission": false,
-      "admission": "held",
-      "source_class": "declared-neuralese-training-run-evidence",
-      "notes": "Exact V7 final unqualified metadata or V8 immutable executed recipe/package/launch evidence. Large V7 weights are hash references, not copied weight payloads. Preparation draft retained distinct from executed recipe."
-    },
-    {
       "id": "luna-v64-seven-source-admitted-nine-native-20261011-v1",
       "owner": "pop",
       "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-admitted-nine-native-v1",
@@ -29420,19 +29354,6 @@
       "training_admission": false,
       "admission": "held-quality-review-no-training-admission-no-DPO",
       "notes": "Immutable V2 terminal outcome audits and action-level V1/V2 scope-failure attributions plus raw-campaign fingerprint manifests. Parent accepted/rejected counts and earlier failures are distinguished; all failed actions remain preserved. Review does not grant action approval, training admission, or DPO eligibility."
-    },
-    {
-      "id": "luna-ar-native-harness-alignment-v8-startup-review-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-v8-startup-review-held-20261011-v1",
-      "include": [
-        "**/*"
-      ],
-      "split": "inherited-training-state-evidence",
-      "source_class": "closed-training-startup-diagnostic-review",
-      "training_admission": false,
-      "admission": "held-startup-review-only-no-training-admission",
-      "notes": "Root requested preservation of the V8 startup review snapshot and its exact artifacts. This is diagnostic evidence only; it does not qualify a training state or authorize a new job."
     },
     {
       "id": "decision-visible-answerability-root-review-held-20261011-v15",
@@ -29735,7 +29656,7 @@
       "training_admission": false,
       "admission": "prepared-only-root-review-required",
       "independent_new_worlds": 0,
-      "notes": "Prepared five per-lane V73 queues from V35 static reference cases (55 programs/395 source items) on frozen runtime V16. Binds actual V72 worker lanes 1,3,4,5 plus the separate lane-02 supplement (PID 1033871) to V73 workers 1–5; each queue SHA and PID is pinned. V71 index16 retry is recorded as completed prerequisite, not substituted as V72 output. Some V72 predecessors were active/incomplete at preparation; the reviewed starter waits on exact PIDs and blocks any lane whose own queue is not terminally covered. All data held, no launch and no admission."
+      "notes": "Prepared five per-lane V73 queues from V35 static reference cases (55 programs/395 source items) on frozen runtime V16. Binds actual V72 worker lanes 1,3,4,5 plus the separate lane-02 supplement (PID 1033871) to V73 workers 1\u20135; each queue SHA and PID is pinned. V71 index16 retry is recorded as completed prerequisite, not substituted as V72 output. Some V72 predecessors were active/incomplete at preparation; the reviewed starter waits on exact PIDs and blocks any lane whose own queue is not terminally covered. All data held, no launch and no admission."
     },
     {
       "id": "luna-choice-confidence-v73-v35-runtimev16-input-plan-held-20261011-v2",
@@ -29889,48 +29810,6 @@
       "admission": "root-approved-launch-evidence-no-quality-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Separate immutable two-file supplement records root approval and supervisor launch PID 1036055 for the V73 input plan. The earlier prepared input snapshot remains unchanged; active campaign-launch/journals/logs are excluded. This records launch only, not result quality or training admission."
-    },
-    {
-      "id": "luna-ar-native-harness-alignment-v8-step38912-review-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-v8-step38912-review-held-20261011-v1",
-      "include": [
-        "**/*"
-      ],
-      "split": "training-runtime-diagnostic-evidence",
-      "source_class": "held-alignment-checkpoint-review",
-      "training_admission": false,
-      "admission": "one-alignment-gate-only-no-runtime-or-training-admission",
-      "independent_new_worlds": 0,
-      "notes": "Exact V8 step 38912 held review snapshot. One strict alignment gate passed; the required two-consecutive-gate alignment qualification remains false. Exact checkpoint/eval/report metadata only; no weights copied. Does not qualify adapted runtime, foundation, recurrence, task quality, or authorize training."
-    },
-    {
-      "id": "luna-ar-native-harness-alignment-v8-recurrence-source-readiness-review-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-v8-recurrence-source-readiness-review-held-20261011-v1",
-      "include": [
-        "**/*"
-      ],
-      "split": "inherited-r4961-source-and-context-review",
-      "source_class": "recurrence-source-readiness-audit",
-      "training_admission": false,
-      "admission": "review-evidence-only-no-new-admission-or-weight-qualification",
-      "independent_new_worlds": 0,
-      "notes": "Read-only audit of the unchanged R4961 source prefix, its exact 554 train writer-reader edge candidates, per-row source pins, groups, and context/structural closure. The original R4961 source admission is separately pinned in the additive clarification snapshot. No model/runtime/gradient or causal-use qualification is asserted."
-    },
-    {
-      "id": "luna-ar-native-harness-alignment-v8-recurrence-source-admission-clarification-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-v8-recurrence-source-admission-clarification-held-20261011-v1",
-      "include": [
-        "**/*"
-      ],
-      "split": "inherited-r4961-source-admission-clarification",
-      "source_class": "additive-review-interpretation-correction",
-      "training_admission": false,
-      "admission": "clarifies-existing-source-admission-no-new-data-or-training-admission",
-      "independent_new_worlds": 0,
-      "notes": "Additive correction: the exact unchanged R4961 prefix was explicitly root-admitted in V9; V18/V19 no-new-recurrence-admission applies to their ordinary-action delta and does not revoke the inherited recurrence prefix. V8 exact-weight runtime and training-stage qualification remain separate. Does not modify the earlier sealed readiness review."
     },
     {
       "id": "annotation-folder-v23-cancelled-unused-preparation-held-20261011-v1",
@@ -30432,84 +30311,6 @@
       "notes": "Separate immutable root approval and launch receipt for V75 v3, supervisor PID 1048971. Receipt pins approved plan SHA 2cdd29b7b8a50690d7f057be47c6c8f0f16db7358f7b80785590c8fdbdf1f4f3. Does not imply outcome quality or admission."
     },
     {
-      "id": "luna-ar-native-harness-plain-behavior-probes-v1-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
-      "include": [
-        "plain-behavior-probes-v1/probes.jsonl",
-        "plain-behavior-probes-v1/build-probes.py",
-        "plain-behavior-probes-v1/probe-manifest.json"
-      ],
-      "split": "held-eval-probe-history-superseded",
-      "source_class": "held-paired-plain-behavior-evaluation-probes",
-      "training_admission": false,
-      "admission": "held-evaluation-evidence-only-superseded-probe-convention-no-training-admission",
-      "independent_new_worlds": 0,
-      "notes": "Immutable original V1 probe artifact retained as history. Its convention predates the owner-reviewed LFM-native V2 and it is not the execution input. No generation or training admission."
-    },
-    {
-      "id": "luna-ar-native-harness-plain-behavior-probes-v2-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
-      "include": [
-        "plain-behavior-probes-v2/probes.jsonl",
-        "plain-behavior-probes-v2/build-probes.py",
-        "plain-behavior-probes-v2/probe-manifest.json"
-      ],
-      "split": "held-paired-plain-behavior-evaluation-input",
-      "source_class": "held-paired-plain-behavior-evaluation-probes",
-      "training_admission": false,
-      "admission": "reviewed-evaluation-input-only-no-training-admission",
-      "independent_new_worlds": 0,
-      "notes": "Owner-reviewed fixed 48-probe LFM-native paired plain-text input. Expected fields remain offline; open/native outputs require manual semantic review. No generation has been run."
-    },
-    {
-      "id": "luna-ar-native-harness-baseline-restore-only-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
-      "include": [
-        "baseline-restore-only-cpu-v1/restore.json"
-      ],
-      "split": "held-loader-restore-only-validation",
-      "source_class": "held-cpu-model-loader-restore-validation",
-      "training_admission": false,
-      "admission": "restore-compatibility-evidence-only-no-behavior-qualification",
-      "independent_new_worlds": 0,
-      "notes": "CPU-only restore validation of exact pre-alignment embedded LFM LoRA checkpoint; no generation, GPU load, training, or admission. Records shared loader/environment pins and exact tensor key/shape/value matches."
-    },
-    {
-      "id": "luna-ar-native-harness-plain-behavior-plan-v1-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
-      "include": [
-        "plain-text-behavior-comparison-plan-v1/plan.json",
-        "plain-text-behavior-comparison-plan-v1/plan.md"
-      ],
-      "split": "held-paired-behavior-plan-history-superseded",
-      "source_class": "held-evaluation-run-plan",
-      "training_admission": false,
-      "admission": "plan-history-only-superseded-no-training-admission",
-      "independent_new_worlds": 0,
-      "notes": "Original plan retained unchanged as planning history. It has superseded component pins and does not authorize an execution; see additive V2 plan snapshot."
-    },
-    {
-      "id": "luna-ar-native-harness-plain-behavior-plan-v2-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
-      "include": [
-        "plain-text-behavior-comparison-plan-v2/plan.json",
-        "plain-text-behavior-comparison-plan-v2/plan.md",
-        "plain-text-behavior-execution-v1/package-manifest.json",
-        "plain-text-behavior-execution-v1/package-source.tar"
-      ],
-      "split": "held-paired-behavior-execution-plan",
-      "source_class": "held-evaluation-package-and-plan",
-      "training_admission": false,
-      "admission": "prepared-execution-evidence-not-run-no-training-admission",
-      "independent_new_worlds": 0,
-      "notes": "Prepared plan and immutable package source for future 48-probe x 3-role paired evaluation. Wait for V8 closure and exact selected checkpoint receipt; do not overlap training. No model generation performed."
-    },
-    {
       "id": "decision-source-quality-root-review-v17-held-20261011-v1",
       "owner": "pop",
       "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v17",
@@ -30621,7 +30422,7 @@
       "training_admission": false,
       "admission": "root-approved-generation-input-only-no-output-or-training-admission",
       "independent_new_worlds": 0,
-      "notes": "V75 v4 preparation-only input snapshot on runtime V17, 54 static programs / 390 source items, five exact worker queues. It binds the current 79-hold policy snapshot SHA c8eab8b4... and exact completed preparer snapshot SHA 6c1ff89f...; later canonical policy or code changes do not invalidate the prepared source identity. Predecessors are explicitly numbered logical lanes 1–5 with exact queue hashes and V16 runtime manifest pins in the reviewed/root-approved plans. Root supervisor 1052262 has started lane 2 and waits on other predecessor lanes; live campaign status/journals/results/logs excluded."
+      "notes": "V75 v4 preparation-only input snapshot on runtime V17, 54 static programs / 390 source items, five exact worker queues. It binds the current 79-hold policy snapshot SHA c8eab8b4... and exact completed preparer snapshot SHA 6c1ff89f...; later canonical policy or code changes do not invalidate the prepared source identity. Predecessors are explicitly numbered logical lanes 1\u20135 with exact queue hashes and V16 runtime manifest pins in the reviewed/root-approved plans. Root supervisor 1052262 has started lane 2 and waits on other predecessor lanes; live campaign status/journals/results/logs excluded."
     },
     {
       "id": "luna-choice-confidence-v75-v36-runtimev17-v4-root-approval-launch-held-20261011-v1",
@@ -30983,64 +30784,6 @@
       "admission": "predecessor-lineage-only-no-training-admission",
       "independent_new_worlds": 0,
       "notes": "Immutable lane-by-lane predecessor snapshot binding V76 to five logical V75 lanes and their captured queue/journal evidence. This is scheduling lineage only."
-    },
-    {
-      "id": "luna-ar-native-harness-alignment-v8-selected-state-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-refine-from-best-20261011-v8/direct-stage-run",
-      "include": [
-        "direct-stage-plan.json",
-        "direct-stage-result.json",
-        "autoregressive_text_fixup/best-checkpoint.pt",
-        "autoregressive_text_fixup/best-heads.pt",
-        "autoregressive_text_fixup/best-checkpoint.json",
-        "autoregressive_text_fixup/report.json",
-        "autoregressive_text_fixup/heads-export-status.json",
-        "autoregressive_text_fixup/optimizer-restore.jsonl",
-        "autoregressive_text_fixup/plan.json"
-      ],
-      "split": "held-selected-training-state-and-alignment-evaluation",
-      "source_class": "held-neuralese-training-checkpoint-and-selection-evidence",
-      "training_admission": false,
-      "admission": "held-alignment-selected-state-only-no-task-runtime-or-training-admission",
-      "independent_new_worlds": 0,
-      "notes": "Exact selected V8 step 39936 full checkpoint and heads, best-selection receipt, stage plan/result, report and optimizer-restore evidence. Alignment gates passed the required consecutive evaluations, but this is not task-quality, adapted-runtime, foundation, recurrence, or training admission. Checkpoint bytes are included for exact downstream review/resumability; no training is authorized."
-    },
-    {
-      "id": "luna-ar-native-harness-plain-behavior-and-runtime-diagnostics-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
-      "include": [
-        "plain-behavior-probes-v2/**",
-        "plain-behavior-earliest-retained-full-v1/**",
-        "plain-behavior-v7-predecessor-comparison-v1/**",
-        "plain-behavior-lineage-diagnostic-v1/**",
-        "v7-final/**",
-        "v8-adapted-runtime-diagnostic-v5/**"
-      ],
-      "split": "held-behavior-and-runtime-diagnostics",
-      "source_class": "held-paired-behavior-evaluation-and-exact-weight-runtime-diagnostic",
-      "training_admission": false,
-      "admission": "held-evaluation-and-runtime-evidence-no-training-admission",
-      "independent_new_worlds": 0,
-      "notes": "Exact LFM-native 48-probe inputs and paired results for the original pre-alignment student, unmodified base, earliest retained V5 candidate and V7 predecessor, plus V8 selected-weight adapted-runtime diagnostic v5. These are descriptive/diagnostic only: plain behavior remains materially poor on exact math and tool-use outputs; runtime v5 establishes its narrow implementation checks only, not task quality or foundation requalification. V8 selected weights are separately included under luna-ar-native-harness-alignment-v8-selected-state-held-20261011-v1. No training admission."
-    },
-    {
-      "id": "luna-preservation-superseded-owner-dgx8f98-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1/superseded-preservation-owner-dgx8f98-v1",
-      "include": [
-        "superseded-preservation.patch",
-        "disposition.json",
-        "SHA256SUMS-original",
-        "FILES.sha256"
-      ],
-      "split": "held-superseded-implementation-and-cache-disposition",
-      "source_class": "held-superseded-preservation-capture-work-disposition",
-      "training_admission": false,
-      "admission": "superseded-diagnostic-only-no-training-admission",
-      "independent_new_worlds": 0,
-      "notes": "Preserves the exact uncommitted Pop preservation/capture patch removed after owner decision dgx-8f98 superseded that approach. Its V1 native text-window teacher cache is explicitly invalid diagnostic-only due to possible final-norm reapplication; no corrected V2 cache was created. No code or cache is admitted for training or qualification."
     },
     {
       "id": "google-choice-confidence-v40-input-unlaunched-held-20261011-v1",
@@ -31493,7 +31236,7 @@
       "training_admission": false,
       "admission": "static-reference-and-future-generation-source-only-no-provider-call-admission",
       "independent_new_worlds": 0,
-      "notes": "Immutable V41 append-only prefix snapshot at 356 label rows. The selected remainder excludes V78’s 187-row prefix and V78/V79 already-selected items/groups. Static adapter used 132 completed label rows to produce 16 programs/102 labels/zero replay failures; combined V80 source has 5 criteria-fixed CLINC programs plus 16 remainder programs, 139 unique inherited-train items/groups. Raw labels, source master cases/manifest, adapter rejections, held native scaffold, component archive, replay evidence, and combined input provenance are included."
+      "notes": "Immutable V41 append-only prefix snapshot at 356 label rows. The selected remainder excludes V78\u2019s 187-row prefix and V78/V79 already-selected items/groups. Static adapter used 132 completed label rows to produce 16 programs/102 labels/zero replay failures; combined V80 source has 5 criteria-fixed CLINC programs plus 16 remainder programs, 139 unique inherited-train items/groups. Raw labels, source master cases/manifest, adapter rejections, held native scaffold, component archive, replay evidence, and combined input provenance are included."
     },
     {
       "id": "luna-choice-confidence-v80-v41-prefix-input-held-20261011-v1",
@@ -31764,25 +31507,6 @@
       "notes": "Preserves V2 launch/planning, failure, initial eval/identity and monitor-reference evidence. The run did not produce a trained checkpoint; these bytes are diagnostic only."
     },
     {
-      "id": "luna-direct-lfm-base-v3-step20-guard-stop-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-neuralese-direct-lfm-base-20261011-v3",
-      "include": [
-        "direct-stage-run/**/*",
-        "direct-stage-run.container-launch.json",
-        "direct-stage-run.container-launch.log",
-        "direct-stage-run.recipe-launch.json",
-        "gpu-observations.jsonl",
-        "gpu-observer-launch.json"
-      ],
-      "split": "held-step20-guard-stopped-training-diagnostic",
-      "source_class": "direct-v1-lfm-training-checkpoint-and-gate-diagnostics",
-      "training_admission": false,
-      "admission": "guard-stopped-step20-diagnostic-and-resumability-only-no-qualification-or-training-admission",
-      "independent_new_worlds": 0,
-      "notes": "Preserves V3 plan/result, full step-20 checkpoint and optimizer state, report/train/eval, identity check, monitor reference, exact runtime code snapshot and launch/GPU observations. Training stopped at its guard after step 20; qualification is false. Excludes mutable Triton/TorchInductor kernel-cache files."
-    },
-    {
       "id": "google-choice-confidence-v41-prefix-static-v5-held-20261011-v1",
       "owner": "pop",
       "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v5-current-criteria",
@@ -31794,7 +31518,7 @@
       "training_admission": false,
       "admission": "strict-source-label-static-reference-only-no-provider-output-or-training-admission",
       "independent_new_worlds": 0,
-      "notes": "Atomic 703-row newline-terminated prefix of live V41 JSON-object labels, with exact parent source cases/frozen model manifest. The selection records excluded prior V77–V81 IDs/groups; 254 remaining labels entered the shared adapter, yielding 148 exact-label accepted cases across 20 programs and 1,899 retained rejection rows; all 20 authored reference replays passed. The run is still held; replay/schema validity is not oracle or training admission."
+      "notes": "Atomic 703-row newline-terminated prefix of live V41 JSON-object labels, with exact parent source cases/frozen model manifest. The selection records excluded prior V77\u2013V81 IDs/groups; 254 remaining labels entered the shared adapter, yielding 148 exact-label accepted cases across 20 programs and 1,899 retained rejection rows; all 20 authored reference replays passed. The run is still held; replay/schema validity is not oracle or training admission."
     },
     {
       "id": "luna-choice-confidence-v82-v41-prefix-input-held-20261011-v1",
@@ -31841,7 +31565,7 @@
       "training_admission": false,
       "admission": "strict-source-label-static-reference-only-no-provider-output-or-training-admission",
       "independent_new_worlds": 0,
-      "notes": "Fresh 749-row append-only V41 prefix snapshot with exact V41 source cases/provider manifest, prior-selection exclusions V77–V82, 38 accepted source labels over six programs, all six authored reference replays passed. All label disagreements and rejection records remain preserved. This is held source/static-reference evidence, not teacher trajectories or training admission."
+      "notes": "Fresh 749-row append-only V41 prefix snapshot with exact V41 source cases/provider manifest, prior-selection exclusions V77\u2013V82, 38 accepted source labels over six programs, all six authored reference replays passed. All label disagreements and rejection records remain preserved. This is held source/static-reference evidence, not teacher trajectories or training admission."
     },
     {
       "id": "luna-choice-confidence-v83-v41-prefix-input-held-20261011-v1",
@@ -32158,7 +31882,7 @@
       "training_admission": false,
       "admission": "post-hoc inherited-label comparison and scope diagnostic only; no relabeling, admission, or independent semantic certification",
       "independent_new_worlds": 0,
-      "notes": "Joins all 65 result rows from closed campaigns V81–V85 to their exact static source program IDs and pinned source cases. 55 accepted program results, 10 rejected programs; 456 expected label slots across 456 distinct inherited source IDs/groups; 11 exact output/source-label disagreements; 33 scope-failure events. Mismatches are not independently adjudicated. Preserves per-result hashes and worker journals."
+      "notes": "Joins all 65 result rows from closed campaigns V81\u2013V85 to their exact static source program IDs and pinned source cases. 55 accepted program results, 10 rejected programs; 456 expected label slots across 456 distinct inherited source IDs/groups; 11 exact output/source-label disagreements; 33 scope-failure events. Mismatches are not independently adjudicated. Preserves per-result hashes and worker journals."
     },
     {
       "id": "free-provider-v73-admitted-ordinary-text-846-20261011-v1",
@@ -32678,7 +32402,7 @@
       "recurrence_admission": false,
       "independent_new_worlds": 0,
       "admission": "prepared-only; root_approved=false; no provider calls or launch",
-      "notes": "V90 proposes 52 programs/402 original source items from the separately held V40 static adapter, with five fresh queues of 10–11 programs each. Exact V40 source IDs/groups had zero overlap with current 79 item/group holds and the 5,005 prior Luna queue IDs/groups observed during preparation. Chains each lane to V89; V17 runtime. Root review and launch authorization required."
+      "notes": "V90 proposes 52 programs/402 original source items from the separately held V40 static adapter, with five fresh queues of 10\u201311 programs each. Exact V40 source IDs/groups had zero overlap with current 79 item/group holds and the 5,005 prior Luna queue IDs/groups observed during preparation. Chains each lane to V89; V17 runtime. Root review and launch authorization required."
     },
     {
       "id": "luna-choice-confidence-v90-approved-launch-held-20261011-v1",
@@ -34411,21 +34135,6 @@
       "notes": "Cutoff snapshot captured status running with five actual worker PIDs. Treat as a launch observation only; later raw outputs require a separate closed snapshot."
     },
     {
-      "id": "luna-v43-static-replay-callstore-attempt-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-static-replay-attempt-v1",
-      "include": [
-        "quality-review-v43-static-replay-attempt-v1.json",
-        "quality-review-v43-static-replay-attempt-v1-termination.json"
-      ],
-      "split": "held-operational-diagnostic-no-admission",
-      "source_class": "static-reference-replay-operational-diagnostic",
-      "training_admission": false,
-      "trace_admission": false,
-      "admission": "preserved interrupted pre-fix attempt; not semantic or model evidence",
-      "notes": "Attempt v2 was stopped after 30 minutes and high userspace I/O from repeated call-store eviction scans; no replay result rows were emitted. See the separate successful v3 static adapter for completed replays."
-    },
-    {
       "id": "luna-v43-runtimev18-v19-paired48-review-held-20261011-v1",
       "owner": "pop",
       "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-runtimev19-paired48-v1",
@@ -34560,7 +34269,7 @@
       "derived_from": [
         "luna-v43-exact-map37-native-sft-926-20261011-v1"
       ],
-      "notes": "Existing converter output for the 926 already-admitted native SFT rows. Converts 20 compiler-attested model-authored inline instruction writers with 34 distinct reads (35 read appearances); 20/20 sidecars pass the scoped Python validator. Child-result conversion remains zero: 895 producer-missing, 164 host-result-only. Supersedes the preliminary v1 readiness report’s zero-inline-conversion interpretation; it does not add independent source credit or change native-SFT admission. Reciprocal writer/read, source quality, split, and recurrence review remain pending. Exact input and converter pins are in review.json."
+      "notes": "Existing converter output for the 926 already-admitted native SFT rows. Converts 20 compiler-attested model-authored inline instruction writers with 34 distinct reads (35 read appearances); 20/20 sidecars pass the scoped Python validator. Child-result conversion remains zero: 895 producer-missing, 164 host-result-only. Supersedes the preliminary v1 readiness report\u2019s zero-inline-conversion interpretation; it does not add independent source credit or change native-SFT admission. Reciprocal writer/read, source quality, split, and recurrence review remain pending. Exact input and converter pins are in review.json."
     },
     {
       "id": "semantic-inline-curriculum-s72-teacher-turns-20261007-v1",
@@ -34788,7 +34497,7 @@
     "free-provider-mixed-labels-and-diagnostics-held-20261009-v1: currentIR conversion and source/quality gates pending; retain failures and success-pair candidates. Corrected reviewv2 artifacts supersede v1 summaries; active GeminiLite batches excluded until immutable closeout.",
     "free-provider-v22-native-results-and-partials-held-20261009-v1: source/quality/native replay admission pending. Restore exact frozen runtime artifacts if needed; manifests alone are not runtime qualification. Keep API partials separate from semantic failure/success preference pairs.",
     "free-provider-google-pool-v1-closed-held-20261009-v1 has an explicit currentIR derivative free-provider-static-decision-inline-lambdas-held-20261010-v1 for131 strict source-consistent labels/36 authored controller cases. Remaining125 labels stay rejected with reasons. Static reference/data quality admission remains pending; no automatic train promotion and no new-world credit. Other provider cohorts still require explicit conversion.",
-    "free-provider-static-decision-inline-lambdas-held-20261010-v2 supersedes v1: all23 authored IR cases replayed, kind-specific probability→crisp instructions qualified for runtime/capture shape only. Source/static-reference-quality admission still required.308native turns are held authored references, not teacher-generated traces, and are excluded from target training until reviewed.",
+    "free-provider-static-decision-inline-lambdas-held-20261010-v2 supersedes v1: all23 authored IR cases replayed, kind-specific probability\u2192crisp instructions qualified for runtime/capture shape only. Source/static-reference-quality admission still required.308native turns are held authored references, not teacher-generated traces, and are excluded from target training until reviewed.",
     "free-provider-zai45-first3-native-and-partial-held-20261010-v1: rawtwoaccepted andoneincomplete remainheld; thirdscopebehaviorcorrect, sharednote prompt clarification+freshsource derivative/recoverypending. Resource-limit partial is not a DPO semanticnegative. Source quality review still blocks new data admission.",
     "luna-v22-current-pass-pending-facts-source-held-20261010-v1: prompt-only derivative, original source gold/group/file scopes unchanged, actual recovery PID777319 is running separately and must receive immutable closeout/review. No retroactive migration of old teacher traces, no new worlds or source admission.",
     "Silent 1500-character source-state clipping affects historical decision corpora: BoardgameQA, HelpSteer, Newsgroups, Yelp, BoolQ and PubMedQA. Preserve original rows and raw outcomes. Historical rows lacking immutable upstream source revisions/source_refs cannot be safely backfilled from current dataset versions; register as unresolved full-evidence conversion, exclude evidence-insufficient cases explicitly. Fresh builds retain full source text; downstream context eligibility skips oversized inputs with reasons, never silently truncates. Corrected input derivatives keep original source groups and receive no independent-world credit."
