@@ -919,3 +919,16 @@ qualify a checkpoint by its completed step count. It does not train the sketch.
 The frozen Pop run resumed from complete24704 optimizer/schedule/RNG state
 (first update24705). No objective or schedule was hot-patched. A change requires
 a declared shared recipe/implementation and exact-weight requalification.
+
+### Explicit projection learning-rate continuation (2026-10-11)
+
+A recurrence recipe can bind `continue_from` and, for a historical direct
+checkpoint, `direct_parent_proof` as immutable input files. Declare
+`curriculum_change: ["heads_lr", "steps"]` only for the controls actually
+changed. `heads_lr` applies to the existing writer heads or direct NL/TCP
+projection parameters after full named optimizer restoration. The shared mapper
+preserves Muon/AdamW and LionSR/MuonSR moments, counters and RNG; a mixed
+parameter group is split by requested rate without resetting other settings.
+The restore report records every actual rate change. An ordinary resume keeps
+its saved rates. This enables a controlled continuation; it grants no runtime,
+quality or corpus admission.

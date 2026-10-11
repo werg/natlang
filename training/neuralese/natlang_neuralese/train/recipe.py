@@ -46,7 +46,7 @@ HANDLERS = {
                           'drift_rows','drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop'},'result':'heads.pt'},
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
                             'parameters':set(),'result':'report.json'},
-    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads','direct_artifact_manifest'},
+    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads','direct_artifact_manifest','continue_from','direct_parent_proof'},
                                 'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'backbone_lr', 'backbone_training', 'max_tokens',
                                                'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
                                                'write_depth', 'tokens_per_vector', 'heads_lr', 'distill',
@@ -65,7 +65,7 @@ HANDLERS = {
                                                'view', 'view_window', 'context_weight', 'feedback_weight',
                                                'context_coverage', 'cohort_weights', 'qualification_cohort',
                                                'stop_pg', 'purpose_contrast', 'purpose_margin', 'view_tokens_per_vector',
-                                               'optimizer_state', 'optimizer_added', 'direct_base_snapshot'},
+                                               'optimizer_state', 'optimizer_added', 'direct_base_snapshot', 'curriculum_change'},
                                 'result': 'checkpoint.pt'},
     # The view operator gate (eval/view_gate.py; TRAINING_RECIPE.md "The view operator stage") on the exact weights of
     # the view stage it requires (that stage's recurrence checkpoint).
@@ -264,7 +264,8 @@ def stage_input_args(resolved, kind):
     args = []
     supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
     for role in ('records', 'pieces', 'text_data', 'continue_from', 'student_checkpoint', 'warmup_checkpoint',
-                 'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces'):
+                 'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
+                 'direct_parent_proof'):
         if role in resolved and role in supported:
             args += ['--' + role.replace('_', '-'), resolved[role]['path']]
     if 'direct_artifact_manifest' in resolved and 'direct_artifact_manifest' in supported:
@@ -900,11 +901,11 @@ def stage_parameter_args(parameters):
                 raise ValueError('cohort_weights must be an object of explicit fractions')
             command += ['--cohort-weights',json.dumps(value,sort_keys=True,separators=(',',':'))]
             continue
-        if key == 'optimizer_added':
+        if key in ('optimizer_added', 'curriculum_change'):
             if not isinstance(value, list) or any(not isinstance(prefix, str) or not prefix for prefix in value):
-                raise ValueError('optimizer_added must be a list of nonempty parameter-name prefixes')
+                raise ValueError(key + ' must be a list of nonempty strings')
             for prefix in value:
-                command += ['--optimizer-added', prefix]
+                command += ['--' + key.replace('_', '-'), prefix]
             continue
         if isinstance(value, bool):
             command += ['--' + ('' if value else 'no-') + key.replace('_', '-')]

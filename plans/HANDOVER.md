@@ -11206,3 +11206,37 @@ No context reduction, frozen backbone or detached producer gradient was used.
   not gold leakage.89/96 items have exact complete visible child context; seven
   literal-join unknowns are not evidence of missing context. Small single-family
   evidence remains held, with no global superiority or admission claim.
+
+### 16:27 UTC — native export and optimizer handoff repairs
+
+- Shared native E2E direct serving adapter d4ee839c accepts dense LFM full or
+  latent backbone state, both trained projections and controls, using the existing
+  artifact loader. Future checkpoints embed parent content binding; old exact
+  checkpoints need pinned stage/launch proof. Serialization is not qualification.
+  Artifact relocation compares content hashes, retaining old paths as provenance;
+  clean-head anchor remains an external file that must resolve. GPU restore is
+  pending the next window. Proof builder/guide are prepared for a stable selected
+  checkpoint; never mutate a live checkpoint or infer its parent from its name.
+- Found a shared named-optimizer bug: `_children` and `_saved_children` omitted
+  LionSR/MuonSR. Unchanged positional/exact load preserved their state, but named
+  regrouping could fail/drop it. Live read-only CPU checkpoint inspection at175
+  confirms164 named primary slots and102 additional persisted LionSR states,
+  all with exact single-parameter group names. Shared restoration now includes
+  every child and explicitly recovers only that proven old receipt omission.
+- A declared `heads_lr` continuation applies requested per-parameter rates AFTER
+  restoring optimizer state, splits mixed groups without changing moments, and
+  logs actual old/new rates. Recurrence recipes now bind continuation/proof input
+  files and repeated curriculum-change options. Source AST/diff checks only;
+  full resume/rate handoff still needs actual execution. Current epoch unchanged.
+- DGX reports finite/descent checks on its optimizer, with overfit/lr/data-width
+  effects rather than a confirmed LionSR arithmetic bug. Recommendation: compare
+  projection heads3e-5 after this exact687-row pass, selecting by held soft/crisp
+  quality and retaining crisp SFT. Local held125 improvedsoft1.442, crisp1.464;
+  held150 soft1.569/crisp1.555. Original1.728/1.358 still the retention baseline.
+- V43 fresh refill31programs/231items independently checked against master; zero
+  overlap against61 prior queue sources/14464 reserved sourceIDs. Approved plan
+  3128917280a5c94670d680292e35c1521d7a1650838d80ae8cacc6b822458792
+  is active on five Luna lanes. V41 semantic count corrected to34/39 (5 source
+  disagreements, including an ambiguous Yahoo annotation),39/39 complete same
+  child-request visibility. Held V15/V41/V43 receipts and approved V43 launch
+  are registered and DGX verified (1b722e25,d4c24dbc); no admission changes.

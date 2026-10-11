@@ -1,7 +1,7 @@
 """Named, safe optimizer-state restore for the neuralese trainers.
 
 Checkpoints record ``optimizer_param_names``: the parameter name of every optimizer slot, in the order of the
-optimizer's flattened ``param_groups`` (for ``PortMuonAdamW`` that is the Muon child followed by the AdamW child).
+optimizer's flattened ``param_groups`` (for ``PortMuonAdamW``: Muon, AdamW, then the optional latent child).
 This lets a later run with a different trainable set map each saved moment to its parameter instead of guessing by
 position, and it replaces the old silent "ValueError -> fresh optimizer" fallback:
 
@@ -14,12 +14,14 @@ position, and it replaces the old silent "ValueError -> fresh optimizer" fallbac
   *current* optimizer on this path, because the saved groups no longer line up with the current ones;
 * checkpoints without names (written before this change) load only when ``load_state_dict`` accepts them, as before;
   otherwise they are refused rather than silently reset;
+* explicitly declared per-parameter learning rates apply after restore, without resetting moments;
 * ``fresh=True`` (``--optimizer-state fresh``) is the explicit, declared way to start the optimizer from scratch.
 """
 
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import torch
@@ -32,9 +34,11 @@ class OptimizerRestoreError(ValueError):
 
 
 def _children(optimizer):
-    """``[(kind, plain optimizer)]``: PortMuonAdamW splits into its Muon and AdamW children."""
+    """Optimizer children in the same order as PortMuonAdamW._groups()."""
     if hasattr(optimizer, "muon"):
-        return [("muon", optimizer.muon)] + ([("adamw", optimizer.auxiliary)] if optimizer.auxiliary is not None else [])
+        return ([("muon", optimizer.muon)]
+                + ([("adamw", optimizer.auxiliary)] if optimizer.auxiliary is not None else [])
+                + ([(optimizer.latent_key, optimizer.latent)] if getattr(optimizer, "latent", None) is not None else []))
     return [("plain", optimizer)]
 
 
@@ -66,7 +70,12 @@ def declared_added_names(named_params, prefixes):
 
 def _saved_children(saved):
     if "muon" in saved:  # PortMuonAdamW
-        return [("muon", saved["muon"])] + ([("adamw", saved["adamw"])] if saved.get("adamw") is not None else [])
+        latent_keys = [key for key in ("lion", "muonsr") if saved.get(key) is not None]
+        if len(latent_keys) > 1:
+            raise OptimizerRestoreError("saved optimizer has multiple latent partitions")
+        return ([("muon", saved["muon"])]
+                + ([("adamw", saved["adamw"])] if saved.get("adamw") is not None else [])
+                + [(key, saved[key]) for key in latent_keys])
     return [("plain", saved)]
 
 
@@ -75,15 +84,52 @@ def _layout_matches(optimizer, saved):
         return False
     kids, skids = _children(optimizer), _saved_children(saved)
     return len(kids) == len(skids) and all(
+        kind == saved_kind and
         [len(g["params"]) for g in c.param_groups] == [len(g["params"]) for g in s["param_groups"]]
-        for (_, c), (_, s) in zip(kids, skids))
+        for (kind, c), (saved_kind, s) in zip(kids, skids))
 
 
-def restore_optimizer_state(optimizer, saved, named_params, declared_added=(), *, saved_names=None, fresh=False):
+def restore_optimizer_state(optimizer, saved, named_params, declared_added=(), *, saved_names=None, fresh=False,
+                            learning_rates=None):
     report = _restore_optimizer_state(optimizer, saved, named_params, declared_added, saved_names=saved_names,
                                       fresh=fresh)
     own_host_tensors(optimizer)
+    if learning_rates:
+        report['declared_learning_rate_changes'] = set_learning_rates(optimizer, named_params, learning_rates)
     return report
+
+
+def set_learning_rates(optimizer, named_params, learning_rates):
+    """Apply explicitly declared rates after restoring moments, without resetting any state.
+
+    A saved group can contain both changed and unchanged parameters. Split that
+    group by requested rate while retaining all its other hyperparameters.
+    """
+    by_id = _id_names(named_params)
+    current = optimizer_param_names(optimizer, named_params)
+    if current is None or not set(learning_rates) <= set(current):
+        raise OptimizerRestoreError('declared learning rates include unnamed or absent optimizer parameters')
+    if any(not math.isfinite(rate) or rate <= 0 for rate in learning_rates.values()):
+        raise OptimizerRestoreError('declared optimizer learning rates must be finite and positive')
+    changes = []
+    for kind, child in _children(optimizer):
+        groups = []
+        for group in child.param_groups:
+            buckets = {}
+            for parameter in group['params']:
+                name = by_id[id(parameter)]
+                rate = learning_rates.get(name, group['lr'])
+                buckets.setdefault(rate, []).append(parameter)
+                if rate != group['lr']:
+                    changes.append({'name': name, 'optimizer': kind, 'old_lr': group['lr'], 'new_lr': rate})
+            groups.extend({**group, 'params': parameters, 'lr': rate}
+                          for rate, parameters in buckets.items())
+            if not buckets:
+                groups.append(group)
+        child.param_groups = groups
+    if hasattr(optimizer, 'muon'):
+        optimizer.param_groups = optimizer._groups()
+    return changes
 
 
 def own_host_tensors(optimizer):
@@ -94,8 +140,6 @@ def own_host_tensors(optimizer):
     def own(value):
         return value.clone() if torch.is_tensor(value) and value.device.type == "cpu" else value
     children = [child for _, child in _children(optimizer)]
-    if getattr(optimizer, "latent", None) is not None:
-        children.append(optimizer.latent)
     for child in children:
         for state in child.state.values():
             for key, value in list(state.items()):
@@ -128,6 +172,23 @@ def _restore_optimizer_state(optimizer, saved, named_params, declared_added=(), 
                 "optimizer_param_names, or pass an explicit --optimizer-state fresh") from error
         return _report("positional", kids, current, kept=current or [], initialized=[], all_kept=True)
     saved_names = list(saved_names)
+    # Earlier named receipts covered Muon/AdamW only, although their checkpoint
+    # did persist the full latent child. Its one-parameter groups bind names
+    # explicitly; recover only that proven omission, never infer slot identity.
+    primary_count = sum(len(group['params']) for kind, child in _saved_children(saved)
+                        if kind not in ('lion', 'muonsr') for group in child['param_groups'])
+    latent_groups = [group for kind, child in _saved_children(saved) if kind in ('lion', 'muonsr')
+                     for group in child['param_groups']]
+    recovered_names = []
+    if latent_groups and len(saved_names) == primary_count:
+        for group in latent_groups:
+            name = group.get('name')
+            if not isinstance(name, str) or len(group['params']) != 1:
+                raise OptimizerRestoreError('older latent checkpoint lacks exact per-group parameter names')
+            recovered_names.append(name)
+        saved_names += recovered_names
+        if len(set(saved_names)) != len(saved_names):
+            raise OptimizerRestoreError('older latent checkpoint parameter names collide')
     if current is None:
         raise OptimizerRestoreError("named_params does not cover every optimizer parameter or has duplicate names")
     if saved_names == current and _layout_matches(optimizer, saved):
@@ -136,7 +197,10 @@ def _restore_optimizer_state(optimizer, saved, named_params, declared_added=(), 
         except ValueError as error:
             raise OptimizerRestoreError(
                 f"optimizer state for identical parameter names was rejected: {str(error)[:300]}") from error
-        return _report("exact", kids, current, kept=current, initialized=[])
+        report = _report("exact", _children(optimizer), current, kept=current, initialized=[])
+        if recovered_names:
+            report['saved_names_completed_from_latent_groups'] = recovered_names
+        return report
 
     if hasattr(optimizer, "muon") != ("muon" in saved):
         raise OptimizerRestoreError("optimizer kind changed: saved and current optimizers differ in Muon/AdamW partitioning")
@@ -197,10 +261,15 @@ def _restore_optimizer_state(optimizer, saved, named_params, declared_added=(), 
     if hasattr(optimizer, "muon"):
         payload = {"format": saved["format"], "schema": optimizer.schema, "muon": aligned["muon"],
                    "adamw": aligned.get("adamw")}
+        if getattr(optimizer, 'latent', None) is not None:
+            payload[optimizer.latent_key] = aligned[optimizer.latent_key]
     else:
         payload = aligned["plain"]
     optimizer.load_state_dict(payload)
-    return _report("by-name", kids, current, kept=kept, initialized=initialized)
+    report = _report("by-name", _children(optimizer), current, kept=kept, initialized=initialized)
+    if recovered_names:
+        report['saved_names_completed_from_latent_groups'] = recovered_names
+    return report
 
 
 def _report(mode, kids, current, *, kept, initialized, note=None, all_kept=False):

@@ -85,3 +85,22 @@ The adapter accepts only the current recurrence checkpoint schema when its optio
 ### Known compatibility gap to resolve during implementation review
 
 `trajectories` currently checkpoints `natlang.neuralese_recurrence_checkpoint/1`, uses `identity.files`, saves trainables in `backbone_trainables`, and records direct projections/controls. `direct_export` currently expects `natlang.neuralese-direct/1`, `identity.inputs`, and `student_parameters`. It also needs the direct artifact manifest that the recurrence loader used; the recurrence checkpoint currently does not embed it. Thus direct payload tensors are present, but a trustworthy exporter mapping and inherited source binding are not. No current artifact is assumed exportable until this bridge is implemented and a checkpoint-specific proof is reviewed.
+
+## Declared projection-rate continuation — 2026-10-11
+
+The optimization decision is to compare gentler NL/TCP updates when training
+loss collapses before held performance improves. The machine owner declares
+that decision in a recipe; the mechanism neither selects the rate nor promotes
+the resulting checkpoint.
+
+| Part | Form | Reason |
+| --- | --- | --- |
+| Choose a smaller projection rate and assess held soft/crisp quality | Owner optimization judgment, recorded in the recipe and handover | This is experimental policy, not an automatic numerical rule. |
+| Declare `heads_lr` as a continuation change with fixed inputs | Existing recipe/trainer interface | Bind the changed objective controls without replacing the trainer. |
+| Restore every optimizer child including LionSR/MuonSR | Shared crisp named-state mapper | Slot identity, parameter shapes and moment preservation require exact checks. |
+| Apply the declared rate after restore, splitting mixed groups if needed | Shared crisp optimizer plumbing | A saved group rate must not silently overwrite the declared new rate; preserve moments and all other group settings. |
+
+Earlier named receipts omitted latent names while saving their full optimizer
+state. Recover only that omission from exact one-parameter latent group names;
+record the recovery explicitly. Unknown slots remain an error. No optimizer
+reset or checkpoint mutation is implied.

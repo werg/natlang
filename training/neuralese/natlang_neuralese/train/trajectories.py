@@ -710,7 +710,7 @@ def main(argv=None):
     parser.add_argument("--content-transport", choices=["learned-residual", "raw-identity", "top-state"], default="learned-residual", help="explicit raw identity warm-up or learned content residual")
     parser.add_argument("--content-residual-initialization", choices=["preserve", "fresh-zero"], default="preserve",
                         help="explicit raw-to-learned transition: zero previously bypassed residual and only its optimizer slots")
-    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps", "sketch_gradient", "member_weight", "member_tokens", "member_eval", "member_mask_system", "member_full_weight", "qat_latent_lr", "projection_anchor_weight", "projection_anchor_backbone_scale", "projection_anchor_decay_steps", "read_adapter"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
+    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps", "sketch_gradient", "member_weight", "member_tokens", "member_eval", "member_mask_system", "member_full_weight", "heads_lr", "qat_latent_lr", "projection_anchor_weight", "projection_anchor_backbone_scale", "projection_anchor_decay_steps", "read_adapter"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
     parser.add_argument('--max-write-vectors', type=int, default=None,
                         help='explicit port payload bound, distinct from prompt context; constant-stop capacity can extend without changing weights/moments')
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
@@ -1830,7 +1830,9 @@ def main(argv=None):
         restore_report = restore_optimizer_state(
             optimizer, resumed['optimizer'], optimizer_named, declared_added_names(optimizer_named, declared_prefixes),
             saved_names=resumed.get('optimizer_param_names'),
-            fresh=args.optimizer_state == 'fresh' and new_continuation)
+            fresh=args.optimizer_state == 'fresh' and new_continuation,
+            learning_rates=({name: args.heads_lr for name, _ in head_named}
+                            if new_continuation and 'heads_lr' in args.curriculum_change else None))
         record_restore_report(restore_report, out, source=args.continue_from or 'resume')
         init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
     if new_continuation and args.content_residual_initialization == 'fresh-zero':
