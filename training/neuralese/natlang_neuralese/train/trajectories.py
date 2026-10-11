@@ -1158,7 +1158,7 @@ def main(argv=None):
             backbone.checkpoint_attention_only = resource_choice.resolve(choose) if resource_choice else choose()
             selective_writer_replays[0] += int(backbone.checkpoint_attention_only)
         if direct is not None:
-            return direct_write_value(context, length if length is not None else source_length(source))
+            return direct_write_value(context, length if length is not None else source_length(source), source)
         try:
             from .execution import prefill_write_context
             pre = prefill_write_context(backbone, heads, context)
@@ -1198,18 +1198,22 @@ def main(argv=None):
                                     ('token_choice_projection', getattr(direct, 'token_choice_projection', None)))
                 if module is not None}
 
-    def direct_write_value(context, target):
+    def direct_write_value(context, target, source=None):
         """The end-to-end stage's producer write: the shared direct writer (full backbone per value, one causal-conv
         segment per call, the TokenChoiceProjection's readout deciding the stop) from the site's context, with
         gradients into the projections, the backbone and the site's soft parameters. Sized from the crisp text when
-        known (no stop decision), else the writer's own stop."""
+        known (no stop decision), else the writer's own stop. Inside the write the backbone reads token embeddings
+        (direct v1: values are emitted, never re-entered): the crisp text's tokens when the write is sized one value
+        per token, else the readout's greedy tokens."""
         from ..serve.direct_write import write_direct
         from ..write import Opened
         from .execution import prefill_write_context
         pre = prefill_write_context(backbone, heads, context)
         opened = Opened(pre.cache, pre.state, backbone.logits(pre.top[:, None])[:, -1], pre.top)
+        crisp = engine._tokens(source) if source else None
         written = write_direct(backbone, direct.neuralese_projection, opened, target or heads.max_length,
-                               engine.stop_ids, length=target,
+                               engine.stop_ids, length=target, feedback='token',
+                               tokens=crisp if crisp is not None and target == len(crisp) else None,
                                token_choice_projection=getattr(direct, 'token_choice_projection', None))
         payload = written.complete()[0]
         n = int(payload.shape[1])

@@ -1,8 +1,14 @@
 """Full-depth direct Neuralese writing, shared by serving and differentiable replay.
 
-Each final state predicts the next ordinary token and projects its next input
-embedding. The projected value is fed through the full backbone once. A call is
-one causal-convolution segment; no projection state crosses a call boundary.
+Each final state predicts the next ordinary token and projects a Neuralese value. A call is one causal-convolution
+segment; no projection state crosses a call boundary.
+
+What the next position reads (``feedback``):
+- ``"token"`` (Neuralese direct v1, the default; plans/neuralese/NEURALESE_DIRECT_V1.md): the embedding of the next
+  ordinary token -- the forced ``tokens`` when given (a write sized and taught from its crisp text), else the
+  readout's greedy choice. Values are emitted, never re-entered inside a write, so a consumer's gradient reaches the
+  producer through each emitted value's projection only (depth 1 per boundary), exactly as direct SFT trained them.
+- ``"value"``: the emitted value itself (the recurrence stage, where values are fed back).
 """
 from __future__ import annotations
 
@@ -10,7 +16,11 @@ import torch
 
 
 class DirectWriter:
-    def __init__(self, backbone, projection, opened, max_length, stop_ids, *, length=None, token_choice_projection=None):
+    def __init__(self, backbone, projection, opened, max_length, stop_ids, *, length=None, token_choice_projection=None,
+                 feedback="token", tokens=None):
+        if feedback not in ("token", "value"):
+            raise ValueError(f"direct writer feedback is token or value, got {feedback!r}")
+        self.feedback, self.tokens, self.token = feedback, None if tokens is None else list(tokens), None
         if opened.top is None:
             raise ValueError('direct writing needs the final causal prefix state')
         self.backbone, self.projection, self.opened = backbone, projection, opened
@@ -48,6 +58,7 @@ class DirectWriter:
         if self.done:
             return None
         stop_logit, token = self.stop_logit()
+        self.token = token
         if self.count:
             self.stop_tensors.append(stop_logit)
             self.stop_logits.append(float(stop_logit.detach()[0]))
@@ -78,11 +89,22 @@ class DirectWriter:
         self.cache = cache
         self.count += 1
 
+    def next_input(self, value):
+        """What the backbone reads after emitting ``value`` (see ``feedback``)."""
+        if self.feedback == "value":
+            return value
+        if self.tokens is not None and self.count < len(self.tokens):
+            ids = torch.tensor([[self.tokens[self.count]]] * value.shape[0], device=value.device)
+        else:
+            ids = self.token[:, None].to(value.device)
+        return self.backbone.embed(ids)[:, 0].detach().to(value.dtype)
+
     def step(self):
         value = self.decide()
         if value is None:
             return True
-        final, cache = self.backbone.run_layers(value[:, None], range(self.backbone.num_layers), self.cache)
+        final, cache = self.backbone.run_layers(self.next_input(value)[:, None], range(self.backbone.num_layers),
+                                                self.cache)
         self.advance(value, final[:, 0], cache)
         return False
 
@@ -95,10 +117,11 @@ class DirectWriter:
         return payload, payload, torch.zeros_like(payload, dtype=torch.float32)
 
 
-def write_direct(backbone, projection, opened, max_length, stop_ids, *, length=None, token_choice_projection=None):
+def write_direct(backbone, projection, opened, max_length, stop_ids, *, length=None, token_choice_projection=None,
+                 feedback="token", tokens=None):
     """Run the same incremental writer without a scheduler; retains gradient paths."""
     writer = DirectWriter(backbone, projection, opened, max_length, stop_ids, length=length,
-                          token_choice_projection=token_choice_projection)
+                          token_choice_projection=token_choice_projection, feedback=feedback, tokens=tokens)
     while not writer.step():
         pass
     return writer

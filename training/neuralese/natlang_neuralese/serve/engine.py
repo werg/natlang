@@ -639,7 +639,10 @@ class Engine:
             del seq.bans[index]
 
     def _sketch_batch(self, rows):
-        sketches = torch.cat([sketch for _, sketch in rows], 0)[:, None]
+        # A direct writer reads its next input as its feedback says (token embeddings under direct v1); a sketch
+        # writer reads its sketch.
+        sketches = torch.cat([seq.writer.next_input(sketch) if hasattr(seq.writer, 'next_input') else sketch
+                              for seq, sketch in rows], 0)[:, None]
         depth = self.backbone.num_layers if getattr(self, 'neuralese_projection', None) is not None else self.heads.cutoff
         with self.using([seq for seq, _ in rows]):
             h, caches = step_rows(self.backbone, sketches, [seq.writer.cache for seq, _ in rows],
