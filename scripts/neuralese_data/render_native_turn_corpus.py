@@ -159,6 +159,104 @@ def chain_key(row: dict) -> str:
     return f"{ref.get('trajectory_id') or row.get('teacher_trajectory_id')}#{ref.get('invocation_id') or ''}"
 
 
+def registered_source_pieces(sources):
+    """Load exact piece tables listed beside the source in its immutable corpus manifest."""
+    registry_path = ROOT / 'training/neuralese_corpora.json'
+    registry = json.loads(registry_path.read_text())
+    entries = registry.get('corpora', [])
+    registered = {entry['id']: entry for entry in entries}
+    if len(registered) != len(entries):
+        raise ValueError('duplicate corpus IDs in training/neuralese_corpora.json')
+    tables, bindings = {}, []
+    for source in sources:
+        source_arg = Path(source)
+        logical_path = source_arg if source_arg.is_absolute() else ROOT / source_arg
+        source_path = logical_path.resolve(strict=True)
+        try:
+            relative = logical_path.relative_to(ROOT).as_posix()
+        except ValueError:
+            relative = str(logical_path)
+        source_bytes, source_hash = source_path.stat().st_size, file_sha(source_path)
+        matches, listed_paths = [], []
+        for corpus_id, entry in registered.items():
+            corpus_root = ROOT / entry['path']
+            real_corpus_root = corpus_root.resolve()
+            possible_relatives = set()
+            try:
+                possible_relatives.add(logical_path.relative_to(corpus_root).as_posix())
+            except ValueError:
+                pass
+            try:
+                possible_relatives.add(source_path.relative_to(real_corpus_root).as_posix())
+            except ValueError:
+                pass
+            if not possible_relatives:
+                continue
+            manifest_path = ROOT / 'training/corpus-manifests' / f'{corpus_id}.json'
+            if not manifest_path.is_file():
+                continue
+            manifest = json.loads(manifest_path.read_text())
+            if manifest.get('id') != corpus_id or manifest.get('path') != entry['path']:
+                raise ValueError(f'registry/manifest identity mismatch for {corpus_id}')
+            listed = {item['path']: item for item in manifest.get('files', [])}
+            for rel_to_corpus in possible_relatives:
+                source_item = listed.get(rel_to_corpus)
+                if source_item:
+                    listed_paths.append((corpus_id, rel_to_corpus))
+                    if source_item.get('bytes') == source_bytes and source_item.get('sha256') == source_hash:
+                        matches.append((corpus_id, entry, manifest_path, manifest, listed, rel_to_corpus))
+        if not matches and listed_paths:
+            raise ValueError(f'registered source bytes differ from immutable manifest: {relative}')
+        if not matches:
+            bindings.append({'source': relative, 'source_sha256': file_sha(source_path),
+                             'registry_sha256': file_sha(registry_path), 'manifest': None,
+                             'piece_table': None})
+            continue
+        declared = []
+        for corpus_id, entry, manifest_path, manifest, listed, rel_to_corpus in matches:
+            parent = Path(rel_to_corpus).parent
+            candidates = [f'{parent}/{name}' if str(parent) != '.' else name
+                          for name in ('native-pieces.jsonl', 'pieces.jsonl')]
+            found = [name for name in candidates if name in listed]
+            if len(found) > 1:
+                raise ValueError(f'multiple registered piece tables beside {relative}: {found}')
+            item = listed[found[0]] if found else None
+            declared.append((corpus_id, entry, manifest_path, listed, rel_to_corpus,
+                             found[0] if found else None, item))
+        table_identities = {(item.get('sha256'), item.get('bytes')) if item else None
+                            for _, _, _, _, _, _, item in declared}
+        if len(table_identities) > 1:
+            raise ValueError(f'registered source manifests disagree on its piece table: {relative}')
+        # Prefer the explicitly training-admitted registration; equivalent duplicate registrations have the same
+        # sidecar identity, so this only determines provenance naming in the receipt.
+        declared.sort(key=lambda row: (not bool(row[1].get('training_admission')), row[0]))
+        corpus_id, entry, manifest_path, listed, rel_to_corpus, piece_rel, item = declared[0]
+        binding = {'source': relative, 'source_sha256': source_hash, 'corpus_id': corpus_id,
+                   'also_registered_as': [row[0] for row in declared[1:]],
+                   'registry_sha256': file_sha(registry_path),
+                   'manifest': str(manifest_path.relative_to(ROOT)), 'manifest_sha256': file_sha(manifest_path),
+                   'piece_table': None}
+        if piece_rel:
+            piece_path = ROOT / entry['path'] / piece_rel
+            if piece_path.stat().st_size != item.get('bytes') or file_sha(piece_path) != item.get('sha256'):
+                raise ValueError(f'registered piece table hash mismatch: {piece_rel}')
+            binding['piece_table'] = {'path': (Path(entry['path']) / piece_rel).as_posix(),
+                                      'bytes': item['bytes'], 'sha256': item['sha256']}
+            with piece_path.open() as f:
+                for line_number, line in enumerate(f, 1):
+                    if not line.strip():
+                        continue
+                    row = json.loads(line)
+                    name, text = row.get('name'), row.get('text')
+                    if not isinstance(name, str) or not isinstance(text, str):
+                        raise ValueError(f'invalid piece row {piece_rel}:{line_number}')
+                    if name in tables and tables[name] != text:
+                        raise ValueError(f'conflicting registered piece body: {name}')
+                    tables[name] = text
+        bindings.append(binding)
+    return tables, bindings
+
+
 def select(args, shard_dir: Path):
     """Stream the sources; write selected raw lines to trajectory shards; return omissions and blocked chains."""
     exclude = {}
@@ -253,7 +351,7 @@ def _init(tokenizers, pieces=None):
     from natlang_neuralese.serve.chat import bind_history_reasoning
     from strip_generic_system_prompt import strip_row
     _G['strip_row'] = strip_row
-    _G['pieces'] = pieces or []  # soft prompt pieces the records reference (name -> text), as gold_text_rows takes
+    _G['pieces'] = pieces or {}  # exact source pieces, keyed by their registered names
     _G['tok'] = {}
     for name, path in tokenizers.items():
         tok = load_pinned_tokenizer(Path(path))
@@ -407,7 +505,7 @@ def render_shard(job):
     wt = []
     for record, members in whole_trajectory_records(records, blocked):
         try:
-            piece_map = {q['name']: q['text'] for q in _G['pieces']}
+            piece_map = _G['pieces']
             messages, _, _ = authenticated_crisp_context_messages(record, piece_map, writer_sources)
             target = crisp_messages([record['target']], piece_map, handover_notes(record))[0]
             text, ids = native_gold_document(tok, messages, target, record.get('tools') or [],
@@ -592,6 +690,21 @@ def main(argv=None):
     p.add_argument('--keep-work', action='store_true', help='keep the per-shard work files after the merge')
     a = p.parse_args(argv)
     tokenizers = dict(item.split('=', 1) for item in a.tokenizer)
+    pieces, piece_bindings = registered_source_pieces(a.source)
+    explicit_piece_bindings = []
+    for path in a.pieces:
+        explicit_piece_bindings.append({'path': str(path), 'bytes': path.stat().st_size,
+                                        'sha256': file_sha(path)})
+        for line_number, line in enumerate(path.read_text().splitlines(), 1):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            name, text = row.get('name'), row.get('text')
+            if not isinstance(name, str) or not isinstance(text, str):
+                p.error(f'invalid explicit piece row {path}:{line_number}')
+            if name in pieces and pieces[name] != text:
+                p.error(f'explicit piece table conflicts with registered source piece {name}')
+            pieces[name] = text
     out = a.out_dir
     out.mkdir(parents=True, exist_ok=True)
     if (out / 'receipt.json').exists():
@@ -636,14 +749,13 @@ def main(argv=None):
             pending.append(job)
     print(json.dumps({'jobs': len(jobs), 'already_done': len(results)}), flush=True)
     jobs = pending
-    pieces = [json.loads(line) for path in a.pieces for line in path.read_text().splitlines() if line.strip()]
     with Pool(a.workers, initializer=_init, initargs=(tokenizers, pieces)) as pool:
         for i, res in enumerate(pool.imap_unordered(render_shard, jobs)):
             results.append(res)
             if i % 8 == 0:
                 print(json.dumps({'done': i + 1, 'of': len(jobs), 'last': res.get('shard'),
                                   'seconds': round(time.time() - t0)}), flush=True)
-    _init(tokenizers)
+    _init(tokenizers, pieces)
     renders = {}
     for mode in RENDERINGS:
         for name in tokenizers:
@@ -668,6 +780,10 @@ def main(argv=None):
     receipt = {
         'schema': SCHEMA, 'corpus_id': a.corpus_id,
         'sources': {str(s): {'sha256': file_sha(s), 'bytes': s.stat().st_size} for s in a.source},
+        'source_piece_bindings': piece_bindings,
+        'source_piece_entries': len(pieces),
+        'source_piece_table_sha256': sha(canonical(pieces).encode()) if pieces else None,
+        'explicit_piece_bindings': explicit_piece_bindings,
         'exclude_programs': [{'path': str(e), 'sha256': file_sha(e)} for e in a.exclude_programs],
         'reserved': ({'path': str(a.reserved), 'sha256': file_sha(a.reserved)} if a.reserved else None),
         'reserved_groups': len(reserved_groups),

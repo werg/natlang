@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v43-static-reference-controller-20261011-v2",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/luna-v43-static-reference-controller-20261011-v2",
+  "files": [
+    {
+      "path": "salvage-receipt.json",
+      "bytes": 2977,
+      "sha256": "fbed93e2330e5e8f38a344b939656c3684a9c2ada65fca44c226c32cfdefad63"
+    },
+    {
+      "path": "teacher-turns.jsonl",
+      "bytes": 171686980,
+      "sha256": "b59643bdabe604e805f440ab574ba134931926ad6be08456ba43f111e07efc85",
+      "lines": 1224
+    }
+  ],
+  "bytes": 171689957
+}
