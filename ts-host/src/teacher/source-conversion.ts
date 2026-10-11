@@ -1,5 +1,6 @@
 /** Offline source replay evidence is distinct from the original agent's task-success label. */
 import { hexDigest } from '../native/hash.js';
+import { sourceQualityClearanceForProgram, type VerifiedSourceQualityClearance } from './source-quality-clearance.js';
 type Dict = Record<string, unknown>;
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -80,7 +81,7 @@ export function retiredWorkflowEvaluationReleased(program: Dict): boolean {
     release.scope === 'these four pinned revisions only' && release.original_split === 'test' && release.training_split === 'train';
 }
 
-export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; outcome?: Dict; trajectory?: unknown[] }): string[] {
+export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; outcome?: Dict; trajectory?: unknown[]; source_ref?: Dict }, clearance?: VerifiedSourceQualityClearance): string[] {
   const provenance = row.provenance ?? {}, evidence = provenance.source_conversion as Dict | undefined;
   const program = row.task?.program_ir as Dict | undefined;
   const quality = (program?.external_source as Dict | undefined)?.quality as Dict | undefined;
@@ -94,6 +95,11 @@ export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; 
   const qualityProblems = (!quality && qualityRequired) || quality &&
     (quality.version !== 'natlang.source_quality/1' || quality.status !== 'eligible' ||
      !Array.isArray(quality.checks) || !quality.checks.length || quality.checks.some(item => typeof item !== 'string' || !item)) ? ['source_quality_held'] : [];
+  const qualityClearance = sourceQualityClearanceForProgram(clearance ?? row.source_ref?.source_quality_clearance, program);
+  if (qualityClearance) {
+    const heldIndex = qualityProblems.indexOf('source_quality_held');
+    if (heldIndex >= 0) qualityProblems.splice(heldIndex, 1);
+  }
   const sourceIdentity = program?.external_source as Dict | undefined;
   if ((program?.generation as Dict | undefined)?.operation_derivative &&
       (typeof sourceIdentity?.source_id !== 'string' ||

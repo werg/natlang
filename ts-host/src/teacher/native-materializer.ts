@@ -2,6 +2,7 @@ import { handoffTurns, type Turn } from './replay.js';
 import { hexDigest } from '../native/hash.js';
 import { nativeDecisionTargetDigest, validNativeDecisionApproval, type NativeDecisionApproval } from '../native/decision-review.js';
 import { sourceConversionProblems, retiredWorkflowEvaluationReleased } from './source-conversion.js';
+import { sourceQualityClearanceForProgram, type VerifiedSourceQualityClearance } from './source-quality-clearance.js';
 import { trainingQualityReason, runtimeFailureReason, quarantineReason, retiredFamily } from './curriculum-policy.js';
 import type { ProgramRecord } from './program.js';
 import { sourceWithLiteralCalls } from '../native/neuralese.js';
@@ -1232,7 +1233,8 @@ export function markAuthoredStaticReferencePending(turns: Dict[]): Dict[] {
 }
 
 export function materializeNativeRows(input: unknown[], options: { directAnswers?: boolean; failedRuns?: boolean;
-  decisionHolds?: readonly NativeDecisionHold[]; decisionApprovals?: readonly NativeDecisionApproval[] } = {}): {
+  decisionHolds?: readonly NativeDecisionHold[]; decisionApprovals?: readonly NativeDecisionApproval[];
+  sourceQualityClearance?: VerifiedSourceQualityClearance } = {}): {
   turns: Dict[]; authored_actions: Dict[]; acceptedRows: number; rejectedRows: number;
   unlinked: { id: string; outcomes: number; reason?: string }[];
 } {
@@ -1266,9 +1268,10 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       reviewedApprovals.set(approval.decision_index, structuredClone(approval));
     }
 
-    if (sourceConversionProblems(row).length) { rejectedRows++; continue; }
+    if (sourceConversionProblems(row, options.sourceQualityClearance).length) { rejectedRows++; continue; }
     const taskIr = record(row.task.program_ir, `${row.id}.task.program_ir`);
     const program = taskIr as unknown as ProgramRecord;
+    const sourceQualityBinding = sourceQualityClearanceForProgram(options.sourceQualityClearance, program);
     // Direct exports and failed-run pair discovery must honor the same source holds as collection/admission.
     if (trainingQualityReason(row) || runtimeFailureReason(row) || quarantineReason(program) || retiredFamily(program)) { rejectedRows++; continue; }
     // Rows from before conversation rollover was retired contain checkpoint notes and cut contexts.
@@ -1636,6 +1639,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       if (!authoredRootAction || decisionApproved) rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
+          ...(sourceQualityBinding && options.sourceQualityClearance ?
+            { source_quality_clearance: options.sourceQualityClearance } : {}),
           ...(normalizedActionProvenance ? { action_provenance: normalizedActionProvenance } : {}),
           ...(semanticApproval ? { native_target_sha256: semanticApproval.target_sha256 } : {}),
           ...(invocation ? { invocation_id: invocation, ...(instructionSites.has(invocation) ? { inline_instruction_site: instructionSites.get(invocation) } : {}), ...(parents.has(invocation) ? { parent_invocation_id: parents.get(invocation) } : {}),
