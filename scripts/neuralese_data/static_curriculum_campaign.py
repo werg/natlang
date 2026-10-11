@@ -27,6 +27,7 @@ generated families are new problems per seed. Resumable: finished shards, batche
   static_curriculum_campaign.py run   --root ROOT [--workers 8] [--batches N]        generate + consolidate
   static_curriculum_campaign.py render-loop --root ROOT [--render-cpus 6]            render batches as they land
   static_curriculum_campaign.py rationalize-loop --root ROOT                         teacher rationales in GPU gaps -> rNN
+  static_curriculum_campaign.py register --root ROOT       registry entries + manifests for rendered batches
   static_curriculum_campaign.py status --root ROOT
 """
 from __future__ import annotations
@@ -248,7 +249,7 @@ def render(root: Path, name: str, cpus: int, budget_gb: int, docker_gb: int) -> 
     unit = f'static-render-{name}-{int(time.time()) % 100000}'
     corpus_id = f"{root.name}-{name}"
     cmd = ['python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', str(budget_gb),
-           '--priority', 'low', '--no-resumable',
+           '--priority', 'low', '--resumable',
            '--wait', '86400', '--workdir', str(REPO), '--', 'env', f'MEM={docker_gb}g', f'CPUS={cpus}',
            'nice', '-n', '10', 'scripts/neuralese_data/render_native_turn_corpus.sh', str(out), '--corpus-id', corpus_id,
            '--source', str(plain), '--workers', str(cpus), '--shards', '64', '--protected', str(REPO / PROTECTED),
@@ -403,6 +404,92 @@ def render_loop(args) -> None:
                     raise
                 time.sleep(600)
         print(json.dumps({'batch': name, 'rendered': True}), flush=True)
+        try:
+            register(args)
+        except (subprocess.CalledProcessError, OSError, ValueError) as error:  # retried after the next render
+            print(json.dumps({'register_error': str(error)}), flush=True)
+
+
+REGISTRY = REPO / 'training/neuralese_corpora.json'
+LINK = 'data/neuralese/corpora'  # ROOT is symlinked here under its own name
+
+
+def registry_entries(root: Path, name: str) -> list[dict]:
+    """The two registry entries of a rendered batch: its turns corpus and its render."""
+    stats, receipt = load(root / 'batches' / name / 'batch.json'), load(root / 'renders' / name / 'receipt.json')
+    cfg = load(root / 'config.json')
+    base, rel = f'{root.name}-{name}', f'{LINK}/{root.name}'
+    rationalized = name.startswith('r')
+    source = {
+        'id': base, 'owner': 'dgx', 'path': f'{rel}/batches/{name}', 'include': ['*'],
+        'source_class': 'static-inline-curriculum-reference-demonstrations' + ('-teacher-rationales' if rationalized else ''),
+        'split': 'train build (--split train); source families keep their upstream split (test rows stay test); '
+                 'generated families are new problems per seed (split group sSEED:...); case ids deduplicated against '
+                 'static-lambda-rationalized v2, clef-new v2, bgkit-knowledge and earlier batches',
+        'admission': 'verified replay through the native runtime, exact oracles, zero model calls'
+                     + ('; root-turn rationales by the local Qwen3.6 teacher (rationalized-actions/1)' if rationalized
+                        else '; reasoning is stock action notes, untrained (teacher_reasoning_trained false)'),
+        'training_admission': True,
+        'training_admission_reason': 'owner 2026-10-11 maximize data: admit unless a concrete defect; protected bgkit '
+                                     'benchmarks, explicit test reservations and held source groups are removed at render',
+        'license': 'per source dataset (facts in the case IR); all licences accepted (owner 2026-10-10)',
+        'build': {'script': 'scripts/neuralese_data/static_curriculum_campaign.py', 'config': {
+            k: cfg[k] for k in ('seed_start', 'shapes', 'seeds_per_batch', 'stride', 'hints', 'split')},
+            'excluded_families': cfg['excluded']},
+        'stats': stats, 'storage': 'zstd --long=27 (decompress with zstd -d --long=27)',
+        'required_conversion': 'none: rendered in ' + f'{base}-render',
+    }
+    if rationalized:
+        source['supersedes'] = f'{root.name}-{stats["rationalizes"]}'
+    renders = {mode: {tok: {k: v for k, v in info.items() if k in ('documents', 'by_split', 'max_document_tokens')}
+                      for tok, info in [(key.split('/')[1], val) for key, val in receipt['renders'].items()
+                                        if key.split('/')[0] == mode]}
+               for mode in ('full', 'program-header', 'whole-trajectory')}
+    render = {
+        'id': f'{base}-render', 'owner': 'dgx', 'path': f'{rel}/renders/{name}',
+        'include': ['receipt.json', '*.jsonl', '*.json', '*/*/text-data.jsonl', '*/*/text-data.jsonl.zst',
+                    '*/*/omissions.jsonl', '*/*/omissions.jsonl.zst', 'render-omissions/*/omissions.jsonl'],
+        'source_class': 'rendered-natlang-native-teacher-turn-text',
+        'split': 'per document, inherited from the source rows; protected bgkit benchmark overlaps and explicit test '
+                 'reservations dropped; train documents sharing a source group with held text (4962 union, harness '
+                 'bench) dropped',
+        'admission': f'renders of {base}: full (zstd --long=27, warm-up share), program-header, whole-trajectory; '
+                     'LFM2.5 and Mellum2.1 twins; no new example admission',
+        'training_admission': True,
+        'training_admission_reason': 'owner 2026-10-11: maximize data; renders of a training-admitted corpus',
+        'derived_from': [base], 'license': 'facts from the source rows', 'renders': renders,
+    }
+    if rationalized:
+        render['supersedes'] = f'{root.name}-{stats["rationalizes"]}-render'
+    return [source, render]
+
+
+def register(args) -> None:
+    """Register every rendered batch not yet in the registry, publish its manifests and push (stages only these
+    paths). Skips while another session has uncommitted registry edits, so it never publishes their work."""
+    root = Path(args.root)
+    if subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--', str(REGISTRY)], cwd=REPO).returncode:
+        print('registry has uncommitted edits by another session; skipping this round', flush=True)
+        return
+    subprocess.run(['python3', 'scripts/git_publish.py', '--sync-only'], cwd=REPO, capture_output=True)
+    registry = json.loads(REGISTRY.read_text())
+    known = {c['id'] for c in registry['corpora']}
+    names = sorted(p.parent.name for p in (root / 'renders').glob('*/receipt.json')
+                   if (root / 'batches' / p.parent.name / 'batch.json').exists())
+    new = [e for n in names for e in registry_entries(root, n) if e['id'] not in known]
+    if not new:
+        return
+    registry['corpora'].extend(new)
+    REGISTRY.write_text(json.dumps(registry, indent=2, ensure_ascii=False) + '\n')
+    for entry in new:
+        subprocess.run(['python3', 'scripts/sync_training_corpora.py', 'publish', '--machine', 'dgx', '--id', entry['id']],
+                       cwd=REPO, check=True)
+    paths = [str(REGISTRY.relative_to(REPO))] + [f'training/corpus-manifests/{e["id"]}.json' for e in new]
+    ids = ', '.join(e['id'] for e in new)
+    subprocess.run(['python3', 'scripts/git_publish.py', '-m', f'Register static curriculum batches: {ids}',
+                    '-m', 'Generated by static_curriculum_campaign.py (owner 2026-10-11: large training dataset).',
+                    *paths], cwd=REPO, check=True)
+    print(json.dumps({'registered': [e['id'] for e in new]}), flush=True)
 
 
 def status(args) -> None:
@@ -439,10 +526,12 @@ def main() -> None:
     # Ledger claim ~1.3x the measured peak of the render container (~0.7-2 GB); docker's own cap is separate.
     p.add_argument('--render-budget-gb', type=int, default=3)
     p.add_argument('--render-docker-gb', type=int, default=8)
+    p = sub.add_parser('register')
+    p.add_argument('--root', required=True)
     p = sub.add_parser('status')
     p.add_argument('--root', required=True)
     args = ap.parse_args()
-    {'init': init, 'run': run, 'render-loop': render_loop, 'rationalize-loop': rationalize_loop, 'status': status}[args.cmd](args)
+    {'init': init, 'run': run, 'render-loop': render_loop, 'rationalize-loop': rationalize_loop, 'status': status, 'register': register}[args.cmd](args)
 
 
 if __name__ == '__main__':
