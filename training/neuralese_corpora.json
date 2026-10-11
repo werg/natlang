@@ -31902,6 +31902,20 @@
       "admission": "root-approval-and-launch-lineage-only-no-output-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Root approved plan SHA f9b47bb46ab5277ab121360d2930502db9e673038400bbff82adc037f35285b0; independent review SHA dd48638cbb445154da0ae28dc150add6e7b62cabeecdeee07d46e7a4c8d8cc40; supervisor launch receipt SHA cc4761e43c5cc3389ebd5bd82a449ed42fe55b08c04fc4937c08d5f3c0a19cd1. Five-worker generation results remain outside this immutable launch-evidence snapshot."
+    },
+    {
+      "id": "folder-decision-scaffold-field-ownership-reference-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-folder-scaffold-field-ownership-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-static-reference-review-only",
+      "source_class": "held-folder-decision-scaffold-field-ownership-review-and-reference-replays",
+      "training_admission": false,
+      "admission": "static-reference-review-only-no-training-or-native-trajectory-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root-reviewed field-ownership correction, archived source and v1/v2/v3 references, failures, component payloads and replay evidence. V3 replay: 2 CLINC items, 1 authored reference result matching exact annotation, 0 replay failures, both child calls passed visibility checks for source state/question/item options/answer domain and actual task.levels:[]; model-visible task/item files contain no answer/gold. The materializer deliberately held the annotation-derived row. V1 and V2 failures remain preserved. No live model sampling was performed; instruction change remains unmeasured/model-facing debt as recorded in MODEL_FACING_CHANGES.md."
     }
   ],
   "coverage_backlog": [
