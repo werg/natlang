@@ -4,14 +4,14 @@
  "doc": "plans/neuralese/DATA_INVENTORY_20261011.md",
  "registry_counts_by_class": {
   "held-or-evidence": {
-   "corpora": 1201,
-   "bytes": 155317681337,
-   "jsonl_lines": 4384936
+   "corpora": 1164,
+   "bytes": 121184397121,
+   "jsonl_lines": 4370188
   },
   "training-admitted": {
-   "corpora": 29,
-   "bytes": 128265712466,
-   "jsonl_lines": 3865677
+   "corpora": 44,
+   "bytes": 130421019823,
+   "jsonl_lines": 3909363
   },
   "protected-evaluation": {
    "corpora": 2,
@@ -24,9 +24,9 @@
    "jsonl_lines": 1040343
   },
   "model-or-training-state": {
-   "corpora": 69,
-   "bytes": 143629548227,
-   "jsonl_lines": 86961
+   "corpora": 27,
+   "bytes": 67300648522,
+   "jsonl_lines": 49242
   }
  },
  "datasets": [
@@ -368,6 +368,84 @@
    "jsonl_lines_approx": 1400000,
    "decision": "Pop sweeps closed campaigns: admit accepted/oracle-passed actions unless a concrete defect (owner maximize-data rule); register omissions.",
    "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": null,
+   "id": "luna-v17-v9-portable-context-view-20261010-v1",
+   "path": "runs/luna-v17-actual-quality-proposal-20261010-v9-portable-context-view-v1/assembled-v3/native-records.jsonl",
+   "origin": "Luna teacher + Clef reference, exact-oracle native records",
+   "format": "natlang.teacher_training_turn.native/1",
+   "docs": 3207,
+   "supervised_tokens_est": 582000,
+   "consumable_now": false,
+   "decision": "ADMIT (held-recovery 2026-10-11): 3207 train rows (2035 test excluded); 415 train decisions are absent from the 4962 union text and are new",
+   "required_conversion": "whole-trajectory render or native_gold_packet",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "refine-judge-exact-20261009-v1",
+   "path": "data/neuralese/corpora/refine-judge-exact-20261009-v1/judge-rows.jsonl",
+   "origin": "crisp-checker labels, no model",
+   "format": "natlang.decision-prompt/1",
+   "docs": 1020,
+   "supervised_tokens_est": 3000,
+   "consumable_now": false,
+   "decision": "ADMIT 1020 train rows; heldout-predicate/family (307) stay out",
+   "required_conversion": "render as judge calls",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "refine-author-static-20261009-v1",
+   "path": "data/neuralese/corpora/refine-author-static-20261009-v1/examples.jsonl",
+   "origin": "applications working tree + git history",
+   "format": "natlang.refine-author/1",
+   "docs": 28,
+   "supervised_tokens_est": 197000,
+   "consumable_now": false,
+   "decision": "ADMIT all 28 pairs",
+   "required_conversion": "authoring-example render",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "neuralese-operator-cases-20261009-v1",
+   "path": "runs/neuralese-operator-cases-20261009-v1/cases.jsonl",
+   "origin": "derived from v7 gold text, code-computed targets",
+   "format": "natlang.operator-case/1",
+   "docs": 1166,
+   "supervised_tokens_est": 74000,
+   "consumable_now": false,
+   "decision": "ADMIT 1166 train spans; 834 test excluded",
+   "required_conversion": "S5 operator objective",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "natlang-specialization-cases-declines-20261009-v1",
+   "path": "data/neuralese/corpora/natlang-specialization-cases-declines-20261009-v1/",
+   "origin": "DGX call store export",
+   "format": "compiled cases + declines",
+   "docs": 15,
+   "supervised_tokens_est": null,
+   "consumable_now": false,
+   "decision": "ADMIT",
+   "required_conversion": "render recorded calls as call programs",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
+   "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/records.jsonl",
+   "origin": "SWE-rebench via pi harness",
+   "format": "natlang.teacher_training_turn.native/1",
+   "docs": 2969,
+   "supervised_tokens_est": null,
+   "consumable_now": false,
+   "decision": "ADMIT (records of the already admitted text twins)",
+   "required_conversion": "none beyond text twins",
+   "owner_of_conversion": "dgx-render"
   }
  ],
  "defects": [
@@ -615,6 +693,34 @@
    "action": "not natlang-native; sources for harness-bench-style normalization (SWE/agent trajectories) under the breadth-via-natlang rule; register a snapshot when a converter consumes one"
   }
  ],
+ "held_recovery_20261011": {
+  "method": "file-level comparison of every registry manifest file (165,526 files) by path and size between DGX and Pop (ssh pop-os)",
+  "registry_entries": 1377,
+  "entries_with_dgx_unique_files": 60,
+  "dgx_unique_bytes_nonadmitted_entries": 91200000000.0,
+  "dgx_unique_breakdown_gb": {
+   "model_and_training_state_pop_offloaded_not_candidates": 60.8,
+   "superseded_or_duplicate_training_shaped_delete_candidates": 20.8,
+   "generation_source_or_index_kept": 7.9,
+   "live_training_shaped_admitted_or_covered": 1.8
+  },
+  "delete_candidates": "runs/DELETE-CANDIDATES-HELD-20261011.txt (20.78 GB)",
+  "recovered": {
+   "rows_train": {
+    "luna-v17-v9-portable-context-view": 3207,
+    "refine-judge-exact": 1020,
+    "refine-author-static": 28,
+    "operator-cases": 1166,
+    "specialization": 15
+   },
+   "new_to_union_train_decisions": 415
+  },
+  "excluded": {
+   "test_or_heldout_splits": "luna 2035 test, judge 307 heldout, operator 834 test, harness 874 test",
+   "defects": "harness v1: 9 records with timeout-notice",
+   "jeff_leaks": 0
+  }
+ },
  "registry": [
   {
    "id": "luna-authored-root-microgrid-31-native-25-text-20261009-v3",
@@ -1061,18 +1167,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "local-recurrence-writer-control-v1-20261005",
-   "owner": "pop",
-   "path": "runs/neuralese-local-recurrence-20261005/writer-control-v1",
-   "class": "model-or-training-state",
-   "bytes": 1651518311,
-   "jsonl_lines": 1081,
-   "admission": "model-diagnostic-checkpoint-not-training-examples",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "clef-rich-source-20261005-v1",
    "owner": "pop",
    "path": "runs",
@@ -1141,46 +1235,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "local-recurrence-execution-baseline-20261005-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-local-recurrence-20261005",
-   "class": "held-or-evidence",
-   "bytes": 439413570,
-   "jsonl_lines": 227,
-   "admission": "heldout-model-evaluation-and-deployment-artifacts-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "clef-rich-reviewed-cohort-20261005-v1"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-recurrence-joint512-state-20261005-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-local-recurrence-20261005",
-   "class": "model-or-training-state",
-   "bytes": 2864084656,
-   "jsonl_lines": 1147,
-   "admission": "superseded-training-stage-resumable-state-not-new-examples",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-recurrence-mixed128-execution-20261005-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-local-recurrence-20261005",
-   "class": "model-or-training-state",
-   "bytes": 1249207978,
-   "jsonl_lines": 427,
-   "admission": "heldout-model-evaluation-and-resumable-checkpoint-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "clef-rich-reviewed-cohort-20261005-v1"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
    "id": "local-neuralese-foundation-20261005-v1",
    "owner": "pop",
    "path": "runs/neuralese-foundation-evidence-20261005-v1",
@@ -1241,50 +1295,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "local-raw-foundation-20261005-v3",
-   "owner": "pop",
-   "path": "runs/neuralese-shared-raw-foundation-20261005-v3",
-   "class": "held-or-evidence",
-   "bytes": 72900650,
-   "jsonl_lines": 1,
-   "admission": "qualified-token-foundation-and-runtime-controls-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-recurrence-mixed128-execution-20261005-v1",
-    "clef-rich-reviewed-cohort-20261005-v1"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-raw-recurrence-20261005-paused-v1",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 106165610,
-   "jsonl_lines": 216,
-   "admission": "failed-staging-diagnostics-and-full-resumable-state-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-foundation-20261005-v3"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-raw-recurrence-20261005-paused-v2",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 213458863,
-   "jsonl_lines": 717,
-   "admission": "failed-numerical-replay-diagnostics-and-full-resumable-state-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-recurrence-20261005-paused-v1",
-    "local-raw-foundation-20261005-v3"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
    "id": "local-raw-typed-runtime-proof-20261005-v4",
    "owner": "pop",
    "path": "runs/neuralese-raw-typed-runtime-proof-20261005-v4",
@@ -1299,48 +1309,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "local-raw-writer-warmup-20261005-paused-v4",
-   "owner": "pop",
-   "path": "runs",
-   "class": "held-or-evidence",
-   "bytes": 214084956,
-   "jsonl_lines": 185,
-   "admission": "warmup-recovery-and-performance-diagnostics-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-recurrence-20261005-paused-v2"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-raw-writer-warmup-20261005-paused-v5",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 320485377,
-   "jsonl_lines": 324,
-   "admission": "full-resumable-state-and-failed-quality-diagnostics-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-writer-warmup-20261005-paused-v4"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-raw-writer-diagnostics-20261005-v6",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 106560812,
-   "jsonl_lines": 55,
-   "admission": "full-resumable-state-and-explicit-weight-interventions-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-writer-warmup-20261005-paused-v5"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
    "id": "static-lambda-rationalized-20261006-v1",
    "owner": "dgx",
    "path": "data/neuralese/corpora/static-lambda-rationalized-20261006-v1",
@@ -1350,119 +1318,6 @@
    "admission": "reference-demonstrations-verified-replay; synthetic-rationales-trained (rationalized-actions/1); not teacher-sampled",
    "training_admission": null,
    "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-raw-recurrence-recovery-20261006-v10",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 323864174,
-   "jsonl_lines": 442,
-   "admission": "full-state-and-resource-failure-diagnostics-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-writer-diagnostics-20261005-v6"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-raw-prefix-memory-20261006-v11",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 107728443,
-   "jsonl_lines": 255,
-   "admission": "full-state-and-memory-diagnostics-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-recurrence-recovery-20261006-v10"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-raw-utilization-20261006-v12",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 107650738,
-   "jsonl_lines": 10,
-   "admission": "full-state-and-utilization-diagnostics-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-prefix-memory-20261006-v11"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-raw-checkpoint-policy-20261006-v14",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 215457468,
-   "jsonl_lines": 523,
-   "admission": "full-state-and-checkpoint-policy-diagnostics-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-utilization-20261006-v12"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-raw-replay-policy-failure-20261006-v15",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 107675246,
-   "jsonl_lines": 64,
-   "admission": "failed-replay-diagnostics-and-last-full-state-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-checkpoint-policy-20261006-v14"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-raw-content-identity-diagnostics-20261007-v16",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 108032188,
-   "jsonl_lines": 1122,
-   "admission": "conditional-semantic-diagnostics-and-closed-full-state-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-replay-policy-failure-20261006-v15"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-raw-native-length-diagnostics-20261006-v17",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 108385401,
-   "jsonl_lines": 1449,
-   "admission": "failed-semantic-probes-native-length-audit-and-closed-full-state-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-content-identity-diagnostics-20261007-v16"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-raw-writer-free-diagnostics-20261006-v18",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 172907409,
-   "jsonl_lines": 1133,
-   "admission": "failed-free-writer-diagnostics-and-closed-full-state-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-raw-native-length-diagnostics-20261006-v17",
-    "local-raw-content-identity-diagnostics-20261007-v16"
-   ],
    "audit_2026_10_11": null
   },
   {
@@ -1931,18 +1786,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "local-recurrence-auto-wide-state-20261005-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-local-recurrence-20261005",
-   "class": "model-or-training-state",
-   "bytes": 3302626564,
-   "jsonl_lines": 208,
-   "admission": "historical-experiment-state-only; not qualified training examples or channel certificates",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "luna-semantic-lambda-refill-task-source-20261006-v7",
    "owner": "pop",
    "path": "runs/luna-semantic-lambdas-refill-20261006-v7",
@@ -2379,66 +2222,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "neuralese-latent-sketch-diagnostic-20261006-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v1",
-   "class": "held-or-evidence",
-   "bytes": 6472,
-   "jsonl_lines": 4,
-   "admission": "implementation-diagnostic-only-not-task-or-runtime-qualified-not-training-data",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-latent-sketch-diagnostic-20261006-v2",
-   "owner": "pop",
-   "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v2",
-   "class": "held-or-evidence",
-   "bytes": 7223,
-   "jsonl_lines": 4,
-   "admission": "retained-numerical-control-or-failed-diagnostic-not-training-data",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-latent-sketch-diagnostic-20261006-v3",
-   "owner": "pop",
-   "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v3",
-   "class": "held-or-evidence",
-   "bytes": 7437,
-   "jsonl_lines": 4,
-   "admission": "retained-numerical-control-or-failed-diagnostic-not-training-data",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-latent-sketch-diagnostic-20261006-v4",
-   "owner": "pop",
-   "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v4",
-   "class": "held-or-evidence",
-   "bytes": 7951,
-   "jsonl_lines": 4,
-   "admission": "retained-numerical-control-or-failed-diagnostic-not-training-data",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-latent-sketch-diagnostic-20261006-v5",
-   "owner": "pop",
-   "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v5",
-   "class": "held-or-evidence",
-   "bytes": 42720410,
-   "jsonl_lines": 4,
-   "admission": "initial-channel-runtime-proof-only-not-task-training-data",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "luna-semantic-lambda-refill-task-source-20261006-v13",
    "owner": "pop",
    "path": "runs/luna-semantic-lambdas-refill-20261006-v13",
@@ -2446,18 +2229,6 @@
    "bytes": 167602,
    "jsonl_lines": 17,
    "admission": "verified-constructed-train-fixtures-and-explicit-provider-retry-task-source-trajectory-review-pending",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-latent-sketch-consumer-20261006-v1-paused",
-   "owner": "pop",
-   "path": "runs/neuralese-latent-sketch-consumer-20261006-v1-paused",
-   "class": "held-or-evidence",
-   "bytes": 112035112,
-   "jsonl_lines": 96,
-   "admission": "safely-paused-experiment-evidence-pending-owner-architecture-model-correction-not-training-data",
    "training_admission": null,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -2474,18 +2245,6 @@
    "derived_from": [
     "luna-semantic-lambda-refill-task-source-20261006-v12"
    ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-latent-sketch-v2-diagnostic-20261006-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-latent-sketch-v2-diagnostic-20261006-v1",
-   "class": "held-or-evidence",
-   "bytes": 41467956,
-   "jsonl_lines": 4,
-   "admission": "initialized-v2-runtime-proof-not-task-training-data",
-   "training_admission": null,
-   "derived_from": null,
    "audit_2026_10_11": null
   },
   {
@@ -2561,18 +2320,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "neuralese-sketch-target-scale-20261006-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-sketch-target-scale-20261006-v1",
-   "class": "held-or-evidence",
-   "bytes": 8956,
-   "jsonl_lines": 0,
-   "admission": "gradient-routing-controls-and-retained-failed-GC-numerical-diagnostics-not-task-quality-or-training-data",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "luna-semantic-lambda-refill-task-source-20261006-v15",
    "owner": "pop",
    "path": "runs/luna-semantic-lambdas-refill-20261006-v15",
@@ -2616,30 +2363,6 @@
    "bytes": 70664,
    "jsonl_lines": 0,
    "admission": "independent-source-semantic-review-evidence-not-training-examples",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "maple-foundation-full-20261006-v4",
-   "owner": "dgx",
-   "path": "runs/maple-foundation-20261005/full-v4",
-   "class": "held-or-evidence",
-   "bytes": 237460927,
-   "jsonl_lines": 1,
-   "admission": "maple-foundation-certificate-and-runtime-qualified-port-on-lfm-certificate-records-not-training-data",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "maple-latent-sketch-v2-diagnostic-20261006-v1",
-   "owner": "dgx",
-   "path": "runs/maple-latent-sketch-v2-diagnostic-20261006-v1",
-   "class": "held-or-evidence",
-   "bytes": 117583857,
-   "jsonl_lines": 2,
-   "admission": "initialized-maple-v2-runtime-proof-not-task-training-data",
    "training_admission": null,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -3240,66 +2963,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "neuralese-gold-text-foundation-v1-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-gold-text-warmup-20261006-v1",
-   "class": "model-or-training-state",
-   "bytes": 1861232723,
-   "jsonl_lines": 1037,
-   "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-gold-text-foundation-v2-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-gold-text-warmup-20261006-v2",
-   "class": "model-or-training-state",
-   "bytes": 1860593287,
-   "jsonl_lines": 1,
-   "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-gold-text-foundation-v3-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-gold-text-warmup-20261006-v3",
-   "class": "model-or-training-state",
-   "bytes": 1860646241,
-   "jsonl_lines": 67,
-   "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-gold-text-foundation-v4-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-gold-text-warmup-20261007-v4",
-   "class": "model-or-training-state",
-   "bytes": 1860657485,
-   "jsonl_lines": 81,
-   "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-gold-text-foundation-v5-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-gold-text-warmup-20261007-v5",
-   "class": "model-or-training-state",
-   "bytes": 1861719652,
-   "jsonl_lines": 758,
-   "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "luna-semantic-reducers-source-v24r4r1c-20261007",
    "owner": "pop",
    "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v4r1c",
@@ -3361,20 +3024,6 @@
    "admission": "reviewed16authoredworlds8train8test;explicitoutputpathrevision2;native-reference-is-not-modeldata-or-admission",
    "training_admission": null,
    "derived_from": [],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-gold-text-foundation-v6-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-gold-text-warmup-20261007-v6",
-   "class": "model-or-training-state",
-   "bytes": 1862134483,
-   "jsonl_lines": 957,
-   "admission": "closed-resumable-fullstate-step2868-diagnostic;failedalignment;nottrainingdata-or-qualifiedchannel",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-gold-text-foundation-v5-closed-20261007"
-   ],
    "audit_2026_10_11": null
   },
   {
@@ -3453,20 +3102,6 @@
    "training_admission": null,
    "derived_from": [
     "luna-semantic-reducers-source-v25r1-20261007"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-gold-text-foundation-v7-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-gold-text-warmup-20261007-v7",
-   "class": "model-or-training-state",
-   "bytes": 1862168249,
-   "jsonl_lines": 594,
-   "admission": "closed-fullstate-step3456;text-alignment-qualified-two-held-gates;not-task-or-autonomous-generation-qualification",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-gold-text-foundation-v6-closed-20261007"
    ],
    "audit_2026_10_11": null
   },
@@ -3575,7 +3210,7 @@
    "bytes": 171850102,
    "jsonl_lines": 7470,
    "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
-   "training_admission": null,
+   "training_admission": false,
    "derived_from": [
     "neuralese-reviewed-restart-cohort-20261007-v8"
    ],
@@ -3589,7 +3224,7 @@
    "bytes": 132440834,
    "jsonl_lines": 5922,
    "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
-   "training_admission": null,
+   "training_admission": false,
    "derived_from": [
     "neuralese-reviewed-restart-cohort-20261007-v7"
    ],
@@ -3603,23 +3238,9 @@
    "bytes": 95032746,
    "jsonl_lines": 4514,
    "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
-   "training_admission": null,
+   "training_admission": false,
    "derived_from": [
     "neuralese-reviewed-restart-cohort-20261007-v5"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-gold-text-foundation-v8-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-gold-text-warmup-20261007-v8",
-   "class": "model-or-training-state",
-   "bytes": 1861666467,
-   "jsonl_lines": 388,
-   "admission": "closed-fullstate-step3840;long-window-alignment-FAILED;not-task-or-autonomous-generation-qualification",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-gold-text-foundation-v7-closed-20261007"
    ],
    "audit_2026_10_11": null
   },
@@ -3662,20 +3283,6 @@
    "training_admission": null,
    "derived_from": [
     "luna-semantic-reducers-source-v27r1-20261007"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-gold-text-foundation-v9-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-gold-text-warmup-20261007-v9",
-   "class": "model-or-training-state",
-   "bytes": 1860767079,
-   "jsonl_lines": 61,
-   "admission": "closed-emergency-fullstate-step3899;long-window-foundation-unqualified",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-gold-text-foundation-v8-closed-20261007"
    ],
    "audit_2026_10_11": null
   },
@@ -3771,36 +3378,6 @@
    "admission": "derived-source-disjoint-native-chat-gold-text-only;not-new-task-admission",
    "training_admission": null,
    "derived_from": [
-    "neuralese-native-gold-text-corpus-20261007-v2"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-native-text-foundation-v10r2-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-warmup-20261007-v10r2",
-   "class": "model-or-training-state",
-   "bytes": 1861468729,
-   "jsonl_lines": 299,
-   "admission": "closed-emergency-fullstate;foundation-unqualified",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-gold-text-foundation-v9-closed-20261007",
-    "neuralese-native-gold-text-corpus-20261007-v2"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-native-text-foundation-v11-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-warmup-20261007-v11",
-   "class": "model-or-training-state",
-   "bytes": 1860852336,
-   "jsonl_lines": 84,
-   "admission": "closed-emergency-fullstate-step4275;strong-final256-foundation-gate-failed",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-native-text-foundation-v10r2-closed-20261007",
     "neuralese-native-gold-text-corpus-20261007-v2"
    ],
    "audit_2026_10_11": null
@@ -3961,18 +3538,6 @@
    "bytes": 111463943,
    "jsonl_lines": 5024,
    "admission": "ordinary native gold-text foundation only; no runtime qualification",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-native-text-foundation-v12-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-warmup-20261007-v12",
-   "class": "held-or-evidence",
-   "bytes": 1861437081,
-   "jsonl_lines": 285,
-   "admission": "closed unqualified foundation state; not training examples",
    "training_admission": null,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -4218,18 +3783,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "neuralese-native-text-foundation-v13-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-warmup-20261007-v13",
-   "class": "held-or-evidence",
-   "bytes": 3722634137,
-   "jsonl_lines": 419,
-   "admission": "closed unqualified text foundation lineage; not runtime/task-qualified",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "luna-semantic-v32-final-decision-audit-20261007-v4",
    "owner": "pop",
    "path": "runs/luna-v32-decision-quality-audit-20261007-final-closed-v4",
@@ -4381,18 +3934,6 @@
    "bytes": 18770584,
    "jsonl_lines": 1098,
    "admission": "raw teacher evidence pending per-action quality review",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-native-text-foundation-v14-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-warmup-20261007-v14",
-   "class": "model-or-training-state",
-   "bytes": 3721580902,
-   "jsonl_lines": 61,
-   "admission": "unqualified failed foundation lineage; checkpoint recovery and diagnostics only",
    "training_admission": null,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -4578,18 +4119,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "neuralese-native-text-foundation-v15-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-warmup-20261007-v15",
-   "class": "model-or-training-state",
-   "bytes": 3723317448,
-   "jsonl_lines": 503,
-   "admission": "unqualified failed foundation lineage; full-state recovery and diagnostics only",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "luna-semantic-v40-raw-20261007",
    "owner": "pop",
    "path": "runs/luna-semantic-v40-campaign-20261007",
@@ -4633,18 +4162,6 @@
    "bytes": 280373,
    "jsonl_lines": 24,
    "admission": "generation-source-only; twelve nested same-world depth2 variants root-reviewed; no static/native/recurrence training admission; twelve unchanged iterative controls held for wording limitations",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-native-text-foundation-v16-v18-closed-20261007",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-warmup-closeouts-20261007-v1",
-   "class": "model-or-training-state",
-   "bytes": 11169553974,
-   "jsonl_lines": 299,
-   "admission": "closed full-state backup and failure evidence only; foundation/runtime/stopping gates unqualified; no inherited training admission",
    "training_admission": null,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -4803,18 +4320,6 @@
    "bytes": 192017243,
    "jsonl_lines": 8250,
    "admission": "Unadmitted superseded renderer attempt96omissions, preserve failure evidence; V8r2 fixes exact attested inlinebody rendering",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-v19-preservation-20261007-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-v19-preservation-20261007-v1",
-   "class": "held-or-evidence",
-   "bytes": 3724462823,
-   "jsonl_lines": 426,
-   "admission": "Closed V19 full optimizer/model/runtime provenance backup step6090; unqualified foundation, V20parent retained, no training corpus admission",
    "training_admission": null,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -5428,7 +4933,7 @@
    "bytes": 200819382,
    "jsonl_lines": 8540,
    "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
-   "training_admission": null,
+   "training_admission": false,
    "derived_from": [
     "neuralese-reviewed-restart-cohort-20261007-v13-final",
     "neuralese-native-gold-text-v11-r2-20261007-v1"
@@ -6346,7 +5851,7 @@
    "bytes": 211156506,
    "jsonl_lines": 8876,
    "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
-   "training_admission": null,
+   "training_admission": false,
    "derived_from": [
     "neuralese-native-gold-text-v16-v5-20261007"
    ],
@@ -6598,18 +6103,6 @@
    "bytes": 3836875,
    "jsonl_lines": 58,
    "admission": "held-actual-generation-evidence;no-automatic-action-admission-or-DPO",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-native-text-warmup-v21-closed-20261008",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-warmup-20261007-v21",
-   "class": "model-or-training-state",
-   "bytes": 3764930833,
-   "jsonl_lines": 8261,
-   "admission": "closed-unqualified-training-state;not-training-data-or-channel-certificate",
    "training_admission": null,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -6943,15 +6436,15 @@
    "id": "luna-v17-v9-portable-context-view-20261010-v1",
    "owner": "dgx",
    "path": "runs/luna-v17-actual-quality-proposal-20261010-v9-portable-context-view-v1",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "bytes": 596269947,
    "jsonl_lines": 10739,
    "admission": "root-admitted-exact-source-grounded-native-sft-closed-recurrence-and-derived-gold-text;not-runtime-qualified",
-   "training_admission": null,
+   "training_admission": true,
    "derived_from": [
     "luna-v17-v9-portable-context-proposal-20261008"
    ],
-   "audit_2026_10_11": null
+   "audit_2026_10_11": "ADMIT (held-recovery 2026-10-11): 3207 train rows (2035 test excluded); 415 train decisions are absent from the 4962 union text and are new"
   },
   {
    "id": "neuralese-v9-root-review-20261008-v1",
@@ -7068,20 +6561,6 @@
    "training_admission": null,
    "derived_from": [
     "neuralese-semantic-iterate-reducers-v25-v1-static-generation-packet-20261008"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "local-recurrence-step256-fullstate-preservation-20261008",
-   "owner": "pop",
-   "path": "runs/neuralese-local-recurrence-20261005/task-eval-inputs",
-   "class": "model-or-training-state",
-   "bytes": 1212541095,
-   "jsonl_lines": 0,
-   "admission": "historical-unqualified-model-checkpoint-not-training-examples",
-   "training_admission": null,
-   "derived_from": [
-    "local-recurrence-execution-baseline-20261005-v1"
    ],
    "audit_2026_10_11": null
   },
@@ -7505,7 +6984,7 @@
    "bytes": 215962051,
    "jsonl_lines": 9018,
    "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
-   "training_admission": null,
+   "training_admission": false,
    "derived_from": [
     "luna-v17-v9-portable-context-proposal-20261008",
     "neuralese-maple-native-gold-text-corpus-20261008-v6"
@@ -7569,49 +7048,6 @@
    "training_admission": null,
    "derived_from": [
     "s1-question-collection-v7-generation-source-20261008"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 1273738285,
-   "jsonl_lines": 3948,
-   "admission": "closed-unqualified-full-state-and-masked-eval-diagnostic; no-training-examples-or-channel-qualification",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-native-text-warmup-v21-closed-20261008",
-    "neuralese-v24-v9-three-action-native-text-20261008-v2"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-native-text-warmup-v20-closed-storage-20261008",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-warmup-20261007-v20",
-   "class": "model-or-training-state",
-   "bytes": 3730814357,
-   "jsonl_lines": 2120,
-   "admission": "incomplete-closed-run-evidence-two-full-state-checkpoints-missing-unresolved; no-training-admission",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-v19-preservation-20261007-v1"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-native-text-warmup-v20-surviving-artifacts-20261008",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-warmup-20261007-v20",
-   "class": "model-or-training-state",
-   "bytes": 1266269585,
-   "jsonl_lines": 2120,
-   "admission": "surviving-closed-run-diagnostics-and-heads-only; full-state-checkpoints-missing; no-training-admission",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-native-text-warmup-v20-closed-storage-20261008"
    ],
    "audit_2026_10_11": null
   },
@@ -8003,36 +7439,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "neuralese-lfm-stage4-8-closed-handoff-20261008-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-warmup-lfm-stage4-8-20261008-v4",
-   "class": "model-or-training-state",
-   "bytes": 3750240670,
-   "jsonl_lines": 2279,
-   "admission": "closed-unqualified-training-state;not-training-data-or-channel-certificate",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1",
-    "neuralese-v24-v9-three-action-native-text-20261008-v2"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-lfm-input-map-launch-preparation-20261008-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
-   "class": "held-or-evidence",
-   "bytes": 1334398,
-   "jsonl_lines": 0,
-   "admission": "immutable-execution-provenance;not-training-data-or-channel-certificate",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-lfm-stage4-8-closed-handoff-20261008-v1",
-    "neuralese-v24-v9-three-action-native-text-20261008-v2"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
    "id": "verified-reasoning-pools-v18-luna-closed-20261008-v1",
    "owner": "pop",
    "path": "runs/verified-reasoning-pools-20261008-v18-answer-key-v2",
@@ -8044,49 +7450,6 @@
    "derived_from": [
     "verified-reasoning-pools-v18-answer-key-v2-20261008-v1",
     "verified-reasoning-pools-v18-luna-launch-20261008-v1"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-lfm-input-map-completed-state-20261008-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
-   "class": "model-or-training-state",
-   "bytes": 789,
-   "jsonl_lines": 0,
-   "admission": "completed-training-state; not-training-data-task-or-autonomous-stopping-certificate",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-lfm-input-map-launch-preparation-20261008-v1"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-lfm-input-map-completed-state-20261008-v2",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
-   "class": "model-or-training-state",
-   "bytes": 3717348796,
-   "jsonl_lines": 1003,
-   "admission": "completed-training-state; not-training-data-task-or-autonomous-stopping-certificate",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-lfm-input-map-launch-preparation-20261008-v1",
-    "neuralese-lfm-input-map-completed-state-20261008-v1"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-lfm-input-map-qualified-runtime-ar-review-20261008-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
-   "class": "held-or-evidence",
-   "bytes": 221843,
-   "jsonl_lines": 20,
-   "admission": "exact-weight-runtime-and-AR-diagnostic-evidence-only; not-training-data-task-or-stopping-certificate",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-lfm-input-map-completed-state-20261008-v2"
    ],
    "audit_2026_10_11": null
   },
@@ -8145,34 +7508,6 @@
    "derived_from": [
     "verified-reasoning-pools-v19-answer-key-v2-20261008-v1",
     "verified-reasoning-pools-v19-frozen-runtime-reference-20261008-v1"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-v22-retired-heads-best-state-20261008-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-warmup-20261008-v22",
-   "class": "model-or-training-state",
-   "bytes": 2489039296,
-   "jsonl_lines": 0,
-   "admission": "retired-closed-weights-and-best-state-only; not-training-data-or-channel-certificate",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-lfm-input-map-refinement-launch-20261008-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-input-map-lfm-refinement-20261008-v2",
-   "class": "held-or-evidence",
-   "bytes": 1340748,
-   "jsonl_lines": 0,
-   "admission": "immutable-active-execution-provenance-only; no-training-data-or-channel-certificate",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-lfm-input-map-completed-state-20261008-v2"
    ],
    "audit_2026_10_11": null
   },
@@ -8243,21 +7578,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "neuralese-lfm-input-map-refinement-22272-closed-20261008-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-input-map-lfm-refinement-20261008-v2",
-   "class": "held-or-evidence",
-   "bytes": 3722001354,
-   "jsonl_lines": 1309,
-   "admission": "closed-step22272-text-alignment-refinement-and-frozen-diagnostics; no-active-training-admission-or-input-change",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-lfm-input-map-completed-state-20261008-v2",
-    "neuralese-lfm-input-map-refinement-launch-20261008-v1"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
    "id": "neuralese-lfm-input-map-action45-refinement-recipe-20261008-v1",
    "owner": "pop",
    "path": "training/neuralese/recipes",
@@ -8267,23 +7587,6 @@
    "admission": "immutable-active-refinement-recipe-provenance-only",
    "training_admission": null,
    "derived_from": [
-    "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-lfm-input-map-action45-refinement-launch-20261008-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-input-map-lfm-action45-refinement-20261008-v1",
-   "class": "held-or-evidence",
-   "bytes": 7945,
-   "jsonl_lines": 0,
-   "admission": "immutable-active-launch-provenance-only;mutable-outputs-excluded",
-   "training_admission": null,
-   "derived_from": [
-    "neuralese-lfm-input-map-action45-refinement-recipe-20261008-v1",
-    "neuralese-lfm-input-map-refinement-22272-closed-20261008-v1",
-    "neuralese-v24-v9-three-action-action45-full-facets-20261008-v1",
     "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1"
    ],
    "audit_2026_10_11": null
@@ -8961,28 +8264,16 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "neuralese-foundation-text-4880-sketch-run-held-artifacts-20261009-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-foundation-text-4880-continuation-20261009-v1/held-artifact-only-publication-proposal-v1",
-   "class": "held-or-evidence",
-   "bytes": 3106496753,
-   "jsonl_lines": 2128,
-   "admission": "artifact-only-diagnostic-no-training-no-qualification",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "natlang-specialization-cases-declines-20261009-v1",
    "owner": "dgx",
    "path": "data/neuralese/corpora/natlang-specialization-cases-declines-20261009-v1",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "bytes": 846679,
    "jsonl_lines": 15,
    "admission": "held-crisp-versus-natural-language-evidence-only",
-   "training_admission": false,
+   "training_admission": true,
    "derived_from": [],
-   "audit_2026_10_11": null
+   "audit_2026_10_11": "ADMIT"
   },
   {
    "id": "luna-semantic-iterate-six-successes-22-native-19-text-20261009-v1",
@@ -8997,18 +8288,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "neuralese-map-v5-ar-state-evidence-20261009-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-map-v5-ar-state-evidence-20261009-v1/payload-v1",
-   "class": "model-or-training-state",
-   "bytes": 3099251799,
-   "jsonl_lines": 2592,
-   "admission": "artifact-only-checkpoint-and-preflight-restore-evidence-no-training-or-qualification",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "luna-v17-conjunctive-eligibility-50-native-46-actor-text-20261009-v1",
    "owner": "pop",
    "path": "runs",
@@ -9016,18 +8295,6 @@
    "bytes": 45980172,
    "jsonl_lines": 345,
    "admission": "Root per-action native and text composition adoption is hash-bound in the allowlist. 50train native/46train text additions; active training inputs unchanged.",
-   "training_admission": null,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-ar-final24960-diagnostic-artifacts-20261009-v2",
-   "owner": "pop",
-   "path": "runs/neuralese-ar-matched-final24960-evidence-20261009-v2/payload-v1",
-   "class": "model-or-training-state",
-   "bytes": 1866713291,
-   "jsonl_lines": 1033,
-   "admission": "artifact-only-diagnostic-checkpoint-and-evaluation-evidence-no-training-admission",
    "training_admission": null,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -9048,11 +8315,11 @@
    "id": "neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1",
    "owner": "dgx",
    "path": "runs/neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "bytes": 248354985,
    "jsonl_lines": 9924,
    "admission": "tokenizer-twin-of-root-adopted-text-composition-training-input-no-new-example-admission (inherits the admission of neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1)",
-   "training_admission": null,
+   "training_admission": true,
    "derived_from": [
     "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1"
    ],
@@ -9118,15 +8385,15 @@
    "id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
    "owner": "dgx",
    "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "bytes": 764745375,
    "jsonl_lines": 4826,
    "admission": "admitted-by-owner-pending-recurrence-support (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'): read directly only by the recurrence stage, which stays held until each student's runtime qualification and the view gate, and until written views run on these records (raw-recurrence-v3 cohorts.harness_bench.recurrence.status); its LFM text twin is admitted",
-   "training_admission": false,
+   "training_admission": true,
    "derived_from": [
     "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
    ],
-   "audit_2026_10_11": null
+   "audit_2026_10_11": "ADMIT (records of the already admitted text twins)"
   },
   {
    "id": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1",
@@ -9200,25 +8467,25 @@
    "id": "refine-judge-exact-20261009-v1",
    "owner": "dgx",
    "path": "data/neuralese/corpora/refine-judge-exact-20261009-v1",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "bytes": 1403943,
    "jsonl_lines": 1420,
    "admission": "held-pending-review-refine-judge-exact-labels",
-   "training_admission": false,
+   "training_admission": true,
    "derived_from": [],
-   "audit_2026_10_11": null
+   "audit_2026_10_11": "ADMIT 1020 train rows; heldout-predicate/family (307) stay out"
   },
   {
    "id": "refine-author-static-20261009-v1",
    "owner": "dgx",
    "path": "data/neuralese/corpora/refine-author-static-20261009-v1",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "bytes": 790965,
    "jsonl_lines": 28,
    "admission": "held-pending-review-refine-author-static",
-   "training_admission": false,
+   "training_admission": true,
    "derived_from": [],
-   "audit_2026_10_11": null
+   "audit_2026_10_11": "ADMIT all 28 pairs"
   },
   {
    "id": "luna-v22-targeted-counterfactual-five-held-trajectories-20261009-v1",
@@ -9332,15 +8599,15 @@
    "id": "neuralese-operator-cases-20261009-v1",
    "owner": "dgx",
    "path": "runs/neuralese-operator-cases-20261009-v1",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "bytes": 1240039,
    "jsonl_lines": 2000,
    "admission": "s5-operator-training-source;exact-code-targets;not-task-admission",
-   "training_admission": false,
+   "training_admission": true,
    "derived_from": [
     "neuralese-maple-native-gold-text-corpus-20261008-v7"
    ],
-   "audit_2026_10_11": null
+   "audit_2026_10_11": "ADMIT 1166 train spans; 834 test excluded"
   },
   {
    "id": "neuralese-s5-operator-replay-records-20261009-v1",
@@ -9882,54 +9149,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "luna-ar-native-harness-29466-full-state-closeout-held-20261010-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-8805-final28793-20261010-v1/closed-output-v1",
-   "class": "held-or-evidence",
-   "bytes": 3714080451,
-   "jsonl_lines": 681,
-   "admission": "excluded-clean-lineage-ancestor-harness-split-overlap",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-prefix-inactive-full-state-closeout-held-20261010-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-feedback-prefix-4962-best23936-20261009-v1/closed-output-v1",
-   "class": "held-or-evidence",
-   "bytes": 3745502526,
-   "jsonl_lines": 4129,
-   "admission": "archival/restore evidence only; no channel qualification inherited",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-gateref-29466-exact-source-heads-held-20261010-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-gateref-29466-20261010-v1/exact-source-export-v1",
-   "class": "held-or-evidence",
-   "bytes": 616841629,
-   "jsonl_lines": 0,
-   "admission": "unqualified heads export; exact handoff state only",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-gateref-29466-frozen-launches-held-20261010-v1",
-   "owner": "pop",
-   "path": "runs",
-   "class": "model-or-training-state",
-   "bytes": 3842616,
-   "jsonl_lines": 0,
-   "admission": "execution provenance only; ongoing logs/checkpoints excluded",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "free-provider-google-pool-v5-queued-inputs-held-20261010-v1",
    "owner": "pop",
    "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v5",
@@ -10403,18 +9622,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "luna-ar-native-harness-gateref-v2-30515-closeout-held-20261010-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-gateref-29466-20261010-v2/closed-output-v1",
-   "class": "held-or-evidence",
-   "bytes": 3719043646,
-   "jsonl_lines": 1059,
-   "admission": "excluded-clean-lineage-ancestor-harness-split-overlap",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "free-provider-luna-v32-source-ambiguity-review-held-20261010-v1",
    "owner": "pop",
    "path": "runs/luna-semantic-iterate-refill-20261010-v1/review-v2",
@@ -10626,18 +9833,6 @@
    "bytes": 31152,
    "jsonl_lines": 29,
    "admission": "dispatch-evidence-live-output-excluded",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-v4-29968-split-contaminated-closeout-held-20261010-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-gentle-29696-20261010-v4/closed-output-v1",
-   "class": "held-or-evidence",
-   "bytes": 3709491978,
-   "jsonl_lines": 276,
-   "admission": "excluded-clean-lineage-ancestor-harness-split-overlap",
    "training_admission": false,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -11011,18 +10206,6 @@
    "class": "held-or-evidence",
    "bytes": 310243700,
    "jsonl_lines": 1383,
-   "admission": "supplemental-immutable-evidence-only",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "neuralese-lfm-input-map-launch-preparation-20261008-v1-glob-supplement-20261010-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
-   "class": "held-or-evidence",
-   "bytes": 10710,
-   "jsonl_lines": 0,
    "admission": "supplemental-immutable-evidence-only",
    "training_admission": false,
    "derived_from": null,
@@ -12611,18 +11794,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "luna-ar-native-harness-v6-refine-frozen-inputs-held-20261010-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-refine-31744-20261010-v6",
-   "class": "held-or-evidence",
-   "bytes": 2061382,
-   "jsonl_lines": 0,
-   "admission": "unqualified; exact resume and diagnostic evidence only",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "free-provider-luna-v49-repaired-train-reviewed-inputs-held-20261010-v1",
    "owner": "pop",
    "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-repaired-train-iterative-trace-v49-runtimev14-v1",
@@ -13355,18 +12526,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "luna-ar-native-harness-v7-continuation-frozen-inputs-held-20261010-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-continue-33792-20261010-v7",
-   "class": "held-or-evidence",
-   "bytes": 2065644,
-   "jsonl_lines": 0,
-   "admission": "held-unqualified-alignment-or-source-quality-evidence",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "free-provider-luna-v59-iterative-coverage-inputs-held-20261010-v1",
    "owner": "pop",
    "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-iterative-modality-recovery-v59-runtimev15-v1",
@@ -13494,18 +12653,6 @@
    "bytes": 5268768,
    "jsonl_lines": 8121,
    "admission": "held-unqualified-alignment-or-source-quality-evidence",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-alignment-v6-diagnostic-correction-held-20261010-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-v6-diagnostic-correction-held-20261010-v1",
-   "class": "held-or-evidence",
-   "bytes": 39285,
-   "jsonl_lines": 0,
-   "admission": "held-diagnostic-with-correction",
    "training_admission": false,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -16895,30 +16042,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "luna-direct-lfm-base-v1-launch-failure-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-neuralese-direct-lfm-base-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 10213,
-   "jsonl_lines": 0,
-   "admission": "launch-failure-diagnostic-only-no-training-or-qualification",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-direct-lfm-base-v2-startup-failure-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-neuralese-direct-lfm-base-20261011-v2",
-   "class": "held-or-evidence",
-   "bytes": 21376579,
-   "jsonl_lines": 1,
-   "admission": "startup-failure-diagnostic-only-no-training-or-qualification",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "google-choice-confidence-v41-prefix-static-v5-held-20261011-v1",
    "owner": "pop",
    "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v5-current-criteria",
@@ -18034,11 +17157,11 @@
    "id": "neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v1",
    "owner": "dgx",
    "path": "runs/neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v1",
-   "class": "training-admitted",
+   "class": "held-or-evidence",
    "bytes": 67463867,
    "jsonl_lines": 9924,
    "admission": "admitted-post-warm-up-phase-of-the-direct-stage (owner decision 2026-10-11: drop the generic system prompt after a warm-up; program-specific content stays; plans/neuralese/NO_SYSTEM_PROMPT_RENDERING_DECOMPOSITION.md). Same documents as the admitted union; not additional independent examples.",
-   "training_admission": true,
+   "training_admission": false,
    "derived_from": [
     "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1"
    ],
@@ -18090,14 +17213,167 @@
    "id": "natlang-native-turns-clef-new-render-20261011-v1",
    "owner": "dgx",
    "path": "runs/natlang-native-turns-clef-new-render-20261011-v1",
-   "class": "training-admitted",
+   "class": "held-or-evidence",
    "bytes": 183312573,
    "jsonl_lines": 14908,
+   "admission": "renders of admitted source corpora: clef-new-rationalized-20261006-v2; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+   "training_admission": false,
+   "derived_from": [
+    "clef-new-rationalized-20261006-v2"
+   ],
+   "audit_2026_10_11": null
+  },
+  {
+   "id": "port-record-calls-s3-20261011-v1",
+   "owner": "dgx",
+   "path": "data/neuralese/corpora/port-record-calls-s3-20261011-v1",
+   "class": "training-admitted",
+   "bytes": 0,
+   "jsonl_lines": 0,
+   "admission": "D16 conversion of the S3 subset of S1 (45 families) into natlang call programs; consume and continue records; reconstruct none in S1",
+   "training_admission": true,
+   "derived_from": [
+    "s3-subset-20261005",
+    "s1-full-final-20261003"
+   ],
+   "audit_2026_10_11": null
+  },
+  {
+   "id": "port-record-calls-view-ask-20261011-v1",
+   "owner": "dgx",
+   "path": "data/neuralese/corpora/port-record-calls-view-ask-20261011-v1",
+   "class": "training-admitted",
+   "bytes": 0,
+   "jsonl_lines": 0,
+   "admission": "D15 conversion of view-ask-20261010-v4 into natlang call programs; consume and compare records; reconstruct records omitted (reproducing the source verbatim is the identity function as a call: omission reason reconstruct-is-identity-as-a-call)",
+   "training_admission": true,
+   "derived_from": [
+    "view-ask-20261010-v4"
+   ],
+   "audit_2026_10_11": null
+  },
+  {
+   "id": "luna-v43-suffix658-1374-runtimev19-closed-raw-held-20261011-v1",
+   "owner": "pop",
+   "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-suffix658-1374-runtimev19-closed-raw-v1",
+   "class": "held-or-evidence",
+   "bytes": 177757879,
+   "jsonl_lines": 641,
+   "admission": "Closed raw evidence for the 69-program V43 suffix campaign; held evidence only, not training data.",
+   "training_admission": false,
+   "derived_from": null,
+   "audit_2026_10_11": null
+  },
+  {
+   "id": "luna-v43-suffix69-native-child-sft-401-20261011-v1",
+   "owner": "pop",
+   "path": "runs/v43-suffix69-native-child-sft-admitted-20261011-v1",
+   "class": "training-admitted",
+   "bytes": 114252187,
+   "jsonl_lines": 1203,
+   "admission": "Root-approved exact 401 successful source-annotation- and invocation-bound child results for native decision SFT only. Excludes 24 annotation disagreements and 118 other unselected items. Parent outcomes are preserved unchanged; no failed action is a target. This does not admit whole parent traces, recurrence, independent worlds, or model/runtime qualification.",
+   "training_admission": true,
+   "derived_from": [
+    "luna-v43-suffix658-1374-runtimev19-closed-raw-held-20261011-v1",
+    "luna-v43-suffix658-1374-runtimev19-static-held-20261011-v1"
+   ],
+   "audit_2026_10_11": null
+  },
+  {
+   "id": "natlang-native-turns-clef-new-render-20261011-v2",
+   "owner": "dgx",
+   "path": "runs/natlang-native-turns-clef-new-render-20261011-v2",
+   "class": "training-admitted",
+   "bytes": 181892728,
+   "jsonl_lines": 14814,
    "admission": "renders of admitted source corpora: clef-new-rationalized-20261006-v2; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
    "training_admission": true,
    "derived_from": [
     "clef-new-rationalized-20261006-v2"
    ],
+   "audit_2026_10_11": null
+  },
+  {
+   "id": "neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v2",
+   "owner": "dgx",
+   "path": "runs/neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v2",
+   "class": "training-admitted",
+   "bytes": 67461703,
+   "jsonl_lines": 9924,
+   "admission": "admitted-post-warm-up-phase-of-the-direct-stage (owner decision 2026-10-11: drop the generic system prompt after a warm-up; program-specific content stays; plans/neuralese/NO_SYSTEM_PROMPT_RENDERING_DECOMPOSITION.md). Same documents as the admitted union; not additional independent examples.",
+   "training_admission": true,
+   "derived_from": [
+    "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1"
+   ],
+   "audit_2026_10_11": null
+  },
+  {
+   "id": "natlang-free-provider-v28-render-20261011-v1",
+   "owner": "dgx",
+   "path": "runs/natlang-free-provider-v28-render-20261011-v1",
+   "class": "training-admitted",
+   "bytes": 70499988,
+   "jsonl_lines": 1680,
+   "admission": "renders of admitted source corpora: free-provider-v28-admitted-ordinary-text-280-20261010-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+   "training_admission": true,
+   "derived_from": [
+    "free-provider-v28-admitted-ordinary-text-280-20261010-v1"
+   ],
+   "audit_2026_10_11": null
+  },
+  {
+   "id": "natlang-free-provider-v29-render-20261011-v1",
+   "owner": "dgx",
+   "path": "runs/natlang-free-provider-v29-render-20261011-v1",
+   "class": "training-admitted",
+   "bytes": 4935081,
+   "jsonl_lines": 120,
+   "admission": "renders of admitted source corpora: free-provider-v29-admitted-ordinary-text-20-20261010-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+   "training_admission": true,
+   "derived_from": [
+    "free-provider-v29-admitted-ordinary-text-20-20261010-v1"
+   ],
+   "audit_2026_10_11": null
+  },
+  {
+   "id": "natlang-free-provider-v73-render-20261011-v1",
+   "owner": "dgx",
+   "path": "runs/natlang-free-provider-v73-render-20261011-v1",
+   "class": "training-admitted",
+   "bytes": 211616174,
+   "jsonl_lines": 5076,
+   "admission": "renders of admitted source corpora: free-provider-v73-admitted-ordinary-text-846-20261011-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+   "training_admission": true,
+   "derived_from": [
+    "free-provider-v73-admitted-ordinary-text-846-20261011-v1"
+   ],
+   "audit_2026_10_11": null
+  },
+  {
+   "id": "port-record-calls-s3-large-20261011-v1",
+   "owner": "dgx",
+   "path": "data/neuralese/corpora/port-record-calls-s3-large-20261011-v1",
+   "class": "training-admitted",
+   "bytes": 0,
+   "jsonl_lines": 0,
+   "admission": "Large-evidence pass of the D16 conversion (Pop request coord 2026-10-11T20:36:10Z-pop-f575): exactly the S3 records whose evidence is over 32,000 and at most 120,000 characters (the base pass omissions evidence-over-cap-needs-paged-program), same paged-reading program shape; the child reads up to ~60 cut-off pages, context stays inside 65,536 tokens. Records over 120,000 characters remain omitted (ir/*/omissions.jsonl) pending a map-over-chunks program shape",
+   "training_admission": true,
+   "derived_from": [
+    "s3-subset-20261005",
+    "s1-full-final-20261003"
+   ],
+   "audit_2026_10_11": null
+  },
+  {
+   "id": "clef-pools-20261011-v1",
+   "owner": "dgx",
+   "path": "data/neuralese/corpora/clef-pools-20261011-v1",
+   "class": "training-admitted",
+   "bytes": 141774003,
+   "jsonl_lines": 6749,
+   "admission": "reference-demonstrations-verified-replay; clef-flash-distilled child labels with per-item confidence gating; action-notes reasoning (not trained); not teacher-sampled",
+   "training_admission": true,
+   "derived_from": null,
    "audit_2026_10_11": null
   }
  ]
