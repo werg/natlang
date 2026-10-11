@@ -1373,6 +1373,8 @@ export function markAuthoredStaticReferencePending(turns: Dict[]): Dict[] {
 }
 
 export function materializeNativeRows(input: unknown[], options: { directAnswers?: boolean; failedRuns?: boolean;
+  /** Candidate discovery only: expose complete turns from a quality-pending parent with admission disabled. */
+  pendingDecisionCandidates?: boolean;
   decisionHolds?: readonly NativeDecisionHold[]; decisionApprovals?: readonly NativeDecisionApproval[];
   sourceQualityClearance?: VerifiedSourceQualityClearance;
   sourceLabelCorrections?: VerifiedNativeSourceLabelCorrections } = {}): {
@@ -1417,6 +1419,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     // Direct exports and failed-run pair discovery must honor the same source holds as collection/admission.
     const rowQualityReason = trainingQualityReason(row);
     const hasExactDecisionReview = (options.decisionApprovals ?? []).some(approval => approval.trajectory_id === row.id);
+    const pendingDecisionCandidateRow = options.pendingDecisionCandidates === true && options.failedRuns === true &&
+      rowQualityReason === 'quality_pending' && row.outcome.accepted === false;
     const reviewedOrdinalSibling = options.failedRuns === true && hasExactDecisionReview &&
       rowQualityReason === 'quality_pending' && onlyBoundedOrdinalSiblingFailure(row);
     const reviewedLabelCorrectionSibling = options.failedRuns === true && hasExactDecisionReview &&
@@ -1424,7 +1428,11 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         options.sourceLabelCorrections);
     const verifiedCorrectionCandidate = options.failedRuns === true && rowQualityReason === 'quality_pending' &&
       hasVerifiedSourceLabelCorrectionMismatch(row, options.sourceLabelCorrections);
-    if ((rowQualityReason && !reviewedOrdinalSibling && !reviewedLabelCorrectionSibling && !verifiedCorrectionCandidate) || runtimeFailureReason(row) || quarantineReason(program) || retiredFamily(program)) {
+    const reviewedQualitySibling = options.failedRuns === true && hasExactDecisionReview &&
+      rowQualityReason === 'quality_pending';
+    if ((rowQualityReason && !reviewedOrdinalSibling && !reviewedLabelCorrectionSibling &&
+        !verifiedCorrectionCandidate && !reviewedQualitySibling && !pendingDecisionCandidateRow) ||
+        runtimeFailureReason(row) || quarantineReason(program) || retiredFamily(program)) {
       rejectedRows++; continue;
     }
     // Rows from before conversation rollover was retired contain checkpoint notes and cut contexts.
@@ -1771,7 +1779,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         (row.collection_guidance as Dict).training_admission === false;
       const authoredGuidanceBlocked = authoredGuidancePending && !semanticApproval;
       const sourceQualityActionReviewPending = !!sourceQualityBinding && !semanticApproval;
-      const decisionApproved = (!authoredRootAction || !!semanticApproval) && !sourceQualityActionReviewPending && !authoredGuidanceBlocked && !semanticHold && !afterChunkCutoff &&
+      const decisionApproved = !pendingDecisionCandidateRow && (!authoredRootAction || !!semanticApproval) && !sourceQualityActionReviewPending && !authoredGuidanceBlocked && !semanticHold && !afterChunkCutoff &&
         !invalidSourceLabelCorrectionApproval &&
         (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
         !heldDirect && !variantContext && !invalidStatusOnlySuccess;
@@ -1844,7 +1852,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         // Keep the final verdict with each decision for downstream continuation validation, without copying files.
         outcome: { accepted: row.outcome.accepted, status: row.outcome.status,
           ...(row.outcome.oracle ? { oracle: row.outcome.oracle } : {}) },
-        training_admission: { kind: authoredRootAction && semanticApproval ? 'reviewed-authored-static-native-action' :
+        training_admission: { kind: pendingDecisionCandidateRow ? 'pending-quality-decision-candidate' : authoredRootAction && semanticApproval ? 'reviewed-authored-static-native-action' :
           sourceQualityActionReviewPending ? 'source-quality-conversion-only-pending-action-review' :
           authoredGuidanceBlocked ? 'authored-root-guided-pending-review' :
           semanticApproval ? 'reviewed-native-decision' : 'exact-native-runtime-oracle', approved: decisionApproved,
@@ -1853,7 +1861,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           ...(sourceQualityActionReviewPending ? { reason: 'source-quality clearance permits conversion only; this exact target awaits native decision approval' } : {}),
           ...(authoredGuidanceBlocked ? { reason: 'authored-root-guided sample awaits separate root training approval' } : {}),
           ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
-          ...(decisionApproved ? {} : { reason: sourceQualityActionReviewPending ? 'source-quality clearance permits conversion only; this exact target awaits native decision approval' : authoredGuidanceBlocked ? 'authored-root-guided sample awaits separate root training approval' : semanticHold ? semanticHold.reason : invalidStatusOnlySuccess ? 'success return omitted value without an authenticated same-invocation staged typed result' : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
+          ...(decisionApproved ? {} : { reason: pendingDecisionCandidateRow ? 'candidate discovery only; the parent quality is pending and this child has no admission' : sourceQualityActionReviewPending ? 'source-quality clearance permits conversion only; this exact target awaits native decision approval' : authoredGuidanceBlocked ? 'authored-root-guided sample awaits separate root training approval' : semanticHold ? semanticHold.reason : invalidStatusOnlySuccess ? 'success return omitted value without an authenticated same-invocation staged typed result' : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
             heldDirect ? 'an answer given without reasoning towards it' :
             (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
@@ -1862,8 +1870,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
             redundantSkillRead ? 'retrieves unchanged skill instructions again' :
             detour ? 'repeats an earlier call of this call with the same result' :
             refusedAttempt ? "the task's checker rejected this attempt" : 'the run was not accepted') }) },
-        trace_admission: { admitted: sourceQualityBinding ? decisionApproved && !!semanticApproval : !authoredGuidancePending && !authoredRootAction,
-          kind: sourceQualityActionReviewPending ? 'source-quality-conversion-only-pending-action-review' :
+        trace_admission: { admitted: !pendingDecisionCandidateRow && (sourceQualityBinding ? decisionApproved && !!semanticApproval : !authoredGuidancePending && !authoredRootAction),
+          kind: pendingDecisionCandidateRow ? 'pending-quality-decision-candidate' : sourceQualityActionReviewPending ? 'source-quality-conversion-only-pending-action-review' :
             authoredRootAction ? 'authored-root-static-reference-not-provider-sampled' :
             authoredGuidancePending ? 'authored-root-guided-pending-review' : semanticApproval ? 'reviewed-native-decision' : 'exact-native-runtime-oracle',
           ...(sourceQualityActionReviewPending ? { reason: 'source-quality clearance permits conversion only; this exact target awaits native decision approval' } : {}),

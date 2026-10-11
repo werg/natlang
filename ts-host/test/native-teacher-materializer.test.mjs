@@ -482,6 +482,49 @@ test('accepted native rows become linked template neutral decisions with their e
   }] });
 });
 
+test('quality-pending parents expose only held child candidates and allow a reviewed exact sibling', () => {
+  const row = nativeRow('pending-mixed-siblings', false);
+  row.outcome.quality_pending = ['one sibling disagrees with its exact source target'];
+  row.outcome.oracle = { level: 'exact', accepted: false };
+
+  const candidates = materializeNativeRows([row], { failedRuns: true, pendingDecisionCandidates: true });
+  assert.equal(candidates.turns.length, 2);
+  assert.ok(candidates.turns.every(turn => turn.training_admission.approved === false));
+  assert.ok(candidates.turns.every(turn => !turn.source_ref.invocation_id),
+    'candidate extraction still requires child invocation provenance before it can select an action');
+  assert.ok(candidates.turns.every(turn => turn.training_admission.kind === 'pending-quality-decision-candidate'));
+  assert.ok(candidates.turns.every(turn => turn.trace_admission.admitted === false));
+
+  const candidate = candidates.turns[0];
+  const approval = { schema: 'natlang.native-decision-approval/1', trajectory_id: row.id,
+    source_row_sha256: nativeRowDigest(row), decision_index: candidate.decision.index,
+    target_sha256: nativeDecisionTargetDigest(candidate.target), review_sha256: 'a'.repeat(64),
+    reason: 'The visible source item and generated child target were independently checked.',
+    evidence: ['exact complete task input', 'source annotation and raw row hash', 'matching generated value'] };
+  const reviewed = materializeNativeRows([row], { failedRuns: true, decisionApprovals: [approval] });
+  assert.equal(reviewed.turns.length, 2);
+  assert.equal(reviewed.turns[0].training_admission.approved, true);
+  assert.equal(reviewed.turns[1].training_admission.approved, false);
+  assert.equal(reviewed.turns[1].outcome.accepted, false);
+  assert.equal(materializeNativeRows([row], { failedRuns: true }).turns.length, 0,
+    'pending candidates remain invisible to the normal materialization path');
+});
+
+test('a pending child candidate without review remains rejected when the parent has no exact child evidence', () => {
+  const row = nativeRow('pending-without-child-provenance', false);
+  row.outcome.quality_pending = ['parent result needs review'];
+  row.outcome.oracle = { level: 'exact', accepted: false };
+  row.trajectory = row.trajectory.map(turn => ({ ...turn, invocation_id: undefined }));
+
+  const candidates = materializeNativeRows([row], { failedRuns: true, pendingDecisionCandidates: true });
+  assert.equal(candidates.turns.length, 2);
+  assert.ok(candidates.turns.every(turn => turn.training_admission.approved === false));
+
+  const result = materializeNativeRows([row], { failedRuns: true });
+  assert.equal(result.turns.length, 0);
+  assert.equal(result.rejectedRows, 1);
+});
+
 test('materialized turns retain case oracle evidence levels as metadata', () => {
   for (const level of ['exact', 'normalized', 'span', 'judged']) {
     const row = nativeRow(`oracle-${level}`);
