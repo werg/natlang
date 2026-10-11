@@ -35,10 +35,14 @@ function visibleInputs(record) {
   const root = record.semantics.files[record.semantics.root];
   const scriptedRoot = record.curriculum.reference.root?.[0]?.[1]?.code;
   const task = parse(files['task.json']);
+  const hasCriteria = Object.hasOwn(task, 'criteria') || input.items.some(item => Object.hasOwn(item, 'criteria'));
+  const hasLevels = Object.hasOwn(task, 'levels') || input.items.some(item => Object.hasOwn(item, 'levels'));
+  const captureFields = ['caseId', 'state', 'question', ...(hasCriteria ? ['criteria'] : []), 'options',
+    ...(hasLevels ? ['levels'] : [])].join(', ');
   const labels = task.labels;
   requireValue(typeof root === 'string' && root.includes('directory') && root.includes('decisions.json'), 'missing_shared_folder_root');
   requireValue(typeof scriptedRoot === 'string' && scriptedRoot.includes('nl<Decision>') &&
-    scriptedRoot.includes('${question}') && scriptedRoot.includes('caseId, state, question, criteria, options, levels'),
+    scriptedRoot.includes('${question}') && scriptedRoot.includes(captureFields),
     'missing_runtime_inline_item_reducer');
   requireValue(Array.isArray(labels) && labels.length >= 2, 'missing_visible_labels');
   const visibleFiles = { folder_files: files, types_ts: record.semantics.files['types.ts'] ?? null };
@@ -59,7 +63,6 @@ function captureVisibility(row, record) {
   const expectedItems = Object.entries(record.semantics.folder_files)
     .filter(([path]) => path.startsWith('items/') && path.endsWith('.json')).map(([, text]) => parse(text));
   const task = parse(record.semantics.folder_files['task.json']);
-  const labelsText = JSON.stringify(task.labels);
   const itemChecks = expectedItems.map((item, index) => {
     const invocations = new Map();
     for (const turn of row.trajectory ?? []) {
@@ -67,7 +70,11 @@ function captureVisibility(row, record) {
       const group = invocations.get(turn.invocation_id) ?? [];
       group.push(turn); invocations.set(turn.invocation_id, group);
     }
-    const expectedEval = 'console.log(JSON.stringify({ caseId, state, question, criteria, options, levels }));';
+    const hasCriteria = Object.hasOwn(item, 'criteria') || Object.hasOwn(task, 'criteria');
+    const hasLevels = Object.hasOwn(item, 'levels') || Object.hasOwn(task, 'levels');
+    const captureFields = ['caseId', 'state', 'question', ...(hasCriteria ? ['criteria'] : []), 'options',
+      ...(hasLevels ? ['levels'] : [])].join(', ');
+    const expectedEval = `console.log(JSON.stringify({ ${captureFields} }));`;
     let matched;
     for (const [invocationId, turns] of invocations) {
       const context = turns.flatMap(turn => turn.context ?? []).map(message => String(message.content ?? '')).join('\n');
@@ -83,18 +90,31 @@ function captureVisibility(row, record) {
     const context = matched?.context ?? '';
     const exactTypedInput = context.includes(item.id) && context.includes(JSON.stringify(item.state));
     const questionVisible = context.includes(item.question) && context.includes('Question:');
-    const optionsLine = context.match(/(?:^|\n)options: unknown = ([^\n]+)/)?.[1];
-    let capturedOptions;
-    try { capturedOptions = optionsLine ? JSON.parse(optionsLine) : undefined; } catch { /* malformed capture */ }
-    const labelDomainVisible = Array.isArray(capturedOptions) && equal(capturedOptions, task.labels) ||
-      context.includes(labelsText);
+    const capturedValue = name => {
+      const line = context.match(new RegExp(`(?:^|\\n)${name}: [^=\\n]+ = ([^\\n]+)(?=\\n|$)`))?.[1];
+      try { return { present: line !== undefined, value: line === undefined ? undefined : JSON.parse(line) }; }
+      catch { return { present: false, value: undefined }; }
+    };
+    const capturedOptions = capturedValue('options');
+    const expectedOptions = Object.hasOwn(item, 'options') ? item.options : task.options;
+    const labelDomainVisible = capturedOptions.present && Array.isArray(capturedOptions.value) &&
+      equal(capturedOptions.value, expectedOptions) && equal(capturedOptions.value, task.labels);
+    const expectedCriteria = Object.hasOwn(item, 'criteria') ? item.criteria : task.criteria;
+    const capturedCriteria = capturedValue('criteria');
+    const criteriaVisible = hasCriteria ? capturedCriteria.present && equal(capturedCriteria.value, expectedCriteria)
+      : !capturedCriteria.present;
+    const expectedLevels = Object.hasOwn(item, 'levels') ? item.levels : task.levels;
+    const capturedLevels = capturedValue('levels');
+    const levelsVisible = hasLevels ? capturedLevels.present && equal(capturedLevels.value, expectedLevels)
+      : !capturedLevels.present;
     return { id: item.id, exact_typed_input_visible: exactTypedInput, question_visible: questionVisible,
-      complete_label_domain_visible: labelDomainVisible,
+      complete_label_domain_visible: labelDomainVisible, criteria_present_in_source: hasCriteria,
+      criteria_value_visible: criteriaVisible, levels_present_in_source: hasLevels, levels_value_visible: levelsVisible,
       state_chars: item.state.length, state_sha256: sha(item.state), invocation_id: matched?.invocationId ?? null,
       matched_exact_child_eval_and_return: Boolean(matched) };
   });
   return { visible: itemChecks.every(item => item.exact_typed_input_visible && item.question_visible &&
-    item.complete_label_domain_visible), items: itemChecks };
+    item.complete_label_domain_visible && item.criteria_value_visible && item.levels_value_visible), items: itemChecks };
 }
 
 async function main() {
@@ -242,14 +262,17 @@ async function main() {
     const instruction = row.question;
     const { criteria, provenance: criteriaProvenance } = decisionCriteria({ family: row.family,
       source: row.source, kind: row.kind, labels: row.options, explicitCriteria: row.criteria, where: row.id });
-    const task = { id: row.id, family: row.family, state: row.state, kind: 'choice', labels: row.options,
-      criteria,
-      question: row.question, instruction, gold: row.answer, gold_source: 'dataset-annotation', group_id: row.group,
+    const omitDerivedIdentityCriteria = criteriaProvenance === null && equal(criteria,
+      Object.fromEntries(row.options.map(label => [label, label])));
+    const task = { id: row.id, family: row.family, state: row.state, question: row.question, kind: 'choice',
+      options: row.options, labels: row.options,
+      ...(!omitDerivedIdentityCriteria ? { criteria } : {}),
+      instruction, gold: row.answer, gold_source: 'dataset-annotation', group_id: row.group,
       split: row.role, license: row.license, source_meta: { family_id: row.family, source_index: index,
         source_version: row.version, source_name: row.source } };
     const familyTasks = tasksByFamily.get(row.family) ?? [];
     familyTasks.push({ task, sourceRow: row, sourceIndex: index,
-      criteriaProvenance,
+      criteriaProvenance, omitDerivedIdentityCriteria,
       sourceRowRaw: selected.find(item => item.index === index).raw,
       sourceRowSha256: sha(selected.find(item => item.index === index).raw) }); tasksByFamily.set(row.family, familyTasks);
   }
@@ -310,7 +333,11 @@ async function main() {
         decision_task_contract_sha256: DECISION_TASK_CONTRACT_SHA256,
         decision_task_contract_path: DECISION_TASK_CONTRACT_PATH,
         task_criteria_provenance: group.map(entry => ({ id: entry.task.id,
-          ...(entry.criteriaProvenance ?? {}) })) };
+          ...(entry.criteriaProvenance ?? {}),
+          scaffold_criteria_exposure: entry.omitDerivedIdentityCriteria
+            ? 'omitted_unprovenanced_identity_map'
+            : entry.criteriaProvenance ? 'included_source_or_shared_contract_criteria'
+              : 'included_unprovenanced_nonidentity_criteria' })) };
       const visible = visibleInputs(record);
       records.push({ record, visible });
     }
