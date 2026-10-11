@@ -4,14 +4,14 @@
  "doc": "plans/neuralese/DATA_INVENTORY_20261011.md",
  "registry_counts_by_class": {
   "held-or-evidence": {
-   "corpora": 1219,
-   "bytes": 164715719762,
-   "jsonl_lines": 4391789
+   "corpora": 1201,
+   "bytes": 155317681337,
+   "jsonl_lines": 4384936
   },
   "training-admitted": {
-   "corpora": 28,
-   "bytes": 128082399893,
-   "jsonl_lines": 3850769
+   "corpora": 29,
+   "bytes": 128265712466,
+   "jsonl_lines": 3865677
   },
   "protected-evaluation": {
    "corpora": 2,
@@ -24,9 +24,9 @@
    "jsonl_lines": 1040343
   },
   "model-or-training-state": {
-   "corpora": 70,
-   "bytes": 145480865491,
-   "jsonl_lines": 86962
+   "corpora": 69,
+   "bytes": 143629548227,
+   "jsonl_lines": 86961
   }
  },
  "datasets": [
@@ -418,7 +418,9 @@
    "dataset": "free-provider-v73-admitted-ordinary-text-846-20261011-v1",
    "defect": "failed assistant turns not masked",
    "rows": "82 histories",
-   "repair": "add context_only_spans"
+   "repair": "Already present: 145 context_only_spans masking25,517 history tokens on82 of846 rows; preserve masks in tokenizer/header twins",
+   "status": "resolved-in-existing-admitted-packet",
+   "verified_artifact": "runs/free-provider-generation-20261009-v1/quality-review-v73-ordinary-text-admission-v1/text.jsonl"
   },
   {
    "id": "D8",
@@ -8781,20 +8783,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "neuralese-v18-v19-selected17-full-recurrence-static-qualification-20261009-v1",
-   "owner": "pop",
-   "path": "runs/neuralese-v18-v19-selected17-full-recurrence-static-qualification-20261009-v1",
-   "class": "held-or-evidence",
-   "bytes": 707900420,
-   "jsonl_lines": 3,
-   "admission": "static-exact-weight-foundation-and-runtime-qualification-evidence-plus-authenticated-context-audit-only;not-training-data;live-recurrence-outcome-excluded",
-   "training_admission": null,
-   "derived_from": [
-    "v18-v19-full-selected17-native-text-5467-4699-r4961-20261009-v1"
-   ],
-   "audit_2026_10_11": null
-  },
-  {
    "id": "v18-v19-opencode-step5-selected-eight-native-text-delta-20261009-v1",
    "owner": "pop",
    "path": "runs",
@@ -12623,18 +12611,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "luna-ar-native-harness-v5-full-state-closeout-held-20261010-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-splitfixed-28793-20261010-v5/closed-output-v1",
-   "class": "held-or-evidence",
-   "bytes": 3759336462,
-   "jsonl_lines": 4131,
-   "admission": "unqualified; exact resume and diagnostic evidence only",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "luna-ar-native-harness-v6-refine-frozen-inputs-held-20261010-v1",
    "owner": "pop",
    "path": "runs/luna-ar-native-harness-alignment-refine-31744-20261010-v6",
@@ -13374,18 +13350,6 @@
    "bytes": 8816372,
    "jsonl_lines": 651,
    "admission": "held-independent-quality-review",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-v6-full-state-closeout-held-20261010-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-refine-31744-20261010-v6/direct-stage-run",
-   "class": "held-or-evidence",
-   "bytes": 3729134987,
-   "jsonl_lines": 2066,
-   "admission": "held-unqualified-alignment-or-source-quality-evidence",
    "training_admission": false,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -15479,30 +15443,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "luna-ar-native-harness-alignment-v7-final-review-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-v7-final-review-held-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 3222545,
-   "jsonl_lines": 6,
-   "admission": "held",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-alignment-v8-launch-evidence-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-v8-launch-evidence-held-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 2371495,
-   "jsonl_lines": 1,
-   "admission": "held",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "luna-v64-seven-source-admitted-nine-native-20261011-v1",
    "owner": "pop",
    "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-admitted-nine-native-v1",
@@ -15558,18 +15498,6 @@
    "bytes": 9055374,
    "jsonl_lines": 0,
    "admission": "held-quality-review-no-training-admission-no-DPO",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-alignment-v8-startup-review-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-v8-startup-review-held-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 937803,
-   "jsonl_lines": 20,
-   "admission": "held-startup-review-only-no-training-admission",
    "training_admission": false,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -15923,42 +15851,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "luna-ar-native-harness-alignment-v8-step38912-review-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-v8-step38912-review-held-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 2558526,
-   "jsonl_lines": 4,
-   "admission": "one-alignment-gate-only-no-runtime-or-training-admission",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-alignment-v8-recurrence-source-readiness-review-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-v8-recurrence-source-readiness-review-held-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 558925,
-   "jsonl_lines": 0,
-   "admission": "review-evidence-only-no-new-admission-or-weight-qualification",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-alignment-v8-recurrence-source-admission-clarification-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-v8-recurrence-source-admission-clarification-held-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 8408,
-   "jsonl_lines": 0,
-   "admission": "clarifies-existing-source-admission-no-new-data-or-training-admission",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "annotation-folder-v23-cancelled-unused-preparation-held-20261011-v1",
    "owner": "pop",
    "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v23",
@@ -16146,66 +16038,6 @@
    "bytes": 16938,
    "jsonl_lines": 0,
    "admission": "held-generation-launch-evidence-only-no-training-admission",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-plain-behavior-probes-v1-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 296437,
-   "jsonl_lines": 48,
-   "admission": "held-evaluation-evidence-only-superseded-probe-convention-no-training-admission",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-plain-behavior-probes-v2-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 298432,
-   "jsonl_lines": 48,
-   "admission": "reviewed-evaluation-input-only-no-training-admission",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-baseline-restore-only-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 1419,
-   "jsonl_lines": 0,
-   "admission": "restore-compatibility-evidence-only-no-behavior-qualification",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-plain-behavior-plan-v1-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 6605,
-   "jsonl_lines": 0,
-   "admission": "plan-history-only-superseded-no-training-admission",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-plain-behavior-plan-v2-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 2323103,
-   "jsonl_lines": 0,
-   "admission": "prepared-execution-evidence-not-run-no-training-admission",
    "training_admission": false,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -16554,42 +16386,6 @@
    "bytes": 346109,
    "jsonl_lines": 356,
    "admission": "predecessor-lineage-only-no-training-admission",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-alignment-v8-selected-state-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-refine-from-best-20261011-v8/direct-stage-run",
-   "class": "model-or-training-state",
-   "bytes": 1851317264,
-   "jsonl_lines": 1,
-   "admission": "held-alignment-selected-state-only-no-task-runtime-or-training-admission",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-ar-native-harness-plain-behavior-and-runtime-diagnostics-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
-   "class": "held-or-evidence",
-   "bytes": 7015257,
-   "jsonl_lines": 464,
-   "admission": "held-evaluation-and-runtime-evidence-no-training-admission",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-preservation-superseded-owner-dgx8f98-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1/superseded-preservation-owner-dgx8f98-v1",
-   "class": "held-or-evidence",
-   "bytes": 42554,
-   "jsonl_lines": 0,
-   "admission": "superseded-diagnostic-only-no-training-admission",
    "training_admission": false,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -17118,18 +16914,6 @@
    "bytes": 21376579,
    "jsonl_lines": 1,
    "admission": "startup-failure-diagnostic-only-no-training-or-qualification",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
-   "id": "luna-direct-lfm-base-v3-step20-guard-stop-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/luna-neuralese-direct-lfm-base-20261011-v3",
-   "class": "held-or-evidence",
-   "bytes": 1182011046,
-   "jsonl_lines": 62,
-   "admission": "guard-stopped-step20-diagnostic-and-resumability-only-no-qualification-or-training-admission",
    "training_admission": false,
    "derived_from": null,
    "audit_2026_10_11": null
@@ -18235,18 +18019,6 @@
    "audit_2026_10_11": null
   },
   {
-   "id": "luna-v43-static-replay-callstore-attempt-held-20261011-v1",
-   "owner": "pop",
-   "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-static-replay-attempt-v1",
-   "class": "held-or-evidence",
-   "bytes": 14001,
-   "jsonl_lines": 0,
-   "admission": "preserved interrupted pre-fix attempt; not semantic or model evidence",
-   "training_admission": false,
-   "derived_from": null,
-   "audit_2026_10_11": null
-  },
-  {
    "id": "luna-v43-runtimev18-v19-paired48-review-held-20261011-v1",
    "owner": "pop",
    "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-runtimev19-paired48-v1",
@@ -18313,6 +18085,20 @@
     "semantic-inline-curriculum-s72-teacher-20261007-v1"
    ],
    "audit_2026_10_11": "REGISTERED and ADMITTED this audit: 71,364 approved rows outside the 54 held cases (2,088 held-case rows excluded)."
+  },
+  {
+   "id": "natlang-native-turns-clef-new-render-20261011-v1",
+   "owner": "dgx",
+   "path": "runs/natlang-native-turns-clef-new-render-20261011-v1",
+   "class": "training-admitted",
+   "bytes": 183312573,
+   "jsonl_lines": 14908,
+   "admission": "renders of admitted source corpora: clef-new-rationalized-20261006-v2; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+   "training_admission": true,
+   "derived_from": [
+    "clef-new-rationalized-20261006-v2"
+   ],
+   "audit_2026_10_11": null
   }
  ]
 }

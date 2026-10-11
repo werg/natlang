@@ -388,7 +388,9 @@
    "dataset": "free-provider-v73-admitted-ordinary-text-846-20261011-v1",
    "defect": "failed assistant turns not masked",
    "rows": "82 histories",
-   "repair": "add context_only_spans"
+   "repair": "Already present: 145 context_only_spans masking25,517 history tokens on82 of846 rows; preserve masks in tokenizer/header twins",
+   "status": "resolved-in-existing-admitted-packet",
+   "verified_artifact": "runs/free-provider-generation-20261009-v1/quality-review-v73-ordinary-text-admission-v1/text.jsonl"
   },
   {
    "id": "D8",
