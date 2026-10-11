@@ -30786,6 +30786,22 @@
       "admission": "full-s1-dgx-key-closure-pending",
       "independent_new_worlds": 0,
       "notes": "V74 exact source closure request binds 640 original train rows to archived master line numbers and raw row hashes, and maps them to 80 static programs. Sent to DGX owner for full S1/harness-v4/protected exact-key checks; request only, no closure result, source-quality clearance, or admission."
+    },
+    {
+      "id": "luna-v73-v75-outline-v2-disposition-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-v75-outline-v2-disposition-v1",
+      "include": [
+        "disposition.json",
+        "disposition.md",
+        "FILES.sha256"
+      ],
+      "split": "inherited-train-quality-review-only",
+      "source_class": "held-artifact-version-disposition",
+      "training_admission": false,
+      "admission": "artifact-disposition-only-no-source-quality-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Documents V2 outline as unchanged, superseded, and intentionally unregistered because its abbreviated closure digest/path were not a valid full receipt pin. Corrected evidence is in outline V3 and actual V36 receipt files."
     }
   ],
   "coverage_backlog": [

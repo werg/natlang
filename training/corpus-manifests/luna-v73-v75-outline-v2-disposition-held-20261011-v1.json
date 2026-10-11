@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v73-v75-outline-v2-disposition-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-v75-outline-v2-disposition-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 164,
+      "sha256": "01ca7d55a4351cc2cadca7b42f78b00d0a9453d3b88d623dc415893411b61a16"
+    },
+    {
+      "path": "disposition.json",
+      "bytes": 2234,
+      "sha256": "0c4ad3fd656036b04f8b12d46cbb67747650f34b2ad018623b46479a9ec6b306"
+    },
+    {
+      "path": "disposition.md",
+      "bytes": 853,
+      "sha256": "de7565be30b0db1fe70e6a1d09cbee5ea71c215898b7d3be6e857e308cf0a3ea"
+    }
+  ],
+  "bytes": 3251
+}
