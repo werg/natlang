@@ -35,6 +35,8 @@ def main():
     p.add_argument('--api-key-env', default='GEMINI_API_KEY')
     p.add_argument('--exclude-model', action='append', default=[], help='reserve this model quota group for an existing worker')
     p.add_argument('--limit', type=int, default=0)
+    p.add_argument('--max-output-tokens', type=int, default=2048,
+                   help='maximum provider output tokens per response; recorded in the pool manifest')
     p.add_argument('--choice-contract', choices=['probabilities', 'label-confidence'], default='probabilities',
                    help='choice response shape; score/noul cases retain the probability contract')
     p.add_argument('--timeout', type=float, default=120)
@@ -44,8 +46,9 @@ def main():
     p.add_argument('--wait', action='store_true', help='wait for cooldowns instead of exiting with unfinished cases')
     p.add_argument('--wait-for-owner', action='store_true', help='queue this source behind the current project pool owner')
     args = p.parse_args()
-    if args.limit < 0 or args.timeout <= 0 or args.workers < 1 or args.max_inflight_per_quota_group < 1:
-        p.error('limit must be nonnegative and timeout positive')
+    if (args.limit < 0 or args.timeout <= 0 or args.workers < 1 or
+            args.max_inflight_per_quota_group < 1 or args.max_output_tokens < 1):
+        p.error('limit must be nonnegative; timeout and max-output-tokens must be positive')
     key = os.environ.get(args.api_key_env)
     if not key:
         p.error('API key environment variable is unset or empty')
@@ -77,6 +80,7 @@ def main():
     identity = {'schema': 'natlang.gemini-decision-pool/1', 'training_admission': False,
                 'cases_sha256': hashlib.sha256(Path(args.cases).read_bytes()).hexdigest(),
                 'choice_contract': args.choice_contract,
+                'max_output_tokens': args.max_output_tokens,
                 'models': models, 'endpoint': ENDPOINT, 'workers': args.workers,
                 'max_inflight_per_quota_group': args.max_inflight_per_quota_group,
                 'adapter_sha256': hashlib.sha256(Path(__file__).with_name('label_decision_cases.py').read_bytes()).hexdigest(),
@@ -96,7 +100,7 @@ def main():
     def ask(case, model):
         return _http_teacher(case, endpoint=ENDPOINT, model=model['id'], api_key=key,
             timeout=args.timeout, retries=0, initial_backoff=30, max_backoff=300,
-            reasoning_effort=model['reasoning_effort'], max_output_tokens=512,
+            reasoning_effort=model['reasoning_effort'], max_output_tokens=args.max_output_tokens,
             response_format='json_schema', choice_contract=args.choice_contract)
     with ThreadPoolExecutor(max_workers=args.workers) as executor, out_path.open('a') as out, open(str(out_path) + '.attempts.jsonl', 'a') as journal:
         while cases or pending:

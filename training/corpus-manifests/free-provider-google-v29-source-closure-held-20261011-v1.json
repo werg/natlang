@@ -1,0 +1,145 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v29-source-closure-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v29-source-closure-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 3294,
+      "sha256": "1a714a81ce0778bc17666473825ebb47169f0102cd3838b1d17771781fd8caf6"
+    },
+    {
+      "path": "build_v29_closure_inputs.py",
+      "bytes": 10421,
+      "sha256": "9aa965ddcf5c3892f430f253592e5fdf3da2e9e8f1f7d2f91ce75ad81366e8e2"
+    },
+    {
+      "path": "check_raw_group_keys.py",
+      "bytes": 1933,
+      "sha256": "b945cbe89c3fe6ad76b562d59a1206a5d85b051620b64ec4bf541ec0f7ee8c4a"
+    },
+    {
+      "path": "closure-input-v1/closure-candidate-root-actions.jsonl",
+      "bytes": 6492373,
+      "sha256": "8e9c173e5fd719bb8ee0f110838ec13dea294c04bc66187a2f3bc3f8f5253cef",
+      "lines": 54
+    },
+    {
+      "path": "closure-input-v1/closure-source-cases.jsonl",
+      "bytes": 1911132,
+      "sha256": "e19377eafbfc2e20f74159a4ce22f3198ec0b8127904015c42a5efea75cb6dc3",
+      "lines": 54
+    },
+    {
+      "path": "closure-input-v1/closure-source-manifest.json",
+      "bytes": 7173,
+      "sha256": "8e2c618f6539bbc0136934c05241656a4c5bb42477d8b7b9c98a195566f742e3"
+    },
+    {
+      "path": "closure-input-v1/selected-program-index.jsonl",
+      "bytes": 588883,
+      "sha256": "7cd70fd48af44842e80fc77bfaf10b4f176819d2c93d7243b7665bd85e843060",
+      "lines": 54
+    },
+    {
+      "path": "closure-input-v1/selected-source-case-index.jsonl",
+      "bytes": 514501,
+      "sha256": "9398903fc2af2c30c08aa9031ea7e675a6ce2522af6b38fd6ee4812a1b2d19ee",
+      "lines": 396
+    },
+    {
+      "path": "closure-packet-v1.json",
+      "bytes": 8840,
+      "sha256": "da9cc18ed684fecec3b43b90d9d8e0c1ac5f976966ba0d1129eeba369c0543b4"
+    },
+    {
+      "path": "execution-components-v1/manifest.json",
+      "bytes": 5888,
+      "sha256": "0292cd9a42c25451357b6ddd95d83d274d8d4b96a32b7c27ae8bac4a03c50ea5"
+    },
+    {
+      "path": "execution-components-v1/training/decision_task_contracts.json",
+      "bytes": 2114,
+      "sha256": "b941a04443d3a47768ef8bdf68730b4fae86a1959aa16abdc6db7b559767ec73"
+    },
+    {
+      "path": "execution-components-v1/ts-host/dist/native/tool-surface.js",
+      "bytes": 151,
+      "sha256": "49a3fbefcb171c20dae1e1fd4f1ea00df9a41784f80def6379f5531e81549538"
+    },
+    {
+      "path": "execution-components-v1/ts-host/dist/skills/graded.js",
+      "bytes": 22094,
+      "sha256": "171f554c7f097c39d53f916a2bdd69a9d6543e2dcb4a31bd1629d2c4213d16a1"
+    },
+    {
+      "path": "execution-components-v1/ts-host/dist/teacher/collector.js",
+      "bytes": 102805,
+      "sha256": "3445aafe0312d110964729480c29d9f960a3c9329ab806937679179ac285a5ef"
+    },
+    {
+      "path": "execution-components-v1/ts-host/scripts/advisory-file.mjs",
+      "bytes": 2235,
+      "sha256": "00cfe276b2f5fdf45614d1302e3428be386ad25f3d84ed11c4d8fa732708eba0"
+    },
+    {
+      "path": "execution-components-v1/ts-host/scripts/static-adapters/decision-task-contracts.mjs",
+      "bytes": 2637,
+      "sha256": "2c1fb0d096354ab7437bdf66d8ff3ff1c312bc95bf39fae9119f13ac749e26f1"
+    },
+    {
+      "path": "execution-components-v1/ts-host/scripts/static-adapters/folder-decision-scaffold.mjs",
+      "bytes": 5098,
+      "sha256": "215783b934af59592abbb1dd66e6105c9b34bbdbafea09ff77e469c3f84db881"
+    },
+    {
+      "path": "execution-components-v1/ts-host/scripts/static-adapters/teacher-decision-labels.mjs",
+      "bytes": 43204,
+      "sha256": "2757fb0ccc8ed5f2ef462d38d07dae5681e96704b6a2e80cf7765dd8607b3334"
+    },
+    {
+      "path": "execution-components-v1/ts-host/src/native/tool-surface.ts",
+      "bytes": 151,
+      "sha256": "49a3fbefcb171c20dae1e1fd4f1ea00df9a41784f80def6379f5531e81549538"
+    },
+    {
+      "path": "execution-components-v1/ts-host/src/skills/graded.ts",
+      "bytes": 22460,
+      "sha256": "dd3737b68ad891845c8895146878b7db2b17f358271fd7298519c84d740a32f1"
+    },
+    {
+      "path": "execution-components-v1/ts-host/src/teacher/collector.ts",
+      "bytes": 105644,
+      "sha256": "38e00b6c2496113c75654315e063dbb9d0d060f7bfcd69ff9d02817eed51d314"
+    },
+    {
+      "path": "pop-harness4-v1/raw-key-harness.json",
+      "bytes": 1036,
+      "sha256": "825c53ebe6282dee84375d1eff1918a747bef9e556ea83e59b8daeee716dea1b"
+    },
+    {
+      "path": "pop-harness4-v1/shared-closure/candidate-source-case-bindings.json",
+      "bytes": 30926,
+      "sha256": "cbe0d492d9993b1b674def657c384d2b89b02f9759cdfae512ad77078a56c0fd"
+    },
+    {
+      "path": "pop-harness4-v1/shared-closure/closed-source-case-port-projection.jsonl",
+      "bytes": 1066893,
+      "sha256": "f9a5936c380b6a6a7a5897a7f926655a21e6331374d8c69656b64bfcffb49d56",
+      "lines": 54
+    },
+    {
+      "path": "pop-harness4-v1/shared-closure/closure-report.json",
+      "bytes": 16393,
+      "sha256": "a5584e067952c3f1066dfff9c6c32884818880cbba6fe71a6302f4c50d81df6f"
+    },
+    {
+      "path": "pop-harness4-v1/shared-closure/source-case-port-projection.jsonl",
+      "bytes": 1066893,
+      "sha256": "f9a5936c380b6a6a7a5897a7f926655a21e6331374d8c69656b64bfcffb49d56",
+      "lines": 54
+    }
+  ],
+  "bytes": 12035172
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v29-candidate-evidence-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v29-candidate-evidence-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2041,
+      "sha256": "d1cd1ea46705eafa35d48f3c1b946f848a41846123b528df31162564413cad3d"
+    },
+    {
+      "path": "candidate-evidence.json",
+      "bytes": 60295,
+      "sha256": "be00d57ff66ec942a342b3d314971cb1f74c404926a9126e4191561a53b2b01d"
+    }
+  ],
+  "bytes": 62336
+}
