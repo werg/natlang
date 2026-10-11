@@ -11027,7 +11027,7 @@ V89 ended10results plus one exact terminal model-request-budget failure (384requ
 
 Shared direct_runtime evaluator adds deterministic syntheticTCPstate receipts, multi-turn score comparison and real Engine guidance rollback/recompute against fresh replay. Root requires an actual nonaccepted rollback with positive replay length and matching next logits/history; skipped guidance cannot pass. No model/training semantics change, no tests run; GPU diagnostic launch/result follows.
 
-## Pop continuation — 2026-10-11 14:55 UTC
+## Pop continuation — 2026-10-11 14:51 UTC
 
 - Synthetic nonidentity TCP stream mechanism passed: 42 weighted targets over four segments matched exactly; real syntax-guidance rollback replayed five tokens with identical history/next logits. This is held mechanism evidence, not trained-TCP/task/stopping qualification. Registered/synced `a45542b8`.
 - V89 closed ten results and one 384-request budget failure. The failed model enumerated boolean intent options for one CLINC item, rather than selecting one typed option. No blanket budget increase. Positive typed-choice paired live probe is being prepared. V90 actual five journals are terminal; its separate lane3 recovery must be joined in an additive closure receipt, preserving the original blocked supervisor status.
@@ -11036,3 +11036,16 @@ Shared direct_runtime evaluator adds deterministic syntheticTCPstate receipts, m
 - Smoke v1 pin preflight failed, v2 missing recipe schema failed, v3 invalid schema draft never launched, v4 unused legacy StopHead capacity failed, v5 OOM before first update. All evidence preserved. Valid schema is `natlang.neuralese-declared-direct-stage/1`. v6 launches from immutable frozen shared code with the same 32k context / 2,048 write bound and qualified V8 source. Session63777, container pop-direct-native-e2e-smoke-v6; output beneath /srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/native-e2e-six-row-smoke-launch-v6.
 - v5 OOM identified per-position FP32 frozen vocabulary copies (256 MiB each). Shared LFM/HF readout storage reuse is published `86487c87`; one nonpersistent buffer, source-version/device/dtype invalidation, bypass trainable/inference tables. v6 recipe `86a63bbd`; GPU outcome pending. No lower context/payload cap or detached recurrence gradient introduced.
 - Important: current typed-factual reciprocal consumer contrast selector selects ZERO readers on the six-row inline-instruction/argument cohort (no target-write producer proof). Crisp CE 1.7793 / soft-init CE 2.4637 is diagnostic, not consumer-usefulness qualification. DGX informed; an appropriate native-binding consumer gate is still needed.
+
+### 14:55 UTC readout follow-up and first successful E2E update
+
+v6 failed before any update: alternating BF16 readouts evicted the FP32 cache.
+`f5a1d42a` preserves the cached cast across native-precision calls. `b1f13725` fixes
+a second real infrastructure bug: recipe CLI discarded its returned child exit
+code (historical shell0 while direct-stage-result correctly recorded child1).
+The v7 immutable recipe (`fb72fb80`) is active in session27719, container
+pop-direct-native-e2e-smoke-v7. First update succeeded with zero errors, joint
+backward, 21 vectors, 6,641 producer context tokens, peak3.5GiB, loss7.1553,
+writer gradient norm140.97. This verifies the memory repair on that exercised
+update; reader updates/20-step outcome and consumer qualification remain pending.
+No context reduction, frozen backbone or detached producer gradient was used.
