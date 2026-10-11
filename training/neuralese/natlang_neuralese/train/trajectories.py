@@ -869,6 +869,9 @@ def main(argv=None):
     if args.direct_artifact and (args.heads or args.producer_batch_size > 1 or args.view == "written" or args.stop_pg):
         parser.error('--direct-artifact restores its own anchor heads and writes one producer at a time with the direct '
                      'writer: no --heads, --producer-batch-size 1, no written views or --stop-pg')
+    if args.direct_artifact and not args.direct_base_snapshot:
+        parser.error('--direct-artifact restores into its pinned base model: pass --direct-base-snapshot '
+                     '(the export manifest base_binding model path)')
     if args.direct_artifact:
         args.sketch_target_weight = 0.0  # a sketch-recurrence term; the direct writer has no sketch
         args.content_transport = 'raw-identity'  # the anchor's raw-token transport; the direct writer owns content

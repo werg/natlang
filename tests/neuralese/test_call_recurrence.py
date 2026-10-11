@@ -152,7 +152,7 @@ def test_direct_writer_end_to_end_stage_trains_the_child_write_through_the_neura
     pieces.write_text("".join(json.dumps(p) + "\n" for p in PIECES))
     out = tmp_path / "out"
     assert main(["--records", str(records), "--pieces", str(pieces), "--out", str(out), "--direct-artifact",
-                 str(tmp_path), "--device", "cpu", "--steps", "1", "--batch", "1", "--eval", "0", "--handover",
+                 str(tmp_path), "--direct-base-snapshot", str(tmp_path), "--device", "cpu", "--steps", "1", "--batch", "1", "--eval", "0", "--handover",
                  "written", "--write-depth", "1", "--tokens-per-vector", "1", "--writer-supervision", "native-value",
                  "--writer-length-policy", "native-value", "--stop-supervision", "generated-length",
                  "--writer-text-weight", "0", "--distill", "0", "--lr", "1e-2", "--heads-lr", "1e-2"]) == 0
