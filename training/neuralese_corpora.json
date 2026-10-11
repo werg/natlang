@@ -28989,6 +28989,25 @@
       "training_admission": false,
       "admission": "held-pending-explicit-review",
       "notes": "53 actual reference programs over393original annotation-matched items,53accepted0failures,892native turns. Exact58declared execution payload archive. Related worlds only; sourceclosure/tracequality/admission pending."
+    },
+    {
+      "id": "luna-v69-v32-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v69-v32-runtimev15-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-approved-plan-v1.json",
+        "root-launch-receipt-v1.json",
+        "root-generation-source-review-v1.json",
+        "current-source-policy-check-v1.json",
+        "source-quality-holds-current64-v13.json",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "held-provider-generation-input-plan",
+      "training_admission": false,
+      "admission": "held-inputs-no-generated-output",
+      "notes": "Rootverified53train programs393exactoriginal rows/current64holds disjoint/58execution payloads. Shared default lane-aware launch uses explicit V68ownership. Approved plan46f0014a..., supervisor1005511 waiting. Inputs only; no live evidence, admission or newworldcredit."
     }
   ],
   "coverage_backlog": [

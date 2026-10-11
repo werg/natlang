@@ -1,0 +1,69 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v69-v32-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v69-v32-runtimev15-v1",
+  "files": [
+    {
+      "path": "current-source-policy-check-v1.json",
+      "bytes": 16388,
+      "sha256": "b20fd0b333e377be31153a94d773f0360fd27f08fbcb670760cebddc28ac3721"
+    },
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 8857,
+      "sha256": "81b4023c00f10d0f5ccbb3a51a4ae289f78855c27ef8fd407fa86d56ac094cbe"
+    },
+    {
+      "path": "root-approved-plan-v1.json",
+      "bytes": 8844,
+      "sha256": "46f0014a01068b211a07b337cfc02a22ab32750115dcee036c3fb6674846e163"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 23643,
+      "sha256": "1aa7d53705aeafb2783262c8801ced4ba369db2c51a7c3e9de8bff0756094abe"
+    },
+    {
+      "path": "root-launch-receipt-v1.json",
+      "bytes": 395,
+      "sha256": "9ea482cce61481012bc189800cb6af00f9147831d5d40659798ac8554c3b6035"
+    },
+    {
+      "path": "source-quality-holds-current64-v13.json",
+      "bytes": 48684,
+      "sha256": "a7dfc77fd8b84e0e517a9395cd45687cb4ac1c14250720c28f9fa9d67d5dee3c"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 9929,
+      "sha256": "23f327f78875b68885e6ca5c310bc231ccaf26d13e06340b7d8831308754ea24",
+      "lines": 11
+    },
+    {
+      "path": "worker-02/queue.jsonl",
+      "bytes": 9929,
+      "sha256": "23de430e07ea1f01e91f9399a6fce88108f93a14fff45f0a3f56e5727518ab7f",
+      "lines": 11
+    },
+    {
+      "path": "worker-03/queue.jsonl",
+      "bytes": 9929,
+      "sha256": "c2830239fcb523eb44583b98c154730fb736f5af8f06c78936697f746959c2a4",
+      "lines": 11
+    },
+    {
+      "path": "worker-04/queue.jsonl",
+      "bytes": 9026,
+      "sha256": "3cce9c178cdb81b1e7b45fff7a44eda3a55cb91841b665fe84490daffd827bc7",
+      "lines": 10
+    },
+    {
+      "path": "worker-05/queue.jsonl",
+      "bytes": 9026,
+      "sha256": "6a2130c531934d7a145eeaa501925f71cf5361194b369b2a85dd21f8798c592e",
+      "lines": 10
+    }
+  ],
+  "bytes": 154650
+}
