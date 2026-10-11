@@ -916,8 +916,9 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     if frozen_code != actual_code:
         raise ValueError('direct-stage runtime snapshot differs from reviewed package bytes')
     stage = recipe['stage']
+    # The handler owns its fresh output boundary; pre-creating this path breaks
+    # handlers that reject an existing --out directory before creating it.
     stage_output = output / stage['id']
-    stage_output.mkdir()
     handler = HANDLERS[stage['kind']]
     if 'heads' not in inputs:
         raise ValueError('direct stage requires an exact heads input')
