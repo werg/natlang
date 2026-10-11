@@ -472,10 +472,12 @@ def tokenizer_fingerprint(tokenizer) -> str:
                             "tokenizer_backend": json.loads(tokenizer.backend_tokenizer.to_str())}).encode("utf-8"))
 
 
-def _native_gold_render(tokenizer, turns, tools, *, empty_thought=True):
+def _native_gold_render(tokenizer, turns, tools, *, empty_thought=True, prompt_rendering="full"):
     """Use the serving renderer; content markers remain ordinary content tokens."""
     from ..serve.chat import bind_history_reasoning, render_messages, render_with_empty_thought, split_escaped
+    from .prompt_rendering import apply_prompt_rendering
     bind_history_reasoning(tokenizer)
+    turns, tools = apply_prompt_rendering(turns, tools, prompt_rendering)
     def apply_template(turns, schemas):
         return tokenizer.apply_chat_template(
             turns, tools=schemas or None, tokenize=False, add_generation_prompt=False)
@@ -1438,20 +1440,26 @@ def authenticated_crisp_context_messages(record, piece_map, writer_sources):
     return messages, context_attestations, augmentation_attestations
 
 
-def native_gold_document(tokenizer, messages, target, tools):
-    return _native_gold_render(tokenizer,[*messages,target],tools)
+def native_gold_document(tokenizer, messages, target, tools, *, prompt_rendering="full"):
+    return _native_gold_render(tokenizer,[*messages,target],tools,prompt_rendering=prompt_rendering)
 
 
-def native_gold_packet(tokenizer, messages, target, tools):
+def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="full"):
     """Render the exact serving prompt followed by the target assistant reply.
 
     The target boundary is the prompt's token length, not a longest-common-
     prefix between two independently rendered conversations. Appending a new
     target can change how earlier assistant turns render, so LCP is not a
     reliable task-target mask.
+
+    ``prompt_rendering`` (``data/prompt_rendering.py``): ``full`` keeps the recorded system prompt and tool
+    schemas; ``program-header`` keeps only the program-specific system paragraphs and no tool schemas, as the
+    serving renderer of a model trained past the warm-up does.
     """
     from ..serve.chat import assistant_reply_segments, bind_history_reasoning, render_messages, split_escaped
+    from .prompt_rendering import apply_prompt_rendering
     bind_history_reasoning(tokenizer)
+    messages, tools = apply_prompt_rendering(messages, tools, prompt_rendering)
     if list(_message_neuralese_ids(target)):
         raise ValueError("ordinary gold text target contains unresolved neuralese blocks")
 
@@ -1488,7 +1496,8 @@ def native_gold_packet(tokenizer, messages, target, tools):
     return "".join(text), ids, boundary
 
 
-def native_gold_packet_context_only_messages(tokenizer, messages, target, tools, message_indices):
+def native_gold_packet_context_only_messages(tokenizer, messages, target, tools, message_indices, *,
+                                             prompt_rendering="full"):
     """Render a gold packet and locate exact historical-message spans in its native token IDs.
 
     ``message_indices`` names complete messages in ``messages`` whose tokens remain visible as history but must not
@@ -1504,6 +1513,13 @@ def native_gold_packet_context_only_messages(tokenizer, messages, target, tools,
             or len(indices) != len(set(indices))):
         raise ValueError("context-only message indices must be unique in-range integers")
     indices.sort()
+    from .prompt_rendering import apply_prompt_rendering
+    if prompt_rendering != "full":
+        kept, tools = apply_prompt_rendering(messages, tools, prompt_rendering)
+        shift = len(messages) - len(kept)
+        if shift and any(index < shift for index in indices):
+            raise ValueError("context-only history index names a dropped system message")
+        messages, indices = kept, [index - shift for index in indices]
     text, token_ids, suffix_start = native_gold_packet(tokenizer, messages, target, tools)
     prompt_ids = token_ids[:suffix_start]
     spans = []
@@ -1549,7 +1565,8 @@ def native_gold_packet_context_only_messages(tokenizer, messages, target, tools,
 def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer,
                    require_independent_splits: bool = True,
                    ordinary_text_admission_receipt: Mapping[str, Any] | None = None,
-                   ordinary_text_admission_receipt_sha256: str | None = None):
+                   ordinary_text_admission_receipt_sha256: str | None = None,
+                   prompt_rendering: str = "full"):
     """Return ``(rows, receipt, omissions, provenance)`` for renderer-qualified records.
 
     Each row has the shared ``text_warmup.load_text_rows`` schema. Text is a
@@ -1562,7 +1579,8 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
     return _gold_text_rows(records, pieces, tokenizer=tokenizer, preview_only=False,
                            require_independent_splits=require_independent_splits,
                            ordinary_text_admission_receipt=ordinary_text_admission_receipt,
-                           ordinary_text_admission_receipt_sha256=ordinary_text_admission_receipt_sha256)
+                           ordinary_text_admission_receipt_sha256=ordinary_text_admission_receipt_sha256,
+                           prompt_rendering=prompt_rendering)
 
 
 def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
@@ -1656,8 +1674,11 @@ def bind_ordinary_text_admission(records, receipt, receipt_sha256):
 
 def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_independent_splits=True,
                     ordinary_text_admission_receipt=None,
-                    ordinary_text_admission_receipt_sha256=None):
+                    ordinary_text_admission_receipt_sha256=None, prompt_rendering="full"):
     from ..train.trajectories import crisp_messages, handover_notes
+    from .prompt_rendering import PROMPT_RENDERINGS
+    if prompt_rendering not in PROMPT_RENDERINGS:
+        raise ValueError(f"unknown prompt_rendering {prompt_rendering!r} (declared: {PROMPT_RENDERINGS})")
 
     from ..serve.chat import bind_history_reasoning
     fingerprint = tokenizer_fingerprint(tokenizer)
@@ -1709,7 +1730,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             omitted.append({"id": rid, "reason": "unresolved_or_malformed_crisp_reference", "detail": str(exc)[:240]})
             continue
         try:
-            text, token_ids, suffix_start = native_gold_packet(tokenizer, messages, target, record.get("tools") or [])
+            text, token_ids, suffix_start = native_gold_packet(tokenizer, messages, target, record.get("tools") or [],
+                                                               prompt_rendering=prompt_rendering)
         except (KeyError, TypeError, ValueError) as exc:
             omitted.append({"id": rid, "reason": "native_chat_render_failed", "detail": str(exc)[:240]})
             continue
@@ -1788,6 +1810,7 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                    if preview_only else "approved SFT records only; ") +
                   "deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks hydrate only from a unique approved same-split writer source sharing a source group or source-row hash, or from an explicit exact provider-expanded runtime read receipt bound to body, type, request, graph and source row; context-only receipts never create a writer target or recurrence edge; typed eval-finish marker outputs are rendered from validated exact code sidecars; hash-bound full capture snapshots omitted from historical previews are supplied only as separately labeled same-invocation context augmentations; hydrated context and capture augmentation never create separate target rows; duplicate identical augmentations are emitted once per target; complete source-group split retained; train copies of held complete documents excluded; serving generation prompt and assistant reply rendered separately with native chat content escaping; no tools executed",
         "rendering": "natlang.native_gold_chat/3", "tokenizer_sha256": fingerprint,
+        **({"prompt_rendering": prompt_rendering} if prompt_rendering != "full" else {}),
         "history_reasoning": history_reasoning,
         "supervision": "serving generation prompt is context-only; loss begins at the exact token length of that prompt and covers the assistant_reply-rendered target; no historical tool outputs or prior assistant turns are target tokens",
         "ordinary_text_stage_only": True, "task_or_trajectory_admission_granted": False,

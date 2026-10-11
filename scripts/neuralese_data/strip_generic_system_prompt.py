@@ -35,16 +35,9 @@ SCHEMA = 'natlang.text-program-header-twin/1'
 SYSTEM_OPEN = '<|im_start|>system\n'
 TURN_END = '<|im_end|>'
 TOOL_SECTION_MARKERS = ('List of tools: ', '# Tools\n')
-# Paragraph heads (exact prefixes) that declare a property of THIS call rather than generic runtime behaviour.
-PROGRAM_SPECIFIC_HEADS = (
-    'This call is a directory reducer:',
-    'This call is at the ',  # nesting layer of ad hoc natural-language calls
-    '\nDeclared Neuralese text-channel emulation for this run:',
-    'Declared Neuralese text-channel emulation for this run:',
-    'At a direct parameter declared Neuralese<string>',
-    "When this call's declared result is exactly Neuralese<string>",
-    'If a function you call is unclear or wrong, read it with read_code and fix it with edit_code',
-)
+# The scope table is shared with the renderer's prompt_rendering argument (one implementation per concept).
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
+from natlang_neuralese.data.prompt_rendering import PROGRAM_SPECIFIC_HEADS, program_header_paragraphs  # noqa: E402
 
 
 def file_sha(path: Path) -> str:
@@ -73,8 +66,50 @@ def program_header(content: str):
     """(kept paragraphs, prose chars, tool-section chars)."""
     cut = min((content.find(m) for m in TOOL_SECTION_MARKERS if m in content), default=len(content))
     prose, tools = content[:cut], content[cut:]
-    kept = [p for p in prose.split('\n\n') if p.startswith(PROGRAM_SPECIFIC_HEADS)]
-    return kept, len(prose), len(tools)
+    return program_header_paragraphs(prose), len(prose), len(tools)
+
+
+def strip_row(row: dict, tok, im_start: int, im_end: int):
+    """``(new_row, None, stats)`` for one rendered row, or ``(None, reason, None)``; the checks of ``main``."""
+    ids = list(row['token_ids'])
+    parts = split_system(row['text'])
+    if parts is None:
+        return None, 'no leading system turn', None
+    prefix, content, rest = parts
+    kept, prose_chars, tool_chars = program_header(content)
+    header = (SYSTEM_OPEN + '\n\n'.join(kept) + TURN_END + '\n') if kept else ''
+    text = prefix + header + rest
+    # Token level: the turn after the system turn starts at the second <|im_start|>; everything from there
+    # is kept as the source's own IDs (escaped special spellings included). The header's content is
+    # encoded with special spellings split, as the renderer does for content; structure IDs are explicit.
+    starts = [i for i, t in enumerate(ids) if t == im_start]
+    if len(starts) < 2 or not rest.startswith('<|im_start|>'):
+        return None, 'no turn after the system turn', None
+    rest_start = starts[1]
+    head_ids = ids[:starts[0]]
+    header_ids = ([im_start] + tok.encode('system\n' + '\n\n'.join(kept), add_special_tokens=False,
+                                          split_special_tokens=True)
+                  + [im_end] + tok.encode('\n', add_special_tokens=False)) if kept else []
+    new_ids = head_ids + header_ids + ids[rest_start:]
+    exact = tok.encode(row['text'], add_special_tokens=False) == ids
+    if exact and tok.encode(text, add_special_tokens=False) != new_ids:
+        return None, 'token-level header splice differs from re-tokenizing the new text', None
+    old_system = rest_start
+    new_system = len(head_ids) + len(header_ids)
+    shift = old_system - new_system
+    sss = row.get('supervised_suffix_start')
+    if sss is not None and sss < old_system:
+        return None, 'supervised suffix starts inside the system turn', None
+    new_row = dict(row)
+    new_row['text'] = text
+    new_row['token_ids'] = new_ids
+    if sss is not None:
+        new_row['supervised_suffix_start'] = sss - shift
+    if row.get('context_only_spans'):
+        new_row['context_only_spans'] = [[b - shift, e - shift] for b, e in row['context_only_spans']]
+    new_row['system_prompt_mode'] = 'program-header' if kept else 'none'
+    return new_row, None, {'retokenization_checked': exact, 'old_system': old_system, 'new_system': new_system,
+                           'kept': len(kept), 'prose_chars': prose_chars, 'tool_chars': tool_chars}
 
 
 def main(argv=None):
@@ -102,53 +137,15 @@ def main(argv=None):
             row = json.loads(line)
             totals['rows'] += 1
             ids = list(row['token_ids'])
-
-            def omit(reason):
+            new_row, reason, info = strip_row(row, tok, im_start, im_end)
+            if new_row is None:
                 totals['omitted'] += 1
                 omissions.write(json.dumps({'id': row['id'], 'split': row['split'], 'reason': reason}) + '\n')
-
-            parts = split_system(row['text'])
-            if parts is None:
-                omit('no leading system turn')
                 continue
-            prefix, content, rest = parts
-            kept, prose_chars, tool_chars = program_header(content)
-            header = (SYSTEM_OPEN + '\n\n'.join(kept) + TURN_END + '\n') if kept else ''
-            text = prefix + header + rest
-            # Token level: the turn after the system turn starts at the second <|im_start|>; everything from there
-            # is kept as the source's own IDs (escaped special spellings included). The header's content is
-            # encoded with special spellings split, as the renderer does for content; structure IDs are explicit.
-            starts = [i for i, t in enumerate(ids) if t == im_start]
-            if len(starts) < 2 or not rest.startswith('<|im_start|>'):
-                omit('no turn after the system turn')
-                continue
-            rest_start = starts[1]
-            head_ids = ids[:starts[0]]
-            header_ids = ([im_start] + tok.encode('system\n' + '\n\n'.join(kept), add_special_tokens=False,
-                                                  split_special_tokens=True)
-                          + [im_end] + tok.encode('\n', add_special_tokens=False)) if kept else []
-            new_ids = head_ids + header_ids + ids[rest_start:]
-            exact = tok.encode(row['text'], add_special_tokens=False) == ids
-            if exact:
-                totals['retokenization_checked'] += 1
-                if tok.encode(text, add_special_tokens=False) != new_ids:
-                    omit('token-level header splice differs from re-tokenizing the new text')
-                    continue
-            old_system = rest_start
-            new_system = len(head_ids) + len(header_ids)
-            shift = old_system - new_system
-            sss = row.get('supervised_suffix_start')
-            if sss is not None and sss < old_system:
-                omit('supervised suffix starts inside the system turn')
-                continue
-            new_row = dict(row)
-            new_row['text'] = text
-            new_row['token_ids'] = new_ids
-            if sss is not None:
-                new_row['supervised_suffix_start'] = sss - shift
-            if row.get('context_only_spans'):
-                new_row['context_only_spans'] = [[b - shift, e - shift] for b, e in row['context_only_spans']]
-            new_row['system_prompt_mode'] = 'program-header' if kept else 'none'
+            totals['retokenization_checked'] += info['retokenization_checked']
+            kept, new_ids = [None] * info['kept'], new_row['token_ids']
+            old_system, new_system = info['old_system'], info['new_system']
+            prose_chars, tool_chars = info['prose_chars'], info['tool_chars']
             tokenizer_sha = row.get('tokenizer_sha256')
             out.write(json.dumps(new_row, ensure_ascii=False) + '\n')
             totals['written'] += 1
