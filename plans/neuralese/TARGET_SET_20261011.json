@@ -9,7 +9,8 @@
     "natlang-free-provider-v73-render-20261011-v1",
     "natlang-native-turns-static-lambda-expansion-render-20261011-v1",
     "natlang-native-turns-refine-render-20261011-v1",
-    "natlang-native-turns-luna-v17-v9-render-20261011-v1"
+    "natlang-native-turns-luna-v17-v9-render-20261011-v1",
+    "natlang-native-turns-static-lambda-v2-render-20261011-v1"
   ],
   "external_members": [
     {
@@ -56,10 +57,6 @@
       "dataset": "semantic-inline-curriculum-s72-teacher-turns-20261007-v1",
       "status": "rendering (render-turns-s72-v3)",
       "excluded": "approved=false 8,692; held cases 1,806 (D1/D2); JeFF reserved programs and their groups"
-    },
-    {
-      "dataset": "static-lambda-rationalized-20261006-v2",
-      "status": "rendering (render-turns-slv2-v2)"
     },
     {
       "dataset": "bgkit-knowledge-rationalized-20261007-v1",
