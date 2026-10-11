@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v64-seven-source-quality-closure-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-source-quality-closure-packet-v1",
+  "files": [
+    {
+      "path": "packet.json",
+      "bytes": 14394,
+      "sha256": "61c7e3fa35ce3eabf2d7d21287ad409e1124372899712f6c8b40651f810b6e82"
+    },
+    {
+      "path": "packet.md",
+      "bytes": 1682,
+      "sha256": "e68aae6d1fd8443a1d9eaf37f01ef6ab812ba82fb3112a556105afcc29508f3e"
+    }
+  ],
+  "bytes": 16076
+}

@@ -28787,6 +28787,16 @@
       "training_admission": false,
       "admission": "held-pending-explicit-review",
       "notes": "Exact failed eval row, immutable runtime/recipe/checkpoint pins, unchanged selection/denominators and training-window diagnosis. Eight strict failures; no runtime/transport/stopping qualification."
+    },
+    {
+      "id": "luna-v64-seven-source-quality-closure-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-source-quality-closure-packet-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-source-quality-and-closure-evidence",
+      "training_admission": false,
+      "admission": "held-pending-full-source-and-trace-review",
+      "notes": "Seven exact original train DBpedia rows, two related programs, root source/quality and current62holds no overlap, Pop harness no cross-corpus errors/protected hits. Full S1 pending; source-quality attestation remains held. No new independent worlds."
     }
   ],
   "coverage_backlog": [
