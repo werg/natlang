@@ -30614,6 +30614,36 @@
         "closure-packet-v1.json",
         "closure-input-v1/**/*"
       ]
+    },
+    {
+      "id": "google-choice-confidence-v37-static-reference-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v37-adapter-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-derived-static-reference",
+      "source_class": "held-provider-label-derived-static-reference",
+      "training_admission": false,
+      "admission": "held-static-reference-only-no-teacher-trajectory-admission",
+      "independent_new_worlds": 0,
+      "notes": "Shared adapter retained 414 source-matching provider labels in 54 authored static programs; 98 label rejections preserved. All54 static reference replays passed. Current source-quality V17 hold intersection is zero. Static replay is not source-oracle validation or provider-authored trajectory evidence; no training admission."
+    },
+    {
+      "id": "google-choice-confidence-v37-source-closure-pop-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v37-source-closure-packet-v1",
+      "split": "inherited-train-source-closure-input",
+      "source_class": "source-closure-evidence",
+      "training_admission": false,
+      "admission": "full-s1-dgx-key-closure-pending",
+      "notes": "V37 exact source-key packet: 54 static programs and 414 original source IDs/groups from the 512-row prepared input; zero intersections with current V17 source-quality holds. Packet requests DGX S1/harness-v4/protected exact-key checks only. No S1 result, source-quality clearance, native model actions, training admission, or independent-world credit.",
+      "include": [
+        "README.md",
+        "FILES.sha256",
+        "closure-packet-v1.json",
+        "closure-input-v1/**/*"
+      ]
     }
   ],
   "coverage_backlog": [
