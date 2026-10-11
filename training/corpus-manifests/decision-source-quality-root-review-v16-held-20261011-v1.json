@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "decision-source-quality-root-review-v16-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v16",
+  "files": [
+    {
+      "path": "root-review.json",
+      "bytes": 3381,
+      "sha256": "de5b61f75149781fafdebb65d01461345b3e98472824e764058f8e2d0f8931e9"
+    },
+    {
+      "path": "source-quality-holds.json",
+      "bytes": 58156,
+      "sha256": "6908448472eaefde49a16bbba852aac396aa9c4d6bc32d2721df42ca6bfd11aa"
+    }
+  ],
+  "bytes": 61537
+}
