@@ -4,13 +4,20 @@
 // a lambda's arguments are its state, its typed result is the question (noul -> boolean, choice -> union member,
 // score -> level). Low-confidence answers are not used (confidence gating); the case's expected result is computed by
 // code from the kept answers. Three stages:
-//   node clef-programs.mjs skeletons SEED COUNT OUT.skeletons.jsonl     cases + Clef requests (no model calls)
+//   node clef-programs.mjs skeletons SEED COUNT OUT.skeletons.jsonl [POOL]   cases + Clef requests (no model calls);
+//        POOL is a comma list of templates (default: the original four; `new` = NEW_POOLS)
 //   node clef-label.mjs OUT.skeletons.jsonl OUT.answers.jsonl            Clef-flash answers (daily token budget)
 //   node clef-programs.mjs assemble OUT.skeletons.jsonl OUT.answers.jsonl OUT.ir.jsonl
 // The assembled cases verify like any curriculum shard and replay into demonstrations (replay-demonstrations.mjs).
 import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { rowsOf } from './labeled.mjs';
+import { coeditRows } from './folder-data.mjs';
+import { SOURCES, cachePath } from './acquire.mjs';
+import { sourceRecordId, sourceRecordSplit } from './source-split.mjs';
 import { Random, curriculumCase, evalCall, literal, returnCall } from './lib.mjs';
+
+const CUAD_CACHE = process.env.NATLANG_DATASETS ?? fileURLToPath(new URL('../../../vendor/datasets', import.meta.url));
 
 const SCIFACT = new URL('../../../data/neuralese/corpora/source-episode-pools-20261005/self-improvement-expansion-20261004/scifact-source-v6/candidates.jsonl', import.meta.url);
 const COMPANIES = ['Arbor Labs', 'Brightline', 'Cobalt Foods', 'Delta Print', 'Evergreen Clinic', 'Fjord Travel', 'Granite Legal', 'Harbor Media',
@@ -101,16 +108,144 @@ const TEMPLATES = {
       aggregate: (values, items) => Object.fromEntries(items.map((item, i) => [item.id, values[i]])),
       code: `const rules = forum.rules(), topic = forum.topic();\nconst all = forum.posts();\nconst actions = await Promise.all(all.map(post => moderate(post, rules, topic)));\nreturn Object.fromEntries(all.map((post, i) => [post.id, actions[i]]));` };
   },
+  // Skill routing for an assistant (Jev skill suggestion): each request goes to one of the installed skills or none.
+  skill_routing(rng) {
+    const intents = [...new Set(rowsOf('clinc_oos').map(row => row.label))].sort();
+    const skills = rng.sample(intents, rng.int(4, 6));
+    const describe = label => label.replace(/_/g, ' ');
+    const pool = rowsOf('clinc_oos');
+    const inSkills = rng.sample(pool.filter(row => skills.includes(row.label)), rng.int(3, 5));
+    const outside = rng.sample(pool.filter(row => !skills.includes(row.label)), rng.int(1, 2));
+    const items = rng.shuffle([...inSkills, ...outside]).map((row, i) => ({ id: `R${i + 1}`, text: row.text }));
+    const criteria = { ...Object.fromEntries(skills.map(skill => [skill, `the ${describe(skill)} skill`])), none: 'none of the installed skills fits' };
+    const catalog = Object.fromEntries(skills.map(skill => [skill, `Handles requests about ${describe(skill)}.`]));
+    return { name: 'route_requests', returns: 'Record<string, Skill>',
+      instructions: 'Route every pending user request in assistant.requests() to the installed skill that should handle it (assistant.skills() describes each), or to "none" when no installed skill fits. Return a record from request id to skill.',
+      types: `export type Request = { id: string, text: string };\nexport type Skill = ${[...skills, 'none'].map(s => JSON.stringify(s)).join(' | ')};\n`,
+      service: items => `const REQUESTS = ${literal(items)};\nconst SKILLS = ${literal(catalog)};\n/** Pending user requests. */\nexport function requests(): Request[] { return REQUESTS; }\n/** The installed skills, each with what it handles. */\nexport function skills(): Record<string, string> { return SKILLS; }\n`,
+      items, lambda: { key: 'Pick the installed skill for request', text: 'Pick the installed skill for request from skills, or "none" when none of them fits.',
+        signature: '(request: Request, skills: Record<string, string>) => Promise<Skill>', call: 'pick(request, skills)' },
+      state: item => ({ request: item.text, skills: catalog }),
+      questions: { skill: { type: 'choice', instructions: 'Which installed skill should handle this request? Choose none when no skill fits.', criteria } },
+      decode: a => a.skill.confidence >= 0.6 ? a.skill.choice : null,
+      aggregate: (values, items) => Object.fromEntries(items.map((item, i) => [item.id, values[i]])),
+      code: `const skills = assistant.skills();\nconst all = assistant.requests();\nconst chosen = await Promise.all(all.map(request => pick(request, skills)));\nreturn Object.fromEntries(all.map((request, i) => [request.id, chosen[i]]));` };
+  },
+  // Wellbeing triage in a peer-support community: follow-up by policy, from the post and the member's history.
+  wellbeing_triage(rng) {
+    const community = rng.pick(['a peer-support forum for students during exam season', 'an online community for new parents',
+      'a workplace wellbeing channel', 'a running club\'s group chat']);
+    const policy = rng.pick([
+      'Moderators reach out privately to anyone who sounds distressed or alone. Strong anger at another member gets a check-in. Everything else needs no action.',
+      'Reach out when a post shows fear or sadness that has lasted, judging by the member\'s recent history. Monitor a single low moment. Happy or neutral posts need no action.',
+      'Members who sound overwhelmed get a private message from a moderator. Members who sound upset for the first time are monitored. The rest need no action.']);
+    const items = rng.sample(rowsOf('emotion'), rng.int(5, 7)).map((row, i) => ({ id: `P${i + 1}`, text: row.text,
+      member: { posts_this_month: rng.int(1, 30), previous_check_ins: rng.int(0, 3) } }));
+    const actions = { reach_out: 'a moderator reaches out privately', monitor: 'keep an eye on the member', none: 'no action needed' };
+    return { name: 'triage_posts', returns: 'Record<string, FollowUp>',
+      instructions: 'For every new post in community.posts(), decide the moderators\' follow-up under the community\'s wellbeing policy (community.policy()), taking the member\'s record into account and keeping in mind what the community is (community.about()). Return a record from post id to follow-up.',
+      types: 'export type Post = { id: string, text: string, member: { posts_this_month: number, previous_check_ins: number } };\nexport type FollowUp = "reach_out" | "monitor" | "none";\n',
+      service: items => `const POSTS = ${literal(items)};\nconst POLICY = ${JSON.stringify(policy)};\nconst ABOUT = ${JSON.stringify(community)};\n/** New posts, each with the author's member record. */\nexport function posts(): Post[] { return POSTS; }\n/** The wellbeing policy. */\nexport function policy(): string { return POLICY; }\n/** What the community is. */\nexport function about(): string { return ABOUT; }\n`,
+      items, lambda: { key: 'Decide follow-up for post', text: 'Decide follow-up for post under policy, in a community that is about: reach_out, monitor or none.',
+        signature: '(post: Post, policy: string, about: string) => Promise<FollowUp>', call: 'followUp(post, policy, about)' },
+      state: item => ({ community, policy, post: item.text, member: item.member }),
+      questions: { action: { type: 'choice', instructions: 'Under the wellbeing policy, what follow-up does this post need from the moderators?', criteria: actions } },
+      decode: a => a.action.confidence >= 0.6 ? a.action.choice : null,
+      aggregate: (values, items) => Object.fromEntries(items.map((item, i) => [item.id, values[i]])),
+      code: `const policy = community.policy(), about = community.about();\nconst all = community.posts();\nconst actions = await Promise.all(all.map(post => followUp(post, policy, about)));\nreturn Object.fromEntries(all.map((post, i) => [post.id, actions[i]]));` };
+  },
+  // Edit review: an editor's proposed revisions, each checked against the instruction it was given.
+  edit_review(rng) {
+    const tasks = { gec: 'Fix the grammar and spelling.', simplification: 'Make the text simpler to read.', paraphrase: 'Paraphrase the text.',
+      coherence: 'Make the text more coherent.', neutralize: 'Remove biased or non-neutral wording.' };
+    const pairs = Object.keys(tasks).flatMap(task => rng.sample(coeditRows(task), 2).map(row => ({ task, row })));
+    // A proposal is either the reference revision or another draft's revision (a mismatched proposal), so both answers occur.
+    const items = rng.sample(pairs, rng.int(5, 6)).map(({ task, row }, i) => {
+      const mismatched = rng.next() < 0.3;
+      const proposal = mismatched ? rng.pick(pairs.filter(p => p.row.id !== row.id)).row.target : row.target;
+      return { id: `E${i + 1}`, instruction: tasks[task], original: row.text, proposal };
+    });
+    return { name: 'review_edits', returns: 'string[]',
+      instructions: 'Review the proposed revisions in editor.proposals(): a proposal is accepted when it carries out its instruction on the original text and keeps its meaning. Return the ids of the accepted proposals in order.',
+      types: 'export type Proposal = { id: string, instruction: string, original: string, proposal: string };\n',
+      service: items => `const PROPOSALS = ${literal(items)};\n/** Proposed revisions, each with its instruction and the original text. */\nexport function proposals(): Proposal[] { return PROPOSALS; }\n`,
+      items, lambda: { key: 'Does proposal carry out its instruction', text: 'Does proposal carry out its instruction on the original text and keep its meaning?',
+        signature: '(proposal: Proposal) => Promise<boolean>', call: 'accept(proposal)' },
+      state: item => ({ instruction: item.instruction, original: item.original, proposal: item.proposal }),
+      questions: { accept: { type: 'noul', instructions: 'Does the proposal carry out the instruction on the original text while keeping its meaning?' } },
+      decode: a => a.accept.noul >= 0.85 ? true : a.accept.noul <= 0.15 ? false : null,
+      aggregate: (values, items) => items.filter((_, i) => values[i]).map(item => item.id),
+      code: `const all = editor.proposals();\nconst verdicts = await Promise.all(all.map(proposal => accept(proposal)));\nreturn all.filter((_, i) => verdicts[i]).map(proposal => proposal.id);` };
+  },
+  // Contract clause review from one side's position: score each clause's risk, the code flags the high ones.
+  clause_risk(rng) {
+    const contract = rng.pick(cuadClauseContracts().filter(c => c.clauses.length >= 4));
+    const side = rng.pick(['the licensee', 'the licensor', 'the customer', 'the supplier']);
+    const position = rng.pick([
+      `We are ${side}. We want to keep the freedom to end the contract, to work with anyone, and to limit what we owe if something goes wrong.`,
+      `We are ${side}. Our priorities are protecting our intellectual property and avoiding open-ended liability or exclusivity.`,
+      `We are ${side}. We care most about flexibility: short commitments, no restrictions on competitors or hiring, and easy assignment.`]);
+    const items = rng.sample(contract.clauses, Math.min(contract.clauses.length, rng.int(4, 6))).map((clause, i) => ({ id: `C${i + 1}`, heading: clause.category, text: clause.text }));
+    const threshold = 2;
+    return { name: 'flag_clauses', returns: 'string[]',
+      instructions: `Review the clauses of the contract in legal.clauses() against our position (legal.position()). Score each clause's risk to us from 0 (none) to 3 (serious) and return the ids of the clauses scoring ${threshold} or more, in order.`,
+      types: 'export type Clause = { id: string, heading: string, text: string };\nexport type Risk = 0 | 1 | 2 | 3;\n',
+      service: items => `const CLAUSES = ${literal(items)};\nconst POSITION = ${JSON.stringify(position)};\n/** Clauses of the contract under review. */\nexport function clauses(): Clause[] { return CLAUSES; }\n/** Our negotiating position. */\nexport function position(): string { return POSITION; }\n`,
+      items, lambda: { key: 'Score clause risk to us', text: 'Score clause risk to us given position, from 0 (none) to 3 (serious).',
+        signature: '(clause: Clause, position: string) => Promise<Risk>', call: 'risk(clause, position)' },
+      state: item => ({ position, heading: item.heading, clause: item.text }),
+      questions: { risk: { type: 'score', instructions: 'How much risk does this clause carry for us, given our position?', criteria: ['None', 'Minor', 'Significant', 'Serious'] } },
+      // The most probable level when it holds at least half the mass (a rounded expectation hides a split answer).
+      decode: a => { const [level, p] = Object.entries(a.risk.probabilities ?? {}).sort((x, y) => y[1] - x[1])[0] ?? [];
+        return p >= 0.5 ? Number(level) : null; },
+      aggregate: (values, items) => items.filter((_, i) => values[i] >= threshold).map(item => item.id),
+      code: `const position = legal.position();\nconst all = legal.clauses();\nconst risks = await Promise.all(all.map(clause => risk(clause, position)));\nreturn all.filter((_, i) => risks[i] >= ${threshold}).map(clause => clause.id);` };
+  },
 };
-const SERVICES = { route_tickets: 'desk', evidence_sentences: 'papers', rank_leads: 'crm', moderate_thread: 'forum' };
+const SERVICES = { route_tickets: 'desk', evidence_sentences: 'papers', rank_leads: 'crm', moderate_thread: 'forum',
+  route_requests: 'assistant', triage_posts: 'community', review_edits: 'editor', flag_clauses: 'legal' };
+// Skeletons written before the pool field drew from these four templates; their draws replay with this list.
+const ORIGINAL_POOL = ['support_routing', 'evidence_sentences', 'lead_scoring', 'moderation'];
+// The new source pools (2026-10-11): CLINC150 skills, emotion posts, CoEdIT revisions, CUAD clauses.
+export const NEW_POOLS = ['skill_routing', 'wellbeing_triage', 'edit_review', 'clause_risk'];
 
-function skeletons(seed, count, out) {
+// CUAD contracts (train split by the shared content partition, same ids as folder_extract) with their annotated
+// clause spans under risk-bearing headings.
+const CLAUSE_HEADINGS = ['Anti-Assignment', 'Cap On Liability', 'Uncapped Liability', 'Termination For Convenience', 'Exclusivity',
+  'Non-Compete', 'Ip Ownership Assignment', 'Change Of Control', 'Liquidated Damages', 'Audit Rights', 'Minimum Commitment',
+  'Most Favored Nation', 'No-Solicit Of Employees', 'Covenant Not To Sue', 'Renewal Term', 'Rofr/Rofo/Rofn', 'Volume Restriction',
+  'Joint Ip Ownership', 'Non-Disparagement', 'Insurance', 'Warranty Duration', 'Revenue/Profit Sharing', 'Price Restrictions'];
+let clauseCache;
+function cuadClauseContracts() {
+  if (clauseCache) return clauseCache;
+  const source = SOURCES.cuad;
+  const parsed = JSON.parse(readFileSync(cachePath(CUAD_CACHE, 'cuad', source.revision, source.files[0].path), 'utf8'));
+  clauseCache = [];
+  for (const item of parsed.data ?? []) {
+    const title = String(item.title ?? ''), paragraphs = item.paragraphs ?? [];
+    const content = [...new Set(paragraphs.map(part => String(part.context ?? '')).filter(Boolean))].join('\n\n');
+    if (!title || !content || sourceRecordSplit(sourceRecordId('cuad', title, content)) !== 'train') continue;
+    const clauses = [];
+    for (const qa of paragraphs.flatMap(part => part.qas ?? [])) {
+      const category = String(qa.id ?? '').split('__').pop();
+      if (!CLAUSE_HEADINGS.includes(category)) continue;
+      const text = (qa.answers ?? []).map(a => String(a.text ?? '').replace(/\s+/g, ' ').trim()).find(t => t.length >= 40 && t.length <= 700);
+      if (text) clauses.push({ category, text });
+    }
+    clauseCache.push({ title, clauses });
+  }
+  return clauseCache;
+}
+
+function skeletons(seed, count, out, pool) {
   const lines = [];
+  const names = pool ? pool.split(',') : ORIGINAL_POOL;
+  for (const name of names) if (!TEMPLATES[name]) throw new Error(`unknown template ${name}`);
   for (let index = 0; index < count; index++) {
     const rng = new Random(Number(seed), `clef:${index}`);
-    const name = rng.pick(Object.keys(TEMPLATES));
+    const name = rng.pick(names);
     const t = TEMPLATES[name](rng);
-    lines.push(JSON.stringify({ seed: Number(seed), index, template: name,
+    lines.push(JSON.stringify({ seed: Number(seed), index, template: name, ...(pool ? { pool: names } : {}),
       requests: t.items.map(item => ({ item: item.id, state: t.state(item), questions: t.questions })) }));
   }
   writeFileSync(out, lines.join('\n') + '\n');
@@ -123,7 +258,7 @@ function assemble(skeletonPath, answersPath, out) {
   for (const line of readFileSync(skeletonPath, 'utf8').split('\n').filter(Boolean)) {
     const sk = JSON.parse(line);
     const rng = new Random(sk.seed, `clef:${sk.index}`);
-    rng.pick(Object.keys(TEMPLATES));  // replay the draws of skeletons()
+    rng.pick(sk.pool ?? ORIGINAL_POOL);  // replay the draws of skeletons()
     const t = TEMPLATES[sk.template](rng);
     // Confidence gating per item: an item Clef is unsure about leaves the case (its data too); a case needs three.
     const decoded = t.items.map(item => { const a = answers.get(`${sk.seed}:${sk.index}:${item.id}`); return a ? t.decode(a) : null; });
@@ -135,7 +270,8 @@ function assemble(skeletonPath, answersPath, out) {
     const expected = t.aggregate(values, t.items);
     const service = SERVICES[t.name];
     const [fn] = t.lambda.call.split('(');
-    const record = curriculumCase({ family: `clef_${sk.template}`, shape: `clef${sk.index}`, variant: 'v0', splitGroup: `clef:${sk.seed}:${sk.index}`,
+    // Pool-era skeletons put the seed in the shape: case ids of different seeds must not collide.
+    const record = curriculumCase({ family: `clef_${sk.template}`, shape: sk.pool ? `clef-s${sk.seed}-${sk.index}` : `clef${sk.index}`, variant: 'v0', splitGroup: `clef:${sk.seed}:${sk.index}`,
       slice: 'inline_placement', domain: 'other', mode: 'single_call', inline: 'required',
       evidence: { world: t.items.map((item, i) => `${item.id}: ${JSON.stringify(values[i])}`), retrieved: [], background: [] },
       minimumSequence: ['read the items and the context they are judged in', 'judge each item in its own nl call that takes the item and its context',
@@ -153,6 +289,6 @@ function assemble(skeletonPath, answersPath, out) {
 }
 
 const [mode, ...args] = process.argv.slice(2);
-if (mode === 'skeletons') skeletons(...args);
+if (mode === 'skeletons') skeletons(args[0], args[1], args[2], args[3] === 'new' ? NEW_POOLS.join(',') : args[3]);
 else if (mode === 'assemble') assemble(...args);
-else if (mode) throw new Error('usage: clef-programs.mjs skeletons SEED COUNT OUT | assemble SKELETONS ANSWERS OUT');
+else if (mode) throw new Error('usage: clef-programs.mjs skeletons SEED COUNT OUT [POOL] | assemble SKELETONS ANSWERS OUT');
