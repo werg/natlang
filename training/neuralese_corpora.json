@@ -29058,6 +29058,31 @@
       "training_admission": false,
       "admission": "quality-evidence-only",
       "notes": "Exactall56pins/maps/files,21explicitdisagreements,perchild visibilitylimited218IDs/403. Additivecorrection/rootattribution prohibits treatingall8unanswered asbadsource; BoBilinskyblockinginput reviewcandidate only. Allheld."
+    },
+    {
+      "id": "luna-v64-seven-source-clearance-exercise-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-quality-clearance-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-generation-quality-and-source-closure",
+      "training_admission": false,
+      "admission": "held-pending-explicit-quality-and-source-review",
+      "notes": "Actual2native rows\u219229turns. Preservedfirstwrongapprovalbitsdiagnostic; correctedall29held then9exactreviewedactions only,20held. Selectednative9candidate,neuralese9held7unsupportedinterpolation/0childresult conversions. No blanketcorpus/operatoradmission."
+    },
+    {
+      "id": "luna-v64-seven-source-original-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-recovery-static-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-generation-quality-and-source-closure",
+      "training_admission": false,
+      "admission": "held-pending-explicit-quality-and-source-review",
+      "notes": "Exactoriginal seven-source normalized train snapshot/manifest/parentrawrows. Needed bysourcequalityclearance; metadata/source unchanged. Previouslyfrozenstaticmirror did notpreserve this originalcanonicalpath.",
+      "include": [
+        "source/cases.jsonl",
+        "source/source-manifest.json",
+        "source/parent-source-rows.json"
+      ]
     }
   ],
   "coverage_backlog": [

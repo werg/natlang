@@ -1,0 +1,155 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v64-seven-source-clearance-exercise-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-quality-clearance-v1",
+  "files": [
+    {
+      "path": "decision-review-nine-targets-v1.json",
+      "bytes": 9566,
+      "sha256": "9ead792225c207dafec9b2a4d1f2de8b2ee567a2474451153249b2f7956c3b10"
+    },
+    {
+      "path": "execution-code-v1/dist/adaptation/identity.js",
+      "bytes": 1420,
+      "sha256": "13d48cbc54240a1a9b1084e7f345b637161dc58d51872db17eaaada3c8702627"
+    },
+    {
+      "path": "execution-code-v1/dist/compiler/inline-instruction-index.js",
+      "bytes": 40519,
+      "sha256": "a3f88f05f5431afacb1869162e59b937eef08f796ff4f06c491f52dc887c2e96"
+    },
+    {
+      "path": "execution-code-v1/dist/compiler/neuralese-conversion.js",
+      "bytes": 114102,
+      "sha256": "4dd1fc6c25da7bbf1d18423591fed25fbfaf8d99d214a6f44ddd7072b7f8bd01"
+    },
+    {
+      "path": "execution-code-v1/dist/native/hash.js",
+      "bytes": 362,
+      "sha256": "4ee149d265d8a8a56009ada87c78ecf719a3e718d2363e492e2c1014cff3afe2"
+    },
+    {
+      "path": "execution-code-v1/dist/teacher/native-materializer.js",
+      "bytes": 130059,
+      "sha256": "bd40dd9fc608a147b7891222907a5ed7deb4d1d4193eaa582f9760c826f1c29b"
+    },
+    {
+      "path": "execution-code-v1/dist/teacher/source-conversion.js",
+      "bytes": 13727,
+      "sha256": "c83c7b51085cc7187e4c5b3e3c608fc6d3b911559180b9400774e7335119e562"
+    },
+    {
+      "path": "execution-code-v1/dist/teacher/source-quality-clearance.js",
+      "bytes": 7879,
+      "sha256": "ec436e4d465bc2ab39b002dd251735c881053cef7e1cc323636c99a5461ebd09"
+    },
+    {
+      "path": "execution-code-v1/manifest.json",
+      "bytes": 3770,
+      "sha256": "042e4a3d415865b087d53282b1f631cc26ea13180e97d47e6f58006bdd7a5c88"
+    },
+    {
+      "path": "execution-code-v1/scripts/inline-curriculum/soft-state-conversion-evidence.mjs",
+      "bytes": 25157,
+      "sha256": "7442ecc833cd2738caff0c881906516be61304ffb6d052a15fb3a4ad421c1b9b"
+    },
+    {
+      "path": "execution-code-v1/scripts/jsonl-stream.mjs",
+      "bytes": 1587,
+      "sha256": "22c23f91274a7669494bee184ce4026f25e5eb273b097933f18dd594757e2335"
+    },
+    {
+      "path": "execution-code-v1/scripts/materialize-native-teacher.mjs",
+      "bytes": 12661,
+      "sha256": "cd6496e09da127470145f7652de60fd9ffdf294afbc02dbc76f0cb6a2e41a437"
+    },
+    {
+      "path": "execution-code-v1/scripts/neuralese-convert-trajectories.mjs",
+      "bytes": 8200,
+      "sha256": "601c0b06a3d3cebff3fa60b63a9a4dd604be4b1e44e9c434b3c29f6a4c55f630"
+    },
+    {
+      "path": "execution-code-v1/src/teacher/native-materializer.ts",
+      "bytes": 125724,
+      "sha256": "1ca140e75eb1fea58528ffa82b7acefe626f7a0bc3a57492b8c62df9cb4715a6"
+    },
+    {
+      "path": "execution-code-v1/src/teacher/source-conversion.ts",
+      "bytes": 14192,
+      "sha256": "900c5fd163c563337a367067c1531b3e70eb980b944067f7babbad9104583301"
+    },
+    {
+      "path": "execution-code-v1/src/teacher/source-quality-clearance.ts",
+      "bytes": 9335,
+      "sha256": "a2513d1b4c95b0b4f68bfd2b99ab80db8c673f21bba42402b8865d15aa99ad6c"
+    },
+    {
+      "path": "materialized-native.jsonl",
+      "bytes": 3655169,
+      "sha256": "fdfe4ea47b27dd3474db9c573eb56245977c93c9ab5ad8684aa49995a91a6b6d",
+      "lines": 29
+    },
+    {
+      "path": "materialized-pending-v2.jsonl",
+      "bytes": 3663081,
+      "sha256": "e45a000b4af065a17a440e8506574cb0182bbe52956586e09d1068ad91c18151",
+      "lines": 29
+    },
+    {
+      "path": "materialized-reviewed-nine-v3.jsonl",
+      "bytes": 3670031,
+      "sha256": "449b3db85f21a5a0bfa0120c459b3f7dd6f745eaaf8e846265d8165cc471064b",
+      "lines": 29
+    },
+    {
+      "path": "root-actual-exercise-review-v1.json",
+      "bytes": 1590,
+      "sha256": "6ae63d26237cfb172c84419a5e3c69cceef77e73c3675dbc05ad9a5bf5f2c7b5"
+    },
+    {
+      "path": "root-nine-target-review-v1.json",
+      "bytes": 10309,
+      "sha256": "3c616dc5fbc23dd96a8e953b4af040339884ef67252a519a2c854b783609f419"
+    },
+    {
+      "path": "root-source-correctness-review-v1.json",
+      "bytes": 4234,
+      "sha256": "85218774b6acb11b04a49bc57144e2647ab170ddb54ff8563095246015fa5cb8"
+    },
+    {
+      "path": "selected-nine-conversion-summary.json",
+      "bytes": 1078,
+      "sha256": "6acf932a11be0acb75cdceda10650869dd58ed9c7d0415c9170c616a2923e183"
+    },
+    {
+      "path": "selected-nine-native.jsonl",
+      "bytes": 1061746,
+      "sha256": "329bb90b56349dc5e97732a2cb2c2eb2ea4c27d809944b7a8efa6a6e8db610fd",
+      "lines": 9
+    },
+    {
+      "path": "selected-nine-neuralese.jsonl",
+      "bytes": 872804,
+      "sha256": "e955663e6781df6a7b3b2502b4bb4f31657f66360965c12103c64278d27ef529",
+      "lines": 9
+    },
+    {
+      "path": "selected-nine-pieces.jsonl",
+      "bytes": 27782,
+      "sha256": "2af5694293735cd6f23fc77ee9b39367a9c7f24b816dccfbfcc0804356bfa60c",
+      "lines": 7
+    },
+    {
+      "path": "source-quality-clearance.json",
+      "bytes": 10982,
+      "sha256": "e4ac9ec0bd55e4c0e88dfae7d2d898f1a6ebcce1ba4db79237c021186ec6cdda"
+    },
+    {
+      "path": "source-quality-policy-at-review-v14.json",
+      "bytes": 52055,
+      "sha256": "d448b118f17c09398f25dc06ee88308e1cd3bddce445d794303c4d05f73df0bd"
+    }
+  ],
+  "bytes": 13549121
+}

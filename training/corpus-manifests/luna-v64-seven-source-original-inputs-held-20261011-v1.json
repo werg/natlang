@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v64-seven-source-original-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-recovery-static-v1",
+  "files": [
+    {
+      "path": "source/cases.jsonl",
+      "bytes": 5960,
+      "sha256": "cc11a4d7be6b74209fde0203dc3861c38aadd510ad4a50bc16077b64b907fd64",
+      "lines": 7
+    },
+    {
+      "path": "source/parent-source-rows.json",
+      "bytes": 7441,
+      "sha256": "c4a1130acfe73dba7dea6c5c175a5310a1a6c7a65001c3541f4de14e8a495015"
+    },
+    {
+      "path": "source/source-manifest.json",
+      "bytes": 373,
+      "sha256": "4d666c55e96165d3ed14ecb1501ababba717ef7d0daf0a964d1bf8417029ac7f"
+    }
+  ],
+  "bytes": 13774
+}
