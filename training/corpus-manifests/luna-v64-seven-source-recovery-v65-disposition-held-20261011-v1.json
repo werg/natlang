@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v64-seven-source-recovery-v65-disposition-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v64-seven-source-recovery-v65-runtimev15-v1",
+  "files": [
+    {
+      "path": "root-approved-plan-v2.json",
+      "bytes": 13984,
+      "sha256": "e5d4547ca4f191c987d881d471e81dc2f04915ee205338c1911eca686bfaff44"
+    },
+    {
+      "path": "root-v65-predecessor-disposition-v1.json",
+      "bytes": 2997,
+      "sha256": "3bcab2ff7d505d1376a88d6102de60da9b82f992e78aeec076a66585c4910cec"
+    },
+    {
+      "path": "supervisor.log",
+      "bytes": 369,
+      "sha256": "1c8f345f0414cd636b57092207442c576a7ef88775ef41130c9df37fb745c8c6"
+    }
+  ],
+  "bytes": 17350
+}

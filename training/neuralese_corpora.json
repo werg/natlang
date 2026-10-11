@@ -28412,6 +28412,69 @@
         "root-related-source-launch-review-v1.json",
         "frozen-adapter-v1/**"
       ]
+    },
+    {
+      "id": "free-provider-google-v30-closed-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v30-source-v2",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Closed512responses; originalinputs/runtime preserved. Futureaudit separate. Noadmission."
+    },
+    {
+      "id": "free-provider-google-v29-four-truncated-recovery-closed-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-v29-truncated-four-recovery-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Closed4same-originalinputs with2048budget andnewattempts. No JSONcompletion fabrication/newworldcredit. Reviewpending."
+    },
+    {
+      "id": "free-provider-google-v31-reviewed-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v31-source",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "512fresh complete inputs9families canonical57+V12additive5holds; TRECcriteria visible2048outputdefault. Activeoutputs excluded.",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl",
+        "root-source-launch-review-v1.json",
+        "frozen-adapter-v1/**",
+        "source-preparation-code/**"
+      ]
+    },
+    {
+      "id": "luna-v64-seven-source-recovery-v65-disposition-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v64-seven-source-recovery-v65-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "V65closed159complete1providerterminatedpartial. Ownercheckedall160finish/all5PIDsdead. Independent reviewed2recovery workerlaunch authorizedwithoutmarkingfailedcasecomplete. Oldfailedsupervisorlogpreserved.",
+      "include": [
+        "root-v65-predecessor-disposition-v1.json",
+        "root-approved-plan-v2.json",
+        "supervisor.log"
+      ]
+    },
+    {
+      "id": "luna-annotation-folder-v65-closed-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-annotation-folder-v65-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Closed160planned159terminal1providerterminatedpartialindex135. Preserveoriginal57-holdtiming/predecessordisposition, noadmission. Separateactual qualityreviewpending."
     }
   ],
   "coverage_backlog": [

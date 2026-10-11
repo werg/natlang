@@ -1,0 +1,128 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v30-closed-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v30-source-v2",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 467932,
+      "sha256": "e9f9f99be6b8a03c2972d1e2f920e041e14a33e94970ea095b58fb91ed3532b0",
+      "lines": 512
+    },
+    {
+      "path": "frozen-adapter-v1/frozen-runtime.json",
+      "bytes": 1194,
+      "sha256": "b3103103058597205e2e9d89322cae332e78a02aad7ec30970720d9ff847eb40"
+    },
+    {
+      "path": "frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/__pycache__/label_decision_cases.cpython-310.pyc",
+      "bytes": 21773,
+      "sha256": "0151ae3ae6cfa48f973aac265e97a8cdecdc6cc89c0623ef97c7dc71275ee45c"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/label_decision_cases.py",
+      "bytes": 29670,
+      "sha256": "adccf20446070bad4d1b3d4cb445ca18f4a28e76fc11657f2dd7f36c532b045b"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+      "bytes": 10420,
+      "sha256": "418bb4f7dc5394063035471254c6d12b26c0e22526b0b25ea8e0bcb6da3d4e4d"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/__pycache__/__init__.cpython-310.pyc",
+      "bytes": 356,
+      "sha256": "4e688f56b9439d13d71055e2f956f477956b8b4c0b4eff1ddb75255a5efabbef"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+      "bytes": 157,
+      "sha256": "8352a509d51ef0dc0be958bdd4492caa968933866b171360be39fda43217364f"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__pycache__/__init__.cpython-310.pyc",
+      "bytes": 444,
+      "sha256": "66abb59f233ba1ed415c74b592671184277d4f755799750b0080f73acc193565"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__pycache__/jsonio.cpython-310.pyc",
+      "bytes": 2489,
+      "sha256": "40030fb1c81ada4546caa690ef737db31cfaea763752e9c7f03c352c90be253e"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+      "bytes": 1755,
+      "sha256": "d4e71ae9211cd625ea5d74706f9e0d4cc7fbf59e731dd0cba34fddd04674e4d2"
+    },
+    {
+      "path": "labels.jsonl",
+      "bytes": 607992,
+      "sha256": "1298a1654e29f0a8e4bcd6f03baf1660caf496f732c51afa240866bc6e862fcb",
+      "lines": 512
+    },
+    {
+      "path": "labels.jsonl.attempts.jsonl",
+      "bytes": 533499,
+      "sha256": "e5dbd66cbad8d5ea378d5019d1b71f14d1a8025b61b60e93a903d887e8351609",
+      "lines": 544
+    },
+    {
+      "path": "labels.jsonl.manifest.json",
+      "bytes": 2520,
+      "sha256": "02241c5361bd19b41087a6e893a368fee223ccbe4b249cd44d17c5a745e03632"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 7122873,
+      "sha256": "a67e9a7c931c9079c806dd86bb1700c7efe58216e2f0288d77a66ebd7fd61ad7",
+      "lines": 10457
+    },
+    {
+      "path": "pool.log",
+      "bytes": 35718,
+      "sha256": "722dd736d708124be2773ccc26428f5cccf72769a3c4542bb198c679fd3ba8ac"
+    },
+    {
+      "path": "root-source-launch-review-v1.json",
+      "bytes": 1439,
+      "sha256": "b1b1f36fe73c4fae424683e8b2cbdf15306323cce659608f4fad178dc09375a9"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 216192,
+      "sha256": "49cda78f58c8371e2100be3a504ccbe710ab6a5851bb98d156ecf82bd2ab561e"
+    },
+    {
+      "path": "source-preparation-code/scripts/decision_task_contracts.py",
+      "bytes": 2980,
+      "sha256": "fdbebaa66e64b679d6e09029925990dd71ed7cec668f2cc0791ca3151a34270d"
+    },
+    {
+      "path": "source-preparation-code/scripts/prepare_decision_provider_source.py",
+      "bytes": 32328,
+      "sha256": "9039d58e8423f899cdd79e2a8cc7a4186a8ddd15ba981c327db18e54b0fe7f96"
+    },
+    {
+      "path": "source-preparation-code/training/decision_source_quality_holds.json",
+      "bytes": 42916,
+      "sha256": "7dd8bcef424457d230a5edbe06982f6f0576d5aa0384a82dbde7bcac8cfc6d68"
+    },
+    {
+      "path": "source-preparation-code/training/decision_task_contracts.json",
+      "bytes": 2114,
+      "sha256": "b941a04443d3a47768ef8bdf68730b4fae86a1959aa16abdc6db7b559767ec73"
+    }
+  ],
+  "bytes": 9139643
+}
