@@ -488,7 +488,7 @@ async function main() {
   const replayRows = [], replayFailures = [], nativeRows = [];
   const options = { modelId: 'held-decision-label-static-reference', rootSeed: 4041, systemPrompt: TOOLS_PROMPT,
     contextTokens: 32768, maxTurns: 128, toolSurfaceSha256, collectionRole: 'reference',
-    authoredActionPlans: false };
+    authoredActionPlans: false, calls: false };
   await mkdir(outDir, { recursive: true });
   if ((await readdir(outDir)).length) throw new Error(`refusing to overwrite non-empty output directory: ${outDir}`);
   const executionArchive = await archiveDecisionExecutionComponents({ outDir,

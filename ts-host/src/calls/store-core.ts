@@ -351,18 +351,46 @@ export class CallStore {
     const target = Math.floor(maxBytes * 0.9);
     const unpinned = `pinned = 0 AND call_id NOT IN (SELECT call_id FROM case_calls)`;
     let total = before;
-    const batch = (sql: string) => this.db.prepare(sql).all() as { call_id: string }[];
-    for (const row of batch(`SELECT call_id FROM calls WHERE events_hash IS NOT NULL AND ${unpinned} ORDER BY started_at ASC LIMIT 5000`)) {
-      if (total <= target) break;
-      this.db.prepare('UPDATE calls SET events_hash = NULL WHERE call_id = ?').run(row.call_id);
-      this.db.prepare("DELETE FROM call_blobs WHERE call_id = ? AND kind = 'events'").run(row.call_id);
-      total -= this.collect();
+    // Eviction's target is a soft bound; a small batch caps overshoot while avoiding a global orphan scan per row.
+    const chunkSize = 64;
+    const inWriteBatch = <T>(body: () => T): T => {
+      this.db.exec('BEGIN IMMEDIATE');
+      try {
+        const value = body();
+        this.db.exec('COMMIT');
+        return value;
+      } catch (error) {
+        this.db.exec('ROLLBACK');
+        throw error;
+      }
+    };
+    while (total > target) {
+      const batch = inWriteBatch(() => {
+        const rows = this.db.prepare(`SELECT call_id FROM calls WHERE events_hash IS NOT NULL AND ${unpinned}
+          ORDER BY started_at ASC LIMIT ?`).all(chunkSize) as { call_id: string }[];
+        if (!rows.length) return { count: 0, freed: 0 };
+        for (const row of rows) {
+          this.db.prepare('UPDATE calls SET events_hash = NULL WHERE call_id = ?').run(row.call_id);
+          this.db.prepare("DELETE FROM call_blobs WHERE call_id = ? AND kind = 'events'").run(row.call_id);
+        }
+        // Collect once per small batch, rather than rescanning the global blob tables for every row.
+        return { count: rows.length, freed: this.collect() };
+      });
+      if (!batch.count) break;
+      total -= batch.freed;
     }
-    for (const row of batch(`SELECT call_id FROM calls WHERE ${unpinned} ORDER BY started_at ASC LIMIT 20000`)) {
-      if (total <= target) break;
-      this.db.prepare('DELETE FROM calls WHERE call_id = ?').run(row.call_id);
-      this.db.prepare('DELETE FROM call_blobs WHERE call_id = ?').run(row.call_id);
-      total = this.totalBytes() - this.collect();
+    while (total > target) {
+      const batch = inWriteBatch(() => {
+        const rows = this.db.prepare(`SELECT call_id FROM calls WHERE ${unpinned} ORDER BY started_at ASC LIMIT ?`)
+          .all(chunkSize) as { call_id: string }[];
+        if (!rows.length) return { count: 0, freed: 0 };
+        const ids = rows.map(row => row.call_id), placeholders = ids.map(() => '?').join(', ');
+        this.db.prepare(`DELETE FROM calls WHERE call_id IN (${placeholders})`).run(...ids);
+        this.db.prepare(`DELETE FROM call_blobs WHERE call_id IN (${placeholders})`).run(...ids);
+        return { count: rows.length, freed: this.collect() };
+      });
+      if (!batch.count) break;
+      total -= batch.freed;
     }
     return before - this.totalBytes();
   }

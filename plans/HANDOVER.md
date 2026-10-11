@@ -11322,14 +11322,21 @@ No context reduction, frozen backbone or detached producer gradient was used.
   `/srv/storage/natlang-artifacts/optimizer-bakeoff-lfm-20261011-v1`.
   Frozen shared package162modules and recipes. Lion matched arm next; no default
   optimizer change yet. Native serving runtime/semantic checks remain pending.
-- Luna V18 main34 closed:241/256 exactsource labels,23/34 exactmaps,256 item-bound
-  child request visibility (47 also snapshots). Repeat14:102/111labels,6/14maps,
-  only10 exact child visibility/snapshots,101 unknown; top-level state substrings
-  do not prove child visibility. All raw/review/input receipts registered+DGX
-  verified, held. V19 exact pairedmain34 approved93dcdd4c…; five lanes launching,
-  then matchingrepeat14, to qualify zero-arg hidden inputs fix. Authored mechanism
-  probe confirms V18 local `const inputs` rejects, V19 succeeds; final acceptance
-  alone missed this difference. No tests run or training admissions changed.
+- Luna V18/V19 zero-argument local `inputs` paired48 review is sealed at
+  `runs/free-provider-generation-20261009-v1/quality-review-v43-runtimev19-paired48-v1`
+  (review JSON SHA `5f43750edd475509d9425233edd98969e35149b7282fc49a18ff165d802e96a6`).
+  Across 34 main + 14 same-world repeat runs (34 unique programs; independent new
+  worlds=0), V18/V19 exact-map counts are 29/48 and 30/48; item-label agreement
+  is identical at 343/367. V19 has more action errors/rejections, and its repeat14
+  is weaker (4 vs 6 exact maps; 99 vs 102 item agreements). Main34 differs in
+  17 items: 9 toward the static source label map, 6 away, 2 wrong-to-wrong.
+  These results do not support a quality-improvement or causal claim. The
+  authored mechanism probe shows V18 rejects a local `const inputs` in a
+  zero-argument call and V19 accepts it, but the live paired set does not establish
+  that this branch caused the observed output differences. Request visibility is
+  only claimed where bound to the exact invocation; repeat14 has substantial
+  unknown visibility. Preserve the paired receipt and raw campaigns as held
+  diagnostics; no training/admission change.
 
 ### 18:28 UTC — low cadence retained; follow-up rate checks
 
