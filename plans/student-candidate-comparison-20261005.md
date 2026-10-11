@@ -91,3 +91,9 @@ history alias rule do not prove every continuation/stop interaction is correct.
 The no-thinking setting is a diagnostic operating mode, not a fix for that issue.
 If Ling is revisited, inspect length-ended reasoning, continuation prefixes and
 reasoning/tool stop boundaries against native wire logs before adding workarounds.
+
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `maple-preview-evaluation-20261005`: deleted 2026-10-11.

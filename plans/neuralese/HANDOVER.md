@@ -1726,3 +1726,19 @@ restore now resolve only that known historical case to `1e-5`; new saves record
 the epsilon explicitly. Unknown variants, malformed explicit epsilons and
 incomplete adapter tensor sets still fail. The focused restore test receipt is
 `runs/neuralese-read-adapter-cpp-port-20261009-v1/checkpoint-epsilon-restore-receipt-v2.json (v1 is retained with its original commit locator)`.
+
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `maple-native-text-warmup-20261007-v1`: deleted 2026-10-11.
+- `maple-native-text-warmup-20261007-v1.sh`: deleted 2026-10-11.
+- `maple-native-text-warmup-20261007-v4.sh`: deleted 2026-10-11.
+- `maple-native-text-warmup-20261008-v7.sh`: deleted 2026-10-11.
+- `maple-native-text-warmup-20261008-v8.sh`: deleted 2026-10-11.
+- `maple-native-text-warmup-20261008-v9.sh`: deleted 2026-10-11.
+- `maple-text-warmup-policy-ab-20261007.sh`: deleted 2026-10-11.
+- `neuralese-call-recurrence-20261005`: deleted 2026-10-11.
+- `neuralese-local-recurrence-20261005`: deleted 2026-10-11.
+- `neuralese-s3-pilot-20261003-v2`: deleted 2026-10-11.
+- `neuralese-s3-pilot-20261005-v4`: deleted 2026-10-11.

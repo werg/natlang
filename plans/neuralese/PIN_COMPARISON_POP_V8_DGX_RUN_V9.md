@@ -251,3 +251,9 @@ runtime is a directory, not a symlink to canonical mutable source. Thus the
 addition figure describes Pop V8 versus the restarted/handoff DGX direct-v2 pin.
 Hash evidence lives at Pop V8/pin-comparison-dgx-direct-v2-v1.json. No DGX jobs were
 modified in this inspection.
+
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `mellum-foundation-qat-20261010/run-v9`: deleted 2026-10-11.

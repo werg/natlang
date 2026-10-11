@@ -34,4 +34,4 @@ def test_the_default_repo_root_holds_the_registry_the_recipes_name():
     assert artifacts.REPO == root('repo')
     if (root('repo') / artifacts.REGISTRY).exists():
         ids = {item['id'] for item in artifacts.load_registry()['artifacts']}
-        assert 'mellum21-teacher-v3-top64-20261010' in ids
+        assert 'learned-updater-v0-lfm2.5-350m-20261009' in ids

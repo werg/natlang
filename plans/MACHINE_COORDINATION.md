@@ -304,3 +304,9 @@ indented manifest file. Publication prints `manifest_file_sha256` for the latter
 When sending a hash in coordination, identify which one is meant. Both bind the
 same selected snapshot, but their byte representations differ; do not interpret
 that difference as failed data verification.
+
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `maple-nested-20261005`: deleted 2026-10-11.

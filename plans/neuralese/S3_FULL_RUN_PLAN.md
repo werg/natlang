@@ -132,3 +132,9 @@ checkpoints kept, resume after a stop. Gradient norms (median, pre-clip): A 5.6,
 11.8). An earlier rehearsal with only 14 steps of A–C saw D norms of 1e6–1e13: the heads must be trained before
 long writes. Memory: D at length 64 and batch 8 does not fit in 30 GB of CUDA (it ran out beside the campaign's
 60 GB); budget 48 GB as planned, with the GPU to itself. `--phase-batch D=4` exists for constrained rehearsals.
+
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `neuralese-s3-pilot-20261005-v4`: deleted 2026-10-11.

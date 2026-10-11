@@ -104,3 +104,10 @@ still incomplete in the C++ implementation and must remain advertised honestly.
 
 This document is a concrete handoff plan, not a claim these prerequisites are
 implemented or that candidate data has been admitted.
+
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `neuralese-s3-pilot-20261003-resume-d-v1`: deleted 2026-10-11.
+- `neuralese-s3-pilot-20261004-resume-ef-v1`: deleted 2026-10-11.
