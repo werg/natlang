@@ -31445,6 +31445,21 @@
       "admission": "review-and-launch-evidence-only-no-data-admission",
       "independent_new_worlds": 0,
       "notes": "Root reviewed and approved corrected V80 v2 plan (21 programs/139 exact inherited-train items), then launched supervisor PID 1098179. Approved plan SHA 3479da20d69454469a8c9673b9dee305b711cf33113eb6c71209bb0fc510d406; independent review SHA 4ef69e001292e326f3d4b705fcd83e006935195dd3ff5d048062000feff7804f. Mutable campaign status and worker outputs are excluded."
+    },
+    {
+      "id": "luna-choice-confidence-v79-final-quality-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v79-choice-confidence-final-v1",
+      "include": [
+        "audit.json",
+        "audit.md"
+      ],
+      "split": "inherited-train-quality-review-only",
+      "source_class": "held-provider-generation-quality-audit",
+      "training_admission": false,
+      "admission": "audit-evidence-only-no-source-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Read-only source-bound review of closed V79. Six of six output rows have terminal accounting; 35/37 item decisions match exact inherited annotations, with two completed decision disagreements in one Newsgroups and one Yahoo Topic program. Per-item saved rendered child requests show state, question and option-domain visibility; no original wire bytes are claimed. Existing source quality/license conditions are preserved."
     }
   ],
   "coverage_backlog": [
