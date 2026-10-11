@@ -109,6 +109,7 @@ const TEMPLATES = {
       code: `const rules = forum.rules(), topic = forum.topic();\nconst all = forum.posts();\nconst actions = await Promise.all(all.map(post => moderate(post, rules, topic)));\nreturn Object.fromEntries(all.map((post, i) => [post.id, actions[i]]));` };
   },
   // Skill routing for an assistant (Jev skill suggestion): each request goes to one of the installed skills or none.
+  // The item type is UserRequest: a type named Request resolved to the platform's fetch Request (every call mismatched).
   skill_routing(rng) {
     const intents = [...new Set(rowsOf('clinc_oos').map(row => row.label))].sort();
     const skills = rng.sample(intents, rng.int(4, 6));
@@ -121,10 +122,10 @@ const TEMPLATES = {
     const catalog = Object.fromEntries(skills.map(skill => [skill, `Handles requests about ${describe(skill)}.`]));
     return { name: 'route_requests', returns: 'Record<string, Skill>',
       instructions: 'Route every pending user request in assistant.requests() to the installed skill that should handle it (assistant.skills() describes each), or to "none" when no installed skill fits. Return a record from request id to skill.',
-      types: `export type Request = { id: string, text: string };\nexport type Skill = ${[...skills, 'none'].map(s => JSON.stringify(s)).join(' | ')};\n`,
-      service: items => `const REQUESTS = ${literal(items)};\nconst SKILLS = ${literal(catalog)};\n/** Pending user requests. */\nexport function requests(): Request[] { return REQUESTS; }\n/** The installed skills, each with what it handles. */\nexport function skills(): Record<string, string> { return SKILLS; }\n`,
+      types: `export type UserRequest = { id: string, text: string };\nexport type Skill = ${[...skills, 'none'].map(s => JSON.stringify(s)).join(' | ')};\n`,
+      service: items => `const REQUESTS = ${literal(items)};\nconst SKILLS = ${literal(catalog)};\n/** Pending user requests. */\nexport function requests(): UserRequest[] { return REQUESTS; }\n/** The installed skills, each with what it handles. */\nexport function skills(): Record<string, string> { return SKILLS; }\n`,
       items, lambda: { key: 'Pick the installed skill for request', text: 'Pick the installed skill for request from skills, or "none" when none of them fits.',
-        signature: '(request: Request, skills: Record<string, string>) => Promise<Skill>', call: 'pick(request, skills)' },
+        signature: '(request: UserRequest, skills: Record<string, string>) => Promise<Skill>', call: 'pick(request, skills)' },
       state: item => ({ request: item.text, skills: catalog }),
       questions: { skill: { type: 'choice', instructions: 'Which installed skill should handle this request? Choose none when no skill fits.', criteria } },
       decode: a => a.skill.confidence >= 0.6 ? a.skill.choice : null,

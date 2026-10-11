@@ -33854,6 +33854,33 @@
         "*.jsonl",
         "summary.json"
       ],
+      "admission": "superseded-by-clef-pools-20261011-v2; reference-demonstrations-verified-replay; clef-flash-distilled child labels with per-item confidence gating; action-notes reasoning (not trained); not teacher-sampled",
+      "training_admission": false,
+      "training_admission_reason": "superseded by clef-pools-20261011-v2 (concrete defect: skill_routing item type Request resolved to the fetch Request; 152 failed root evals, children never ran)",
+      "review_status": "verified replay 446/446 cases; Clef-flash labels unreviewed",
+      "required_conversion": "render (render_native_turn_corpus.sh, both tokenizers); root rationales in a teacher window",
+      "split": "train only: items drawn from the train side of the shared content partition (source-split.mjs, training/source-split-reservations.json); generated case ids carry the seed",
+      "source_class": "public-dataset-items-with-clef-flash-decisions",
+      "license": "per source: CLINC150 CC-BY-3.0, dair-ai/emotion (dataset card), CoEdIT Apache-2.0, CUAD v1 CC-BY-4.0; Clef-flash outputs (Cloudflare Workers AI terms). Provenance facts only (owner rule 2026-10-10)",
+      "build": {
+        "driver": "scripts/neuralese_data/clef_pools_daily.py",
+        "seed": 8100,
+        "templates": "clef-programs.mjs NEW_POOLS (skill_routing, wellbeing_triage, edit_review, clause_risk)",
+        "model": "@cf/cloudflare/clef-flash",
+        "input_tokens": 785973
+      },
+      "note": "Clef-flash-distilled inline-lambda programs over new source pools, day 20261011: 446 cases, 2034 decisions ({'clef_edit_review': 125, 'clef_clause_risk': 76, 'clef_skill_routing': 152, 'clef_wellbeing_triage': 93}). Files: *.skeletons (Clef requests), *.answers (Clef outputs with usage), *.ir (cases), *.rows (trajectories), *.turns (native training turns).",
+      "consumable_by_direct_stage": false,
+      "superseded_by": "clef-pools-20261011-v2"
+    },
+    {
+      "id": "clef-pools-20261011-v2",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/clef-pools-20261011-v2",
+      "include": [
+        "*.jsonl",
+        "summary.json"
+      ],
       "admission": "reference-demonstrations-verified-replay; clef-flash-distilled child labels with per-item confidence gating; action-notes reasoning (not trained); not teacher-sampled",
       "training_admission": true,
       "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
@@ -33869,8 +33896,12 @@
         "model": "@cf/cloudflare/clef-flash",
         "input_tokens": 785973
       },
-      "note": "Clef-flash-distilled inline-lambda programs over new source pools, day 20261011: 446 cases, 2034 decisions ({'clef_edit_review': 125, 'clef_clause_risk': 76, 'clef_skill_routing': 152, 'clef_wellbeing_triage': 93}). Files: *.skeletons (Clef requests), *.answers (Clef outputs with usage), *.ir (cases), *.rows (trajectories), *.turns (native training turns).",
-      "consumable_by_direct_stage": false
+      "note": "Clef-flash-distilled inline-lambda programs over new source pools, day 20261011: 446 cases, 2838 decisions ({'clef_edit_review': 125, 'clef_clause_risk': 76, 'clef_skill_routing': 152, 'clef_wellbeing_triage': 93}). Files: *.skeletons (Clef requests), *.answers (Clef outputs with usage), *.ir (cases), *.rows (trajectories), *.turns (native training turns). Rebuilt from v1's skeletons and Clef answers (no new Clef calls) after the skill_routing item type was renamed Request -> UserRequest: in v1 the name resolved to the platform's fetch Request, every root eval of the 152 skill_routing cases failed (152 unapproved decisions) and their children never ran. v2: 2,838 decisions, all approved.",
+      "consumable_by_direct_stage": false,
+      "supersedes": "clef-pools-20261011-v1",
+      "derived_from": [
+        "clef-pools-20261011-v1"
+      ]
     }
   ],
   "coverage_backlog": [
