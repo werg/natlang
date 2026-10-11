@@ -1271,7 +1271,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     if (sourceConversionProblems(row, options.sourceQualityClearance).length) { rejectedRows++; continue; }
     const taskIr = record(row.task.program_ir, `${row.id}.task.program_ir`);
     const program = taskIr as unknown as ProgramRecord;
-    const sourceQualityBinding = sourceQualityClearanceForProgram(options.sourceQualityClearance, program);
+    const sourceQualityReview = options.sourceQualityClearance ?? (row.source_ref as Dict | undefined)?.source_quality_clearance;
+    const sourceQualityBinding = sourceQualityClearanceForProgram(sourceQualityReview, program);
     // Direct exports and failed-run pair discovery must honor the same source holds as collection/admission.
     if (trainingQualityReason(row) || runtimeFailureReason(row) || quarantineReason(program) || retiredFamily(program)) { rejectedRows++; continue; }
     // Rows from before conversation rollover was retired contain checkpoint notes and cut contexts.
@@ -1615,7 +1616,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const authoredGuidancePending = row.collection_guidance && typeof row.collection_guidance === 'object' &&
         (row.collection_guidance as Dict).training_admission === false;
       const authoredGuidanceBlocked = authoredGuidancePending && !semanticApproval;
-      const decisionApproved = (!authoredRootAction || !!semanticApproval) && !authoredGuidanceBlocked && !semanticHold && !afterChunkCutoff &&
+      const sourceQualityActionReviewPending = !!sourceQualityBinding && !semanticApproval;
+      const decisionApproved = (!authoredRootAction || !!semanticApproval) && !sourceQualityActionReviewPending && !authoredGuidanceBlocked && !semanticHold && !afterChunkCutoff &&
         (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
         !heldDirect && !variantContext && !invalidStatusOnlySuccess;
       const targetBindingAdapter = providerActionNormalizationAdapter(source, target, rowDigest, index);
@@ -1639,8 +1641,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       if (!authoredRootAction || decisionApproved) rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
-          ...(sourceQualityBinding && options.sourceQualityClearance ?
-            { source_quality_clearance: options.sourceQualityClearance } : {}),
+          ...(sourceQualityBinding ? { source_quality_clearance: sourceQualityReview } : {}),
           ...(normalizedActionProvenance ? { action_provenance: normalizedActionProvenance } : {}),
           ...(semanticApproval ? { native_target_sha256: semanticApproval.target_sha256 } : {}),
           ...(invocation ? { invocation_id: invocation, ...(instructionSites.has(invocation) ? { inline_instruction_site: instructionSites.get(invocation) } : {}), ...(parents.has(invocation) ? { parent_invocation_id: parents.get(invocation) } : {}),
@@ -1689,13 +1690,15 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         outcome: { accepted: row.outcome.accepted, status: row.outcome.status,
           ...(row.outcome.oracle ? { oracle: row.outcome.oracle } : {}) },
         training_admission: { kind: authoredRootAction && semanticApproval ? 'reviewed-authored-static-native-action' :
+          sourceQualityActionReviewPending ? 'source-quality-conversion-only-pending-action-review' :
           authoredGuidanceBlocked ? 'authored-root-guided-pending-review' :
           semanticApproval ? 'reviewed-native-decision' : 'exact-native-runtime-oracle', approved: decisionApproved,
           ...(semanticApproval ? { semantic_review: semanticApproval } : {}),
           ...(semanticHold ? { semantic_review: semanticHold } : {}),
+          ...(sourceQualityActionReviewPending ? { reason: 'source-quality clearance permits conversion only; this exact target awaits native decision approval' } : {}),
           ...(authoredGuidanceBlocked ? { reason: 'authored-root-guided sample awaits separate root training approval' } : {}),
           ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
-          ...(decisionApproved ? {} : { reason: authoredGuidanceBlocked ? 'authored-root-guided sample awaits separate root training approval' : semanticHold ? semanticHold.reason : invalidStatusOnlySuccess ? 'success return omitted value without an authenticated same-invocation staged typed result' : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
+          ...(decisionApproved ? {} : { reason: sourceQualityActionReviewPending ? 'source-quality clearance permits conversion only; this exact target awaits native decision approval' : authoredGuidanceBlocked ? 'authored-root-guided sample awaits separate root training approval' : semanticHold ? semanticHold.reason : invalidStatusOnlySuccess ? 'success return omitted value without an authenticated same-invocation staged typed result' : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
             heldDirect ? 'an answer given without reasoning towards it' :
             (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
@@ -1704,9 +1707,11 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
             redundantSkillRead ? 'retrieves unchanged skill instructions again' :
             detour ? 'repeats an earlier call of this call with the same result' :
             refusedAttempt ? "the task's checker rejected this attempt" : 'the run was not accepted') }) },
-        trace_admission: { admitted: !authoredGuidancePending && !authoredRootAction,
-          kind: authoredRootAction ? 'authored-root-static-reference-not-provider-sampled' :
-            authoredGuidancePending ? 'authored-root-guided-pending-review' : 'exact-native-runtime-oracle',
+        trace_admission: { admitted: sourceQualityBinding ? decisionApproved && !!semanticApproval : !authoredGuidancePending && !authoredRootAction,
+          kind: sourceQualityActionReviewPending ? 'source-quality-conversion-only-pending-action-review' :
+            authoredRootAction ? 'authored-root-static-reference-not-provider-sampled' :
+            authoredGuidancePending ? 'authored-root-guided-pending-review' : semanticApproval ? 'reviewed-native-decision' : 'exact-native-runtime-oracle',
+          ...(sourceQualityActionReviewPending ? { reason: 'source-quality clearance permits conversion only; this exact target awaits native decision approval' } : {}),
           final_outcome_sha256: outcomeDigest },
         decision: { index,
           ...(statusOnlySuccessValidation.length ? { status_only_success_validation: statusOnlySuccessValidation } : {}),
