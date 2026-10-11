@@ -71,6 +71,9 @@ def program_header(content: str):
     # paragraph differ from the message-level program-header rendering (serving form).
     if tools.startswith('List of tools: ') and prose.endswith('\n'):
         prose = prose[:-1]
+    # Mellum2.1's (Qwen-style) template writes the system message, then '\n\n', then '# Tools': the same rule.
+    if tools.startswith('# Tools\n') and prose.endswith('\n\n'):
+        prose = prose[:-2]
     return program_header_paragraphs(prose), len(prose), len(tools)
 
 

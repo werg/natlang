@@ -235,11 +235,12 @@ def select(args, shard_dir: Path):
 
 # ---------------------------------------------------------------- rendering (workers)
 
-def _init(tokenizers):
+def _init(tokenizers, pieces=None):
     from build_neuralese_gold_text_delta import load_pinned_tokenizer
     from natlang_neuralese.serve.chat import bind_history_reasoning
     from strip_generic_system_prompt import strip_row
     _G['strip_row'] = strip_row
+    _G['pieces'] = pieces or []  # soft prompt pieces the records reference (name -> text), as gold_text_rows takes
     _G['tok'] = {}
     for name, path in tokenizers.items():
         tok = load_pinned_tokenizer(Path(path))
@@ -328,7 +329,7 @@ def render_shard(job):
         if not decision_records:
             rows[mode] = []
             continue
-        r, receipt, omitted, provenance = gold_text_rows(decision_records, [], tokenizer=tok,
+        r, receipt, omitted, provenance = gold_text_rows(decision_records, _G['pieces'], tokenizer=tok,
                                                          require_independent_splits=False, prompt_rendering=mode)
         for row, prov in zip(r, provenance):
             row['corpus'] = corpus
@@ -387,8 +388,9 @@ def render_shard(job):
     wt = []
     for record, members in whole_trajectory_records(records, blocked):
         try:
-            messages, _, _ = authenticated_crisp_context_messages(record, {}, writer_sources)
-            target = crisp_messages([record['target']], {}, handover_notes(record))[0]
+            piece_map = {q['name']: q['text'] for q in _G['pieces']}
+            messages, _, _ = authenticated_crisp_context_messages(record, piece_map, writer_sources)
+            target = crisp_messages([record['target']], piece_map, handover_notes(record))[0]
             text, ids = native_gold_document(tok, messages, target, record.get('tools') or [],
                                              prompt_rendering='full' if header_as_full else 'program-header')
         except (KeyError, TypeError, ValueError, IndexError) as exc:
@@ -556,6 +558,7 @@ def main(argv=None):
                    help='jsonl rows {id, reason_code?}: programs whose rows are dropped')
     p.add_argument('--program-header-as-full', action='store_true',
                    help="the system prompt is the program's own prompt, not generic runtime prose: keep it")
+    p.add_argument('--pieces', type=Path, nargs='*', default=[], help='jsonl {name, text}: soft prompt pieces')
     p.add_argument('--train-only', action='store_true', help='leave held rows out entirely (their held set lives elsewhere)')
     p.add_argument('--decision-exclude-ids', type=Path, nargs='*', default=[],
                    help='jsonl {id}: decisions already rendered elsewhere; used only inside whole trajectories')
@@ -612,7 +615,8 @@ def main(argv=None):
             pending.append(job)
     print(json.dumps({'jobs': len(jobs), 'already_done': len(results)}), flush=True)
     jobs = pending
-    with Pool(a.workers, initializer=_init, initargs=(tokenizers,)) as pool:
+    pieces = [json.loads(line) for path in a.pieces for line in path.read_text().splitlines() if line.strip()]
+    with Pool(a.workers, initializer=_init, initargs=(tokenizers, pieces)) as pool:
         for i, res in enumerate(pool.imap_unordered(render_shard, jobs)):
             results.append(res)
             if i % 8 == 0:
