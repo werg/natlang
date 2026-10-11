@@ -11138,3 +11138,49 @@ No context reduction, frozen backbone or detached producer gradient was used.
   52d84efec995f99546042cc5c8e37b04f91a5c4d1ba010a2f6041b806ba41ba4
   is running under the same exclusive project lock/frozen bundle, enum omission
   with unchanged exact local validation; first two completions succeeded.
+
+### 16:00 UTC — full-state resume, throughput investigation and quality follow-up
+
+- Briefly checkpointed the active native epoch at a safe step boundary after
+  31+ updates to exercise shared known-token sequence writing. `forced_sequence`
+  is prepared in `DirectWriter` (da11b62f), but is **not dispatched** by training
+  or serving yet. GPU diagnostic9ef05e91 compares outputs, caches, both projection
+  gradients, all exercised non-vocabulary backbone gradients and prefix adjoints.
+- BF16 producer forward/backward speedup was~13–18×, but payload relative L2
+  differences~3.3–3.8% exceeded the predeclared2% parity bound. FP32 diagnostic
+ 99da33d7 reduces payload differences to~0.14–0.23%, suggesting reduced-precision
+  sequence/decode kernel effects. Diagnose highest-precision reference and actual
+  consumer quality before adopting; do not silently relax the bound.
+- Native epoch resumed with its exact declared shared child argv and unchanged
+  frozen source inventory, full optimizer/RNG restoration. Active container
+  `pop-direct-native-e2e-endpoint-v2-resume01`, session83742, launch/checkpointSHA
+  receipt in `native-e2e-full-endpoint-epoch-resume-v2-01`. Module path relocation
+  logs320 changed paths despite byte-identical160-file source inventories; this
+  is not a second trainer. GPU observed100%/6.9GiB at update51, errors0.
+- Found and fixed a recipe infrastructure bug in c3da2de4: a trainer's clean
+  checkpoint-on-signal exit caused the direct-stage parent to claim completion
+  despite31/687 updates. Shared recurrence completion now reads committed
+  checkpoint step/errors, used by both recipe paths. Declared direct stages also
+  resume their saved checkpoint through the shared trainer; `--handoff` preserves
+  previous frozen source and plan/result receipts. Existing erroneous result is
+  preserved with additive `completion-correction-v1.json`; no success fabricated.
+  New parent resume mechanism is statically checked, not yet exercised on GPU.
+- Quality remains unqualified: held32 soft CE improved1.728→1.589 at25, then
+  rose2.232 at50; crisp1.358→1.419→1.989. Proven reciprocal reader written CE
+  1.1025→1.1598→1.5493 while shuffled1.6893→1.8252→2.2408. Own-vs-wrong context
+  contrast is useful, but absolute quality degraded. Watch the next declared
+  evaluation before changing optimization; preserve best25 and original V8.
+  Qualification must retain the original SFT/crisp and ordinary-behavior baseline.
+- E2E checkpoint/export audit found a real handoff gap: full resume state includes
+  both projections and backbone, but the existing direct serving exporter accepts
+  only direct-SFT checkpoints. Helper is implementing an adapter in the shared
+  exporter plus immutable parent-artifact binding in future E2E checkpoints.
+  Current lineage needs explicit pinned launch proof; do not infer parent identity
+  from a path or treat legacy `heads.pt` as a direct serving artifact.
+- V41 additive retry now has five active workers. Google resumed160 rows were
+  allHTTP200 at cutoff, with one typed-invalid response held for investigation.
+  V15 audit's initial leakage warning was withdrawn after tracing the actual
+  root request: the alleged answer hint was model-authored from visible state
+  and options, not injected gold. Complete paired provenance/quality review is
+  pending; preserve that correction and do not suppress legitimate dynamic lambda
+  formulation or invent a new prompt experiment from the mistaken warning.
