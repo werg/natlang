@@ -83,3 +83,17 @@ Reference, LionSR as before the fix (run v2c, same first 300 updates): response 
 100 / 200 / 300, agreement 0.900 / 0.874 / 0.862, gate 0.83 at 100 and 0.75 at 200 (base 0.75), about 6.2 s/update.
 
 RESULTS: pending.
+
+## Pop LFM comparison prepared (17:30 UTC)
+
+Declared diagnostic recipes `optimizer-bakeoff-lfm-lion-20261011` and
+`optimizer-bakeoff-lfm-muon-20261011` extend the shared LFM direct-v2 base:
+4962 union, 32k context, 256 supervised tokens/update, same seed and 8000-update
+schedule, stopping at300. Lion uses current3e-7 row-scale units; Muon uses
+cubic5/1e-5/weight-decay0.1 and shared narrow-matrix AdamW dispatch. These rates
+are optimizer-specific units, not an assertion of equal update magnitudes.
+The requested100-update KL measurements are diagnostic-only, not the cadence
+for normal full runs. Full state is retained for resumability. No arm launched
+while the current native epoch owns Pop GPU. Next window first checks native
+crisp/raw-vs-TCP quality and serving restore, then executes the finite comparison.
+No additional trainer implementation and no optimizer default change yet.

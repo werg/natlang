@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "optimizer-bakeoff-lfm-lion-20261011",
+  "extends": "neuralese-direct-lfm-v2",
+  "parity": "diagnostic",
+  "description": "Finite shared optimizer comparison requested by DGX/owner; same LFM base, registered4962 union, seed, context and declared8000-step schedule. Stop at300 updates;100-update response-KL checks are bounded diagnostic measurements, not normal training cadence. No optimizer default change from this recipe alone. Full state retained for exact follow-up; results judged by held CE and behavior within drift bounds per wall time.",
+  "overrides": {
+    "stage_parameter_defaults": {
+      "neuralese_direct": {
+        "stop_at": 300,
+        "save_state": true,
+        "drift_every": 100,
+        "drift_gate_every": 300,
+        "latent_optimizer": "lionsr",
+        "latent_lr": 3e-07,
+        "latent_skip_idle": true
+      }
+    }
+  }
+}
