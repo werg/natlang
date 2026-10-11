@@ -100,6 +100,8 @@ def strip_row(row: dict, tok, im_start: int, im_end: int):
     sss = row.get('supervised_suffix_start')
     if sss is not None and sss < old_system:
         return None, 'supervised suffix starts inside the system turn', None
+    if any(begin < old_system for begin, _ in row.get('context_only_spans') or ()):
+        return None, 'a context_only span starts inside the system turn', None
     new_row = dict(row)
     new_row['text'] = text
     new_row['token_ids'] = new_ids
