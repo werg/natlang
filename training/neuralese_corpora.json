@@ -31220,6 +31220,22 @@
       "admission": "prepared-input-only-root-review-required-no-training-admission",
       "independent_new_worlds": 0,
       "notes": "Root-review candidate only: 18 visible, accepted authored references from the V41 immutable label prefix; 122 source items across five queues, V17 frozen runtime. Root approval is false and no worker was launched. The 5 other static references remain preserved in the prefix-static artifact with missing criteria capture reported."
+    },
+    {
+      "id": "luna-choice-confidence-v78-root-approval-launch-evidence-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v78-v41-prefix-runtimev17-v1",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-independent-review-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "split": "inherited-train-generation-control-evidence",
+      "source_class": "held-luna-root-review-and-launch-evidence",
+      "training_admission": false,
+      "admission": "review-and-launch-evidence-only-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root approved plan SHA 0acfc708dffd72cb8fc90ec00fb0cac27830fc1ef51effac80f49047feb37af1 after independently checking 18 programs / 122 original train items, exact master rows and no hold hits; supervisor PID 1093879 launched the five per-lane waiters. Mutable campaign-launch state, results and logs are excluded."
     }
   ],
   "coverage_backlog": [
