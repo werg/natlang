@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-neuralese-direct-lfm-v8-failing-context-recipe-20261011-v1",
+  "owner": "pop",
+  "path": "training/neuralese/recipes",
+  "files": [
+    {
+      "path": "luna-direct-lfm-native-e2e-failing-context-diagnostic-20261011-v2.json",
+      "bytes": 19090,
+      "sha256": "a6f949a92e43ff1d332f48bedc879c5a5139f3b7db7d6e45fae610a7fc489bdd"
+    }
+  ],
+  "bytes": 19090
+}
