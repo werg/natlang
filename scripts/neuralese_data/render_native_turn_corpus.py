@@ -37,6 +37,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import time
 from collections import Counter, defaultdict
@@ -123,12 +124,28 @@ def reserved_normalize(text: str) -> str:
     return re.sub(r'\s+', ' ', text.replace('\\', ' ')).strip()
 
 
+_PREFIX = 16
+
+
 def reserved_hit(row: dict, needles) -> str | None:
+    """First reserved source id whose needle occurs in the row's normalized program text. Needles are indexed by
+    their first 16 characters, so one pass over the text finds every candidate (the same substring rule)."""
+    index = needles if isinstance(needles, dict) else None
+    if index is None:
+        raise TypeError('reserved needles must be indexed with index_needles')
     haystack = reserved_normalize(' '.join(_strings(row.get('task'), [])))
-    for sid, needle in needles:
-        if needle in haystack:
-            return sid
+    for i in range(len(haystack) - _PREFIX + 1):
+        for sid, needle in index.get(haystack[i:i + _PREFIX], ()):
+            if haystack.startswith(needle, i):
+                return sid
     return None
+
+
+def index_needles(needles):
+    index = {}
+    for sid, needle in needles:
+        index.setdefault(needle[:_PREFIX], []).append((sid, needle))
+    return index
 
 
 def program_key(row: dict) -> str:
@@ -148,7 +165,7 @@ def select(args, shard_dir: Path):
             if line.strip():
                 item = json.loads(line)
                 exclude.setdefault(item['id'], item.get('reason_code') or 'held_case_excluded')
-    needles = reserved_needles(args.reserved) if args.reserved else None
+    needles = index_needles(reserved_needles(args.reserved)) if args.reserved else None
     reserved_cache, reserved_groups = {}, set()
     protected = json.loads(args.protected.read_text()) if args.protected else None
     shard_files = [open(shard_dir / f'{i:04d}.jsonl', 'wb') for i in range(args.shards)]
@@ -296,6 +313,7 @@ def render_shard(job):
     records = kept
     result['decontaminated'] = result['records'] - len(records)
     if not records:
+        write_done(Path(out_dir), tok_name, stem, result)
         return result
     rows = {}
     for mode in ('full', 'program-header'):
@@ -375,7 +393,17 @@ def render_shard(job):
     path = Path(out_dir) / 'omissions' / tok_name / f'{stem}.jsonl'
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(''.join(canonical(o) + '\n' for o in omissions))
+    write_done(Path(out_dir), tok_name, stem, result)
     return result
+
+
+def write_done(work: Path, tok_name: str, stem: str, result: dict):
+    """Resume marker, written last and atomically: a job with a marker is never rendered again."""
+    done = work / 'done' / tok_name / f'{stem}.json'
+    done.parent.mkdir(parents=True, exist_ok=True)
+    tmp = done.with_suffix('.tmp')
+    tmp.write_text(json.dumps(result))
+    os.replace(tmp, done)
 
 
 # ---------------------------------------------------------------- merge
@@ -514,8 +542,21 @@ def main(argv=None):
         p.error(f'refusing to overwrite a finished render: {out}')
     t0 = time.time()
     shard_dir = out / 'work' / 'selected'
-    shard_dir.mkdir(parents=True, exist_ok=True)
-    omissions, counts, blocked, protected_cache, test_groups, reserved_groups = select(a, shard_dir)
+    state_path = out / 'work' / 'selection-state.json'
+    if state_path.exists():  # resume: selection is deterministic and already done
+        state = json.loads(state_path.read_text())
+        omissions, counts, blocked = state['omissions'], Counter(state['counts']), state['blocked']
+        protected_cache, test_groups, reserved_groups = state['protected'], set(state['test_groups']), set(state['reserved_groups'])
+        print(json.dumps({'resumed_selection': True}), flush=True)
+    else:
+        shutil.rmtree(out / 'work', ignore_errors=True)
+        shard_dir.mkdir(parents=True, exist_ok=True)
+        omissions, counts, blocked, protected_cache, test_groups, reserved_groups = select(a, shard_dir)
+        tmp = state_path.with_suffix('.tmp')
+        tmp.write_text(json.dumps({'omissions': omissions, 'counts': counts, 'blocked': blocked,
+                                   'protected': protected_cache, 'test_groups': sorted(test_groups),
+                                   'reserved_groups': sorted(reserved_groups)}))
+        os.replace(tmp, state_path)
     held_external = held_groups_from(a.held_text)
     # Train decisions sharing a source group with a reserved-test hit go with it (whole source groups, every split's
     # program of that group): they are decontaminated exactly like held groups.
@@ -526,6 +567,15 @@ def main(argv=None):
     jobs = [(str(shard_dir / f'{s}.jsonl'), str(out / 'work'), name, blocked, a.corpus_id, held_groups)
             for s in shards for name in tokenizers]
     results = []
+    pending = []
+    for job in jobs:
+        done = out / 'work' / 'done' / job[2] / f'{Path(job[0]).stem}.json'
+        if done.exists():
+            results.append(json.loads(done.read_text()))
+        else:
+            pending.append(job)
+    print(json.dumps({'jobs': len(jobs), 'already_done': len(results)}), flush=True)
+    jobs = pending
     with Pool(a.workers, initializer=_init, initargs=(tokenizers,)) as pool:
         for i, res in enumerate(pool.imap_unordered(render_shard, jobs)):
             results.append(res)
@@ -586,7 +636,6 @@ def main(argv=None):
                             'shared feedback weight); assistant tokens counted as supervised target tokens',
         'seconds': round(time.time() - t0),
     }
-    import shutil
     for name in tokenizers:  # render omissions are kept; the per-shard documents are merged
         dst = out / 'render-omissions' / name
         dst.mkdir(parents=True, exist_ok=True)
