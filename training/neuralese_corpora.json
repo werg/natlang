@@ -37647,6 +37647,238 @@
       "required_conversion": "shared native chat renderer for full, program-header, and whole-trajectory twins; no inference or runtime qualification implied",
       "consumable_by_direct_stage": false,
       "notes": "Provider generated source annotation decisions only. Approves the exact 283 selected actions, not unselected sibling actions; toxicity and star-rating children are excluded pending revised visible-text contracts. The 186 candidate rejections remain non-admitted: 70 lacking complete successful visible input/action binding, 13 ambiguous child invocations, 79 old toxicity/rating task-contract cases, 24 protected JeFF overlaps."
+    },
+    {
+      "id": "natlang-native-turns-s72-render-20261011-v1",
+      "owner": "dgx",
+      "path": "runs/natlang-native-turns-s72-render-20261011-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: semantic-inline-curriculum-s72-teacher-turns-20261007-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "semantic-inline-curriculum-s72-teacher-turns-20261007-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "ae5b639d7972b17804a8bac7995ba8e3931ef3e198b49d8ba3f95d66a8f4e4c6",
+            "documents": 1791,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1791,
+                "supervised_tokens": 283332,
+                "tokens": 8191338,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 10127,
+            "merge_omissions": {
+              "exact_duplicate_document": 17
+            }
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "6c98d663030dac34c004633158d35f750f1ad4565f871cde0016526162f38e60",
+            "documents": 1791,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1791,
+                "supervised_tokens": 307377,
+                "tokens": 8378153,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 10156,
+            "merge_omissions": {
+              "exact_duplicate_document": 17
+            }
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "4b2278b2610ba5017102b9bb897eac602b37e6ead667a808d211bbda84b1bf6a",
+            "documents": 67533,
+            "by_split": {
+              "test": {
+                "assistant_tokens": 0,
+                "documents": 25,
+                "supervised_tokens": 5394,
+                "tokens": 18669,
+                "tool_tokens": 0
+              },
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 67508,
+                "supervised_tokens": 10547274,
+                "tokens": 69940298,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 12368,
+            "merge_omissions": {
+              "exact_duplicate_document": 709
+            }
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "8ae0356e943b4e2daf16c922a7c4419fe765f4b580422ab962b74f9c7909a7cd",
+            "documents": 67534,
+            "by_split": {
+              "test": {
+                "assistant_tokens": 0,
+                "documents": 25,
+                "supervised_tokens": 5656,
+                "tokens": 19944,
+                "tool_tokens": 0
+              },
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 67509,
+                "supervised_tokens": 11328393,
+                "tokens": 73957341,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 13135,
+            "merge_omissions": {
+              "exact_duplicate_document": 709
+            }
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "e0584f72350019b179a774deb2e60e968598ac80b527a86ad5a5ca070151c035",
+            "documents": 33083,
+            "by_split": {
+              "test": {
+                "assistant_tokens": 5352,
+                "documents": 15,
+                "opening_tokens": 742,
+                "supervised_tokens": 4610,
+                "tokens": 10245,
+                "tool_tokens": 2023
+              },
+              "train": {
+                "assistant_tokens": 15643497,
+                "documents": 33068,
+                "opening_tokens": 8602801,
+                "supervised_tokens": 7040696,
+                "tokens": 27686107,
+                "tool_tokens": 5192862
+              }
+            },
+            "max_document_tokens": 9471,
+            "merge_omissions": {
+              "exact_duplicate_document": 608
+            }
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "84e48e00ee98969b4217406648ce1551129c06799a0d3434a2392c5f2e5f283a",
+            "documents": 33227,
+            "by_split": {
+              "test": {
+                "assistant_tokens": 6465,
+                "documents": 15,
+                "opening_tokens": 1028,
+                "supervised_tokens": 5437,
+                "tokens": 11364,
+                "tool_tokens": 2073
+              },
+              "train": {
+                "assistant_tokens": 18857483,
+                "documents": 33212,
+                "opening_tokens": 9143385,
+                "supervised_tokens": 9714098,
+                "tokens": 31192419,
+                "tool_tokens": 5555172
+              }
+            },
+            "max_document_tokens": 9640,
+            "merge_omissions": {
+              "exact_duplicate_document": 464
+            }
+          }
+        }
+      },
+      "selection": {
+        "omitted:held_case_excluded": 1806,
+        "omitted:jeff_reserved_test_text": 203,
+        "omitted:not_approved": 8692,
+        "reserved_groups": 33,
+        "reserved_programs_hit": 4,
+        "selected": 69355,
+        "selected:test": 25,
+        "selected:train": 69330,
+        "source_rows": 80056
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 68,
+        "lfm25/all/train_decision_shares_held_source_group": 68,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 66434,
+        "mellum21/all/decontaminated": 68,
+        "mellum21/all/train_decision_shares_held_source_group": 68,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 66435
+      },
+      "program_header_parity": {
+        "equal": 136485,
+        "retokenization_checked": 136483
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "bc309126562db69b77f73d5ff0764371182d5223646977a1fc190c9ffc7156c9",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "2bb383731743309117be7b5a92534ce9661fc38635dfc9fd5001e0412e6406ce",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "16f5941d4a6ddc876ace120949281ca25aebee5c40581d079a6862490ccfac9c",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/natlang-native-turns-s72-render-20261011-v1/receipt.json",
+        "sources": {
+          "runs/semantic-teacher-20261005/turns.jsonl": {
+            "bytes": 4347231466,
+            "sha256": "bd4d807fffc237dbc9de5da012803c0a7ba079fa900f034322c71bb1b25eb13a"
+          }
+        },
+        "exclude_programs": [
+          {
+            "path": "runs/semantic-teacher-20261005/s72-holds.jsonl",
+            "sha256": "fe0f29940e8903ceb72714cda6c90f4d3a9bc5726d93d2a8c1c46116a0cf50bf"
+          }
+        ],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": "S72 semantic-inline curriculum teacher turns."
     }
   ],
   "coverage_backlog": [
