@@ -28522,6 +28522,66 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "Bothrelatedrecoveryprograms closed after explicitowner V65failedpredecessordisposition; original sevenDBpedia sourceinputs unchanged, noadmission/newworldcredit. Detailedauditpending."
+    },
+    {
+      "id": "luna-annotation-folder-v65-quality-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v65-annotation-folder-final-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "V3 authoritative159terminal636items500annotationmatches72runneraccepted,795files159maps exact.632child-bound4root-only. Earlierauditsretainedforcorrections. Failed135providertermination6requestsnotbudget/semanticnegative. Held."
+    },
+    {
+      "id": "luna-annotation-folder-v65-quality-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v65-annotation-folder-final-v2",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "V3 authoritative159terminal636items500annotationmatches72runneraccepted,795files159maps exact.632child-bound4root-only. Earlierauditsretainedforcorrections. Failed135providertermination6requestsnotbudget/semanticnegative. Held."
+    },
+    {
+      "id": "luna-annotation-folder-v65-quality-held-20261011-v3",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v65-annotation-folder-final-v3",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "V3 authoritative159terminal636items500annotationmatches72runneraccepted,795files159maps exact.632child-bound4root-only. Earlierauditsretainedforcorrections. Failed135providertermination6requestsnotbudget/semanticnegative. Held."
+    },
+    {
+      "id": "free-provider-google-v30-static-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v30-adapter-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "56staticprograms403matchinglabels918turns; allactualreference/visibilityaccepted. No source/traceadmission."
+    },
+    {
+      "id": "free-provider-google-v30-quality-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v30-google-choice-confidence-and-static-replay-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "512typedvalid403annotationmatches109differences no malformed. TRECcriteria visibleoriginalprovider. FourV29retries typedvalid1annotationmatch3disagreements notcontrolledbudgetcomparison. Earlier visibilitysupplement correctedv2."
+    },
+    {
+      "id": "free-provider-google-v30-source-closure-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v30-source-closure-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "56program403originalIDs/groups806question/stateleaves Popportableharnessclosure nohits; actualexecutioncomponents frozen; fullS1ownercheckpending."
     }
   ],
   "coverage_backlog": [
