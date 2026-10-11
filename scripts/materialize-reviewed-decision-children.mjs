@@ -141,6 +141,10 @@ if (values['source-label-corrections']) {
     correctionsByItem.set(correction.item_id, { ...correction, evidence_sha256: labelCorrectionSha });
   }
 }
+const verifiedLabelCorrections = labelCorrectionSha ? {
+  schema: 'natlang.verified-source-label-corrections/1', evidence_sha256: labelCorrectionSha,
+  source_cases_sha256: sourceSha, evidence_files_verified: true, corrections: [...correctionsByItem.values()],
+} : undefined;
 const reservedNeedles = [];
 for (const { value } of parseLines(reservationSourceBytes.toString('utf8'), reservationSourcePath)) {
   if (!reservedIds.has(value.id) || typeof value.state !== 'string') continue;
@@ -233,6 +237,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         program.external_source?.source_manifest_sha256 !== sha(sourceManifestBytes)))
       throw new Error(`source-quality clearance is bound to different source bytes: ${program.id}`);
     const materialized = materializeNativeRows([row], { failedRuns: true,
+      ...(verifiedLabelCorrections ? { sourceLabelCorrections: verifiedLabelCorrections } : {}),
       ...(qualityBinding ? { sourceQualityClearance } : {}) });
     if (materialized.unlinked.length) { rejected.push({ id: row.id, reason: 'action-ledger-unlinked', unlinked: materialized.unlinked }); continue; }
     const ledger = row.outcome?.invocation_ledger ?? [];
@@ -332,6 +337,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         if (approval.source_label_correction?.evidence_sha256 !== correction.evidence_sha256 ||
             approval.source_label_correction?.item_id !== id ||
             approval.source_label_correction?.item_sha256 !== itemSha ||
+            approval.source_label_correction?.source_row_sha256 !== correction.source_row_sha256 ||
             approval.source_label_correction?.input_sha256 !== correction.input_sha256 ||
             approval.source_label_correction?.original_annotation !== expected ||
             approval.source_label_correction?.corrected_label !== observed ||
@@ -345,6 +351,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         reason: approval.reason, evidence: approval.evidence,
         ...(correction ? { source_label_correction: approval.source_label_correction } : {}) };
       const approved = materializeNativeRows([row], { failedRuns: true, decisionApprovals: [decisionApproval],
+        ...(verifiedLabelCorrections ? { sourceLabelCorrections: verifiedLabelCorrections } : {}),
         ...(qualityBinding ? { sourceQualityClearance } : {}) });
       const selected = approved.turns.filter(value => value.decision.index === turn.decision.index &&
         value.training_admission?.approved === true);
