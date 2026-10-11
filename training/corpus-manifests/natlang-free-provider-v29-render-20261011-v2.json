@@ -1,0 +1,72 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-free-provider-v29-render-20261011-v2",
+  "owner": "dgx",
+  "path": "runs/natlang-free-provider-v29-render-20261011-v2",
+  "files": [
+    {
+      "path": "full/lfm25/text-data.jsonl",
+      "bytes": 1699381,
+      "sha256": "7a04cbf2b523fa892be09509d766643cdd9e9c06f2d90d446b58c9537e99036f",
+      "lines": 20
+    },
+    {
+      "path": "full/mellum21/text-data.jsonl",
+      "bytes": 1656243,
+      "sha256": "02c89d01f983725604b640aee92f9e67886da1fd146e963d88cc77f1b74a38fe",
+      "lines": 20
+    },
+    {
+      "path": "program-header/lfm25/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "program-header/lfm25/receipt.json",
+      "bytes": 1284,
+      "sha256": "7d89d127a260f57c93c5a30384f0a6b75eb7e2a8781392f4da34ac01aa6e6dba"
+    },
+    {
+      "path": "program-header/lfm25/row-stats.jsonl",
+      "bytes": 5387,
+      "sha256": "eb9d019d6ad5f00b8e6ac2cbd4fb46c0f5c8d473acd4480c3f513977e496b6cc",
+      "lines": 20
+    },
+    {
+      "path": "program-header/lfm25/text-data.jsonl",
+      "bytes": 784042,
+      "sha256": "1959a715abcf9ab5ac2612d3e65519541af0f3f8d1fc0965600a8588d2aad91b",
+      "lines": 20
+    },
+    {
+      "path": "program-header/mellum21/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "program-header/mellum21/receipt.json",
+      "bytes": 1243,
+      "sha256": "df1cf4eb1a1e2fdbb2c92a51d78346976d6255d9df54b484250db5d92f7d7a38"
+    },
+    {
+      "path": "program-header/mellum21/row-stats.jsonl",
+      "bytes": 5387,
+      "sha256": "ccf98cc8ff25869fb3702a7a8655b0e3fbc29000f5bb6b2e04dae21f97cd63a0",
+      "lines": 20
+    },
+    {
+      "path": "program-header/mellum21/text-data.jsonl",
+      "bytes": 776349,
+      "sha256": "bcd6a9e8a3d5a3be221fbcd141e51e6649e00647d40629613577bcabc5ff3e78",
+      "lines": 20
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 2959,
+      "sha256": "d884e7c55febedca84346488c0d9a6b4925ce0ea5e4da4d3471b018a8d062a04"
+    }
+  ],
+  "bytes": 4932275
+}
