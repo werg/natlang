@@ -837,6 +837,9 @@ class DirectServingModel:
 def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
                          device: str = "cpu", dtype=None) -> DirectServingModel:
     """Strictly restore a direct export into the pinned clean-base engine."""
+    if base_snapshot is None:
+        raise ValueError("a direct artifact restores into its pinned base: pass the base snapshot "
+                         "(--direct-base-snapshot, the manifest's base_binding model path)")
     artifact_dir = Path(artifact_dir).resolve(strict=True)
     manifest_path = artifact_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
@@ -973,7 +976,10 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
             raise ValueError("LFM direct checkpoint trainable names differ from the declared full-layer policy")
     else:
         from .backbone_policy import latent_backbone_parameters
+        # The latent policy names native module paths; the export's coverage declaration (like the checkpoint's
+        # student_parameters) carries the trainer's "backbone." prefix. Compare in the declaration's naming.
         declared = {name for name, _ in latent_backbone_parameters(engine.backbone)}
+        declared_prefixed = sorted(prefix + name for name in declared)
         # Restore into the original BF16 Mellum. A run-v1 trainer ordering bug
         # omitted only q/k/v/o attention projections; their values remain the
         # unchanged source-base values. Later direct runs may save the complete
@@ -983,9 +989,9 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
             for projection in ("q", "k", "v", "o"))}
         coverage = manifest.get("training_parameter_coverage") or {}
         missing = declared - set(native_parameters)
-        if sorted(declared) != coverage.get("expected_latent_policy_names"):
+        if declared_prefixed != coverage.get("expected_latent_policy_names"):
             raise ValueError("Maple latent policy parameter names differ from the export coverage declaration")
-        if sorted(missing) != coverage.get("missing_declared_names"):
+        if sorted(prefix + name for name in missing) != coverage.get("missing_declared_names"):
             raise ValueError("Maple omitted trainables differ from the export coverage declaration")
         if set(native_parameters) not in (declared, declared - allowed_attention):
             raise ValueError("Maple direct trainable names must match the complete latent policy or its declared q/k/v/o omission")
