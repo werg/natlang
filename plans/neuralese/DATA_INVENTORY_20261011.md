@@ -22,12 +22,13 @@ Already on disk, natlang-native, and in the same teacher-turn format the union w
 | Corpus | Decisions | Target tokens (est.) | Origin |
 | --- | --- | --- | --- |
 | `native-sft-v13-r2` | 111,301 | ~12.5M | gpt-6-luna teacher, exact-oracle checked |
+| `semantic-inline-curriculum-s72-teacher-turns` | 71,364 approved (80,056 total) | ~14M | DGX Qwen3.6 teacher; found unregistered and registered in this audit |
 | `bgkit-knowledge-rationalized` | 77,767 | ~4.2M | static reference demonstrations + rationales |
 | `static-lambda-rationalized-v2` | 54,753 | ~5.8M | static inline-lambda generator + rationales |
 | `clef-new-rationalized-v2` | 2,619 | ~0.24M | Clef labels |
 | `static-lambda-expansion` | 9,137 | ~0.65M | static generator, exact oracles |
 
-That is about **255k decisions and ~23M target tokens, roughly 90× what the direct stage sees**. None of these
+That is about **325k decisions and ~37M target tokens, roughly 150× what the direct stage sees**. None of these
 corpora shares a single source group with the union, so they are clean additions.
 
 Beyond them:
@@ -53,15 +54,17 @@ Yes. Nothing *inside* the native lineage was lost: every gold-text document of e
    - The direct restart silently dropped it from both lines.
 3. **Five free-provider ordinary-text packets** (1,191 train docs, 104k target tokens), admitted 2026-10-10/11, were
    never added to any line's inputs.
-4. **The rationalized static and Clef corpora** (bgkit-knowledge, static-lambda v2, clef-new; ~135k decisions) were
+4. **80k Qwen3.6 teacher turns of the s72 campaign** (`runs/semantic-teacher-20261005/turns.jsonl`) were never
+   registered: only the campaign's results file was. They are now registered and admitted.
+5. **The rationalized static and Clef corpora** (bgkit-knowledge, static-lambda v2, clef-new; ~135k decisions) were
    built 2026-10-06/07 and never trained. They are registered "verified replay" with no `training_admission`.
-5. **S1 (1.87M records) and S2.**
+6. **S1 (1.87M records) and S2.**
    - S1 was used only in S3 pilots (~2k records per family); the S3 full run never launched.
    - Its remaining hold was licensing and provenance; licensing is void since 2026-10-10.
    - S2 generated families never reached the Neuralese line.
-6. **63k of the 67k public SWE-rebench trajectories** were downloaded as the harness bench source, but only 3,843 were
+7. **63k of the 67k public SWE-rebench trajectories** were downloaded as the harness bench source, but only 3,843 were
    normalized.
-7. **Teacher campaign outputs** (DGX Qwen3.6 pools; `teacher-campaign-evidence-20261005`, 704k jsonl lines incl.
+8. **Teacher campaign outputs** (DGX Qwen3.6 pools; `teacher-campaign-evidence-20261005`, 704k jsonl lines incl.
    repeats) were never imported beyond what fed v13.
 
 Also dropped, on purpose (recorded, not lost):
@@ -79,6 +82,7 @@ records; "target tok" is the supervised decision text (estimates marked ~).
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `native-sft-v13-r2` | teacher gpt-6-luna, natlang curriculum, exact oracle | teacher turns | 111,301 (105,869 / 5,432) | ~12.5M | **admitted (this audit)** | LFM crisp student SFT 10-04 | no: render + language migration |
 | 2 | harness-bench text v2 (LFM, Mellum) | public SWE-rebench → natlang pi harness | rendered text | 3,843 (2,969 / 874) | 629,543 | admitted 10-10 | Pop LFM AR runs; dropped at the direct restart | **yes** |
+| 2b | `semantic-inline-curriculum-s72-teacher-turns-20261007-v1` (was unregistered) | teacher Qwen3.6 on semantic-s72 curriculum | teacher turns | 80,056 (71,364 approved) | ~14M | **registered + admitted (this audit)** | never | no: render |
 | 3 | `bgkit-knowledge-rationalized-20261007-v1` | static references (bgkit/Schnitzeljagd/HotpotQA) + rationales | teacher turns | 77,767 | ~4.2M | **admitted** | never | no: render + protected check |
 | 4 | `static-lambda-rationalized-20261006-v2` | static inline-lambda generator + rationales | teacher turns | 54,753 | ~5.8M | **admitted** | never | no: render |
 | 5 | `s1-full-final-20261003` | bgkit/Schnitzeljagd/public → port records, 45 families | port records | 1,870,591 | n/a | **admitted** (defects in D) | S3 pilots | no: render as natlang calls |
@@ -104,7 +108,7 @@ Excluded, with reasons recorded in the registry:
 - `mellum21-self-distill-v3`: owner rule.
 - `protected-bgkit`: never train.
 
-Registry overview: 1,393 corpora. The JSON's `registry_counts_by_class` sizes each class: training-admitted,
+Registry overview: 1,395 corpora. The JSON's `registry_counts_by_class` sizes each class: training-admitted,
 held-or-evidence, generation source, model/training state, protected evaluation. More than half of the registered
 bytes are checkpoints and run state, not data.
 
@@ -123,6 +127,8 @@ bytes are checkpoints and run state, not data.
   - `static-lambda-expansion-20261005-v1` (approved 9,137)
   - `semantic-inline-curriculum-s72-teacher-20261007-v1` (accepted, minus the leak)
   - `student-posttraining-turns-20261005` (new turns only)
+  - `semantic-inline-curriculum-s72-teacher-turns-20261007-v1`: newly registered; 71,364 approved rows outside the
+    54 held cases
 - These are recorded with `consumable_by_direct_stage: false`. Admission is not consumption: each needs the
   conversion named in the registry, which Pop owns (section D).
 - `training_admission: false`, with the reason: `maple-sft-v13-r2`, `teacher-neuralese-v13-v8`,
@@ -221,8 +227,8 @@ coordinator and owner call; no run was changed here.
 
 ## F. Next data-generation steps (cheap, natlang-native, by yield)
 
-1. **Render the admitted teacher-turn corpora** (v13, bgkit-knowledge, static-lambda v2, clef-new,
-   static-lambda-expansion): ~255k decisions, ~23M target tokens, CPU only.
+1. **Render the admitted teacher-turn corpora** (v13, s72 turns, bgkit-knowledge, static-lambda v2, clef-new,
+   static-lambda-expansion): ~325k decisions, ~37M target tokens, CPU only.
    - Use the same packet renderer, in both modes and for both tokenizers, plus the whole-trajectory render.
    - Biggest and cheapest win; Pop owns the conversion (D9–D12).
 2. **Normalize 32k resolved SWE-rebench trajectories** through the harness-bench pipeline: ~8× the current harness
@@ -244,4 +250,19 @@ coordinator and owner call; no run was changed here.
 
 ## G. Unregistered data on disk
 
-See section G of the JSON (`unregistered`). Swept: `runs/`, `/home/werg/data`, `/mnt/external`, the HF cache.
+Swept `runs/` and `/home/werg/data` (NVMe) for JSONL files over 1 MB outside the registered paths: 49 GB in 40
+directories, mostly copies or intermediates. Full list in the JSON key `unregistered`.
+
+| Path | Size | What | Action |
+| --- | --- | --- | --- |
+| `runs/semantic-teacher-20261005/turns.jsonl` (+ `admitted.jsonl`) | 6.1 GB, 80,056 turns | Qwen3.6 teacher turns, s72 | **registered and admitted** (`semantic-inline-curriculum-s72-teacher-turns-20261007-v1`) |
+| `runs/neuralese-integration-20261003/v13-full-candidate-v2/teacher.candidate.jsonl` (HDD) | 8.3 GB | pre-filter v13 candidate | omission recorded: superseded by the filtered `native-sft-v13-r2` |
+| `/home/werg/data/harness-bench/build-*/` | 1.5 GB | harness pipeline intermediates | not additional |
+| `/home/werg/data/maple-sft/maple-v13.sft.jsonl` | 3.1 GB | Maple render of v13 | duplicate (excluded) |
+| `/home/werg/data/neuralese-s3-full/records/` (files beyond the include list) | 15 GB | S3 subset of S1 | subset of S1, not additional |
+| HF cache: Toucan-1.5M, SWE-smith 66k, Multi-SWE-bench trajs, swe-rebench-v2 GLM5.1/Qwen, claude-code traces, kodcode, smoltalk, Ling-Coder-SFT, fineweb-edu, pg19, … | — | public raw datasets | not natlang-native; candidate sources for harness-style normalization (agent/SWE trajectories); register a snapshot when a converter consumes one |
+
+`/mnt/external` beyond the registered S1, v13 and S2 paths was not exhaustively re-swept (slow, contended HDD).
+`training/neuralese_data_ledger.json` remains the full source ledger for bgkit and Schnitzeljagd: 241 excluded,
+55 migrated into S1, 22 queued (e.g. `web_sds_v3` adapter missing, `natlang:v13-corpus` migration,
+`bgkit:teacher` runs, retired Python sources). Its 22 queued items are the next conversion backlog after section F.

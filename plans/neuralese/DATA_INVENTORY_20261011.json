@@ -4,14 +4,14 @@
  "doc": "plans/neuralese/DATA_INVENTORY_20261011.md",
  "registry_counts_by_class": {
   "held-or-evidence": {
-   "corpora": 1218,
-   "bytes": 164600836007,
-   "jsonl_lines": 4390781
+   "corpora": 1219,
+   "bytes": 164715719762,
+   "jsonl_lines": 4391789
   },
   "training-admitted": {
-   "corpora": 27,
-   "bytes": 121963713831,
-   "jsonl_lines": 3768476
+   "corpora": 28,
+   "bytes": 128082399893,
+   "jsonl_lines": 3850769
   },
   "protected-evaluation": {
    "corpora": 2,
@@ -61,6 +61,22 @@
    "decision": "INCLUDE in the shared direct-stage set now (already admitted). Sample by document per cohort, not by window (69,670 windows at target 1024 would swamp the native cohort).",
    "required_conversion": "none (program-header twin: optional; its system prompt is only 1,489 tokens)",
    "owner_of_conversion": null
+  },
+  {
+   "rank_value": 2.5,
+   "id": "semantic-inline-curriculum-s72-teacher-turns-20261007-v1",
+   "path": "runs/semantic-teacher-20261005/turns.jsonl",
+   "origin": "teacher model Qwen3.6-35B-A3B-NVFP4 (DGX) on the semantic-s72 inline curriculum (workbench tickets/applicants/reviews, dataset workbench, desks, edit stream, ...)",
+   "format": "natlang.teacher_training_turn.native/1",
+   "docs": 80056,
+   "split": "80,027 train / 29 test; 0 groups shared with the union",
+   "supervised_tokens_est": 14000000,
+   "admission_before": "UNREGISTERED (only results.jsonl and s72-holds.jsonl were registered)",
+   "last_use": "never",
+   "consumable_now": false,
+   "decision": "REGISTERED and ADMITTED this audit: 71,364 approved rows outside the 54 held cases (2,088 held-case rows excluded).",
+   "required_conversion": "render (both modes, both tokenizers)",
+   "owner_of_conversion": "pop"
   },
   {
    "rank_value": 3,
@@ -530,6 +546,72 @@
   "S1 port records -> natlang call documents (45 families)",
   "v13-style teacher campaigns on local Qwen3.6 and free providers; Clef (~800k tokens/day DGX) for labels on new source pools",
   "three renders per set: full-prompt, program-header, whole-trajectory"
+ ],
+ "unregistered": [
+  {
+   "path": "runs/semantic-teacher-20261005/turns.jsonl (+ admitted.jsonl)",
+   "bytes": 6118686062,
+   "records": 80056,
+   "format": "teacher turns",
+   "origin": "Qwen3.6 DGX teacher",
+   "action": "registered now as semantic-inline-curriculum-s72-teacher-turns-20261007-v1 (admitted, approved rows outside holds)"
+  },
+  {
+   "path": "runs/neuralese-integration-20261003/v13-full-candidate-v2/teacher.candidate.jsonl (HDD)",
+   "bytes": 8345048604,
+   "records": null,
+   "format": "teacher turns (candidate)",
+   "origin": "gpt-6-luna v13 collection, pre-filter candidate of native-sft-v13-r2",
+   "action": "omission recorded: superseded candidate; native-sft-v13-r2 is the filtered admitted form; register only if the filter is to be revisited"
+  },
+  {
+   "path": "/home/werg/data/harness-bench/build-2026100{9,10}-1000/{records,prepared,replayed}.jsonl",
+   "bytes": 1530000000,
+   "records": null,
+   "format": "harness-bench pipeline intermediates",
+   "origin": "SWE-rebench normalization builds",
+   "action": "evidence/intermediates of the registered harness-bench records; not additional"
+  },
+  {
+   "path": "/home/werg/data/maple-sft/maple-v13.sft.jsonl (+ .cache shards)",
+   "bytes": 3050100000,
+   "records": 111232,
+   "format": "Maple-rendered SFT",
+   "origin": "render of native-sft-v13-r2",
+   "action": "duplicate of maple-sft-v13-r2 (registered, excluded)"
+  },
+  {
+   "path": "/home/werg/data/neuralese-s3-full/records/*.port-records.jsonl",
+   "bytes": 15222000000,
+   "records": null,
+   "format": "port records",
+   "origin": "S3 subset of S1",
+   "action": "files beyond the registered s3-subset include list; subset of S1 (admitted); not additional"
+  },
+  {
+   "path": "/home/werg/data/mellum-qat/distill-v3",
+   "bytes": 142300000,
+   "records": null,
+   "format": "self-distill",
+   "origin": "Mellum BF16",
+   "action": "same content as mellum21-self-distill-v3 (excluded by owner rule)"
+  },
+  {
+   "path": "/home/werg/data/code-snapshots/*",
+   "bytes": null,
+   "records": null,
+   "format": "code snapshots",
+   "origin": "repo snapshots for runs",
+   "action": "not training data"
+  },
+  {
+   "path": "~/.cache/huggingface/hub datasets (Toucan-1.5M, SWE-smith 66k trajectories, Multi-SWE-bench trajs, smoltalk, Ling-Coder-SFT, kodcode-lfm2.5, swe-rebench-v2 GLM5.1/qwen38, claude-code traces, fineweb-edu, pg19, ...)",
+   "bytes": null,
+   "records": null,
+   "format": "public raw datasets",
+   "origin": "public",
+   "action": "not natlang-native; sources for harness-bench-style normalization (SWE/agent trajectories) under the breadth-via-natlang rule; register a snapshot when a converter consumes one"
+  }
  ],
  "registry": [
   {
@@ -18203,6 +18285,34 @@
     "neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1"
    ],
    "audit_2026_10_11": null
+  },
+  {
+   "id": "luna-v43-exact-map37-native-conversion-v2-held-20261011-v1",
+   "owner": "pop",
+   "path": "runs/v43-exact-map37-native-conversion-review-v2-20261011-v1",
+   "class": "held-or-evidence",
+   "bytes": 114883755,
+   "jsonl_lines": 1008,
+   "admission": "held-conversion-candidate; no recurrence or runtime qualification",
+   "training_admission": false,
+   "derived_from": [
+    "luna-v43-exact-map37-native-sft-926-20261011-v1"
+   ],
+   "audit_2026_10_11": null
+  },
+  {
+   "id": "semantic-inline-curriculum-s72-teacher-turns-20261007-v1",
+   "owner": "dgx",
+   "path": "runs/semantic-teacher-20261005",
+   "class": "training-admitted",
+   "bytes": 6118686062,
+   "jsonl_lines": 82293,
+   "admission": "found unregistered in the 2026-10-11 data audit (plans/neuralese/DATA_INVENTORY_20261011.md): decision-level teacher turns of the 2,183 admitted s72 trajectories; 71,364 of 80,056 rows carry training_admission.approved=true; 2,088 rows belong to held cases",
+   "training_admission": true,
+   "derived_from": [
+    "semantic-inline-curriculum-s72-teacher-20261007-v1"
+   ],
+   "audit_2026_10_11": "REGISTERED and ADMITTED this audit: 71,364 approved rows outside the 54 held cases (2,088 held-case rows excluded)."
   }
  ]
 }
