@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v80-v1-failed-launch-disposition-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v80-v41-prefix-runtimev17-v1",
+  "files": [
+    {
+      "path": "root-launch-failure-v1/launch-failure.json",
+      "bytes": 754,
+      "sha256": "ffee33327227dae816bd46f4b63546b3f24f6920813e10c284cbdd1aa529ade6"
+    },
+    {
+      "path": "root-supervisor-v1.log",
+      "bytes": 548,
+      "sha256": "47d01c1b5df23e743345aa4a4d0b3449105e761fa88fac71ad5aff581fdb06e0"
+    }
+  ],
+  "bytes": 1302
+}
