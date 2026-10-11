@@ -105,6 +105,7 @@ class _FakeEngine:
 
     def __init__(self, store):
         self.store, self.dialect, self.width, self.max_block, self.model_name = store, DIALECT, 4, 8, "fake"
+        self.context = 64  # /v1/neuralese/info reports the served context (bac56086)
         self.heads = SimpleNamespace(cutoff=6)
         self.projections = {}
         self.written = 0
