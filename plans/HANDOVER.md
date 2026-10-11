@@ -11338,3 +11338,11 @@ Owner rejected frequent eval/checkpoints; regular native cadence remains200/200,
 Lion finite300-update comparison closed (heldCE5.098805 vsbase6.192337; behavior25/48 vs26/48;326.36s). Muon1e-5 stopped100 atresponseKL.535719, preserving negative evidence. Declared Muon3e-6 follow-up launched from same cleanbase/data/seed/schedule, regular measurements200/final300; previous unlaunched5e-7 plan preserved. No default optimizer change. Five Luna lanes approved forV19 pairedrepeat14, same world/seed asV18, held qualification only.
 
 Recipe/hash checks and actual runs used; automated tests were not run this turn under the developer instruction against unrequested tests.
+
+### 18:40 UTC — actual best225 continuation and launcher corrections
+
+Muon3e-6 finite300 comparison: heldCE1.048767 vsbase6.192337, behavior26/48 samebase,462.04s, peak3.038GiB. Periodic16-rowresponseKL.270145 was withinstopbound, but final48-rowresponseKL1.161699 fails behaviorgate; notqualified and nooptimizerdefaultchange.
+
+Best225 heads_lr3e-5 continuation launched through sharedcontainerlauncher at `native-e2e-best225-heads-lr3e-5-diagnostic-launch-v3`. Original preparedv1 omitted diagnosticparity and failed beforetraining; v2 correctedparity but collidedwith same-parent launcher-runtime. Bothfailure receipts retained. V3freshdirectory corrects theseoperationalissues, unchangedapprovednumericparameters. Sharedlauncher now checksdeclaredparity inhostpreflight and names frozenruntime byreceiptstem so differentretryreceipts cannotcollide. AST/diffchecks only; no automatedtests thisturn.
+
+Closednativev3finalcheckpoint and directbase1000 checkpoint/best were SHAverified relocatedto canonical.local/checkpoint-storage-relief withoriginalpaths symlinked. Nooptimizer state discarded. Closedstep600servingexport similarlyrelocated withmanifest/payloadhashes preserved.

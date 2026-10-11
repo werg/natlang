@@ -126,6 +126,9 @@ def read_direct_recipe(path: Path) -> dict:
     stage = recipe.get("stage")
     if not isinstance(stage, dict) or not isinstance(stage.get("id"), str) or not isinstance(stage.get("kind"), str):
         raise ValueError("recipe must declare stage.id and stage.kind")
+    from natlang_neuralese.train.line_parity import check_declared_stage
+
+    check_declared_stage(recipe)
     return recipe
 
 
@@ -242,7 +245,7 @@ def main(argv=None) -> int:
     # package now, then bind it over its canonical path inside the container.
     # The recipe runner still makes its usual per-run runtime snapshot from
     # these exact bytes, never from a moving development tree.
-    launcher_package = output.parent / "launcher-runtime" / "natlang_neuralese"
+    launcher_package = output.parent / (metadata.stem + ".launcher-runtime") / "natlang_neuralese"
     shutil.copytree(package, launcher_package, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     launcher_code = {str(path.relative_to(launcher_package)): sha256(path)
                      for path in sorted(launcher_package.rglob("*.py")) if path.is_file()}
