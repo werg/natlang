@@ -64,6 +64,7 @@ cat > "$OUT/shard.sh" <<EOF
 set -eu
 D=\$1
 [ -e "\$D/summary.json" ] && exit 0
+"$ROOT/scripts/disk_guard.sh" "$OUT"  # pause while the NVMe is short (coordinator 2026-10-12)
 nice -n 10 node "$ROOT/ts-host/bin/natlang.mjs" run "$ROOT/applications/pi" -- replay --in "\$D/prepared.jsonl" --out "\$D/replayed.jsonl" 2>> "\$D/replay.log"
 cd "$ROOT/training/neuralese"
 nice -n 10 "$PY" -m natlang_neuralese.harness_bench.records --replayed "\$D/replayed.jsonl" --surface "$OUT/surface.json" \\
