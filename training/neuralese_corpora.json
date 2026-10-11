@@ -33858,6 +33858,42 @@
         "luna-v43-prefix-646-runtimev18-static-held-20261011-v1"
       ],
       "notes": "Immutable snapshot of the initial plan, final approved plan, root review/approval, five worker queues, static source-review materials, and frozen-runtime file manifest. campaign-launch.json, active journals, logs, jobs, and results are excluded until closure."
+    },
+    {
+      "id": "luna-v43-runtimev18-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-runtimev18-closed-raw-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-provider-generation-closed-no-admission",
+      "source_class": "provider-generation-raw-results",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "closed held generation evidence; output quality review is separate; no training, native trajectory, or recurrence admission",
+      "derived_from": [
+        "luna-v43-prefix-646-runtimev18-approved-inputs-held-20261011-v1",
+        "luna-v43-prefix-646-runtimev18-static-held-20261011-v1"
+      ],
+      "notes": "34 programs, 256 source items, 986 saved turns. Full closed worker queues, journals, logs and outputs preserved. Completion is not semantic correctness; preserve 15 source-label disagreements and all failure details."
+    },
+    {
+      "id": "luna-v43-runtimev18-quality-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-runtimev18-closeout-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-quality-review-no-admission",
+      "source_class": "provider-output-quality-review",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "read-only output quality and request-visibility accounting; no training, native trajectory, or recurrence admission",
+      "derived_from": [
+        "luna-v43-runtimev18-closed-raw-held-20261011-v1",
+        "luna-v43-prefix-646-runtimev18-static-held-20261011-v1"
+      ],
+      "notes": "Exact per-case/source/result provenance and source-label agreement review. SDK turn starts are distinct from physical network requests and billable usage; physical request and total billing counts are unavailable."
     }
   ],
   "coverage_backlog": [
