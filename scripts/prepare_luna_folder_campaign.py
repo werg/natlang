@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from freeze_training_runtime import tree_identity
+from start_reviewed_luna_campaign import predecessor_lanes, validate_predecessor_identity
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -341,6 +342,10 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
 
     predecessor_campaign = args.predecessor_campaign.expanduser().resolve() if args.predecessor_campaign else None
     predecessors = load_predecessors(predecessor_campaign) if predecessor_campaign else []
+    # A rolling predecessor launch may have recorded only some lanes so far.
+    # Use the starter's exact contract before emitting an unlaunchable plan.
+    validate_predecessor_identity(predecessors)
+    predecessor_lanes([{"number": number} for number in range(1, args.workers + 1)], predecessors)
     now = datetime.now(timezone.utc).isoformat()
     out.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive creation protects prior attempts and makes every queue/log path fresh.
