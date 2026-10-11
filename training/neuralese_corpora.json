@@ -37910,6 +37910,46 @@
       "required_conversion": "shared native chat renderer for full, program-header, and whole-trajectory twins; admission does not imply runtime qualification",
       "consumable_by_direct_stage": false,
       "notes": "Source task visible contract defines toxic as insult/degrading language, threats, hate, or identity attacks; policy disagreement alone is not toxic. Four items were individually reviewed for explicit demeaning/personal insults: dv-41ee7c22c35fc354a123, dv-593249d30383ce87cc48, dv-e33f4b23ca733ded3262, dv-f3c90592b9c621fecd20. Ambiguous political/boundary mismatches and clear non-toxic false positives/false negatives are explicitly excluded. Frozen v20 generation results and original source annotations are unchanged. These examples receive zero independent-world credit."
+    },
+    {
+      "id": "port-record-calls-s3-20261011-v2",
+      "path": "data/neuralese/corpora/port-record-calls-s3-20261011-v2",
+      "derived_from": [
+        "s3-subset-20261005",
+        "s1-full-final-20261003"
+      ],
+      "split": "per port record (S3 subset: 25,000 train per family cap plus 400 eval rows per family, kept as test/validation)",
+      "admission": "D16 conversion of the S3 subset of S1 (45 families) into natlang call programs; consume and continue records; reconstruct none in S1",
+      "owner": "dgx",
+      "include": [
+        "runtime-page.json",
+        "ir/*/*.ir.jsonl",
+        "ir/*/build.json",
+        "ir/*/omissions.jsonl",
+        "turns/*/*.turns.jsonl.zst",
+        "turns/*/*.rows.jsonl.zst",
+        "turns/*/*.summary.json"
+      ],
+      "source_class": "public-dataset-port-records-as-natlang-call-programs (static reference replay through the native runtime, zero model calls)",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect; record splits kept (train/validation/test per port record), JeFF reservations checked (0 hits; D3 does not apply to S1 per plans/neuralese/JEFF_RESERVATION_OVERLAP_20261011.json), protected bgkit benchmarks removed at render (--protected data/neuralese/corpora/protected-bgkit-20261003/bgkit-benchmarks.protected.json). Licences are provenance facts only (owner rule 2026-10-10)",
+      "review_status": "replayed and admitted per case (admitRow); every decision approved by the materializer; generation in progress (resumable unit), manifest published when the run completes",
+      "required_conversion": "render with scripts/neuralese_data/render_native_turn_corpus.py (decompress turns/*/*.turns.jsonl.zst; pass --protected); evidence over 32,000 characters omitted (ir/*/omissions.jsonl: evidence-over-cap-needs-paged-program) and needs a paged-reading program shape",
+      "consumable_by_direct_stage": false,
+      "build": {
+        "builder": "ts-host/scripts/inline-curriculum/build-port-record-calls.mjs",
+        "replay": "ts-host/scripts/inline-curriculum/replay-port-record-calls.mjs",
+        "driver": "scripts/neuralese_data/port_record_calls.sh",
+        "options": {
+          "items_per_case": 4,
+          "shard_cases": 250,
+          "max_evidence_chars": 32000
+        }
+      },
+      "notes": "Each port record is one item of an answer_collection() directory-reducer program (4 items per case): the root iterates the item files with iterateOn and calls an inline nl<string> child per item; the reference child reads item.evidence (following the runtime's 2,000-character cut-off pages with read_page) and returns the record's target (direct answer, children act without reasoning). Root turns carry stock action notes (untrained reasoning) until rationalized. Turn format natlang.teacher_training_turn.native/1, runtime contract 19. Model-facing texts recorded as unmeasured debt in plans/MODEL_FACING_CHANGES.md.",
+      "page_size": "see runtime-page.json: tool-output page of the rebuilt ts-host at 65,536 tokens (28,672 characters) and its build commit",
+      "runtime_cutover": "Runtime cutover 2026-10-12 (coordinator): ts-host dist rebuilt with 8267b177 (tool-output page = an eighth of the context budget instead of a fixed 2,000 characters); one corpus version = one page size, recorded in runtime-page.json and in every shard summary (runtime). Holds exactly the S3 shards not replayed in v1 (same IR shards, numbering shared; SKIP_DONE_IN); v1 + v2 together are the whole S3 conversion, disjoint by shard.",
+      "continues": "port-record-calls-s3-20261011-v1"
     }
   ],
   "coverage_backlog": [
