@@ -48,7 +48,6 @@ import os
 import shlex
 import subprocess
 import sys
-import threading
 import time
 
 STATE = os.path.expanduser(os.environ.get('NATLANG_MEMORY_LEDGER', '~/.local/state/natlang/memory-ledger.json'))
@@ -106,8 +105,10 @@ def mem_free():
     raise RuntimeError('MemFree missing from /proc/meminfo')
 
 
-CACHE_ROOTS = ['~/natlang', '~/data', '~/natlang-data-nvme', '~/.cache', '/mnt/external/natlang-development-data',
-               '/mnt/external/bgkit-data/models']
+# The external HDD is left out (2026-10-12: a walk of /mnt/external sat in uncommitted D state for 80 min and held the lock);
+# balloon_reclaim evicts what the walk cannot reach. Add roots with NATLANG_CACHE_ROOTS.
+CACHE_ROOTS = ['~/natlang', '~/data', '~/natlang-data-nvme', '~/.cache']
+RELEASE_SECONDS = 240  # a walk stops itself after this long; a lock older than twice this is taken over
 
 
 def reclaimable():
@@ -115,24 +116,48 @@ def reclaimable():
     return mem_available() - mem_free()
 
 
-def release_cache(roots=None, min_bytes=16 << 20):
+def start_release():
+    """Run a cache release as its own detached process (never in the caller): a walk stuck in uncommitted I/O on a slow
+    disk then blocks only itself. Returns the Popen."""
+    idle = ['ionice', '-c3'] if shutil.which('ionice') else []
+    return subprocess.Popen(idle + [sys.executable, os.path.abspath(__file__), 'release-cache'],
+                            stdout=subprocess.PIPE, text=True, start_new_session=True)
+
+
+def take_release_lock():
+    """Claim the single-walk slot: a pid file instead of a flock, so a walk stuck in D state (unkillable, lock held)
+    cannot block later releases beyond RELEASE_SECONDS x 2. None when a live walk is within its time."""
+    path = STATE + '.release.pid'
+    try:
+        info = json.load(open(path))
+        if time.time() - info['started'] < 2 * RELEASE_SECONDS and os.path.exists(f'/proc/{info["pid"]}'):
+            return None
+    except (OSError, ValueError, KeyError):
+        pass
+    json.dump({'pid': os.getpid(), 'started': time.time()}, open(path, 'w'))
+    return path
+
+
+def release_cache(roots=None, min_bytes=16 << 20, seconds=None):
     """posix_fadvise(DONTNEED) on every file of at least ``min_bytes`` under the roots: drops only clean cached
     pages (dirty pages and mapped pages in use stay), so running jobs at worst re-read from disk. One walk at a
     time: the roots include a slow disk with millions of small files, and concurrent walks only thrash it."""
     roots = roots or [r for r in os.environ.get('NATLANG_CACHE_ROOTS', '').split(':') if r] or CACHE_ROOTS
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
-    lock = open(STATE + '.release.lock', 'w')
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        lock.close()
+    lock = take_release_lock()
+    if not lock:
         return {'skipped': 'another cache release is running'}
+    deadline = time.time() + (seconds or RELEASE_SECONDS)
     before, files = mem_free(), 0
     for root in roots:
         for directory, subdirs, names in os.walk(os.path.expanduser(root)):
+            if time.time() > deadline:
+                break
             # Hidden directories (.git, sync histories) and package trees hold many small files and no data a job reads.
             subdirs[:] = [d for d in subdirs if not d.startswith('.') and d not in ('node_modules', 'proc')]
             for name in names:
+                if time.time() > deadline:
+                    break
                 path = os.path.join(directory, name)
                 try:
                     if os.path.islink(path) or os.path.getsize(path) < min_bytes:
@@ -147,7 +172,8 @@ def release_cache(roots=None, min_bytes=16 << 20):
                     pass
     walked = mem_free()
     ballooned = balloon_reclaim()
-    lock.close()
+    with contextlib.suppress(OSError):
+        os.remove(lock)
     return {'files': files, 'free_before_gb': round(before / GIB, 1), 'free_after_walk_gb': round(walked / GIB, 1),
             'ballooned_gb': ballooned, 'free_after_gb': round(mem_free() / GIB, 1)}
 
@@ -389,6 +415,23 @@ def waiting_order(state, now=None):
     return sorted(entries, key=lambda item: (-PRIORITIES[item[1]['priority']], item[1]['since'], item[0]))
 
 
+def may_start(order, unit, can_backfill, fit):
+    """Whether a waiting job may start now. The head starts when it fits. Others backfill when they fit by real headroom
+    and are resumable (so they are preemptible if the head needs the room): a big waiting head must not starve the queue
+    behind it (2026-10-12: a 1 GB watcher waited behind a 75 GB high job while 17 GB was free)."""
+    return fit and (order[0][0] == unit or can_backfill)
+
+
+def plan_launch(state, head, wanted, backfill, free):
+    """Whether the guard relaunches a requeued unit now: the backfill candidate when the head waits for room, else the
+    head itself when it fits. Never while it is still active or one of its containers still runs."""
+    name, entry = backfill if backfill else (head, wanted)
+    return bool(entry.get('requeued') and time.time() >= entry['not_before'] and name not in state['claims']
+                and unit_state(name)[0] not in ('active', 'activating', 'deactivating')
+                and (backfill or fits(free, entry['budget'], entry['reserve']))
+                and not any(container_running(n) for n in entry.get('containers', ())))
+
+
 def fits(free, budget, reserve):
     """Real-headroom admission: free is MemAvailable minus what running claims still reserve."""
     return free - budget >= reserve
@@ -500,8 +543,7 @@ def run(args):
     # In a thread: the walk takes minutes and the waiter must stay in the queue (refreshed every loop) meanwhile, or the
     # guard cannot see it and preempts nothing.
     if mem_free() < budget + reserve and reclaimable() >= GIB:
-        threading.Thread(target=lambda: print(json.dumps({'released_cache': release_cache()}), file=sys.stderr),
-                         daemon=True).start()
+        start_release()
     deadline = time.time() + args.wait
     since = time.time()
     while True:
@@ -518,10 +560,12 @@ def run(args):
             now = time.time()
             waiting[unit] = {'priority': priority, 'since': waiting.get(unit, {}).get('since', since), 'seen': now,
                              'budget': budget, 'reserve': reserve}
-            head = waiting_order(state, now)[0][0]
-            # Head of the priority queue only: a lower job does not slip in ahead of a higher one that waits for room
-            # (the guard preempts lower units for the head when real headroom is short).
-            if head == unit and fits(free, budget, reserve):
+            order = waiting_order(state, now)
+            head = order[0][0]
+            # The head of the priority queue starts when it fits (the guard preempts lower units for it when real
+            # headroom is short); others backfill when they fit and are resumable.
+            backfill = args.resumable if args.resumable is not None else args.cls != 'service'
+            if may_start(order, unit, backfill, fits(free, budget, reserve)):
                 spec = {'unit': unit, 'budget': budget, 'host_max_gb': args.host_max_gb, 'cls': args.cls,
                         'oom_policy': args.oom_policy, 'workdir': os.path.abspath(args.workdir), 'env': args.env,
                         'stop_seconds': args.stop_seconds, 'command': args.command, 'priority': priority,
@@ -734,12 +778,18 @@ def guard(args):
     emergency = int(getattr(args, 'emergency_gb', EMERGENCY_GB) * GIB)
     stopped = {}
     pending = {}  # unit -> {'deadline', 'container'}: graceful stops in progress
-    next_release, release = 0, None
+    next_release, release, release_started = 0, None, 0
     while True:
         # CUDA allocates only from MemFree, and the warm-up's memory preflight refuses an update when MemFree is
         # short: release clean page cache well above the floor, one walk at a time, at idle I/O priority, and only
         # when there is cache worth dropping (MemFree is also short when jobs simply use it). A walk takes minutes on
         # the external disk: after one that freed little, wait half an hour before the next.
+        if release is not None and release.poll() is None and time.time() - release_started > 2 * RELEASE_SECONDS:
+            # Stuck (uncommitted I/O on a slow disk): abandon it. The kill is best effort, and its lock lapses by itself.
+            with contextlib.suppress(OSError):
+                release.kill()
+            next_release = time.time() + 300
+            release = None
         if release is not None and release.poll() is not None:
             try:
                 result = json.loads(release.communicate()[0] or '{}')
@@ -755,7 +805,8 @@ def guard(args):
             own_unit = ['systemd-run', '--user', '--quiet', '--pipe', '--wait', '--collect',
                         '-p', 'MemoryMax=26G', '-p', 'MemorySwapMax=0'] if shutil.which('systemd-run') else []
             release = subprocess.Popen(own_unit + idle + [sys.executable, os.path.abspath(__file__), 'release-cache'],
-                                       stdout=subprocess.PIPE, text=True)
+                                       stdout=subprocess.PIPE, text=True, start_new_session=True)
+            release_started = time.time()
         with ledger() as state:
             all_live = live_claims(state, gpu_usage())
             live = {u: c for u, c in all_live.items() if time.time() - stopped.get(u, 0) > 60}
@@ -779,6 +830,7 @@ def guard(args):
             queue = waiting_order(state)
             if queue and not pending:
                 head, wanted = queue[0]
+                backfill = None
                 if not unit and not fits(free, wanted['budget'], wanted['reserve']):
                     # A waiting higher priority job: stop the lowest priority resumable units (one graceful stop at a
                     # time; the next cycle re-plans with what that stop freed).
@@ -786,10 +838,16 @@ def guard(args):
                                             time.time() - stopped[u] > 60}, free, wanted, graces)
                     if plan:
                         unit, reason = plan[0], f'preempted for {head} ({wanted["priority"]})'
-                elif (not unit and wanted.get('requeued') and time.time() >= wanted['not_before']
-                      and head not in state['claims'] and unit_state(head)[0] not in ('active', 'activating', 'deactivating')
-                      and fits(free, wanted['budget'], wanted['reserve'])
-                      and not any(container_running(n) for n in wanted.get('containers', ()))):
+                if not unit and not fits(free, wanted['budget'], wanted['reserve']):
+                    # Nothing to preempt for the head (or its blockers are protected): relaunch the first requeued unit
+                    # behind it that fits now instead of leaving the room idle.
+                    for name, entry in queue[1:]:
+                        if (entry.get('requeued') and time.time() >= entry['not_before']
+                                and fits(free, entry['budget'], entry['reserve'])):
+                            backfill = (name, entry)
+                            break
+                if not unit and plan_launch(state, head, wanted, backfill, free):
+                    head, wanted = backfill if backfill else (head, wanted)
                     state['claims'][head] = claim_for(wanted['spec'])
                     state['waiting'].pop(head)
                     state['events'].append({'time': time.time(), 'event': 'relaunched', 'unit': head, 'free': free})
