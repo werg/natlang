@@ -1210,6 +1210,78 @@ const CHECKER_REFUSAL = /"?ok"?\s*:\s*false\s*,\s*"?certificate"?\s*:/;
 export type NativeDecisionHold = { trajectory_id: string; source_row_sha256: string;
   decision_index: number; reason: string; evidence: string[] };
 
+/** Permit an exact sibling review on a rejected ordinal batch only when the
+ * parent's sole quality failure is another item's out-of-tolerance label.
+ * The per-decision approval is still checked against the exact target below. */
+function onlyBoundedOrdinalSiblingFailure(row: NativeRow): boolean {
+  const program = row.task.program_ir as ProgramRecord | undefined;
+  const oracleSpec = program?.semantics?.oracle as Dict | undefined;
+  const outcome = row.outcome;
+  if (oracleSpec?.normalization !== 'ordinal-distance-record' ||
+      (outcome.quality_pending as unknown[] | undefined)?.length || !outcome.oracle ||
+      typeof outcome.oracle !== 'object') return false;
+  const oracle = outcome.oracle as Dict;
+  if (oracle.level !== 'normalized' || typeof oracle.verdict !== 'string') return false;
+  let verdict: Dict;
+  try { verdict = JSON.parse(oracle.verdict) as Dict; } catch { return false; }
+  if (verdict.accepted !== false || !Array.isArray(verdict.entries) || !Array.isArray(verdict.errors) ||
+      !verdict.entries.length) return false;
+  const failed = (verdict.entries as Dict[]).filter(entry => entry.accepted === false);
+  if (!failed.length || (verdict.entries as Dict[]).some(entry =>
+      typeof entry.key !== 'string' || !Number.isSafeInteger(entry.ordinal_distance) ||
+      typeof entry.accepted !== 'boolean' || (entry.accepted && Number(entry.ordinal_distance) > 1) ||
+      (!entry.accepted && Number(entry.ordinal_distance) <= 1))) return false;
+  const expectedErrors = failed.map(entry => `ordinal_distance_exceeded:${String(entry.key)}`).sort();
+  if (canonical((verdict.errors as unknown[]).map(String).sort()) !== canonical(expectedErrors)) return false;
+  const files = outcome.files_check as Dict | undefined;
+  const fileErrors = Array.isArray(files?.errors) ? files!.errors as unknown[] : [];
+  if (canonical(files?.failed) !== canonical(['decisions.json']) ||
+      fileErrors.length !== expectedErrors.length ||
+      canonical(fileErrors.map(value => String(value).replace(/^decisions\.json:/, '')).sort()) !==
+        canonical(expectedErrors) || (files?.pending as unknown[] | undefined)?.length) return false;
+  const checks = outcome.checks as Dict | undefined;
+  if (!checks || checks.files !== false || checks.answer !== false || Object.entries(checks)
+      .some(([key, value]) => key !== 'files' && key !== 'answer' && value !== true)) return false;
+  return true;
+}
+
+/** Permit a reviewed rubric correction from a rejected exact-label batch only
+ * when its sole oracle/file failure is the decisions map. The selected child
+ * must bind one exact source item, its original expected label and its actual
+ * generated boolean to the immutable correction receipt in the approval. */
+function onlyReviewedSourceLabelSiblingFailure(row: NativeRow,
+  approvals: ReadonlyMap<number, NativeDecisionApproval>): boolean {
+  const program = row.task.program_ir as ProgramRecord | undefined;
+  const outcome = row.outcome;
+  const oracle = outcome.oracle as Dict | undefined;
+  const files = outcome.files_check as Dict | undefined;
+  const checks = outcome.checks as Dict | undefined;
+  if (oracle?.level !== 'exact' || oracle.accepted !== false ||
+      (outcome.quality_pending as unknown[] | undefined)?.length ||
+      canonical(files?.failed) !== canonical(['decisions.json']) ||
+      (files?.errors as unknown[] | undefined)?.length || (files?.pending as unknown[] | undefined)?.length ||
+      !checks || checks.files !== false || checks.answer !== false || Object.entries(checks)
+        .some(([key, value]) => key !== 'files' && key !== 'answer' && value !== true)) return false;
+  const expected = program?.semantics?.expected;
+  const observed = outcome.value;
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected) ||
+      !observed || typeof observed !== 'object' || Array.isArray(observed)) return false;
+  const sourceExpected = expected as Dict, generated = observed as Dict;
+  for (const [index, approval] of approvals) {
+    const correction = approval.source_label_correction;
+    if (!correction) continue;
+    const itemText = program?.semantics?.folder_files?.[`items/${correction.item_id}.json`];
+    if (typeof itemText !== 'string' || hexDigest(itemText) !== correction.item_sha256 ||
+        sourceExpected[correction.item_id] !== correction.original_annotation ||
+        generated[correction.item_id] !== correction.actual_generated_value ||
+        correction.corrected_label !== correction.actual_generated_value ||
+        correction.corrected_label === correction.original_annotation ||
+        !row.trajectory[index]?.assistant) continue;
+    return true;
+  }
+  return false;
+}
+
 /**
  * Scripted authored-source references can prove that a declared source world
  * runs, but they are not teacher observations or training approvals. Keep the
@@ -1274,7 +1346,15 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     const sourceQualityReview = options.sourceQualityClearance ?? (row.source_ref as Dict | undefined)?.source_quality_clearance;
     const sourceQualityBinding = sourceQualityClearanceForProgram(sourceQualityReview, program);
     // Direct exports and failed-run pair discovery must honor the same source holds as collection/admission.
-    if (trainingQualityReason(row) || runtimeFailureReason(row) || quarantineReason(program) || retiredFamily(program)) { rejectedRows++; continue; }
+    const rowQualityReason = trainingQualityReason(row);
+    const hasExactDecisionReview = (options.decisionApprovals ?? []).some(approval => approval.trajectory_id === row.id);
+    const reviewedOrdinalSibling = options.failedRuns === true && hasExactDecisionReview &&
+      rowQualityReason === 'quality_pending' && onlyBoundedOrdinalSiblingFailure(row);
+    const reviewedLabelCorrectionSibling = options.failedRuns === true && hasExactDecisionReview &&
+      rowQualityReason === 'quality_pending' && onlyReviewedSourceLabelSiblingFailure(row, reviewedApprovals);
+    if ((rowQualityReason && !reviewedOrdinalSibling && !reviewedLabelCorrectionSibling) || runtimeFailureReason(row) || quarantineReason(program) || retiredFamily(program)) {
+      rejectedRows++; continue;
+    }
     // Rows from before conversation rollover was retired contain checkpoint notes and cut contexts.
     const rolledOver = row.trajectory.some(turn => (turn as Dict | undefined)?.phase === 'checkpoint');
     if ((!row.outcome.accepted && !options.failedRuns) || rolledOver) { rejectedRows++; continue; }
