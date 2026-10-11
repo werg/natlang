@@ -566,10 +566,50 @@ def validate_direct_stage_recipe(recipe):
                 not isinstance(item['path'], str) or not item['path'] or
                 not isinstance(item['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', item['sha256'])):
             raise ValueError('invalid direct-stage lineage evidence binding')
+    if stage['kind'] == 'raw_recurrence_training':
+        runtime_reports = [item for item in evidence if item['role'] == 'adapted_runtime']
+        if len(runtime_reports) != 1:
+            raise ValueError('direct recurrence requires exactly one pinned adapted_runtime lineage report')
+        if 'heads' not in inputs:
+            raise ValueError('direct recurrence requires the exact heads input bound by adapted_runtime')
     outputs = recipe.get('outputs')
     if not isinstance(outputs, dict) or not isinstance(outputs.get('directory'), str):
         raise ValueError('direct stage requires a declared output directory')
     return recipe
+
+
+def verify_direct_stage_lineage_gates(stage, inputs, lineage_evidence):
+    """Bind direct recurrence to the exact adapted-runtime gate for its heads.
+
+    A direct stage has no in-recipe predecessor graph, so the runtime report is
+    an explicit, hashed lineage input. Validate it before creating the output
+    directory or starting the trainer.
+    """
+    if stage['kind'] != 'raw_recurrence_training':
+        return []
+    reports = [item for item in lineage_evidence if item['role'] == 'adapted_runtime']
+    if len(reports) != 1:
+        raise ValueError('direct recurrence requires exactly one pinned adapted_runtime lineage report')
+    heads_sha = inputs.get('heads', {}).get('sha256')
+    if not heads_sha:
+        raise ValueError('direct recurrence requires an exact heads input')
+    item = reports[0]
+    try:
+        report = json.loads(Path(item['path']).read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError('adapted_runtime lineage evidence is not a readable JSON report') from exc
+    if (not isinstance(report, dict) or
+            report.get('schema') != 'natlang.latent-sketch-diagnostic/1'):
+        raise ValueError('adapted_runtime lineage report has an unsupported schema')
+    require_gate(report, 'text_warmup_runtime')
+    if report.get('parent_sha256') != heads_sha:
+        raise ValueError('adapted_runtime lineage report belongs to different heads weights')
+    if report.get('weights_unmodified') is not True or report.get('retained_trained_heads') is not True:
+        raise ValueError('adapted_runtime lineage report does not attest retained, unmodified trained heads')
+    return [{'role': 'adapted_runtime', 'report_sha256': item['sha256'],
+             'heads_sha256': heads_sha, 'runtime_qualified': True,
+             'output_reference_qualified': True, 'weights_unmodified': True,
+             'retained_trained_heads': True}]
 
 
 def stage_quantization(recipe, stage, parameters, reports, init_mix=None):
@@ -857,6 +897,8 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
         if sha(path) != item['sha256']:
             raise ValueError('direct-stage lineage evidence hash mismatch: ' + item['role'])
         lineage_evidence.append({'role': item['role'], 'path': str(path), 'sha256': item['sha256']})
+    lineage_gate_verifications = verify_direct_stage_lineage_gates(
+        recipe['stage'], inputs, lineage_evidence)
 
     package = Path(__file__).parents[1]
     actual_code = {str(path.relative_to(package)): sha(path)
@@ -889,7 +931,8 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
             'stage': stage, 'inputs': inputs, 'device': device,
             'runtime_image': recipe['runtime']['image'], 'frozen_code': frozen_code,
             'parameters': parameters, 'child_argv': command, 'stage_output': str(stage_output),
-            'lineage': recipe['lineage'], 'lineage_evidence': lineage_evidence}
+            'lineage': recipe['lineage'], 'lineage_evidence': lineage_evidence,
+            'lineage_gate_verifications': lineage_gate_verifications}
     write_json(output / 'direct-stage-plan.json', plan)
     write_json(metadata_path, {'schema': 'natlang.neuralese-direct-stage-launch-intent/1',
                                'recipe_id': recipe['id'], 'recipe_sha256': plan['recipe_sha256'],

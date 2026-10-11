@@ -276,6 +276,17 @@ Completion requires the declared steps and zero recorded errors; it explicitly
 **does not grant semantic channel admission**. Learned weights need task/stopping
 qualification, not inheritance of their initializer's certificate.
 
+When a stage is run through the shared `direct_shared_stage` path, there is no
+in-recipe predecessor graph. A direct `raw_recurrence_training` declaration
+must therefore pin exactly one `lineage.evidence` item with role
+`adapted_runtime`. Before creating the output directory or starting training,
+the shared runner verifies its report hash, applies the same
+`text_warmup_runtime` gate, checks that `parent_sha256` equals the exact `heads`
+input hash, and requires the report to attest that trained heads were retained
+and weights were not modified. This carries only the adapted-runtime/output
+reference gate for those heads; it neither reruns nor certifies the foundation,
+nor admits the source rows or qualifies task quality/autonomous stopping.
+
 This declaration starts with one vector per source token and a512-vector writer
 ceiling, without global compression pressure. Payload length follows the function result;
 compression is trained only when an explicit task/operator calls for it.

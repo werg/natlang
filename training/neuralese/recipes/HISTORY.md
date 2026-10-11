@@ -290,3 +290,15 @@ range (`quantization_steps`), so q4 stays at λ 1 and ternary-experts at 0.125. 
 so the mean reaches 0.05 near update 5,600; two consecutive passes need about that much margin. Report-only precision
 columns (gated points this stage does not require) run only at the decision that ends the stage, on a quarter of the
 column's held windows, gate probes and held rows (`report_column_fraction`, operational).
+
+## direct recurrence stage runtime evidence (2026-10-11)
+
+The shared `direct_shared_stage` validator now requires a direct
+`raw_recurrence_training` stage to carry exactly one SHA-pinned `adapted_runtime`
+report in `lineage.evidence`. Before creating outputs, it applies the normal
+`text_warmup_runtime` gate and binds `parent_sha256` to the exact `heads` input;
+the report must attest `weights_unmodified` and `retained_trained_heads`.
+This closes the gap where a direct recurrence invocation could record arbitrary
+lineage evidence without proving the exact adapted runtime handoff. It adds no
+foundation certificate, source admission, task-quality or autonomous-stopping
+claim. Existing full-recipe stage dependencies are unchanged.
