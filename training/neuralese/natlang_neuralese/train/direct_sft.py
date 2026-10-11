@@ -313,17 +313,20 @@ def main(argv=None):
         hidden = out['h_final']
         segments = segment_ids(roles[:, :-1] if roles is not None else None, start, hidden.shape[1], hidden.shape[0],
                                hidden.device)
+        # Both projections read only the supervised positions: segments start inside the span (context is -1), so
+        # no convolution tap reaches the context and the slice is exact. Never full-context logits or mixtures.
+        hidden, segments = hidden[:, start:], segments[:, start:]
         read = hidden if token_choice is None else token_choice(hidden, segments)
         ce, training_ce, prediction, _, token_losses = chunked_readout(
-            backbone, read[:, start:], span, backbone.controls.close_id, gradients=gradients, position_weights=weights)
+            backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights)
         mixture = soft_token_mixture(backbone.logits, table, hidden.detach())
-        value = neuralese(hidden.detach(), mixture.to(hidden.dtype), segments)[:, start:]
+        value = neuralese(hidden.detach(), mixture.to(hidden.dtype), segments)
         target = table[span]
         value_error = relative_mse(value, target, weights)
         metrics = {'ce': float(ce), 'gold_accuracy': float((prediction == span).float().mean()),
                    'value_relative_mse': float(value_error)}
         if not torch.is_grad_enabled():
-            mixture_error = relative_mse(mixture[:, start:], target, weights)
+            mixture_error = relative_mse(mixture, target, weights)
             nearest = (value.float() @ table.t()).argmax(-1)
             metrics.update(value_mixture_relative_mse=float(mixture_error),
                            value_relative_mse_delta=float(value_error - mixture_error),
@@ -424,6 +427,7 @@ def main(argv=None):
         with torch.no_grad():
             ids, prefix, span, roles, _ = tensors(held[:1])
             hidden = backbone.forward_ids(ids[:, :-1], cutoff=engine.heads.cutoff, logits=False)['h_final']
+            hidden = hidden[:, prefix - 1:]
             mixture = soft_token_mixture(backbone.logits, table, hidden)
             if not torch.equal(neuralese(hidden, mixture.to(hidden.dtype)), mixture.to(hidden.dtype)):
                 raise RuntimeError('NeuraleseProjection is not the soft-token mixture at initialization')
