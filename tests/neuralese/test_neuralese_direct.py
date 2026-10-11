@@ -74,6 +74,32 @@ def test_segment_ids_are_turns_inside_the_supervised_span():
     assert segment_ids(None, 3, 6, 2, 'cpu').tolist() == [[-1, -1, -1, 0, 0, 0]] * 2
 
 
+def test_direct_recipes_resolve_for_both_lines_and_gate_on_qualification():
+    from natlang_neuralese.train.recipe import (HANDLERS, require_gate, resolve_recipe_data, stage_parameter_args,
+                                                stage_quantization)
+    assert HANDLERS['neuralese_direct']['module'] == 'natlang_neuralese.train.direct_sft'
+    mellum = resolve_recipe_data(RECIPES / 'neuralese-direct-mellum-v1.json')
+    lfm = resolve_recipe_data(RECIPES / 'neuralese-direct-lfm-v1.json')
+    for recipe in (mellum, lfm):
+        stage = recipe['stages'][0]
+        assert stage['kind'] == 'neuralese_direct'
+        defaults = recipe['stage_parameter_defaults']['neuralese_direct']
+        assert defaults['token_choice_projection'] is False and defaults['tokens'] > defaults['target_tokens']
+        args = stage_parameter_args({**defaults, **stage['parameters']})
+        assert '--no-token-choice-projection' in args
+    assert mellum['stage_parameter_defaults']['neuralese_direct']['moe_kernel'] == 'grouped'
+    assert mellum['quantization']['preserve']['weight'] == 0.0
+    stage = mellum['stages'][0]
+    component = stage_quantization(mellum, stage, {**mellum['stage_parameter_defaults']['neuralese_direct'],
+                                                   **stage['parameters']}, [])
+    assert component['stage'] == {'id': 'direct_sft', 'progress': [0.0, 0.35], 'start': 0,
+                                  'end': stage['parameters']['steps']}
+    assert 'quantization' not in lfm
+    with pytest.raises(ValueError, match='not qualified'):
+        require_gate({'qualified': False}, 'neuralese_direct')
+    require_gate({'qualified': True}, 'neuralese_direct')
+
+
 def test_failed_assistant_turns_are_masked_from_every_loss():
     """An assistant turn answered by a runtime failure (rejected action, discarded eval, refused result) is context
     only: zero weight in both halves of the whole-trajectory supervision."""

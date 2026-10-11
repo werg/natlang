@@ -1,0 +1,129 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-direct-mellum-v1",
+ "extends": "neuralese-direct-v1",
+ "description": "neuralese-direct-v1 on BF16 Mellum (heads from the base model, init bf16). Backbone-inherent: dense trainable MoE experts as two grouped GEMMs; the quantization component of raw-recurrence-mellum-v11 with the direct stage's progress range and no preserve weight. History: recipes/HISTORY.md.",
+ "overrides": {
+  "stage_parameter_defaults": {
+   "neuralese_direct": {
+    "moe_kernel": "grouped"
+   }
+  },
+  "quantization": {
+   "schema": "natlang.neuralese-quantization/1",
+   "description": "raw-recurrence-mellum-v11's precision points and behaviour gate, woven into the direct stage (owner rule: QAT in every stage). The quantized points train on the same SFT targets; with self-distillation out (owner 2026-10-11) there is NO BF16 KL teacher for them (flagged for the owner, plans/neuralese/NEURALESE_DIRECT_V1.md). preserve.weight 0: the teacher shards are only the drift monitor's and the behaviour gate's held data.",
+   "loss": {
+    "mode": "sample",
+    "bf16_weight": 1.0,
+    "seed": 0
+   },
+   "stage_progress": {
+    "direct_sft": [
+     0.0,
+     0.35
+    ]
+   },
+   "points": [
+    {
+     "name": "q4",
+     "gate": "required",
+     "weight": 0.5,
+     "ramp": {
+      "start": 0.15,
+      "end": 0.3
+     },
+     "modules": {
+      "experts": {
+       "format": "int4",
+       "group": 32
+      },
+      "mlp": {
+       "format": "int4",
+       "group": 32
+      },
+      "attention": {
+       "format": "int4",
+       "group": 32
+      },
+      "conv": {
+       "format": "int4",
+       "group": 32
+      }
+     }
+    },
+    {
+     "name": "ternary-experts",
+     "gate": "required",
+     "weight": 1.0,
+     "ramp": {
+      "start": 0.3,
+      "end": 0.7
+     },
+     "modules": {
+      "experts": {
+       "format": "ternary"
+      },
+      "mlp": {
+       "format": "ternary"
+      },
+      "attention": {
+       "format": "int4",
+       "group": 32
+      },
+      "conv": {
+       "format": "int4",
+       "group": 32
+      }
+     }
+    },
+    {
+     "name": "ternary",
+     "gate": "report",
+     "weight": 0.5,
+     "ramp": {
+      "start": 0.55,
+      "end": 0.95
+     },
+     "modules": {
+      "experts": {
+       "format": "ternary"
+      },
+      "mlp": {
+       "format": "ternary"
+      },
+      "attention": {
+       "format": "ternary"
+      },
+      "conv": {
+       "format": "ternary"
+      }
+     }
+    }
+   ],
+   "preserve": {
+    "teacher": {
+     "artifact": "mellum21-teacher-v3-top64-20261010"
+    },
+    "weight": 0.0,
+    "prompt_weight": 0.25,
+    "max_tokens": 4096,
+    "seed": 0
+   },
+   "gate": {
+    "probes": {
+     "path": "data/neuralese/corpora/mellum21-self-distill-v3-20261010/probe.jsonl",
+     "sha256": "0fbd7d42863fddaf8faf751507e9628aa756610a33fc0bf4f7ca35d20c547cd4"
+    },
+    "held_rows": 48,
+    "prompt_weight": 0.25,
+    "max_gate_drop": 0.1,
+    "max_held_kl": 0.25,
+    "reference": {
+     "gate_pass": 0.75,
+     "source": "BF16 Mellum, conversion v3 gate.jsonl step 0 (18/24 probes)"
+    },
+    "column_held_documents": 8
+   }
+  }
+ }
+}

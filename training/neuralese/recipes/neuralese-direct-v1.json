@@ -1,0 +1,46 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-direct-v1",
+ "description": "Neuralese direct v1 (owner 2026-10-11; plans/neuralese/NEURALESE_DIRECT_V1.md): plain whole-trajectory target SFT of a base model on the native records, one pass on ordinary token embeddings (no input map, no second pass, no self-distillation), the NeuraleseProjection producing the Neuralese value (soft-token mixture plus a zero-initialised causal conv correction, trained on detached states), the TokenChoiceProjection declared off. Windows hold the whole preceding document (system prompt included); routers and norms on AdamW, attention and expert matrices on the latent optimizer. Shared by both lines; backbone-inherent differences in neuralese-direct-mellum-v1 / -lfm-v1.",
+ "stages": [
+  {
+   "id": "direct_sft",
+   "kind": "neuralese_direct",
+   "requires": [],
+   "parameters": {
+    "steps": 1000
+   }
+  }
+ ],
+ "stage_parameter_defaults": {
+  "neuralese_direct": {
+   "tokens": 8192,
+   "target_tokens": 1024,
+   "prefix_tokens": 32,
+   "batch": 1,
+   "eval_batch": 1,
+   "eval_every": 100,
+   "checkpoint_every": 500,
+   "held_documents": 8,
+   "context_weight": 1.0,
+   "feedback_weight": 0.25,
+   "backbone_lr": 7.5e-06,
+   "latent_optimizer": "lionsr",
+   "latent_lr": 3e-06,
+   "head_lr": 0.0003,
+   "neuralese_weight": 1.0,
+   "projection_blocks": 2,
+   "projection_hidden": 0,
+   "projection_kernel": 4,
+   "token_choice_projection": false,
+   "drift_rows": 16,
+   "drift_warn": 0.05,
+   "drift_stop": 0.5,
+   "drift_agreement_warn": 0.97,
+   "drift_agreement_stop": 0.0,
+   "gate_held_rows": 48,
+   "seed": 0,
+   "drift_gate": true
+  }
+ }
+}

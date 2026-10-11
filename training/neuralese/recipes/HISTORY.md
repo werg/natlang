@@ -302,3 +302,20 @@ This closes the gap where a direct recurrence invocation could record arbitrary
 lineage evidence without proving the exact adapted runtime handoff. It adds no
 foundation certificate, source admission, task-quality or autonomous-stopping
 claim. Existing full-recipe stage dependencies are unchanged.
+
+## neuralese-direct-v1, neuralese-direct-mellum-v1, neuralese-direct-lfm-v1 (2026-10-11): owner decision after the behaviour-gate bug hunt
+
+These recipes replace the warm-up line, whose shared core_text_warmup drifted the backbone 11–14% on both lines and
+broke plain behaviour. They are plain whole-trajectory target SFT from the base models, with no warm-up stage, input
+map, second pass or self-distillation. The NeuraleseProjection produces the Neuralese value: the soft-token mixture plus
+a zero-initialised causal conv, trained on detached states toward the gold next-token embedding. The
+TokenChoiceProjection is declared but off.
+
+Windows hold the whole preceding document, system prompt included. Routers and norms train on AdamW, attention and
+expert matrices on the latent optimizer. The monitors are behaviour_drift (response KL and agreement) with its guard,
+plus the final behaviour gate.
+
+On Mellum, QAT points train on the same targets, with no BF16 KL teacher (flagged for the owner).
+
+Design: plans/neuralese/NEURALESE_DIRECT_V1.md. Evidence: plans/mellum-port.md "Behaviour gate bug hunt" and
+plans/neuralese/WARMUP_AUDIT_20261011.md.

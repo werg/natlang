@@ -1,0 +1,15 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-direct-lfm-v1",
+ "extends": "neuralese-direct-v1",
+ "description": "neuralese-direct-v1 on base LFM2.5-350M (LiquidAI/LFM2.5-350M, revision 9e6c6ccf; heads from the base model). Backbone-inherent: the context budget of an 8 GB GPU (long windows at batch 1 with a bounded target of 256); no quantization component yet (Pop's line has none; the owner's QAT rule applies once an LFM component is declared). History: recipes/HISTORY.md.",
+ "overrides": {
+  "stage_parameter_defaults": {
+   "neuralese_direct": {
+    "tokens": 32768,
+    "target_tokens": 256,
+    "batch": 1
+   }
+  }
+ }
+}
