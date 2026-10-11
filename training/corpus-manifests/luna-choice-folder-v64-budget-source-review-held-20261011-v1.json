@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-folder-v64-budget-source-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-budget-source-candidate-review-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 160822,
+      "sha256": "cdbc9852e6619736e6e95db18d30e913a8b8cdb6b3ac94429fbb299cebb8cb6a"
+    },
+    {
+      "path": "review.md",
+      "bytes": 1901,
+      "sha256": "f69a36186ec47ce5dc4e51d2e092afbef47ea34cc5bf3e724cb7403698f9ff3f"
+    }
+  ],
+  "bytes": 162723
+}

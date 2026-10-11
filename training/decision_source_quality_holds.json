@@ -1,6 +1,6 @@
 {
   "schema": "natlang.decision-source-quality-holds/1",
-  "policy_id": "decision-visible-answerability-holds-v10",
+  "policy_id": "decision-visible-answerability-holds-v11",
   "status": "canonical_forward_source_filter",
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
@@ -618,6 +618,72 @@
         "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
       },
       "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+    },
+    {
+      "item_id": "dc-158e30a77e28c16e5e6c",
+      "original_source_group": "g-c9f2ce53d17da7efb1bf1a01",
+      "split": "train",
+      "reason": "The entry describes a fictional team and an eponymous comic series. Primary team versus publication is unresolved in a taxonomy lacking groups or fictional characters; no visible mapping rule justifies unique WrittenWork.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11/root-review.json",
+        "review_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+      },
+      "decision_receipt_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+    },
+    {
+      "item_id": "dc-c6dc075d403c75d8f114",
+      "original_source_group": "g-2874d44319b3123509369724",
+      "split": "train",
+      "reason": "Both bike and car are explicit in this generic anti-drunk-driving reply; the omitted thread/list context is needed for unique motorcycle versus automobile destination.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11/root-review.json",
+        "review_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+      },
+      "decision_receipt_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+    },
+    {
+      "item_id": "dc-15a40634db33eaa0e62b",
+      "original_source_group": "g-3997d64cdf4bae9dbbd6e95c",
+      "split": "train",
+      "reason": "Submissiveness alone does not uniquely specify sadness versus fearful anxiety or another affect.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11/root-review.json",
+        "review_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+      },
+      "decision_receipt_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+    },
+    {
+      "item_id": "dc-15c64969bcb660ca7986",
+      "original_source_group": "g-3296fa6292c5032e85210a7c",
+      "split": "train",
+      "reason": "Doomed earth/life expresses compatible fear and sadness without a dominant-affect rule.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11/root-review.json",
+        "review_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+      },
+      "decision_receipt_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+    },
+    {
+      "item_id": "dc-2432545486453b0178f3",
+      "original_source_group": "g-e66308fa289b8ee362a1e0ce",
+      "split": "train",
+      "reason": "Mostly positive sentiment does not establish lack of ambiguous wording or mixed opinions. Evidence does not uniquely refute the ambiguous-reviews claim.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11/root-review.json",
+        "review_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+      },
+      "decision_receipt_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+    },
+    {
+      "item_id": "dc-99eb2027fae73b53860f",
+      "original_source_group": "g-c87dfdad72f1efcd20eeffea",
+      "split": "train",
+      "reason": "Measured tidal-volume variability lacks a prescribed target, acceptable error or reference defining accurate delivery; the comparisons alone do not uniquely establish categorical no.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11/root-review.json",
+        "review_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+      },
+      "decision_receipt_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
     }
   ],
   "root_review": {

@@ -28253,6 +28253,26 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "Exact typeddecision/answer/label/option extraction proves398/398 childhostoutputs match returnedmaps; preserve matchingversions notextracases.26scopeevents perprogram, item-loopinflateddetailcounts corrected. Noadmission."
+    },
+    {
+      "id": "decision-visible-answerability-root-review-held-20261011-v11",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Rootfullstatereview6narrowforwardholds57total;8candidateholdsdeclined. UnsupportedDynamo5primaryteam/seriesmapping explains unfinishedcase; no blindbudgetincrease orsemanticnegative."
+    },
+    {
+      "id": "luna-choice-folder-v64-budget-source-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-budget-source-candidate-review-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Exactrequestphase384=192planner/actionpairs,383completedoneplannerresetfallback. All8unfinishedsourceobjects and25terminaldifferences preserved withfrozenV15pins,scopecounts,lastactions. Originalcandidatesnotautomatictruth."
     }
   ],
   "coverage_backlog": [
