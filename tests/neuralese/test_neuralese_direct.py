@@ -248,3 +248,16 @@ def test_raw_token_mellum_anchor_opens_on_the_direct_serving_path(tmp_path, monk
     with pytest.raises(SystemExit):  # the legacy profile keeps its inside-the-stack cutoff
         foundation_heads.main(['--model', str(model_dir), '--precision', 'bf16', '--cutoff', str(layers),
                                '--out', str(tmp_path / 'legacy.pt')])
+
+
+def test_direct_sft_resume_copies_through_the_shared_restore_and_keeps_no_view_of_the_state():
+    """The v2 resume leak (39 GB host anon): direct_sft restores backbone values through text_warmup's
+    copy_restored_values, so no loop variable in main() keeps the mmap'd state alive."""
+    import ast
+    import inspect
+    from natlang_neuralese.train import direct_sft
+    tree = ast.parse(inspect.getsource(direct_sft.main))
+    loops = [node for node in ast.walk(tree) if isinstance(node, ast.For)
+             and "student_parameters" in ast.unparse(node.iter)]
+    assert not loops, "restore student_parameters with copy_restored_values, never a loop in main()"
+    assert "copy_restored_values" in inspect.getsource(direct_sft.main)

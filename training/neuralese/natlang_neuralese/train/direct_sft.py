@@ -357,10 +357,11 @@ def main(argv=None):
         if state.get('schema') != SCHEMA or state['identity']['options'] != identity['options'] or \
                 state['identity']['inputs'] != identity['inputs']:
             raise ValueError('neuralese_direct resume identity changed (options or inputs)')
+        from .text_warmup import copy_restored_values
         tensors_by_name = plain_named_tensors(backbone.hf)
-        with torch.no_grad():
-            for name, value in state['student_parameters'].items():
-                tensors_by_name[name.removeprefix('backbone.')].copy_(value.to(tensors_by_name[name.removeprefix('backbone.')]))
+        # The shared copy (its own scope): a loop variable left in main() is a view of the mmap'd state and kept the
+        # whole mapping plus the dirtied pages alive for the run (v2 resume: 39 GB host anon, as text_warmup 085713c7).
+        copy_restored_values({'backbone.' + n: t for n, t in tensors_by_name.items()}, state['student_parameters'])
         for key, module in projections.items():
             module.load_state_dict(state[key])
         from .optim_restore import own_host_tensors
