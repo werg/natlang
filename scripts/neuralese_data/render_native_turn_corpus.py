@@ -53,20 +53,8 @@ RENDERINGS = ('full', 'program-header', 'whole-trajectory')
 _G: dict = {}
 
 
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def canonical(value) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
-
-
-def file_sha(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, 'rb') as f:
-        for chunk in iter(lambda: f.read(1 << 22), b''):
-            h.update(chunk)
-    return h.hexdigest()
+from natlang_neuralese.common.hashing import sha256_file_hex as file_sha, sha256_hex as sha  # noqa: E402
+from natlang_neuralese.common.jsonio import canonical_json_str as canonical  # noqa: E402
 
 
 # ---------------------------------------------------------------- selection
