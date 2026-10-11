@@ -34277,6 +34277,28 @@
         "luna-v43-exact-map37-native-sft-926-20261011-v1"
       ],
       "notes": "Existing converter output for the 926 already-admitted native SFT rows. Converts 20 compiler-attested model-authored inline instruction writers with 34 distinct reads (35 read appearances); 20/20 sidecars pass the scoped Python validator. Child-result conversion remains zero: 895 producer-missing, 164 host-result-only. Supersedes the preliminary v1 readiness report\u2019s zero-inline-conversion interpretation; it does not add independent source credit or change native-SFT admission. Reciprocal writer/read, source quality, split, and recurrence review remain pending. Exact input and converter pins are in review.json."
+    },
+    {
+      "id": "semantic-inline-curriculum-s72-teacher-turns-20261007-v1",
+      "owner": "dgx",
+      "path": "runs/semantic-teacher-20261005",
+      "include": [
+        "turns.jsonl",
+        "admitted.jsonl",
+        "s72-holds.jsonl"
+      ],
+      "split": "per row (80,027 train / 29 test turns); 54 held cases in s72-holds.jsonl (38 train cases on reserved-test sources, 16 anli on hash-test sources) are excluded from training",
+      "source_class": "teacher-model-native-turns (Qwen3.6-35B-A3B-NVFP4 on the semantic-s72 inline curriculum, exact native-runtime oracle)",
+      "admission": "found unregistered in the 2026-10-11 data audit (plans/neuralese/DATA_INVENTORY_20261011.md): decision-level teacher turns of the 2,183 admitted s72 trajectories; 71,364 of 80,056 rows carry training_admission.approved=true; 2,088 rows belong to held cases",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: approved rows outside the s72 holds; held-case rows (leak defect D1, D2) excluded; no source group shared with the 4962 union",
+      "review_status": "per-row exact native-runtime oracle approval at collection; holds from s72-holds.jsonl",
+      "required_conversion": "render (native_gold_packet; full-prompt and program-header; LFM2.5 and Mellum2.1), dropping approved=false rows and held-case rows",
+      "consumable_by_direct_stage": false,
+      "derived_from": [
+        "semantic-inline-curriculum-s72-teacher-20261007-v1"
+      ],
+      "notes": "Families: workbench_tickets 25,146, workbench_applicants 15,140, workbench_reviews 11,630, dataset_workbench 9,003, inline_late_binding 2,318, named_versus_inline 2,218, claims_desk 2,081, edit_stream 1,971, contract_desk 1,738, labeled_judgments 1,732, ... Mean target about 705 characters (~14M target tokens over approved rows, estimate). admitted.jsonl holds the 2,183 trajectories (natlang.teacher_trajectory.native/1)."
     }
   ],
   "coverage_backlog": [
