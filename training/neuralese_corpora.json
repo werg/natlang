@@ -34165,6 +34165,25 @@
         "luna-neuralese-direct-lfm-base-v8-export-and-paired-behavior-held-20261011-v1"
       ],
       "notes": "Step-225 native recurrence checkpoint was hash-verified at its original v2 best-checkpoint path (storage-relief symlink to byte-preserved cold copy), proven with the existing parent-proof builder, and serialized with the existing CPU direct exporter against direct-export-v2. The original stage result remains an earlier interruption receipt; the separate v2 resume launch/exit/log and completion correction are included. Export manifest status remains direct-writer-pending. The direct-tensors.pt payload SHA is recorded in receipts but is intentionally not registered/synced."
+    },
+    {
+      "id": "luna-v43-runtimev19-repeat14-approved-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-runtimev19-repeat14-inputs-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-generation-plan-no-admission",
+      "source_class": "approved-same-world-comparison-inputs",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "approved repeat inputs and bounded launch observation only; active journals, logs, results and mutable campaign status are excluded",
+      "derived_from": [
+        "luna-v43-runtimev19-main34-approved-inputs-held-20261011-v1",
+        "luna-v43-runtimev18-repeat14-approved-inputs-held-20261011-v1",
+        "luna-v43-runtimev18-repeat14-closed-raw-held-20261011-v1"
+      ],
+      "notes": "14 repeated source programs/111 items at seed base 43101, matching the approved V18 repeat14 IDs and seed mapping. Same-world qualification only; independent new worlds=0. Launch observation is cutoff-scoped."
     }
   ],
   "coverage_backlog": [
