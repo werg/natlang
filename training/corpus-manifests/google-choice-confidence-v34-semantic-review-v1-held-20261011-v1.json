@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v34-semantic-review-v1-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v34-label-disagreements-root-candidate-semantic-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 336157,
+      "sha256": "09ce43e0c665c363455a2bbb8d5680a870c24dfcd9e6bf7a99cf60b18de6ca85"
+    },
+    {
+      "path": "review.md",
+      "bytes": 8427,
+      "sha256": "da244d2911bb80a2cd0db46c2941f7f3d3d9c872593927600916185693236e11"
+    }
+  ],
+  "bytes": 344584
+}
