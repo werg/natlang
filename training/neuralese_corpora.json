@@ -32549,6 +32549,27 @@
       "independent_new_worlds": 0,
       "admission": "prepared-only; root_approved=false; no provider calls or launch",
       "notes": "V90 proposes 52 programs/402 original source items from the separately held V40 static adapter, with five fresh queues of 10–11 programs each. Exact V40 source IDs/groups had zero overlap with current 79 item/group holds and the 5,005 prior Luna queue IDs/groups observed during preparation. Chains each lane to V89; V17 runtime. Root review and launch authorization required."
+    },
+    {
+      "id": "luna-choice-confidence-v90-approved-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v90-v40-runtimev17-prepared-v1",
+      "include": [
+        "reviewed-plan-root-approved-v1.json",
+        "root-owner-approval-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-train-generation-approval-and-launch-evidence",
+      "source_class": "root-approved-luna-generation-launch-receipt",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "launch evidence only; no data admission",
+      "notes": "Additive approval/supervisor-start snapshot for V90. Original prepared-only plan and mutable campaign status/journals are not replaced or included."
     }
   ],
   "coverage_backlog": [
