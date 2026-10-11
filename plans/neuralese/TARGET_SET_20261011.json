@@ -10,7 +10,8 @@
     "natlang-native-turns-static-lambda-expansion-render-20261011-v1",
     "natlang-native-turns-refine-render-20261011-v1",
     "natlang-native-turns-luna-v17-v9-render-20261011-v1",
-    "natlang-native-turns-static-lambda-v2-render-20261011-v1"
+    "natlang-native-turns-static-lambda-v2-render-20261011-v1",
+    "natlang-native-turns-misc-admitted-render-20261011-v1"
   ],
   "external_members": [
     {
@@ -19,7 +20,7 @@
         "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1",
         "neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1",
         "neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v2",
-        "neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v1"
+        "neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v2"
       ],
       "note": "no whole-trajectory rendering yet (needs a re-render from its 5,733 native records)",
       "files": {
@@ -29,7 +30,7 @@
         },
         "program-header": {
           "lfm25": "runs/neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v2/text-data.jsonl",
-          "mellum21": "runs/neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v1/text-data.jsonl"
+          "mellum21": "runs/neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v2/text-data.jsonl"
         }
       }
     },
@@ -65,10 +66,6 @@
     {
       "dataset": "native-sft-v13-r2",
       "status": "next render; rendered at its recorded language surface (D9 language migration not applied: the migration needs a compiler-built rewrite plus execution replay)"
-    },
-    {
-      "dataset": "student-posttraining-turns-20261005, luna-v43-exact-map37 (926), free-provider sourcebound16 (36), v64 (9)",
-      "status": "rendering together (render-turns-misc-v1)"
     },
     {
       "dataset": "teacher-campaign-evidence-20261005",
