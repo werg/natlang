@@ -1,0 +1,41 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v73-admitted-ordinary-text-846-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-ordinary-text-admission-v1",
+  "files": [
+    {
+      "path": "FILES.sha256.json",
+      "bytes": 870,
+      "sha256": "63b4fb96d0726a9fca840c13871afe35cca48177ce8f040b8234f09f61407b58"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1051,
+      "sha256": "d2a3de13e5289bedff03b67dddeb0203f22ee1bc7a82228a9ca8030e2a858b6e"
+    },
+    {
+      "path": "ordinary-text-admission.json",
+      "bytes": 53426,
+      "sha256": "2f6843a5c72913b10cde2225f0c3d905397d026b3bf5027f7287472878f4da13"
+    },
+    {
+      "path": "subset-closure.json",
+      "bytes": 1421,
+      "sha256": "c0c1706e8db85f370aa19b16c6c395a6f5faace5390f0072efd0b82f356cfa25"
+    },
+    {
+      "path": "text.jsonl",
+      "bytes": 72235244,
+      "sha256": "5ae5826d405609f0be2c40899b1d1a1d3aaec73d2e1b145fdcbd728f92519971",
+      "lines": 846
+    },
+    {
+      "path": "v4-subset-closure-bindings.jsonl",
+      "bytes": 1202827,
+      "sha256": "62120f5125a9fcafb92dda3b9be576f71aa4ba13a0cd68418d49e61f07a761e6",
+      "lines": 846
+    }
+  ],
+  "bytes": 73494839
+}

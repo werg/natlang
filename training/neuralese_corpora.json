@@ -32029,6 +32029,26 @@
       "admission": "post-hoc inherited-label comparison and scope diagnostic only; no relabeling, admission, or independent semantic certification",
       "independent_new_worlds": 0,
       "notes": "Joins all 65 result rows from closed campaigns V81–V85 to their exact static source program IDs and pinned source cases. 55 accepted program results, 10 rejected programs; 456 expected label slots across 456 distinct inherited source IDs/groups; 11 exact output/source-label disagreements; 33 scope-failure events. Mismatches are not independently adjudicated. Preserves per-result hashes and worker journals."
+    },
+    {
+      "id": "free-provider-v73-admitted-ordinary-text-846-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-ordinary-text-admission-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-only-no-evaluation-credit",
+      "source_class": "root-approved-v73-ordinary-text-only-rendered-candidate-rows",
+      "training_admission": true,
+      "admission": "ordinary-text-sft-only-inherited-labels",
+      "native_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "notes": "Root authorized exact846 V73 V4 rendered text rows for ordinary-text SFT only. Per-row exact V2/V3/V4 ancestry bindings; source closure inherited from 909-row parent covers302 original IDs/groups, zero current source-hold hits. 63 failed target rows excluded/unscored; 145 context-only spans/25517 tokens on82 rows remain target-masked. No independent annotation truth/evaluation credit, native trace/action, recurrence, whole-trajectory, writer or DPO-negative admission. Not added to active GPU inputs."
     }
   ],
   "coverage_backlog": [
