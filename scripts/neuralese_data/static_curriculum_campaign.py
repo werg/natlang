@@ -207,6 +207,7 @@ def consolidate(root: Path, cfg: dict, b: int) -> dict:
             if not Path(f'{base}.ir.jsonl.zst').exists():
                 continue
             fam = stats['families'].setdefault(family, {'cases': 0, 'decisions': 0})
+            here: set[str] = set()  # this shard's new cases: a case id repeated across shards keeps its first shard
             for line in zlines(Path(f'{base}.ir.jsonl.zst')):
                 cid = json.loads(line)['id']
                 if cid in seen:
@@ -214,15 +215,16 @@ def consolidate(root: Path, cfg: dict, b: int) -> dict:
                     continue
                 seen.add(cid)
                 kept.add(cid)
+                here.add(cid)
                 writers['cases.ir'].write(line)
                 stats['cases'] += 1
                 fam['cases'] += 1
             for line in zlines(Path(f'{base}.rows.jsonl.zst')):
-                if json.loads(line)['task']['program_ir']['id'] in kept:
+                if json.loads(line)['task']['program_ir']['id'] in here:
                     writers['rows'].write(line)
                     stats['rows'] += 1
             for line in zlines(Path(f'{base}.turns.jsonl.zst')):
-                if json.loads(line)['source_ref']['program_ir_id'] in kept:
+                if json.loads(line)['source_ref']['program_ir_id'] in here:
                     writers['turns'].write(line)
                     stats['decisions'] += 1
                     fam['decisions'] += 1
