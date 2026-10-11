@@ -189,3 +189,10 @@ No differences in trained loss, projection, forward pass or optimizer math.
 V8 retains the V7 recipe settings in the preceding table. At local step460,
 CE4.688 vs base6.192, projection value delta−.270, responseKL.0150, guard ok.
 These intermediate diagnostics do not replace final behavior/runtime qualification.
+
+
+### Direct closeout and remaining checkout-only work — 2026-10-11 12:36 UTC
+
+Both1000-step direct runs are now closed. Pop passes its original declared gates; Mellum fails the projection-value margin (delta+.0003007 versusrequired−.05) while behavior.75 matchesbase. Both use the same.05 value margin and headLR3e-4. Norm/routerLR differs10x (Pop7.5e-7, DGX7.5e-6), as do matrixLRs. Shared defaults/layout/lossweights/seed/onebatch/1000steps remain the same. Current shared drift_every100 is a subsequent operational change, not retroactively present in either frozen package.
+
+Latest read-only canonicalDGX check showsHEAD3221718c withfourdirty trackedfiles, not the earlier11: MODEL_FACING_CHANGES, thiscomparison, check-main.sh, serve/engine.py. The engine-only edit adds3lines binding tokenizerhistoryreasoning to backbone model_type. It is an unpublished serving-context change, outside the frozen direct training audit. DGX owner request pop-7dcb asks promptpublication andcanonicalpull; Pop has not overwritten/discarded those files. Published new runtime/eval modules are sharedmain additions, but absent from both old frozen training packages. Keep immutable run pins separate from current checkout parity.
