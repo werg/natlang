@@ -114,3 +114,30 @@ implementation. Coord pop-dc2b asks its owner to reconcile published changes
 safely before freezing another run. Pop does not overwrite that working tree.
 The new direct-v1 trainer and projection were not yet present in either inspected
 working tree; implementation remains assigned to DGX, for both models to consume.
+
+### Updated canonical adoption audit — 2026-10-11 10:37 UTC
+
+After publishing the new direct implementation, Pop has151 Python modules and
+DGX canonical147;138 are byte-identical. Nine differ: maple/distill_data.py,
+maple/generation_gate.py, serve/__init__.py, serve/chat.py, serve/engine.py,
+train/adapters.py, train/quantization.py, train/recipe.py, train/text_supervision.py.
+Four published Pop modules are absent from DGX canonical: eval/plain_behavior.py,
+eval/plain_weight_drift.py, model/neuralese_projection.py, train/direct_sft.py.
+DGX canonical HEAD remains32262369; Pop HEAD at this audit e9b5f9a417.
+These are live working-tree hashes, not the active Mellum package inventory.
+All four additions are on origin/main, so this is an unresolved canonical
+adoption gap. Coord pop-69f6 asks DGX owner to reconcile dirty work safely and
+provide the actual active frozen package path/hash inventory. Do not conflate
+published shared code with its adoption by a running process.
+
+The new Pop direct lineage V6 adopts the reported shared LionSR tiebreak
+(coord dgx-0440), unlike historical V8. Backbone matrices use LionSR3e-6,
+norms AdamW7.5e-6; projection3e-4. Native4962 text only,32K capacity,target256,
+batch1; 1000steps,eval20/checkpoint100 for early diagnosis. Shared architecture,
+ordinary token input, detached projection loss and monitor-only drift follow
+neuralese-direct-v1; no input map/sketch/preservation or old weights. V3 aggressive
+MuonSR7.5e-6 stopped20 on behavior26/48→18/48 despite improvedCE/value. V4 gentle
+MuonSR5e-7 passed guard20 (CE5.795,value delta−.09954,responseKL.01213), was safely
+checkpointed40 when the new optimizer decision arrived, and remains evidence.
+V5 launch refused a changing live documentation hash before model work; V6
+pins immutable lineage-doc snapshots. Old failed/stopped lineages remain held.
