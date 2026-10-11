@@ -25,7 +25,7 @@ HANDLERS = {
     # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
     # NeuraleseProjection; the TokenChoiceProjection is declared per stage (off in v1).
     'neuralese_direct': {'module':'natlang_neuralese.train.direct_sft', 'required_inputs':{'records','pieces'},
-                         'optional_inputs':{'text_data'},
+                         'optional_inputs':{'text_data','heads'},
                          'parameters':{'steps','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
                            'checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
                            'latent_optimizer','latent_lr','head_lr','neuralese_weight','projection_blocks',
