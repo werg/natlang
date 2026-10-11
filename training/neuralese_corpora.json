@@ -32786,6 +32786,38 @@
         "neuralese-native-e2e-smoke-cohort-held-20261011-v1"
       ],
       "notes": "Corrects the selector design diagnosis without mutating the v1 published snapshot: the sidecar parser gap is proven; independently, exact function-body IDs and disjoint factual groups remain required and are not satisfied by the six-row sample. No selector checks are relaxed."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v43-launch-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v43-source",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl",
+        "launch-review-v1/FILES.sha256",
+        "launch-review-v1/launch-review.json",
+        "root-launch-approved-v1.json",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-input-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "Immutable V43 approved input/runtime snapshot only. The live labels, attempt journal, quota state, worker-launch log, and active outputs are excluded. Pool remains held; no provider-policy or source admission."
+    },
+    {
+      "id": "free-provider-choice-enum-paired-probe-v15-launch-evidence-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-choice-enum-paired-probe-v15-launch-evidence-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "paired-diagnostic-no-independent-world-credit",
+      "source_class": "prompt-probe-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "Bounded 48-item paired baseline/candidate prompt probe. Captures root-level NL instruction changes and static reference replays; point-in-time campaign launch observation is included, but live worker journals/logs/results and any training/DPO admission are excluded."
     }
   ],
   "coverage_backlog": [

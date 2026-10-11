@@ -1,0 +1,41 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-choice-enum-paired-probe-v15-launch-evidence-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-choice-enum-paired-probe-v15-launch-evidence-v1",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 971000,
+      "sha256": "faea80bef8df04e6ee60da759851ee122902f8b9a7ff8291137adea42bcce625",
+      "lines": 12
+    },
+    {
+      "path": "launch-observation.json",
+      "bytes": 9728,
+      "sha256": "4e41a016db7a30a634d0e02a3e35e8e47a0081a51d78c8c4a73d15acc3337596"
+    },
+    {
+      "path": "probe.json",
+      "bytes": 124859,
+      "sha256": "20fa480a3e12b5211fe237968abab43046ef8825143acfa97c6dd788302c033c"
+    },
+    {
+      "path": "reference-replay.jsonl",
+      "bytes": 10222547,
+      "sha256": "8591012e548d91fa9c107529ef64aef996d46036fefa81f2920f33920ba97592",
+      "lines": 12
+    },
+    {
+      "path": "reviewed-plan-root-approved-v1.json",
+      "bytes": 11162,
+      "sha256": "8468e96360510b971c978c244ec8756453d41e2ba03896afbebb83fbbafeb4c0"
+    },
+    {
+      "path": "root-independent-approval-v1.json",
+      "bytes": 374,
+      "sha256": "cff68d97a1c0ee7477b04a5b606efb77b3342d3cfabd5029344cc394c7153cac"
+    }
+  ],
+  "bytes": 11339670
+}
