@@ -1,0 +1,74 @@
+/**
+ * Types an eval declares for itself (`type State = …`, `interface Row { … }`), in the runtime's type language, so a
+ * local annotated with one is checked and stored like any other.
+ */
+import ts from 'typescript';
+import { parseType } from './types.js';
+/**
+ * The top-level type aliases and interfaces (without type parameters or heritage) that `code` declares. One the type
+ * language cannot express is `unknown`: a value annotated with it is kept as it is instead of refused.
+ */
+export function evalTypeDeclarations(code) {
+    const file = ts.createSourceFile('eval.ts', code, ts.ScriptTarget.ES2022, true);
+    const declared = Object.create(null);
+    const namespaces = new Map();
+    const walk = (statements, namespace = '') => {
+        for (const statement of statements) {
+            if (ts.isModuleDeclaration(statement) && statement.body && ts.isModuleBlock(statement.body)) {
+                walk(statement.body.statements, namespace + statement.name.text + '.');
+                continue;
+            }
+            let text;
+            if (ts.isTypeAliasDeclaration(statement) && !statement.typeParameters)
+                text = statement.type.getText(file);
+            else if (ts.isInterfaceDeclaration(statement) && !statement.typeParameters && !statement.heritageClauses)
+                text = `{ ${statement.members.map(member => member.getText(file).replace(/[;,]\s*$/, '')).join('; ')} }`;
+            else
+                continue;
+            const name = namespace + statement.name.text;
+            try {
+                declared[name] = parseType(text);
+            }
+            catch {
+                declared[name] = parseType('unknown');
+            }
+            namespaces.set(name, namespace);
+        }
+    };
+    walk(file.statements);
+    // References inside a service namespace use that namespace's aliases, rather than eval-local names.
+    const qualify = (type, namespace) => {
+        const child = (inner) => qualify(inner, namespace);
+        switch (type.kind) {
+            case 'name': return Object.hasOwn(declared, namespace + type.name) ? { ...type, name: namespace + type.name } : type;
+            case 'record': return { ...type, fields: type.fields.map(field => ({ ...field, type: child(field.type) })) };
+            case 'list':
+            case 'dict': return { ...type, element: child(type.element) };
+            case 'union': return { ...type, members: type.members.map(child) };
+            case 'lambda': return { ...type, params: child(type.params), returns: child(type.returns) };
+            default: return type;
+        }
+    };
+    for (const [name, namespace] of namespaces)
+        if (namespace)
+            declared[name] = qualify(declared[name], namespace);
+    return declared;
+}
+/** `type` with the names `declared` defines replaced by their definitions, through declarations that use each other. */
+export function inlineDeclaredTypes(type, declared, seen = new Set()) {
+    const inline = (inner) => inlineDeclaredTypes(inner, declared, seen);
+    switch (type.kind) {
+        case 'name': {
+            const definition = Object.hasOwn(declared, type.name) ? declared[type.name] : undefined;
+            if (!definition || seen.has(type.name))
+                return type;
+            return inlineDeclaredTypes(definition, declared, new Set([...seen, type.name]));
+        }
+        case 'record': return { ...type, fields: type.fields.map(field => ({ ...field, type: inline(field.type) })) };
+        case 'list':
+        case 'dict': return { ...type, element: inline(type.element) };
+        case 'union': return { ...type, members: type.members.map(inline) };
+        case 'lambda': return { ...type, params: inline(type.params), returns: inline(type.returns) };
+        default: return type;
+    }
+}

@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.root-generation-review/1",
+  "reviewer": "pop-codex-01a0e480",
+  "scope": "generation launch only; all training admission remains held",
+  "prepared_plan_sha256": "8067429ee9fc4e2865d6d7259297eb49cf147a149438658c516dc2a0472ef917",
+  "artifacts_checked": 19,
+  "programs": 34,
+  "master_exact_items": 256,
+  "distinct_prior_queue_sources": 62,
+  "reserved_source_ids": 14695,
+  "overlap": 0,
+  "replay_passes": 34,
+  "runtime_change": "v18 includes exact saved-helper as-const compiler fix cf66f4cd; prompt/scaffold unchanged"
+}

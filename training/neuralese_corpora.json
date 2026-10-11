@@ -33827,6 +33827,37 @@
       "training_admission": false,
       "admission": "held-diagnostic-only-no-training-admission",
       "notes": "Reconstruction of reported V43 first preflight refusal; durable files show expected approved SHA vs final launch-plan SHA, but actual refusal output/observed SHA is unavailable. Do not treat reconstruction as launch log."
+    },
+    {
+      "id": "luna-v43-prefix-646-runtimev18-static-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v43-prefix-646-delta-adapter-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-static-reference-no-independent-world-credit",
+      "source_class": "authored-static-decision-reference",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "static reference replay and source-bound provider-label scaffold only; no native model trajectory or training admission",
+      "notes": "34 authored programs, 256 exact source-matched accepted label items; 34 static reference replays. Frozen V18 runtime identity is recorded in the derived launch input snapshot. All outputs remain held."
+    },
+    {
+      "id": "luna-v43-prefix-646-runtimev18-approved-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-inputs-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-generation-plan-no-admission",
+      "source_class": "provider-generation-approved-input-snapshot",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "root-approved launch inputs and source/runtime provenance only; active model outputs are excluded and no training admission is granted",
+      "derived_from": [
+        "luna-v43-prefix-646-runtimev18-static-held-20261011-v1"
+      ],
+      "notes": "Immutable snapshot of the initial plan, final approved plan, root review/approval, five worker queues, static source-review materials, and frozen-runtime file manifest. campaign-launch.json, active journals, logs, jobs, and results are excluded until closure."
     }
   ],
   "coverage_backlog": [

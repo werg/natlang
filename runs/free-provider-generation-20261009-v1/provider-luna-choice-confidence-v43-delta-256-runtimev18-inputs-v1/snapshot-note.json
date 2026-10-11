@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.luna-v18-input-snapshot/1",
+  "status": "held",
+  "training_admission": false,
+  "trace_admission": false,
+  "independent_new_worlds": 0,
+  "campaign_source": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1",
+  "static_source": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/held-static-choice-confidence-v43-prefix-646-delta-adapter-v1",
+  "runtime_frozen_source": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v18",
+  "excluded_mutable_paths": [
+    "campaign-launch.json",
+    "worker-*/journal.jsonl",
+    "worker-*/worker.log",
+    "worker-*/case-*/jobs/**",
+    "worker-*/case-*/results.jsonl"
+  ],
+  "approved_plan_sha256": "001333f5bbd2f049ac84af3c5181d46f693fa6e0ff2013837e5b9ad7f94d4a59",
+  "static_cases_sha256": "d5b199a704547eca83f89635c21488b2b68f540683a6a396ba2fa726cc99deb1",
+  "frozen_runtime_manifest_sha256": "bd075ebe3d223f18796c87a89848fcbf18c7e6fbd1089775d0ccdf0bbfffe1d3"
+}

@@ -1,0 +1,1570 @@
+{
+  "schema": "natlang.held-static-decision-scorer-manifest/1",
+  "training_admission": false,
+  "scorer": "scoreGraded",
+  "scorer_schema": "natlang.skill-graded/1",
+  "source_file": "/home/werg/natlang/ts-host/src/skills/graded.ts",
+  "source_sha256": "dd3737b68ad891845c8895146878b7db2b17f358271fd7298519c84d740a32f1",
+  "loaded_module": "/home/werg/natlang/ts-host/dist/skills/graded.js",
+  "module_sha256": "171f554c7f097c39d53f916a2bdd69a9d6543e2dcb4a31bd1629d2c4213d16a1",
+  "strict_schema": "Probability contract: exact answer/distribution keys, finite numeric [0,1] values and total within 1e-4 of 1, without normalization. Choice-label-confidence contract: exact choice/confidence keys, declared choice, finite confidence in [0,1].",
+  "gates": {
+    "choice": [
+      "distribution",
+      "top_correct"
+    ],
+    "choice_label_confidence": [
+      "strict choice and confidence schema",
+      "exact source-choice match"
+    ],
+    "noul": [
+      "probability",
+      "correct_side"
+    ],
+    "score": [
+      "distribution",
+      "within_half_level"
+    ]
+  },
+  "exact_top": "Probability choices use argmax in source option order (first on ties); choice-label-confidence uses the directly supplied declared choice; noul p>=0.5; ordinal must equal argmax of shared ordinalDistribution(source answer, levels), including zero-based numeric and fractional positions",
+  "invocation": "Imported scoreGraded directly by teacher-decision-labels.mjs; see source-manifest.json for adapter and source paths.",
+  "accepted_score_details": [],
+  "accepted_choice_confidence_details": [
+    {
+      "id": "dc-18bb777672f2d00f94f7",
+      "choice": "travel_notification",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-067ba29b14bd21a02bfc",
+      "choice": "weather_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07920e9d4b11654ea1da",
+      "choice": "pending_transfer",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-18c83daa0847bce2f2aa",
+      "choice": "what_can_i_ask_you",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-067c4b5cbc323c8456e4",
+      "choice": "play_game",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-fe2d2154a5afd3173e7e",
+      "choice": "Education & Reference",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-18c99b991f2f244b1afd",
+      "choice": "recipe",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-067cecccdca2226c80e6",
+      "choice": "qa_factoid",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-3ccae21864c7661ddad6",
+      "choice": "Entertainment & Music",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0681132a7e45c7f75bb5",
+      "choice": "audio_volume_mute",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-18d2ca6086fefec2c1a6",
+      "choice": "rollover_401k",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-06833bf27fcc527ae4e9",
+      "choice": "iot_hue_lightoff",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-079a9b99bb8ce199c548",
+      "choice": "transaction_charged_twice",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-18d776b4630c121fae5a",
+      "choice": "oos",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-068a7c09097a0effaadc",
+      "choice": "calendar_set",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-fbd07cee4fde6e28abf7",
+      "choice": "Business & Finance",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-079b67b16228e9cf5958",
+      "choice": "atm_support",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-18dd70283de690a2877f",
+      "choice": "play_music",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-068c412461256454ee74",
+      "choice": "calendar_set",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07a4f2e0344ee43fdc4d",
+      "choice": "country_support",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-068d69ddb8e815621ba6",
+      "choice": "transport_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0857e8736be8370f4faa",
+      "choice": "Society & Culture",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-18f1ab9ae9b72141c83b",
+      "choice": "oil_change_how",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0696dadb2c0bee2d2d15",
+      "choice": "audio_volume_up",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08590a12232b88709dc4",
+      "choice": "Family & Relationships",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07ba94830eba06d1bdeb",
+      "choice": "cash_withdrawal_not_recognised",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-e584129d944ce4f01246",
+      "choice": "Sports",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0698da0e4464594c7a72",
+      "choice": "calendar_set",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-085c51f5cdf481643827",
+      "choice": "Sports",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07c7c70ebd979343c2db",
+      "choice": "card_payment_fee_charged",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-069ab647ed7e3852674f",
+      "choice": "iot_hue_lightoff",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-085d70fe11b7dbbd28d6",
+      "choice": "Science & Mathematics",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-18faee0cf800cee792a4",
+      "choice": "car_rental",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-085e947dc54d203ccde0",
+      "choice": "Computers & Internet",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07cda7210b45a4ad5dd4",
+      "choice": "apple_pay_or_google_pay",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-190b907c1da6ce77f589",
+      "choice": "direct_deposit",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-2ff2aacde30a23b20426",
+      "choice": "Sports",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07cfd8cfe9be5e490ac8",
+      "choice": "terminate_account",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-190e17688128e286893c",
+      "choice": "text",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-06b617bdd42b4b6d9cb4",
+      "choice": "datetime_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-e40b053cb9ed176aef9c",
+      "choice": "Education & Reference",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07d307916e2afc9a3948",
+      "choice": "why_verify_identity",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1912f1525e8145b56834",
+      "choice": "jump_start",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-06b73f10dc5fd8fe92a7",
+      "choice": "alarm_set",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-8f7902222ce993f1d21a",
+      "choice": "Science & Mathematics",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1925bd30bc724bc17238",
+      "choice": "order_status",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-06c516c18d99f23a7a19",
+      "choice": "qa_factoid",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-71f3ade59182168865d6",
+      "choice": "Computers & Internet",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07e547d793e3158f3992",
+      "choice": "card_delivery_estimate",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1927f7a8e92796c87f97",
+      "choice": "do_you_have_pets",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-06ce9c1f75abac625907",
+      "choice": "play_music",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0841e601866b04f1a9d9",
+      "choice": "Health",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-93dbeb082b39cf80b4ad",
+      "choice": "card_payment_fee_charged",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-192b198cdb2979e1d9bb",
+      "choice": "flight_status",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-06d1173ffb1c7a7a4b72",
+      "choice": "qa_factoid",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-cc88c2c66dc518eadfd0",
+      "choice": "Computers & Internet",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07fbf9f5dac63b92c1ee",
+      "choice": "direct_debit_payment_not_recognised",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1934c804b962543a4873",
+      "choice": "flight_status",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-06d20026714cc2a5c931",
+      "choice": "calendar_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08640835c03c30d90deb",
+      "choice": "Politics & Government",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0800c6310885ea989b31",
+      "choice": "declined_cash_withdrawal",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-06d6afb8d05b798c8e29",
+      "choice": "play_audiobook",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0864156a64e91deed34f",
+      "choice": "Computers & Internet",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08046542d8ab4aba25a7",
+      "choice": "card_linking",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-193c2ea6c55c786824ac",
+      "choice": "last_maintenance",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-06dfdcf011baf5208bfc",
+      "choice": "email_sendemail",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0864aa98eccb3d7f8073",
+      "choice": "Health",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08093128a47ebd77f236",
+      "choice": "card_payment_wrong_exchange_rate",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-193f635c3ed24d3c25a5",
+      "choice": "rollover_401k",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-06e2a0fda572afae3777",
+      "choice": "iot_coffee",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0864db48d70137a953d9",
+      "choice": "Health",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-080fd1e15adb019732e6",
+      "choice": "card_linking",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1945693495ef5bbcd692",
+      "choice": "smart_home",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-06edd58ed036bcb43011",
+      "choice": "recommendation_locations",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08103626dcefa22f83d0",
+      "choice": "passcode_forgotten",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-194ce95ffa1298467dbd",
+      "choice": "todo_list_update",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-06f54d7d1d438f2af6e1",
+      "choice": "calendar_remove",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-f3595dd74ca219637c95",
+      "choice": "Family & Relationships",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-081454e6e82e3a54023b",
+      "choice": "topping_up_by_card",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19508c92d71aa81b4106",
+      "choice": "play_music",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-086b9aac80c495e845b9",
+      "choice": "Computers & Internet",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-081e30fe4ad51018199e",
+      "choice": "top_up_limits",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1950ca5dc117385df29e",
+      "choice": "bill_balance",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-7ef27e12cf35e7c27367",
+      "choice": "Science & Mathematics",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0820ac892064792d975a",
+      "choice": "pending_transfer",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1954079d034de6aab8fa",
+      "choice": "no",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0710b007c8ac7a589258",
+      "choice": "calendar_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-3759b638d1a6f595bdf9",
+      "choice": "Sports",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1955c80d2dada70eb655",
+      "choice": "payday",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0713064a0a5ffc19568f",
+      "choice": "lists_query",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08292b27fc66aa2c3266",
+      "choice": "verify_my_identity",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-195e782d0c0a33340d33",
+      "choice": "order_status",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-071394388b2c57dfa325",
+      "choice": "play_game",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-082edb8fe4946ece2ee8",
+      "choice": "extra_charge_on_statement",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-195f29aeeb682bd5d08a",
+      "choice": "payday",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-071f9cb2ffe15ee1a587",
+      "choice": "calendar_set",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-2d0171b5b278f4dff986",
+      "choice": "Health",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-082ee7ef73f2aa928c65",
+      "choice": "apple_pay_or_google_pay",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0721fd73648cb6363a7b",
+      "choice": "lists_createoradd",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-798705546912e2eacf3f",
+      "choice": "Sports",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0841ce74b16773033641",
+      "choice": "pending_top_up",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-198872807662b3d4ef69",
+      "choice": "share_location",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07272ccde578d66d7eab",
+      "choice": "qa_stock",
+      "confidence": 0.98,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-157f9bd4453a6d053e08",
+      "choice": "Science & Mathematics",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08480781e733a962f6ae",
+      "choice": "declined_cash_withdrawal",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07402d46c15902df403a",
+      "choice": "audio_volume_down",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-03702b44a0e0968ae0ab",
+      "choice": "Computers & Internet",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-084c9265916822264ff4",
+      "choice": "transfer_fee_charged",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07436bec257c24f36592",
+      "choice": "iot_hue_lightoff",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-9b62f7882207a362225a",
+      "choice": "Science & Mathematics",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08578c3c5b63caf128ae",
+      "choice": "supported_cards_and_currencies",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07554f5ce183613714dc",
+      "choice": "transport_ticket",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-086621b03cdaeb3427b7",
+      "choice": "verify_my_identity",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19a235344a88736c498d",
+      "choice": "change_ai_name",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-e69316a88a3fa768b7b8",
+      "choice": "Health",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19a42b5f00ad840d3c9c",
+      "choice": "gas",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0767ba4a25586c06288e",
+      "choice": "email_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-8d64d82f96487e8cc51f",
+      "choice": "Education & Reference",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-076eb62172ab15afcc7d",
+      "choice": "qa_currency",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08855854e36e486c6db1",
+      "choice": "Sports",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-087721d6e0bfebfbb2b9",
+      "choice": "verify_top_up",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0777f0da66fac3c02c28",
+      "choice": "play_radio",
+      "confidence": 0.98,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08858fc90266603ccb98",
+      "choice": "Politics & Government",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0878afaaba100ec07a33",
+      "choice": "cancel_transfer",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19b559d2afaa88301624",
+      "choice": "traffic",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-077dca16b46112deba14",
+      "choice": "play_music",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0885e69df36d2257ea22",
+      "choice": "Politics & Government",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-48a1210cfebf037ccf60",
+      "choice": "lost_or_stolen_card",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19c56cb55fb24bd1bafa",
+      "choice": "cancel_reservation",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-087f2af36883e894fb34",
+      "choice": "Refund_not_showing_up",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19cc2e11ad4d84a4a65b",
+      "choice": "travel_alert",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07836c84910b15124bc5",
+      "choice": "lists_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-087fa1276cf44b640148",
+      "choice": "top_up_by_cash_or_cheque",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19cc4f5929b8d44c0bf7",
+      "choice": "what_can_i_ask_you",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0794ee166b55d009dcfa",
+      "choice": "qa_factoid",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0881ba474a611a659bf2",
+      "choice": "exchange_via_app",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0798c13e3047553c5f80",
+      "choice": "recommendation_movies",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-4df27502b0073a40a657",
+      "choice": "Education & Reference",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19d4448ce57be22f5b9c",
+      "choice": "tire_pressure",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-088e3b35865553684094",
+      "choice": "balance_not_updated_after_cheque_or_cash_deposit",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19d714209c4c53bc94b3",
+      "choice": "book_hotel",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07a6812ac27bcf2a1def",
+      "choice": "alarm_set",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-81f9f6463f85b98c086e",
+      "choice": "Science & Mathematics",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-089563f66bda0097aaa0",
+      "choice": "unable_to_verify_identity",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19d9d4d010893b928ec6",
+      "choice": "card_declined",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07a9b314c494d82a57e4",
+      "choice": "calendar_remove",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-088d5d2ea6773f396018",
+      "choice": "Family & Relationships",
+      "confidence": 0.8,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-089bd26e103db79bb775",
+      "choice": "balance_not_updated_after_cheque_or_cash_deposit",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19da2c4b151b4e36e94e",
+      "choice": "how_busy",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07b05dd4e11dd7cbd57e",
+      "choice": "weather_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08a14ff876cbf19a0dfc",
+      "choice": "wrong_amount_of_cash_received",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19e71b4e1ee8004d1363",
+      "choice": "order_status",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07b2b2ddff5496f4e79b",
+      "choice": "transport_traffic",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-62250b61f4329dfb43ec",
+      "choice": "Business & Finance",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08ba0d94e6a39c207a0e",
+      "choice": "automatic_top_up",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19ee6af8ce30955ed504",
+      "choice": "gas",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07b5a7b80e67c337ebe1",
+      "choice": "weather_query",
+      "confidence": 0.8,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08c5687e175385ba139d",
+      "choice": "direct_debit_payment_not_recognised",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19ee883157e377dc679f",
+      "choice": "change_volume",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07b79e308a78e5561ee6",
+      "choice": "transport_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1ef79d77ce4a8c53e2a7",
+      "choice": "Society & Culture",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08cc7760727a6330b3a7",
+      "choice": "virtual_card_not_working",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19ef89a51ca1c5ce5e21",
+      "choice": "do_you_have_pets",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07b845434180b223bfb8",
+      "choice": "datetime_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08cc7e3da95f9d25b93c",
+      "choice": "pending_card_payment",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07c84f2420b4910da74a",
+      "choice": "transport_ticket",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0897443191c06717be33",
+      "choice": "Society & Culture",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-19f7ecba92414e207ba9",
+      "choice": "next_song",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07c9d8df8baf0ccaeaa4",
+      "choice": "play_music",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07d5f7c8779075199cb5",
+      "choice": "recommendation_locations",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08998fefe46df7ef8a08",
+      "choice": "Society & Culture",
+      "confidence": 0.8,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08d9df7da7040f0b8ead",
+      "choice": "reverted_card_payment?",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a0b102d5379db6545ff",
+      "choice": "do_you_have_pets",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07d69beb1395c9644594",
+      "choice": "news_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08dd61e88ffd41f361e3",
+      "choice": "visa_or_mastercard",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a18939a3eeecc12700a",
+      "choice": "lost_luggage",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07d945be7e5ffbda2701",
+      "choice": "qa_factoid",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-089b724533b94872f38c",
+      "choice": "Entertainment & Music",
+      "confidence": 0.1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08f9193b960d6d83c17d",
+      "choice": "age_limit",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a19c63f4ae2ace8c96d",
+      "choice": "reset_settings",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07daac9a9a3f056cb06b",
+      "choice": "general_quirky",
+      "confidence": 0.8,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08fa4d34b470ec76aef2",
+      "choice": "verify_my_identity",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a2477826c58ce237c05",
+      "choice": "weather",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07dbdf552dd3a5237e69",
+      "choice": "iot_wemo_on",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08facc8f5e1543e858ae",
+      "choice": "card_payment_wrong_exchange_rate",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a371e24b603723cdb37",
+      "choice": "change_speed",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07dc746d119a1b25260e",
+      "choice": "calendar_remove",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-090a0f5c04d8a30845bc",
+      "choice": "card_arrival",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a39dc5c9ebf49dea19a",
+      "choice": "weather",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07e20c01fce7a3333af7",
+      "choice": "weather_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-090a96ad71b44e7e264d",
+      "choice": "declined_cash_withdrawal",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a3c629b6c8a0916149a",
+      "choice": "card_declined",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07e21566a06c3d82b4ee",
+      "choice": "transport_query",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-090f0ee0697b6500ba16",
+      "choice": "direct_debit_payment_not_recognised",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a4157b7b10452bc3175",
+      "choice": "change_ai_name",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07f423963ab926788449",
+      "choice": "music_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-09105768d24f1b35296a",
+      "choice": "top_up_by_card_charge",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a43e7da69a7c396aabe",
+      "choice": "gas_type",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-07f6931518c6b8501802",
+      "choice": "cooking_recipe",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-091b4ef212b4637a7d1d",
+      "choice": "top_up_by_card_charge",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-091e0805e0a1b86cec57",
+      "choice": "transaction_charged_twice",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a4b051427c52fd8d536",
+      "choice": "payday",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08046e8fb5ee06872ff3",
+      "choice": "social_query",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-092094deaa84b2ffe91b",
+      "choice": "country_support",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a4bbe9926208072c74c",
+      "choice": "ingredients_list",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08085e3fb668cc265d68",
+      "choice": "calendar_remove",
+      "confidence": 0.98,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-080d6ae00ee54aff1192",
+      "choice": "email_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a51a8dd3a7bf57a0800",
+      "choice": "oil_change_how",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-080f68c484a1e270c097",
+      "choice": "social_post",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-093938b08fa264c770f1",
+      "choice": "cash_withdrawal_charge",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a53303a635870803061",
+      "choice": "tire_change",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08139ec21f129ab037b3",
+      "choice": "qa_stock",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a596a5fb1193be04f31",
+      "choice": "shopping_list",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08154846f712e0668403",
+      "choice": "iot_wemo_off",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-093fb203240bc7a39648",
+      "choice": "request_refund",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a599cfedd461e928c00",
+      "choice": "whisper_mode",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0816014db2f4ec7b3897",
+      "choice": "social_query",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a5a0bfa4afd9a7f8ee8",
+      "choice": "share_location",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-081639b33322f32a7c5a",
+      "choice": "email_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-09559e6d09494eca9cc4",
+      "choice": "direct_debit_payment_not_recognised",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08213892eac3d67bf16c",
+      "choice": "datetime_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a67bf92d2f420f0fd63",
+      "choice": "translate",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-082cc3b20beeda9201d9",
+      "choice": "qa_maths",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-095dc626696366d23549",
+      "choice": "declined_card_payment",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a7546fb52d7644169ab",
+      "choice": "meeting_schedule",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-083121be42d69ed744d2",
+      "choice": "news_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-095f8378331998adcde5",
+      "choice": "balance_not_updated_after_cheque_or_cash_deposit",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a775fbb3511422301e6",
+      "choice": "travel_alert",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08352743ee6bb0a9fe50",
+      "choice": "datetime_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-09631a7638bf19780dad",
+      "choice": "verify_my_identity",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a791c9451986b162342",
+      "choice": "oil_change_how",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0836e22673e92e81bb94",
+      "choice": "alarm_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a794da8b9317774ba5f",
+      "choice": "income",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0839a3c8b4031267df63",
+      "choice": "email_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0976a2d3391afbc16797",
+      "choice": "card_acceptance",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a855313297e78dbb4ff",
+      "choice": "mpg",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-097857a2ab489bb9ed85",
+      "choice": "transfer_fee_charged",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a87bec395da0790d6dc",
+      "choice": "calendar",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0842c88e462433e103b1",
+      "choice": "transport_ticket",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-097bc82707a81c3a5f6b",
+      "choice": "top_up_by_card_charge",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a88c42d1e960d53c7ef",
+      "choice": "application_status",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-084ed02faff9a261ebfe",
+      "choice": "transport_ticket",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-09863839c6499b9b3036",
+      "choice": "extra_charge_on_statement",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a951c47a014cbee9000",
+      "choice": "rollover_401k",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0850ef4a21d4f31f624f",
+      "choice": "play_music",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1a9f23e4c22b9a530972",
+      "choice": "repeat",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0851cd49feb02be0c7ca",
+      "choice": "audio_volume_up",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-099559181178010db144",
+      "choice": "topping_up_by_card",
+      "confidence": 0.9,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1ab02c66e675d13d92aa",
+      "choice": "repeat",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08561347132019edd5e2",
+      "choice": "audio_volume_down",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1acfcde53ed56788b826",
+      "choice": "current_location",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-085b63a284a724bb943f",
+      "choice": "calendar_set",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1ad0190a2b11609600a7",
+      "choice": "international_visa",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-0861b4dc4d1b13155d4d",
+      "choice": "weather_query",
+      "confidence": 1,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-1ad4e897e2d3e34d56e5",
+      "choice": "next_holiday",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    },
+    {
+      "id": "dc-08633d7b19e5b1d91509",
+      "choice": "play_music",
+      "confidence": 0.95,
+      "exact_source_choice_match": true
+    }
+  ]
+}

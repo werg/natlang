@@ -1,0 +1,79 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v43-prefix-646-runtimev18-approved-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-inputs-v1",
+  "files": [
+    {
+      "path": "approved-plan-v1.json",
+      "bytes": 11595,
+      "sha256": "001333f5bbd2f049ac84af3c5181d46f693fa6e0ff2013837e5b9ad7f94d4a59"
+    },
+    {
+      "path": "frozen-runtime.json",
+      "bytes": 203969,
+      "sha256": "bd075ebe3d223f18796c87a89848fcbf18c7e6fbd1089775d0ccdf0bbfffe1d3"
+    },
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 11467,
+      "sha256": "8067429ee9fc4e2865d6d7259297eb49cf147a149438658c516dc2a0472ef917"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 22275,
+      "sha256": "04cce9a84dac5a95cd59280f37eaf37025274765c1b99be98252c6d7e56541cc"
+    },
+    {
+      "path": "root-independent-approval-v1.json",
+      "bytes": 551,
+      "sha256": "5ad2eb661e150890a7e98f0c409273e59974c934fe886e39ba334d65bd5b9d71"
+    },
+    {
+      "path": "snapshot-note.json",
+      "bytes": 1078,
+      "sha256": "f18eba75952da1b5ad9e7b9f543b349b31ef390580ec0f8f5674e392f9e15933"
+    },
+    {
+      "path": "source-review/decision_source_quality_holds.json",
+      "bytes": 61430,
+      "sha256": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994"
+    },
+    {
+      "path": "source-review/prepare_luna_folder_campaign.py",
+      "bytes": 29142,
+      "sha256": "57ae3fcbea99d931d73eaf0d0e0ee0adb8dcec8997302ec81243d7e888378408"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 6737,
+      "sha256": "9066f2245a4ef43a024bfe79b354f5f02ed1db2f465259c187f557aad3e1bbdc",
+      "lines": 7
+    },
+    {
+      "path": "worker-02/queue.jsonl",
+      "bytes": 6737,
+      "sha256": "8e41edf45dbc9c25940f6ccae2150382d27c8fdcbbbf72e4675d10b11a3f2712",
+      "lines": 7
+    },
+    {
+      "path": "worker-03/queue.jsonl",
+      "bytes": 6737,
+      "sha256": "202dca553b3322eeb3eb270918b156bfa087e50f6a427ba507da81162245255a",
+      "lines": 7
+    },
+    {
+      "path": "worker-04/queue.jsonl",
+      "bytes": 6737,
+      "sha256": "5f1ee70e11aacd7a68714cc4efb5499ba6fb9784fc76973e4ea0b03a4941b90b",
+      "lines": 7
+    },
+    {
+      "path": "worker-05/queue.jsonl",
+      "bytes": 5774,
+      "sha256": "cd05958d104d8b3b248651ca8828282ad744f2daa852f16e4c2b41eee359c080",
+      "lines": 6
+    }
+  ],
+  "bytes": 374229
+}

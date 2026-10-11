@@ -1,0 +1,688 @@
+{
+  "schema": "natlang.held-static-decision-adapter-summary/1",
+  "created_at": "2026-10-11T16:58:48.383Z",
+  "training_admission": false,
+  "cases": 34,
+  "source_labels_accepted": 256,
+  "source_cases": 1941,
+  "label_rows": 328,
+  "replay_attempted": 34,
+  "replay_failures": 0,
+  "native_turns": 580,
+  "rejection_rows": 1685,
+  "batch_size_limit": 8,
+  "group_preserving_oversized_batches": 0,
+  "replay_options_sha256": "b7e20ff908003d0b112917f3f3020cad6deca372ef6c75a29306d4a6eef1ae48",
+  "replay_context": "Label-derived static controller/reference generation; zero provider calls; no teacher-generated scaffold/reasoning. Gold annotations and teacher judgment receipts are absent from model-facing folder files and prompts.",
+  "files": {
+    "source_cases_sha256": "3caa918786f7ac092f2dabe33a37f6688981e172b6f2a11bf2ea42f7e0270f6c",
+    "adapter_sha256": "d723c37cb3beeb717b0421cc91e60e985725e99362fe9f65dfafdf9ad339f013",
+    "folder_decision_scaffold_sha256": "878d4f5fcc58d2d51d71b6efa9e29384295a58098633cc6de165abd419d289bf",
+    "folder_decision_scaffold_components": {
+      "/home/werg/natlang/ts-host/scripts/static-adapters/folder-decision-scaffold.mjs": "878d4f5fcc58d2d51d71b6efa9e29384295a58098633cc6de165abd419d289bf",
+      "/home/werg/natlang/ts-host/scripts/advisory-file.mjs": "00cfe276b2f5fdf45614d1302e3428be386ad25f3d84ed11c4d8fa732708eba0",
+      "/home/werg/natlang/ts-host/scripts/static-adapters/decision-task-contracts.mjs": "2c1fb0d096354ab7437bdf66d8ff3ff1c312bc95bf39fae9119f13ac749e26f1",
+      "/home/werg/natlang/training/decision_task_contracts.json": "b941a04443d3a47768ef8bdf68730b4fae86a1959aa16abdc6db7b559767ec73"
+    },
+    "scorer_source_sha256": "dd3737b68ad891845c8895146878b7db2b17f358271fd7298519c84d740a32f1",
+    "scorer_dist_sha256": "171f554c7f097c39d53f916a2bdd69a9d6543e2dcb4a31bd1629d2c4213d16a1",
+    "tool_surface_sha256": "edec5cd7ad8b4698538ae601ba8b950e10c01f2fd1f38ac870b9298fd31daec2"
+  },
+  "execution_component_archive": {
+    "schema": "natlang.static-decision-execution-components/1",
+    "manifest_path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/held-static-choice-confidence-v43-prefix-646-delta-adapter-v1/execution-components/manifest.json",
+    "manifest_sha256": "7cce6bc43bace79f93119a7d7fbf763ebfc6509550e9633fe00f72bc2cc4a709",
+    "component_count": 58,
+    "components": [
+      {
+        "path": "/home/werg/natlang/training/decision_task_contracts.json",
+        "roles": [
+          "criteria-contract-data"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 2114,
+        "sha256": "b941a04443d3a47768ef8bdf68730b4fae86a1959aa16abdc6db7b559767ec73",
+        "payload": "payload/001-decision_task_contracts.json",
+        "payload_sha256": "b941a04443d3a47768ef8bdf68730b4fae86a1959aa16abdc6db7b559767ec73"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/environment.js",
+        "roles": [
+          "runtime-environment"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 19178,
+        "sha256": "10177b5437c3f81ddb96112ddd4133d113995751392799086162696170a27274",
+        "payload": "payload/002-environment.js",
+        "payload_sha256": "10177b5437c3f81ddb96112ddd4133d113995751392799086162696170a27274"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/agent.js",
+        "roles": [
+          "native-agent",
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 96883,
+        "sha256": "6e0ef3304e2e1fd2a177b2746e86b792bc4e0f94e4c838482859119dbe9dbe88",
+        "payload": "payload/003-agent.js",
+        "payload_sha256": "6e0ef3304e2e1fd2a177b2746e86b792bc4e0f94e4c838482859119dbe9dbe88"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/archive.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 2677,
+        "sha256": "db4d9b3e88fc59cb04fe002aeb46769d75cd489a0a5b2f6f702c49e865e444b9",
+        "payload": "payload/004-archive.js",
+        "payload_sha256": "db4d9b3e88fc59cb04fe002aeb46769d75cd489a0a5b2f6f702c49e865e444b9"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/cutoff.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 2346,
+        "sha256": "63e175e4925e69e5324f49eacf5774bc9b67f2dc256f34daf2510c7a6bd4508e",
+        "payload": "payload/005-cutoff.js",
+        "payload_sha256": "63e175e4925e69e5324f49eacf5774bc9b67f2dc256f34daf2510c7a6bd4508e"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/data-layout.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 10945,
+        "sha256": "8d358171a00a422574f8bcd5d3e3114e210b39addf8d5788a21e5c4179934cd3",
+        "payload": "payload/006-data-layout.js",
+        "payload_sha256": "8d358171a00a422574f8bcd5d3e3114e210b39addf8d5788a21e5c4179934cd3"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/decision-review.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 1161,
+        "sha256": "c940c27195ce7af1f2f6a9c130b2f0c76a7b605279d4e89d67dae9dba88437d9",
+        "payload": "payload/007-decision-review.js",
+        "payload_sha256": "c940c27195ce7af1f2f6a9c130b2f0c76a7b605279d4e89d67dae9dba88437d9"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/decision.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 2846,
+        "sha256": "3d7bc8773a9dab098f374cdeca0ec9de2d812870953212fe9cf70606a3d90486",
+        "payload": "payload/008-decision.js",
+        "payload_sha256": "3d7bc8773a9dab098f374cdeca0ec9de2d812870953212fe9cf70606a3d90486"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/effects.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 5420,
+        "sha256": "350777166ebc11ac55946ff1ff8c4c4876e610198173ef685e1fe7c9d7bde8c6",
+        "payload": "payload/009-effects.js",
+        "payload_sha256": "350777166ebc11ac55946ff1ff8c4c4876e610198173ef685e1fe7c9d7bde8c6"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/eval-types.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 3805,
+        "sha256": "b53bc5bebd07a675f4ad1184149e6770cd29a11c1f3fb91dfed19957dd96f182",
+        "payload": "payload/010-eval-types.js",
+        "payload_sha256": "b53bc5bebd07a675f4ad1184149e6770cd29a11c1f3fb91dfed19957dd96f182"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/evaluator.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 1159,
+        "sha256": "1d4a4569c9be2381dd07d6102fedb41a90cc0776a2a9413eeeb5de79dbe04da4",
+        "payload": "payload/011-evaluator.js",
+        "payload_sha256": "1d4a4569c9be2381dd07d6102fedb41a90cc0776a2a9413eeeb5de79dbe04da4"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/external.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 2131,
+        "sha256": "7abe4557e8703cd7da988cc35215a41c26526a841f73a153329410b7982d2fd1",
+        "payload": "payload/012-external.js",
+        "payload_sha256": "7abe4557e8703cd7da988cc35215a41c26526a841f73a153329410b7982d2fd1"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/file-diff-preview.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 2459,
+        "sha256": "0230fb319ee478d58e3a0a56531d32260a2283ea3a87790e0dc7edb1386d446e",
+        "payload": "payload/013-file-diff-preview.js",
+        "payload_sha256": "0230fb319ee478d58e3a0a56531d32260a2283ea3a87790e0dc7edb1386d446e"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/folder-python.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 7997,
+        "sha256": "ccaec9ddaa14f7588e6f54f2e98d1b0a1c38845fdde5d95becbad853e660fc83",
+        "payload": "payload/014-folder-python.js",
+        "payload_sha256": "ccaec9ddaa14f7588e6f54f2e98d1b0a1c38845fdde5d95becbad853e660fc83"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/folder-shell.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 16792,
+        "sha256": "3ee57b63eb633686bbda420ab49239b58d41a8ab7267b2a947acded8e93309aa",
+        "payload": "payload/015-folder-shell.js",
+        "payload_sha256": "3ee57b63eb633686bbda420ab49239b58d41a8ab7267b2a947acded8e93309aa"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/fusion-blocks.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 1166,
+        "sha256": "a13ebc7006155a724aa79ee24f4148b0fb3d37f5ce0bc5d5c8b15b745c0eef2c",
+        "payload": "payload/016-fusion-blocks.js",
+        "payload_sha256": "a13ebc7006155a724aa79ee24f4148b0fb3d37f5ce0bc5d5c8b15b745c0eef2c"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/graph.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 8439,
+        "sha256": "e4c039b04156e08f1762e5c87470c21238fcab390ed73fc3a54f1265d6a5b4ba",
+        "payload": "payload/017-graph.js",
+        "payload_sha256": "e4c039b04156e08f1762e5c87470c21238fcab390ed73fc3a54f1265d6a5b4ba"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/hash.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 362,
+        "sha256": "4ee149d265d8a8a56009ada87c78ecf719a3e718d2363e492e2c1014cff3afe2",
+        "payload": "payload/018-hash.js",
+        "payload_sha256": "4ee149d265d8a8a56009ada87c78ecf719a3e718d2363e492e2c1014cff3afe2"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/introspection.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 1732,
+        "sha256": "157d5ceabc8e3cd1e4506dd3c6d9627fd80758db41bda4c9c4f765258a10930b",
+        "payload": "payload/019-introspection.js",
+        "payload_sha256": "157d5ceabc8e3cd1e4506dd3c6d9627fd80758db41bda4c9c4f765258a10930b"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/natlang-command.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 3514,
+        "sha256": "53c9ae9e1cde203ab73d6f79340af48febdd56f77c24842dc6a5fddd0768e8f8",
+        "payload": "payload/020-natlang-command.js",
+        "payload_sha256": "53c9ae9e1cde203ab73d6f79340af48febdd56f77c24842dc6a5fddd0768e8f8"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/neuralese-preview.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 5032,
+        "sha256": "fad0daa89baffe980c13ec893d4c09bc7f49ea98511e7b1c5c82bf4e18c5855c",
+        "payload": "payload/021-neuralese-preview.js",
+        "payload_sha256": "fad0daa89baffe980c13ec893d4c09bc7f49ea98511e7b1c5c82bf4e18c5855c"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/neuralese-store.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 6879,
+        "sha256": "0165d23034cbdd7ca71126fd1e6749495022717487d36e276e06059a3056f2d3",
+        "payload": "payload/022-neuralese-store.js",
+        "payload_sha256": "0165d23034cbdd7ca71126fd1e6749495022717487d36e276e06059a3056f2d3"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/neuralese.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 9825,
+        "sha256": "3678475e743d6a280f5a97c3298895c5091714a45b78c4e3c35bd07deb219d23",
+        "payload": "payload/023-neuralese.js",
+        "payload_sha256": "3678475e743d6a280f5a97c3298895c5091714a45b78c4e3c35bd07deb219d23"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/node-files.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 5191,
+        "sha256": "5b57bb0061fefac5288212e988b98318eed3a60422f98046fc7016c9b6cbd5e1",
+        "payload": "payload/024-node-files.js",
+        "payload_sha256": "5b57bb0061fefac5288212e988b98318eed3a60422f98046fc7016c9b6cbd5e1"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/nz-file.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 20388,
+        "sha256": "e07cbfa9d03bee539e42586f7d3dc6b164842eabe00f4e1db6ed617e90d0ee1e",
+        "payload": "payload/025-nz-file.js",
+        "payload_sha256": "e07cbfa9d03bee539e42586f7d3dc6b164842eabe00f4e1db6ed617e90d0ee1e"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/pages.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 2551,
+        "sha256": "71503c4ee9a1e94cd1b321e9d90869194d46b9feb6b78ecc782a072938673533",
+        "payload": "payload/026-pages.js",
+        "payload_sha256": "71503c4ee9a1e94cd1b321e9d90869194d46b9feb6b78ecc782a072938673533"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/prompt.js",
+        "roles": [
+          "native-prompt",
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 35313,
+        "sha256": "1a5892f39074bbbbfe2797916135bac7eb0476101604ea515048c1f359d5905a",
+        "payload": "payload/027-prompt.js",
+        "payload_sha256": "1a5892f39074bbbbfe2797916135bac7eb0476101604ea515048c1f359d5905a"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/pseudo-call.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 3315,
+        "sha256": "bcea8ba1878ed0363ed1b5fa7f44d9c092a9aa830ea2082bd786023e2275336c",
+        "payload": "payload/028-pseudo-call.js",
+        "payload_sha256": "bcea8ba1878ed0363ed1b5fa7f44d9c092a9aa830ea2082bd786023e2275336c"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/python-folderfs.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 7782,
+        "sha256": "c0c20c81c88ddcfd14a99154984c4019279b65bbb7359c2d959e749f4c63e969",
+        "payload": "payload/029-python-folderfs.js",
+        "payload_sha256": "c0c20c81c88ddcfd14a99154984c4019279b65bbb7359c2d959e749f4c63e969"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/python-sources.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 10148,
+        "sha256": "b63dc2b5d5bdc7f1f1648a0881a02a7501d5946f3c094defbd92fe710d3a8568",
+        "payload": "payload/030-python-sources.js",
+        "payload_sha256": "b63dc2b5d5bdc7f1f1648a0881a02a7501d5946f3c094defbd92fe710d3a8568"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/refinement-settings.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 3922,
+        "sha256": "9570ecb362859d2e8c47421e1b14d3e31f23887f36fb66acabf0f890c3214cda",
+        "payload": "payload/031-refinement-settings.js",
+        "payload_sha256": "9570ecb362859d2e8c47421e1b14d3e31f23887f36fb66acabf0f890c3214cda"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/refinement.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 15541,
+        "sha256": "965cdee33b033ce07785269438476a36e608859ad76117cea2783452fdee01be",
+        "payload": "payload/032-refinement.js",
+        "payload_sha256": "965cdee33b033ce07785269438476a36e608859ad76117cea2783452fdee01be"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/representation.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 3865,
+        "sha256": "f879a1aa89ddf9d084e030b346f7d65a04c727566e804a7b8753ec05d512d52c",
+        "payload": "payload/033-representation.js",
+        "payload_sha256": "f879a1aa89ddf9d084e030b346f7d65a04c727566e804a7b8753ec05d512d52c"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/runtime.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 160333,
+        "sha256": "0bd6493485a6775e4d3fd70cbe4f6a8b0f0927a89f40ed5d07abe9fa2488c5a8",
+        "payload": "payload/034-runtime.js",
+        "payload_sha256": "0bd6493485a6775e4d3fd70cbe4f6a8b0f0927a89f40ed5d07abe9fa2488c5a8"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/scenario.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 2525,
+        "sha256": "f8a9de34cbbd9bf6b478410570cacc2bbc498b10e5a928c9b4e22d9c5a823287",
+        "payload": "payload/035-scenario.js",
+        "payload_sha256": "f8a9de34cbbd9bf6b478410570cacc2bbc498b10e5a928c9b4e22d9c5a823287"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/scoped-fs.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 35998,
+        "sha256": "4e42d185d70f0912acecd3decdd17985fe188b21e8f22c67e5b4f29a692cafe9",
+        "payload": "payload/036-scoped-fs.js",
+        "payload_sha256": "4e42d185d70f0912acecd3decdd17985fe188b21e8f22c67e5b4f29a692cafe9"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/system-prompts.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 6264,
+        "sha256": "43a8071aa51bc1d82af2825a6de3b45ba9feb3f665f3d27ff51eaaa957fe4772",
+        "payload": "payload/037-system-prompts.js",
+        "payload_sha256": "43a8071aa51bc1d82af2825a6de3b45ba9feb3f665f3d27ff51eaaa957fe4772"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/tool-surface.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 151,
+        "sha256": "49a3fbefcb171c20dae1e1fd4f1ea00df9a41784f80def6379f5531e81549538",
+        "payload": "payload/038-tool-surface.js",
+        "payload_sha256": "49a3fbefcb171c20dae1e1fd4f1ea00df9a41784f80def6379f5531e81549538"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/trace.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 5616,
+        "sha256": "5330ff72927cd20cb2fa2ed3da7b5dcdd0c782869c30a8d87df74d5f123c04e3",
+        "payload": "payload/039-trace.js",
+        "payload_sha256": "5330ff72927cd20cb2fa2ed3da7b5dcdd0c782869c30a8d87df74d5f123c04e3"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/type-aliases.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 944,
+        "sha256": "4daab72d6d1affb881c41fd10230270a820018449cdf0b5db6ed708472594a93",
+        "payload": "payload/040-type-aliases.js",
+        "payload_sha256": "4daab72d6d1affb881c41fd10230270a820018449cdf0b5db6ed708472594a93"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/types.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 29456,
+        "sha256": "8ed10ad30dd107604082b9bc957db296c094a441fc35569de8cfd3351a1dd082",
+        "payload": "payload/041-types.js",
+        "payload_sha256": "8ed10ad30dd107604082b9bc957db296c094a441fc35569de8cfd3351a1dd082"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/untrusted.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 5369,
+        "sha256": "f59f16b1fae0fd658eba067cf17d45eb693029b427777c7a51cc7470b712e3e2",
+        "payload": "payload/042-untrusted.js",
+        "payload_sha256": "f59f16b1fae0fd658eba067cf17d45eb693029b427777c7a51cc7470b712e3e2"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/native/values.js",
+        "roles": [
+          "native-tool-or-runtime-module"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 20890,
+        "sha256": "4aba335069227efe95ad7e774736d3bae1367bb2609ed721d15430b107a5d70c",
+        "payload": "payload/043-values.js",
+        "payload_sha256": "4aba335069227efe95ad7e774736d3bae1367bb2609ed721d15430b107a5d70c"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/scope-compiler.js",
+        "roles": [
+          "scope-compiler"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 80688,
+        "sha256": "c6101ed383046baf52665ba2112e08f7afb4168419542275117405896b3a600e",
+        "payload": "payload/044-scope-compiler.js",
+        "payload_sha256": "c6101ed383046baf52665ba2112e08f7afb4168419542275117405896b3a600e"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/skills/graded.js",
+        "roles": [
+          "loaded-scorer-runtime"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 22094,
+        "sha256": "171f554c7f097c39d53f916a2bdd69a9d6543e2dcb4a31bd1629d2c4213d16a1",
+        "payload": "payload/045-graded.js",
+        "payload_sha256": "171f554c7f097c39d53f916a2bdd69a9d6543e2dcb4a31bd1629d2c4213d16a1"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/teacher/collector.js",
+        "roles": [
+          "collector-runtime"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 102805,
+        "sha256": "3445aafe0312d110964729480c29d9f960a3c9329ab806937679179ac285a5ef",
+        "payload": "payload/046-collector.js",
+        "payload_sha256": "3445aafe0312d110964729480c29d9f960a3c9329ab806937679179ac285a5ef"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum.js",
+        "roles": [
+          "curriculum-runtime"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 30024,
+        "sha256": "a77f724f6145ac566cb2caa724fb7fe43e2daaf446bc35af570c065b0780d4bc",
+        "payload": "payload/047-curriculum.js",
+        "payload_sha256": "a77f724f6145ac566cb2caa724fb7fe43e2daaf446bc35af570c065b0780d4bc"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/teacher/native-materializer.js",
+        "roles": [
+          "native-materializer"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 130059,
+        "sha256": "bd40dd9fc608a147b7891222907a5ed7deb4d1d4193eaa582f9760c826f1c29b",
+        "payload": "payload/048-native-materializer.js",
+        "payload_sha256": "bd40dd9fc608a147b7891222907a5ed7deb4d1d4193eaa582f9760c826f1c29b"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/dist/teacher/program.js",
+        "roles": [
+          "program-runtime"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 5664,
+        "sha256": "955871e9e69258b5d2e2bc48641325ca119a3dedbe2f4688cd9f884573a41005",
+        "payload": "payload/049-program.js",
+        "payload_sha256": "955871e9e69258b5d2e2bc48641325ca119a3dedbe2f4688cd9f884573a41005"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/scripts/advisory-file.mjs",
+        "roles": [
+          "canonical-json-plumbing"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 2235,
+        "sha256": "00cfe276b2f5fdf45614d1302e3428be386ad25f3d84ed11c4d8fa732708eba0",
+        "payload": "payload/050-advisory-file.mjs",
+        "payload_sha256": "00cfe276b2f5fdf45614d1302e3428be386ad25f3d84ed11c4d8fa732708eba0"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/scripts/inline-curriculum/references.mjs",
+        "roles": [
+          "reference-collector"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 7904,
+        "sha256": "cab72a8d77735965ece55e457d8cda8d0702bf92207a9fef8ad4f17b58625bbf",
+        "payload": "payload/051-references.mjs",
+        "payload_sha256": "cab72a8d77735965ece55e457d8cda8d0702bf92207a9fef8ad4f17b58625bbf"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/scripts/static-adapters/common.mjs",
+        "roles": [
+          "adapter-validation-and-hashing"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 3989,
+        "sha256": "38f1998767a6feaabe8a74f004c9740c69426215aff18fe8956a5d4856eb71ca",
+        "payload": "payload/052-common.mjs",
+        "payload_sha256": "38f1998767a6feaabe8a74f004c9740c69426215aff18fe8956a5d4856eb71ca"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/scripts/static-adapters/decision-task-contracts.mjs",
+        "roles": [
+          "criteria-selection"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 2637,
+        "sha256": "2c1fb0d096354ab7437bdf66d8ff3ff1c312bc95bf39fae9119f13ac749e26f1",
+        "payload": "payload/053-decision-task-contracts.mjs",
+        "payload_sha256": "2c1fb0d096354ab7437bdf66d8ff3ff1c312bc95bf39fae9119f13ac749e26f1"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/scripts/static-adapters/decisions.mjs",
+        "roles": [
+          "decision-contract-plumbing"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 9753,
+        "sha256": "0372490865a747edf2b94a3d1697a4482c47e0f1115818ca083373915aac7c3e",
+        "payload": "payload/054-decisions.mjs",
+        "payload_sha256": "0372490865a747edf2b94a3d1697a4482c47e0f1115818ca083373915aac7c3e"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/scripts/static-adapters/execution-components.mjs",
+        "roles": [
+          "shared-component-archiver"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 7825,
+        "sha256": "6835a534c59aba289d51afff26a5534389e30e3e941c1b74569022bb090545ff",
+        "payload": "payload/055-execution-components.mjs",
+        "payload_sha256": "6835a534c59aba289d51afff26a5534389e30e3e941c1b74569022bb090545ff"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/scripts/static-adapters/folder-decision-scaffold.mjs",
+        "roles": [
+          "decision-folder-scaffold"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 7830,
+        "sha256": "878d4f5fcc58d2d51d71b6efa9e29384295a58098633cc6de165abd419d289bf",
+        "payload": "payload/056-folder-decision-scaffold.mjs",
+        "payload_sha256": "878d4f5fcc58d2d51d71b6efa9e29384295a58098633cc6de165abd419d289bf"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/scripts/static-adapters/teacher-decision-labels.mjs",
+        "roles": [
+          "adapter-entrypoint"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 44466,
+        "sha256": "d723c37cb3beeb717b0421cc91e60e985725e99362fe9f65dfafdf9ad339f013",
+        "payload": "payload/057-teacher-decision-labels.mjs",
+        "payload_sha256": "d723c37cb3beeb717b0421cc91e60e985725e99362fe9f65dfafdf9ad339f013"
+      },
+      {
+        "path": "/home/werg/natlang/ts-host/src/skills/graded.ts",
+        "roles": [
+          "scorer-source-reference"
+        ],
+        "verification": "live-execution",
+        "size_bytes": 22460,
+        "sha256": "dd3737b68ad891845c8895146878b7db2b17f358271fd7298519c84d740a32f1",
+        "payload": "payload/058-graded.ts",
+        "payload_sha256": "dd3737b68ad891845c8895146878b7db2b17f358271fd7298519c84d740a32f1"
+      }
+    ]
+  },
+  "execution_component_verification": {
+    "schema": "natlang.static-decision-execution-component-verification/1",
+    "verified": true,
+    "checked_components": 58,
+    "manifest_sha256": "7cce6bc43bace79f93119a7d7fbf763ebfc6509550e9633fe00f72bc2cc4a709",
+    "verification": "all archived payloads match their immutable manifest pins; live-execution components also match current source bytes",
+    "live_execution_components": 58,
+    "archived_provenance_components": 0
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "schema": "natlang.reviewed-fresh-luna-campaign/1",
+  "root_approved": false,
+  "preparation_only": true,
+  "cwd": "/home/werg/natlang",
+  "runtime": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v18",
+  "supervisor": "/home/werg/natlang/scripts/run_bonsai_queue.py",
+  "reasoning_effort": "medium",
+  "training_admission": false,
+  "independent_new_worlds": 0,
+  "workers": [
+    {
+      "number": 1,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-01/queue.jsonl",
+      "journal": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-01/journal.jsonl",
+      "log": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-01/worker.log"
+    },
+    {
+      "number": 2,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-02/queue.jsonl",
+      "journal": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-02/journal.jsonl",
+      "log": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-02/worker.log"
+    },
+    {
+      "number": 3,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-03/queue.jsonl",
+      "journal": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-03/journal.jsonl",
+      "log": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-03/worker.log"
+    },
+    {
+      "number": 4,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-04/queue.jsonl",
+      "journal": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-04/journal.jsonl",
+      "log": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-04/worker.log"
+    },
+    {
+      "number": 5,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-05/queue.jsonl",
+      "journal": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-05/journal.jsonl",
+      "log": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-05/worker.log"
+    }
+  ],
+  "artifact_hashes": {
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/held-static-choice-confidence-v43-prefix-646-delta-adapter-v1/cases.jsonl": "d5b199a704547eca83f89635c21488b2b68f540683a6a396ba2fa726cc99deb1",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/held-static-choice-confidence-v43-prefix-646-delta-adapter-v1/replay.results.jsonl": "c3ed8615d9b449fdab0a9adb94bdc5b6e6abd9f54cd1413d2dfdd4f88c83b771",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/root-generation-source-review-v1.json": "04cce9a84dac5a95cd59280f37eaf37025274765c1b99be98252c6d7e56541cc",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/source-review/decision_source_quality_holds.json": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/source-review/prepare_luna_folder_campaign.py": "57ae3fcbea99d931d73eaf0d0e0ee0adb8dcec8997302ec81243d7e888378408",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v18/frozen-runtime.json": "bd075ebe3d223f18796c87a89848fcbf18c7e6fbd1089775d0ccdf0bbfffe1d3",
+    "/home/werg/natlang/scripts/run_bonsai_queue.py": "7bab73c7bb9f35e1a2cb62727a0beedcaba01cd1328c47e091f047d2b36e2b39",
+    "/home/werg/natlang/scripts/start_reviewed_luna_campaign.py": "e0759b7c22d35e828c8e405f10a7c901ed23553b7c7db522ac6ce77a26743139",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-01/queue.jsonl": "034b0ff863673b2011423e4783a6b584e1f0a2a0ececc534b453a135b7149585",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17/frozen-runtime.json": "3cd37901422b89dfd9af3d573833dbf4ce1758c28234519557fe2dc848e56b69",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-02/queue.jsonl": "7f268e4685612076afb813dde8a2435ad90aee36b24f8f33e63bf4ba1eb672fd",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-03/queue.jsonl": "4363ef19a2d08ee398087e078698274f8784ec389bdfa08901acb5c079e7895c",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-04/queue.jsonl": "78efae4cab568685631c996411c5423b7b5c717f86a02ab2a2547b34207e2ee7",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-05/queue.jsonl": "444e73bad974428328c2e74ef27b66139a21edee9ff1fd46e510a293b3367590",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-01/queue.jsonl": "9066f2245a4ef43a024bfe79b354f5f02ed1db2f465259c187f557aad3e1bbdc",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-02/queue.jsonl": "8e41edf45dbc9c25940f6ccae2150382d27c8fdcbbbf72e4675d10b11a3f2712",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-03/queue.jsonl": "202dca553b3322eeb3eb270918b156bfa087e50f6a427ba507da81162245255a",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-04/queue.jsonl": "5f1ee70e11aacd7a68714cc4efb5499ba6fb9784fc76973e4ea0b03a4941b90b",
+    "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/worker-05/queue.jsonl": "cd05958d104d8b3b248651ca8828282ad744f2daa852f16e4c2b41eee359c080"
+  },
+  "launch_record": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/campaign-launch.json",
+  "predecessors": [
+    {
+      "number": 1,
+      "pid": 1170361,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-01/queue.jsonl",
+      "journal": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-01/journal.jsonl",
+      "queue_sha256": "034b0ff863673b2011423e4783a6b584e1f0a2a0ececc534b453a135b7149585",
+      "runtime": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17",
+      "runtime_manifest_sha256": "3cd37901422b89dfd9af3d573833dbf4ce1758c28234519557fe2dc848e56b69"
+    },
+    {
+      "number": 2,
+      "pid": 1170373,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-02/queue.jsonl",
+      "journal": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-02/journal.jsonl",
+      "queue_sha256": "7f268e4685612076afb813dde8a2435ad90aee36b24f8f33e63bf4ba1eb672fd",
+      "runtime": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17",
+      "runtime_manifest_sha256": "3cd37901422b89dfd9af3d573833dbf4ce1758c28234519557fe2dc848e56b69"
+    },
+    {
+      "number": 3,
+      "pid": 1170385,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-03/queue.jsonl",
+      "journal": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-03/journal.jsonl",
+      "queue_sha256": "4363ef19a2d08ee398087e078698274f8784ec389bdfa08901acb5c079e7895c",
+      "runtime": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17",
+      "runtime_manifest_sha256": "3cd37901422b89dfd9af3d573833dbf4ce1758c28234519557fe2dc848e56b69"
+    },
+    {
+      "number": 4,
+      "pid": 1170397,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-04/queue.jsonl",
+      "journal": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-04/journal.jsonl",
+      "queue_sha256": "78efae4cab568685631c996411c5423b7b5c717f86a02ab2a2547b34207e2ee7",
+      "runtime": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17",
+      "runtime_manifest_sha256": "3cd37901422b89dfd9af3d573833dbf4ce1758c28234519557fe2dc848e56b69"
+    },
+    {
+      "number": 5,
+      "pid": 1170409,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-05/queue.jsonl",
+      "journal": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-05/journal.jsonl",
+      "queue_sha256": "444e73bad974428328c2e74ef27b66139a21edee9ff1fd46e510a293b3367590",
+      "runtime": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17",
+      "runtime_manifest_sha256": "3cd37901422b89dfd9af3d573833dbf4ce1758c28234519557fe2dc848e56b69"
+    }
+  ],
+  "approval_scope": "Preparation only. Source/reference gates passed, but source quality and execution remain subject to owner review; no training admission or independent-world credit is conferred."
+}

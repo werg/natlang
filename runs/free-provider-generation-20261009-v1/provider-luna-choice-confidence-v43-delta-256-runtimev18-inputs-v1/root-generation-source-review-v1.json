@@ -1,0 +1,266 @@
+{
+  "schema": "natlang.root-folder-generation-review/1",
+  "time_utc": "2026-10-11T16:59:20.239443+00:00",
+  "source_path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/held-static-choice-confidence-v43-prefix-646-delta-adapter-v1/cases.jsonl",
+  "source_sha256": "d5b199a704547eca83f89635c21488b2b68f540683a6a396ba2fa726cc99deb1",
+  "reference_replay_path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/held-static-choice-confidence-v43-prefix-646-delta-adapter-v1/replay.results.jsonl",
+  "reference_replay_sha256": "c3ed8615d9b449fdab0a9adb94bdc5b6e6abd9f54cd1413d2dfdd4f88c83b771",
+  "runtime_path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v18",
+  "runtime_manifest_sha256": "bd075ebe3d223f18796c87a89848fcbf18c7e6fbd1089775d0ccdf0bbfffe1d3",
+  "programs": 34,
+  "source_items": 256,
+  "source_case_ids": [
+    "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_2fca06169ee13e396acad4e8:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_b9187d5279cd8c6e3deb5bd4:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_43b3205ea6b00b73bb18e7a7:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_089e7ef21051eb42f21f14e2:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_870e1f382e675459f481d641:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_9dc3d6c02363f1e9b2c914dd:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_b91f2b6979f5b844fa1d0709:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_72f0b7aa675c59dfe00b0a80:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_bdb5f3d9a52a25aaa4baaead:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_99068ce3c687535e8beb5aab:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_d78e8c39897bc8c14ec43afd:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_793994a0e5920bdb9b58d15f:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_2bd024045a3a1b6e39fdf6b8:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_051423d53d938bb41931a4f8:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_94e1111d17734acafb824d94:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_bb88fc9d4330b2af5e9e3844:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_f36afca23efd8c6f79ac48c5:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_a4ba2cdba32ff8e1e149135a:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_dcd80476bda205fb68cbcbde:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_8c3248924b31fb3c1ae1c2db:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_82f4d448544e618344522746:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_d77e987d1a13083cf1490197:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_0abee7cebfe8d1a4ce9339bd:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_d3a3a0c0016bbd3feefd7989:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_11bf02cd648c3c6cc1514d49:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_f5d233697bed82e4baee1114:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_b9e76ae75e2138b1df1aa08d:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_cc6c23a7efb51b425737f954:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_3caa918786f7_4a465fc3f85e580f2c6cd194:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_3caa918786f7_52b5fdfd520bd500826151c5:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_3caa918786f7_521cec14503b96e5b77e7fd1:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_3caa918786f7_94537b5460568e43ce2fdaa8:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_3caa918786f7_e642cbb4d96f40c3bf796322:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria",
+    "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_3caa918786f7_94d36d45c1ef91c1c811d992:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria"
+  ],
+  "source_splits": {
+    "train": 34
+  },
+  "reference_replay_cases": 34,
+  "reference_gates": {
+    "checked_gate_sets": [
+      [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ]
+    ],
+    "per_case": {
+      "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_2fca06169ee13e396acad4e8:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_b9187d5279cd8c6e3deb5bd4:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_43b3205ea6b00b73bb18e7a7:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_089e7ef21051eb42f21f14e2:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_870e1f382e675459f481d641:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_9dc3d6c02363f1e9b2c914dd:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_b91f2b6979f5b844fa1d0709:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_72f0b7aa675c59dfe00b0a80:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_clinc_intent_choice:source_3caa918786f7_bdb5f3d9a52a25aaa4baaead:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_99068ce3c687535e8beb5aab:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_d78e8c39897bc8c14ec43afd:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_793994a0e5920bdb9b58d15f:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_2bd024045a3a1b6e39fdf6b8:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_051423d53d938bb41931a4f8:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_94e1111d17734acafb824d94:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_bb88fc9d4330b2af5e9e3844:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_f36afca23efd8c6f79ac48c5:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_a4ba2cdba32ff8e1e149135a:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_massive_intent_choice:source_3caa918786f7_dcd80476bda205fb68cbcbde:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_8c3248924b31fb3c1ae1c2db:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_82f4d448544e618344522746:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_d77e987d1a13083cf1490197:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_0abee7cebfe8d1a4ce9339bd:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_d3a3a0c0016bbd3feefd7989:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_11bf02cd648c3c6cc1514d49:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_f5d233697bed82e4baee1114:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_b9e76ae75e2138b1df1aa08d:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_banking77_choice:source_3caa918786f7_cc6c23a7efb51b425737f954:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_3caa918786f7_4a465fc3f85e580f2c6cd194:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_3caa918786f7_52b5fdfd520bd500826151c5:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_3caa918786f7_521cec14503b96e5b77e7fd1:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_3caa918786f7_94537b5460568e43ce2fdaa8:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_3caa918786f7_e642cbb4d96f40c3bf796322:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ],
+      "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_3caa918786f7_94d36d45c1ef91c1c811d992:exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria": [
+        "admission.admitted",
+        "capture_visibility.visible"
+      ]
+    }
+  },
+  "source_quality": "held_for_independent_quality_review",
+  "source_quality_policy_snapshot": {
+    "canonical_path_at_preparation": "/home/werg/natlang/training/decision_source_quality_holds.json",
+    "canonical_sha256_at_preparation": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994",
+    "snapshot_path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/source-review/decision_source_quality_holds.json",
+    "snapshot_sha256": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994",
+    "policy_identity": "The owner reviews these copied bytes with the source and queues. A later canonical-policy edit does not alter this prepared campaign's identity."
+  },
+  "preparation_code_snapshot": {
+    "canonical_path_at_preparation": "/home/werg/natlang/scripts/prepare_luna_folder_campaign.py",
+    "canonical_sha256_at_preparation": "57ae3fcbea99d931d73eaf0d0e0ee0adb8dcec8997302ec81243d7e888378408",
+    "snapshot_path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-delta-256-runtimev18-prepared-v1/source-review/prepare_luna_folder_campaign.py",
+    "snapshot_sha256": "57ae3fcbea99d931d73eaf0d0e0ee0adb8dcec8997302ec81243d7e888378408",
+    "code_identity": "The owner reviews this exact completed preparer byte snapshot. A later checkout edit does not alter this prepared campaign's identity."
+  },
+  "training_admission": false,
+  "independent_new_worlds": 0,
+  "related_worlds": "Source lineage and split/group metadata are preserved verbatim; this preparation adds no independent-world credit.",
+  "authored_reference_replay": "Gate evidence only; authored-reference acceptance is not teacher reasoning or semantic admission.",
+  "item_agreement_count": null,
+  "item_agreement_count_status": "not supplied",
+  "max_new_workers": 5,
+  "predecessor_campaign": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1",
+  "predecessor_worker_count": 5,
+  "predecessor_lanes": [
+    {
+      "number": 1,
+      "pid": 1170361,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-01/queue.jsonl",
+      "queue_sha256": "034b0ff863673b2011423e4783a6b584e1f0a2a0ececc534b453a135b7149585",
+      "runtime": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17",
+      "runtime_manifest_sha256": "3cd37901422b89dfd9af3d573833dbf4ce1758c28234519557fe2dc848e56b69"
+    },
+    {
+      "number": 2,
+      "pid": 1170373,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-02/queue.jsonl",
+      "queue_sha256": "7f268e4685612076afb813dde8a2435ad90aee36b24f8f33e63bf4ba1eb672fd",
+      "runtime": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17",
+      "runtime_manifest_sha256": "3cd37901422b89dfd9af3d573833dbf4ce1758c28234519557fe2dc848e56b69"
+    },
+    {
+      "number": 3,
+      "pid": 1170385,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-03/queue.jsonl",
+      "queue_sha256": "4363ef19a2d08ee398087e078698274f8784ec389bdfa08901acb5c079e7895c",
+      "runtime": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17",
+      "runtime_manifest_sha256": "3cd37901422b89dfd9af3d573833dbf4ce1758c28234519557fe2dc848e56b69"
+    },
+    {
+      "number": 4,
+      "pid": 1170397,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-04/queue.jsonl",
+      "queue_sha256": "78efae4cab568685631c996411c5423b7b5c717f86a02ab2a2547b34207e2ee7",
+      "runtime": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17",
+      "runtime_manifest_sha256": "3cd37901422b89dfd9af3d573833dbf4ce1758c28234519557fe2dc848e56b69"
+    },
+    {
+      "number": 5,
+      "pid": 1170409,
+      "queue": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1/worker-05/queue.jsonl",
+      "queue_sha256": "444e73bad974428328c2e74ef27b66139a21edee9ff1fd46e510a293b3367590",
+      "runtime": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17",
+      "runtime_manifest_sha256": "3cd37901422b89dfd9af3d573833dbf4ce1758c28234519557fe2dc848e56b69"
+    }
+  ],
+  "reasoning_effort": "medium",
+  "prepared_only": true
+}
