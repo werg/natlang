@@ -114,6 +114,23 @@ def sh(cmd: list[str], log: Path, cwd=TS) -> None:
         subprocess.run(['nice', '-n', '15'] + cmd, cwd=cwd, stdout=f, stderr=subprocess.STDOUT, check=True)
 
 
+REPLAY_CONTEXT_TOKENS = 16384  # curriculum.replayReference's context budget (the provenance field says 65536; it is not)
+
+
+def runtime_page() -> dict:
+    """The tool-output page size the current ts-host build pages replays at, and that build's commit (provenance:
+    8267b177 made the page follow the context budget; data replayed before it used a fixed 2,000-character page).
+    Read per shard, so a dist rebuild mid-campaign is visible in every shard it affects."""
+    probe = ("import('./dist/native/cutoff.js').then(m => console.log(typeof m.shownCharsFor === 'function' ? "
+             f"m.shownCharsFor({REPLAY_CONTEXT_TOKENS}) : 'fixed-2000'))")
+    out = subprocess.run([NODE, '-e', probe], cwd=TS, capture_output=True, text=True)
+    size = out.stdout.strip() if out.returncode == 0 else 'unknown'
+    stamp = TS / 'dist' / '.build-commit'
+    return {'page_size': int(size) if size.isdigit() else size,
+            'dist_commit': stamp.read_text().strip() if stamp.exists() else 'unknown (built before 2026-10-12 cutover)',
+            'context_tokens': REPLAY_CONTEXT_TOKENS}
+
+
 def shard(root: Path, cfg: dict, seed: int, family: str) -> dict:
     out = root / 'shards' / f's{seed}'
     done = out / f'{family}.done.json'
@@ -127,7 +144,7 @@ def shard(root: Path, cfg: dict, seed: int, family: str) -> dict:
     started = time.time()
     start = (seed - cfg['seed_start']) * cfg['shapes'] * cfg['stride']
     ir, rows, turns = work / 'ir.jsonl', work / 'rows.jsonl', work / 'turns.jsonl'
-    stats = {'seed': seed, 'family': family, 'start': start}
+    stats = {'seed': seed, 'family': family, 'start': start, **runtime_page()}
     try:
         sh(['node', 'scripts/inline-curriculum/build.mjs', '--seed', str(seed), '--shapes', str(cfg['shapes']),
             '--start', str(start), '--no-hints', '--allow-failures', '--split', 'train', '--families', family,
@@ -197,8 +214,16 @@ def consolidate(root: Path, cfg: dict, b: int) -> dict:
     tmp.mkdir(parents=True)
     seen = seen_ids(root, b)
     seeds = range(cfg['seed_start'] + b * cfg['seeds_per_batch'], cfg['seed_start'] + (b + 1) * cfg['seeds_per_batch'])
+    # One page size per batch: a ts-host rebuild that changes it takes effect at a batch boundary, never inside one.
+    pages = {json.dumps({k: d.get(k, 'fixed-2000' if k == 'page_size' else 'unknown') for k in ('page_size', 'dist_commit')},
+                        sort_keys=True)
+             for d in (load(root / 'shards' / f's{seed}' / f'{family}.done.json') for seed in seeds for family in cfg['families'])}
+    if len(pages) > 1:
+        shutil.rmtree(tmp, ignore_errors=True)
+        sys.exit(f'batch b{b:02d} mixes runtime builds {sorted(pages)}: delete the older shards (their done files) and rerun')
     writers = {name: ZWriter(tmp / f'{name}.jsonl.zst') for name in ('cases.ir', 'rows', 'turns')}
-    stats = {'batch': b, 'seeds': [seeds.start, seeds.stop - 1], 'cases': 0, 'duplicate_cases': 0, 'rows': 0,
+    stats = {'batch': b, 'seeds': [seeds.start, seeds.stop - 1], **json.loads(next(iter(pages))),
+             'context_tokens': REPLAY_CONTEXT_TOKENS, 'cases': 0, 'duplicate_cases': 0, 'rows': 0,
              'decisions': 0, 'families': {}, 'build_failures': 0}
     kept: set[str] = set()
     for seed in seeds:
@@ -346,7 +371,7 @@ def rationalize(root: Path, b: int, concurrency: int) -> bool:
         subprocess.run(['zstd', '-q', '-3', '--long=27', '-T4', '--rm', '-f', str(path)], check=True)
     shutil.copy(root / 'batches' / name / 'cases.ir.jsonl.zst', tmp / 'cases.ir.jsonl.zst')
     shutil.copy(root / 'batches' / name / 'case-ids.txt', tmp / 'case-ids.txt')
-    save(tmp / 'batch.json', {'batch': rname, 'rationalizes': name, 'replay': replay,
+    save(tmp / 'batch.json', {'batch': rname, 'rationalizes': name, 'replay': replay, **runtime_page(),
                               'rationales': len(keys(rationales)), 'synthetic_reasoning': 'rationalized-actions/1'})
     tmp.rename(root / 'batches' / rname)
     cases.unlink()
@@ -395,7 +420,7 @@ def collect_teacher(root: Path, b: int, cases_per_batch: int, workers: int) -> b
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True)
     count = lambda path: sum(1 for _ in open(path, 'rb')) if path.exists() else 0
-    stats = {'batch': tname, 'samples': name, 'cases': n, 'collected_rows': count(results),
+    stats = {'batch': tname, 'samples': name, 'cases': n, 'collected_rows': count(results), **runtime_page(),
              'admitted_rows': count(admitted), 'decisions': count(turns), 'model': 'nvidia/Qwen3.6-35B-A3B-NVFP4'}
     for path, out in ((results, 'rows.jsonl.zst'), (turns, 'turns.jsonl.zst'), (ir, 'cases.ir.jsonl.zst')):
         subprocess.run(['zstd', '-q', '-3', '--long=27', '-T4', '-f', str(path), '-o', str(tmp / out)], check=True)
@@ -433,6 +458,10 @@ def run(args) -> None:
     while args.batches is None or b < args.batches:
         seeds = range(cfg['seed_start'] + b * cfg['seeds_per_batch'], cfg['seed_start'] + (b + 1) * cfg['seeds_per_batch'])
         jobs = [(seed, family) for seed in seeds for family in cfg['families']]
+        # ROOT/PAUSE holds the campaign at the next batch boundary (used for runtime cutovers such as a dist rebuild).
+        if not (root / 'batches' / f'b{b:02d}' / 'batch.json').exists():
+            while (root / 'PAUSE').exists():
+                time.sleep(60)
         started, decisions = time.time(), 0
         errors = []
         with cf.ThreadPoolExecutor(args.workers) as pool:
@@ -510,6 +539,10 @@ def registry_entries(root: Path, name: str) -> list[dict]:
             k: cfg[k] for k in ('seed_start', 'shapes', 'seeds_per_batch', 'stride', 'hints', 'split')},
             'excluded_families': cfg['excluded']},
         'stats': stats, 'storage': 'zstd --long=27 (decompress with zstd -d --long=27)',
+        'page_size': {'tool_output_page_chars': stats.get('page_size', 'fixed-2000'),
+                      'context_tokens': stats.get('context_tokens', REPLAY_CONTEXT_TOKENS),
+                      'ts_host_dist_commit': stats.get('dist_commit', 'unknown (built before 2026-10-12 cutover)'),
+                      'note': 'fixed-2000 before 8267b177; afterwards an eighth of the context budget (plans/neuralese/DECISIONS.md)'},
         'required_conversion': 'none: rendered in ' + f'{base}-render',
     }
     if rationalized:
@@ -537,6 +570,7 @@ def registry_entries(root: Path, name: str) -> list[dict]:
         'training_admission': True,
         'training_admission_reason': 'owner 2026-10-11: maximize data; renders of a training-admitted corpus',
         'derived_from': [base], 'license': 'facts from the source rows', 'renders': renders,
+        'page_size': source['page_size'],
     }
     if rationalized:
         render['supersedes'] = f'{root.name}-{stats["rationalizes"]}-render'
