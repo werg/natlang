@@ -49,3 +49,5 @@ await rename(`${prefix}.rows.jsonl.tmp`, `${prefix}.rows.jsonl`);
 await writeFile(`${prefix}.summary.json`, JSON.stringify(stats, null, 1) + '\n');
 const { omissions, ...counts } = stats;
 console.log(JSON.stringify(counts));
+// A replay error is a bug in the environment or the converter, not a data omission: fail the shard so it is retried.
+if (stats.omitted.replay_error) process.exit(1);
