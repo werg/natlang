@@ -257,7 +257,15 @@ function childIdentity(context: Message[]): string {
 }
 
 export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }; provenance?: Record<string, unknown>; outcome?: Record<string, unknown>;
-  trajectory?: unknown[] }): Admission {
+  trajectory?: unknown[]; version?: string }): Admission {
+  // Native teacher turns carry a task.program_ir with a curriculum descriptor, but
+  // they are not collector result rows: their target/decision fields are not a
+  // full root trajectory. Sending one through this admission function can make
+  // runFacts observe zero root turns and accidentally approve the wrong schema.
+  // Native turns must go through materializeNativeRows and its native review
+  // receipts instead.
+  if (row.version === 'natlang.teacher_training_turn.native/1')
+    throw new Error('native_teacher_turn_requires_native_admission: use scripts/materialize-native-teacher.mjs with the native decision/source-quality review; curriculum admission requires a collector trajectory');
   const record = row.task.program_ir as CurriculumRecord, c = record.curriculum;
   const facts = runFacts(record, (row.trajectory ?? []) as Turn[]);
   const reasons: string[] = sourceConversionProblems(row), notes: string[] = [];
