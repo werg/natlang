@@ -6,7 +6,7 @@ Type=simple
 WorkingDirectory=%h/natlang
 # Stops only units admitted through the ledger: one over its budget (CUDA included, which MemoryMax misses),
 # or, when free memory falls below the floor, the lowest-priority admitted unit.
-ExecStart=/usr/bin/python3 %h/natlang/scripts/memory_ledger.py guard --floor-gb 8 --overshoot 1.15 --interval 5
+ExecStart=/usr/bin/python3 %h/natlang/scripts/memory_ledger.py guard --floor-gb 10 --overshoot 1.15 --interval 2
 Restart=always
 RestartSec=10
 # The guard itself must outlive the jobs it watches.

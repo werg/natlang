@@ -4,7 +4,7 @@ The GB10 has one 121 GB pool. CUDA allocations come from it, systemd's `MemoryMa
 kernel's OOM killer ranks processes by resident pages, which leave CUDA memory out. On 2026-10-04 an extra CUDA
 server pushed the machine over and the global OOM killed the v10 teacher campaign along with it.
 
-## Rules
+## Rules (see "Oversubscription and priorities" below; its admission rule replaces the claim-sum rule)
 
 - Launch every heavy job (anything with CUDA, a model load, or more than a few GB) through the ledger:
 
@@ -77,20 +77,26 @@ guard should be different for smaller models". Every stop now gives the job time
   saves, `backbone_trainable_state`, qat_convert), so a stop does not double the model in unified memory.
 
 
-## Effective claims (2026-10-11)
+## Oversubscription and priorities (owner 2026-10-11)
 
-Claims are admitted by their declared budget, but over-claiming CPU jobs (87 GB claimed, ~5 GB used) blocked a priority
-GPU job, which then got a reduced cap and OOMed. Admission now reserves an *effective claim*:
+Claims are admitted against real headroom, not the sum of declared budgets (87 GB claimed while 5 GB was used blocked a
+priority GPU job, which then got a reduced cap and OOMed). The sum of claims may exceed the machine.
 
-- An experiment unit that has run and been measured for `EXPERIMENT_SETTLE_SECONDS` (600; `NATLANG_LEDGER_SETTLE_SECONDS`)
-  reserves `max(peak x 1.3, 2 GiB, current use)`, capped at its budget; never below its observed peak x margin. It grows
-  back automatically as its peak rises, up to the original budget. Collections and services keep the older rule (peak
-  after 30 minutes, no margin).
-- The guard's kill/overshoot threshold remains the ORIGINAL budget, so a unit is never stopped for using what it claimed.
-- Observed use is cgroup memory (page cache and MADV_FREE excluded) plus CUDA memory per pid from nvidia-smi, plus the
-  attached docker container's cgroup, which is how GB10 unified-memory allocations show up.
-- `run/adopt --fixed-claim` (alias `--hold-budget`) opts out: the whole unspent budget always counts. Use it for
-  trainers with late spikes (first eval, checkpoint write, MemFree preflight). Decision: GPU units are not fixed by
-  default; the family's measured peak already raises the next admission, and the guard floor covers a spike.
-- `status` shows `budget_gb` (original), `effective_gb`, `outstanding_gb`, `fixed_claim`. A refused `run` names the
-  claims withholding the most memory.
+- Reservation of a running claim: its unspent budget in full while ramping up (5 min) or with `--fixed-claim` (alias
+  `--hold-budget`); half for a GPU unit (auto-detected from nvidia-smi pids of its cgroup/container); a quarter for a
+  CPU unit. Observed use is cgroup memory (cache and MADV_FREE excluded) plus CUDA per pid plus the attached container.
+- `--priority high|medium|low` (default medium, services high). High: training, GPU end-to-end/direct runs. Medium:
+  smokes, evals. Low: data generation, rendering, check-main, other CPU jobs. Callers pass it; the class defaults do not
+  guess. Priority orders the waiting queue (head only is admitted), sets the kernel OOM score (200/600/900), orders the
+  guard's victims under pressure (lowest first; a unit over its own budget goes first), and picks preemption victims.
+- Preemption: the guard stops (graceful, with the usual stop grace) the lowest-priority resumable units for the queue
+  head when real headroom is short and stopping all candidates would make it fit. `--resumable` (default yes except
+  services) means the command resumes from its checkpoints; such units are requeued (spec stored in the claim) and
+  relaunched by the guard after 2 minutes when they fit. Over-budget stops are not requeued.
+- Kernel safety net evaluated 2026-10-11: user units can set OOMScoreAdjust but the floor is the user manager's own
+  score (100): -900 is silently clamped. systemd-oomd is not installed. Slices with MemoryLow need delegation
+  (`Delegate=no` for the user manager) and do not see CUDA. Decision: use positive OOM scores by priority as the instant
+  safety net (kernel kills the +900 jobs first), keep the guard for graceful, checkpointed stops, requeue and preemption.
+  The guard floor is 10 GB and polls every 2 s (was 8 GB / 5 s) because CUDA allocation bursts can outrun it.
+- `status` shows priority, budget, use, reserved, resumable, and the waiting queue with `would_preempt`.
+- Superseded: the claim-shrinking design (effective claims, commit 4f32386a) was dropped.

@@ -19,20 +19,23 @@ heavy job declare a budget and enforces it from outside the job:
            and below the floor the lowest-priority admitted unit; without pressure an over-budget unit keeps
            running and its budget is raised to what it uses. Admission learns each job family's measured peak. Only units admitted through this ledger are ever stopped.
 
-Outstanding demand of a running claim is its budget minus what it already uses, so a job still ramping up is
-counted at its full budget and a job at its peak is counted once, through MemAvailable. A claim that has run for
-SETTLE_SECONDS, and been measured that long, has shown its working set: from then on it is counted up to the highest
-use the ledger has measured (the guard measures every few seconds), not its whole budget. EFFECTIVE CLAIMS: an
-experiment settles after EXPERIMENT_SETTLE_SECONDS (600; env NATLANG_LEDGER_SETTLE_SECONDS) and then reserves
-max(peak x 1.3, 2 GiB floor), never above its budget and never below its peak; the reservation grows back as its peak
-rises. Admission uses these effective reservations (`status` shows budget_gb, effective_gb, outstanding_gb); the guard's
-kill threshold and overshoot rule still use the ORIGINAL budget. Usage includes CUDA (nvidia-smi per pid) plus cgroup
-memory of the unit and of its docker container. `--fixed-claim` (alias --hold-budget) opts a unit out: use it for
-trainers whose peak comes late (first eval, checkpoint write). GPU units are not fixed by default: their observed use
-already includes CUDA, and the family's measured peak raises the next admission. A refused `run` names the claims
-withholding the most memory. The guard's floor still covers a later spike, and
-its first victim is the newest experiment. A claim made with --hold-budget (a job whose working set grows on its own
-schedule, or that checks MemFree before each step) always counts its whole unspent budget.
+OVERSUBSCRIPTION AND PRIORITIES (owner 2026-10-11). Admission is by real headroom: MemAvailable (which already excludes what
+running jobs use) minus what running claims still reserve, minus the job's budget, must leave the reserve. The sum of
+claims may exceed the machine. A running claim reserves its unspent budget in full while it ramps up (RAMP_SECONDS) or
+when it is fixed (`--fixed-claim`, alias `--hold-budget`: late spikes such as the first eval or a checkpoint write),
+half of it for a GPU unit (CUDA bursts can reach the floor before the guard reacts; CUDA use is nvidia-smi per pid and
+counts in the unit's `used`, with its cgroup and attached docker container), a quarter for a CPU unit.
+Priority (`--priority high|medium|low`; default medium, services high): training and GPU end-to-end runs high, smokes
+and evals medium, data generation, rendering, check-main and other CPU jobs low. It sets (1) the order of the shared
+waiting queue (higher first, then earlier; only the head is admitted), (2) the kernel OOM score of the unit (high 200,
+medium 600, low 900: user units cannot go below the user manager's own 100, and with no systemd-oomd the kernel is the
+instant safety net), (3) the guard's victim order under pressure (lowest priority first; a unit over its own budget
+goes first), and (4) preemption: when the head of the queue does not fit, the guard gracefully stops the lowest-priority
+resumable units until it does. Units are resumable by default (`--no-resumable` for services and non-resumable jobs); a
+stopped resumable unit (preemption or pressure, not an over-budget stop) re-enters the queue with the spec it was
+launched from and the guard relaunches it when room returns. `status` lists claims with priority, budget, use and
+reservation, and the queue with the units that would be preempted for each entry. The guard's kill threshold is still
+the original budget.
 """
 import argparse
 import contextlib
@@ -52,13 +55,19 @@ STATE = os.path.expanduser(os.environ.get('NATLANG_MEMORY_LEDGER', '~/.local/sta
 # campaign and the vLLM server (score 0) comes from every admitted job ranking above them.
 CLASSES = {'experiment': 900, 'collection': 600, 'service': 300}
 GIB = 2**30
-SETTLE_SECONDS = 1800
-# Effective claims of experiments (2026-10-11): 87 GB claimed against ~5 GB used blocked a priority GPU job. After
-# EXPERIMENT_SETTLE_SECONDS an experiment counts max(measured peak x margin, floor), at most its budget, and grows back
-# with its peak. Only admission uses this: the guard's kill threshold stays the original budget.
-EXPERIMENT_SETTLE_SECONDS = float(os.environ.get('NATLANG_LEDGER_SETTLE_SECONDS', 600))
-EFFECTIVE_MARGIN = float(os.environ.get('NATLANG_LEDGER_MARGIN', 1.3))
-EFFECTIVE_FLOOR = int(float(os.environ.get('NATLANG_LEDGER_FLOOR_GB', 2)) * 2**30)
+# Oversubscription (owner 2026-10-11): admission is by real headroom (MemAvailable already excludes what running jobs use),
+# not by the sum of claims. A running claim reserves only part of its unspent budget: all of it while ramping up or when
+# fixed (``--fixed-claim``), half for a GPU unit (CUDA allocations come in bursts and can reach the floor before the guard
+# reacts), a quarter for a CPU unit. Priorities decide who waits, who is preempted and who the guard stops first.
+RAMP_SECONDS = 300
+RESERVE_FRACTION = {'gpu': 0.5, 'cpu': 0.25}
+PRIORITIES = {'low': 1, 'medium': 2, 'high': 3}
+PRIORITY_NAMES = {v: k for k, v in PRIORITIES.items()}
+# Kernel OOM score adjust by priority: the safety net when memory really runs out faster than the guard polls.
+PRIORITY_OOM = {'high': 200, 'medium': 600, 'low': 900}
+DEFAULT_PRIORITY = {'experiment': 'medium', 'collection': 'medium', 'service': 'high'}
+WAITER_TTL = 90  # a waiting `run` refreshes its queue entry every 30 s; older entries are abandoned
+REQUEUE_DELAY = 120  # seconds after a preemption/pressure stop before the unit may be relaunched
 # A guard stop gives the victim its declared grace (``run --stop-seconds``) to write its full checkpoint (latents and
 # optimizer: ~4 min for Mellum's 47 GB state), and kills at once only below this emergency level (under the floor).
 EMERGENCY_GB = 3
@@ -278,6 +287,22 @@ def learned_budget(state, unit, budget):
     return max(budget, int(peak * 1.1))
 
 
+def unit_cuda(unit, gpu, command=None):
+    """CUDA memory held by the unit's processes and its attached container (from nvidia-smi's per-pid list)."""
+    active, cgroup = unit_state(unit)
+    if active not in ('active', 'activating', 'reloading') or not cgroup:
+        return 0
+    roots = ['/sys/fs/cgroup' + cgroup]
+    container = container_cgroup(command, unit)
+    if container:
+        roots.append(container)
+    total = 0
+    for root in roots:
+        with contextlib.suppress(OSError, ValueError):
+            total += sum(gpu.get(int(p), 0) for p in open(os.path.join(root, 'cgroup.procs')).read().split())
+    return total
+
+
 def live_claims(state, gpu):
     """Claims whose unit still runs, with measured use and the highest use measured so far; claims of finished
     units are released."""
@@ -291,6 +316,8 @@ def live_claims(state, gpu):
             del state['claims'][unit]
             state['events'].append({'time': time.time(), 'event': 'released', 'unit': unit})
             continue
+        if gpu and not claim.get('gpu') and unit_cuda(unit, gpu, claim.get('command')):
+            claim['gpu'] = True
         claim['peak'] = max(claim.get('peak', 0), used or 0)
         claim.setdefault('peak_since', time.time())
         live[unit] = dict(claim, used=used or 0)
@@ -298,31 +325,30 @@ def live_claims(state, gpu):
 
 
 def fixed_claim(claim):
-    """A claim that always counts its whole budget (``--fixed-claim``, older name ``--hold-budget``)."""
+    """A claim that always reserves its whole unspent budget (``--fixed-claim``, older name ``--hold-budget``)."""
     return bool(claim.get('hold_budget') or claim.get('fixed_claim'))
 
 
-def effective_claim(claim, now=None):
-    """What admission reserves for a claim. Fixed claims, and claims not yet settled (run and measured for the settle
-    period), reserve their budget. A settled experiment reserves max(peak x margin, floor), never more than its budget
-    and never less than its measured peak; it grows back as the peak rises. Settled collections and services reserve
-    their measured peak (no margin). The guard never uses this: its kill threshold is ``claim['budget']``."""
-    now = now or time.time()
-    if fixed_claim(claim):
-        return claim['budget']
-    experiment = claim.get('class') == 'experiment'
-    settle = EXPERIMENT_SETTLE_SECONDS if experiment else SETTLE_SECONDS
-    if now - max(claim['admitted'], claim.get('peak_since', now)) < settle:
-        return claim['budget']
-    peak = claim.get('peak', 0)
-    if experiment:
-        return min(claim['budget'], max(int(peak * EFFECTIVE_MARGIN), EFFECTIVE_FLOOR, int(claim.get('used', 0))))
-    return min(claim['budget'], peak)
+def priority_of(claim):
+    """Numeric priority (1 low, 2 medium, 3 high) from ``run --priority``, else the class default."""
+    return PRIORITIES[claim.get('priority') or DEFAULT_PRIORITY.get(claim.get('class'), 'medium')]
+
+
+def resumable(claim):
+    """Whether the guard may stop the unit for a higher priority and relaunch it later: declared at ``run``, default
+    true for experiments and collections (their commands resume from checkpoints), false for services."""
+    declared = claim.get('resumable')
+    return bool(claim.get('spec')) and (claim.get('class') != 'service' if declared is None else declared)
 
 
 def outstanding(claim, now=None):
-    """What a claim may still take: its effective reservation minus what it already uses."""
-    return max(0, effective_claim(claim, now) - claim['used'])
+    """What a running claim still reserves beyond its use: the unspent budget times its reserve fraction (whole while
+    ramping up or fixed)."""
+    now = now or time.time()
+    unspent = max(0, claim['budget'] - claim['used'])
+    if fixed_claim(claim) or now - claim['admitted'] < RAMP_SECONDS:
+        return unspent
+    return int(unspent * RESERVE_FRACTION['gpu' if claim.get('gpu') else 'cpu'])
 
 
 def headroom(state, gpu):
@@ -331,22 +357,109 @@ def headroom(state, gpu):
 
 
 def blocked_by(live, count=3):
-    """Names of the claims withholding the most memory (outstanding), for the refusal message of a waiting job."""
+    """Names of the claims reserving the most memory, for the refusal message of a waiting job."""
     top = [(u, c) for u, c in sorted(live.items(), key=lambda item: -outstanding(item[1]))[:count]
            if outstanding(c) >= GIB]
-    return ' (blocked by ' + ', '.join(f'{u} {outstanding(c) / GIB:.0f} GiB outstanding of {c["budget"] / GIB:.0f} '
+    return ' (blocked by ' + ', '.join(f'{u} {outstanding(c) / GIB:.0f} GiB reserved of {c["budget"] / GIB:.0f} '
                                         f'claimed' for u, c in top) + ')' if top else ''
+
+
+def waiting_order(state, now=None):
+    """The queue of jobs waiting for room, head first: higher priority first, then the earlier request. Entries of
+    waiting ``run`` calls expire when not refreshed; requeued units (preempted or stopped under pressure) stay."""
+    now = now or time.time()
+    entries = [(u, w) for u, w in state.get('waiting', {}).items()
+               if w.get('requeued') or now - w.get('seen', 0) < WAITER_TTL]
+    return sorted(entries, key=lambda item: (-PRIORITIES[item[1]['priority']], item[1]['since'], item[0]))
+
+
+def fits(free, budget, reserve):
+    """Real-headroom admission: free is MemAvailable minus what running claims still reserve."""
+    return free - budget >= reserve
+
+
+def preemption_plan(live, free, wanted, graces=None):
+    """The running units to stop (in order) so a waiting job of ``wanted`` = {priority, budget, reserve} fits: only
+    resumable units of strictly lower priority, the lowest priority first, within it the one freeing the most per
+    second of stop grace. Empty when it already fits or when stopping every candidate would not make it fit."""
+    need = wanted['budget'] + wanted['reserve'] - free
+    if need <= 0:
+        return []
+    graces = graces or {}
+    candidates = sorted((u for u, c in live.items() if resumable(c) and priority_of(c) < PRIORITIES[wanted['priority']]),
+                        key=lambda u: (priority_of(live[u]), -(live[u]['used'] / (graces.get(u, GRACE_MIN) + 1)),
+                                       -live[u]['admitted']))
+    plan, freed = [], 0
+    for unit in candidates:
+        plan.append(unit)
+        freed += live[unit]['used'] + outstanding(live[unit])
+        if freed >= need:
+            return plan
+    return []
+
+
+def requeue_spec(state, unit, now=None):
+    """Put a stopped resumable unit back in the waiting queue with the spec it was launched from."""
+    claim = state['claims'].get(unit, {})
+    if not resumable(claim):
+        return False
+    now = now or time.time()
+    state.setdefault('waiting', {})[unit] = {'priority': PRIORITY_NAMES[priority_of(claim)], 'since': now,
+                                             'requeued': True, 'not_before': now + REQUEUE_DELAY,
+                                             'budget': claim['budget'], 'reserve': claim['spec'].get('reserve', 8 * GIB),
+                                             'spec': claim['spec']}
+    state['events'].append({'time': now, 'event': 'requeued', 'unit': unit})
+    return True
+
+
+def claim_for(spec, now=None):
+    return {'budget': spec['budget'], 'class': spec['cls'], 'admitted': now or time.time(),
+            'command': spec['command'], 'host_max': spec.get('host_max_gb'), 'priority': spec['priority'],
+            'resumable': spec['resumable'], 'spec': spec,
+            **({'stop_seconds': spec['stop_seconds'], 'stop_seconds_explicit': True}
+               if spec.get('stop_seconds') is not None else {}),
+            **({'hold_budget': True} if spec.get('hold_budget') else {})}
+
+
+def launch(spec):
+    """Start the admitted job as a user unit. Its kernel OOM score follows its priority (user units cannot go below
+    the user manager's own score, 100 on the DGX), so when memory really runs out the kernel takes low priority first."""
+    unit, budget = spec['unit'], spec['budget']
+    host_max = spec.get('host_max_gb') or budget / GIB
+    subprocess.run(['systemctl', '--user', 'reset-failed', unit], capture_output=True)
+    command = ['systemd-run', '--user', '--unit', unit, '-p', f'MemoryMax={int(host_max * GIB)}',
+               '-p', 'MemorySwapMax=0', '-p', f'OOMScoreAdjust={PRIORITY_OOM[spec["priority"]]}',
+               '-p', f'OOMPolicy={spec["oom_policy"]}',
+               '--working-directory', os.path.abspath(spec['workdir']),
+               '-E', f'NATLANG_CUDA_MEMORY_GB={round(budget / GIB, 1)}', '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
+    for env in spec['env']:
+        command += ['-E', env]
+    # A stopped unit takes its container with it (an orphaned one held 36 GB outside the ledger): the one its command
+    # names, else one named like the unit (wrapper scripts that `docker run --name <unit>`; '-' ignores none).
+    container = container_name(spec['command']) or unit.removesuffix('.service')
+    # --stop-seconds: a planned stop (systemctl stop) waits this long for the job to checkpoint before its container
+    # is killed (a 47 GB latent+optimizer checkpoint takes minutes). The guard's pressure stops stay short.
+    if spec.get('stop_seconds') is not None:
+        stop_seconds = spec['stop_seconds']
+    else:
+        writes = checkpoint_writes()
+        stop_seconds = max(30.0, grace_seconds(unit, {}, family_state_bytes(writes), write_throughput(writes)))
+    command += ['-E', f'NATLANG_LEDGER_UNIT={unit}', '-p', f'TimeoutStopSec={int(stop_seconds) + 30}',
+                '-p', f'ExecStopPost=-/usr/bin/docker stop -t {int(stop_seconds)} {container}']
+    return subprocess.run(command + spec['command']).returncode
 
 
 def run(args):
     budget = int(args.budget_gb * GIB)
     reserve = int(args.reserve_gb * GIB)
     unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
+    priority = args.priority or DEFAULT_PRIORITY[args.cls]
     # Before admission: a claim whose unit has not started within 30 s is released by the next ledger call, and a
     # cache walk takes minutes. Walk only when there is cache to drop; skip it when another walk is running.
     if mem_free() < budget + reserve and reclaimable() >= GIB:
         print(json.dumps({'released_cache': release_cache()}), file=sys.stderr)
     deadline = time.time() + args.wait
+    since = time.time()
     while True:
         with ledger() as state:
             free, live = headroom(state, gpu_usage())
@@ -357,45 +470,37 @@ def run(args):
                 print(json.dumps({'budget_raised_to_measured_peak_gb': round(learned / GIB, 1),
                                   'requested_gb': args.budget_gb, 'family': family(unit)}), file=sys.stderr)
                 budget = learned
-            if free - budget >= reserve:
-                state['claims'][unit] = {'budget': budget, 'class': args.cls, 'admitted': time.time(),
-                                         'command': args.command, 'host_max': args.host_max_gb,
-                                         **({'stop_seconds': args.stop_seconds, 'stop_seconds_explicit': True}
-                                            if args.stop_seconds is not None else {}),
-                                         **({'hold_budget': True} if args.hold_budget else {})}
-                state['events'].append({'time': time.time(), 'event': 'admitted', 'unit': unit, 'budget': budget,
-                                        'free': free})
+            waiting = state.setdefault('waiting', {})
+            now = time.time()
+            waiting[unit] = {'priority': priority, 'since': waiting.get(unit, {}).get('since', since), 'seen': now,
+                             'budget': budget, 'reserve': reserve}
+            head = waiting_order(state, now)[0][0]
+            # Head of the priority queue only: a lower job does not slip in ahead of a higher one that waits for room
+            # (the guard preempts lower units for the head when real headroom is short).
+            if head == unit and fits(free, budget, reserve):
+                spec = {'unit': unit, 'budget': budget, 'host_max_gb': args.host_max_gb, 'cls': args.cls,
+                        'oom_policy': args.oom_policy, 'workdir': os.path.abspath(args.workdir), 'env': args.env,
+                        'stop_seconds': args.stop_seconds, 'command': args.command, 'priority': priority,
+                        'resumable': args.resumable if args.resumable is not None else args.cls != 'service',
+                        'hold_budget': args.hold_budget, 'reserve': reserve}
+                state['claims'][unit] = claim_for(spec)
+                waiting.pop(unit, None)
+                state['events'].append({'time': now, 'event': 'admitted', 'unit': unit, 'budget': budget,
+                                        'free': free, 'priority': priority})
                 break
+            blockers = blocked_by(live) + ('' if head == unit else f' (queue head: {head})')
         if time.time() >= deadline:
-            blockers = blocked_by(live)
-            raise SystemExit(f'not admitted: {free / GIB:.1f} GiB free after outstanding claims{blockers}, '
+            with ledger() as state:
+                state.get('waiting', {}).pop(unit, None)
+            raise SystemExit(f'not admitted: {free / GIB:.1f} GiB free after reservations{blockers}, '
                              f'{args.budget_gb} GiB requested, {args.reserve_gb} GiB reserve')
         time.sleep(30)
-    host_max = args.host_max_gb or max(args.budget_gb, budget / GIB)
-    command = ['systemd-run', '--user', '--unit', unit, '-p', f'MemoryMax={int(host_max * GIB)}',
-               '-p', 'MemorySwapMax=0', '-p', f'OOMScoreAdjust={CLASSES[args.cls]}', '-p', f'OOMPolicy={args.oom_policy}',
-               '--working-directory', os.path.abspath(args.workdir),
-               '-E', f'NATLANG_CUDA_MEMORY_GB={round(budget / GIB, 1)}', '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
-    for env in args.env:
-        command += ['-E', env]
-    # A stopped unit takes its container with it (an orphaned one held 36 GB outside the ledger): the one its command
-    # names, else one named like the unit (wrapper scripts that `docker run --name <unit>`; '-' ignores none).
-    container = container_name(args.command) or unit.removesuffix('.service')
-    # --stop-seconds: a planned stop (systemctl stop) waits this long for the job to checkpoint before its container
-    # is killed (a 47 GB latent+optimizer checkpoint takes minutes). The guard's pressure stops stay short.
-    if args.stop_seconds is not None:
-        stop_seconds = args.stop_seconds
-    else:
-        writes = checkpoint_writes()
-        stop_seconds = max(30.0, grace_seconds(unit, {}, family_state_bytes(writes), write_throughput(writes)))
-    command += ['-E', f'NATLANG_LEDGER_UNIT={unit}', '-p', f'TimeoutStopSec={int(stop_seconds) + 30}',
-                '-p', f'ExecStopPost=-/usr/bin/docker stop -t {int(stop_seconds)} {container}']
-    result = subprocess.run(command + args.command)
-    if result.returncode:
+    if launch(spec):
         with ledger() as state:
             state['claims'].pop(unit, None)
-        raise SystemExit(result.returncode)
-    print(json.dumps({'unit': unit, 'budget_gb': round(budget / GIB, 1), 'class': args.cls, 'free_gb': round(free / GIB, 1)}))
+        raise SystemExit(1)
+    print(json.dumps({'unit': unit, 'budget_gb': round(budget / GIB, 1), 'class': args.cls, 'priority': priority,
+                      'free_gb': round(free / GIB, 1)}))
 
 
 def main_command(unit):
@@ -416,7 +521,7 @@ def adopt(args):
         raise SystemExit(f'{unit} is not running')
     for pid in open('/sys/fs/cgroup' + cgroup + '/cgroup.procs').read().split():
         with contextlib.suppress(OSError):
-            open(f'/proc/{pid}/oom_score_adj', 'w').write(str(CLASSES[args.cls]))
+            open(f'/proc/{pid}/oom_score_adj', 'w').write(str(PRIORITY_OOM[args.priority or DEFAULT_PRIORITY[args.cls]]))
     with ledger() as state:
         # Re-adopting a claimed unit keeps its command: it names the container a `docker start -a` unit is charged for.
         # A fresh adoption takes the unit's own command line, so an attached container is measured too.
@@ -426,6 +531,7 @@ def adopt(args):
         if not command or command == ['(adopted)']:
             command = main_command(unit) or ['(adopted)']
         state['claims'][unit] = {'budget': int(args.budget_gb * GIB), 'class': args.cls,
+                                 **({'priority': args.priority} if args.priority else {}),
                                  'admitted': previous.get('admitted', time.time()), 'command': command, 'host_max': None,
                                  **{key: previous[key] for key in ('peak', 'peak_since') if key in previous},
                                  **({'hold_budget': True} if args.hold_budget else {})}
@@ -436,13 +542,22 @@ def adopt(args):
 def status(args):
     with ledger() as state:
         free, live = headroom(state, gpu_usage())
+        queue = waiting_order(state)
+        graces = {}
+        plans = {}
+        for position, (name, wait) in enumerate(queue):
+            plans[name] = preemption_plan(live, free, wait, graces)
+        claims = {u: {'class': c['class'], 'priority': PRIORITY_NAMES[priority_of(c)],
+                      'budget_gb': round(c['budget'] / GIB, 1), 'used_gb': round(c['used'] / GIB, 1),
+                      'peak_gb': round(c.get('peak', 0) / GIB, 1), 'reserved_gb': round(outstanding(c) / GIB, 1),
+                      'resumable': resumable(c), 'gpu': bool(c.get('gpu')),
+                      **({'fixed_claim': True} if fixed_claim(c) else {}),
+                      'command': shlex.join(c['command'])[:160]} for u, c in live.items()}
     print(json.dumps({'available_gb': round(mem_available() / GIB, 1), 'headroom_gb': round(free / GIB, 1),
-                      'claims': {u: {'class': c['class'], 'budget_gb': round(c['budget'] / GIB, 1),
-                                     'used_gb': round(c['used'] / GIB, 1), 'peak_gb': round(c.get('peak', 0) / GIB, 1),
-                                     'effective_gb': round(effective_claim(c) / GIB, 1),
-                                     'outstanding_gb': round(outstanding(c) / GIB, 1),
-                                     **({'fixed_claim': True} if fixed_claim(c) else {}),
-                                     'command': shlex.join(c['command'])[:160]} for u, c in live.items()}}, indent=2))
+                      'claims': claims,
+                      'waiting': [{'position': n + 1, 'unit': name, 'priority': w['priority'],
+                                   'budget_gb': round(w['budget'] / GIB, 1), 'requeued': bool(w.get('requeued')),
+                                   'would_preempt': plans[name]} for n, (name, w) in enumerate(queue)]}, indent=2))
 
 
 def victim(live, floor_breached, overshoot, pressure=None, grace=None):
@@ -459,7 +574,8 @@ def victim(live, floor_breached, overshoot, pressure=None, grace=None):
         # Class priority first; within a class, the unit freeing the most memory per second of stop grace (small,
         # stateless jobs such as tests and probes before big long-running trainers), then the newest.
         grace = grace or {}
-        return max(live, key=lambda u: (CLASSES[live[u]['class']], live[u]['used'] / (grace.get(u, GRACE_MIN) + 1),
+        return max(live, key=lambda u: (-priority_of(live[u]), CLASSES[live[u]['class']],
+                                        live[u]['used'] / (grace.get(u, GRACE_MIN) + 1),
                                         live[u]['admitted'])), 'free memory below floor'
     return None, None
 
@@ -560,9 +676,10 @@ def guard(args):
             release = subprocess.Popen(own_unit + idle + [sys.executable, os.path.abspath(__file__), 'release-cache'],
                                        stdout=subprocess.PIPE, text=True)
         with ledger() as state:
-            live = live_claims(state, gpu_usage())
-            live = {u: c for u, c in live.items() if time.time() - stopped.get(u, 0) > 60}
+            all_live = live_claims(state, gpu_usage())
+            live = {u: c for u, c in all_live.items() if time.time() - stopped.get(u, 0) > 60}
             available = mem_available()
+            free = available - sum(outstanding(c) for c in all_live.values())
             writes = checkpoint_writes()
             sizes, throughput = family_state_bytes(writes), write_throughput(writes)
             graces = {name: grace_seconds(name, state['claims'].get(name, {}), sizes, throughput) for name in live}
@@ -577,6 +694,26 @@ def guard(args):
                 # One graceful stop at a time: while a victim checkpoints, the guard watches it instead of picking
                 # another (cache release above continues).
                 unit, reason = None, None
+            to_launch = None
+            queue = waiting_order(state)
+            if queue and not pending:
+                head, wanted = queue[0]
+                if not unit and not fits(free, wanted['budget'], wanted['reserve']):
+                    # A waiting higher priority job: stop the lowest priority resumable units (one graceful stop at a
+                    # time; the next cycle re-plans with what that stop freed).
+                    plan = preemption_plan({u: c for u, c in live.items() if u not in stopped or
+                                            time.time() - stopped[u] > 60}, free, wanted, graces)
+                    if plan:
+                        unit, reason = plan[0], f'preempted for {head} ({wanted["priority"]})'
+                elif (not unit and wanted.get('requeued') and time.time() >= wanted['not_before']
+                      and head not in state['claims'] and unit_state(head)[0] not in ('active', 'activating', 'deactivating')
+                      and fits(free, wanted['budget'], wanted['reserve'])):
+                    state['claims'][head] = claim_for(wanted['spec'])
+                    state['waiting'].pop(head)
+                    state['events'].append({'time': time.time(), 'event': 'relaunched', 'unit': head, 'free': free})
+                    to_launch = wanted['spec']
+            if unit and (reason.startswith('preempted') or reason.startswith('free memory below floor')):
+                requeue_spec(state, unit)  # a resumable unit comes back when room returns
             command = state['claims'].get(unit, {}).get('command') if unit else None
             grace = graces.get(unit, GRACE_MIN) if unit else 0
             if unit:
@@ -584,6 +721,10 @@ def guard(args):
                                         'grace': round(grace, 1),
                                         'used': live[unit]['used'], 'budget': live[unit]['budget'],
                                         'available': mem_available()})
+        if to_launch and launch(to_launch):
+            with ledger() as state:
+                state['claims'].pop(to_launch['unit'], None)
+                state['events'].append({'time': time.time(), 'event': 'relaunch failed', 'unit': to_launch['unit']})
         if unit:
             print(json.dumps({'stopped': unit, 'reason': reason, 'used_gb': round(live[unit]['used'] / GIB, 1)}),
                   flush=True)
@@ -621,6 +762,13 @@ def main():
                    help='when the kernel kills a process of the unit for memory: stop the unit (default), or continue '
                         '(a runner of many child processes, such as a test runner, records the kill and goes on)')
     r.add_argument('--class', dest='cls', choices=sorted(CLASSES), default='experiment')
+    r.add_argument('--priority', choices=sorted(PRIORITIES, key=PRIORITIES.get),
+                   help='high: training and GPU end-to-end runs; medium: smokes and evals; low: data generation, rendering, '
+                        'check-main and other CPU jobs (default: medium, services high). Higher waits ahead, preempts '
+                        'lower resumable units, is stopped last under pressure and gets a lower kernel OOM score')
+    r.add_argument('--resumable', action=argparse.BooleanOptionalAction, default=None,
+                   help='the command resumes from its own checkpoints, so the ledger may stop it for a higher priority job '
+                        'or under pressure and relaunch it from the queue (default: yes except services)')
     r.add_argument('--reserve-gb', type=float, default=8, help='free memory that must remain after admission (the guard floor; owner: use the memory we have)')
     r.add_argument('--wait', type=float, default=0, help='seconds to wait for admission')
     r.add_argument('--hold-budget', '--fixed-claim', action='store_true',
@@ -635,6 +783,7 @@ def main():
     a.add_argument('--unit', required=True)
     a.add_argument('--budget-gb', type=float, required=True)
     a.add_argument('--class', dest='cls', choices=sorted(CLASSES), default='experiment')
+    a.add_argument('--priority', choices=sorted(PRIORITIES, key=PRIORITIES.get))
     a.add_argument('--hold-budget', '--fixed-claim', action='store_true', help='always count the whole unspent budget')
     sub.add_parser('status')
     sub.add_parser('release-cache', help='drop clean page cache of large files under the data roots')

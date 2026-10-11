@@ -78,19 +78,19 @@ def test_attached_container_is_charged_to_its_unit(monkeypatch, tmp_path):
     assert ledger.unit_usage('t.service', gpu, ['(adopted)']) == GIB
 
 
-def test_a_settled_claim_counts_up_to_its_measured_peak(monkeypatch):
-    # The teacher has run for hours at 56 of its 62 GiB: it is not about to take the other 6.
+def test_a_running_claim_reserves_only_a_fraction_of_its_unspent_budget_after_ramp_up(monkeypatch):
+    # Oversubscription: the teacher at 56 of its 62 GiB, a CPU job at 2 of 30, a young job still ramping.
     monkeypatch.setattr(ledger, 'mem_available', lambda: 30 * GIB)
-    use = {'teacher.service': 56 * GIB, 'young.service': 2 * GIB, 'unmeasured.service': 20 * GIB}
+    use = {'teacher.service': 56 * GIB, 'young.service': 2 * GIB, 'cpu.service': 2 * GIB}
     monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None: use[unit])
     now = ledger.time.time()
-    state = {'claims': {'teacher.service': dict(claim('service', 62, 0, now - 7200), peak=57 * GIB, peak_since=now - 3600),
-                        'unmeasured.service': claim('service', 30, 0, now - 7200),
+    state = {'claims': {'teacher.service': dict(claim('service', 62, 0, now - 7200), gpu=True),
+                        'cpu.service': claim('experiment', 30, 0, now - 7200),
                         'young.service': claim('experiment', 10, 0, now - 60)}, 'events': []}
     free, live = ledger.headroom(state, {})
-    # 1 GiB up to the teacher's peak; the young job's whole rest; a claim only now measured counts its whole rest too
-    assert free == 30 * GIB - 1 * GIB - 8 * GIB - 10 * GIB
-    assert state['claims']['teacher.service']['peak'] == 57 * GIB and state['claims']['young.service']['peak'] == 2 * GIB
+    # gpu unit: half of 6 GiB; cpu unit: a quarter of 28 GiB; young: the whole 8 GiB
+    assert free == 30 * GIB - 3 * GIB - 7 * GIB - 8 * GIB
+    assert state['claims']['young.service']['peak'] == 2 * GIB
 
 
 def test_one_cache_release_at_a_time(monkeypatch, tmp_path):
@@ -200,7 +200,7 @@ def test_re_adoption_keeps_the_admission_time_and_peak_and_can_hold_the_budget(m
     with ledger.ledger() as state:
         state['claims']['warmup.service'] = dict(claim('experiment', 40, 0, 123.0), command=['docker', 'start', '-a', 'w'],
                                                  peak=38 * GIB, peak_since=200.0)
-    args = type('Args', (), {'unit': 'warmup', 'budget_gb': 42, 'cls': 'experiment', 'hold_budget': True})()
+    args = type('Args', (), {'unit': 'warmup', 'budget_gb': 42, 'cls': 'experiment', 'hold_budget': True, 'priority': None})()
     ledger.adopt(args)
     with ledger.ledger() as state:
         held = state['claims']['warmup.service']
@@ -317,54 +317,133 @@ def test_under_the_floor_the_cheapest_stop_per_grace_goes_first_within_a_class()
     assert ledger.victim(live, True, 1.15, grace=grace)[0] == 'trainer.service'
 
 
-def settled(cls, budget, used, peak, age=3600, **extra):
-    now = ledger.time.time()
-    return dict(claim(cls, budget, used, now - age), peak=peak * GIB, peak_since=now - age, **extra)
+def running(cls, budget, used, priority=None, age=3600, **extra):
+    c = claim(cls, budget, used, ledger.time.time() - age)
+    c.update(priority=priority, spec={'reserve': 8 * GIB}, **extra)
+    return c
 
 
-def test_a_settled_experiment_reserves_its_peak_times_margin_not_its_budget():
-    c = settled('experiment', 87, 5, 5)
-    assert ledger.effective_claim(c) == int(5 * GIB * 1.3)
-    assert ledger.outstanding(c) == int(5 * GIB * 1.3) - 5 * GIB
-    assert ledger.effective_claim(settled('experiment', 87, 0.5, 0.5)) == 2 * GIB  # the floor
-    assert ledger.effective_claim(settled('experiment', 87, 5, 5, age=60)) == 87 * GIB  # not settled yet
-
-
-def test_the_reservation_grows_back_with_use_up_to_the_original_budget():
-    assert ledger.effective_claim(settled('experiment', 10, 5, 5)) < ledger.effective_claim(settled('experiment', 10, 8, 8))
-    assert ledger.effective_claim(settled('experiment', 10, 9.5, 9.5)) == 10 * GIB  # never above the budget
-
-
-def test_admission_uses_effective_reservations(monkeypatch):
-    monkeypatch.setattr(ledger, 'mem_available', lambda: 100 * GIB)
+def test_admission_is_by_real_headroom_so_claims_may_exceed_the_machine(monkeypatch):
+    # 87 GiB claimed, 5 used: the old claim-sum rule refused a 40 GiB GPU job on a 121 GiB machine
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 110 * GIB)
     monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None: 5 * GIB)
     now = ledger.time.time()
-    state = {'claims': {'cpu.service': dict(claim('experiment', 87, 0, now - 3600), peak=5 * GIB, peak_since=now - 3600)},
-             'events': []}
+    state = {'claims': {'cpu.service': claim('experiment', 87, 0, now - 3600)}, 'events': []}
     free, _ = ledger.headroom(state, {})
-    assert free == 100 * GIB - (int(5 * GIB * 1.3) - 5 * GIB)
-    state['claims']['cpu.service']['fixed_claim'] = True
-    free_fixed, _ = ledger.headroom(state, {})
-    assert free_fixed == 100 * GIB - 82 * GIB  # opt-out: the whole unspent budget
+    assert free == 110 * GIB - int(0.25 * 82 * GIB)
+    assert ledger.fits(free, 40 * GIB, 8 * GIB)
+    state['claims']['cpu.service']['fixed_claim'] = True  # opt-out: the whole unspent budget reserved
+    assert ledger.headroom(state, {})[0] == 110 * GIB - 82 * GIB
+    assert not ledger.fits(110 * GIB - 82 * GIB, 40 * GIB, 8 * GIB)
 
 
-def test_the_guard_threshold_stays_the_original_budget():
-    live = {'a.service': dict(settled('experiment', 10, 6, 6), used=6 * GIB)}
-    assert ledger.effective_claim(live['a.service']) < 10 * GIB
-    # 6 GiB used is above the effective claim's use but far below 10 x 1.15: never a victim for using what it claimed
-    assert ledger.victim(live, False, 1.15, pressure=True) == (None, None)
-    live['a.service']['used'] = 12 * GIB
-    assert ledger.victim(live, False, 1.15, pressure=True)[0] == 'a.service'
+def test_gpu_units_reserve_more_of_their_unclaimed_remainder_than_cpu_units():
+    gpu, cpu = running('experiment', 40, 10, gpu=True), running('experiment', 40, 10)
+    assert ledger.outstanding(gpu) == 15 * GIB and ledger.outstanding(cpu) == int(7.5 * GIB)
+    assert ledger.outstanding(running('experiment', 40, 10, age=60)) == 30 * GIB  # still ramping up
 
 
-def test_fixed_claim_and_hold_budget_opt_out_of_shrinking():
-    for key in ('fixed_claim', 'hold_budget'):
-        c = settled('experiment', 40, 5, 5, **{key: True})
-        assert ledger.effective_claim(c) == 40 * GIB and ledger.fixed_claim(c)
+def test_priorities_default_by_class_and_can_be_declared():
+    assert ledger.priority_of(claim('experiment', 1, 0, 0)) == 2 and ledger.priority_of(claim('service', 1, 0, 0)) == 3
+    assert ledger.priority_of(running('experiment', 1, 0, priority='high')) == 3
+    assert ledger.priority_of(running('collection', 1, 0, priority='low')) == 1
+    assert ledger.PRIORITY_OOM['high'] < ledger.PRIORITY_OOM['medium'] < ledger.PRIORITY_OOM['low']
 
 
-def test_a_refusal_names_the_over_claimers():
-    live = {'big.service': dict(claim('experiment', 60, 4, ledger.time.time()), peak=4 * GIB),
-            'small.service': dict(claim('experiment', 2, 2, ledger.time.time()), peak=2 * GIB)}
-    text = ledger.blocked_by(live)
-    assert 'big.service' in text and 'small.service' not in text
+def test_the_waiting_queue_is_ordered_by_priority_then_arrival_and_drops_abandoned_waiters():
+    now = 1000.0
+    state = {'waiting': {'low.service': {'priority': 'low', 'since': 1, 'seen': now},
+                         'high-late.service': {'priority': 'high', 'since': 5, 'seen': now},
+                         'high-early.service': {'priority': 'high', 'since': 2, 'seen': now},
+                         'gone.service': {'priority': 'high', 'since': 0, 'seen': now - 500},
+                         'requeued.service': {'priority': 'medium', 'since': 3, 'requeued': True}}}
+    assert [u for u, _ in ledger.waiting_order(state, now)] == \
+        ['high-early.service', 'high-late.service', 'requeued.service', 'low.service']
+
+
+def test_preemption_picks_the_lowest_priority_resumable_units_and_never_equals_or_services():
+    live = {'train.service': running('experiment', 40, 38, priority='high'),
+            'eval.service': running('experiment', 20, 18, priority='medium'),
+            'render-a.service': running('collection', 20, 15, priority='low'),
+            'render-b.service': running('collection', 20, 6, priority='low'),
+            'teacher.service': dict(running('service', 62, 56), resumable=False)}
+    wanted = {'priority': 'high', 'budget': 30 * GIB, 'reserve': 8 * GIB}
+    plan = ledger.preemption_plan(live, 14 * GIB, wanted)
+    assert plan == ['render-a.service', 'render-b.service']  # lowest priority first, biggest first; teacher/train untouched
+    assert ledger.preemption_plan(live, 60 * GIB, wanted) == []  # fits already
+    assert ledger.preemption_plan(live, 10 * GIB, dict(wanted, budget=120 * GIB)) == []  # cannot fit even so: no needless stops
+    assert ledger.preemption_plan(live, 10 * GIB, dict(wanted, priority='low')) == []  # nothing lower than low
+    assert 'eval.service' not in ledger.preemption_plan(live, 10 * GIB, dict(wanted, priority='medium'))
+
+
+def test_pressure_stops_the_lowest_priority_first_unless_a_higher_one_is_over_its_budget():
+    live = {'train.service': running('experiment', 40, 30, priority='high', age=9000),
+            'render.service': running('collection', 20, 10, priority='low', age=10)}
+    assert ledger.victim(live, True, 1.15)[0] == 'render.service'  # even though it is older/cheaper class order says otherwise
+    live['train.service']['used'] = 50 * GIB  # above its own claimed budget x overshoot
+    assert ledger.victim(live, True, 1.15)[0] == 'train.service'
+    live['train.service']['used'] = 40 * GIB  # at its budget: never killed for using what it claimed
+    assert ledger.victim(live, True, 1.15)[0] == 'render.service'
+
+
+def test_a_stopped_resumable_unit_is_requeued_with_its_spec_and_a_service_is_not():
+    state = {'claims': {'render.service': running('collection', 20, 10, priority='low'),
+                        'teacher.service': running('service', 62, 56)}, 'events': []}
+    assert ledger.requeue_spec(state, 'render.service', now=100.0)
+    entry = state['waiting']['render.service']
+    assert entry['requeued'] and entry['priority'] == 'low' and entry['not_before'] > 100 and entry['spec']
+    state['claims']['teacher.service']['resumable'] = False
+    assert not ledger.requeue_spec(state, 'teacher.service') and 'teacher.service' not in state['waiting']
+    assert not ledger.requeue_spec({'claims': {'old.service': claim('experiment', 1, 0, 0)}, 'events': []}, 'old.service')  # legacy claim: no spec
+
+
+def test_the_guard_preempts_for_the_queue_head_then_relaunches_when_room_returns(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'CHECKPOINT_WRITES', str(tmp_path / 'none'))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    available = [30 * GIB]
+    monkeypatch.setattr(ledger, 'mem_available', lambda: available[0])
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None: 30 * GIB)
+    calls, launched = [], []
+    monkeypatch.setattr(ledger, 'terminate', lambda unit, container: calls.append(unit))
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec['unit']) or 0)
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('inactive', ''))
+    monkeypatch.setattr(ledger, 'time', type('T', (), {'time': staticmethod(lambda: now[0]), 'sleep': staticmethod(lambda s: None)}))
+    now = [10000.0]
+    with ledger.ledger() as state:
+        state['claims']['render.service'] = running('collection', 40, 30, priority='low', admitted=1.0) \
+            if False else dict(running('collection', 40, 30, priority='low'), admitted=1.0)
+        state['waiting'] = {'train.service': {'priority': 'high', 'since': 9990.0, 'seen': 10000.0, 'budget': 40 * GIB,
+                                              'reserve': 8 * GIB}}
+    args = type('A', (), {'floor_gb': 8, 'overshoot': 1.15, 'interval': 0, 'once': True})()
+    ledger.guard(args)
+    assert calls == ['render.service']  # the high job cannot fit by real headroom: the low resumable unit is stopped
+    with ledger.ledger() as state:
+        assert state['waiting']['render.service']['requeued']  # and requeued for later
+
+
+def test_the_guard_relaunches_a_requeued_unit_once_its_delay_has_passed_and_it_fits(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'CHECKPOINT_WRITES', str(tmp_path / 'none'))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 90 * GIB)
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('inactive', ''))
+    launched = []
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec['unit']) or 0)
+    now = ledger.time.time()
+    spec = {'unit': 'render.service', 'budget': 20 * GIB, 'cls': 'collection', 'command': ['x'], 'priority': 'low',
+            'resumable': True, 'reserve': 8 * GIB}
+    with ledger.ledger() as state:
+        state['waiting'] = {'render.service': {'priority': 'low', 'since': now, 'requeued': True, 'not_before': now + 3600,
+                                               'budget': 20 * GIB, 'reserve': 8 * GIB, 'spec': spec}}
+    args = type('A', (), {'floor_gb': 8, 'overshoot': 1.15, 'interval': 0, 'once': True})()
+    ledger.guard(args)
+    assert launched == []  # delay not over
+    with ledger.ledger() as state:
+        state['waiting']['render.service']['not_before'] = now - 1
+    ledger.guard(args)
+    assert launched == ['render.service']
+    with ledger.ledger() as state:
+        assert 'render.service' in state['claims'] and not state['waiting']
