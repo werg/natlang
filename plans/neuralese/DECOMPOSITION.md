@@ -36,6 +36,17 @@ for each token. This is execution plumbing, not a model policy change.
 
 The forced-sequence diagnostic also compares downstream synthetic-consumer CE/logits and combined producer-plus-consumer parameter/prefix gradients; its FP32 reference disables TF32, and it qualifies mechanism parity rather than task quality.
 
+## Native causal-convolution dependency selection — 2026-10-12
+
+The LFM2 forward keeps one causal-convolution call site. On the Pop executor it may use the official Dao-AILab `causal_conv1d_fn` source build only when the exact pinned Torch/CUDA build, package version, and SM 8.9 device match its immutable build manifest. The invalid Hub revision is not resolved or substituted. Any absent or mismatched package selects the existing `torch.nn.functional.conv1d` reference path. This is exact ABI and runtime plumbing, not a model policy change; same-input CUDA fidelity and speed remain a separate adoption gate.
+
+| Part | Form | Reason |
+| --- | --- | --- |
+| Check that the installed extension matches its package, Torch/CUDA, and device pins | Crisp exact loader in shared `model/lfm2_port.py` | These version and architecture fields determine whether the compiled extension can load and execute. |
+| Apply causal convolution when the exact native package is available | Existing `PortBackbone` convolution site with `causal_conv1d_fn` | Keep one model path and preserve its existing inputs and weights. |
+| Use the reference convolution otherwise | Existing `F.conv1d` branch | It already implements the same operation and remains available for every runtime. |
+| Record which implementation and artifact served a run | Existing runtime/evaluation receipts | Bind performance and parity claims to the actual loaded implementation and source artifact. |
+
 ## Direct SFT window gradients and memory choice
 
 Direct SFT still uses one global weighted objective and one optimizer update for a packed schedule batch. The default `window_execution=auto` backpropagates independent windows sequentially, accumulating parameter gradients and applying MuonSR/LionSR/AdamW once after all windows. It asks the shared `backbone_memory_layout`/`geometry_bytes` estimator for the largest-window activation geometry, combines that with the shared optimizer gradient/state floor and live reusable CUDA memory, and selects uncheckpointed execution when the predicted increment fits; otherwise it uses layer checkpointing. The estimate includes promoted FP32 RMSNorm inputs retained for backward on uncheckpointed layers and the largest layer-local promoted norm input while checkpointing. `AdaptiveGraphMemory` supplies its calibrated geometry ratio and 5% prediction margin. Every update records the plan before its forward, including selected checkpoint mode, activation layout, estimate, and reusable CUDA bytes; successful updates also record the observed peak and update calibration. `packed` remains an explicit diagnostic override. The recipe's `checkpoint_layers` may pin a mode operationally; omitting it enables the adaptive choice.

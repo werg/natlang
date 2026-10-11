@@ -90,6 +90,7 @@ def main(argv=None):
     prefix = torch.cat([ids, torch.full((args.batch, 1), controls.open_id)], 1).to(args.device)
     report = {"device": args.device, "dtype": str(dtype), "prefix": args.prefix, "block": args.block,
               "batch": args.batch, "cutoff": args.cutoff, "conv_kernel": fast.conv_kernel is not None,
+              "conv_kernel_runtime_info": fast.conv_kernel_runtime_info,
               "reference": bench(reference, heads, prefix, args.block, args.repeats),
               "fast": bench(fast, heads, prefix, args.block, args.repeats)}
     report["speedup"] = {k: report["fast"][k] / report["reference"][k] for k in report["fast"]
