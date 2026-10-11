@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v36-model-coverage-supplement-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-model-coverage-supplement-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 180,
+      "sha256": "55527f8c4e88064715340fe1b1b28b4d6f0582d1110acbddd326622749c06bae"
+    },
+    {
+      "path": "coverage-supplement.json",
+      "bytes": 3998,
+      "sha256": "505fd394c581cd01a90915132db6dd8e020a4731312ed716f917b3fec2be2668"
+    },
+    {
+      "path": "coverage-supplement.md",
+      "bytes": 695,
+      "sha256": "0ce4fa271fcccdccbbb678fec169dd61de8b16b92b67a835acdc6c4eee23617a"
+    }
+  ],
+  "bytes": 4873
+}

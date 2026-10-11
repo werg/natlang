@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "decision-source-quality-root-review-v17-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v17",
+  "files": [
+    {
+      "path": "root-review.json",
+      "bytes": 11086,
+      "sha256": "bda6f310d5dfddeed5800dc8cf8f0d4c0a9e00731c2ac14f94a8521a33429cf1"
+    }
+  ],
+  "bytes": 11086
+}

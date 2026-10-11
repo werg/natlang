@@ -30378,6 +30378,36 @@
       "admission": "prepared-execution-evidence-not-run-no-training-admission",
       "independent_new_worlds": 0,
       "notes": "Prepared plan and immutable package source for future 48-probe x 3-role paired evaluation. Wait for V8 closure and exact selected checkpoint receipt; do not overlap training. No model generation performed."
+    },
+    {
+      "id": "decision-source-quality-root-review-v17-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v17",
+      "include": [
+        "root-review.json"
+      ],
+      "split": "inherited-train-source-quality-review",
+      "source_class": "owner-reviewed-source-quality-hold-candidate-evidence",
+      "training_admission": false,
+      "admission": "held-owner-review-evidence-only-canonical-policy-update-separate",
+      "independent_new_worlds": 0,
+      "notes": "Root-reviewed seven exact master rows and approved four prospective source-quality holds; review is separate from the canonical hold policy and does not itself change selection or grant admission. Exact master/source bindings are in the reviewed file."
+    },
+    {
+      "id": "google-choice-confidence-v36-model-coverage-supplement-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-model-coverage-supplement-v1",
+      "include": [
+        "coverage-supplement.json",
+        "coverage-supplement.md",
+        "FILES.sha256"
+      ],
+      "split": "inherited-train-quality-review",
+      "source_class": "held-provider-model-coverage-accounting",
+      "training_admission": false,
+      "admission": "held-coverage-accounting-no-comparative-ranking-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V36 coverage supplement: ten models configured, two actually received requests, eight had zero attempts. 512 HTTP 200 label rows and 33 failed attempts are pinned. Request allocation is not a comparative quality ranking; no admission change."
     }
   ],
   "coverage_backlog": [
