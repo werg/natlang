@@ -32165,6 +32165,24 @@
       "independent_new_worlds": 0,
       "admission": "approval provenance only; not a result, quality, or training admission",
       "notes": "Separate immutable V87 root approval snapshot. Approved plan SHA 2804cc7ee26040dafb08074717d29cc86831016f2dc4488c1afb09860a211040; owner approval and disjointness review bind 404 exact source rows and all 51 authored replays. The campaign is running from five worker lanes. A separate immutable root supervisor launch receipt file was not present at snapshot time, so active campaign-launch/journal files are not represented here."
+    },
+    {
+      "id": "luna-choice-confidence-v86-question-level-scope-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v86-question-level-visibility-supplement-v1",
+      "include": [
+        "supplement.json",
+        "supplement.md",
+        "FILES.sha256.json"
+      ],
+      "split": "held-quality-review-supplement",
+      "source_class": "invocation-bound-question-options-and-levels-visibility-audit",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "visibility diagnostic only; no data or trace admission",
+      "notes": "Additive to V86 quality review. Exact same-invocation request joins confirm question/options/effective levels fields across all 147 items. Every task has empty levels and no item overrides; compiler scope diagnostics concern NL arity/capture, and one separate attempt lacked state. Saved request rendering is not original provider wire evidence."
     }
   ],
   "coverage_backlog": [
