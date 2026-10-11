@@ -10693,3 +10693,12 @@ Shared soft-state evidence converter now recognizes model-authored constant stri
 V34shared verified quota waiter1002378 queues512freshtrain inputs under current64holds, caseSHA6f7e28b41cc9d261c70942ef07ee340ca138edd63d45511610abbc40ecf53bdf. Root independently verified originalobjects/train/IDs/groups and allsix frozenfiles/tenmodels throughsharedhelper. Same2048/4workers/2quota-group/ownerwait; no extraquota capacity. Input snapshot excludes liveoutputs.
 
 Future iterateOn rubric should explicitly allow provisional hypotheses/status without treating them as final commitments, keep initial unknown state legal, and judge evidence updates independently of final-answer oracle. No forceddelegation/extra-read requirement and no exact gold-prose requirement.
+
+
+### Pop 2026-10-11 02:38 UTC — source closure and scheduling diagnosis
+
+Pulled origin/main a48efbe6. DGX completed full-S1/harness/protected closure for seven-source V64 related recovery (5d44497f) and V31 57 programs/407 original items (93b7ba41). Exact receipts are committed under training/closure-receipts. Closure is held evidence, not source-quality eligibility or trace/training admission. Historical pinned policy V12 remains unchanged; current V13 additive holds are disjoint.
+
+Google V32 closed512valid outputs,393annotation matches119differences. Actual shared static adapter produced53accepted references/0failures over393items,892native turns,58declared execution byte payloads. Rawclosed/static held manifests published; detailed semantic audit underway. V33/V34 use the same quota owner/pacing, not extra capacity.
+
+Luna V67 has four complete lanes and one active lane; global V68 successor barrier unnecessarily idles four slots. Shared launcher is being changed to refill each numbered lane only after its own predecessor is dead and its exact queue terminal accounting is complete. No incomplete bypass or hidden extra slots. Old sealed V68 approved plan will be preserved and separately superseded; active predecessor evidence is unchanged. V7 still live37346/37888 GPU99%; keep best35840 and strict failed gates, finish declared run before selecting continuation.

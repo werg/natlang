@@ -28969,6 +28969,26 @@
       "training_admission": false,
       "admission": "producer-proof-only-not-operator-approval",
       "notes": "Actual shared AST witness extraction on PROV521pass2 modelreturned literal matches graphbody/typedpriorstate/sameinvocationrawcall. Sharedcodesealed; source/trace/operatoradmission unchanged. Full approvedsoftstateconversion not yetrun, no fabricatedtrainingmessage/newworld."
+    },
+    {
+      "id": "google-v32-closed-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v32-source",
+      "split": "inherited-train-evidence",
+      "source_class": "held-quality-and-generation-evidence",
+      "training_admission": false,
+      "admission": "held-pending-explicit-review",
+      "notes": "Closed512typedvalid outputs393annotationmatches119differences. Historical stale freeze-runner pin preserved with additive shared-freeze correction; actual labels manifest supports2048. All held, no automatic negative or admission."
+    },
+    {
+      "id": "google-v32-static-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v32-adapter-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-quality-and-generation-evidence",
+      "training_admission": false,
+      "admission": "held-pending-explicit-review",
+      "notes": "53 actual reference programs over393original annotation-matched items,53accepted0failures,892native turns. Exact58declared execution payload archive. Related worlds only; sourceclosure/tracequality/admission pending."
     }
   ],
   "coverage_backlog": [
