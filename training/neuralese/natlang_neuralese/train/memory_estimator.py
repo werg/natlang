@@ -23,12 +23,39 @@ def backbone_memory_layout(backbone, *, depth=None, checkpointed, **stage_option
         intermediate = int(first.mlp.gate_proj.out_features)
     kv_width = sum(2 * int(backbone.layers[i].self_attn.k_proj.out_features)
                    for i in range(depth) if backbone.is_attention(i))
+    # RMSNorm implementations that promote their input to FP32 retain those
+    # promoted values for backward when the layer is not checkpointed. Count
+    # the actual call-site widths: attention q/k norms operate over all heads,
+    # even when each norm's learned weight is only head_dim wide.
+    norm_saved_width = 0
+    norm_transient_width = 0
+    activation_bytes = int(backbone.embedding_weight.element_size())
+    if activation_bytes < 4:
+        for i in range(depth):
+            layer = backbone.layers[i]
+            layer_widths = []
+            for name in ('operator_norm', 'ffn_norm'):
+                module = getattr(layer, name, None)
+                if module is not None and 'rmsnorm' in type(module).__name__.casefold():
+                    layer_widths.append(width)
+            if backbone.is_attention(i):
+                attention = layer.self_attn
+                for norm_name, proj_name in (('q_layernorm', 'q_proj'), ('k_layernorm', 'k_proj')):
+                    module = getattr(attention, norm_name, None)
+                    projection = getattr(attention, proj_name, None)
+                    if (module is not None and projection is not None and
+                            'rmsnorm' in type(module).__name__.casefold()):
+                        layer_widths.append(int(projection.out_features))
+            norm_saved_width += sum(layer_widths)
+            norm_transient_width = max(norm_transient_width, *layer_widths, 0)
     return {
         'width': int(backbone.config.hidden_size),
         'layers': depth,
         'intermediate': intermediate,
         'kv_width': kv_width,
-        'dtype_bytes': int(backbone.embedding_weight.element_size()),
+        'dtype_bytes': activation_bytes,
+        'fp32_norm_saved_bytes_per_token': norm_saved_width * 4,
+        'fp32_norm_transient_bytes_per_token': norm_transient_width * 4,
         'checkpointed': bool(checkpointed),
         **stage_options,
     }
@@ -131,7 +158,8 @@ class AdaptiveGraphMemory:
 
 def geometry_bytes(context, vectors, *, width, layers, intermediate, kv_width, dtype_bytes,
                    checkpointed, target_tokens=0, vocab_size=0, shared_kv_prefix=False,
-                   uncheckpointed_layers=0, stage_group_size=0, sketch_cutoff=0):
+                   uncheckpointed_layers=0, stage_group_size=0, sketch_cutoff=0,
+                   fp32_norm_saved_bytes_per_token=0, fp32_norm_transient_bytes_per_token=0):
     # Checkpointed layers retain residual inputs; ordinary backward also retains
     # expanded FFN and operator activations. KV copies grow with sketch writes.
     plain_layers = uncheckpointed_layers if checkpointed else layers
@@ -140,6 +168,14 @@ def geometry_bytes(context, vectors, *, width, layers, intermediate, kv_width, d
     tape_per_token = ((layers - plain_layers) * width +
                       plain_layers * (6 * width + 3 * intermediate)) * dtype_bytes
     tape = context * tape_per_token
+    if min(fp32_norm_saved_bytes_per_token, fp32_norm_transient_bytes_per_token) < 0:
+        raise ValueError('FP32 norm geometry must be nonnegative')
+    if layers:
+        tape += context * fp32_norm_saved_bytes_per_token * plain_layers // layers
+    if plain_layers < layers:
+        # Checkpointing discards per-call saved tensors, but one promoted norm
+        # input remains live transiently while the current layer executes.
+        tape += context * fp32_norm_transient_bytes_per_token
     if stage_group_size and vectors:
         if stage_group_size < 1 or not 0 <= sketch_cutoff <= layers:
             raise ValueError('invalid local-stage geometry')
