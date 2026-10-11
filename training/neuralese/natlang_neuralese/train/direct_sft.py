@@ -501,8 +501,8 @@ def main(argv=None):
             if drift['guard'] == 'stop':
                 print(json.dumps({'event': 'behaviour_drift_stop', 'step': step}), flush=True)
                 stop.request()
-        if policy.due(step) or stop.requested:
-            policy.save(full_state())
+        if (policy.due(step) or stop.requested) and saved_step != step:  # never a second write of one step:
+            policy.save(full_state())  # it would replace the slot and break best-checkpoint.pt's hard link
             saved_step = step
     finished = step >= a.steps
     gate = (gate_by_step.get(step) or gate_report()) if finished else None
