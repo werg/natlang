@@ -29492,6 +29492,32 @@
       "training_admission": false,
       "admission": "generation-launch-evidence-only",
       "notes": "Root-approved V72 supervisor1025637 waits per lane on V71; at most five combined generator workers. Separate supplement preserves immutable preparation snapshot. 88 programs/640 original train items; V16 callable diagnostic adopted; current74 source holds checked. No source/trace/training admission or independent-world credit."
+    },
+    {
+      "id": "luna-choice-confidence-v70-v34-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v70-v34-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-provider-generation-raw-and-terminal-evidence",
+      "training_admission": false,
+      "admission": "held-raw-only-no-training-admission-no-DPO",
+      "notes": "Closed V70 campaign: 55/55 programs completed across five queues (11 each), 419 source items, current 74-hold source policy at launch, with the historical V68 plan lineage preserved in pinned campaign review. Includes all actual raw results, traces, files, worker journals/queues/logs, and launch artifacts. Parent acceptance and original source labels are not training admission or semantic adjudication; no new-world credit.",
+      "include": [
+        "**/*"
+      ]
+    },
+    {
+      "id": "luna-choice-confidence-v70-v34-quality-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v70-folder-terminal-v9",
+      "split": "inherited-train-diagnostic",
+      "source_class": "held-source-and-trajectory-quality-review",
+      "training_admission": false,
+      "admission": "held-quality-review-no-training-admission-no-DPO",
+      "notes": "Held audit for luna-choice-confidence-v70-v34-closed-raw-held-20261011-v1, pinned to its 419 source items and exact source/runtime/replay inputs. Reports 34 parent accepted and 21 rejected; 382 observed source-label matches and 37 differences are not semantic judgments. Exact question/state pairs are evidenced in 251 child contexts; 168 source items lack direct same-child context proof. One DBpedia row saved the expected map but returned an empty map. The sealed review.json identifies v9; review.md retains a stale v4 heading, preserved without mutation. No admission or new-world credit.",
+      "include": [
+        "**/*"
+      ]
     }
   ],
   "coverage_backlog": [
