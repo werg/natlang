@@ -27,6 +27,7 @@ def backbone_memory_layout(backbone, *, depth=None, checkpointed, **stage_option
     # promoted values for backward when the layer is not checkpointed. Count
     # the actual call-site widths: attention q/k norms operate over all heads,
     # even when each norm's learned weight is only head_dim wide.
+    width = int(backbone.config.hidden_size)
     norm_saved_width = 0
     norm_transient_width = 0
     activation_bytes = int(backbone.embedding_weight.element_size())
