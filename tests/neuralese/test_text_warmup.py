@@ -472,6 +472,24 @@ def test_single_close_target_is_supported_by_mapped_completions():
     assert heads.input_map.up.weight.grad is not None
 
 
+def test_single_target_runs_both_mapped_passes_with_an_empty_mapped_history():
+    """Two passes on a one-token span (run-v9 step 3474): the second pass's mapped history is empty, so it reads the
+    prefix alone; the input map returns no outputs for no slots instead of a padded conv shorter than its kernel."""
+    from natlang_neuralese.model.input_map import NeuraleseInputMap
+    from natlang_neuralese.train.text_warmup import mapped_completions
+    backbone,heads=tiny_student()
+    heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],kernel=4,rank=4))
+    empty=torch.zeros(2,0,backbone.embedding_weight.shape[1])
+    assert heads.input_map(empty).shape==(2,0,backbone.embedding_weight.shape[1])
+    prefix=torch.tensor([[1,4,backbone.controls.open_id]])
+    span=torch.tensor([[backbone.controls.close_id]])
+    first,second=list(mapped_completions(backbone,heads,prefix,span,passes=2))
+    assert second['pass_index']==1 and second['top'].shape[:2]==(1,1)
+    assert torch.allclose(second['top'],first['top'],atol=1e-5)  # same input: the prefix alone
+    relative_mse(second['sketches'],backbone.embed(span)).backward()
+    assert heads.input_map.up.weight.grad is not None
+
+
 def test_branch_checkpoint_preserves_values_and_parameter_gradients():
     backbone,heads=tiny_student()
     prefix=torch.tensor([[1,4,7],[2,3,8]])

@@ -27,5 +27,9 @@ class NeuraleseInputMap(nn.Module):
     def forward(self, embeddings):
         """[B,T,d] token embeddings of the slots (each slot sees its own and earlier tokens) -> Neuralese inputs."""
         x = embeddings.float()
+        if x.shape[1] == 0:
+            # No slots, no inputs (a one-token span's mapped history in the second pass): the causal map of an empty
+            # sequence is empty, and the padded conv would refuse an input shorter than its kernel.
+            return embeddings.new_zeros(embeddings.shape)
         local = self.conv(F.pad(x.transpose(1, 2), (self.kernel - 1, 0))).transpose(1, 2)
         return (x + local + self.up(self.down(x))).to(embeddings.dtype)
