@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v27-closure-provenance-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v27-closure-provenance-supplement-v1",
+  "files": [
+    {
+      "path": "decision_source_quality_holds.json",
+      "bytes": 35316,
+      "sha256": "ea67230ed1dd7b28ec65c83e0e440f8871bb39bc90c949b93df625fb02b66b5a"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 923,
+      "sha256": "73f764174daf37002cefb86f2382eb644727ed79d3df5e55810616712228fd61"
+    },
+    {
+      "path": "source_case_closure.py",
+      "bytes": 32159,
+      "sha256": "64b255e854c30fccc197d69af3a1a632068d144b5a047441a3df4c218fe7e9af"
+    }
+  ],
+  "bytes": 68398
+}

@@ -10576,3 +10576,10 @@ Google V29 closed: 512 responses, 507 typed valid, 396 exact annotation choices,
 Google V30 now runs PID981324 on 512 fresh complete inherited-train inputs across nine families, source SHA e9f9f99be6b8a03c2972d1e2f920e041e14a33e94970ea095b58fb91ed3532b0. It applies 57 canonical holds, exact V21 reservations and prior original ID/group exclusions; TREC criteria are now visible in provider requests. Same free model pool, quota state, four total/two per quota group requests and backoff. No paid fallback or training admission.
 
 Owner initially supplied incorrect family spellings, producing an empty unlaunched V30 preparation. Preserved that receipt. Shared preparer now rejects requested families absent from the source, while actual known families with exhausted eligible rows still report omissions/shortfalls. No tests added or run. Active V7 and five-worker Luna V65 continue unchanged.
+
+
+### Pop 2026-10-11T00:31:24.193278+00:00 — reviewed related-source recovery and V27 closure
+
+Root fully reviewed seven remaining V64 incomplete-folder source states and verified object equality with original master. Two annotation-grounded recovery programs (4+3 inputs) reference replay accepted, zero provider label calls; original eight-row lineage and excluded Dynamo5 preserved. Sixteen actual execution components archived and hash matched; previous preparer recovered from135ec72a. Related-world recovery adds no independent worlds/admission. Two-worker supervisor982642 now waits all five V65 predecessors with complete accounting; approved plan SHA0a276516f329cc12c1bd09acd5105b28056d381a22cf19c90ed002f0038f4532,39artifact pins, original384request budget unchanged.
+
+DGX reports V27 fullS1+harness closure:54/54trainprograms404items/groups, zero cross-corpus/protected hits, report de431050, projection b1db9d3f. Reply2026-10-11T00:22:42.394878Z-dgx-f599, receipt commit9959107a; evidence only. Added separate exact historical45holdpolicy and actual closurecode provenance supplement; original packet unchanged. Typed16iterate closure remains pending. Google V29/V30 five new snapshots all SSH SHA verified.

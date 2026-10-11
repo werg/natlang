@@ -28331,6 +28331,42 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "Unlaunchedempty sourceprep caused byownerusingunrecognizedfamily spellings; sharedpreparer nowrejects absentfamily requests. Preserved provenance, zeroprovidercalls."
+    },
+    {
+      "id": "luna-v64-seven-source-recovery-static-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-recovery-static-frozen-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Seven exact original trainobjects, excluded ambiguous Dynamo5 preserved inparentlineage; two referenceaccepted programs4+3,16executioncomponents frozen. Relatedworlds, held."
+    },
+    {
+      "id": "luna-v64-seven-source-recovery-reviewed-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v64-seven-source-recovery-v65-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Two-worker relatedsource recovery supervisor982642 waits V65completeaccounting.39pins unchanged384requestlimit. Movingoutputs excluded.",
+      "include": [
+        "reviewed-plan-v2.json",
+        "root-approved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ]
+    },
+    {
+      "id": "free-provider-google-v27-closure-provenance-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v27-closure-provenance-supplement-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Additive exact45holdpolicy andactualsharedclosurecode bytes forDGXfullS1 closure54program404items; oldpacketunchanged, noadmission."
     }
   ],
   "coverage_backlog": [
