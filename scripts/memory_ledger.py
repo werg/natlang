@@ -22,7 +22,15 @@ heavy job declare a budget and enforces it from outside the job:
 Outstanding demand of a running claim is its budget minus what it already uses, so a job still ramping up is
 counted at its full budget and a job at its peak is counted once, through MemAvailable. A claim that has run for
 SETTLE_SECONDS, and been measured that long, has shown its working set: from then on it is counted up to the highest
-use the ledger has measured (the guard measures every few seconds), not its whole budget. The guard's floor still covers a later spike, and
+use the ledger has measured (the guard measures every few seconds), not its whole budget. EFFECTIVE CLAIMS: an
+experiment settles after EXPERIMENT_SETTLE_SECONDS (600; env NATLANG_LEDGER_SETTLE_SECONDS) and then reserves
+max(peak x 1.3, 2 GiB floor), never above its budget and never below its peak; the reservation grows back as its peak
+rises. Admission uses these effective reservations (`status` shows budget_gb, effective_gb, outstanding_gb); the guard's
+kill threshold and overshoot rule still use the ORIGINAL budget. Usage includes CUDA (nvidia-smi per pid) plus cgroup
+memory of the unit and of its docker container. `--fixed-claim` (alias --hold-budget) opts a unit out: use it for
+trainers whose peak comes late (first eval, checkpoint write). GPU units are not fixed by default: their observed use
+already includes CUDA, and the family's measured peak raises the next admission. A refused `run` names the claims
+withholding the most memory. The guard's floor still covers a later spike, and
 its first victim is the newest experiment. A claim made with --hold-budget (a job whose working set grows on its own
 schedule, or that checks MemFree before each step) always counts its whole unspent budget.
 """
@@ -45,6 +53,12 @@ STATE = os.path.expanduser(os.environ.get('NATLANG_MEMORY_LEDGER', '~/.local/sta
 CLASSES = {'experiment': 900, 'collection': 600, 'service': 300}
 GIB = 2**30
 SETTLE_SECONDS = 1800
+# Effective claims of experiments (2026-10-11): 87 GB claimed against ~5 GB used blocked a priority GPU job. After
+# EXPERIMENT_SETTLE_SECONDS an experiment counts max(measured peak x margin, floor), at most its budget, and grows back
+# with its peak. Only admission uses this: the guard's kill threshold stays the original budget.
+EXPERIMENT_SETTLE_SECONDS = float(os.environ.get('NATLANG_LEDGER_SETTLE_SECONDS', 600))
+EFFECTIVE_MARGIN = float(os.environ.get('NATLANG_LEDGER_MARGIN', 1.3))
+EFFECTIVE_FLOOR = int(float(os.environ.get('NATLANG_LEDGER_FLOOR_GB', 2)) * 2**30)
 # A guard stop gives the victim its declared grace (``run --stop-seconds``) to write its full checkpoint (latents and
 # optimizer: ~4 min for Mellum's 47 GB state), and kills at once only below this emergency level (under the floor).
 EMERGENCY_GB = 3
@@ -283,18 +297,45 @@ def live_claims(state, gpu):
     return live
 
 
+def fixed_claim(claim):
+    """A claim that always counts its whole budget (``--fixed-claim``, older name ``--hold-budget``)."""
+    return bool(claim.get('hold_budget') or claim.get('fixed_claim'))
+
+
+def effective_claim(claim, now=None):
+    """What admission reserves for a claim. Fixed claims, and claims not yet settled (run and measured for the settle
+    period), reserve their budget. A settled experiment reserves max(peak x margin, floor), never more than its budget
+    and never less than its measured peak; it grows back as the peak rises. Settled collections and services reserve
+    their measured peak (no margin). The guard never uses this: its kill threshold is ``claim['budget']``."""
+    now = now or time.time()
+    if fixed_claim(claim):
+        return claim['budget']
+    experiment = claim.get('class') == 'experiment'
+    settle = EXPERIMENT_SETTLE_SECONDS if experiment else SETTLE_SECONDS
+    if now - max(claim['admitted'], claim.get('peak_since', now)) < settle:
+        return claim['budget']
+    peak = claim.get('peak', 0)
+    if experiment:
+        return min(claim['budget'], max(int(peak * EFFECTIVE_MARGIN), EFFECTIVE_FLOOR, int(claim.get('used', 0))))
+    return min(claim['budget'], peak)
+
+
 def outstanding(claim, now=None):
-    """What a claim may still take: its unspent budget, or, once it has settled (run and been measured for
-    SETTLE_SECONDS), up to its measured peak."""
-    settled = not claim.get('hold_budget') and \
-        (now or time.time()) - max(claim['admitted'], claim.get('peak_since', time.time())) >= SETTLE_SECONDS
-    ceiling = min(claim['budget'], claim.get('peak', 0)) if settled else claim['budget']
-    return max(0, ceiling - claim['used'])
+    """What a claim may still take: its effective reservation minus what it already uses."""
+    return max(0, effective_claim(claim, now) - claim['used'])
 
 
 def headroom(state, gpu):
     live = live_claims(state, gpu)
     return mem_available() - sum(outstanding(c) for c in live.values()), live
+
+
+def blocked_by(live, count=3):
+    """Names of the claims withholding the most memory (outstanding), for the refusal message of a waiting job."""
+    top = [(u, c) for u, c in sorted(live.items(), key=lambda item: -outstanding(item[1]))[:count]
+           if outstanding(c) >= GIB]
+    return ' (blocked by ' + ', '.join(f'{u} {outstanding(c) / GIB:.0f} GiB outstanding of {c["budget"] / GIB:.0f} '
+                                        f'claimed' for u, c in top) + ')' if top else ''
 
 
 def run(args):
@@ -326,7 +367,8 @@ def run(args):
                                         'free': free})
                 break
         if time.time() >= deadline:
-            raise SystemExit(f'not admitted: {free / GIB:.1f} GiB free after outstanding claims, '
+            blockers = blocked_by(live)
+            raise SystemExit(f'not admitted: {free / GIB:.1f} GiB free after outstanding claims{blockers}, '
                              f'{args.budget_gb} GiB requested, {args.reserve_gb} GiB reserve')
         time.sleep(30)
     host_max = args.host_max_gb or max(args.budget_gb, budget / GIB)
@@ -397,8 +439,9 @@ def status(args):
     print(json.dumps({'available_gb': round(mem_available() / GIB, 1), 'headroom_gb': round(free / GIB, 1),
                       'claims': {u: {'class': c['class'], 'budget_gb': round(c['budget'] / GIB, 1),
                                      'used_gb': round(c['used'] / GIB, 1), 'peak_gb': round(c.get('peak', 0) / GIB, 1),
+                                     'effective_gb': round(effective_claim(c) / GIB, 1),
                                      'outstanding_gb': round(outstanding(c) / GIB, 1),
-                                     **({'hold_budget': True} if c.get('hold_budget') else {}),
+                                     **({'fixed_claim': True} if fixed_claim(c) else {}),
                                      'command': shlex.join(c['command'])[:160]} for u, c in live.items()}}, indent=2))
 
 
@@ -580,7 +623,7 @@ def main():
     r.add_argument('--class', dest='cls', choices=sorted(CLASSES), default='experiment')
     r.add_argument('--reserve-gb', type=float, default=8, help='free memory that must remain after admission (the guard floor; owner: use the memory we have)')
     r.add_argument('--wait', type=float, default=0, help='seconds to wait for admission')
-    r.add_argument('--hold-budget', action='store_true',
+    r.add_argument('--hold-budget', '--fixed-claim', action='store_true',
                    help='always count the whole unspent budget, even after the job settles (working set grows later)')
     r.add_argument('--stop-seconds', type=float, default=None,
                    help='seconds the job gets to write its full state when stopped (planned or by the guard); default: '
@@ -592,7 +635,7 @@ def main():
     a.add_argument('--unit', required=True)
     a.add_argument('--budget-gb', type=float, required=True)
     a.add_argument('--class', dest='cls', choices=sorted(CLASSES), default='experiment')
-    a.add_argument('--hold-budget', action='store_true', help='always count the whole unspent budget')
+    a.add_argument('--hold-budget', '--fixed-claim', action='store_true', help='always count the whole unspent budget')
     sub.add_parser('status')
     sub.add_parser('release-cache', help='drop clean page cache of large files under the data roots')
     g = sub.add_parser('guard', help='enforce budgets and the free-memory floor')

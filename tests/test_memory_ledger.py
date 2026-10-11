@@ -315,3 +315,56 @@ def test_under_the_floor_the_cheapest_stop_per_grace_goes_first_within_a_class()
     assert ledger.victim(live, True, 1.15, grace=grace) == ('probe.service', 'free memory below floor')
     del live['probe.service']
     assert ledger.victim(live, True, 1.15, grace=grace)[0] == 'trainer.service'
+
+
+def settled(cls, budget, used, peak, age=3600, **extra):
+    now = ledger.time.time()
+    return dict(claim(cls, budget, used, now - age), peak=peak * GIB, peak_since=now - age, **extra)
+
+
+def test_a_settled_experiment_reserves_its_peak_times_margin_not_its_budget():
+    c = settled('experiment', 87, 5, 5)
+    assert ledger.effective_claim(c) == int(5 * GIB * 1.3)
+    assert ledger.outstanding(c) == int(5 * GIB * 1.3) - 5 * GIB
+    assert ledger.effective_claim(settled('experiment', 87, 0.5, 0.5)) == 2 * GIB  # the floor
+    assert ledger.effective_claim(settled('experiment', 87, 5, 5, age=60)) == 87 * GIB  # not settled yet
+
+
+def test_the_reservation_grows_back_with_use_up_to_the_original_budget():
+    assert ledger.effective_claim(settled('experiment', 10, 5, 5)) < ledger.effective_claim(settled('experiment', 10, 8, 8))
+    assert ledger.effective_claim(settled('experiment', 10, 9.5, 9.5)) == 10 * GIB  # never above the budget
+
+
+def test_admission_uses_effective_reservations(monkeypatch):
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None: 5 * GIB)
+    now = ledger.time.time()
+    state = {'claims': {'cpu.service': dict(claim('experiment', 87, 0, now - 3600), peak=5 * GIB, peak_since=now - 3600)},
+             'events': []}
+    free, _ = ledger.headroom(state, {})
+    assert free == 100 * GIB - (int(5 * GIB * 1.3) - 5 * GIB)
+    state['claims']['cpu.service']['fixed_claim'] = True
+    free_fixed, _ = ledger.headroom(state, {})
+    assert free_fixed == 100 * GIB - 82 * GIB  # opt-out: the whole unspent budget
+
+
+def test_the_guard_threshold_stays_the_original_budget():
+    live = {'a.service': dict(settled('experiment', 10, 6, 6), used=6 * GIB)}
+    assert ledger.effective_claim(live['a.service']) < 10 * GIB
+    # 6 GiB used is above the effective claim's use but far below 10 x 1.15: never a victim for using what it claimed
+    assert ledger.victim(live, False, 1.15, pressure=True) == (None, None)
+    live['a.service']['used'] = 12 * GIB
+    assert ledger.victim(live, False, 1.15, pressure=True)[0] == 'a.service'
+
+
+def test_fixed_claim_and_hold_budget_opt_out_of_shrinking():
+    for key in ('fixed_claim', 'hold_budget'):
+        c = settled('experiment', 40, 5, 5, **{key: True})
+        assert ledger.effective_claim(c) == 40 * GIB and ledger.fixed_claim(c)
+
+
+def test_a_refusal_names_the_over_claimers():
+    live = {'big.service': dict(claim('experiment', 60, 4, ledger.time.time()), peak=4 * GIB),
+            'small.service': dict(claim('experiment', 2, 2, ledger.time.time()), peak=2 * GIB)}
+    text = ledger.blocked_by(live)
+    assert 'big.service' in text and 'small.service' not in text

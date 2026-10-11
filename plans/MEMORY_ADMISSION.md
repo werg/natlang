@@ -75,3 +75,22 @@ guard should be different for smaller models". Every stop now gives the job time
   before big long-running trainers), then the newest.
 - **No host copies on the stop path.** Checkpoints are written from device tensors (text warm-up synchronous
   saves, `backbone_trainable_state`, qat_convert), so a stop does not double the model in unified memory.
+
+
+## Effective claims (2026-10-11)
+
+Claims are admitted by their declared budget, but over-claiming CPU jobs (87 GB claimed, ~5 GB used) blocked a priority
+GPU job, which then got a reduced cap and OOMed. Admission now reserves an *effective claim*:
+
+- An experiment unit that has run and been measured for `EXPERIMENT_SETTLE_SECONDS` (600; `NATLANG_LEDGER_SETTLE_SECONDS`)
+  reserves `max(peak x 1.3, 2 GiB, current use)`, capped at its budget; never below its observed peak x margin. It grows
+  back automatically as its peak rises, up to the original budget. Collections and services keep the older rule (peak
+  after 30 minutes, no margin).
+- The guard's kill/overshoot threshold remains the ORIGINAL budget, so a unit is never stopped for using what it claimed.
+- Observed use is cgroup memory (page cache and MADV_FREE excluded) plus CUDA memory per pid from nvidia-smi, plus the
+  attached docker container's cgroup, which is how GB10 unified-memory allocations show up.
+- `run/adopt --fixed-claim` (alias `--hold-budget`) opts out: the whole unspent budget always counts. Use it for
+  trainers with late spikes (first eval, checkpoint write, MemFree preflight). Decision: GPU units are not fixed by
+  default; the family's measured peak already raises the next admission, and the guard floor covers a spike.
+- `status` shows `budget_gb` (original), `effective_gb`, `outstanding_gb`, `fixed_claim`. A refused `run` names the
+  claims withholding the most memory.
