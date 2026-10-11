@@ -21,6 +21,10 @@ NODE=${NODE:-/home/werg/.local/bin/node}
 TS=$REPO/ts-host/scripts/inline-curriculum
 RES=$REPO/data/external_pilot/jeff-test-tasks.jsonl
 mkdir -p "$OUT/ir" "$OUT/turns" "$OUT/logs"
+# Replay scratch lives under OUT/tmp (several GB per shard while a replay runs). A preempted run (SIGTERM) leaves
+# no live replay behind, so the scratch of an earlier run is removed on start, and on TERM/INT/EXIT of this one.
+rm -rf "$OUT/tmp"; mkdir -p "$OUT/tmp"
+trap 'trap "" TERM INT; trap - EXIT; kill 0 2>/dev/null; wait; rm -rf "$OUT/tmp"' TERM INT EXIT
 PAGE=$(cd "$REPO/ts-host" && "$NODE" -e "import('./dist/native/cutoff.js').then(m => console.log(typeof m.shownCharsFor === 'function' ? m.shownCharsFor(65536) : 'fixed-2000'))")
 DIST=$(cat "$REPO/ts-host/dist/.build-commit" 2>/dev/null || echo "unknown (built before 2026-10-12 cutover)")
 RUNTIME="{\"page_size\": \"$PAGE\", \"dist_commit\": \"$DIST\", \"context_tokens\": 65536}"
@@ -42,7 +46,8 @@ replay() {
   [ -f "$dst.summary.json" ] && return 0
   [ -n "${SKIP_DONE_IN:-}" ] && [ -f "$SKIP_DONE_IN/turns/$f/$n.summary.json" ] && return 0
   mkdir -p "$OUT/turns/$f"
-  tmp=$(mktemp -d /home/werg/data/tmp-port-calls.XXXXXX)
+  "$REPO/scripts/disk_guard.sh" "$OUT"  # pause while NVMe is short (coordinator 2026-10-12)
+  tmp=$(mktemp -d "$OUT/tmp/replay.XXXXXX")
   if nice -n 15 "$NODE" --max-old-space-size=6144 "$TS/replay-port-record-calls.mjs" "$shard" "$tmp/x" > "$OUT/logs/$f.$n.replay.log" 2>&1; then
     zstd -q -T1 -6 --rm "$tmp/x.turns.jsonl" -o "$dst.turns.jsonl.zst.tmp" && mv "$dst.turns.jsonl.zst.tmp" "$dst.turns.jsonl.zst"
     zstd -q -T1 -6 --rm "$tmp/x.rows.jsonl" -o "$dst.rows.jsonl.zst.tmp" && mv "$dst.rows.jsonl.zst.tmp" "$dst.rows.jsonl.zst"
@@ -53,7 +58,7 @@ replay() {
   fi
   rm -rf "$tmp"
 }
-export -f build replay; export OUT IN TS RES CORPUS BUILD_ARGS NODE RUNTIME SKIP_DONE_IN
+export -f build replay; export OUT IN TS RES CORPUS BUILD_ARGS NODE RUNTIME SKIP_DONE_IN REPO
 families=$(ls "$IN" | sed -n 's/\.port-records\.jsonl$//p')
 echo "$(date -Is) build $(echo $families | wc -w) families"
 # Builds (I/O bound on the HDD families) run beside the replays: a family's shards replay as soon as its build is done.
