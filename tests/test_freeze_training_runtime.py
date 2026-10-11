@@ -12,6 +12,8 @@ def make_runtime(root):
         'dist/native/runtime.js': 'export const runtimeVersion = 1;\n',
         'dist/native/prompt.js': 'export const prompt = "Fixture runtime instructions";\n',
         'dist/teacher/collector.js': 'export const collectorVersion = 1;\n',
+        # The provider entrypoint the freeze preflight imports (9610fb65).
+        'dist/model/pi-provider.js': 'export const providerVersion = 1;\n',
         'src/native/runtime.ts': 'export const runtimeVersion = 1;\n',
         'scripts/code-corpus/replay.mjs': 'export const replayVersion = 1;\n',
         'prelude.js': 'export const preludeVersion = 1;\n',
@@ -36,7 +38,9 @@ def test_freeze_copies_runtime_scripts_and_shares_node_modules(tmp_path):
     assert manifest['build']['mode'] == 'explicit_compiled_dist'
     assert set(manifest['files']) == set(files)
     assert all((output / name).read_text() == contents for name, contents in files.items())
-    assert (output / 'node_modules').is_symlink()
+    # 9610fb65: node_modules is a merged directory of links (local packages over the repository root's hoisted ones).
+    assert (output / 'node_modules').is_dir() and not (output / 'node_modules').is_symlink()
+    assert (output / 'node_modules' / 'fixture.txt').is_symlink()
     assert (output / 'node_modules' / 'fixture.txt').read_text() == 'shared dependency'
     assert json.loads((output / 'frozen-runtime.json').read_text()) == manifest
 
@@ -112,6 +116,8 @@ def make_compile_project(repo):
     (host / 'src/native/runtime.ts').write_text('export const runtimeVersion = 2;\nexport const finishSupported = (args: { finish?: boolean }) => args.finish === true;\n')
     (host / 'src/native/prompt.ts').write_text('export const prompt = "fixture runtime prompt";\n')
     (host / 'src/native/agent.ts').write_text('export const schema = { finish: { type: "boolean" } };\n')
+    (host / 'src/model').mkdir()
+    (host / 'src/model/pi-provider.ts').write_text('export const providerVersion = 1;\n')  # freeze preflight imports it
     (host / 'tsconfig.json').write_text(json.dumps({
         'compilerOptions': {'target': 'ES2022', 'module': 'NodeNext', 'moduleResolution': 'NodeNext',
                             'strict': True, 'declaration': True, 'outDir': 'dist', 'rootDir': 'src',

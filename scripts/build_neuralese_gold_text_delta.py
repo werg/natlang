@@ -82,6 +82,10 @@ def load_pinned_tokenizer(tokenizer_path):
             raise ValueError(f"tokenizer class mismatch: config declares {expected_class}, loader returned {actual_class}")
         return tokenizer
 
+    if expected_class == "TokenizersBackend" and not backend_path.is_file():
+        # Refuse before loading: Transformers 5 registers TokenizersBackend and would try (and fail) to rebuild the
+        # backend from slow-tokenizer files instead of naming what is missing.
+        raise ValueError("TokenizersBackend requires its exact serialized tokenizer.json backend")
     try:
         loaded = AutoTokenizer.from_pretrained(str(path), local_files_only=True)
     except ValueError as exc:
