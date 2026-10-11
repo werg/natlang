@@ -1,0 +1,112 @@
+{
+  "schema": "natlang.target-set/1",
+  "id": "natlang-target-set-20261011",
+  "owner_decision": "2026-10-11: expand the target training set by everything found that can be integrated (both tokenizers, three renderings: full = warm-up, program-header = after warm-up, whole-trajectory)",
+  "members": [
+    "natlang-native-turns-clef-new-render-20261011-v2",
+    "natlang-free-provider-v28-render-20261011-v1",
+    "natlang-free-provider-v29-render-20261011-v1",
+    "natlang-free-provider-v73-render-20261011-v1",
+    "natlang-native-turns-static-lambda-expansion-render-20261011-v1"
+  ],
+  "external_members": [
+    {
+      "id": "neuralese-foundation-text-input-4962",
+      "registry_ids": [
+        "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1",
+        "neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1",
+        "neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v2",
+        "neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v1"
+      ],
+      "note": "no whole-trajectory rendering yet (needs a re-render from its 5,733 native records)",
+      "files": {
+        "full": {
+          "lfm25": "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl",
+          "mellum21": "runs/neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1/text-data.jsonl"
+        },
+        "program-header": {
+          "lfm25": "runs/neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v2/text-data.jsonl",
+          "mellum21": "runs/neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v1/text-data.jsonl"
+        }
+      }
+    },
+    {
+      "id": "harness-bench-swe-rebench-openhands-pi-text-v2",
+      "registry_ids": [
+        "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2",
+        "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2"
+      ],
+      "note": "pi-harness decision packets with the harness's own system prompt (not natlang generic runtime prose), so the same documents serve both decision renderings; no whole-trajectory rendering yet",
+      "files": {
+        "full": {
+          "lfm25": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl",
+          "mellum21": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2/text.jsonl"
+        },
+        "program-header": {
+          "lfm25": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl",
+          "mellum21": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2/text.jsonl"
+        }
+      }
+    }
+  ],
+  "pending": [
+    {
+      "dataset": "semantic-inline-curriculum-s72-teacher-turns-20261007-v1",
+      "status": "rendering (render-turns-s72-v3)",
+      "excluded": "approved=false 8,692; held cases 1,806 (D1/D2); JeFF reserved programs and their groups"
+    },
+    {
+      "dataset": "static-lambda-rationalized-20261006-v2",
+      "status": "rendering (render-turns-slv2-v2)"
+    },
+    {
+      "dataset": "bgkit-knowledge-rationalized-20261007-v1",
+      "status": "rendering (render-turns-bgkit-v1) with the protected-bgkit question/id check (D10)"
+    },
+    {
+      "dataset": "native-sft-v13-r2",
+      "status": "next render; rendered at its recorded language surface (D9 language migration not applied: the migration needs a compiler-built rewrite plus execution replay)"
+    },
+    {
+      "dataset": "student-posttraining-turns-20261005, luna-v43-exact-map37 (926), free-provider sourcebound16 (36), v64 (9)",
+      "status": "rendering together (render-turns-misc-v1)"
+    },
+    {
+      "dataset": "teacher-campaign-evidence-20261005",
+      "status": "importing: 8,813 accepted trajectories absent from v13 (training/audits/teacher-coverage-20261005.json), materialize to teacher turns (ts-host/scripts/materialize-native-teacher.mjs), then render"
+    },
+    {
+      "dataset": "view-ask-20261010-v4",
+      "status": "not integrated",
+      "reason": "view-stage/records.jsonl (160,118 native rows) carries user content parts of type view, which native_gold_packet does not render; rows are approved=false pending the view-stage qualification",
+      "conversion": "render view parts through natlang_neuralese.data.view_records (crisp preview = full text) and an explicit admission override per the registry admission (D15, Pop)"
+    },
+    {
+      "dataset": "s1-full-final-20261003",
+      "status": "not integrated",
+      "reason": "port records, not natlang call documents",
+      "conversion": "render as natlang calls (D16; port_record_calls.sh in progress by another agent, S3 subset first); apply the JeFF reservations (D3) and provenance pins (D4)"
+    },
+    {
+      "dataset": "s2-generated-20261004-v2",
+      "status": "not integrated",
+      "reason": "149 attempts, 1 positive; the 58,500 decision cases are a generation source (they feed Pop's choice/annotation curricula, e.g. v64/v73 dc-* ids)",
+      "conversion": "D11 (Pop): keep accepted and grader-passed only, convert to teacher turns; 7,624 heldout cases stay out"
+    },
+    {
+      "dataset": "nebius-swe-rebench-openhands-trajectories-20261009-v1 (32,161 resolved)",
+      "status": "normalization in progress (swe-norm-bulk, datagen agent); joins as harness-bench text when its twins are registered"
+    },
+    {
+      "dataset": "Pop campaign long tail",
+      "status": "partly: the root-adopted native sets are in render-turns-misc-v1; the rest are row-approved but registered as audit/evidence/held or superseded re-materializations of the same programs (about 11,149 approved ids outside the union)",
+      "conversion": "Pop decides per entry (structural sweep under way on Pop); admitted ones join as native-turn sources"
+    },
+    {
+      "dataset": "whole-trajectory rendering of the 4962 union, harness bench and free-provider packets",
+      "status": "not rendered",
+      "reason": "decision-level packets; whole trajectories need the source native records (union) or the raw harness trajectories"
+    }
+  ],
+  "notes": "Exclusions are only protected eval sets, held splits and defect rows under repair. Full-prompt documents carry the recorded runtime system prompt, which differs from current ts-host pieces in about 7 of 12 paragraphs (check_prompt_against_ts_host.py)."
+}
