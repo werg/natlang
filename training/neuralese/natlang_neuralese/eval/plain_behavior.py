@@ -23,6 +23,7 @@ from pathlib import Path
 import torch
 
 from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex
+from ..serve.chat import normalize_tool_call_arguments
 from .generation_checks import check, summarize
 
 
@@ -58,10 +59,12 @@ def _dependency_versions():
 
 
 def _render(tokenizer, probe):
-    return tokenizer.apply_chat_template(
-        probe["messages"], tools=probe.get("tools") or None, tokenize=True,
+    normalized_messages, conversions = normalize_tool_call_arguments(probe["messages"])
+    encoded = tokenizer.apply_chat_template(
+        normalized_messages, tools=probe.get("tools") or None, tokenize=True,
         add_generation_prompt=True, enable_thinking=bool(probe.get("enable_thinking")),
         return_tensors="pt")
+    return encoded, normalized_messages, conversions
 
 
 def _load_model(checkpoint: Path | None, *, device: str, base: str | None):
@@ -101,7 +104,7 @@ def _run_role(role: str, checkpoint: Path | None, probes: list[dict], *, device:
                             "stop_token_ids": sorted(end_ids)})
     results = []
     for probe in probes:
-        encoded = _render(tokenizer, probe)
+        encoded, normalized_messages, argument_conversions = _render(tokenizer, probe)
         # Transformers 5 returns BatchEncoding, a Mapping, from
         # apply_chat_template(return_tensors="pt"); older versions may return
         # the input-id tensor directly. Normalize either declared shape here.
@@ -120,12 +123,16 @@ def _run_role(role: str, checkpoint: Path | None, probes: list[dict], *, device:
         output_ids = generated[0, prompt_len:].detach().cpu().tolist()
         text = tokenizer.decode(output_ids, skip_special_tokens=False)
         checks = check(probe, text, output_ids, sorted(end_ids))
-        prompt_record = {"messages": probe["messages"], "tools": probe.get("tools"),
+        prompt_record = {"messages": probe["messages"],
+                         "normalized_messages": normalized_messages,
+                         "tool_argument_normalizations": argument_conversions,
+                         "tools": probe.get("tools"),
                          "enable_thinking": bool(probe.get("enable_thinking")),
                          "rendered_input_ids": encoded[0].detach().cpu().tolist()}
         results.append({"role": role, "id": probe["id"], "kind": probe.get("kind"),
                         "output_convention": probe.get("output_convention", "maple"),
                         "prompt_sha256": canonical_json_sha256_hex(prompt_record),
+                        "tool_argument_normalizations": argument_conversions,
                         "tokenizer_name_or_path": getattr(tokenizer, "name_or_path", None),
                         "model_name_or_path": getattr(getattr(model, "config", None), "_name_or_path", None),
                         "stop_token_ids": sorted(end_ids),

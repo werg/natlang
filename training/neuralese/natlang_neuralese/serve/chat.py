@@ -27,6 +27,8 @@ import re
 import secrets
 from dataclasses import dataclass
 
+from ..common.hashing import canonical_json_sha256_hex
+
 _PH_OPEN, _PH_CLOSE = "", ""
 _PH = re.compile(_PH_OPEN + r"(\d+)" + _PH_CLOSE)
 ESC_OPEN, ESC_CLOSE = "\ue012", "\ue013"
@@ -102,6 +104,43 @@ def _escape_value(value, specials, nonce=""):
     return value
 
 
+def normalize_tool_arguments(arguments):
+    """Decode JSON-text tool arguments into the object expected by chat templates."""
+    if not isinstance(arguments, str):
+        return arguments
+    try:
+        return json.loads(arguments) if arguments.strip() else {}
+    except json.JSONDecodeError as error:
+        raise RequestError("tool-arguments", f"tool-call arguments are not JSON: {error}") from error
+
+
+def normalize_tool_call_arguments(messages: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Return a copy of messages with JSON-text tool arguments decoded for chat templates.
+
+    OpenAI-style transports carry `function.arguments` as JSON text, while native chat
+    templates expect an object. Keep this conversion in one place for ordinary serving,
+    training renders, and direct tokenizer evaluation. The receipt binds each conversion
+    to the exact raw text and decoded value without changing the caller's messages.
+    """
+    normalized = json.loads(json.dumps(messages, ensure_ascii=False))
+    conversions = []
+    for message_index, message in enumerate(normalized):
+        for call_index, call in enumerate(message.get("tool_calls") or []):
+            fn = call.get("function", call)
+            arguments = fn.get("arguments")
+            if not isinstance(arguments, str):
+                continue
+            decoded = normalize_tool_arguments(arguments)
+            fn["arguments"] = decoded
+            path_prefix = "/function/arguments" if "function" in call else "/arguments"
+            conversions.append({
+                "path": f"messages/{message_index}/tool_calls/{call_index}{path_prefix}",
+                "raw_text_sha256": canonical_json_sha256_hex(arguments),
+                "decoded_value_sha256": canonical_json_sha256_hex(decoded),
+            })
+    return normalized, conversions
+
+
 def render_messages(messages: list[dict], tools: list | None, apply_template, specials=(), block_type=None) -> Rendered:
     """Messages with block parts → template text cut into text runs and block references.
 
@@ -134,7 +173,8 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
         return "".join(out)
 
     plain = []
-    for message in messages:
+    normalized_messages, _ = normalize_tool_call_arguments(messages)
+    for message in normalized_messages:
         message = dict(message)
         if _is_parts(message.get("content")):
             message["content"] = flatten(message["content"])
@@ -147,12 +187,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
             arguments = fn.get("arguments")
             if _is_parts(arguments):
                 arguments = flatten(arguments, escape=False)
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments) if arguments.strip() else {}
-                except json.JSONDecodeError as error:
-                    raise RequestError("tool-arguments", f"tool-call arguments are not JSON: {error}") from error
-
+            arguments = normalize_tool_arguments(arguments)
             def inline(value):
                 # An argument value that is a part list holding a block (as replies return a written value:
                 # `"value": [{"type": "neuralese", "id": …}]`) renders as that block inside the value's string.
@@ -364,15 +399,12 @@ def assistant_reply_segments(apply_template, message: dict, specials=()) -> list
                                               if part.get("type") == "text" else {}))
                                 for part in content]
     calls = []
+    prepared_messages, _ = normalize_tool_call_arguments([prepared])
+    prepared = prepared_messages[0]
     for call in prepared.get("tool_calls") or []:
         copied = json.loads(json.dumps(call))
         fn = copied.get("function", copied)
         arguments = fn.get("arguments")
-        if isinstance(arguments, str):
-            try:
-                arguments = json.loads(arguments) if arguments.strip() else {}
-            except json.JSONDecodeError as error:
-                raise RequestError("tool-arguments", f"tool-call arguments are not JSON: {error}") from error
         fn["arguments"] = escape_value(arguments)
         calls.append(copied)
     if calls:
