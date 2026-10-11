@@ -1,0 +1,95 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-neuralese-direct-lfm-base-v8-export-and-paired-behavior-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-lfm-base-20261011-v8",
+  "files": [
+    {
+      "path": "direct-export-v2/cpu-restore-receipt-v2.json",
+      "bytes": 454,
+      "sha256": "8317d366186c6bc3e9656d90897e299b842aef8c2a4693a1deab7527e2066848"
+    },
+    {
+      "path": "direct-export-v2/direct-tensors.pt",
+      "bytes": 579051154,
+      "sha256": "4c1846c38ef240585f42fe639bc9fd25e8e1e528d001e4f9b9c4d1984898fb5d"
+    },
+    {
+      "path": "direct-export-v2/manifest.json",
+      "bytes": 35011,
+      "sha256": "f3ff523b6b0d8b0e5bfd3a949a87feb4e91a1ca08c268e1cf0c57b9b106e230c"
+    },
+    {
+      "path": "paired-plain-behavior-v1/probe-manifest.json",
+      "bytes": 1574,
+      "sha256": "f51763a08d95bdfc7d1223a33bacbe6f31932df1d40860f1f2b15945e24ee19a"
+    },
+    {
+      "path": "paired-plain-behavior-v1/probe-path-mutation-note-v1.json",
+      "bytes": 1877,
+      "sha256": "db1a405f0c9eafb617cbf0b98da97822b01cf80bcf13ea6bc3d2ba70eae97333"
+    },
+    {
+      "path": "paired-plain-behavior-v1/probes-v1-reconstructed.jsonl",
+      "bytes": 293437,
+      "sha256": "d96bcb9283ae7fc9033150375fe7f30645810ca4f57548d8b2ce85490c359b2e",
+      "lines": 48
+    },
+    {
+      "path": "paired-plain-behavior-v1/probes.jsonl",
+      "bytes": 293448,
+      "sha256": "b0daaa9fde22cb6b7167a2b031029be8fdfad80e62bc0a948c25f6bb728db6d7",
+      "lines": 48
+    },
+    {
+      "path": "paired-plain-behavior-v1/quality-supplement-v1/README.md",
+      "bytes": 1587,
+      "sha256": "d42371e9dd5cd603141a61cee0ef962cbacc27837bdbc5a08188da228d8a25e9"
+    },
+    {
+      "path": "paired-plain-behavior-v1/quality-supplement-v1/probe-path-mutation-and-offline-regrade.json",
+      "bytes": 3779,
+      "sha256": "d86e5cd2e4e02128a3097f8f627550ddb1138fc47980c18b3cbf44984826fb0f"
+    },
+    {
+      "path": "paired-plain-behavior-v1/run-v1/execution-journal.jsonl",
+      "bytes": 251096,
+      "sha256": "7a811892cad276e202d1d2c18921d0a88430951b85746a99733e57912ab79a3f",
+      "lines": 103
+    },
+    {
+      "path": "paired-plain-behavior-v1/run-v1/invocation.json",
+      "bytes": 17432,
+      "sha256": "8b3bc4e687a317a3ec9316a08f370a3cf6d1ca19429b2cefc463aacec921e24e"
+    },
+    {
+      "path": "paired-plain-behavior-v1/run-v1/paired-results.jsonl",
+      "bytes": 253425,
+      "sha256": "ff58d0ae72c728f0a538c5b04fc26d6a8ab6a7e63c78cd0251ce17327f4ce026",
+      "lines": 48
+    },
+    {
+      "path": "paired-plain-behavior-v1/run-v1/run-status.json",
+      "bytes": 320,
+      "sha256": "126f9f4e6ffa814ed821cf9acb1fd11290e4526c115ee365b954582a08ec7dea"
+    },
+    {
+      "path": "paired-plain-behavior-v1/run-v1/selected_direct_candidate.jsonl",
+      "bytes": 125045,
+      "sha256": "7a08745dffd61320ef5f37dfb659edfe220c05b92e7014c651ddbc4a37af7fb9",
+      "lines": 48
+    },
+    {
+      "path": "paired-plain-behavior-v1/run-v1/summary.json",
+      "bytes": 17726,
+      "sha256": "fdf733b67903c640d340bd262793214ddb1d7dc8afda41a8454db6be1689955f"
+    },
+    {
+      "path": "paired-plain-behavior-v1/run-v1/unmodified_pinned_base.jsonl",
+      "bytes": 117100,
+      "sha256": "00ef237da56b01a2387dfeccdd2091c7600b0f6aa7321047889ccd05b73204c8",
+      "lines": 48
+    }
+  ],
+  "bytes": 580464465
+}

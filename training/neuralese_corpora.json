@@ -32049,6 +32049,23 @@
       "recurrence_admission": false,
       "independent_new_worlds": 0,
       "notes": "Root authorized exact846 V73 V4 rendered text rows for ordinary-text SFT only. Per-row exact V2/V3/V4 ancestry bindings; source closure inherited from 909-row parent covers302 original IDs/groups, zero current source-hold hits. 63 failed target rows excluded/unscored; 145 context-only spans/25517 tokens on82 rows remain target-masked. No independent annotation truth/evaluation credit, native trace/action, recurrence, whole-trajectory, writer or DPO-negative admission. Not added to active GPU inputs."
+    },
+    {
+      "id": "luna-neuralese-direct-lfm-base-v8-export-and-paired-behavior-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-lfm-base-20261011-v8",
+      "include": [
+        "direct-export-v2/manifest.json",
+        "direct-export-v2/direct-tensors.pt",
+        "direct-export-v2/cpu-restore-receipt-v2.json",
+        "paired-plain-behavior-v1/**"
+      ],
+      "split": "held-evaluation-and-runtime-pending",
+      "source_class": "exact-direct-serving-export-and-paired-ordinary-generation-diagnostic",
+      "training_admission": false,
+      "admission": "held-runtime-pending-and-descriptive-behavior-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Immutable V8 direct checkpoint export-v2 and its CPU restore receipt, plus paired 48-probe ordinary HF behavior run and additive probe-path mutation/offline regrade receipt. The paired run is descriptive; it showed no improvement in exact-math 4/12, tool checks 7/12 to 5/12, open answers 10/12 to 11/12; it is not a runtime or task qualification. Export manifest remains direct-writer-pending. Runtime qualification evidence is registered separately and is not included here. No training admission."
     }
   ],
   "coverage_backlog": [
