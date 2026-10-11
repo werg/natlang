@@ -159,11 +159,13 @@ def validate_spec(spec, stages=None):
 
 def stage_component(spec, stage, *, start, end, init_mix=None):
     """The component as one stage receives it (``--quantization``): the recipe's spec plus the stage's progress range
-    and update range. ``None`` when the stage is not named in ``stage_progress`` (it trains at BF16)."""
+    and update range. ``None`` when the stage is not named in ``stage_progress`` (it trains at BF16). ``end`` may be
+    ``'derived'``: a stage budgeted in epochs (neuralese_direct) derives its update count from its data and sets it
+    before the first update (``progress`` refuses an unbound end)."""
     if not spec or stage not in spec.get('stage_progress', {}):
         return None
-    if type(start) is not int or type(end) is not int or end <= start:
-        raise ValueError('a quantized stage needs an update range start < end')
+    if type(start) is not int or not (end == 'derived' or type(end) is int and end > start):
+        raise ValueError('a quantized stage needs an update range start < end (or end "derived")')
     span = spec['stage_progress'][stage]
     component = {**json.loads(json.dumps(spec)), 'stage': {'id': stage, 'progress': list(span), 'start': start,
                                                           'end': end}}
@@ -257,6 +259,8 @@ class Quantization:
     def progress(self, step):
         p0, p1 = self.stage['progress']
         start, end = self.stage['start'], self.stage['end']
+        if type(end) is not int:
+            raise ValueError('the stage update range end is not bound yet (a derived end is set by the trainer)')
         fraction = min(1.0, max(0.0, (step - start) / (end - start)))
         return p0 + (p1 - p0) * fraction
 

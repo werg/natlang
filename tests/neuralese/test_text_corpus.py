@@ -734,3 +734,36 @@ def test_text_provider_read_coalesces_only_duplicate_views_of_same_authenticated
                 assert "ambiguous" in str(exc)
             else:
                 raise AssertionError(f"distinct eligible writer event accepted after tampering {field}")
+
+
+def test_program_header_rendering_keeps_only_program_specific_system_paragraphs():
+    from natlang_neuralese.data.prompt_rendering import apply_prompt_rendering
+
+    system = ("You are running one call of a natural-language function.\n\n"
+              "This call is at the fifth and final layer of ad hoc natural-language calls.\n\n"
+              "Use eval for exact computation.")
+    tools = [{"type": "function", "function": {"name": "eval"}}]
+    base = {"split": "train", "source_groups": ["g-train"], "training_admission": {"approved": True},
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": "Question"}],
+            "target": {"role": "assistant", "content": "Answer"}, "tools": tools}
+    held = {**base, "id": "held", "split": "test", "source_groups": ["g-test"],
+            "messages": [base["messages"][0], {"role": "user", "content": "Held question"}]}
+    rows_full, receipt_full, _, _ = gold_text_rows([{**base, "id": "a"}, held], [], tokenizer=_Tokenizer())
+    rows_ph, receipt_ph, omissions, _ = gold_text_rows([{**base, "id": "a"}, held], [], tokenizer=_Tokenizer(),
+                                                       prompt_rendering="program-header")
+    assert not omissions
+    assert "prompt_rendering" not in receipt_full and receipt_ph["prompt_rendering"] == "program-header"
+    assert "Use eval" in rows_full[0]["text"]
+    assert rows_ph[0]["text"] == ("<|system|>This call is at the fifth and final layer of ad hoc natural-language "
+                                  "calls.<|end|><|user|>Question<|end|><|assistant|>Answer<|end|>")
+    # Without a program-specific paragraph there is no system turn, and tool schemas are never passed.
+    messages, schemas = apply_prompt_rendering([{"role": "system", "content": "Generic."},
+                                                {"role": "user", "content": "Q"}], tools, "program-header")
+    assert messages == [{"role": "user", "content": "Q"}] and schemas is None
+    assert apply_prompt_rendering(base["messages"], tools, "full") == (base["messages"], tools)
+    try:
+        apply_prompt_rendering([], None, "none")
+    except ValueError as exc:
+        assert "unknown prompt_rendering" in str(exc)
+    else:
+        raise AssertionError("an undeclared prompt rendering must be refused")

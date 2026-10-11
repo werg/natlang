@@ -80,6 +80,10 @@ differences from a known-good path. Record what was ruled out and how.
   decision and reclaimed totals, without building another archive of discarded
   approaches. This order supersedes older blanket preservation/PRUNE-ASK rules
   for explicitly discarded work.
+- These deletions are expressly desired and authorized by the owner (2026-10-11):
+  deleting discarded run directories, checkpoints, exports, caches and their
+  registry/manifest entries on either machine is wanted. Do it without asking for
+  confirmation; list the exact paths in a script first, then delete.
 
 # Natlang-native work (owner rules)
 

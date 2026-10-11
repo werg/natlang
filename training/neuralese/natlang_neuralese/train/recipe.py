@@ -28,7 +28,7 @@ HANDLERS = {
     # pieces rendered by gold_text_rows: missing_stage_inputs() states that alternative.
     'neuralese_direct': {'module':'natlang_neuralese.train.direct_sft', 'required_inputs':set(),
                          'optional_inputs':{'records','pieces','text_data','heads'},
-                         'parameters':{'steps','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
+                         'parameters':{'steps','epochs','batch_tokens','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
                            'checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
                            'latent_optimizer','latent_lr','head_lr','neuralese_weight','projection_blocks',
                            'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows','drift_every','drift_gate_every','drift_gate_rise','drift_ce_windows','gate_response_kl',
@@ -357,7 +357,7 @@ def resolve_recipe_data(path, _chain=()):
     ``extends`` names a recipe id; the parent is the sibling file in the same directory whose ``id`` equals it.
     ``overrides`` is an object. Its ``stages`` member maps stage ids to objects deep-merged into the parent's stage of
     that id (``{"$delete": true}`` drops the stage; an unknown id is an error); ``stages_added`` lists new stages, each
-    ``{"after": stage id, "stage": {...}}`` inserted after that stage; every other member deep-merges into the top
+    ``{"after": stage id, "stage": {...}}`` inserted after that stage (or ``{"before": ...}``, before it); every other member deep-merges into the top
     level. The child's own ``id`` and ``description`` always win. Resolution happens before validation, so the
     handler parameter whitelist applies to the merged result.
     """
@@ -413,15 +413,16 @@ def resolve_recipe_data(path, _chain=()):
     if not isinstance(added, list):
         raise ValueError('overrides.stages_added must be a list of {"after", "stage"} objects')
     for entry in added:
-        if (not isinstance(entry, dict) or set(entry) != {'after', 'stage'} or not isinstance(entry['stage'], dict)
-                or not isinstance(entry['stage'].get('id'), str)):
-            raise ValueError('each added stage is {"after": stage id, "stage": object with an id}')
+        if (not isinstance(entry, dict) or set(entry) not in ({'after', 'stage'}, {'before', 'stage'})
+                or not isinstance(entry['stage'], dict) or not isinstance(entry['stage'].get('id'), str)):
+            raise ValueError('each added stage is {"after" or "before": stage id, "stage": object with an id}')
         ids = [stage['id'] for stage in stages]
         if entry['stage']['id'] in ids or entry['stage']['id'] in stage_overrides:
             raise ValueError('added stage id already exists: ' + entry['stage']['id'])
-        if entry['after'] not in ids:
-            raise ValueError('added stage follows an unknown stage: ' + str(entry['after']))
-        stages.insert(ids.index(entry['after']) + 1, json.loads(json.dumps(entry['stage'])))
+        anchor = entry.get('after', entry.get('before'))
+        if anchor not in ids:
+            raise ValueError('added stage is placed next to an unknown stage: ' + str(anchor))
+        stages.insert(ids.index(anchor) + ('after' in entry), json.loads(json.dumps(entry['stage'])))
     resolved['stages'] = stages
     resolved['id'] = recipe['id']
     if 'description' in recipe:
@@ -681,6 +682,11 @@ def stage_quantization(recipe, stage, parameters, reports, init_mix=None):
     if stage['kind'] == 'core_text_warmup' and parameters.get('ar_feedback_fixup', False):
         start = next(r for r in reports if r['id'] in stage['requires'] and r['kind'] == 'core_text_warmup')['gate']['step']
     end = parameters.get('steps', 4096 if stage['kind'] == 'core_text_warmup' else 500)  # the trainers' defaults
+    if stage['kind'] == 'neuralese_direct' and 'epochs' in parameters:
+        if 'steps' in parameters or 'quantization_steps' in parameters:
+            raise ValueError('a neuralese_direct stage declares its budget as epochs or steps, not both')
+        end = 'derived'  # direct_sft derives the update count from its data and packing
+        return stage_component(spec, stage['id'], start=start, end=end, init_mix=init_mix)
     if 'quantization_steps' in parameters:
         # The update range the stage's progress span maps onto, when the stage runs longer (an extension, e.g.
         # raw-recurrence-mellum-v12): updates past it hold the stage-end mixes, so extending a stage never moves its
@@ -1316,6 +1322,13 @@ def main(argv=None):
                     command += ['--heads', str(stage_heads)]
                 command += stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
                            str(output if kind == 'token_identity' else directory), '--device', args.device]
+                if kind == 'neuralese_direct':
+                    # A later phase of a direct lineage continues from its predecessor phase's final full state.
+                    phases = [r for r in reports if r['id'] in stage['requires'] and r['kind'] == 'neuralese_direct']
+                    if len(phases) > 1:
+                        raise ValueError('a neuralese_direct stage continues from at most one direct predecessor')
+                    if phases:
+                        continuation_checkpoint = str(Path(phases[0]['artifact']).parent / 'checkpoint.pt')
                 if continuation_checkpoint:
                     command += ['--continue-from', continuation_checkpoint]
                 if kind == 'raw_runtime_qualification':
