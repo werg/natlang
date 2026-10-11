@@ -36,6 +36,17 @@ for each token. This is execution plumbing, not a model policy change.
 
 The forced-sequence diagnostic also compares downstream synthetic-consumer CE/logits and combined producer-plus-consumer parameter/prefix gradients; its FP32 reference disables TF32, and it qualifies mechanism parity rather than task quality.
 
+## Direct SFT window gradients and memory choice
+
+Direct SFT still uses one global weighted objective and one optimizer update for a packed schedule batch. The default `window_execution=auto` backpropagates independent windows sequentially, accumulating parameter gradients and applying MuonSR/LionSR/AdamW once after all windows. It asks the shared `backbone_memory_layout`/`geometry_bytes` estimator for the largest-window activation geometry, combines that with the shared optimizer gradient/state floor and live reusable CUDA memory, and selects uncheckpointed execution when the predicted increment fits; otherwise it uses layer checkpointing. `AdaptiveGraphMemory` supplies its calibrated geometry ratio and 5% prediction margin. Every update records estimates, selected execution/checkpoint mode, and observed peak increment; only successful updates update calibration. `packed` remains an explicit diagnostic override. The recipe's `checkpoint_layers` may pin a mode operationally; omitting it enables the adaptive choice.
+
+| Part | Form | Reason |
+| --- | --- | --- |
+| Select packed or per-window gradient accumulation and checkpointing | Shared crisp resource policy in `train/direct_sft.py` and `train/memory_estimator.py` | This is a resource choice based on declared activation geometry, optimizer storage, and live CUDA headroom; it does not change the loss or the one-update batch semantics. |
+| Compute each window's existing CE and value losses | Existing `forward` objective with global denominators | The shared loss definitions and weights remain unchanged. |
+| Accumulate gradients across windows | Ordinary autograd `backward()` per window, shared gradient buffers | Each window graph is freed before the next forward; the optimizer remains unarmed until the complete packed update is ready. |
+| Clip gradients and update MuonSR/LionSR/AdamW | Existing optimizer path, once after accumulation | Optimizer state, update count, global clipping, and packed batch semantics remain one update. |
+
 ## Declared direct-stage resume and completion — 2026-10-11
 
 Checkpoint restoration belongs to the existing shared trainer. The recipe runner

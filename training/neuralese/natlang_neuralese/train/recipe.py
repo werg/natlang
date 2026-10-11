@@ -27,13 +27,13 @@ HANDLERS = {
     # Its data is either prepared text (text_data, the shared declared input of neuralese-direct-v2) or records and
     # pieces rendered by gold_text_rows: missing_stage_inputs() states that alternative.
     'neuralese_direct': {'module':'natlang_neuralese.train.direct_sft', 'required_inputs':set(),
-                         'optional_inputs':{'records','pieces','text_data','heads'},
+                         'optional_inputs':{'records','pieces','text_data','heads','continue_from'},
                          'parameters':{'steps','epochs','batch_tokens','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
                            'checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
                            'latent_optimizer','latent_lr','head_lr','neuralese_weight','projection_blocks',
                            'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows','drift_every','drift_gate_every','drift_gate_rise','drift_ce_windows','gate_response_kl',
                            'drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop','drift_gate','gate_held_rows','monitor',
-                           'value_margin','seed','latent_skip_idle','latent_cautious','latent_beta2_half_life_tokens',
+                           'value_margin','seed','window_execution','latent_skip_idle','latent_cautious','latent_beta2_half_life_tokens',
                            'latent_ns','latent_weight_decay','grad_spike_clip','stop_at','weight_drift_base','save_state'},'result':'report.json'},
     'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads','student_checkpoint'},
                         'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','target_tokens','cutoff',
@@ -745,7 +745,7 @@ def write_json(path, value):
 
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
-OPERATIONAL_STAGE_PARAMETERS = frozenset({'eval_every', 'checkpoint_every', 'moe_kernel', 'checkpoint_layers', 'report_column_fraction', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl',
+OPERATIONAL_STAGE_PARAMETERS = frozenset({'eval_every', 'checkpoint_every', 'moe_kernel', 'checkpoint_layers', 'window_execution', 'report_column_fraction', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl',
                                           'drift_gate_now',  # retired by drift_gate_rise (b1cd6632); a lineage that declared it hands off
                                           'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop'})
 # Stage parameters the runner consumes itself (never passed to a trainer).

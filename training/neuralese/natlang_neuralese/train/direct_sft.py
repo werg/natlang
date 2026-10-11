@@ -12,7 +12,9 @@ optimizer (LionSR or MuonSR, in backward); routers, norms and the projections on
 Every ``--eval-every`` updates (declared points): held CE, gold accuracy and agreement against the base model's own
 predictions on the same windows, the Neuralese value's error against its soft-token-mixture baseline, and
 ``behaviour_drift`` with its guard. At the end: the behaviour gate (texts kept). Full state at declared checkpoint points,
-on a stop and at the end; a restart resumes from it.
+on a stop and at the end; a restart resumes from it. The default ``--window-execution auto`` accumulates gradients
+sequentially across independent windows and uses shared activation geometry plus live CUDA headroom to choose whether
+to checkpoint layer activations. The packed path remains an explicit diagnostic override.
 """
 from __future__ import annotations
 
@@ -41,7 +43,7 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
                   'epochs': None, 'batch_tokens': 0, 'continue_from': None}
 OPERATIONAL = frozenset({'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
-                         'gate_held_rows'})
+                         'gate_held_rows', 'window_execution', 'continue_from'})
 
 
 def parse(argv=None):
@@ -107,8 +109,11 @@ def parse(argv=None):
     p.add_argument('--token-choice-projection', action=argparse.BooleanOptionalAction, default=False,
                    help='declare the TokenChoiceProjection (the end-to-end Neuralese stage); off in direct v1')
     p.add_argument('--moe-kernel', choices=('loop', 'grouped'), default='loop')
-    p.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=True,
+    p.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=None,
                    help='recompute each layer in backward (long windows)')
+    p.add_argument('--window-execution', choices=('auto', 'packed', 'sequential'), default='auto',
+                   help='auto accumulates independent windows sequentially and chooses checkpointing from shared '
+                        'activation geometry plus live CUDA headroom; packed is a diagnostic override')
     p.add_argument('--quantization')
     from .drift_monitor import add_drift_arguments
     # The drift guard (owner 2026-10-11; train/drift_monitor.py, shared with the end-to-end stage): response KL or
@@ -256,14 +261,15 @@ def main(argv=None):
     options = {k: str(v) if isinstance(v, Path) else v for k, v in vars(a).items()}
     code = {str(path.relative_to(Path(__file__).parents[1])): sha256_file_hex(path)
             for path in sorted(Path(__file__).parents[1].rglob('*.py'))}
-    inputs = {str(path): sha256_file_hex(path) for path in (a.heads, a.records, a.pieces, a.text_data) if path}
+    inputs = {str(path): sha256_file_hex(path)
+              for path in (a.heads, a.records, a.pieces, a.text_data, a.continue_from) if path}
     identity = {'schema': SCHEMA, 'options': {k: v for k, v in options.items() if k not in OPERATIONAL
                                               and not (k in LATER_DEFAULTS and v == LATER_DEFAULTS[k])},
                 'inputs': inputs, 'code': code}
 
     engine = load_engine(heads_checkpoint=str(a.heads), device=a.device)
     backbone = engine.backbone
-    backbone.checkpoint_layers = a.checkpoint_layers
+    backbone.checkpoint_layers = True if a.checkpoint_layers is None else a.checkpoint_layers
     from ..maple.model import set_dense_moe_kernel
     set_dense_moe_kernel(a.moe_kernel)
     quant = load_component(a.quantization, root=path_root('repo'))
@@ -329,8 +335,17 @@ def main(argv=None):
     spike = SpikeClip(a.grad_spike_clip) if a.grad_spike_clip else None
     in_backward.step_in_backward(gated=True, spike=spike)
     other_trainables = [q for _, q in head_named + other_backbone]
+    parameter_names = {id(parameter): name for name, parameter in head_named + backbone_named}
+    optimizer_parameter_names = [[parameter_names[id(parameter)] for parameter in group['params']]
+                                 for group in optimizer.param_groups]
+    backbone_parameter_dtypes = sorted({str(parameter.dtype) for parameter in backbone.hf.parameters()})
+    backbone_floating_buffer_dtypes = sorted({str(buffer.dtype) for buffer in backbone.hf.buffers()
+                                              if buffer.is_floating_point()})
     print(json.dumps({'event': 'trainables', 'latent_optimizer': a.latent_optimizer, 'latents': len(latent),
                       'grad_spike_clip': a.grad_spike_clip,
+                      'backbone_parameter_dtypes': backbone_parameter_dtypes,
+                      'backbone_floating_buffer_dtypes': backbone_floating_buffer_dtypes,
+                      'declared_autocast': None,
                       'latent_options': {k: list(v) if isinstance(v, tuple) else v for k, v in latent_options.items()},
                       'adamw_or_muon_backbone': [n for n, _ in other_backbone][:4] + ['...'],
                       'projections': {k: sum(q.numel() for q in m.parameters()) for k, m in projections.items()}}),
@@ -375,6 +390,9 @@ def main(argv=None):
         a.steps = len(schedule)  # derived: the stage's schedules (QAT ramps, cadence ends) follow it
     if quant is not None and quant.stage['end'] == 'derived':
         quant.stage['end'] = a.steps
+    from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout, geometry_bytes
+    from .memory_policy import effective_cuda_free_bytes
+    memory_estimator = AdaptiveGraphMemory(geometry_version='direct-sft-window-v1')
     budget = {'epochs': a.epochs, 'updates': a.steps, 'batch_tokens': a.batch_tokens,
               'train_windows': len(train_windows), 'target_windows': len(targets),
               'documents': sum(len(d) for d in sampler.documents.values()),
@@ -453,12 +471,16 @@ def main(argv=None):
         hidden = backbone.forward_ids(ids[:, :-1], cutoff=engine.heads.cutoff, logits=False)['h_final']
         return hidden.gather(1, index[..., None].expand(-1, -1, hidden.shape[-1]))
 
-    def forward(rows_, *, gradients):
+    def forward(rows_, *, gradients, accumulation=None):
         """(weighted CE, metrics, predictions, token losses) of one padded batch at the active precision."""
         ids, span, index, valid, weights, segments, suffix = tensors(rows_)
         usable = float(weights.sum()) > 0  # a window made only of failed assistant turns teaches nothing
-        if not usable:
+        if accumulation is None:
+            if not usable:
+                weights = valid.float()
+        elif not accumulation['has_weight']:
             weights = valid.float()
+        usable = float(weights.sum()) > 0
         # Both projections read only the supervised positions: segments start inside the span (context and padding
         # are -1), so no convolution tap reaches the context and the slice is exact. Never full-context logits.
         hidden = span_states(ids, index)
@@ -487,7 +509,13 @@ def main(argv=None):
                            target_tokens=int(suffix.sum()), real_tokens=sum(len(r['ids']) - 1 for r in rows_),
                            forward_tokens=int(ids.shape[0] * (ids.shape[1] - 1)))
         loss = training_ce + a.neuralese_weight * value_error
-        return (loss if usable else loss * 0.0), metrics, prediction, token_losses
+        if accumulation is not None:
+            local_weight = weights.sum()
+            training_ce = training_ce * (real / accumulation['valid_positions'])
+            value_error = value_error * (local_weight / accumulation['weight_mass'].clamp_min(1e-12))
+            loss = training_ce + a.neuralese_weight * value_error
+        loss_stats = {'valid_positions': int(valid.sum()), 'weight_mass': float(weights.sum())}
+        return (loss if usable else loss * 0.0), metrics, prediction, token_losses, loss_stats
 
     # Resume.
     policy = CheckpointPolicy(a.out, every_steps=a.checkpoint_every)
@@ -514,6 +542,8 @@ def main(argv=None):
         monitor.restore(state)  # the update of the guard's last gate and its response KL
         if spike is not None:
             spike.load_state_dict(state.get('grad_spike_clip'))
+        memory_estimator = AdaptiveGraphMemory(state.get('direct_memory_estimator'),
+                                               geometry_version='direct-sft-window-v1')
         restore_training_rng_state(state['rng'], a.device)
         print(json.dumps({'event': 'resumed', 'step': step, 'code_changed': sorted(
             k for k in code if state['identity']['code'].get(k) != code[k])}), flush=True)
@@ -525,6 +555,47 @@ def main(argv=None):
         state = CheckpointPolicy.load(a.continue_from)
         if state.get('schema') != SCHEMA:
             raise ValueError('--continue-from is not a neuralese_direct full state')
+        previous_identity = state.get('identity') or {}
+        previous_inputs = previous_identity.get('inputs') or {}
+        if previous_inputs.get(str(a.heads.resolve())) != inputs[str(a.heads.resolve())]:
+            raise ValueError('--continue-from was trained from different base heads')
+        previous_options = previous_identity.get('options') or {}
+        current_options = identity['options']
+        changed_objective = sorted(key for key in set(previous_options) & set(current_options)
+                                   if previous_options[key] != current_options[key])
+        if changed_objective:
+            raise ValueError('--continue-from training options differ: ' + ', '.join(changed_objective))
+        expected_backbone = {name.removeprefix('backbone.'): parameter for name, parameter in backbone_named}
+        saved_backbone = state.get('student_parameters') or {}
+        if set(saved_backbone) != set(expected_backbone):
+            raise ValueError('--continue-from backbone trainable names differ')
+        for name, parameter in expected_backbone.items():
+            if tuple(saved_backbone[name].shape) != tuple(parameter.shape):
+                raise ValueError('--continue-from backbone shape differs: ' + name)
+        for key, module in projections.items():
+            saved_projection = state.get(key)
+            current_projection = module.state_dict()
+            if not isinstance(saved_projection, dict) or set(saved_projection) != set(current_projection):
+                raise ValueError('--continue-from projection state differs: ' + key)
+            if any(tuple(saved_projection[name].shape) != tuple(value.shape)
+                   for name, value in current_projection.items()):
+                raise ValueError('--continue-from projection shape differs: ' + key)
+        saved_optimizer = state.get('optimizer') or {}
+        saved_groups = saved_optimizer.get('param_groups') or []
+        current_groups = optimizer.param_groups
+        if len(saved_groups) != len(current_groups):
+            raise ValueError('--continue-from optimizer group count differs')
+        saved_names = state.get('optimizer_parameter_names')
+        if saved_names is not None and saved_names != optimizer_parameter_names:
+            raise ValueError('--continue-from optimizer parameter names differ')
+        for group_index, (saved_group, current_group) in enumerate(zip(saved_groups, current_groups)):
+            saved_ids, current_parameters = saved_group.get('params', []), current_group.get('params', [])
+            if len(saved_ids) != len(current_parameters):
+                raise ValueError('--continue-from optimizer parameter count differs in group ' + str(group_index))
+            for saved_id, parameter in zip(saved_ids, current_parameters):
+                for slot_name, slot_value in (saved_optimizer.get('state', {}).get(saved_id, {})).items():
+                    if torch.is_tensor(slot_value) and slot_value.ndim and tuple(slot_value.shape) != tuple(parameter.shape):
+                        raise ValueError('--continue-from optimizer slot shape differs: ' + slot_name)
         from .text_warmup import copy_restored_values
         tensors_by_name = plain_named_tensors(backbone.hf)
         copy_restored_values({'backbone.' + n: t for n, t in tensors_by_name.items()}, state['student_parameters'])
@@ -534,6 +605,8 @@ def main(argv=None):
         optimizer.load_state_dict(state['optimizer'])
         own_host_tensors(optimizer)
         optimizer.param_groups = optimizer._groups()
+        memory_estimator = AdaptiveGraphMemory(state.get('direct_memory_estimator'),
+                                               geometry_version='direct-sft-window-v1')
         if spike is not None:
             spike.load_state_dict(state.get('grad_spike_clip'))
         print(json.dumps({'event': 'continued', 'from': str(a.continue_from), 'predecessor_step': state['step']}),
@@ -547,8 +620,10 @@ def main(argv=None):
                 'student_parameters': {n: values[n.removeprefix('backbone.')].detach() for n, _ in backbone_named},
                 **{key: module.state_dict() for key, module in projections.items()},
                 'optimizer': optimizer.state_dict(), 'rng': capture_training_rng_state(a.device),
+                'optimizer_parameter_names': optimizer_parameter_names,
                 'best': best, 'base_eval': base_eval, 'history': history, **monitor.state(),
-                'grad_spike_clip': spike.state_dict() if spike is not None else None}
+                'grad_spike_clip': spike.state_dict() if spike is not None else None,
+                'direct_memory_estimator': memory_estimator.state_dict()}
 
     def log(name, value):
         with (a.out / name).open('a') as handle:
@@ -563,7 +638,7 @@ def main(argv=None):
             if quant is not None:
                 scope.enter_context(quant.context('bf16', 0.0))
             for batch in evaluation_batches(held, a.eval_batch):
-                _, metrics, prediction, _ = forward(batch, gradients=False)
+                _, metrics, prediction, _, _ = forward(batch, gradients=False)
                 predictions.append(prediction.cpu())
                 for key, value in metrics.items():
                     sums[key] = sums.get(key, 0.0) + value * len(batch)
@@ -661,31 +736,143 @@ def main(argv=None):
     start_index = step
     saved_step = None
     started = time.time()
+    from .text_warmup import _warmup_update_floor_bytes
+    direct_trainables = head_named + backbone_named
+    cuda_active = torch.cuda.is_available() and str(a.device).startswith('cuda')
+
+    def execution_plan(batch):
+        """Pick sequential accumulation and the least checkpointing that fits live device memory."""
+        if a.window_execution == 'auto':
+            mode = 'sequential' if len(batch) > 1 else 'packed'
+        elif a.window_execution == 'packed':
+            mode = 'packed'
+        else:
+            mode = 'sequential'
+        context = max(len(window['ids']) - 1 for window in batch)
+        target = max(len(window['ids']) - window['prefix'] for window in batch)
+        rows = 1 if mode == 'sequential' else len(batch)
+        floor = _warmup_update_floor_bytes(direct_trainables, optimizer, bootstrap=False, in_backward=False)
+        if cuda_active:
+            free, total = torch.cuda.mem_get_info(a.device)
+            available = effective_cuda_free_bytes(int(free), int(total), int(torch.cuda.memory_reserved(a.device)),
+                                                  int(torch.cuda.memory_allocated(a.device)))
+        else:
+            available = None
+
+        def estimate(checkpointed):
+            layout = backbone_memory_layout(backbone, checkpointed=checkpointed)
+            one_raw = geometry_bytes(context, 0, **layout,
+                                     target_tokens=min(128, target),
+                                     vocab_size=int(backbone.embedding_weight.shape[0]))
+            kind = f'direct-sft-{mode}-checkpointed-{int(checkpointed)}'
+            predicted_activation = memory_estimator.predict(kind, context, target, one_raw) * rows
+            return one_raw * rows, predicted_activation
+
+        if a.checkpoint_layers is not None:
+            checkpointed = bool(a.checkpoint_layers)
+            raw, predicted = estimate(checkpointed)
+        else:
+            checkpointed = available is None
+            raw, predicted = estimate(checkpointed)
+            if cuda_active and predicted + floor > available:
+                checkpointed = not checkpointed
+                raw, predicted = estimate(checkpointed)
+        incremental = predicted + floor
+        fits = available is None or incremental <= available
+        if not fits:
+            raise MemoryError('neuralese_direct estimated update exceeds reusable CUDA memory: '
+                              f'{incremental} bytes required, {available} available; no forward was started')
+        return {'mode': mode, 'checkpoint_layers': checkpointed, 'context_tokens': context,
+                'target_tokens': target, 'activation_geometry_bytes': raw,
+                'predicted_activation_bytes': predicted, 'gradient_optimizer_floor_bytes': floor,
+                'estimated_incremental_peak_bytes': incremental, 'reusable_cuda_bytes': available,
+                'estimator_margin': memory_estimator.margin, 'estimator_geometry': memory_estimator.geometry_version}
+
     for step_index in loop:
         batch, covered = schedule[step_index]
         point, mix = ('bf16', 0.0) if quant is None else quant.sampled(step_index)[:2]
         tick = time.time()
+        plan = execution_plan(batch)
+        backbone.checkpoint_layers = plan['checkpoint_layers']
+        update_start_allocated = int(torch.cuda.memory_allocated(a.device)) if cuda_active else 0
+        if cuda_active:
+            torch.cuda.reset_peak_memory_stats(a.device)
         with contextlib.ExitStack() as scope:
             if quant is not None:
                 scope.enter_context(quant.context(point, mix))
-            with shared_parametrized_weights(backbone.hf) as next_pass:
-                next_pass()
-                with in_backward.in_backward() as armed:
-                    loss, metrics, _, _ = forward(batch, gradients=True)
-                    if not torch.isfinite(loss):
-                        raise RuntimeError('nonfinite neuralese_direct loss')
-                    loss.backward()
+            if plan['mode'] == 'sequential' and len(batch) > 1:
+                _, _, _, valid_all, weights_all, _, _ = tensors(batch)
+                valid_positions = valid_all.sum().clamp_min(1)
+                has_weight = bool(weights_all.sum() > 0)
+                effective_weights = weights_all if has_weight else valid_all.float()
+                normalizers = {'valid_positions': valid_positions,
+                               'weight_mass': effective_weights.sum(), 'has_weight': has_weight}
+                del valid_all, weights_all, effective_weights
+                metrics_rows, loss_value = [], 0.0
+                # The gated latent hooks are deliberately unarmed here: their gradients accumulate like the
+                # other parameters, and the shared optimizer updates every partition exactly once below.
+                with shared_parametrized_weights(backbone.hf):
+                    for window in batch:
+                        part, part_metrics, _, _, part_stats = forward(
+                            [window], gradients=True, accumulation=normalizers)
+                        if not torch.isfinite(part):
+                            raise RuntimeError('nonfinite neuralese_direct loss')
+                        part.backward()
+                        loss_value += float(part.detach())
+                        metrics_rows.append((part_metrics, part_stats))
+                        del part
+                span_total = int(valid_positions)
+                weight_total = float(normalizers['weight_mass'])
+                metrics = {
+                    'ce': sum(m['ce'] * s['valid_positions'] for m, s in metrics_rows) / span_total,
+                    'gold_accuracy': sum(m['gold_accuracy'] * s['valid_positions'] for m, s in metrics_rows) / span_total,
+                    'value_relative_mse': sum(m['value_relative_mse'] * s['weight_mass']
+                                              for m, s in metrics_rows) / max(weight_total, 1e-12),
+                    'windows': sum(m['windows'] for m, _ in metrics_rows),
+                    'supervised_tokens': sum(m['supervised_tokens'] for m, _ in metrics_rows),
+                    'target_tokens': sum(m['target_tokens'] for m, _ in metrics_rows),
+                    'real_tokens': sum(m['real_tokens'] for m, _ in metrics_rows),
+                    'forward_tokens': sum(m['forward_tokens'] for m, _ in metrics_rows),
+                }
+                loss = loss_value
+                latent_norm = gradient_norm([parameter for _, parameter, *_ in latent])
+                all_trainables = other_trainables + [parameter for _, parameter, *_ in latent]
+                if spike is not None:
+                    global_norm = clip_finite_gradients(all_trainables, spike=spike)
+                    threshold = spike.threshold()
+                    exact_coefficient = spike.coefficient(float(global_norm))
+                else:
+                    global_norm = gradient_norm(all_trainables)
+                    if not torch.isfinite(global_norm):
+                        raise RuntimeError('nonfinite neuralese_direct gradient norm')
+                    threshold, exact_coefficient = None, 1.0
+                grad_clip = {'threshold': threshold, 'global_norm': float(global_norm),
+                             'latent_norm': float(latent_norm), 'exact_coefficient': exact_coefficient,
+                             'latent_applied_norm': float(latent_norm) * exact_coefficient,
+                             'latent_exact_norm': float(latent_norm) * exact_coefficient}
+                if spike is not None:
+                    spike.observe(grad_clip['global_norm'])
+                armed = None
+            else:
+                with shared_parametrized_weights(backbone.hf) as next_pass:
+                    next_pass()
+                    with in_backward.in_backward() as armed:
+                        loss, metrics, _, _, _ = forward(batch, gradients=True)
+                        if not torch.isfinite(loss):
+                            raise RuntimeError('nonfinite neuralese_direct loss')
+                        loss.backward()
                 latent_norm = armed.norm()
         # The global gradient norm: the latents' (stepped in backward, spike-clipped by the norm so far) with the
         # others' (spike-clipped exactly here with --grad-spike-clip).
-        if spike is not None:
-            global_norm = clip_finite_gradients(other_trainables, consumed_norm=latent_norm, spike=spike)
-        else:
-            global_norm = torch.linalg.vector_norm(torch.stack([gradient_norm(other_trainables).to(latent_norm.device),
-                                                                latent_norm.double()]))
-        grad_clip = armed.clip_record(global_norm)
-        if spike is not None:
-            spike.observe(grad_clip['global_norm'])
+        if armed is not None:
+            if spike is not None:
+                global_norm = clip_finite_gradients(other_trainables, consumed_norm=latent_norm, spike=spike)
+            else:
+                global_norm = torch.linalg.vector_norm(torch.stack([gradient_norm(other_trainables).to(latent_norm.device),
+                                                                    latent_norm.double()]))
+            grad_clip = armed.clip_record(global_norm)
+            if spike is not None:
+                spike.observe(grad_clip['global_norm'])
         optimizer.step()  # routers, norms and projections (the latents stepped in backward)
         optimizer.zero_grad(set_to_none=True)
         step = step_index + 1
@@ -697,12 +884,28 @@ def main(argv=None):
                       flush=True)
                 raise SystemExit(2)
         seconds = time.time() - tick
+        observed_increment = (max(0, int(torch.cuda.max_memory_allocated(a.device)) - update_start_allocated)
+                              if cuda_active else None)
+        if observed_increment is not None:
+            # Successful updates calibrate only matching packed/sequential and checkpoint geometries.
+            floor = plan['gradient_optimizer_floor_bytes']
+            observed_activation = max(1, observed_increment - floor)
+            memory_estimator.observe(
+                f"direct-sft-{plan['mode']}-checkpointed-{int(plan['checkpoint_layers'])}",
+                plan['context_tokens'], plan['target_tokens'], plan['activation_geometry_bytes'],
+                observed_activation)
         for key in totals:
             totals[key] += metrics[key]
-        log('train.jsonl', {'step': step, 'loss': float(loss), 'precision': point, 'mix': mix, **metrics,
+        log('train.jsonl', {'step': step, 'loss': float(loss), 'precision': point,
+                            'precision_policy': point, 'mix': mix,
+                            'window_execution': plan['mode'], 'checkpoint_layers': plan['checkpoint_layers'],
+                            'memory_plan': plan, 'observed_incremental_peak_bytes': observed_increment,
+                            'backbone_parameter_dtypes': backbone_parameter_dtypes,
+                            'backbone_floating_buffer_dtypes': backbone_floating_buffer_dtypes,
+                            'declared_autocast': None, **metrics,
                             'epochs': covered, 'supervised_tokens_per_second': metrics['supervised_tokens'] / seconds,
-                            'cuda_peak_allocated_gb': torch.cuda.max_memory_allocated() / 2 ** 30
-                            if torch.cuda.is_available() else None,
+                            'cuda_peak_allocated_gb': torch.cuda.max_memory_allocated(a.device) / 2 ** 30
+                            if cuda_active else None,
                             'grad_clip': grad_clip, 'seconds': seconds})
         if step % a.eval_every == 0 or step == end:
             report = evaluate()
@@ -750,7 +953,7 @@ def main(argv=None):
                              'report_only': True, 'moved_to': 'end-to-end stage (owner 2026-10-11)'},
                  seconds=time.time() - started, budget=budget,
                  epochs_covered=schedule[step - 1][1] if step else 0.0, this_run=dict(totals),
-                 cuda_peak_allocated_gb=torch.cuda.max_memory_allocated() / 2 ** 30 if torch.cuda.is_available() else None,
+                 cuda_peak_allocated_gb=torch.cuda.max_memory_allocated(a.device) / 2 ** 30 if cuda_active else None,
                  scope='Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md)')
     if saved_step != step:
         policy.save(full_state())
