@@ -34129,6 +34129,42 @@
         "luna-neuralese-direct-lfm-base-20261011-v8"
       ],
       "notes": "687/687-update native epoch and associated launch/parent-proof/runtime-hash receipts, step-600/final serving export manifests without tensor payloads, raw-head versus trained TCP readout comparisons, and BF16/strict-FP32 synthetic forced-consumer diagnostics. See packet README and source-map for exact source locations and hashes. Operational recipe completion is not behavioral qualification."
+    },
+    {
+      "id": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/README.md",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/checkpoint-storage/move-receipt.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/export-receipt.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/lineage-observation.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/original-v2/direct-stage-plan.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/original-v2/direct-stage-result.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/original-v2/launch.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/original-v2/recipe.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/original-v2/stage-launch-intent.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/proof/parent-proof.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/resume-v2/completion-correction-v1.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/resume-v2/exit.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/resume-v2/launch.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/resume-v2/worker.log",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/selection/best-evaluation.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/serving/manifest.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/serving/parent-direct-export-v2-manifest.json",
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/source-map.json"
+      ],
+      "split": "held-diagnostic-no-admission",
+      "source_class": "native-recurrence-checkpoint-proof-and-serving-export-diagnostic",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "Immutable best-step checkpoint proof, strict parent lineage receipts, and CPU serving-export manifest only. No tensor payload is included in this snapshot; no training admission, semantic/task qualification, runtime qualification, or promotion is implied.",
+      "derived_from": [
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1",
+        "luna-neuralese-direct-lfm-base-v8-full-checkpoint-held-20261011-v1",
+        "luna-neuralese-direct-lfm-base-v8-export-and-paired-behavior-held-20261011-v1"
+      ],
+      "notes": "Step-225 native recurrence checkpoint was hash-verified at its original v2 best-checkpoint path (storage-relief symlink to byte-preserved cold copy), proven with the existing parent-proof builder, and serialized with the existing CPU direct exporter against direct-export-v2. The original stage result remains an earlier interruption receipt; the separate v2 resume launch/exit/log and completion correction are included. Export manifest status remains direct-writer-pending. The direct-tensors.pt payload SHA is recorded in receipts but is intentionally not registered/synced."
     }
   ],
   "coverage_backlog": [

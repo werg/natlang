@@ -1,0 +1,99 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/README.md",
+      "bytes": 1077,
+      "sha256": "3e06928330cf820b65e9b66e4d1eb68bb1d0d5e123577c5048ac4485bacfec10"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/checkpoint-storage/move-receipt.json",
+      "bytes": 1056,
+      "sha256": "f67dc0594067cd280359ff3e05089efb5f4b8bbff6f01f051906e4a012777dbc"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/export-receipt.json",
+      "bytes": 1201,
+      "sha256": "1972d15b54360bc267a650ef39e101929063c7a98ab95c71ef7521cd2faa7af6"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/lineage-observation.json",
+      "bytes": 4425,
+      "sha256": "bf36e4e354dbcdce6d6d29e7db3fa061a7f02301219ef333b2e6a946fed84dbb"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/original-v2/direct-stage-plan.json",
+      "bytes": 21825,
+      "sha256": "4c574e05fcbb5f08e137390f7b3c479ab42bde4d20decc459342241c574f192a"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/original-v2/direct-stage-result.json",
+      "bytes": 1877,
+      "sha256": "cdac1226115b087e6c9aa062b55ca21eed0c1d94d3fbeae14919987c7a674b11"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/original-v2/launch.json",
+      "bytes": 18402,
+      "sha256": "66174fe1fbf85859fb40a6045b2db2639fbf2d41493c633fc619226b439b1081"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/original-v2/recipe.json",
+      "bytes": 19138,
+      "sha256": "9f88311f89f2eb6548aa86e2338027bac929296095f5230af9bf1feffe03c298"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/original-v2/stage-launch-intent.json",
+      "bytes": 3315,
+      "sha256": "384fdcbcd422a7d5a74cbf6b8318749379766ef9fcd1558d1cc5cf173790e5e4"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/proof/parent-proof.json",
+      "bytes": 1559,
+      "sha256": "0fbc0cc1f55aaa1ef932bc4d1ea919a7b151fdbb6fd9874841d74c225f3011ca"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/resume-v2/completion-correction-v1.json",
+      "bytes": 571,
+      "sha256": "b6e2e3b9d9078e2850e59a7bf36bd2e8b554a726f24220176496ebad35949c80"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/resume-v2/exit.json",
+      "bytes": 68,
+      "sha256": "8af8df464542d6c4b9fc9274e3a6a312b5cfad33cacf20163e9e80fdf9550b34"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/resume-v2/launch.json",
+      "bytes": 19793,
+      "sha256": "b878956c0ec44c147ef62d8b41bd4e4c5bcab29dd494814adee691350d0cff1a"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/resume-v2/worker.log",
+      "bytes": 1944527,
+      "sha256": "a07c81a36dcba60a89bd065517cf2d37f5fe6c8c6d45a0b83cd02ac484476d57"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/selection/best-evaluation.json",
+      "bytes": 197126,
+      "sha256": "d70b80f386c8d3251fa01861b47c3d5497413996bb5e8c374ccdcfff128deecd"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/serving/manifest.json",
+      "bytes": 195026,
+      "sha256": "18dfd4e145a4d34247fe50f9daf0987d3ef207a7120d706dc199ff91328c682e"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/serving/parent-direct-export-v2-manifest.json",
+      "bytes": 35011,
+      "sha256": "f3ff523b6b0d8b0e5bfd3a949a87feb4e91a1ca08c268e1cf0c57b9b106e230c"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1/source-map.json",
+      "bytes": 5963,
+      "sha256": "864e78a2e82c78997bf7a0092cf5c3029e198dcd227e68d97fcad1c349dc40b6"
+    }
+  ],
+  "bytes": 2471960
+}
