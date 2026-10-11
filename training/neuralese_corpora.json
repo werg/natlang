@@ -30262,6 +30262,44 @@
       "admission": "held-quality-review-no-training-admission",
       "independent_new_worlds": 0,
       "notes": "Exact source/provider label scoring supplement. 512 valid typed responses, 390/512 exact choice agreement, 122 disagreements, 0 answer errors/invalid schema. Family-level scorer output, per-model/family aggregates and full source-row disagreement bindings are pinned. The 26b/31b item allocations differ and do not support model ranking. Usage and artifact hashes are recorded; no semantic/source/license clearance or training admission."
+    },
+    {
+      "id": "luna-choice-confidence-v75-v36-runtimev17-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v75-v36-runtimev17-v3",
+      "include": [
+        "reviewed-plan-v1.json",
+        "plan-corrections-v1.json",
+        "root-generation-source-review-v1.json",
+        "runtime-lineage-v1.json",
+        "predecessor-bundle-v1/**/*",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ],
+      "split": "inherited-train-generation-input",
+      "source_class": "held-luna-generation-inputs",
+      "training_admission": false,
+      "admission": "root-approved-generation-input-only-no-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Prepared V75 generation inputs on frozen runtime V17; 54 static source-derived programs and five queues. Root separately approved/launched supervisor PID 1048971 (receipt registered independently). Parent bindings use V74 lanes 1/3/4/5 and V73 lane 2; each parent runtime V16. Includes predecessor source bundle snapshots and exact queues, not active journals/logs/results or mutable campaign status. Source labels remain held; no training admission."
+    },
+    {
+      "id": "luna-choice-confidence-v75-v36-runtimev17-root-launch-receipt-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v75-v36-runtimev17-v3",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-launch-receipt-v1.json"
+      ],
+      "split": "inherited-train-launch-evidence",
+      "source_class": "held-luna-generation-approval-launch-receipt",
+      "training_admission": false,
+      "admission": "held-generation-launch-evidence-only-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Separate immutable root approval and launch receipt for V75 v3, supervisor PID 1048971. Receipt pins approved plan SHA 2cdd29b7b8a50690d7f057be47c6c8f0f16db7358f7b80785590c8fdbdf1f4f3. Does not imply outcome quality or admission."
     }
   ],
   "coverage_backlog": [
