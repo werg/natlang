@@ -1,6 +1,6 @@
 {
   "schema": "natlang.decision-source-quality-holds/1",
-  "policy_id": "decision-visible-answerability-holds-v15",
+  "policy_id": "decision-visible-answerability-holds-v16",
   "status": "canonical_forward_source_filter",
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
@@ -900,6 +900,18 @@
         "state": "Claim: Selena was a musician . Evidence: Selena 's popularity grew after she won the Tejano Music Award for Producer of the Year in 1987 , which she won nine consecutive times ."
       },
       "decision_receipt_sha256": "26fbc277fb319d9ad5eb110329a351d07bad45b8a965363ca5a9e3f816178edc"
+    },
+    {
+      "item_id": "dc-5d21114a28d432792a47",
+      "original_source_group": "g-c86d703521e10a281b157b01",
+      "split": "train",
+      "reason": "The visible post requests polygon-filling source code and graphics mailing lists; it supplies no X Window System or destination-forum context. comp.graphics and comp.windows.x cannot be uniquely distinguished from this input. Hold strict source-forum target; preserve annotation, no relabel.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_index": 14923,
+        "official_row_sha256": "475355a0fe3ac63038c1c1394a821d5fd41c042e77a15834a71668fdacfca572"
+      },
+      "decision_receipt_sha256": "de5b61f75149781fafdebb65d01461345b3e98472824e764058f8e2d0f8931e9"
     }
   ],
   "root_review": {
