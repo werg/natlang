@@ -10,6 +10,19 @@ Audit by DGX. Machine-readable twin: `DATA_INVENTORY_20261011.json`, built by
 - The generic system prompt is dropped after a warm-up; program-specific content always stays.
 - Pop repairs the defect sets in section D.
 
+## Reading inventory totals
+
+Registry admission status and observed data shape are separate fields. The generated
+JSON now samples declared local JSON/JSONL members and reports `data_shape` plus
+`registry_counts_by_data_shape`, so native targets and conversion inputs can be
+found inside administratively held snapshots. Missing remote files, compressed
+members and unsupported shapes remain unclassified; a sample does not prove
+correctness, split eligibility or admission. File and line totals are gross
+manifest totals, including repeated snapshots and tokenization twins. They must
+not be reported as unique recoverable examples or unique token counts. Registered
+piece sidecars must reach the shared renderer; copying the files alone does not
+make soft source references visible in rendered training inputs.
+
 ## A. Answer to the owner
 
 **"I thought we had sizable corpora of statically generated and teacher-generated data."**
