@@ -1,0 +1,34 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v43-suffix658-1374-runtimev19-launch-observation-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-suffix658-1374-runtimev19-launch-evidence-v1",
+  "files": [
+    {
+      "path": "FILES.sha256.json",
+      "bytes": 468,
+      "sha256": "53c89ed34ca85a762c219dd252d0052d9e3af763c9fe6e4d76ba1e6d188dc258"
+    },
+    {
+      "path": "approved-plan-v1.json",
+      "bytes": 11416,
+      "sha256": "29634734d5cc0ccd166ea0314a11b9ce628a84213c4980095f8a333dc571b3af"
+    },
+    {
+      "path": "campaign-launch-at-capture.json",
+      "bytes": 9112,
+      "sha256": "ed44a28d5484dfb53cb7701c235ab0dd4b425735916c5c4d581a0061b4502542"
+    },
+    {
+      "path": "root-independent-approval-v1.json",
+      "bytes": 551,
+      "sha256": "46d191fd627968532df28656f6454bf64ec0982454986bbfcb11a9f22780ed2e"
+    },
+    {
+      "path": "snapshot.json",
+      "bytes": 3964,
+      "sha256": "1351d8bf49a1f54adcb15d56ed48f83dc07403d92ad31e255dac540b27a971d7"
+    }
+  ],
+  "bytes": 25511
+}

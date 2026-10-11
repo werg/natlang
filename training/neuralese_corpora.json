@@ -34247,6 +34247,133 @@
         "luna-v43-runtimev18-quality-review-held-20261011-v1"
       ],
       "notes": "Root adoption receipt runs/v43-exact-map37-native-admission-proposal-v2-20261011-v1/root-adoption-v1.json SHA-256 8869c488d7e083edd519214c01ba8303950767c249a293415013696d4e148345 approves exactly the 926 IDs. Native row bytes are copied unchanged from the shared materializer output and cross-checked against the root receipt and proposal row hashes. All 37 source programs and 274 train IDs/groups are retained; license metadata, including 8 programs marked unknown, is preserved without license-based omission. The source annotation agreement is inherited from the source-bound exact-map check, not an independent relabel. 65 approved turns retain 66 actual prior failed-action response references in context. This is native SFT only; do not infer trace/recurrence admission, task/label correctness beyond the adopted source review, or model/runtime qualification. Active training recipes remain unchanged."
+    },
+    {
+      "id": "google-v43-resume-enum-omit-source-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v43-resume-enum-omit-v1",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "resume-plan.json",
+        "locked-prior-successes.json",
+        "root-independent-approval-v1.json",
+        "launch-receipt-v1.json"
+      ],
+      "split": "held-provider-source-inputs",
+      "source_class": "provider-source-selection-inputs",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "immutable provider source and approved input metadata only; mutable labels, attempts, logs and campaign status excluded",
+      "notes": "Source used by the V43 suffix static adapter. Original 1941-row resumed case set; the next suffix snapshot contains only the exact complete-line label prefix at indices 658-1374."
+    },
+    {
+      "id": "google-v43-label-prefix-latest-delta-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v43-prefix-latest-delta-snapshot-v1",
+      "include": [
+        "prefix-snapshot.json",
+        "labels.jsonl",
+        "labels.jsonl.manifest.json"
+      ],
+      "split": "held-provider-label-prefix",
+      "source_class": "provider-label-evidence",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "immutable complete-line label prefix and provenance; labels require exact static source-label screening before downstream use",
+      "notes": "Cutoff snapshot of V43 complete-line labels; source rows at indices 658-1374 are the suffix candidate window. No active source output or campaign state included."
+    },
+    {
+      "id": "luna-v43-suffix658-1374-runtimev19-static-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v43-prefix-latest-delta-adapter-v3",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-static-reference-no-admission",
+      "source_class": "static-label-derived-reference-evidence",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "543 exact source-top labels converted to authored static references; 1398 rejection records preserved; all 69 reference replays passed; no native provider trajectories or training admission",
+      "derived_from": [
+        "google-v43-resume-enum-omit-source-inputs-held-20261011-v1",
+        "google-v43-label-prefix-latest-delta-held-20261011-v1"
+      ],
+      "notes": "Source labels at indices 658-1374 only; remaining rejection rows include 1224 rows without a label in this suffix, 173 source-top disagreements, and 1 label error. Root source/hold policy remains applicable."
+    },
+    {
+      "id": "luna-v43-suffix658-1374-runtimev19-approved-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-suffix658-1374-runtimev19-prepared-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "approved-plan-v1.json",
+        "root-independent-approval-v1.json",
+        "root-generation-source-review-v1.json",
+        "source-review/decision_source_quality_holds.json",
+        "source-review/prepare_luna_folder_campaign.py",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "held-generation-inputs-no-admission",
+      "source_class": "approved-provider-generation-inputs",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "approved five-lane launch inputs and immutable queues only; active journals, logs, results and mutable campaign status excluded",
+      "derived_from": [
+        "luna-v43-suffix658-1374-runtimev19-static-held-20261011-v1"
+      ],
+      "notes": "69 authored folder programs on runtime V19, root-approved plan; five predecessor lanes are the exact V90 queue/journal/runtime references embedded in the source review. Independent new worlds=0."
+    },
+    {
+      "id": "luna-v43-suffix658-1374-runtimev19-launch-observation-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-suffix658-1374-runtimev19-launch-evidence-v1",
+      "include": [
+        "FILES.sha256.json",
+        "approved-plan-v1.json",
+        "campaign-launch-at-capture.json",
+        "root-independent-approval-v1.json",
+        "snapshot.json"
+      ],
+      "split": "held-launch-observation-no-admission",
+      "source_class": "provider-generation-launch-evidence",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "immutable launch-time snapshot; no active journals, logs, results, or completion/quality claims",
+      "derived_from": [
+        "luna-v43-suffix658-1374-runtimev19-approved-inputs-held-20261011-v1"
+      ],
+      "notes": "Cutoff snapshot captured status running with five actual worker PIDs. Treat as a launch observation only; later raw outputs require a separate closed snapshot."
+    },
+    {
+      "id": "luna-v43-static-replay-callstore-attempt-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-static-replay-attempt-v1",
+      "include": [
+        "quality-review-v43-static-replay-attempt-v1.json",
+        "quality-review-v43-static-replay-attempt-v1-termination.json"
+      ],
+      "split": "held-operational-diagnostic-no-admission",
+      "source_class": "static-reference-replay-operational-diagnostic",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "preserved interrupted pre-fix attempt; not semantic or model evidence",
+      "notes": "Attempt v2 was stopped after 30 minutes and high userspace I/O from repeated call-store eviction scans; no replay result rows were emitted. See the separate successful v3 static adapter for completed replays."
+    },
+    {
+      "id": "luna-v43-runtimev18-v19-paired48-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-runtimev19-paired48-v1",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "held-same-world-runtime-review",
+      "source_class": "paired-runtime-quality-review",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "paired runtime comparison only; no quality-improvement/causal claim and no training/trace/recurrence admission",
+      "notes": "34 main plus 14 same-world repeated source programs: exact maps V18/V19 29/48 and 30/48, item agreement identical 343/367. Review JSON pins exact source/result/visibility evidence."
     }
   ],
   "coverage_backlog": [

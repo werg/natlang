@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-v43-label-prefix-latest-delta-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v43-prefix-latest-delta-snapshot-v1",
+  "files": [
+    {
+      "path": "labels.jsonl",
+      "bytes": 853480,
+      "sha256": "3b33eb6f60d9766f773f9bf688481598e801b091b076bf23a07be06f8178c7b5",
+      "lines": 717
+    },
+    {
+      "path": "labels.jsonl.manifest.json",
+      "bytes": 3668,
+      "sha256": "14739a90324ae35f8084c52a3ac53167a2e60f2166a363fbf00efcced3dc19ea"
+    },
+    {
+      "path": "prefix-snapshot.json",
+      "bytes": 1114,
+      "sha256": "d63904315ab7d23c7b10d315177d7e6b9d617164fcfe3f122c42f661026f623e"
+    }
+  ],
+  "bytes": 858262
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v43-static-replay-callstore-attempt-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-static-replay-attempt-v1",
+  "files": [
+    {
+      "path": "quality-review-v43-static-replay-attempt-v1-termination.json",
+      "bytes": 1709,
+      "sha256": "b624e9e702aaf86c2993d7288dfc36de5f80e0c4cca4fb70382fd6b4fc8e72a1"
+    },
+    {
+      "path": "quality-review-v43-static-replay-attempt-v1.json",
+      "bytes": 12292,
+      "sha256": "0b69f28d612161b5356cfef0ea36f741c075b09e8cd6db74b01c2d16463de30a"
+    }
+  ],
+  "bytes": 14001
+}
