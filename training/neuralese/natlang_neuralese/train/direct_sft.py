@@ -24,6 +24,7 @@ import contextlib
 import hashlib
 import json
 import math
+import os
 import random
 import time
 from array import array
@@ -812,6 +813,7 @@ def main(argv=None):
                 'allocator_reserved_bytes': allocator_reserved,
                 'allocator_allocated_bytes': allocator_allocated,
                 'allocator_inactive_split_bytes': inactive_split,
+                'cuda_allocator_config': os.environ.get('PYTORCH_CUDA_ALLOC_CONF'),
                 'estimator_margin': memory_estimator.margin, 'estimator_geometry': memory_estimator.geometry_version,
                 'activation_layout': {key: value for key, value in layout.items()
                                       if key in ('width', 'layers', 'intermediate', 'kv_width', 'dtype_bytes',

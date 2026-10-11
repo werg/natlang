@@ -116,6 +116,10 @@ def read_direct_recipe(path: Path) -> dict:
         raise ValueError("recipe must pin a sha256 container image")
     if not isinstance(runtime.get("package_code"), dict) or not runtime["package_code"]:
         raise ValueError("recipe must pin the shared package_code inventory")
+    allocator_config = runtime.get("cuda_allocator_config")
+    if allocator_config is not None and (not isinstance(allocator_config, str) or
+                                         not allocator_config.strip() or "\n" in allocator_config):
+        raise ValueError("runtime.cuda_allocator_config must be a nonempty single-line string")
     if not isinstance(recipe.get("inputs"), dict) or not recipe["inputs"]:
         raise ValueError("recipe must declare pinned input files")
     if not isinstance(recipe.get("lineage"), dict) or not isinstance(recipe.get("lineage", {}).get("evidence", []), list):
@@ -270,6 +274,9 @@ def main(argv=None) -> int:
                       "-e", f"TORCH_EXTENSIONS_DIR={container_kernel_cache / 'extensions'}",
                       "-e", f"XDG_CACHE_HOME={container_kernel_cache / 'xdg'}",
                       "-e", f"PYTHONPATH={map_path(NEURALESE, mounts)}"]
+    allocator_config = recipe["runtime"].get("cuda_allocator_config")
+    if allocator_config is not None:
+        common_docker += ["-e", f"PYTORCH_CUDA_ALLOC_CONF={allocator_config}"]
     preflight_code = (
         "import importlib,json,os,sys; "
         "from natlang_neuralese.train.recipe import HANDLERS; "
@@ -297,6 +304,7 @@ def main(argv=None) -> int:
               "inputs": input_bindings, "lineage_evidence": lineage, "package_code_count": len(package_code),
               "artifact_root": str(artifact_root), "output": str(output), "launch_metadata": str(metadata),
               "hf_hub_cache": str(hf_hub_cache),
+              "cuda_allocator_config": allocator_config,
               "launcher_package_snapshot": str(launcher_package),
               "launcher_package_target": str(package),
               "log": str(log_path), "device": args.device, "mounts": [
