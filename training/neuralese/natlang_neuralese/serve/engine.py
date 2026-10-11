@@ -605,9 +605,10 @@ class Engine:
 
     def _sketch_batch(self, rows):
         sketches = torch.cat([sketch for _, sketch in rows], 0)[:, None]
+        depth = self.backbone.num_layers if getattr(self, 'neuralese_projection', None) is not None else self.heads.cutoff
         with self.using([seq for seq, _ in rows]):
             h, caches = step_rows(self.backbone, sketches, [seq.writer.cache for seq, _ in rows],
-                                  range(0, self.heads.cutoff))
+                                  range(0, depth))
         for index, (seq, sketch) in enumerate(rows):
             seq.writer.advance(sketch, h[index:index + 1, 0], caches[index])
 
@@ -786,11 +787,23 @@ class Engine:
                     raise RuntimeError('raw write missing causal prefix state')
                 opened = Opened(cache=seq.cache, h_cut=seq.cut_state, logits=seq.logits, top=seq.top_state)
             limit = request.neuralese_max_length or self.max_block
-            seq.writer = StepWriter(self.backbone, self.heads, opened, min(limit, self.max_block, remaining - 2),
-                                    length=request.neuralese_length)
+            direct = getattr(self, 'neuralese_projection', None)
+            if direct is not None:
+                from .direct_write import DirectWriter
+                seq.writer = DirectWriter(self.backbone, direct, opened, min(limit, self.max_block, remaining - 2),
+                                          self.stop_ids, length=request.neuralese_length)
+            else:
+                seq.writer = StepWriter(self.backbone, self.heads, opened, min(limit, self.max_block, remaining - 2),
+                                        length=request.neuralese_length)
             if request.neuralese_length and request.neuralese_passes:
                 with self.using([seq]):
-                    seq.writer.blockwise(request.neuralese_passes)
+                    if direct is not None:
+                        # Direct v1 has no shallow sketch passes. The full-depth
+                        # writer remains the sole implementation for this artifact.
+                        while not seq.writer.step():
+                            pass
+                    else:
+                        seq.writer.blockwise(request.neuralese_passes)
             seq.generated_positions += 1
             seq.phase = "sketch"
             return None
@@ -810,6 +823,8 @@ class Engine:
             seq.cut_state, seq.top_state = back['h_cut'], back['h_final']
         record = {"kind": "write", "request": request.request_id, "index": index, "cutoff": self.heads.cutoff,
                   "temperature": tau, "seed": seed, "stop_logits": writer.stop_logits}
+        if getattr(self, 'neuralese_projection', None) is not None:
+            record.update(algorithm='neuralese-direct-v1', cutoff=self.backbone.num_layers)
         if writer.length is not None:
             record.update(length_hint=writer.length, passes=writer.passes)
         parts = []

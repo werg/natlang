@@ -80,8 +80,14 @@ class NeuraleseProjection(nn.Module):
         super().__init__()
         self.stack = CausalConvStack(width, blocks=blocks, hidden=hidden, kernel=kernel)
 
-    def forward(self, hidden: torch.Tensor, mixture: torch.Tensor, segments: torch.Tensor | None = None):
-        return mixture + (self.stack(hidden, segments) - hidden).to(mixture.dtype)
+    def forward(self, hidden: torch.Tensor, mixture: torch.Tensor, segments: torch.Tensor | None = None,
+                *, last_only: bool = False):
+        correction = self.stack(hidden, segments) - hidden
+        if last_only:
+            # Incremental serving needs the receptive-field history but only the
+            # newest position's mixture. The projection equation is shared.
+            correction = correction[:, -1:]
+        return mixture + correction.to(mixture.dtype)
 
 
 class TokenChoiceProjection(nn.Module):

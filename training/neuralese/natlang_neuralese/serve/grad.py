@@ -356,6 +356,17 @@ class GradSession:
         backbone, heads = self.backbone, self.heads
         producer = block.producer or {}
         length = block.length
+        direct = getattr(self.engine, 'neuralese_projection', None)
+        if direct is not None:
+            from .direct_write import write_direct
+            from ..write import Opened
+            if producer.get('temperature'):
+                raise ValueError('direct Neuralese replay has no stochastic payload distribution')
+            opened = Opened(block_start, state, backbone.logits(top[:, None])[:, -1], top)
+            writer = write_direct(backbone, direct, opened, max(1, length), self.engine.stop_ids, length=max(1, length))
+            terms = [torch.nn.functional.logsigmoid(logit if index == length - 1 and not block.truncated else -logit)
+                     for index, logit in enumerate(writer.stop_tensors)]
+            return torch.stack(terms).sum() if terms else top.sum() * 0.0
         cache, sketches, shallow, logp = block_start, [], [], []
         final_source = heads.stop_source == "final"
         for count in range(length + 1):
@@ -696,8 +707,18 @@ class GradSession:
         with self._adapted(adapters, leaves):
             from ..train.execution import prefill_write_context
             pre = prefill_write_context(backbone, heads, self._embed_items(context, {**leaves, **local}))
-            written = unroll_write(backbone, heads, pre, length=max(1, stored.length))
-        rewritten = written.payload[0, :stored.length].float()
+            direct = getattr(self.engine, 'neuralese_projection', None)
+            if direct is not None:
+                from .direct_write import write_direct
+                from ..write import Opened
+                opened = Opened(pre.cache, pre.state, backbone.logits(pre.top[:, None])[:, -1], pre.top)
+                writer = write_direct(backbone, direct, opened, max(1, stored.length), self.engine.stop_ids,
+                                      length=max(1, stored.length))
+                payload, _, _ = writer.complete()
+                rewritten = payload[0, :stored.length].float()
+            else:
+                written = unroll_write(backbone, heads, pre, length=max(1, stored.length))
+                rewritten = written.payload[0, :stored.length].float()
         recorded = stored.payload.clone().to(rewritten.device, rewritten.dtype)
         memo[block_id] = recorded + (rewritten - rewritten.detach())
         return memo[block_id]
