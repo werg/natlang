@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v90-lane03-runtime-bound-recovery-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v90-v40-runtimev17-prepared-v1",
+  "files": [
+    {
+      "path": "reviewed-plan-root-lane03-runtime-bound-recovery-v1.json",
+      "bytes": 6815,
+      "sha256": "02bd05ed733f39f1c7ab887e204676b0b012528b107b74611f902dff20417eba"
+    },
+    {
+      "path": "root-lane03-runtime-repair-v1.json",
+      "bytes": 640,
+      "sha256": "377713bc70dbd7b416ba7e77dcd85a6b8e233bd9b4d3e9e66866cc7660975fa5"
+    },
+    {
+      "path": "root-lane03-supervisor-launch-v1.json",
+      "bytes": 3137,
+      "sha256": "c97f299a15e3cd94b0fc37d8b3404e4605b0a55cfee042a0ee3c9fa43ed1b307"
+    }
+  ],
+  "bytes": 10592
+}
