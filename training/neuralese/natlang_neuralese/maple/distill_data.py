@@ -271,7 +271,9 @@ def probe_set(seed: int):
 
 # Rendering and generation ----------------------------------------------------------------------------------------------
 def render(tokenizer, prompt) -> list[int]:
-    return tokenizer.apply_chat_template(prompt["messages"], tools=prompt.get("tools") or None, tokenize=True,
+    from ..serve.chat import normalize_tool_call_arguments
+    messages, _ = normalize_tool_call_arguments(prompt["messages"])
+    return tokenizer.apply_chat_template(messages, tools=prompt.get("tools") or None, tokenize=True,
                                          add_generation_prompt=True, enable_thinking=bool(prompt.get("enable_thinking")),
                                          return_dict=False)
 
