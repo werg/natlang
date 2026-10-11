@@ -29801,6 +29801,66 @@
       "admission": "clarifies-existing-source-admission-no-new-data-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Additive correction: the exact unchanged R4961 prefix was explicitly root-admitted in V9; V18/V19 no-new-recurrence-admission applies to their ordinary-action delta and does not revoke the inherited recurrence prefix. V8 exact-weight runtime and training-stage qualification remain separate. Does not modify the earlier sealed readiness review."
+    },
+    {
+      "id": "annotation-folder-v23-cancelled-unused-preparation-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v23",
+      "include": [
+        "reservation-disposition.json",
+        "**/*"
+      ],
+      "split": "inherited-train-source-preparation-diagnostic",
+      "source_class": "cancelled-unused-static-annotation-preparation",
+      "training_admission": false,
+      "admission": "cancelled-unused-generation-reservation-preserved-diagnostic-only",
+      "independent_new_worlds": 0,
+      "notes": "Root-approved cancellation of an unlaunched annotation-folder source preparation (Superseded unlaunched annotation preparation. Nested-reservation bug and diagnostic preparations contaminated later selection; release only generation reservations for fresh corrected preparation. Preserve all source/static reference/review artifacts held; no training admission or independent-world credit.) This registration preserves the exact source-selection and available static reference artifacts; it does not revoke any prior admission because none was granted. Root explicitly verified zero provider worker queue references, zero launches and no journals for this preparation. The separate Google V23 provider campaign is unrelated and remains reserved/registered under its own ID."
+    },
+    {
+      "id": "annotation-folder-v23-v2-cancelled-unused-preparation-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v23-v2",
+      "include": [
+        "reservation-disposition.json",
+        "**/*"
+      ],
+      "split": "inherited-train-source-preparation-diagnostic",
+      "source_class": "cancelled-unused-static-annotation-preparation",
+      "training_admission": false,
+      "admission": "cancelled-unused-generation-reservation-preserved-diagnostic-only",
+      "independent_new_worlds": 0,
+      "notes": "Root-approved cancellation of an unlaunched annotation-folder source preparation (Superseded unlaunched annotation preparation. Nested-reservation bug and diagnostic preparations contaminated later selection; release only generation reservations for fresh corrected preparation. Preserve all source/static reference/review artifacts held; no training admission or independent-world credit.) This registration preserves the exact source-selection and available static reference artifacts; it does not revoke any prior admission because none was granted. Root explicitly verified zero provider worker queue references, zero launches and no journals for this preparation. The separate Google V23 provider campaign is unrelated and remains reserved/registered under its own ID."
+    },
+    {
+      "id": "annotation-folder-v23-v3-cancelled-unused-preparation-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v23-v3",
+      "include": [
+        "reservation-disposition.json",
+        "**/*"
+      ],
+      "split": "inherited-train-source-preparation-diagnostic",
+      "source_class": "cancelled-unused-static-annotation-preparation",
+      "training_admission": false,
+      "admission": "cancelled-unused-generation-reservation-preserved-diagnostic-only",
+      "independent_new_worlds": 0,
+      "notes": "Root-approved cancellation of an unlaunched annotation-folder source preparation (Superseded unlaunched annotation preparation. Nested-reservation bug and diagnostic preparations contaminated later selection; release only generation reservations for fresh corrected preparation. Preserve all source/static reference/review artifacts held; no training admission or independent-world credit.) This registration preserves the exact source-selection and available static reference artifacts; it does not revoke any prior admission because none was granted. Root explicitly verified zero provider worker queue references, zero launches and no journals for this preparation. The separate Google V23 provider campaign is unrelated and remains reserved/registered under its own ID."
+    },
+    {
+      "id": "annotation-folder-v23-v4-cancelled-unused-preparation-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v23-v4",
+      "include": [
+        "reservation-disposition.json",
+        "**/*"
+      ],
+      "split": "inherited-train-source-preparation-diagnostic",
+      "source_class": "cancelled-unused-static-annotation-preparation",
+      "training_admission": false,
+      "admission": "cancelled-unused-generation-reservation-preserved-diagnostic-only",
+      "independent_new_worlds": 0,
+      "notes": "Root-approved cancellation of an unlaunched annotation-folder source preparation (Superseded unlaunched annotation preparation. Nested-reservation bug and diagnostic preparations contaminated later selection; release only generation reservations for fresh corrected preparation. Preserve all source/static reference/review artifacts held; no training admission or independent-world credit.) This registration preserves the exact source-selection and available static reference artifacts; it does not revoke any prior admission because none was granted. Root explicitly verified zero provider worker queue references, zero launches and no journals for this preparation. The separate Google V23 provider campaign is unrelated and remains reserved/registered under its own ID."
     }
   ],
   "coverage_backlog": [

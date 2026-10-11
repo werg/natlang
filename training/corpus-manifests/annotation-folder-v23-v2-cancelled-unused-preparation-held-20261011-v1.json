@@ -1,0 +1,42 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "annotation-folder-v23-v2-cancelled-unused-preparation-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v23-v2",
+  "files": [
+    {
+      "path": "reservation-disposition.json",
+      "bytes": 900,
+      "sha256": "259e68ecc806f5cc2f25e1657247592aef632e013290b2d36bab729db849a9cf"
+    },
+    {
+      "path": "reservations/bridge-manifest.json",
+      "bytes": 2039,
+      "sha256": "e9509123707d731c855f2e010f17a05ea524a521992bc0ae466785bfe393b23e"
+    },
+    {
+      "path": "reservations/v22-master-row-reservation-bridge.jsonl",
+      "bytes": 361957,
+      "sha256": "860799b691ac6245843e31b798fd3c90061e25c4b544ebc610010cf1c280ca33",
+      "lines": 640
+    },
+    {
+      "path": "source-selection/cases.jsonl",
+      "bytes": 811247,
+      "sha256": "aeef3aa1ab6ede5139cbfe1c69dc887b080a799f49ad8030da19b9dc644e052e",
+      "lines": 640
+    },
+    {
+      "path": "source-selection/omissions.jsonl",
+      "bytes": 9653797,
+      "sha256": "92f8d5e40fbb945c2b74287771eacceea2cd427e5c5ec36f03fadab51660fb07",
+      "lines": 14375
+    },
+    {
+      "path": "source-selection/source-manifest.json",
+      "bytes": 181802,
+      "sha256": "fb90ea753936d5ef3b08e9a0295f42b96426272b0914af0a8e48a69c976fa378"
+    }
+  ],
+  "bytes": 11011742
+}
