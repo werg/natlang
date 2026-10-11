@@ -1,8 +1,8 @@
 # Latent optimizer bakeoff (2026-10-11)
 
-Status: code merged (74f06ed4, c957cccc, 0889bace, 266a9350); Mellum arms queued behind v2c and the E2E smoke
-(`natlang-bakeoff-queue`, log `/home/werg/data/optimizer-bakeoff-20261011/queue.log`); LFM check requested from Pop.
-Results below are filled as arms finish.
+Status: **decided 2026-10-11: MuonSR is the shared latent optimizer for both lines** (neuralese-direct-v2;
+Mellum latent_lr 1e-5, LFM 3e-6). Code: 74f06ed4, c957cccc, 0889bace, 266a9350, 6070232a. The remaining Lion arms
+were cut (owner: training time over a precise comparison; coordinator: skip them once Muon passes the gate).
 
 ## Decision rule (owner, 2026-10-11)
 
@@ -82,7 +82,51 @@ per-element step is therefore 1.2e-7 for LionSR at 3e-6 (lr x row scale) and 2e-
 Reference, LionSR as before the fix (run v2c, same first 300 updates): response KL 0.180 / 0.256 / 0.347 at
 100 / 200 / 300, agreement 0.900 / 0.874 / 0.862, gate 0.83 at 100 and 0.75 at 200 (base 0.75), about 6.2 s/update.
 
-RESULTS: pending.
+### Results
+
+Mellum, same data order as v2c for updates 1-100 (train CE is on the same windows there; mean over each range):
+
+| updates | LionSR 3e-6 (v2c, before the idle fix) train CE | MuonSR 1e-5 cubic5 wd 0.1 train CE |
+|---|---|---|
+| 1-25 | 2.229 | 2.005 |
+| 26-50 | 1.910 | 1.437 |
+| 51-75 | 1.715 | 1.098 |
+| 76-100 | 1.571 | 0.847 |
+| 201-300 (Lion only) | 0.99 | — |
+| 301-400 (Lion only) | 0.81 | — |
+
+| arm | s/update | wall to update 100 | held CE subset (4 windows) at 100 | response KL / agreement at 100 | gate at 100 (base 0.75) | CUDA peak |
+|---|---|---|---|---|---|---|
+| LionSR 3e-6 (v2c) | 6.2 | 10 min | not measured | 0.180 / 0.900 | 0.83 | ~93 GB ledger peak (whole run) |
+| MuonSR 1e-5 | 18.8 | 31 min | 0.832 (base 2.285) | 0.304 / 0.867 | 0.75 | 55.6 GB allocated |
+
+- Per wall-clock hour MuonSR 1e-5 is at or slightly ahead of LionSR 3e-6. Muon's train CE at 100 updates (31 min) is
+  0.85; Lion's is 0.99 at updates 201-300 (21-31 min) and reaches 0.81 only at 301-400 (31-41 min). Muon costs 3x
+  per update, and almost all of that is Newton-Schulz on the expert stacks.
+- MuonSR 1e-5 passes the behaviour gate (0.75 = base) at update 100. The arm was stopped after the 100-update drift
+  check to save GPU time.
+- LFM (Pop, 300 updates): MuonSR 3e-6 took held CE from 6.19 to 1.05 against LionSR's 5.10 at the same budget, with
+  behaviour 26/48 = base and response KL 1.16 on the final 48 rows. MuonSR 1e-5 took held CE subset from 5.89 to 1.51
+  in 100 updates, then hit the old 0.5 KL stop (KL 0.54, agreement 0.73). 1.34 s/update.
+- Weight drift per expert was not captured for muon-1e-5: the report crashed on MuonSR's missing idle counts, fixed in
+  6070232a.
+
+### Decision
+
+Muon is comparable on Mellum and clearly ahead on LFM. Under the owner's tie-break (a cheap, battle-tested Muon for
+both lines when comparable) MuonSR is the shared default in `neuralese-direct-v2`: cubic5, wd 0.1, idle experts
+skipped, `split_rows` for Mellum's fused gate_up. latent_lr is declared per line as a backbone-inherent setting in
+`line-parity.json`: Mellum 1e-5, LFM 3e-6 (the shared base value). In the same change the drift policy moved:
+the behaviour gate (≥ base − 0.1) is the hard criterion, response KL warns at 0.5 and stops at 1.5
+(LINE_PARITY.md, NEURALESE_DIRECT_V1.md, AGENTS.md).
+
+Cost caveat: on Mellum MuonSR is about 18.8 s/update against LionSR's 6.2 at 8k context. At 32k context
+(mellum-v3, about 10.4 s/update with Lion) expect about 22 s/update, so 2000 updates take about 12 h. Muon learns
+more per update, so a shorter run could reach the same held CE. Further cheapening options: Newton-Schulz on the gram
+(about 20% fewer FLOPs), or fewer steps (they lose orthogonality, see above).
+
+LionSR keeps its idle-expert fix and stays available (`latent_optimizer: lionsr`). AdamMiniSR stays in the code
+unused.
 
 ## Pop LFM comparison prepared (17:30 UTC)
 

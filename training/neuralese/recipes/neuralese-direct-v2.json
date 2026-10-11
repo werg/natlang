@@ -2,7 +2,7 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-v2",
  "extends": "neuralese-direct-v1",
- "description": "Unified shared base of Neuralese direct v1 for both lines (line parity, owner 2026-10-11; plans/neuralese/LINE_PARITY.md). Same stage as neuralese-direct-v1 with: (1) the data declared here, the root-adopted 4962-document text union (3258 train / 1704 held; a strict superset of the V9 set with the same held documents), which the CLI cannot substitute; a line whose tokenizer differs binds its registered tokenizer twin (same documents, ids, splits and source groups); (2) a shared context capacity of tokens 32768 (capacity 32768 - target_tokens, so every document of the union keeps its whole preceding context); target_tokens is a per-line memory knob and steps x target_tokens x batch (2,048,000 supervised positions) stays equal across lines; (3) one monitor for both lines: Pop's 48 clean-base probes (12 each plain exact math, tool, open answer, natlang test turn) as the in-run captured drift reference and as the behaviour gate's probes, each line declaring its own measured base gate_pass; (4) the shared cadence policy: eval and full-state checkpoints at the stage end (plus the checkpoint at half way and the final/emergency saves), the drift monitor and gate-at-warn at a cadence keeping evaluation near 3% of wall time, set per line from measured seconds (fit-only).",
+ "description": "Unified shared base of Neuralese direct v1 for both lines (line parity, owner 2026-10-11; plans/neuralese/LINE_PARITY.md). Same stage as neuralese-direct-v1 with: (1) the data declared here, the root-adopted 4962-document text union (3258 train / 1704 held; a strict superset of the V9 set with the same held documents), which the CLI cannot substitute; a line whose tokenizer differs binds its registered tokenizer twin (same documents, ids, splits and source groups); (2) a shared context capacity of tokens 32768 (capacity 32768 - target_tokens, so every document of the union keeps its whole preceding context); target_tokens is a per-line memory knob and steps x target_tokens x batch (2,048,000 supervised positions) stays equal across lines; (3) one monitor for both lines: Pop's 48 clean-base probes (12 each plain exact math, tool, open answer, natlang test turn) as the in-run captured drift reference and as the behaviour gate's probes, each line declaring its own measured base gate_pass; (4) the shared cadence policy: eval and full-state checkpoints at the stage end (plus the checkpoint at half way and the final/emergency saves), the drift monitor and gate-at-warn at a cadence keeping evaluation near 3% of wall time, set per line from measured seconds (fit-only). (5) Optimizer and drift policy (coordinator decision 2026-10-11 under the owner's tie-break for a cheap, battle-tested Muon; plans/neuralese/OPTIMIZER_BAKEOFF_20261011.md): latents on MuonSR (Nesterov 0.95, cubic5 Newton-Schulz, 0.2 sqrt(max) scale, wd 0.1, idle experts skipped; Mellum2 was pretrained and SFT'd with this Muon) at one shared latent_lr 3e-6; the behaviour gate (pass >= base - 0.1) is the hard criterion, response KL warns at 0.5 (runs the gate) and stops only at 1.5 (catastrophic shift), because SFT is meant to change the distribution and the gate measures forgetting.",
  "overrides": {
   "input_bindings": {
    "direct_text": {
@@ -42,7 +42,14 @@
       "prompt_weight": 0.25,
       "max_gate_drop": 0.1
      }
-    }
+    },
+    "latent_optimizer": "muonsr",
+    "latent_lr": 3e-06,
+    "latent_ns": "cubic5",
+    "latent_weight_decay": 0.1,
+    "drift_warn": 0.5,
+    "drift_stop": 1.5,
+    "gate_response_kl": 1.5
    }
   }
  }

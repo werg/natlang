@@ -95,6 +95,12 @@ difference is declared and checked; the audit is in plans/neuralese/LINE_PARITY.
     (24 probes, texts kept) runs, and the stage stops when the gate falls below its reference minus
     `max_gate_drop`.
   - Response KL above `drift_stop` (0.5) stops at once.
+  - **Revised 2026-10-11 (coordinator decision under the owner's "keep moving"; neuralese-direct-v2):** the behaviour
+    gate (pass at least base minus 0.1) is the hard criterion. Response KL is reported with every result, warns at
+    0.5 (`drift_warn`, runs the gate) and stops only at 1.5 (`drift_stop`; the gate's `gate_response_kl` is 1.5 too),
+    a guard against catastrophic shift. Reason: SFT is meant to change the distribution, and the gate measures
+    forgetting (Pop's LFM MuonSR 3e-6: gate 26/48 = base, held CE 6.19 to 1.05, with response KL 1.16).
+  - Latent optimizer from neuralese-direct-v2: MuonSR (cubic5, wd 0.1); plans/neuralese/OPTIMIZER_BAKEOFF_20261011.md.
   - The gate runs only while drift is past warn, which keeps the eval share in budget.
 - **Behaviour gate:** `quantization.gate`, or `monitor.gate` without a quantization component. Its greedy decode is
   the Maple port's, so on other backbones the gate is reported unavailable and drift still runs.

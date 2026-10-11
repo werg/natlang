@@ -19,7 +19,6 @@
     "drift_every": 2000,
     "drift_gate_every": 6000,
     "backbone_lr": 7.5e-07,
-    "latent_lr": 3e-07,
     "monitor": {
      "gate": {
       "reference": {

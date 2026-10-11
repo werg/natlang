@@ -44,7 +44,10 @@ Classes:
 | tokens (context window) | 8192 (context ≤ 7168) | 32768 (≤ 32512) | accidental | 32768 | Every union document keeps its whole preceding context (Mellum max 13,366 tokens; Mellum2.1 supports 131,072 positions via YaRN). At 7168, 3.1% (Mellum) / 4.3% (LFM) of supervised tokens lost early context. |
 | target_tokens | 1024 | 256 | fit-only | Mellum 1024, LFM 256 | Pop's 8 GB GPU; each token is supervised once either way. |
 | steps | 2000 | 1000 | accidental (8x less supervision on LFM) | equal supervised positions: 2000 x 1024 = 2,048,000; LFM 8000 steps (fit-only consequence) | Mellum's held CE still fell at update 1500 of 2000 with the gate passing; the drift guard protects both lines. |
-| backbone_lr / latent_lr | 7.5e-6 / 3e-6 | 7.5e-7 / 3e-7 | backbone-inherent (evidence) | keep per line | LFM at the shared rates drift-stopped at update 260 (V6: gate 16/48, base 26/48). At 1/10 it finished (V8: gate 22/48, response KL 0.018). Mellum at the shared rates qualified (run-v1) and v2 holds gate 0.79 vs base 0.75 at update 1300. |
+| latent optimizer | LionSR | LionSR | shared | MuonSR (cubic5 Newton-Schulz, Nesterov 0.95, 0.2·sqrt(max) scale, wd 0.1, idle experts skipped) for both | Owner tie-break 2026-10-11: a cheap, battle-tested Muon for both lines when comparable; Mellum2 was pretrained and SFT'd with Muon. One implementation, not a per-backbone split (OPTIMIZER_BAKEOFF_20261011.md). |
+| latent_lr (MuonSR) | 1e-5 | 3e-6 (shared base value) | backbone-inherent (evidence) | per line | LFM MuonSR 3e-6: gate 26/48 = base at 300, held CE 6.19 to 1.05 (1e-5 drift-stopped under the old 0.5 bound). Mellum MuonSR 1e-5: gate 0.75 = base at 100, response KL 0.30, train CE per hour at or above LionSR 3e-6. |
+| drift policy | gate + KL stop 0.5 | gate + KL stop 0.5 | shared | behaviour gate (≥ base − 0.1) is the hard criterion; response KL warns at 0.5 (runs the gate), stops at 1.5 | Coordinator decision 2026-10-11: SFT is meant to change the distribution; the gate measures forgetting. |
+| backbone_lr / latent_lr (LionSR era) | 7.5e-6 / 3e-6 | 7.5e-7 / 3e-7 | backbone-inherent (evidence) | backbone_lr per line (latent_lr: rows above) | LFM at the shared rates drift-stopped at update 260 (V6: gate 16/48, base 26/48). At 1/10 it finished (V8: gate 22/48, response KL 0.018). Mellum at the shared rates qualified (run-v1) and v2 holds gate 0.79 vs base 0.75 at update 1300. |
 | drift_every, drift_gate_every, drift_gate_rise, drift_ce_windows, gate_response_kl | 100, 300, 0.05, 4, 0.5 | absent (V8's code predates them) | accidental (code age) | current shared code and values; cadence per the policy below | They are fixes that came after V8's frozen package (bdb6851b). |
 | eval_every / checkpoint_every | 2000 / 1000 (+ drift every 100) | 20 / 100 | accidental | cadence policy below | Owner: no super-frequent evals or saves (25% wall overhead on Pop). |
 | drift reference | quantization `preserve.teacher` held rows (Mellum teacher v3) | in-run capture on `monitor.data` (48 probes) | accidental | in-run capture on the shared 48 probes | One mechanism that works on any backbone, so the reference is the actual base model's answers. |
@@ -93,8 +96,9 @@ A checkpoint of the end-to-end stage is selected only if all of these hold on he
    - V must beat the shuffled block and the zeroed block by 0.05 nats each;
    - on exact-oracle records, V's success rate must be at least T's minus 0.02;
    - greedy-T is reported only.
-3. The shared behaviour gate passes, the drift guard never stopped, and runtime is requalified on the exact final
-   weights.
+3. The shared behaviour gate passes (the hard criterion: at least base minus 0.1), the drift guard never stopped
+   (response KL hard stop 1.5; KL 0.5 only warns and runs the gate, decision 2026-10-11; KL is reported with the
+   result), and runtime is requalified on the exact final weights.
 
 Pop's best225 (written 0.929 against shuffled 1.359) and final687 (1.446 against 1.609) are judged by this. Neither
 is selected until criterion 1 is measured on it.

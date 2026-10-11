@@ -132,6 +132,9 @@ afterwards. The rules below are consequences of this one.
   declared as the recipe's `identity_qualification` and recorded in
   `direct-certificate.json`. Older lineages keep the rule above. Direct-stage
   qualification is the identity check, held CE below base, no drift stop and
-  the behaviour gate. The Neuralese value is report-only there: its
+  the behaviour gate. The behaviour gate (pass at least base minus 0.1) is the
+  hard criterion. Response KL is reported, warns at 0.5 (which runs the gate)
+  and stops a run only at 1.5: SFT is meant to change the distribution, and the
+  gate measures forgetting (coordinator decision 2026-10-11). The Neuralese value is report-only there: its
   requirement is the end-to-end stage's, consumers reading values against
   consumers reading tokens (owner decision 2026-10-11).
