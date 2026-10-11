@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Register the bulk harness-bench SWE-rebench corpus (D13) and its two text twins, publish their manifests, commit
-only the registry and those manifests, and brief Pop. Run by swe_bulk_followup.sh when the twins are assembled.
+"""Register the bulk harness-bench SWE-rebench corpus (D13) and its two text twins: entries and manifests are committed
+and pushed by register_corpora.py from a private worktree off origin/main (never the shared checkout's registry).
+Run by swe_bulk_followup.sh when the twins are assembled.
 
-  register_swe_bulk.py --bulk BULK_OUT --twin-root TWIN_ROOT [--no-commit]
+  register_swe_bulk.py --bulk BULK_OUT --twin-root TWIN_ROOT
 """
 from __future__ import annotations
 
@@ -14,6 +15,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'scripts/neuralese_data'))
+from register_corpora import link as data_link, register  # noqa: E402
 RECORDS_ID = 'harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1'
 TWINS = {'lfm25': ('harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-bulk-20261011-v1', 'last_turn_only', 'LFM'),
          'mellum21': ('harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-bulk-20261011-v1', 'keep', 'Mellum')}
@@ -28,9 +31,7 @@ def git(*args: str) -> str:
 
 def link(name: str, target: Path) -> str:
     rel = f'data/neuralese/corpora/{name}'
-    path = ROOT / rel
-    if not path.is_symlink():
-        os.symlink(target, path)
+    data_link(rel, target)
     return rel
 
 
@@ -38,7 +39,6 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--bulk', type=Path, required=True)
     parser.add_argument('--twin-root', type=Path, required=True)
-    parser.add_argument('--no-commit', action='store_true')
     args = parser.parse_args()
     shards = sorted(p for p in (args.bulk / 'shards').iterdir() if p.is_dir())
     summaries = [json.loads((s / 'summary.json').read_text()) for s in shards]
@@ -58,11 +58,6 @@ def main() -> int:
     prepared = [json.loads(p.read_text()) for p in sorted((args.bulk / 'prepared').glob('*.summary.json'))]
     prep = {k: sum(p.get(k, 0) for p in prepared) for k in ('seen', 'written', 'no_task', 'unresolved_skipped')}
     commit = git('rev-parse', 'HEAD').strip()
-    registry_path = ROOT / 'training/neuralese_corpora.json'
-    # Another session's uncommitted registry edits must not ride along in this commit.
-    foreign = bool(git('status', '--porcelain', '--', 'training/neuralese_corpora.json').strip())
-    registry = json.loads(registry_path.read_text())
-    known = {c['id'] for c in registry['corpora']}
     entries = []
     rel = link(RECORDS_ID, args.bulk)
     entries.append({
@@ -109,24 +104,10 @@ def main() -> int:
             'tokens': receipt['tokens'],
             'notes': f"Text twin of {RECORDS_ID}, same renderer and history-reasoning policy as the v4 twin; per-shard receipts under shards/.",
         })
-    added = [e for e in entries if e['id'] not in known]
-    registry['corpora'].extend(added)
-    registry_path.write_text(json.dumps(registry, indent=2, ensure_ascii=False) + '\n')
-    for e in entries:
-        subprocess.run([sys.executable, str(ROOT / 'scripts/sync_training_corpora.py'), 'publish', '--machine', 'dgx', '--id', e['id']],
-                       cwd=ROOT, check=True)
-    print(json.dumps({'registered': [e['id'] for e in added], 'counts': total,
+    added = register(entries, f'Register bulk SWE-rebench harness-bench records and text twins (D13): '
+                              f'{total["trajectories"]} trajectories, {total["records"]} records')
+    print(json.dumps({'registered': added, 'counts': total,
                       'tokens': {e['id']: e.get('tokens') for e in entries[1:]}}, indent=1))
-    if args.no_commit:
-        return 0
-    paths = ['training/neuralese_corpora.json'] + [f'training/corpus-manifests/{e["id"]}.json' for e in entries]
-    if foreign or git('diff', '--cached', '--name-only').strip():
-        print('registry or index holds another session\'s changes; registered but left uncommitted', file=sys.stderr)
-        return 2
-    git('add', '--', *paths)
-    git('commit', '-q', '-m', f'Register bulk SWE-rebench harness-bench records and text twins (D13): {total["trajectories"]} trajectories, {total["records"]} records\n\n'
-        'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n'
-        'Claude-Session: https://claude.ai/code/session_01Q53kXkxDK2onzJmxGfyHnP', '--', *paths)
     return 0
 
 

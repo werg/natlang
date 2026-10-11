@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -51,7 +52,7 @@ def union_entry(a, receipt):
                       'receipt': f'{a.path}/receipt.json'}}
 
 
-def main(argv=None):
+def parse(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--id', required=True)
     p.add_argument('--render-dir', type=Path, required=True)
@@ -59,8 +60,16 @@ def main(argv=None):
     p.add_argument('--kind', choices=['member', 'union'], default='member')
     p.add_argument('--notes', default='')
     p.add_argument('--no-publish', action='store_true')
+    p.add_argument('--via-worktree', action='store_true',
+                   help='register, publish, commit and push through register_corpora.py (private worktree off '
+                        'origin/main) instead of editing this checkout\'s registry')
     a = p.parse_args(argv)
-    a.path = str(a.render_dir.resolve().relative_to(ROOT))
+    # The registry path is the link inside the repo, not where it resolves (corpora may live on NVMe behind a link).
+    a.path = os.path.relpath(os.path.abspath(a.render_dir), ROOT)
+    return a
+
+
+def make_entry(a) -> dict:
     receipt = json.loads((a.render_dir / 'receipt.json').read_text())
     body = member_entry(a, receipt) if a.kind == 'member' else union_entry(a, receipt)
     entry = {
@@ -83,6 +92,17 @@ def main(argv=None):
         **body,
         'notes': a.notes,
     }
+    return entry
+
+
+def main(argv=None):
+    a = parse(argv)
+    entry = make_entry(a)
+    if a.via_worktree:
+        sys.path.insert(0, str(ROOT / 'scripts/neuralese_data'))
+        from register_corpora import register
+        register([entry], f'Register {a.id}', replace=True)
+        return
     registry = json.loads(REGISTRY.read_text())
     corpora = [c for c in registry['corpora'] if c['id'] != a.id]
     replaced = len(corpora) != len(registry['corpora'])
