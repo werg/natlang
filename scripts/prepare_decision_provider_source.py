@@ -108,7 +108,14 @@ def omission(case, source_path, source_sha, line_number, row_sha, reasons):
 
 def read_prior_cases(prior_root):
     root = Path(prior_root).resolve()
-    files = sorted(root.glob('provider-*/cases.jsonl'))
+    # Annotation campaigns preserve their selected raw rows and derived program
+    # cases in separate subdirectories. Both reserve their original source IDs
+    # and groups; overlooking them silently regenerates the same worlds.
+    files = sorted({path.resolve() for pattern in (
+        'provider-*/cases.jsonl',
+        'provider-*/source-selection/cases.jsonl',
+        'provider-*/static/cases.jsonl',
+    ) for path in root.glob(pattern)})
     program_ids, program_groups = set(), set()
     source_ids, source_groups = set(), set()
     manifests = []
