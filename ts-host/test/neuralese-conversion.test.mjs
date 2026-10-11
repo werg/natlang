@@ -690,9 +690,10 @@ test('provider-expanded configured function and producer blocks become source-bo
   const functionId = `nz1_${'a'.repeat(32)}`, noteId = `nz1_${'b'.repeat(32)}`;
   const functionBody = 'Read the value held by v and return it exactly.';
   const noteBody = 'The note from the earlier producer.';
-  const invocation = 'call-7', readNode = `${invocation}#6`, turnNode = `${invocation}#turn1`;
+  const invocation = 'call-7', readNode = `${invocation}#3`, turnNode = `${invocation}#turn1`;
   const makeReceipt = (id, type, body, origin) => ({
-    schema: 'natlang.provider-expanded-read-context/1', origin, invocation_id: invocation,
+    schema: origin === 'same-run-producer' ? 'natlang.provider-expanded-read-context/3' :
+      'natlang.provider-expanded-read-context/1', origin, invocation_id: invocation,
     source_row_sha256: '1'.repeat(64), trace_sha256: '2'.repeat(64),
     transport_provenance_sha256: '3'.repeat(64), raw_request_sha256: '4'.repeat(64),
     rendered_request_sha256: '5'.repeat(64), learned_vectors: false,
@@ -705,12 +706,14 @@ test('provider-expanded configured function and producer blocks become source-bo
     } : null,
     definition: origin === 'configured-function-definition' ? { id: `nz-fn:${id}` } : null,
     block_read: { kind: 'block_read', call_id: invocation, block: id, node: readNode, seq: 3,
-      inputs: origin === 'same-run-producer' ? [{ node: 'call-3#5', block: id, port: 'block' }] : [] },
+      inputs: origin === 'same-run-producer' ? [{ node: `${invocation}#2`, block: id, port: 'block' }] : [] },
     model_turn: { kind: 'model_turn', call_id: invocation, node: turnNode, seq: 4,
       inputs: [{ node: readNode, port: 'read', block: id }] },
     context_occurrences: 1,
-    producer_write: origin === 'same-run-producer' ? { kind: 'block_write', call_id: 'call-3', seq: 2, block: id,
-      node: 'call-3#5', truncated: false, learned_vectors: false, result_type: type, text_body_sha256: digest(body) } : null,
+    producer_write: origin === 'same-run-producer' ? { kind: 'block_write', call_id: invocation, seq: 2, block: id,
+      node: `${invocation}#2`, truncated: false, learned_vectors: false, producer: 'text-marker-emulation',
+      source_kind: 'typed-text-result', result_type: type, text_body_sha256: digest(body) } : null,
+    ...(origin === 'same-run-producer' ? { writer_source_class: 'modern-typed-text-result', writer_target_selected: false } : {}),
   });
   const row = { id: 'row-7', decision: { index: 4 }, source_ref: { trajectory_id: 'run-1', invocation_id: invocation,
     source_row_sha256: '1'.repeat(64), provider_expanded_read_contexts: [
@@ -719,6 +722,9 @@ test('provider-expanded configured function and producer blocks become source-bo
     ] }, provenance: { trace_sha256: '2'.repeat(64) }, messages: [
       { role: 'system', content: 'System.' }, { role: 'user', content: [{ type: 'text', text: 'Prompt: ' },
         { type: 'neuralese', id: functionId }] },
+      { role: 'assistant', content: null, tool_calls: [{ id: 'eval-note', type: 'function',
+        function: { name: 'eval', arguments: JSON.stringify({ code: 'const note = await nl<string>`Write the note.`;' }) } }] },
+      { role: 'tool', tool_call_id: 'eval-note', content: 'stored note' },
       { role: 'tool', tool_call_id: 'scope_0', content: [{ type: 'text', text: 'note: ' },
         { type: 'neuralese', id: noteId }] },
       { role: 'tool', tool_call_id: 'debug', content: `console: {"$neuralese":{"type":"Neuralese<string>","id":"${noteId}"}}` },
@@ -728,7 +734,10 @@ test('provider-expanded configured function and producer blocks become source-bo
   assert.equal(out.messages[1].role, 'user');
   assert.deepEqual(out.messages[1].content, [{ type: 'text', text: 'Prompt: ' }, { type: 'text', text: functionBody }],
     'configured function body stays crisp at its exact request-context location');
-  assert.deepEqual(out.messages[2].content, [{ type: 'text', text: 'note: ' },
+  assert.equal(out.messages[2].tool_calls[0].function.name, 'eval',
+    'the same invocation records the producer action before the context read');
+  assert.equal(out.messages[3].tool_call_id, 'eval-note');
+  assert.deepEqual(out.messages[4].content, [{ type: 'text', text: 'note: ' },
     { type: 'read', name: `soft-state:${noteId}`, source: noteBody }],
   'a graph-authenticated same-run producer remains a typed read of its original writer');
   assert.equal(out.neuralese_conversion.external_context_inputs.length, 2);
@@ -736,11 +745,13 @@ test('provider-expanded configured function and producer blocks become source-bo
     item.qualification_certificate === false && item.training_admission === false));
   assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === noteId).learner_representation,
     'typed-read-linked-to-existing-writer');
+  assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === noteId).producer_write_node,
+    `${invocation}#2`, 'the context read remains bound to the earlier same-invocation producer node');
   assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === noteId).context_occurrences, 1,
     'only the structured typed reference remains a Neuralese read');
   assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === noteId).serialized_literal_id_mentions, 1,
     'serialized debug ID mentions remain separately observable');
-  assert.equal(out.messages[3].content, `console: {"$neuralese":{"type":"Neuralese<string>","id":"${noteId}"}}`,
+  assert.equal(out.messages[5].content, `console: {"$neuralese":{"type":"Neuralese<string>","id":"${noteId}"}}`,
     'quoted JSON text remains literal rather than becoming a vector read');
   assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === functionId).learner_representation,
     'crisp-external-function-context');

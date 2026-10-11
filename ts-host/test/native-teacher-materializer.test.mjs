@@ -1203,7 +1203,7 @@ test('materialization preserves same-call provider-expanded read provenance with
   assert.equal(receipt.length, 2);
   assert.deepEqual(receipt.map(item => [item.block.id, item.origin]), [
     [functionId, 'configured-function-definition'], [noteId, 'same-run-producer']]);
-  assert.equal(receipt[1].schema, 'natlang.provider-expanded-read-context/2');
+  assert.equal(receipt[1].schema, 'natlang.provider-expanded-read-context/3');
   assert.equal(receipt[1].parent_invocation_id, 'parent-call');
   assert.equal(receipt[1].source_trajectory_index, 0);
   assert.equal(receipt[1].source_request_sha256, 'a'.repeat(64));
