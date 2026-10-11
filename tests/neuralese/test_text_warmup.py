@@ -1491,7 +1491,8 @@ def test_input_map_warmup_trains_the_map_and_exports_it_beside_serving_heads(tmp
     assert 'shallow' not in evals[-1]['projection_held_errors']
     identity=json.loads((run/'plan.json').read_text())['identity']
     assert identity['supervision_policy']['objectives']==[
-        'full_projection','input_map_self_consistency','next_token_ce']
+        'full_projection','input_map_self_consistency','next_token_ce',
+        'generated_tail_full_projection_after_gold_fork']  # ec36ec06 (DECISIONS.md): projector beyond gold forks
     assert identity['display']['secondary_objective']=='neuralese_input_map_self_consistency'
     assert identity['display']['secondary_head']=='heads.input_map'
     assert all(r['updates'].get('input_map') for r in rows)
@@ -1517,7 +1518,8 @@ def test_input_map_reports_name_the_actual_secondary_projection():
     assert 'sketch_mse' not in metrics[0]
     policy=text_supervision_policy()
     assert policy['objectives']==[
-        'full_projection','input_map_self_consistency','next_token_ce']
+        'full_projection','input_map_self_consistency','next_token_ce',
+        'generated_tail_full_projection_after_gold_fork']  # ec36ec06 (DECISIONS.md): projector beyond gold forks
     assert warmup_display_labels()['secondary_head']=='heads.input_map'
     assert display_update_flags({'backbone': True, 'input_map': True}) == {
         'backbone': True, 'input_map': True}
