@@ -31509,6 +31509,50 @@
       "admission": "prepared-queue-only-root-review-required-no-generation-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Prepared no-call V81 buffer from the 21-program/151-label disjoint V41 prefix static derivative; exact prefix/case/source/criteria/replay receipts are separately registered. Uses runtime-small-teachers-v17 and completed V80 v2 predecessor lanes. Plan remains root_approved=false; no workers launched. Mutable status, worker journals/logs, results excluded."
+    },
+    {
+      "id": "luna-direct-clean-base-untrained-heads-monitor-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v2",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-initialization-and-clean-base-monitor-diagnostic",
+      "source_class": "untrained-clean-base-heads-and-behavior-probe-diagnostic",
+      "training_admission": false,
+      "admission": "initialization-and-behavior-diagnostic-only-no-training-or-foundation-qualification",
+      "independent_new_worlds": 0,
+      "notes": "Preserves the CPU/offline initialized untrained heads artifact, exact probe inputs/results, manifest, preparation/launch receipts, and failed first preparation attempt. No training or generation was launched. These artifacts do not establish task quality or foundation qualification."
+    },
+    {
+      "id": "luna-direct-untrained-base-behavior-gate-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-base-behavior-20261011-v2",
+      "include": [
+        "capture_base_gate.py",
+        "report.json"
+      ],
+      "split": "held-untrained-base-behavior-diagnostic",
+      "source_class": "untrained-base-behavior-gate-report",
+      "training_admission": false,
+      "admission": "48-probe-behavior-diagnostic-only-no-model-or-training-qualification",
+      "independent_new_worlds": 0,
+      "notes": "Exact clean-base behavior gate capture and 48-probe report. Gate pass is 26/48; metrics are descriptive diagnostics for an untrained base, not a qualification certificate or training admission."
+    },
+    {
+      "id": "luna-choice-confidence-v81-root-approval-evidence-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v81-v41-prefix-runtimev17-v1",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-independent-review-v1.json"
+      ],
+      "split": "held-generation-authorization-and-independent-review",
+      "source_class": "held-provider-campaign-review-evidence",
+      "training_admission": false,
+      "admission": "approval-and-review-evidence-only-no-provider-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Stable independent prelaunch validation and owner-approved immutable plan for V81. Mutable campaign launcher status, journals, logs, and result files are intentionally outside this receipt."
     }
   ],
   "coverage_backlog": [

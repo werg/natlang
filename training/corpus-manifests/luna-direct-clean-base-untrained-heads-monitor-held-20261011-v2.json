@@ -1,0 +1,60 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-direct-clean-base-untrained-heads-monitor-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v2",
+  "files": [
+    {
+      "path": "SHA256SUMS",
+      "bytes": 1403,
+      "sha256": "6e9a9708946cc51d7fd8ddc1ce5dbfa0229503eb7dbd0473b17df713964439ab"
+    },
+    {
+      "path": "SHA256SUMS-inputs",
+      "bytes": 523,
+      "sha256": "3696bd18add49b80224da552f6baa08e1b71eadf213130d617c6619b95575ccd"
+    },
+    {
+      "path": "artifact/clean-base-untrained-heads.pt",
+      "bytes": 26393909,
+      "sha256": "3853846b8d69798382fb3b6341aed8b1ac6277ba7eea795ec460c19d1c208fe1"
+    },
+    {
+      "path": "attempt-01-failure.json",
+      "bytes": 495,
+      "sha256": "143c8b061db0654431d31af55d62eb9df289694d8befc7a24dd432700a4fbb56"
+    },
+    {
+      "path": "container-launch.json",
+      "bytes": 1207,
+      "sha256": "7319e1b7c47b1aea39b959cdfd72c4e25b12b7160bf472304203041c20d31efb"
+    },
+    {
+      "path": "init-receipt.json",
+      "bytes": 4482,
+      "sha256": "b06852d68ff0da0ce7440fe3082f19bcf46caf78b02055c56cf282196cd48600"
+    },
+    {
+      "path": "monitor/probe-manifest.json",
+      "bytes": 2925,
+      "sha256": "04978f860d7287868a5b1660b9a12fbb153793f5d14c19868e9d414cea061475"
+    },
+    {
+      "path": "monitor/probes.jsonl",
+      "bytes": 290679,
+      "sha256": "0bce5275646cd95ae36374f41769602995c8587c871275653b26c1cf260c3d52",
+      "lines": 48
+    },
+    {
+      "path": "preparation-summary.md",
+      "bytes": 1040,
+      "sha256": "6071101293bed30fa37d620e2f0d2eccb18ed5d25a8eadee392ced397dc61eb0"
+    },
+    {
+      "path": "prepare_clean_base_heads.py",
+      "bytes": 6263,
+      "sha256": "0d21df3d09b7882fec74dd76422df9ed5026b48fcbcd7b3823057aaab5793406"
+    }
+  ],
+  "bytes": 26702926
+}

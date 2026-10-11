@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-direct-untrained-base-behavior-gate-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-base-behavior-20261011-v2",
+  "files": [
+    {
+      "path": "capture_base_gate.py",
+      "bytes": 1308,
+      "sha256": "b22d464ad6f26b646aa63b4bbb78ddfcc544585af2b316c78f86b446eabd298f"
+    },
+    {
+      "path": "report.json",
+      "bytes": 33290,
+      "sha256": "3d64dd2917c2a0538f95d109f0d62975c3c71449aa4ae06e5473d1feabc46b50"
+    }
+  ],
+  "bytes": 34598
+}
