@@ -401,7 +401,7 @@ def main(argv=None):
         quant.stage['end'] = a.steps
     from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout, geometry_bytes
     from .memory_policy import effective_cuda_free_bytes
-    memory_estimator = AdaptiveGraphMemory(geometry_version='direct-sft-window-v1')
+    memory_estimator = AdaptiveGraphMemory(geometry_version='direct-sft-window-v2:fp32-rmsnorm-casts')
     budget = {'epochs': a.epochs, 'updates': a.steps, 'batch_tokens': a.batch_tokens,
               'train_windows': len(train_windows), 'target_windows': len(targets),
               'documents': sum(len(d) for d in sampler.documents.values()),
@@ -786,17 +786,24 @@ def main(argv=None):
         if not fits:
             raise MemoryError('neuralese_direct estimated update exceeds reusable CUDA memory: '
                               f'{incremental} bytes required, {available} available; no forward was started')
+        layout = backbone_memory_layout(backbone, checkpointed=checkpointed)
         return {'mode': mode, 'checkpoint_layers': checkpointed, 'context_tokens': context,
                 'target_tokens': target, 'activation_geometry_bytes': raw,
                 'predicted_activation_bytes': predicted, 'gradient_optimizer_floor_bytes': floor,
                 'estimated_incremental_peak_bytes': incremental, 'reusable_cuda_bytes': available,
-                'estimator_margin': memory_estimator.margin, 'estimator_geometry': memory_estimator.geometry_version}
+                'estimator_margin': memory_estimator.margin, 'estimator_geometry': memory_estimator.geometry_version,
+                'activation_layout': {key: value for key, value in layout.items()
+                                      if key in ('width', 'layers', 'intermediate', 'kv_width', 'dtype_bytes',
+                                                 'fp32_norm_saved_bytes_per_token',
+                                                 'fp32_norm_transient_bytes_per_token')}}
 
     for step_index in loop:
         batch, covered = schedule[step_index]
         point, mix = ('bf16', 0.0) if quant is None else quant.sampled(step_index)[:2]
         tick = time.time()
         plan = execution_plan(batch)
+        print(json.dumps({'event': 'execution_plan', 'step': step_index + 1,
+                          'source_documents': [window['document'] for window in batch], **plan}), flush=True)
         backbone.checkpoint_layers = plan['checkpoint_layers']
         update_start_allocated = int(torch.cuda.memory_allocated(a.device)) if cuda_active else 0
         if cuda_active:
