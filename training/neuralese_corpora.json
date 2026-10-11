@@ -32249,6 +32249,86 @@
         "luna-neuralese-direct-lfm-base-v8-full-checkpoint-held-20261011-v1"
       ],
       "notes": "Additive held synthetic mechanism evidence against the V8 export; no learned/trained TCP, training admission, or end-to-end task/runtime qualification. tcp-readout-mechanism-v1 exited 1 and failed its synthetic nonidentity mechanism check at default natural precision (incremental logits delta 0.0035095); preserve this failure. tcp-readout-mechanism-v2 uses matmul_precision=highest and its synthetic mechanism check passed (incremental logits delta 0.00002575; finite gradients), but tcp_artifact_qualified and full_runtime_qualified remain false. tcp-runtime-mechanism-v1 passed the synthetic runtime mechanism check, but runtime_qualified remains false; it tests mechanism only. Launch receipts are preserved exactly, including uncommitted_runtime_changes=true where present; this records the frozen-launch provenance limitation and is not retrospectively repaired. No trained TCP certificate is implied."
+    },
+    {
+      "id": "luna-choice-confidence-v87-closed-results-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v87-v41-prefix-runtimev17-v1",
+      "include": [
+        "campaign-launch.json",
+        "root-supervisor-launch-v1.json",
+        "worker-*/queue.jsonl",
+        "worker-*/journal.jsonl",
+        "worker-*/case-*/results.jsonl",
+        "worker-*/case-*/results.jsonl.manifest.json",
+        "worker-*/case-*/jobs/*.trace.jsonl",
+        "worker-*/case-*/jobs/*.result.json"
+      ],
+      "split": "held-closed-provider-generation-results",
+      "source_class": "closed-native-teacher-trajectory-and-trace-evidence",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "closed output evidence only; no training, trace, recurrence, or independent-world admission",
+      "notes": "V87 closed 51/51 programs; results/journals/queues/trace snapshots are pinned. Keep exact source annotation comparisons in the separate quality review; no automatic admission."
+    },
+    {
+      "id": "luna-choice-confidence-v87-quality-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v87-choice-confidence-final-v1",
+      "include": [
+        "audit.json",
+        "audit.md",
+        "FILES.sha256.json"
+      ],
+      "split": "held-quality-review",
+      "source_class": "independent-closed-output-quality-audit",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "quality evidence only; disagreement comparisons do not grant data or trace admission",
+      "notes": "V87 review: 51 programs, 404 source items, 372 exact inherited annotation agreements and 32 differences. All item states have item-bound saved-rendered-request joins; 80 also have same-invocation capture snapshots. No original-wire claim."
+    },
+    {
+      "id": "luna-choice-confidence-v88-v41-prefix-runtimev17-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v88-v41-runtimev17-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-hold-check-v1.json",
+        "source-review/**/*",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-reviewed-generation-inputs",
+      "source_class": "held-luna-provider-generation-inputs",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "root-approved generation inputs only; excludes active campaign state, journals, logs, and results",
+      "notes": "V88 approved plan SHA 8f5ce633c13c57a03fbf27a3bae5f8cf304e7cc5e66ea94b422b13f6cb8646cb. Fifty source-visible programs / 400 train items, 0 current hold overlap, V17 runtime; active workers must not be treated as closed."
+    },
+    {
+      "id": "luna-choice-confidence-v88-root-approval-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v88-v41-runtimev17-v1",
+      "include": [
+        "reviewed-plan-root-approved-v1.json",
+        "root-owner-approval-v1.json",
+        "root-hold-check-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "split": "held-provider-generation-approval-evidence",
+      "source_class": "root-reviewed-generation-approval-and-launch-receipt",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "approved inputs/launch evidence only; active worker output is not included",
+      "notes": "Root approval and supervisor launch receipt bind V88 plan SHA 8f5ce633c13c57a03fbf27a3bae5f8cf304e7cc5e66ea94b422b13f6cb8646cb. Excludes mutable campaign-launch and worker journals/logs/results."
     }
   ],
   "coverage_backlog": [
