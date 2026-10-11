@@ -86,15 +86,22 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
         heads.add_read_adapter(eps=read_adapter_eps)
     if state is not None:
         if state.get("lora"):
-            from ..train.adapters import inject_lora, lora_state
-            inject_lora(backbone, state["lora_layers"], rank=state["lora_rank"],
-                        alpha=metadata.get("lora_alpha", 2 * state["lora_rank"]))
-            if set(lora_state(backbone)) != set(state["lora"]):
-                raise ValueError("Checkpoint backbone adapter names do not match the model")
-            parameters = dict(backbone.hf.named_parameters())
-            with torch.no_grad():
-                for name, value in state["lora"].items():
-                    parameters[name].copy_(value.to(parameters[name]))
+            if getattr(backbone, "ternary", False):
+                # Maple's existing QAT adapters expose their own parameter names
+                # and remain bound to explicit metadata; legacy LFM inference
+                # must not rewrite this restoration path.
+                from ..train.adapters import inject_lora, lora_state
+                inject_lora(backbone, state["lora_layers"], rank=state["lora_rank"],
+                            alpha=metadata.get("lora_alpha", 2 * state["lora_rank"]))
+                if set(lora_state(backbone)) != set(state["lora"]):
+                    raise ValueError("Checkpoint backbone adapter names do not match the model")
+                parameters = dict(backbone.hf.named_parameters())
+                with torch.no_grad():
+                    for name, value in state["lora"].items():
+                        parameters[name].copy_(value.to(parameters[name]))
+            else:
+                from ..train.adapters import restore_lora_checkpoint
+                restore_lora_checkpoint(backbone, state, alpha=metadata.get("lora_alpha"))
         heads.load_state_dict(state["heads"])
         # Restore declared full-layer or Maple-QAT structure before its exact values.
         if state.get('maple_qat'):

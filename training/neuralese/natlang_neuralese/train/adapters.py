@@ -180,6 +180,56 @@ def lora_state(backbone: PortBackbone) -> dict[str, torch.Tensor]:
     return {n: p.detach().cpu() for n, p in backbone.hf.named_parameters() if "lora_" in n}
 
 
+def restore_lora_checkpoint(backbone: PortBackbone, checkpoint: dict, *, alpha: int | None = None) -> dict:
+    """Install and restore an embedded LFM LoRA checkpoint with exact structure checks.
+
+    Current serving exports declare ``lora_layers`` and ``lora_rank``. Older
+    recurrence checkpoints declare rank in ``identity.options.rank`` and only
+    carry the named tensors; for those, layers are recovered from the complete
+    tensor-name set and then checked against the injected structure.
+    """
+    saved = checkpoint.get("lora") or {}
+    if not isinstance(saved, dict) or not saved:
+        raise ValueError("checkpoint must contain a nonempty LoRA tensor mapping")
+    layers = checkpoint.get("lora_layers")
+    if layers is None:
+        if _ternary(backbone):
+            raise ValueError("Maple LoRA checkpoints must declare their adapter layer set")
+        import re
+        matches = [re.fullmatch(r"model\.layers\.(\d+)\..+\.lora_[AB]\.neuralese\.weight", name)
+                   for name in saved]
+        if any(match is None for match in matches):
+            raise ValueError("legacy LoRA tensor names do not match the supported LFM adapter schema")
+        layers = sorted({int(match.group(1)) for match in matches})
+    elif (not isinstance(layers, (list, tuple)) or not layers or
+          any(not isinstance(layer, int) or isinstance(layer, bool) or layer < 0 for layer in layers) or
+          len(set(layers)) != len(layers)):
+        raise ValueError("checkpoint LoRA layers must be a nonempty unique list of nonnegative integers")
+    else:
+        layers = sorted(layers)
+    identity = checkpoint.get("identity") or {}
+    rank = checkpoint.get("lora_rank")
+    if rank is None:
+        rank = (identity.get("options") or {}).get("rank")
+    if not isinstance(rank, int) or isinstance(rank, bool) or rank < 1:
+        raise ValueError("checkpoint must declare a positive LoRA rank")
+    if alpha is not None and (not isinstance(alpha, int) or isinstance(alpha, bool) or alpha < 1):
+        raise ValueError("LoRA alpha must be a positive integer when declared")
+    inject_lora(backbone, layers, rank=rank, alpha=alpha if alpha is not None else 2 * rank)
+    current = lora_state(backbone)
+    if set(current) != set(saved):
+        missing = sorted(set(current) - set(saved))[:8]
+        extra = sorted(set(saved) - set(current))[:8]
+        raise ValueError(f"checkpoint LoRA names do not exactly match injected structure; missing={missing}, extra={extra}")
+    parameters = dict(backbone.hf.named_parameters())
+    with torch.no_grad():
+        for name, value in saved.items():
+            if not isinstance(value, torch.Tensor) or tuple(value.shape) != tuple(current[name].shape):
+                raise ValueError(f"checkpoint LoRA tensor shape differs from adapter structure: {name}")
+            parameters[name].copy_(value.to(parameters[name]))
+    return {"layers": layers, "rank": rank, "tensor_count": len(saved)}
+
+
 def adapter_layers(backbone: PortBackbone) -> list[int]:
     if _ternary(backbone):
         return sorted(_maple_adapters(backbone))
