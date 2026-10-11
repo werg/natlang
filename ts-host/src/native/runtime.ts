@@ -1126,8 +1126,12 @@ export class NativeSession {
     const tool = /\b(\w+) is not defined/.exec(message)?.[1];
     const toolNote = tool && NATIVE_TOOLS.includes(tool) && tool !== 'return_result' ?
       `\n${tool} is one of your tools: call it as a tool, not from eval code.` : '';
+    const bindingNote = tool && !NATIVE_TOOLS.includes(tool) ?
+      `\n${tool} must be bound in this eval's scope before you use it. Mentioning it in instructions does not declare it. ` +
+      'JavaScript template interpolation runs when the template is created: create an item-specific template inside the callback or loop that binds the item, ' +
+      'or mention a future child parameter by name in literal instructions and pass its value when calling the child.' : '';
     const repeatNote = repeated ? '\nThis is the code of your previous eval, and it failed the same way: change it before running it again.' : '';
-    return toolNote + repeatNote + (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
+    return toolNote + bindingNote + repeatNote + (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
       (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
       (receipts.length ? `\nCompleted service calls succeeded:\n${receipts.join('\n')}\nRepair subsequent work without repeating an already completed write.` : '') +
       '\nNothing else from this eval was kept. This refers to new eval bindings and the staged result; ' +
