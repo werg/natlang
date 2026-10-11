@@ -832,7 +832,6 @@ def main(argv=None):
         if not fits and cuda_active and not cache_released:
             # On unified memory (DGX GB10) CUDA allocations only use MemFree: stale page cache of read-once
             # checkpoints and corpora hides reusable memory. Drop it once (the ledger's shared release) and re-measure.
-            import os
             import subprocess
             cache_released.append(True)
             ledger = Path(os.environ.get('NATLANG_REPO', path_root('repo'))) / 'scripts' / 'memory_ledger.py'
