@@ -34184,6 +34184,39 @@
         "luna-v43-runtimev18-repeat14-closed-raw-held-20261011-v1"
       ],
       "notes": "14 repeated source programs/111 items at seed base 43101, matching the approved V18 repeat14 IDs and seed mapping. Same-world qualification only; independent new worlds=0. Launch observation is cutoff-scoped."
+    },
+    {
+      "id": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/README.md",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/actual/direct-stage-plan.json",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/actual/run.recipe-launch.json",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v1/container-launch-receipt.json",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v1/container.log",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v1/owner-launch-exit.json",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v1/preparation-receipt.json",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v1/recipe-without-parity.json",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v1/root-approval.json",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v2/owner-launch-exit.json",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v2/recipe-with-diagnostic-parity.json",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v2/root-retry-approval.json",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v2/wrapper-failure.log",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/recipe.json",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/root-approved-launch.json",
+        "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/source-map.json"
+      ],
+      "split": "held-diagnostic-launch-evidence-no-admission",
+      "source_class": "native-full-state-diagnostic-continuation-launch",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "Held diagnostic launch provenance only. V3 is root-approved and currently running; mutable run outputs are excluded until terminal. V1 failed preflight before model launch because parity was omitted; V2 failed before container start because of a wrapper runtime-path collision. No model, runtime, task, or corpus qualification is claimed.",
+      "derived_from": [
+        "neuralese-native-e2e-best225-serving-diagnostic-held-20261011-v1",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1"
+      ],
+      "notes": "V3 uses the exact best225 full-state checkpoint and original approved continuation parameters with parity=diagnostic and a fresh output/runtime path. Inputs, stage plan, frozen shared recipe launch metadata, root approval, source map, and both setup-failure attempts are pinned. Checkpoint weights, runtime source copies, and mutable V3 container log/receipt are excluded; terminal evidence will be a separate additive snapshot."
     }
   ],
   "coverage_backlog": [

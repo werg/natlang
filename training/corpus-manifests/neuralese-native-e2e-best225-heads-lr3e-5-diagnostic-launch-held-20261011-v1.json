@@ -1,0 +1,89 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-launch-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/README.md",
+      "bytes": 1220,
+      "sha256": "b23fa62f84624f01dc4ffc4b96cd8417572a0d82f55bd81553248f274501a24c"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/actual/direct-stage-plan.json",
+      "bytes": 23062,
+      "sha256": "4ccdabad596fb7596587305aed3fb21a542a042caeae31b461a294c2d0a6e2f7"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/actual/run.recipe-launch.json",
+      "bytes": 3919,
+      "sha256": "3d8e3350a2115930b8c720280f2d07f7df3fbe353d3e656e94645147ede7e7ea"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v1/container-launch-receipt.json",
+      "bytes": 10988,
+      "sha256": "b62bd15b07240d27dc13a6e47dd9c62604aa6ac6ec74230fc09bde22d5cacbf1"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v1/container.log",
+      "bytes": 1405,
+      "sha256": "d596e5b5ddca33fcf61c4f2faba1677f3bea3c7a32b50628f75db0b1ab1bf298"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v1/owner-launch-exit.json",
+      "bytes": 72,
+      "sha256": "cb9fcf12c1679b8f7755bfef40241a33d6b57e74a319acd0d26477140d9dca13"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v1/preparation-receipt.json",
+      "bytes": 21951,
+      "sha256": "50073d12e27822ecbe9992858aaa386e10739da01ad6628849345f3546ce1bc7"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v1/recipe-without-parity.json",
+      "bytes": 20028,
+      "sha256": "18929c2d53ec9bb1fee85464c605e550957a9b91d399c55c1088bd03b8989144"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v1/root-approval.json",
+      "bytes": 906,
+      "sha256": "7a9cab15209f9b2ee3fb62be686604bf60c9fdfe3152dc2f5b0bfe6926588f74"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v2/owner-launch-exit.json",
+      "bytes": 72,
+      "sha256": "0f98fa0bdfd83555a509b1d54b5b37d98d7ee38d2c8b2bf1549d167107c9663c"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v2/recipe-with-diagnostic-parity.json",
+      "bytes": 20064,
+      "sha256": "91ca602b63f241274364ee4f337904002663436b62b7fbf81ae02e5f07031d67"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v2/root-retry-approval.json",
+      "bytes": 1014,
+      "sha256": "96bf66932b733d6e0993f2c01914aded3da0e8688fba40dd699f35772571f6d3"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/attempt-v2/wrapper-failure.log",
+      "bytes": 860,
+      "sha256": "1073ebb0e8559c186bc39a5e70dca3827ce9ad1bbe806faa21982b636ac8e7f2"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/recipe.json",
+      "bytes": 20052,
+      "sha256": "edb97fa7454f2211ab42069a34f6de4275aba9a5a086060ab0e70644eb4fa799"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/root-approved-launch.json",
+      "bytes": 2122,
+      "sha256": "2311858c2e29b1d57888d56508e90d017987cff16f6b324933bf6e85894b61e6"
+    },
+    {
+      "path": "neuralese-native-e2e-best225-heads-lr3e-5-diagnostic-v3-launch-held-20261011-v1/source-map.json",
+      "bytes": 3200,
+      "sha256": "363f2ae7764e2b7c59a0a1b10448b8b9f0cfee22e9ace8d091713cba65d5aefe"
+    }
+  ],
+  "bytes": 130935
+}

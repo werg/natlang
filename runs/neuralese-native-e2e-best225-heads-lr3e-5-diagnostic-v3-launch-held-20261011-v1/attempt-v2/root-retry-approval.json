@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "python3",
+    "scripts/run_neuralese_recipe.py",
+    "--recipe",
+    "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/native-e2e-best225-heads-lr3e-5-diagnostic-prepared-v1/recipe-v2.json",
+    "--artifact-root",
+    "/srv/storage",
+    "--hf-hub-cache",
+    "/srv/storage/natlang-artifacts/hf-cache-lfm25-postqualification-v1/hub",
+    "--launch-metadata",
+    "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/native-e2e-best225-heads-lr3e-5-diagnostic-prepared-v1/container-launch-receipt-v2.json",
+    "--log",
+    "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/native-e2e-best225-heads-lr3e-5-diagnostic-prepared-v1/container-v2.log",
+    "--device",
+    "cuda"
+  ],
+  "recipe_sha256": "91ca602b63f241274364ee4f337904002663436b62b7fbf81ae02e5f07031d67",
+  "reason": "Explicit shared diagnostic parity declaration required; initiallaunch failed before creatingoutput/GPU work. Numerical parameters unchanged."
+}

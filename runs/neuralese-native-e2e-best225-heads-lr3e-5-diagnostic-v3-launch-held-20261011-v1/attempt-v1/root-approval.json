@@ -1,0 +1,24 @@
+{
+  "approved_at": "2026-10-11T18:33:25.707795+00:00",
+  "recipe_sha256": "18929c2d53ec9bb1fee85464c605e550957a9b91d399c55c1088bd03b8989144",
+  "changes": {
+    "curriculum_change": [
+      null,
+      [
+        "heads_lr"
+      ]
+    ],
+    "heads_lr": [
+      0.0003,
+      3e-05
+    ]
+  },
+  "input_sha256": {
+    "continue_from": "6a8e1e12b983c0eae8e90348cae53090de7381d2998eadee171c2cd602408ade",
+    "direct_artifact_manifest": "f3ff523b6b0d8b0e5bfd3a949a87feb4e91a1ca08c268e1cf0c57b9b106e230c",
+    "direct_parent_proof": "0fbc0cc1f55aaa1ef932bc4d1ea919a7b151fdbb6fd9874841d74c225f3011ca",
+    "pieces": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6",
+    "records": "35a52f34de92f226bb68e34c2a28cd11dc51afcc56ccb685b7852b62b8cb549a"
+  },
+  "scope": "diagnostic heads learning rate continuation; no quality/qualification inheritance; launch after current owned GPU run closes"
+}

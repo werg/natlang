@@ -1,0 +1,15 @@
+{"stage_module": "natlang_neuralese.train.trajectories", "hf_hub_cache": "/srv/storage/natlang-artifacts/hf-cache-lfm25-postqualification-v1/hub", "cached_model_repositories": ["models--LiquidAI--LFM2.5-350M"]}
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/werg/natlang/training/neuralese/natlang_neuralese/train/recipe.py", line 1402, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/werg/natlang/training/neuralese/natlang_neuralese/train/recipe.py", line 1169, in main
+    return run_declared_direct_stage(recipe, args.recipe, args.out, args.launch_metadata, args.device, args.handoff)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/werg/natlang/training/neuralese/natlang_neuralese/train/recipe.py", line 959, in run_declared_direct_stage
+    check_declared_stage(recipe)
+  File "/home/werg/natlang/training/neuralese/natlang_neuralese/train/line_parity.py", line 193, in check_declared_stage
+    raise ValueError('declare "parity": {"line": "mellum"|"lfm", "stage": "direct"|"e2e"} (or "diagnostic" for '
+ValueError: declare "parity": {"line": "mellum"|"lfm", "stage": "direct"|"e2e"} (or "diagnostic" for a diagnostic run) so the launch is checked against the shared base (LINE_PARITY.md)
