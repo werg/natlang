@@ -430,6 +430,14 @@ def main(argv=None):
             mixture = soft_token_mixture(backbone.logits, table, hidden)
             if not torch.equal(neuralese(hidden, mixture.to(hidden.dtype)), mixture.to(hidden.dtype)):
                 raise RuntimeError('NeuraleseProjection is not the soft-token mixture at initialization')
+            token_choice_identity = token_choice is None or torch.equal(token_choice(hidden), hidden)
+            if not token_choice_identity:
+                raise RuntimeError('TokenChoiceProjection is not the identity at initialization')
+        # The lineage's identity qualification (recipe identity_qualification, direct certificate).
+        (a.out / 'identity-check.json').write_text(json.dumps({
+            'passed': True, 'step': 0, 'neuralese_projection_equals_soft_token_mixture': True,
+            'token_choice_projection': 'absent' if token_choice is None else 'identity',
+            'logits_equal_base': True}, indent=2) + '\n')
         evaluate()
     order = random.Random(f'{a.seed}:direct')
     for _ in range(step):  # the sampler is keyed by step: replay its draws
@@ -484,6 +492,8 @@ def main(argv=None):
     value_qualified = math.isfinite(value_delta) and value_delta < -a.value_margin
     qualified = bool(finished and final.get('ce_delta', 0.0) < 0 and value_qualified and not drift_stopped and
                      (gate is None or gate['passed']))
+    identity_file = a.out / 'identity-check.json'
+    final.update(identity_check=json.loads(identity_file.read_text()) if identity_file.is_file() else None)
     final.update(status='complete' if finished else 'checkpointed_on_signal', steps=step, best=best,
                  behaviour_gate=gate, drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
                  value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta')},

@@ -423,6 +423,9 @@ def recipe_identity_sha256(path):
     return sha(path)
 
 
+DIRECT_IDENTITY_QUALIFICATION = 'neuralese_direct_step0_identity'
+
+
 def load_recipe(path):
     recipe = resolve_recipe_data(path)
     if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
@@ -515,7 +518,16 @@ def load_recipe(path):
             raise ValueError('the view operator gate requires the view stage (a raw_recurrence_training stage) it measures')
         declared.add(name)
         complete.add(name)
-    if not identity_stages or not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages']):
+    # Neuralese direct v1 (owner decision 2026-10-11, AGENTS.md "Neuralese training foundation"): a lineage made only of
+    # neuralese_direct stages starts from the base model at an exact identity with no warm-up; each stage's step-0
+    # identity check (direct_sft: NeuraleseProjection equals the soft-token mixture, TokenChoiceProjection absent or
+    # the identity, so logits equal the base model's) is its identity qualification. Older lineages keep the rule.
+    direct_lineage = all(s['kind'] == 'neuralese_direct' for s in recipe['stages'])
+    if direct_lineage and recipe.get('identity_qualification') != DIRECT_IDENTITY_QUALIFICATION:
+        raise ValueError('a neuralese_direct lineage must declare identity_qualification ' +
+                         repr(DIRECT_IDENTITY_QUALIFICATION))
+    if not direct_lineage and (not identity_stages or
+                               not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages'])):
         raise ValueError('neuralese recipe must declare identity and embedding distillation stages')
     validate_input_bindings(recipe)
     if 'quantization' in recipe:
@@ -1274,6 +1286,18 @@ def main(argv=None):
                                'stages': [{'kind': report['kind'], 'report': str(args.out / (report['id'] + '-report.json')),
                                            'report_sha256': sha(args.out / (report['id'] + '-report.json'))} for report in reports if report['kind'] in {'token_identity', 'causal_embedding_distillation'}]}
                 write_json(args.out / 'foundation-certificate.json', certificate)
+            if kind == 'neuralese_direct':
+                stage_report = json.loads(Path(report['artifact']).read_text())
+                identity = stage_report.get('identity_check') or {}
+                certificate = {'schema': 'natlang.neuralese-direct-certificate/1',
+                               'qualified': bool(stage_report.get('qualified')) and identity.get('passed') is True,
+                               'identity_qualification': {'kind': DIRECT_IDENTITY_QUALIFICATION, **identity},
+                               'owner_decision': 'Neuralese direct v1, 2026-10-11 (AGENTS.md "Neuralese training '
+                                                 'foundation")',
+                               'heads_sha256': sha(args.heads), 'recipe_sha256': plan['recipe_sha256'],
+                               'stage': {'id': stage['id'], 'report': str(report_path), 'report_sha256': sha(report_path),
+                                         'artifact_sha256': report['artifact_sha256']}}
+                write_json(args.out / 'direct-certificate.json', certificate)
             if args.until == stage['id']:
                 return
     print(json.dumps({'status': 'recipe_completed', 'foundation_runtime_qualified': any(r['kind'] == 'raw_runtime_qualification' for r in reports)}), flush=True)

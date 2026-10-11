@@ -54,7 +54,7 @@ SCHEMA = 'natlang.neuralese-quantization/1'
 FORMATS = ('bf16', 'int4', 'ternary')
 GROUPS = ('experts', 'attention', 'conv', 'mlp', 'router', 'embeddings', 'heads')
 GATES = ('required', 'report', 'none')
-STAGE_KINDS = ('core_text_warmup', 'raw_recurrence_training')
+STAGE_KINDS = ('core_text_warmup', 'raw_recurrence_training', 'neuralese_direct')
 
 
 def _number(value):

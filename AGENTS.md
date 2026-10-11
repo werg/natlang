@@ -118,3 +118,11 @@ afterwards. The rules below are consequences of this one.
 - Runtime transport/gradient replay needs separate qualification against those
   exact weights. Legacy marker/RMS checkpoints do not inherit the new foundation
   certificate, and backbone changes require channel requalification.
+- Exception, Neuralese direct v1 (owner decision 2026-10-11,
+  `plans/neuralese/NEURALESE_DIRECT_V1.md`): a lineage made only of
+  `neuralese_direct` stages starts from the base model with no warm-up and needs
+  no identity or embedding-distillation stage. Its stage's step-0 identity check
+  (NeuraleseProjection equals the soft-token mixture, TokenChoiceProjection
+  absent or the identity, logits equal the base) is the identity qualification,
+  declared as the recipe's `identity_qualification` and recorded in
+  `direct-certificate.json`. Older lineages keep the rule above.

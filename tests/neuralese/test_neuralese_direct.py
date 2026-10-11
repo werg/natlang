@@ -185,3 +185,21 @@ def test_declared_context_only_spans_are_masked_with_the_failed_turns():
             context_only_spans({**row, 'context_only_spans': bad})
     with pytest.raises(ValueError, match='native token_ids'):
         context_only_spans({'context_only_spans': [[0, 1]]})
+
+
+def test_a_direct_lineage_loads_without_warm_up_stages_and_old_lineages_keep_the_rule(tmp_path):
+    """Owner decision 2026-10-11: a recipe of neuralese_direct stages needs no token_identity /
+    causal_embedding_distillation stages; its declared step-0 identity check is the identity qualification."""
+    from natlang_neuralese.train.recipe import DIRECT_IDENTITY_QUALIFICATION, load_recipe, resolve_recipe_data
+    for name in ('neuralese-direct-mellum-v1.json', 'neuralese-direct-lfm-v1.json'):
+        assert load_recipe(RECIPES / name)['identity_qualification'] == DIRECT_IDENTITY_QUALIFICATION
+    recipe = resolve_recipe_data(RECIPES / 'neuralese-direct-v1.json')
+    undeclared = {k: v for k, v in recipe.items() if k != 'identity_qualification'}
+    (tmp_path / 'undeclared.json').write_text(json.dumps(undeclared))
+    with pytest.raises(ValueError, match='identity_qualification'):
+        load_recipe(tmp_path / 'undeclared.json')
+    old = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v12.json')
+    old['stages'] = [s for s in old['stages'] if s['kind'] not in ('token_identity', 'causal_embedding_distillation')]
+    (tmp_path / 'old.json').write_text(json.dumps(old))
+    with pytest.raises(ValueError):
+        load_recipe(tmp_path / 'old.json')
