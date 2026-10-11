@@ -223,9 +223,16 @@ def destination(path: Path, roots, archive: Path) -> Path:
     raise ValueError(f'{path} is under no root')
 
 
+def link_dir_writable(path: Path) -> bool:
+    """Whether the directory of ``path`` accepts the replacing link (immutable closeouts are read-only: kept)."""
+    return os.access(path.parent, os.W_OK | os.X_OK)
+
+
 def archive_file(path: Path, dest: Path, manifest: Path) -> dict:
     """Copy, verify, then replace the source with a symlink. Raises (leaving the source untouched) on any doubt."""
     before = path.lstat()
+    if not link_dir_writable(path):
+        raise PermissionError(f'{path.parent} is not writable: cannot leave a link')
     dest.parent.mkdir(parents=True, exist_ok=True)
     partial = dest.with_name(dest.name + '.archiving')
     source_hash = hashlib.sha256()
@@ -246,8 +253,17 @@ def archive_file(path: Path, dest: Path, manifest: Path) -> dict:
         raise RuntimeError(f'verification failed for {path}')
     os.replace(partial, dest)
     link = path.with_name(path.name + '.archive-link')
-    os.symlink(dest, link)
-    os.replace(link, path)  # atomic: readers see the old file or the link, never nothing
+    try:
+        os.symlink(dest, link)
+        os.replace(link, path)  # atomic: readers see the old file or the link, never nothing
+    except OSError:
+        # The source stays; do not leave an orphaned verified copy (and no stray link) behind.
+        for leftover in (link, dest):
+            try:
+                leftover.unlink()
+            except OSError:
+                pass
+        raise
     record = {'source': str(path), 'dest': str(dest), 'bytes': before.st_size, 'sha256': digest,
               'mtime': before.st_mtime, 'time': time.time()}
     with open(manifest, 'a') as handle:
@@ -332,11 +348,14 @@ def main(argv=None):
     summary = {'apply': a.apply, 'movable_files': len(movable), 'movable_gb': round(sum(s for s, *_ in movable) / GIB, 1),
                'kept_files': len(kept), 'kept_gb': round(sum(s for s, *_ in kept) / GIB, 1),
                'nvme_free_gb': round(shutil.disk_usage(roots[0] if roots[0].exists() else '/').free / GIB, 1)}
-    moved, failed, budget = [], [], int(a.budget_gb * GIB)
+    moved, failed, kept_read_only, budget = [], [], [], int(a.budget_gb * GIB)
     if a.apply:
         a.archive.mkdir(parents=True, exist_ok=True)
         manifest = a.archive / MANIFEST_NAME
         for size, path, _ in movable:
+            if not link_dir_writable(Path(path)):  # deliberately read-only (immutable closeout): stays, not an error
+                kept_read_only.append(path)
+                continue
             if sum(r['bytes'] for r in moved) + size > budget and not a.until_done:
                 continue
             if a.until_done and sum(r['bytes'] for r in moved) + size > budget:
@@ -354,6 +373,7 @@ def main(argv=None):
                 failed.append({'path': path, 'error': str(error)[:300]})
         summary['nvme_free_after_gb'] = round(shutil.disk_usage(roots[0]).free / GIB, 1)
     summary.update(moved_files=len(moved), moved_gb=round(sum(r['bytes'] for r in moved) / GIB, 1), failed=failed,
+                   kept_read_only=kept_read_only,
                    would_move=[{'path': p, 'gb': round(s / GIB, 1)} for s, p, _ in movable[:a.list_limit]],
                    kept_largest=[{'path': p, 'gb': round(s / GIB, 1), 'why': r}
                                  for s, p, r in sorted(kept, reverse=True)[:a.list_limit]])

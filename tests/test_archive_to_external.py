@@ -109,3 +109,33 @@ def test_only_named_regenerable_caches_are_cleared(tmp_path):
     assert [d['path'] for d in dry] == [str(tmp_path / 'pip')] and (tmp_path / 'pip').exists()
     archive.clear_regenerable(True, cache=tmp_path)
     assert not (tmp_path / 'pip').exists() and (tmp_path / 'huggingface' / 'hub').exists()
+
+
+def test_a_file_in_a_read_only_directory_is_kept_and_does_not_fail_the_run(tmp_path, capsys):
+    root = tmp_path / 'nvme'
+    locked = big(root / 'closeout' / 'run' / 'ckpt.pt', size=2048)
+    free = big(root / 'free' / 'ckpt.pt', size=2048)
+    locked.parent.chmod(0o555)
+    try:
+        if os.access(locked.parent, os.W_OK):
+            pytest.skip('running as a user who ignores directory permissions')
+        code = archive.main(['--apply', '--root', str(root), '--archive', str(tmp_path / 'hdd'), '--min-gb', '0.000001',
+                             '--hdd-floor-gb', '0'])
+        text = capsys.readouterr().out
+        out = json.loads(text[text.index('{\n'):])
+        with pytest.raises(PermissionError):
+            archive.archive_file(locked, tmp_path / 'hdd' / 'x', tmp_path / 'hdd' / 'm.jsonl')
+    finally:
+        locked.parent.chmod(0o755)
+    assert code == 0 and out['failed'] == [] and out['kept_read_only'] == [str(locked)]
+    assert locked.is_file() and not locked.is_symlink() and free.is_symlink()
+    assert not (tmp_path / 'hdd' / 'nvme' / 'closeout').exists()
+
+
+def test_a_failed_link_removes_the_verified_copy(tmp_path, monkeypatch):
+    source = big(tmp_path / 'nvme' / 'ckpt.pt')
+    dest = tmp_path / 'hdd' / 'nvme' / 'ckpt.pt'
+    monkeypatch.setattr(os, 'symlink', lambda *a, **k: (_ for _ in ()).throw(PermissionError(13, 'denied')))
+    with pytest.raises(PermissionError):
+        archive.archive_file(source, dest, tmp_path / 'hdd' / 'manifest.jsonl')
+    assert source.is_file() and not source.is_symlink() and not dest.exists()
