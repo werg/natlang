@@ -1,6 +1,6 @@
 {
   "execution": "direct_shared_stage",
-  "id": "luna-neuralese-direct-lfm-base-20261011-v11-full-rendering-continuation",
+  "id": "luna-neuralese-direct-lfm-base-20261011-v12-full-rendering-continuation",
   "inputs": {
     "heads": {
       "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-clean-base-monitor-20261011-v2/artifact/clean-base-untrained-heads.pt",
@@ -21,6 +21,14 @@
     "continue_from": {
       "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-run/direct_sft/best-checkpoint.pt",
       "sha256": "1768c700444da52ac9d031288174a1c600adfad8f213f63bca302622e7ee935b"
+    },
+    "continue_identity": {
+      "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-run/direct_sft/identity-check.json",
+      "sha256": "a399ac750c517b780267b3d91992260a7bc8a8513c4b47254a836b329f9ed110"
+    },
+    "continue_monitor_reference": {
+      "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-run/direct_sft/monitor-reference.pt",
+      "sha256": "9aec5425f3ee086c56fb022a4cbdb8659ccf3d24c766af4816ae283df54a3cfe"
     }
   },
   "limitations": [
@@ -38,7 +46,7 @@
     "V7 aborted before model load when a parallel helper added a shared inactive text producer during import preflight; no updates. Launcher now freezes exact reviewed package before container preflight and binds it read-only at canonical package path, eliminating race without a private trainer. Added producer helper is inactive for this already-prepared text input."
   ],
   "lineage": {
-    "scope": "A fresh 1000-update phase resumes the exact qualified V8 full-state checkpoint with the unchanged full-rendering 4962-document data, base heads, tokenizer, loss, optimizer settings and declared gates. Output directory is operational. The two prior attempts exited during pre-update restore validation: one exposed output-path identity handling; one exposed canonical checkpoint key and nested optimizer schema handling. Those no-update attempts were discarded after the shared corrections. This phase must satisfy its own completion and evaluation gates.",
+    "scope": "A fresh 1000-update phase resumes the exact qualified V8 full-state checkpoint with the unchanged full-rendering 4962-document data, base heads, tokenizer, loss, optimizer settings and declared gates. Output directory is operational. Three prior attempts exited before training updates: output-path identity handling; canonical checkpoint keys and nested optimizer schema; and a symlink-resolved checkpoint path that hid its original stage sidecars. The shared recipe now binds identity and monitor-reference sidecars independently of checkpoint storage paths. Those no-update attempt artifacts were discarded after recording their causes here. This phase must satisfy its own completion and evaluation gates.",
     "evidence": [
       {
         "role": "predecessor_recipe_v8",
@@ -73,7 +81,7 @@
     ]
   },
   "outputs": {
-    "directory": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-full-rendering-continuation-v3"
+    "directory": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-full-rendering-continuation-v4"
   },
   "parameters": {
     "backbone_lr": 7.5e-07,
@@ -87,7 +95,7 @@
     "drift_stop": 0.5,
     "drift_warn": 0.05,
     "eval_batch": 1,
-    "eval_every": 20,
+    "eval_every": 100,
     "feedback_weight": 0.25,
     "gate_held_rows": 48,
     "head_lr": 0.0003,
@@ -254,7 +262,7 @@
       "train/delta_e2e.py": "3a5676e1ceb92b5d5ae9ff126be3a13ed2519ad21ffecdadcc116f29792942b5",
       "train/delta_projection.py": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91",
       "train/direct_export.py": "e63b9808a9fb65885ec5f6c216a6490f4bebb70f8e159a36bbe37737db18d6cd",
-      "train/direct_sft.py": "2bda209148c980dbbcf845940145c2428264621ef852dd017cdc9d8269d0b5c0",
+      "train/direct_sft.py": "012aab3fe04f909083b1386dc43344eb6ad82df01899f00e5e1b338c67e9466c",
       "train/drift_monitor.py": "29cdb01a0363d4c0af417ac8ae66e4b09fb89084033d2c97f201dc7e01faff4e",
       "train/execution.py": "a847a145e5b4e1987f0c69c8cbc7902406754be8b57e2e37bd1139d8756643b3",
       "train/export_trajectory.py": "5bbc545ff603530fbcc5b5930c6f841c70b09f37732b0f26bd088666250fef14",
@@ -280,7 +288,7 @@
       "train/projection_anchor.py": "300f993e439432faee809694ac3f71a0089cefab9e47142f0ffb4e98caae5ac8",
       "train/projection_e2e.py": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be",
       "train/quantization.py": "a32fd7258683ca51186d6ff2e43b96265d3bbac4c3c38b3330ec86711f21ea01",
-      "train/recipe.py": "d722a28610390805967905cbe3213791d890af099890d31c89a948a33e184888",
+      "train/recipe.py": "f1b80b77cc18099bc48af96e87b0c8e2bc0103595bc0a5a1758c7e18e7681bcc",
       "train/record_cohorts.py": "7c69d0dfa81869e6dcd6bce45bb7230d51b995ca648a4ca16663bfaea7e99dba",
       "train/recurrence.py": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d",
       "train/staging.py": "d826eee727aae24930ba2ebffb782da71c7d18dafc05575a345a4acbb87ebb19",
