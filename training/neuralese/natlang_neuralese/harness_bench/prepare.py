@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-from .openhands import normalize, resolved, rows
+from .openhands import normalize, resolved, rows, rows_start
 
 
 def tasks(directory: str) -> dict[str, dict]:
@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, 'w') as handle:
         columns = ['trajectory_id', 'instance_id', 'repo', 'trajectory', 'model_patch', 'resolved']
-        for number, row in enumerate(rows(args.trajectories, columns)):
+        for number, row in enumerate(rows(args.trajectories, columns, skip=args.offset), start=rows_start(args.trajectories, args.offset)):
             if number < args.offset:
                 continue
             if args.limit and summary['seen'] >= args.limit:
