@@ -12,6 +12,14 @@ Don't reject an approach because our implementation of it failed (owner,
 bug until proven otherwise: compare against an exact reference, localize the
 divergence, fix it, and re-measure before judging the approach itself.
 
+When something doesn't make sense, assume a bug and run a wide, varied dragnet
+for it (owner, 2026-10-11). Usually there is a bug. Don't give up, and don't settle
+for the naive explanation ("BF16 noise", "the approach doesn't work", "the model
+can't learn this"). Check many hypotheses in parallel: data and masking, rendering
+and templates, dtype and upcasts, caches and state carried between steps, kernels,
+optimizer state and resume, gradient flow, loss weighting, evaluation code, and
+differences from a known-good path. Record what was ruled out and how.
+
 # Machine ownership and coordination
 
 - Use `/home/werg/natlang` as the canonical development checkout on both Pop and
