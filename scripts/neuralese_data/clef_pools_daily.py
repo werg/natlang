@@ -10,7 +10,8 @@ replay-demonstrations.mjs); the programs, their questions and the confidence gat
       2. Clef-flash answers up to the day's budget minus what this batch already spent (resumable: answered items are
          skipped, so an interrupted run continues);
       3. assemble the confidence-gated cases, replay them into native teacher-training turns (no model calls);
-      4. write summary.json and registry-entry.json (the batch's registry entry, ready to merge).
+      4. write summary.json and registry-entry.json (the batch's registry entry, ready to merge);
+      5. queue the shared render (render_native_turn_corpus.sh, both tokenizers) as a low-priority ledger unit.
   register --day YYYYMMDD
       merge registry-entry.json into training/neuralese_corpora.json and publish the immutable manifest. Committing
       is left to the agent (shared checkout).
@@ -41,8 +42,11 @@ DGX_SHARE = 800_000
 NODE = os.environ.get('NATLANG_NODE') or shutil.which('node', path=f"{Path.home()}/.local/bin:{os.environ.get('PATH', '')}") or 'node'
 
 
+VERSION = os.environ.get('CLEF_POOLS_VERSION', 'v1')  # a rebuilt batch (fixed template, same answers) is a new id
+
+
 def corpus_id(day: str) -> str:
-    return f'clef-pools-{day}-v1'
+    return f'clef-pools-{day}-{VERSION}'
 
 
 def batch_dir(day: str) -> Path:
@@ -133,6 +137,24 @@ def run(day: str, budget: int, count: int) -> None:
     }
     (out / 'registry-entry.json').write_text(json.dumps(entry, indent=1) + '\n')
     print(json.dumps(summary))
+    render(day)
+
+
+HELD_TEXT = ['runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl',
+             'data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl']
+
+
+def render(day: str) -> None:
+    """Queue the shared three-rendering twin build (both tokenizers) as a low-priority resumable ledger unit."""
+    out = ROOT / f'runs/natlang-native-turns-{corpus_id(day)}-render'
+    if (out / 'receipt.json').exists():
+        return
+    turns = batch_dir(day) / f'clef-pools-{day}.turns.jsonl'
+    subprocess.run([sys.executable, str(ROOT / 'scripts/memory_ledger.py'), 'run', '--unit', f'render-turns-clef-pools-{day}',
+                    '--budget-gb', '5', '--priority', 'low', '--resumable', '--wait', '43200', '--',
+                    'env', 'MEM=5g', 'CPUS=2', 'scripts/neuralese_data/render_native_turn_corpus.sh', str(out),
+                    '--corpus-id', corpus_id(day), '--source', str(turns.relative_to(ROOT)), '--workers', '2',
+                    '--shards', '8', '--held-text', *HELD_TEXT], cwd=ROOT, check=False)
 
 
 def register(day: str) -> None:
