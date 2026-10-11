@@ -82,6 +82,10 @@ def test_full_backbone_state_roundtrips_through_load_engine(tmp_path,monkeypatch
     class TinyTokenizer:
         eos_token_id=2
         def convert_tokens_to_ids(self,token): return 3
+        def apply_chat_template(self,messages,tokenize=False,add_generation_prompt=False,**options):
+            # Minimal template with the lfm2 history rule: only the last assistant turn's reasoning is rendered.
+            last=max((i for i,m in enumerate(messages) if m['role']=='assistant'),default=-1)
+            return ''.join(f"<{m['role']}>{m.get('reasoning_content','') if i==last else ''}{m['content']}" for i,m in enumerate(messages))
     tokenizer=TinyTokenizer()
     monkeypatch.setattr(lfm,'load_backbone',lambda *args,**kwargs:(fresh.hf,tokenizer))
     monkeypatch.setattr(lfm.ControlTokens,'from_tokenizer',staticmethod(lambda _tokenizer:ControlTokens(62,63)))
