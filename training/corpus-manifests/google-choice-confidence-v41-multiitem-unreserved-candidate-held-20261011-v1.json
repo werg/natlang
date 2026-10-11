@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v41-multiitem-unreserved-candidate-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-multiitem-unreserved-v2",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 753056,
+      "sha256": "db448770bfafb47132ad33f511d0d289515ed1e019f16aa05dd5325fe1c69268",
+      "lines": 11
+    },
+    {
+      "path": "reference-replay.jsonl",
+      "bytes": 8181885,
+      "sha256": "ad1bf1cb2d822c965f764027a521387609822990df93206ebf8868d79d0a1c6d",
+      "lines": 11
+    },
+    {
+      "path": "selection-manifest.json",
+      "bytes": 250747,
+      "sha256": "c78fb24f51788852375a235399ed51a36c028e705ad51e3d5a5af76ff1386fad"
+    }
+  ],
+  "bytes": 9185688
+}

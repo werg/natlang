@@ -32329,6 +32329,96 @@
       "independent_new_worlds": 0,
       "admission": "approved inputs/launch evidence only; active worker output is not included",
       "notes": "Root approval and supervisor launch receipt bind V88 plan SHA 8f5ce633c13c57a03fbf27a3bae5f8cf304e7cc5e66ea94b422b13f6cb8646cb. Excludes mutable campaign-launch and worker journals/logs/results."
+    },
+    {
+      "id": "luna-choice-confidence-v88-closed-results-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v88-v41-runtimev17-v1",
+      "include": [
+        "campaign-launch.json",
+        "root-supervisor-launch-v1.json",
+        "worker-*/queue.jsonl",
+        "worker-*/journal.jsonl",
+        "worker-*/worker.log",
+        "worker-*/case-*/collector.log",
+        "worker-*/case-*/results.jsonl",
+        "worker-*/case-*/results.jsonl.manifest.json",
+        "worker-*/case-*/jobs/*.trace.jsonl",
+        "worker-*/case-*/jobs/*.result.json"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "held-closed-provider-generation-results",
+      "source_class": "closed-native-teacher-trajectory-and-trace-evidence",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "closed output evidence only; no training, trace, recurrence, or independent-world admission",
+      "notes": "V88 closed 50/50 single-item CLINC programs on five lanes. Exact source annotation matches 46/50; all 50 choices were in declared options; saved decisions.json equals returned map in all 50. Nine reported scope failures remain part of raw traces. See separate quality review for same-invocation request visibility and item-level comparisons."
+    },
+    {
+      "id": "luna-choice-confidence-v88-quality-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v88-choice-confidence-final-v1",
+      "include": [
+        "audit.json",
+        "audit.md",
+        "FILES.sha256.json"
+      ],
+      "split": "held-quality-review",
+      "source_class": "independent-closed-output-quality-audit",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "quality evidence only; source-annotation comparison is not admission",
+      "notes": "V88 closeout binds 50 actual saved results, 46 exact inherited annotation agreements, 4 disagreements, 0 returned-map/file drift, 50/50 same-invocation rendered request state matches (8 also have capture snapshots). No original-byte-wire or broad accuracy claim."
+    },
+    {
+      "id": "google-choice-confidence-v41-multiitem-unreserved-candidate-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-multiitem-unreserved-v2",
+      "include": [
+        "cases.jsonl",
+        "reference-replay.jsonl",
+        "selection-manifest.json"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-train-held-candidate",
+      "source_class": "static-source-and-reference-selection-proposal",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "candidate selection evidence only; not generation approval or data admission",
+      "notes": "11 multi-item programs/88 source items from exact existing V41 batch-size-8 static cases/reference, remaining disjoint from observed prior Luna source IDs/groups and current 79 source-quality holds. Families: 8 CLINC, 3 Yahoo. No labels/reference regenerated."
+    },
+    {
+      "id": "luna-choice-confidence-v89-v41-multiitem-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v89-v41-multiitem-runtimev17-prepared-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "source-review/**/*",
+        "worker-*/queue.jsonl",
+        "predecessors.json"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-train-generation-inputs",
+      "source_class": "prepared-luna-generation-inputs-not-launched",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "prepared-only; root approval and launch are absent",
+      "notes": "V89 candidate has 11 multi-item programs/88 original items across CLINC and Yahoo, with five fresh queues of two or three programs each and V88 predecessor lane binding. reviewed-plan-v1 has root_approved=false. This entry excludes any runtime outputs."
     }
   ],
   "coverage_backlog": [
