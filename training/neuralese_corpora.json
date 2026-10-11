@@ -32419,6 +32419,27 @@
       "independent_new_worlds": 0,
       "admission": "prepared-only; root approval and launch are absent",
       "notes": "V89 candidate has 11 multi-item programs/88 original items across CLINC and Yahoo, with five fresh queues of two or three programs each and V88 predecessor lane binding. reviewed-plan-v1 has root_approved=false. This entry excludes any runtime outputs."
+    },
+    {
+      "id": "luna-choice-confidence-v89-approved-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v89-v41-multiitem-runtimev17-prepared-v1",
+      "include": [
+        "reviewed-plan-root-approved-v1.json",
+        "root-owner-approval-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-train-generation-approval-and-launch-evidence",
+      "source_class": "root-approved-luna-generation-launch-receipt",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "launch evidence only; no data admission",
+      "notes": "Additive approval/launch snapshot for V89. Original prepared-only input manifest and live mutable campaign-launch.json remain untouched and excluded."
     }
   ],
   "coverage_backlog": [
