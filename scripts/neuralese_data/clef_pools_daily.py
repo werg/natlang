@@ -164,7 +164,7 @@ def register(day: str) -> None:
     if any(c.get('id') == entry['id'] for c in registry['corpora']):
         raise SystemExit(f"{entry['id']} is already registered (manifests are immutable; a new batch needs a new id)")
     registry['corpora'].append(entry)
-    path.write_text(json.dumps(registry, indent=2) + '\n')
+    path.write_text(json.dumps(registry, indent=2, ensure_ascii=False) + '\n')
     subprocess.run([sys.executable, str(ROOT / 'scripts/sync_training_corpora.py'), 'publish', '--machine', 'dgx',
                     '--id', entry['id']], cwd=ROOT, check=True)
 
