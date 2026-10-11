@@ -31,10 +31,10 @@ waiting queue (higher first, then earlier; only the head is admitted), (2) the k
 medium 600, low 900: user units cannot go below the user manager's own 100, and with no systemd-oomd the kernel is the
 instant safety net), (3) the guard's victim order under pressure (lowest priority first; a unit over its own budget
 goes first), and (4) preemption: when the head of the queue does not fit, the guard gracefully stops the lowest-priority
-resumable units until it does. Units are resumable by default (`--no-resumable` for services and non-resumable jobs); a
+resumable units until it does. Units are resumable by default (tests, checks and data jobs are rerunnable; `--no-resumable` only for long non-checkpointed jobs; services and adopted units are protected); a
 stopped resumable unit (preemption or pressure, not an over-budget stop) re-enters the queue with the spec it was
 launched from and the guard relaunches it when room returns. `status` lists claims with priority, budget, use and
-reservation, and the queue with the units that would be preempted for each entry. The guard's kill threshold is still
+reservation, and the queue with the units that would be preempted for each entry and the non-preemptible units blocking it (`blocked_by`). A stopped unit's docker containers (named by the command, `run --container`, a `docker run --name` client in its cgroup, or the unit name) are stopped by name too, and a requeued unit is not relaunched while one still runs. The guard's kill threshold is still
 the original budget.
 """
 import argparse
@@ -347,9 +347,9 @@ def resumable(claim):
     """Whether the guard may stop the unit for a higher priority and relaunch it later: declared at ``run``, default
     true for experiments and collections (their commands resume from checkpoints), false for services."""
     declared = claim.get('resumable')
-    if declared is None:  # not declared (older claims, adopted units): resumable only when the ledger holds its launch spec
-        return bool(claim.get('spec')) and claim.get('class') != 'service'
-    return bool(declared)  # declared resumable without a spec: stopped, logged, and its owner restarts it
+    if declared is None:  # undeclared: tests, checks and jobs the ledger launched are rerunnable; services and adopted units are not
+        return claim.get('class') != 'service' and not claim.get('adopted')
+    return bool(declared)  # without a launch spec it is stopped and logged, and its owner restarts it
 
 
 def outstanding(claim, now=None):
@@ -367,8 +367,13 @@ def headroom(state, gpu):
     return mem_available() - sum(outstanding(c) for c in live.values()), live
 
 
-def blocked_by(live, count=3):
-    """Names of the claims reserving the most memory, for the refusal message of a waiting job."""
+def blocked_by(live, wanted=None, count=3):
+    """Names of what keeps a waiting job out, for a refusal message: with ``wanted`` the units it cannot preempt, else
+    the claims reserving the most memory."""
+    if wanted:
+        rows = non_preemptible(live, wanted, count)
+        return ' (not preemptible: ' + ', '.join(f'{r["unit"]} {r["held_gb"]} GiB, {r["reason"]}' for r in rows) + ')' \
+            if rows else ''
     top = [(u, c) for u, c in sorted(live.items(), key=lambda item: -outstanding(item[1]))[:count]
            if outstanding(c) >= GIB]
     return ' (blocked by ' + ', '.join(f'{u} {outstanding(c) / GIB:.0f} GiB reserved of {c["budget"] / GIB:.0f} '
@@ -409,7 +414,22 @@ def preemption_plan(live, free, wanted, graces=None):
     return []
 
 
-def requeue_spec(state, unit, now=None):
+def non_preemptible(live, wanted, count=4):
+    """Running units a waiting job cannot preempt (equal or higher priority, or not resumable) that hold memory it needs,
+    biggest first, with the reason: shown in ``status`` and in a refusal so the owner sees what blocks the head."""
+    rows = []
+    for unit, c in live.items():
+        held = c['used'] + outstanding(c)
+        if held < GIB:
+            continue
+        if not resumable(c):
+            rows.append((held, unit, 'not resumable'))
+        elif priority_of(c) >= PRIORITIES[wanted['priority']]:
+            rows.append((held, unit, f'priority {PRIORITY_NAMES[priority_of(c)]} is not below {wanted["priority"]}'))
+    return [{'unit': u, 'held_gb': round(h / GIB, 1), 'reason': why} for h, u, why in sorted(rows, reverse=True)[:count]]
+
+
+def requeue_spec(state, unit, now=None, containers=()):
     """Put a stopped resumable unit back in the waiting queue with the spec it was launched from."""
     claim = state['claims'].get(unit, {})
     now = now or time.time()
@@ -422,6 +442,8 @@ def requeue_spec(state, unit, now=None):
                                              'requeued': True, 'not_before': now + REQUEUE_DELAY,
                                              'budget': claim['budget'], 'reserve': claim['spec'].get('reserve', 8 * GIB),
                                              'spec': claim['spec']}
+    if containers:
+        state['waiting'][unit]['containers'] = list(containers)
     state['events'].append({'time': now, 'event': 'requeued', 'unit': unit})
     return True
 
@@ -463,7 +485,8 @@ def launch(spec):
         writes = checkpoint_writes()
         stop_seconds = max(30.0, grace_seconds(unit, {}, family_state_bytes(writes), write_throughput(writes)))
     command += ['-E', f'NATLANG_LEDGER_UNIT={unit}', '-p', f'TimeoutStopSec={int(stop_seconds) + 30}',
-                '-p', f'ExecStopPost=-/usr/bin/docker stop -t {int(stop_seconds)} {container}']
+                '-p', f'ExecStopPost=-/usr/bin/docker stop -t {int(stop_seconds)} ' + ' '.join(
+                    dict.fromkeys([container, *spec.get('containers', ())]))]
     return subprocess.run(command + spec['command']).returncode
 
 
@@ -503,13 +526,13 @@ def run(args):
                         'oom_policy': args.oom_policy, 'workdir': os.path.abspath(args.workdir), 'env': args.env,
                         'stop_seconds': args.stop_seconds, 'command': args.command, 'priority': priority,
                         'resumable': args.resumable if args.resumable is not None else args.cls != 'service',
-                        'hold_budget': args.hold_budget, 'reserve': reserve}
+                        'hold_budget': args.hold_budget, 'reserve': reserve, 'containers': args.container}
                 state['claims'][unit] = claim_for(spec)
                 waiting.pop(unit, None)
                 state['events'].append({'time': now, 'event': 'admitted', 'unit': unit, 'budget': budget,
                                         'free': free, 'priority': priority})
                 break
-            blockers = blocked_by(live) + ('' if head == unit else f' (queue head: {head})')
+            blockers = blocked_by(live, {'priority': priority}) + ('' if head == unit else f' (queue head: {head})')
         if time.time() >= deadline:
             with ledger() as state:
                 state.get('waiting', {}).pop(unit, None)
@@ -551,7 +574,7 @@ def adopt(args):
         command = previous.get('command')
         if not command or command == ['(adopted)']:
             command = main_command(unit) or ['(adopted)']
-        state['claims'][unit] = {'budget': int(args.budget_gb * GIB), 'class': args.cls,
+        state['claims'][unit] = {'budget': int(args.budget_gb * GIB), 'class': args.cls, 'adopted': True,
                                  **({'priority': args.priority} if args.priority else {}),
                                  'admitted': previous.get('admitted', time.time()), 'command': command, 'host_max': None,
                                  **{key: previous[key] for key in ('peak', 'peak_since') if key in previous},
@@ -578,7 +601,8 @@ def status(args):
                       'claims': claims,
                       'waiting': [{'position': n + 1, 'unit': name, 'priority': w['priority'],
                                    'budget_gb': round(w['budget'] / GIB, 1), 'requeued': bool(w.get('requeued')),
-                                   'would_preempt': plans[name]} for n, (name, w) in enumerate(queue)]}, indent=2))
+                                   'would_preempt': plans[name],
+                                   'blocked_by': non_preemptible(live, w)} for n, (name, w) in enumerate(queue)]}, indent=2))
 
 
 def victim(live, floor_breached, overshoot, pressure=None, grace=None):
@@ -614,16 +638,52 @@ def escalation(pending, now, available, emergency, active):
     return 'wait'
 
 
+def unit_containers(unit, command=None, extra=()):
+    """Every docker container a unit runs: named by its command, recorded at launch (``run --container``), named in the
+    command line of a docker client inside its cgroup (a wrapper script's ``docker run --rm --name X``), or named like the
+    unit. Stopping the unit only ends the client (and a shell waiting on its foreground client runs its trap only after
+    that client exits), so the containers must be stopped by name."""
+    names = [container_name(command), *extra, unit.removesuffix('.service')]
+    _, cgroup = unit_state(unit)
+    if cgroup:
+        with contextlib.suppress(OSError, ValueError):
+            for pid in open('/sys/fs/cgroup' + cgroup + '/cgroup.procs').read().split():
+                with contextlib.suppress(OSError):
+                    text = open(f'/proc/{pid}/cmdline', 'rb').read().replace(b'\0', b' ').decode(errors='replace')
+                    names.append(container_name(text))
+    return list(dict.fromkeys(n for n in names if n))
+
+
+def container_running(name):
+    out = subprocess.run(['docker', 'inspect', '-f', '{{.State.Running}}', name], capture_output=True, text=True)
+    return out.stdout.strip() == 'true'
+
+
+def as_list(containers):
+    return [containers] if isinstance(containers, str) else list(containers)
+
+
+def stop_containers(containers, seconds=10):
+    """Stop (not wait for) every named container still running: a preempted unit's work must free its memory, and a
+    requeued unit must not start a duplicate beside an orphan."""
+    for name in as_list(containers):
+        if container_running(name):
+            subprocess.Popen(['docker', 'stop', '-t', str(seconds), name], stderr=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL)
+
+
 def terminate(unit, container):
     """Ask a unit's job to checkpoint and exit: SIGTERM to the container's main process (``docker kill -s TERM``
     does not stop the container itself) and to the unit."""
-    subprocess.Popen(['docker', 'kill', '--signal', 'SIGTERM', container], stderr=subprocess.DEVNULL,
-                     stdout=subprocess.DEVNULL)
+    for name in as_list(container):
+        subprocess.Popen(['docker', 'kill', '--signal', 'SIGTERM', name], stderr=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL)
     subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGTERM', unit])
 
 
 def kill(unit, container):
-    subprocess.Popen(['docker', 'kill', container], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+    for name in as_list(container):
+        subprocess.Popen(['docker', 'kill', name], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
     subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGKILL', unit])
     subprocess.Popen(['systemctl', '--user', 'stop', unit], stderr=subprocess.DEVNULL)
 
@@ -728,14 +788,17 @@ def guard(args):
                         unit, reason = plan[0], f'preempted for {head} ({wanted["priority"]})'
                 elif (not unit and wanted.get('requeued') and time.time() >= wanted['not_before']
                       and head not in state['claims'] and unit_state(head)[0] not in ('active', 'activating', 'deactivating')
-                      and fits(free, wanted['budget'], wanted['reserve'])):
+                      and fits(free, wanted['budget'], wanted['reserve'])
+                      and not any(container_running(n) for n in wanted.get('containers', ()))):
                     state['claims'][head] = claim_for(wanted['spec'])
                     state['waiting'].pop(head)
                     state['events'].append({'time': time.time(), 'event': 'relaunched', 'unit': head, 'free': free})
                     to_launch = wanted['spec']
-            if unit and (reason.startswith('preempted') or reason.startswith('free memory below floor')):
-                requeue_spec(state, unit)  # a resumable unit comes back when room returns
             command = state['claims'].get(unit, {}).get('command') if unit else None
+            state_claim_containers = state['claims'].get(unit, {}).get('spec', {}).get('containers', ()) if unit else ()
+            containers = unit_containers(unit, command, state_claim_containers) if unit else []
+            if unit and (reason.startswith('preempted') or reason.startswith('free memory below floor')):
+                requeue_spec(state, unit, containers=containers)  # a resumable unit comes back when room returns
             grace = graces.get(unit, GRACE_MIN) if unit else 0
             if unit:
                 state['events'].append({'time': time.time(), 'event': 'stopped', 'unit': unit, 'reason': reason,
@@ -751,7 +814,7 @@ def guard(args):
                   flush=True)
             # Killing a `docker start -a NAME` unit only detaches its client; the container keeps running and keeps
             # its memory. Signal the job inside, then give it its grace to write its full state.
-            container = container_name(command) or unit.removesuffix('.service')
+            container = containers
             terminate(unit, container)
             pending[unit] = {'deadline': time.time() + grace, 'container': container}
             stopped[unit] = time.time()
@@ -760,6 +823,8 @@ def guard(args):
                                 unit_state(name)[0] in ('active', 'activating', 'deactivating'))
             if action == 'wait':
                 continue
+            if action == 'done':
+                stop_containers(pending[name]['container'])  # the unit ended; a detached container may live on
             if action == 'kill':
                 kill(name, pending[name]['container'])
                 with ledger() as state:
@@ -797,6 +862,9 @@ def main():
     r.add_argument('--stop-seconds', type=float, default=None,
                    help='seconds the job gets to write its full state when stopped (planned or by the guard); default: '
                         'its family\'s measured checkpoint size over the measured write throughput')
+    r.add_argument('--container', action='append', default=[],
+                   help='name of a docker container the job runs outside the unit (repeatable); stopped with the unit. '
+                        'Containers named by `docker run --name` in the command or its wrapper script are found anyway')
     r.add_argument('--workdir', default='.')
     r.add_argument('--env', action='append', default=[])
     r.add_argument('command', nargs=argparse.REMAINDER)
