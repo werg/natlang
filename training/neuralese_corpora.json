@@ -31106,6 +31106,41 @@
       "admission": "candidate-only-pending-root-review-and-full-candidate-source-closure-no-native-or-trace-admission",
       "independent_new_worlds": 0,
       "notes": "Exact-trace-bound v3 derivative of the V73 candidate-only v2 turn set. Excludes only the 63 rejected/error eval action targets (36 rejected, 27 errors) after one-to-one joins by selected program, invocation, tool and exact decoded arguments. Retains 846 byte-identical rows; all later same-invocation retry contexts remain byte-identical and contain the failed result first line. Failed actions are protocol/runtime failures, not valid negative semantic targets; successful repairs remain. Earlier candidate and raw artifacts stay immutable; no source or recurrence admission."
+    },
+    {
+      "id": "google-choice-confidence-v41-json-object-remaining-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-source",
+      "include": [
+        "cases-remaining-v2-json-object.jsonl",
+        "omissions.jsonl",
+        "source-manifest.json",
+        "frozen-adapter-v2-json-object/**/*"
+      ],
+      "split": "inherited-train-provider-input",
+      "source_class": "held-provider-generation-inputs",
+      "training_admission": false,
+      "admission": "input-only-json-object-restart-no-label-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V41 JSON-object restart input: 2047 remaining inherited-train cases; one earlier successful label is carried by parent review and is not rerun. Frozen runtime v2 has explicit json_object format, strict local validation and reasoning preservation. Full source manifest and omissions retained; root launch review/receipt and quota repair are registered separately. Mutable labels/attempts/output manifests and runner logs are excluded."
+    },
+    {
+      "id": "google-choice-confidence-v41-json-object-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-source/root-launch-review-v2-json-object",
+      "include": [
+        "review.json",
+        "launch-receipt.json",
+        "quota-repair-receipt.json",
+        "quota-state-before.json",
+        "quota-state-after.json"
+      ],
+      "split": "launch-control-evidence",
+      "source_class": "held-provider-launch-evidence",
+      "training_admission": false,
+      "admission": "launch-evidence-only-no-provider-label-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root-approved V41 JSON-object relaunch and exclusive quota-state repair evidence; binds 2047 remaining cases and frozen adapter manifest. No mutable runner log or generated labels included."
     }
   ],
   "coverage_backlog": [
