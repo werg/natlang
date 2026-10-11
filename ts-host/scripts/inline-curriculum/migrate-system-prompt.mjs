@@ -27,6 +27,7 @@ import { migrateIrLine as renameCodeTools } from './migrate-code-tools.mjs';
 const MIGRATION = 'current-prompt/1';
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const FILE = 'ts-host/src/native/prompt.ts';
+const EMULATION_FILE = 'ts-host/src/model/text-neuralese-emulation.ts';
 
 /** Every version of each prompt part in the history of native/prompt.ts, longest first. */
 export async function promptHistory() {
@@ -112,6 +113,22 @@ export async function historicalPromptPieces() {
         add(commit, `directory-reducer/${surface}/read-only/depth-limit`, module.directoryReducerPrompt(surface, false, false));
       }
     }
+  }
+  // The text-channel prompt was first declared in its transport module, then moved into native/prompt.ts.
+  // Keep those exact older texts as the same declared program piece instead of inferring scope from export names.
+  const emulationRevisions = execFileSync('git', ['log', '--format=%H', '--', EMULATION_FILE], { cwd: REPO, encoding: 'utf8' }).split('\n').filter(Boolean);
+  for (const commit of emulationRevisions) {
+    const source = execFileSync('git', ['show', `${commit}:${EMULATION_FILE}`], { cwd: REPO, encoding: 'utf8', maxBuffer: 1 << 26 });
+    const parsed = ts.createSourceFile(EMULATION_FILE, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const importsAndReexports = parsed.statements.filter(statement => ts.isImportDeclaration(statement) ||
+      (ts.isExportDeclaration(statement) && statement.moduleSpecifier !== undefined))
+      .map(statement => [statement.getFullStart(), statement.getEnd()]);
+    let isolated = source;
+    for (const [start, end] of importsAndReexports.sort((a, b) => b[0] - a[0]))
+      isolated = isolated.slice(0, start) + isolated.slice(end);
+    const js = ts.transpileModule(isolated, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+    const module = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
+    add(commit, 'neuralese/text-emulation', module.TEXT_NEURALESE_EMULATION_PROMPT);
   }
   return [...byText.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
