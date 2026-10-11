@@ -10772,7 +10772,7 @@ GoogleV35 closed512labels395annotationmatches117differences, static55allreplaypa
 
 V72index49 hits384model_request_budget after1083.8seconds; partialdiagnosis ongoing, nottransportfailure. Sharedlauncher nowpermits a dead predecessor lane toadvance after explicitincomplete/exit2 failed-or-transport_failed attempt only if declaredfrozenruntime tree matches and freshsharedoutput_accounting exactlymatchesjournal, manifestvalid/everyjobterminal result,generation_held,failed,transport_failed. Terminalfailure detailspersistinnewlaunchrecord. No fabricated result/completion/admission; unrelatednextworkcanproceedwhilefailedattemptreview/recoveryseparate. Missing/malformed/partial-only/exportinvalidaccountingstillblocks. This removes unnecessarysuccesscoupling of resource scheduling; activeoldapprovedlaunchers unchanged, newreviewedplanspinupdatedscript. Syntax/diffreviewonly, no tests.
 
-## 2026-10-11 05:49 UTC — full-input-safe curriculum and recurrence receipt clarification
+## 2026-10-11 05:45 UTC — full-input-safe curriculum and recurrence receipt clarification
 
 Fixed sourcefamilies inline_cohort_policy andpaged_late_row: oldcases assumedargumentpreviewtruncation, butcurrentruntime exposesfullsmallarrays, breakingidenticalcounterfactualopenings andshowingdecisivemarkers upfront. Version2retrievescomplete arrays throughnamed visits()/checks() callables instead; numericalpolicies/expectedanswersunchanged, rootargumentssurfaceschanged explicitly. Actualregenerated7cases passedsharedcaseverification/referencegrading, heldcase+reviewartifactunder curriculum-visible-scope-source-fix-v1; no tests ortrainingadmission. No truncationintroduced tohidevisibleinputs.
 
