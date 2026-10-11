@@ -2,7 +2,7 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-v2",
  "extends": "neuralese-direct-v1",
- "description": "Unified shared base of Neuralese direct v1 for both lines (line parity, owner 2026-10-11; plans/neuralese/LINE_PARITY.md). Same stage as neuralese-direct-v1 with: (1) the data declared here, the root-adopted 4962-document text union (3258 train / 1704 held; a strict superset of the V9 set with the same held documents), which the CLI cannot substitute; a line whose tokenizer differs binds its registered tokenizer twin (same documents, ids, splits and source groups); (2) a shared context capacity of tokens 32768 (capacity 32768 - target_tokens, so every document of the union keeps its whole preceding context); target_tokens is a per-line memory knob and steps x target_tokens x batch (2,048,000 supervised positions) stays equal across lines; (3) one monitor for both lines: Pop's 48 clean-base probes (12 each plain exact math, tool, open answer, natlang test turn) as the in-run captured drift reference and as the behaviour gate's probes, each line declaring its own measured base gate_pass; (4) the shared cadence policy: eval and full-state checkpoints at the stage end (plus the checkpoint at half way and the final/emergency saves), the drift monitor and gate-at-warn at a cadence keeping evaluation near 3% of wall time, set per line from measured seconds (fit-only). (5) Optimizer and drift policy (coordinator decision 2026-10-11 under the owner's tie-break for a cheap, battle-tested Muon; plans/neuralese/OPTIMIZER_BAKEOFF_20261011.md): latents on MuonSR (Nesterov 0.95, cubic5 Newton-Schulz, 0.2 sqrt(max) scale, wd 0.1, idle experts skipped; Mellum2 was pretrained and SFT'd with this Muon) at one shared latent_lr 3e-6; the behaviour gate (pass >= base - 0.1) is the hard criterion, response KL warns at 0.5 (runs the gate) and stops only at 1.5 (catastrophic shift), because SFT is meant to change the distribution and the gate measures forgetting.",
+ "description": "Unified shared base of Neuralese direct v1 for both lines (line parity, owner 2026-10-11; plans/neuralese/LINE_PARITY.md). Same stage as neuralese-direct-v1 with: (1) the data declared here, the root-adopted 4962-document text union (3258 train / 1704 held; a strict superset of the V9 set with the same held documents), which the CLI cannot substitute; a line whose tokenizer differs binds its registered tokenizer twin (same documents, ids, splits and source groups); (2) a shared context capacity of tokens 32768 (capacity 32768 - target_tokens, so every document of the union keeps its whole preceding context); target_tokens is a per-line memory knob and steps x target_tokens x batch (768,000 supervised positions: about 2 epochs of the Mellum twin's ~384k supervised tokens; coordinator decision 2026-10-11: more than ~2 SFT epochs erodes instruction following, arXiv:2609.01244, v2 plateaued near update 1800 and MuonSR learns several times faster per update) stays equal across lines; (3) one monitor for both lines: Pop's 48 clean-base probes (12 each plain exact math, tool, open answer, natlang test turn) as the in-run captured drift reference and as the behaviour gate's probes, each line declaring its own measured base gate_pass; (4) the shared cadence policy: eval and full-state checkpoints at the stage end (plus the checkpoint at half way and the final/emergency saves), the drift monitor and gate-at-warn at a cadence keeping evaluation near 3% of wall time, set per line from measured seconds (fit-only). (5) Optimizer and drift policy (coordinator decision 2026-10-11 under the owner's tie-break for a cheap, battle-tested Muon; plans/neuralese/OPTIMIZER_BAKEOFF_20261011.md): latents on MuonSR (Nesterov 0.95, cubic5 Newton-Schulz, 0.2 sqrt(max) scale, wd 0.1, idle experts skipped; Mellum2 was pretrained and SFT'd with this Muon) at one shared latent_lr 3e-6; the behaviour gate (pass >= base - 0.1) is the hard criterion, response KL warns at 0.5 (runs the gate) and stops only at 1.5 (catastrophic shift), because SFT is meant to change the distribution and the gate measures forgetting. Cadence for the 750-step Mellum run at ~22 s/update: held eval at half way and the end, drift monitor every 150, gate-at-warn at most every 450.",
  "overrides": {
   "input_bindings": {
    "direct_text": {
@@ -16,7 +16,7 @@
      "text_data": "direct_text"
     },
     "parameters": {
-     "steps": 2000
+     "steps": 750
     }
    }
   },
@@ -24,10 +24,10 @@
    "neuralese_direct": {
     "tokens": 32768,
     "target_tokens": 1024,
-    "eval_every": 2000,
-    "checkpoint_every": 1000,
-    "drift_every": 500,
-    "drift_gate_every": 1500,
+    "eval_every": 375,
+    "checkpoint_every": 375,
+    "drift_every": 150,
+    "drift_gate_every": 450,
     "monitor": {
      "data": {
       "path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v2/monitor/probes.jsonl",

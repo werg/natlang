@@ -2,22 +2,22 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-lfm-v2",
  "extends": "neuralese-direct-v2",
- "description": "neuralese-direct-v2 (the unified base: 4962-document union, context capacity 32768, shared 48-probe monitor) on base LFM2.5-350M (LiquidAI/LFM2.5-350M, revision 9e6c6ccf; heads from the base model). Every difference is declared in training/neuralese/line-parity.json (plans/neuralese/LINE_PARITY.md). Fit-only: target_tokens 256 (8 GB GPU) and so steps 8000 (equal supervised positions, 2,048,000), cadence scaled with the steps (Pop resets it from measured seconds to keep evaluation near 3% of wall time). Backbone-inherent, evidence-backed: backbone/latent lr 10x below the shared 7.5e-6/3e-6 (LFM V6 at the shared rates drift-stopped at update 260, gate 16/48 against base 26/48; V8 at 7.5e-7/3e-7 finished 1000 updates, gate 22/48, response KL 0.018; Mellum at the shared rates passes, run-v1 qualified and v2 gate 0.79 against base 0.75 at update 1300); the measured base gate_pass 26/48. Declared gap: no quantization component yet (the owner's QAT rule applies once an LFM component is declared). History: recipes/HISTORY.md.",
+ "description": "neuralese-direct-v2 (the unified base: 4962-document union, context capacity 32768, shared 48-probe monitor) on base LFM2.5-350M (LiquidAI/LFM2.5-350M, revision 9e6c6ccf; heads from the base model). Every difference is declared in training/neuralese/line-parity.json (plans/neuralese/LINE_PARITY.md). Fit-only: target_tokens 256 (8 GB GPU) and so steps 3000 (equal supervised positions, 768,000), cadence scaled with the steps (Pop resets it from measured seconds to keep evaluation near 3% of wall time). Backbone-inherent, evidence-backed: backbone/latent lr 10x below the shared 7.5e-6/3e-6 (LFM V6 at the shared rates drift-stopped at update 260, gate 16/48 against base 26/48; V8 at 7.5e-7/3e-7 finished 1000 updates, gate 22/48, response KL 0.018; Mellum at the shared rates passes, run-v1 qualified and v2 gate 0.79 against base 0.75 at update 1300); the measured base gate_pass 26/48. Declared gap: no quantization component yet (the owner's QAT rule applies once an LFM component is declared). History: recipes/HISTORY.md.",
  "overrides": {
   "stages": {
    "direct_sft": {
     "parameters": {
-     "steps": 8000
+     "steps": 3000
     }
    }
   },
   "stage_parameter_defaults": {
    "neuralese_direct": {
     "target_tokens": 256,
-    "eval_every": 8000,
-    "checkpoint_every": 4000,
-    "drift_every": 2000,
-    "drift_gate_every": 6000,
+    "eval_every": 3000,
+    "checkpoint_every": 1500,
+    "drift_every": 750,
+    "drift_gate_every": 2250,
     "backbone_lr": 7.5e-07,
     "monitor": {
      "gate": {

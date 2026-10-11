@@ -153,3 +153,12 @@ A declared gentle Muon5e-7 arm is prepared, based on earlier LFM V4 update20
 KL0.01213 evidence before its owner-requested optimizer switch. Same data/seed/
 schedule/guards; no quality bound relaxed. Requested Muon and Lion rates use
 optimizer-specific units; failed high rate alone does not rank optimizer families.
+
+### Follow-ups (queued, not blocking mellum-v3)
+
+- Move the E2E stage (`trajectories.py`, `latent_optimizer`/`qat_latent_lr`, line-parity e2e base config) to MuonSR.
+- Reproduce Mellum2's grad clip 1.0 for in-backward latents: clip each latent's gradient inside the hook by a running
+  estimate of the global gradient norm (the true norm is known only after the backward).
+
+Run length (coordinator, 2026-10-11): the shared supervision budget is 768,000 positions (about 2 epochs): Mellum v3
+750 updates at target 1024 (about 4.6 h at ~22 s/update), LFM 3000 at target 256.
