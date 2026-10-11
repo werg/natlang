@@ -32689,6 +32689,7 @@
           "luna-choice-confidence-v89-v41-multiitem-inputs-held-20261011-v1"
         ],
         "notes": "Independent closeout of V89 output vs exact source annotations, files/maps, child request visibility, and typed invocation evidence. Agreement is source-label agreement, not a truth claim. The 8 items in the budget-failed program are unscored."
+    }
   ],
   "coverage_backlog": [
     "S1 source-policy, ambiguous provenance aliases and protected split closure remain separate from its passed schema audit.",
