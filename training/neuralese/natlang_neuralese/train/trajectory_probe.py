@@ -5,9 +5,10 @@ This module deliberately does not import the trainer or evaluate model outputs.
 
 from __future__ import annotations
 
-import json
 from collections import Counter, defaultdict
 from typing import Any, Iterable, Mapping
+
+from .write_sites import extract_write_sites
 
 
 def _program_aliases(record: Mapping[str, Any]) -> set[str]:
@@ -36,7 +37,7 @@ def source_groups(record: Mapping[str, Any]) -> frozenset[str]:
 
 
 def _reads(record: Mapping[str, Any]) -> set[str]:
-    own = {w["write"].get("name") for w in _target_writes(record)}
+    own = {site.name for site in extract_write_sites(record)}
     return {part["name"] for message in record.get("messages", [])
             if isinstance(message.get("content"), list)
             for part in message["content"]
@@ -73,48 +74,11 @@ def select_held(records: Iterable[Mapping[str, Any]], limit: int) -> list[Mappin
 
 
 def _target_writes(record: Mapping[str, Any]) -> list[dict[str, Any]]:
-    out = []
-    def visit(value: Any, path: tuple[str | int, ...]):
-        if isinstance(value, dict) and isinstance(value.get("$write"), dict):
-            out.append({"argument": path[0] if path else None, "value_path": path,
-                        "write": value["$write"]})
-        elif isinstance(value, dict):
-            for key, item in value.items():visit(item,path+(key,))
-        elif isinstance(value, list):
-            for index, item in enumerate(value):visit(item,path+(index,))
-    for call in ((record.get("target") or {}).get("tool_calls") or []):
-        try:
-            args = json.loads(call["function"]["arguments"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        before={}
-        for arg,value in args.items():
-            start=len(out);visit(value,(arg,))
-            for site in out[start:]:site["tool"]=call["function"].get("name")
-            before[arg]=value
-    return out
-
-
-def _strip_descriptions(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {k: _strip_descriptions(v) for k, v in value.items() if k != "description"}
-    if isinstance(value, list):
-        return [_strip_descriptions(v) for v in value]
-    return value
-
-
-def _arg_schema(record: Mapping[str, Any], tool_name: str | None, argument: str,
-                value_path: Iterable[str | int] | None = None) -> Any:
-    for tool in record.get("tools", []) or []:
-        fn = tool.get("function", {})
-        if fn.get("name") == tool_name:
-            schema=(fn.get("parameters") or {}).get("properties", {}).get(argument)
-            for part in tuple(value_path or ())[1:]:
-                if not isinstance(schema,dict):return None
-                schema=(schema.get("properties",{}).get(part) if isinstance(part,str) else
-                        schema.get("items") if type(part) is int else None)
-            return _strip_descriptions(schema)
-    return None
+    """Compatibility projection of the shared, validated target writer sites."""
+    return [{"argument": site.argument, "value_path": site.value_path,
+             "write": dict(site.descriptor), "tool": site.tool,
+             "source_kind": site.source_kind, "schema": site.schema}
+            for site in extract_write_sites(record)]
 
 
 def _function_body_ids(record: Mapping[str, Any], piece_kinds: Mapping[str, Any]) -> tuple[str, ...]:
@@ -174,7 +138,7 @@ def aligned_donor(recipient: Any, candidates: Iterable[Any], producers: Mapping[
             if not body:
                 return "producer has no function-body soft IDs"
             w = writes[name]
-            schema = _arg_schema(producer, w["tool"], w["argument"],w.get("value_path"))
+            schema = w.get("schema")
             if not isinstance(schema, dict):
                 return "producer has no argument schema proof"
             native = w["write"].get("source")

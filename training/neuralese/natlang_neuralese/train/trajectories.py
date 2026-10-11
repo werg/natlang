@@ -68,6 +68,7 @@ from pathlib import Path
 import torch
 
 from .memory import cuda_allocated_bytes
+from .write_sites import extract_write_sites, extract_write_sites_from_calls
 
 from ..view import TOOLS as VIEW_TOOLS, combine_site, listing_instructions, part_site, plan as view_plan, \
     reject_digest_part, reply_prefix, view_note, view_site
@@ -300,84 +301,40 @@ def reads(record: dict) -> set[str]:
     return names
 
 
-def _write_markers(value, path=()):
-    """Yield ``(exact JSON value path, write descriptor)`` leaves without walking descriptor metadata."""
-    if isinstance(value, dict) and '$write' in value:
-        site=value['$write']
-        if isinstance(site,dict) and isinstance(site.get('name'),str) and isinstance(site.get('source'),str):
-            yield path,site
-        return
-    if isinstance(value,dict):
-        for key,item in value.items():yield from _write_markers(item,path+(key,))
-    elif isinstance(value,list):
-        for index,item in enumerate(value):yield from _write_markers(item,path+(index,))
-
-
 def write_sites(record: dict) -> list[tuple[str, dict, str, str]]:
-    """Every actual target writer, including nested JSON values and inline bodies.
-
-    The public tuple keeps its legacy top-level argument field. ``write_value_path`` supplies the exact nested
-    path, and rejects duplicate IDs rather than guessing which occurrence owns a block.
-    """
-    sites=[]
-    for call in (record.get('target') or {}).get('tool_calls') or []:
-        arguments=json.loads(call['function']['arguments'])
-        before={}
-        for key,value in arguments.items():
-            for _,write in _write_markers(value):
-                sites.append((call['function']['name'],dict(before),key,write['name']))
-            before[key]=value
-        if 'neuralese_code' in call:
-            from .inline_instructions import validate_inline_instruction_code
-            checked=validate_inline_instruction_code(call['function']['arguments'],call['neuralese_code'])
-            if not checked.valid:raise ValueError('invalid inline instruction code sidecar: '+str(checked.reason))
-            before={}
-            for key,value in arguments.items():
-                if key=='code':break
-                before[key]=value
-            for write in checked.value.writes:
-                sites.append((call['function']['name'],dict(before),'code',write.name))
-    names=[site[3] for site in sites]
+    """Legacy tuple view over the shared validated target write-site extractor."""
+    parsed = extract_write_sites(record)
+    names=[site.name for site in parsed]
     if len(names)!=len(set(names)):
         raise ValueError('duplicate writer name in target')
-    return sites
+    return [(site.tool,dict(site.before_arguments),site.argument,site.name) for site in parsed]
 
 
 def write_value_path(record: dict, name: str | None = None) -> tuple[str | int, ...]:
     """Exact argument-tree path for one uniquely named writer in the target."""
     selected=name or record.get('_active_write_name')
-    found=[]
-    for call in (record.get('target') or {}).get('tool_calls') or []:
-        arguments=json.loads(call['function']['arguments'])
-        for key,value in arguments.items():
-            found.extend(((key,)+path,write) for path,write in _write_markers(value)
-                         if selected is None or write['name']==selected)
+    found=[site for site in extract_write_sites(record)
+           if (selected is not None and site.name==selected) or
+              (selected is None and site.source_kind=='json-write-marker')]
     if len(found)!=1:
         if not found and selected is not None and inline_write_prefix(record,selected) is not None:
             return ()
         raise ValueError('writer name is absent or has multiple value paths')
-    return found[0][0]
+    return found[0].legacy_path
 
 
 def write_site_arguments(record: dict, name: str | None = None) -> dict:
     """Complete native call arguments for a writer, used when its value is nested."""
     selected=name or record.get('_active_write_name')
-    matches=[]
-    for call in (record.get('target') or {}).get('tool_calls') or []:
-        arguments=json.loads(call['function']['arguments'])
-        for value in arguments.values():
-            matches.extend(write for _,write in _write_markers(value)
-                           if selected is None or write['name']==selected)
-        if 'neuralese_code' in call:
-            from .inline_instructions import validate_inline_instruction_code
-            checked=validate_inline_instruction_code(call['function']['arguments'],call['neuralese_code'])
-            if not checked.valid:raise ValueError('invalid inline instruction code sidecar: '+str(checked.reason))
-            matches.extend({'name':write.name} for write in checked.value.writes
-                           if selected is None or write.name==selected)
-        if matches:
-            if len(matches)!=1:raise ValueError('writer name is ambiguous in target')
-            return arguments
-    raise ValueError('writer arguments are absent')
+    sites=extract_write_sites(record)
+    if selected is None:
+        if sites:return dict(sites[0].arguments)
+        raise ValueError('writer arguments are absent')
+    matches=[site for site in sites if site.name==selected]
+    if len(matches)!=1:
+        if len(matches)>1:raise ValueError('writer name is ambiguous in target')
+        raise ValueError('writer arguments are absent')
+    return dict(matches[0].arguments)
 
 
 def write_site(record: dict) -> tuple[str, dict, str, str] | None:
@@ -386,14 +343,8 @@ def write_site(record: dict) -> tuple[str, dict, str, str] | None:
 
 
 def inline_write_prefix(record: dict, name: str) -> str | None:
-    from .inline_instructions import validate_inline_instruction_code
-    for call in (record.get('target') or {}).get('tool_calls') or []:
-        if 'neuralese_code' not in call:continue
-        checked=validate_inline_instruction_code(call['function']['arguments'],call['neuralese_code'])
-        if not checked.valid:raise ValueError('invalid inline instruction code sidecar: '+str(checked.reason))
-        pair=checked.value.prefix_and_body(name)
-        if pair is not None:return pair[0]
-    return None
+    return next((site.inline_prefix for site in extract_write_sites(record)
+                 if site.name==name and site.source_kind=='inline-code-sidecar'),None)
 
 
 def authenticated_capture_context_augmentation(record: dict, writer_name: str) -> tuple[dict | None, str | None]:
@@ -447,18 +398,17 @@ def authenticated_capture_context_augmentation(record: dict, writer_name: str) -
 
 
 def write_value_type(record: dict) -> str:
-    site=write_site(record)
-    if site is None:return 'string'
-    name=site[3]
-    if inline_write_prefix(record,name) is not None:return 'string'
-    for call in (record.get('target') or {}).get('tool_calls') or []:
-        for _,write in _write_markers(json.loads(call['function']['arguments'])):
-            if write['name']==name:
-                kind=write.get('type','Neuralese<string>')
-                if kind=='Neuralese<string>':return 'string'
-                if kind=='Neuralese<unknown>' or write.get('source_encoding')=='json':return 'unknown'
-                raise ValueError('nested writer has unsupported declared value type')
-    raise ValueError('selected writer contract is missing')
+    parsed_sites=extract_write_sites(record)
+    names=[site.name for site in parsed_sites]
+    if len(names)!=len(set(names)):raise ValueError('duplicate writer name in target')
+    selected=record.get('_active_write_name')
+    parsed=next((item for item in parsed_sites if selected is None or item.name==selected),None)
+    if parsed is None:return 'string'
+    if parsed.source_kind=='inline-code-sidecar':return 'string'
+    kind=parsed.value_type
+    if kind=='Neuralese<string>':return 'string'
+    if kind=='Neuralese<unknown>' or parsed.descriptor.get('source_encoding')=='json':return 'unknown'
+    raise ValueError('nested writer has unsupported declared value type')
 
 
 def target_writes(record: dict) -> set[str]:
@@ -486,15 +436,12 @@ def handover_notes(record: dict) -> dict[str, str]:
             for child in value: remember_reads(child)
     remember_reads(record.get("messages", []))
     for message in record["messages"] + ([record["target"]] if record.get("target") else []):
-        for call in message.get("tool_calls") or []:
-            if 'neuralese_code' in call:
-                from .inline_instructions import validate_inline_instruction_code
-                checked=validate_inline_instruction_code(call['function']['arguments'],call['neuralese_code'])
-                if not checked.valid:raise ValueError('invalid inline instruction code sidecar: '+str(checked.reason))
-                for write in checked.value.writes:remember(write.name,write.source)
-            if '"$write"' in call["function"]["arguments"]:
-                for _,write in _write_markers(json.loads(call["function"]["arguments"])):
-                    remember(write['name'],write['source'])
+        calls = [call for call in (message.get("tool_calls") or [])
+                 if "neuralese_code" in call or
+                 (isinstance((call.get("function") or {}).get("arguments"), str) and
+                  '"$write"' in call["function"]["arguments"])]
+        for site in extract_write_sites_from_calls(calls):
+            remember(site.name, site.source)
     return notes
 
 
