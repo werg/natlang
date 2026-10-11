@@ -761,10 +761,22 @@ def main(argv=None):
         floor = _warmup_update_floor_bytes(direct_trainables, optimizer, bootstrap=False, in_backward=mode == "packed")  # packed: the latents step in backward
         if cuda_active:
             free, total = torch.cuda.mem_get_info(a.device)
-            available = effective_cuda_free_bytes(int(free), int(total), int(torch.cuda.memory_reserved(a.device)),
-                                                  int(torch.cuda.memory_allocated(a.device)))
+            allocator_backend = torch.cuda.get_allocator_backend()
+            allocator_reserved = int(torch.cuda.memory_reserved(a.device))
+            allocator_allocated = int(torch.cuda.memory_allocated(a.device))
+            inactive_split = None
+            if allocator_backend == 'native':
+                stats = torch.cuda.memory_stats(a.device)
+                value = stats.get('inactive_split_bytes.all.current')
+                inactive_split = int(value) if value is not None else None
+            available = effective_cuda_free_bytes(int(free), int(total), allocator_reserved,
+                                                  allocator_allocated,
+                                                  inactive_split_bytes=inactive_split)
         else:
+            free = total = allocator_reserved = allocator_allocated = None
             available = None
+            allocator_backend = None
+            inactive_split = None
 
         def estimate(checkpointed):
             layout = backbone_memory_layout(backbone, checkpointed=checkpointed)
@@ -794,6 +806,12 @@ def main(argv=None):
                 'target_tokens': target, 'activation_geometry_bytes': raw,
                 'predicted_activation_bytes': predicted, 'gradient_optimizer_floor_bytes': floor,
                 'estimated_incremental_peak_bytes': incremental, 'reusable_cuda_bytes': available,
+                'device_free_bytes': int(free) if free is not None else None,
+                'device_total_bytes': int(total) if total is not None else None,
+                'allocator_backend': allocator_backend,
+                'allocator_reserved_bytes': allocator_reserved,
+                'allocator_allocated_bytes': allocator_allocated,
+                'allocator_inactive_split_bytes': inactive_split,
                 'estimator_margin': memory_estimator.margin, 'estimator_geometry': memory_estimator.geometry_version,
                 'activation_layout': {key: value for key, value in layout.items()
                                       if key in ('width', 'layers', 'intermediate', 'kv_width', 'dtype_bytes',
