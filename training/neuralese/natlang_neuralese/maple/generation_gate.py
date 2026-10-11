@@ -63,7 +63,7 @@ def run_gate(model, tokenizer, probes: list[dict], render, eos: int, max_new: in
     with deployed_cache():
         for probe in probes:
             limit = max_new_thinking if probe.get("enable_thinking") else max_new
-            tokens = greedy(model, render(tokenizer, probe), limit, eos)
+            tokens = greedy_any(model, render(tokenizer, probe), limit, eos)
             text = tokenizer.decode(tokens, skip_special_tokens=False)
             checks = check(probe, text, tokens, eos)
             results.append({"id": probe["id"], "kind": probe.get("kind"), "checks": checks, "pass": all(checks.values()),
