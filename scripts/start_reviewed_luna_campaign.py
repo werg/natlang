@@ -247,6 +247,8 @@ def main():
                                        stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         processes.append(process)
         launched.append({**worker, 'lane': lane, 'pid': process.pid, 'command': command,
+                         'runtime': str(runtime),
+                         'runtime_manifest_sha256': digest(runtime / 'frozen-runtime.json'),
                          **({'predecessor_accounting': reason} if predecessor and reason else {})})
         lane_states[lane] = {'status': 'running', 'pid': process.pid,
                              'predecessor_pid': predecessor['pid'] if predecessor else None,

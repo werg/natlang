@@ -225,6 +225,19 @@ def load_predecessors(campaign: Path) -> list[dict[str, Any]]:
         record: dict[str, Any] = {"number": number, "pid": pid, "queue": str(queue),
                                   "journal": str(journal), "queue_sha256": digest(queue)}
         runtime_value = worker.get("runtime")
+        # Existing launch records declare the executed runtime in their exact
+        # argv. Preserve it even when a successful lane has no failure yet;
+        # its successor may need to account for an exhausted attempt later.
+        command = worker.get("command", [])
+        if isinstance(command, list) and "--runtime" in command:
+            if command.count("--runtime") != 1 or command.index("--runtime") + 1 >= len(command):
+                raise ValueError(f"Ambiguous predecessor runtime argv for lane {number}")
+            command_runtime = command[command.index("--runtime") + 1]
+            if not isinstance(command_runtime, str) or not command_runtime:
+                raise ValueError(f"Missing predecessor runtime argv for lane {number}")
+            if runtime_value and Path(runtime_value).resolve() != Path(command_runtime).resolve():
+                raise ValueError(f"Predecessor runtime metadata and argv disagree for lane {number}")
+            runtime_value = command_runtime
         if bundle_by_number:
             lane = bundle_by_number.get(number)
             if lane is None:
