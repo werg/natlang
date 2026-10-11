@@ -37879,6 +37879,37 @@
         }
       },
       "notes": "S72 semantic-inline curriculum teacher turns."
+    },
+    {
+      "id": "luna-v20-visible-decision-rubric-corrected-20261012-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/luna-v20-visible-decision-rubric-corrected-20261012-v1",
+      "include": [
+        "teacher-turns.jsonl",
+        "salvage-receipt.json",
+        "review.json",
+        "candidate-audit.json",
+        "source-cases.jsonl",
+        "source-manifest.json",
+        "source-bindings.json",
+        "source-quality-clearance.json",
+        "source-quality-review.json",
+        "source-closure.json",
+        "source-label-corrections.json",
+        "selected-candidate-audit.json",
+        "overlap-audit.json"
+      ],
+      "split": "inherited-source-train-only",
+      "source_class": "provider-generated-source-bound-decision-actions-with-scoped-visible-rubric-label-corrections",
+      "training_admission": true,
+      "trace_admission": false,
+      "admission": "reviewed-exact-source-bound-child-actions-with-immutable-source-label-correction; training SFT only",
+      "independent_new_worlds": 0,
+      "review_status": "4 exact generated toxicity child targets approved against the visible insult/degrading-language rubric after independent source-label review; no same source ID/group/full-context example in the published 283-turn packet; one generic return-true action hash is shared across different tasks and retained. The other outputs from the 96-case pilot are not admitted by this entry.",
+      "training_admission_reason": "Each admitted target is the exact Luna-generated boolean true child action, binds the source case bytes and visible state/question/rubric/schema, and has an immutable scoped correction receipt binding original false annotation, source group/revision/input digest, and actual generated true value. The two source rows originally labeled false are preserved unchanged; admission does not claim agreement with those original annotations. Each selected child retains inherited train-only group closure and passed canonical holds and JeFF reservation checks. The exact child review, source-quality clearance, source closure, source-label correction evidence, target hashes, and prior 283-packet overlap audit are bundled.",
+      "required_conversion": "shared native chat renderer for full, program-header, and whole-trajectory twins; admission does not imply runtime qualification",
+      "consumable_by_direct_stage": false,
+      "notes": "Source task visible contract defines toxic as insult/degrading language, threats, hate, or identity attacks; policy disagreement alone is not toxic. Four items were individually reviewed for explicit demeaning/personal insults: dv-41ee7c22c35fc354a123, dv-593249d30383ce87cc48, dv-e33f4b23ca733ded3262, dv-f3c90592b9c621fecd20. Ambiguous political/boundary mismatches and clear non-toxic false positives/false negatives are explicitly excluded. Frozen v20 generation results and original source annotations are unchanged. These examples receive zero independent-world credit."
     }
   ],
   "coverage_backlog": [
