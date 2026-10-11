@@ -31236,6 +31236,23 @@
       "admission": "review-and-launch-evidence-only-no-training-admission",
       "independent_new_worlds": 0,
       "notes": "Root approved plan SHA 0acfc708dffd72cb8fc90ec00fb0cac27830fc1ef51effac80f49047feb37af1 after independently checking 18 programs / 122 original train items, exact master rows and no hold hits; supervisor PID 1093879 launched the five per-lane waiters. Mutable campaign-launch state, results and logs are excluded."
+    },
+    {
+      "id": "v73-failed-history-exact-message-pair-supplement-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-failed-history-supplement-v1",
+      "include": [
+        "FILES.sha256",
+        "review.json",
+        "review.md",
+        "exact-failed-history-row-bindings.json"
+      ],
+      "split": "inherited-train-quality-review-only",
+      "source_class": "held-native-failed-action-history-risk-diagnostic",
+      "training_admission": false,
+      "admission": "diagnostic-only-no-native-or-trace-admission-and-no-846-subset-closure-claim",
+      "independent_new_worlds": 0,
+      "notes": "Exact saved assistant tool-call/tool-result pair join for failed trace actions into retained 846-row V3 histories. 63/63 trace actions match by same trajectory+invocation, function, exact decoded args, linked saved tool_call_id and exact result text; these appear in 82 unique retained turns (145 row/action occurrences). One bad-action lacks trace call ID and is bound by exact args plus linked saved pair. No loose substring/first-line join. Existing full S1 closure covers the 909-row V2 ancestor only; no inferred closure, context masking, admission, or negative-label claim."
     }
   ],
   "coverage_backlog": [

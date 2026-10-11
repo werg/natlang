@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v73-failed-history-exact-message-pair-supplement-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-failed-history-supplement-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 259,
+      "sha256": "cd9c849d4106be2acbff6c3bf4c299498c43c7a00fe3806f5c718a7c395eb7a1"
+    },
+    {
+      "path": "exact-failed-history-row-bindings.json",
+      "bytes": 418666,
+      "sha256": "97d280b2cc61ddef62a123ceac72f49fa712a4d4c6c1395e4cd4a334185dd109"
+    },
+    {
+      "path": "review.json",
+      "bytes": 3662,
+      "sha256": "2f05f1d85103379a726a5e413888391531e3a08c94498c3375ea989ee44f5e89"
+    },
+    {
+      "path": "review.md",
+      "bytes": 1128,
+      "sha256": "666b70f49218f481e45595b9213265e8e6ffe21ba9ca16f06e69c83036b1c42a"
+    }
+  ],
+  "bytes": 423715
+}
