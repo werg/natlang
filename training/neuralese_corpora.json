@@ -30427,6 +30427,20 @@
       "admission": "prepared-input-only-root-review-and-launch-pending-no-label-admission",
       "independent_new_worlds": 0,
       "notes": "V38 prepared-only fresh source: 512 inherited-train exact master rows, 128 each from DBpedia, LanguageID, Newsgroups and Yahoo Topic; source and omissions are pinned. The prior scan includes V37 exact case SHA and all available provider/annotation reservations. Frozen ten-model free pool is copied from V37; no labels or provider requests are included. The source-preparation manifest pins canonical policy V16 (75 holds); a separate owner-reviewed V17 receipt with four prospective holds is pinned in source-review-v1 and has zero ID/group overlap with selected V38. Root review/launch remain pending; no training admission."
+    },
+    {
+      "id": "google-choice-confidence-v38-root-launch-receipt-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v38-source",
+      "include": [
+        "root-launch-receipt-v1.json"
+      ],
+      "split": "inherited-train-launch-evidence",
+      "source_class": "held-google-provider-pool-launch-receipt",
+      "training_admission": false,
+      "admission": "held-launch-receipt-only-no-label-admission",
+      "independent_new_worlds": 0,
+      "notes": "Separate immutable root launch receipt for V38 supervisor PID 1051685. The receipt pins the fresh V38 input cases and manifest, validates current canonical 79-hold policy (source-policy prep snapshot remains V16/75 and the four approved new hold IDs are separately checked disjoint), and pins the frozen ten-model pool. It records 4 workers, two in-flight calls per quota group, 2048 max output tokens, wait-for-owner enabled, and paid fallback disabled. Launch evidence only; no label quality or training admission."
     }
   ],
   "coverage_backlog": [

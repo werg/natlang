@@ -216,6 +216,16 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
     if args.item_agreement_count is not None and args.item_agreement_count < 0:
         raise ValueError("--item-agreement-count must be nonnegative")
 
+    # Capture the source-quality policy at preparation time. A campaign's
+    # owner review and later worker starts must remain bound to these exact
+    # bytes even if the canonical policy receives new holds afterward.
+    quality_policy_path = ROOT / "training/decision_source_quality_holds.json"
+    quality_policy_bytes = quality_policy_path.read_bytes()
+    quality_policy_sha256 = hashlib.sha256(quality_policy_bytes).hexdigest()
+    preparer_path = Path(__file__).resolve()
+    preparer_bytes = preparer_path.read_bytes()
+    preparer_sha256 = hashlib.sha256(preparer_bytes).hexdigest()
+
     frozen_path = runtime / "frozen-runtime.json"
     if not frozen_path.is_file():
         raise ValueError(f"Runtime has no frozen-runtime.json: {runtime}")
@@ -286,6 +296,13 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
     # Exclusive creation protects prior attempts and makes every queue/log path fresh.
     out.mkdir(mode=0o750)
 
+    source_review_dir = out / "source-review"
+    source_review_dir.mkdir(mode=0o750)
+    quality_policy_snapshot = source_review_dir / "decision_source_quality_holds.json"
+    quality_policy_snapshot.write_bytes(quality_policy_bytes)
+    preparer_snapshot = source_review_dir / "prepare_luna_folder_campaign.py"
+    preparer_snapshot.write_bytes(preparer_bytes)
+
     review = {
         "schema": "natlang.root-folder-generation-review/1",
         "time_utc": now,
@@ -303,6 +320,20 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         "reference_gates": {"checked_gate_sets": sorted({tuple(gates) for gates in gates_by_identity.values()}),
                             "per_case": gates_by_identity},
         "source_quality": "held_for_independent_quality_review",
+        "source_quality_policy_snapshot": {
+            "canonical_path_at_preparation": str(quality_policy_path),
+            "canonical_sha256_at_preparation": quality_policy_sha256,
+            "snapshot_path": str(quality_policy_snapshot),
+            "snapshot_sha256": digest(quality_policy_snapshot),
+            "policy_identity": "The owner reviews these copied bytes with the source and queues. A later canonical-policy edit does not alter this prepared campaign's identity.",
+        },
+        "preparation_code_snapshot": {
+            "canonical_path_at_preparation": str(preparer_path),
+            "canonical_sha256_at_preparation": preparer_sha256,
+            "snapshot_path": str(preparer_snapshot),
+            "snapshot_sha256": digest(preparer_snapshot),
+            "code_identity": "The owner reviews this exact completed preparer byte snapshot. A later checkout edit does not alter this prepared campaign's identity.",
+        },
         "training_admission": False,
         "independent_new_worlds": 0,
         "related_worlds": "Source lineage and split/group metadata are preserved verbatim; this preparation adds no independent-world credit.",
@@ -322,6 +353,8 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         str(cases_path): digest(cases_path),
         str(replay_path): digest(replay_path),
         str(review_path): digest(review_path),
+        str(quality_policy_snapshot): digest(quality_policy_snapshot),
+        str(preparer_snapshot): digest(preparer_snapshot),
         str(frozen_path): digest(frozen_path),
         str(SUPERVISOR): digest(SUPERVISOR),
         str(STARTER): digest(STARTER),

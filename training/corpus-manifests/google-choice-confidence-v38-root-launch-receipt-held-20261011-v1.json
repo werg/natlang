@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v38-root-launch-receipt-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v38-source",
+  "files": [
+    {
+      "path": "root-launch-receipt-v1.json",
+      "bytes": 2909,
+      "sha256": "0df3bb9cd1ba8dd5f117d4353a1f30f84c5153367d10afc56d938c5a61bf71a9"
+    }
+  ],
+  "bytes": 2909
+}
