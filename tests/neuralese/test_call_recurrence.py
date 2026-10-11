@@ -162,3 +162,39 @@ def test_direct_writer_end_to_end_stage_trains_the_child_write_through_the_neura
     assert down.abs().sum() > 0, "the caller's loss trains the NeuraleseProjection (zero-initialised output)"
     saved = torch.load(out / "heads.pt", weights_only=False)
     assert torch.equal(saved["neuralese_projection"]["stack.blocks.1.down.weight"], down.detach().cpu())
+
+
+@pytest.mark.parametrize("feedback", ["token", "value"])
+def test_direct_writer_feeds_back_tokens_so_a_consumer_reaches_each_value_at_depth_one(loaded, feedback):
+    """Neuralese direct v1: inside a write the backbone reads token embeddings, never the emitted values, so the
+    gradient from a later value to an earlier one is zero (depth 1 per producer->consumer boundary). With
+    feedback="value" (the recurrence stage) it is not."""
+    from types import SimpleNamespace
+    from natlang_neuralese.model.neuralese_projection import NeuraleseProjection
+    from natlang_neuralese.serve.direct_write import write_direct
+    from natlang_neuralese.train.execution import prefill_write_context
+
+    model, tokenizer, backbone = loaded
+    heads = SimpleNamespace(cutoff=backbone.num_layers, read_markers=False)
+    torch.manual_seed(0)
+    projection = NeuraleseProjection(int(model.config.hidden_size), hidden=8)
+    with torch.no_grad():
+        for block in projection.stack.blocks:
+            block.down.weight.normal_(0, 0.05)
+    context = backbone.embed(torch.tensor([tokenizer.encode("The parcel is ready.", add_special_tokens=False)]))
+    pre = prefill_write_context(backbone, heads, context)
+    from natlang_neuralese.write import Opened
+    opened = Opened(pre.cache, pre.state, backbone.logits(pre.top[:, None])[:, -1], pre.top)
+    stop = {tokenizer.eos_token_id}
+    forced = tokenizer.encode(" It is", add_special_tokens=False)[:3]
+    writer = write_direct(backbone, projection, opened, 3, stop, length=3, feedback=feedback,
+                          tokens=forced if feedback == "token" else None)
+    first, last = writer.payloads[0], writer.payloads[-1]
+    gradient, = torch.autograd.grad(last.float().sum(), first, allow_unused=True)
+    if feedback == "token":
+        assert gradient is None or float(gradient.abs().sum()) == 0
+        # The consumer still reaches the producer's projection through every emitted value.
+        down = projection.stack.blocks[-1].down.weight
+        assert float(torch.autograd.grad(last.float().sum(), down)[0].abs().sum()) > 0
+    else:
+        assert gradient is not None and float(gradient.abs().sum()) > 0

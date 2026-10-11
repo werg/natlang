@@ -81,7 +81,8 @@ def run(artifact, base_snapshot, probes_path, probes_sha256, out, tokens=64, per
                 hidden, cache = backbone.run_layers(backbone.embed(torch.tensor([[plain_token]], device=device)),
                                                     range(backbone.num_layers), cache)
                 top = hidden[:, 0]
-                final, neural_cache = backbone.run_layers(value[:, None], range(backbone.num_layers), neural.cache)
+                final, neural_cache = backbone.run_layers(neural.next_input(value)[:, None], range(backbone.num_layers),
+                                                          neural.cache)
                 neural.advance(value, final[:, 0], neural_cache)
             if not neural.done and neural.count == tokens:
                 neural.decide()  # record stop/cap decision after the last emitted value

@@ -208,7 +208,8 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda', token_choice_
                 value = served.decide()
                 if value is None:
                     break
-                hidden, caches = step_rows(backbone, value[:, None], [served.cache], range(backbone.num_layers))
+                hidden, caches = step_rows(backbone, served.next_input(value)[:, None], [served.cache],
+                                           range(backbone.num_layers))
                 served.advance(value, hidden[:, 0], caches[0])
             serving_delta = float((served.complete()[0] - payload).abs().max())
             cached = read_back(backbone, engine.heads, opened.cache, payload, all_logits=False)
