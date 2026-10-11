@@ -7,6 +7,11 @@ record why, brief the other machine, and keep going. Raise with the owner only
 what is truly theirs to decide, and keep working on everything else in the
 meantime.
 
+Don't reject an approach because our implementation of it failed (owner,
+2026-10-11). A worse loss, degraded behaviour or an unexplained numerical gap is a
+bug until proven otherwise: compare against an exact reference, localize the
+divergence, fix it, and re-measure before judging the approach itself.
+
 # Machine ownership and coordination
 
 - Use `/home/werg/natlang` as the canonical development checkout on both Pop and
