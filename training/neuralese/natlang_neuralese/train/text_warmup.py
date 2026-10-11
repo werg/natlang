@@ -368,7 +368,7 @@ def process_rss_bytes():
 RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','eval_minutes','device',
                                       'checkpoint_layers','cuda_reserved_cap_gb','optimizer_state','optimizer_added',
                                       'moe_kernel','report_column_fraction','drift_rows',
-                                      'drift_warn','drift_stop'})
+                                      'drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop'})
 
 
 def copy_restored_values(targets, values):
@@ -378,6 +378,20 @@ def copy_restored_values(targets, values):
     with torch.no_grad():
         for name,value in values.items():
             targets[name].copy_(value.to(targets[name]))
+
+
+def behaviour_drift_level(drift, a):
+    """The drift guard (plans/mellum-port.md "Behaviour gate bug hunt") on a ``behaviour_drift`` report: ``stop`` when
+    the response KL to BF16 Mellum exceeds ``--drift-stop`` or the response greedy agreement falls below
+    ``--drift-agreement-stop``, ``warn`` at ``--drift-warn`` / ``--drift-agreement-warn``, else ``ok``. Prompt-position
+    KL is reported, never guarded: whole-trajectory training moves it by design. Calibration (16 rows): BF16 Mellum
+    0.0003 / 0.9999; equal-norm noise of 0.1-0.37% ~0.009 / 0.98 (routing near-ties)."""
+    kl=drift.get('held_response_kl');agreement=drift.get('held_response_agreement')
+    def beyond(value,limit,above):
+        return bool(limit) and value is not None and (value>limit if above else value<limit)
+    if beyond(kl,a.drift_stop,True) or beyond(agreement,a.drift_agreement_stop,False):return 'stop'
+    if beyond(kl,a.drift_warn,True) or beyond(agreement,a.drift_agreement_warn,False):return 'warn'
+    return 'ok'
 
 
 def same_resume_identity(previous, current):
@@ -1313,9 +1327,13 @@ def main(argv=None):
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
     p.add_argument('--drift-rows',type=int,default=16,
                    help='held preserve rows of the behaviour-drift KL logged at every cadence evaluation (0: off)')
-    p.add_argument('--drift-warn',type=float,default=.06,help='behaviour-drift held KL that logs a warning (0: off)')
-    p.add_argument('--drift-stop',type=float,default=.1,
-                   help='behaviour-drift held KL that stops the run with its full state (0: off)')
+    p.add_argument('--drift-warn',type=float,default=.03,help='behaviour-drift response KL that logs a warning (0: off)')
+    p.add_argument('--drift-stop',type=float,default=.05,
+                   help='behaviour-drift response KL that stops the run with its full state (0: off)')
+    p.add_argument('--drift-agreement-warn',type=float,default=.97,
+                   help='behaviour-drift response agreement below which a warning is logged (0: off)')
+    p.add_argument('--drift-agreement-stop',type=float,default=.95,
+                   help='behaviour-drift response agreement below which the run stops with its full state (0: off)')
     p.add_argument('--report-column-fraction',type=float,default=1.0,
                    help='fraction of the column held windows, gate probes and held rows a report-only precision column '
                         '(a gated point not required in this stage) evaluates; it runs only at the decision ending the stage')
@@ -2824,17 +2842,15 @@ def main(argv=None):
             streak=streak+1 if bf16_pass and precisions_ok is not False else 0
             report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
                           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
-            drift=(report.get('behaviour_drift') or {}).get('held_kl')
+            drift=report.get('behaviour_drift')
             if drift is not None:
-                # The drift guard (plans/mellum-port.md "Behaviour gate bug hunt"): BF16 Mellum is 0.013 on these
-                # rows and any small weight change costs ~0.035-0.04 (routing flips); above --drift-stop the run
-                # stops with its full state instead of training on.
-                level=('stop' if a.drift_stop and drift>a.drift_stop else
-                       'warn' if a.drift_warn and drift>a.drift_warn else 'ok')
+                level=behaviour_drift_level(drift,a)
                 report['behaviour_drift']['guard']=level
                 if level!='ok':
-                    print(json.dumps({'event':'behaviour_drift_'+level,'step':step,'held_kl':drift,
-                                      'warn':a.drift_warn,'stop':a.drift_stop}),flush=True)
+                    print(json.dumps({'event':'behaviour_drift_'+level,'step':step,
+                                      'held_response_kl':drift.get('held_response_kl'),
+                                      'held_response_agreement':drift.get('held_response_agreement'),
+                                      'held_prompt_kl':drift.get('held_prompt_kl')}),flush=True)
                 if level=='stop':
                     report['stopped_by']='behaviour_drift'
                     stop.request()

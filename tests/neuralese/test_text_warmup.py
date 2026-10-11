@@ -1752,3 +1752,17 @@ def test_restored_values_leave_no_view_of_the_mmap_checkpoint_behind(tmp_path):
     del saved
     gc.collect()
     assert all(probe() is None for probe in probes)  # nothing else holds a view: the file mapping can close
+
+
+def test_drift_guard_keys_on_response_kl_and_agreement_never_on_prompt_kl():
+    from types import SimpleNamespace
+    from natlang_neuralese.train.text_warmup import behaviour_drift_level
+    a = SimpleNamespace(drift_warn=.03, drift_stop=.05, drift_agreement_warn=.97, drift_agreement_stop=.95)
+    floor = {'held_response_kl': 0.009, 'held_response_agreement': 0.98, 'held_prompt_kl': 0.4}
+    assert behaviour_drift_level(floor, a) == 'ok'  # prompt drift alone never warns or stops
+    assert behaviour_drift_level({**floor, 'held_response_kl': 0.04}, a) == 'warn'
+    assert behaviour_drift_level({**floor, 'held_response_agreement': 0.96}, a) == 'warn'
+    assert behaviour_drift_level({**floor, 'held_response_kl': 0.06}, a) == 'stop'
+    assert behaviour_drift_level({**floor, 'held_response_agreement': 0.94}, a) == 'stop'
+    off = SimpleNamespace(drift_warn=0, drift_stop=0, drift_agreement_warn=0, drift_agreement_stop=0)
+    assert behaviour_drift_level({**floor, 'held_response_kl': 9.0, 'held_response_agreement': 0.0}, off) == 'ok'

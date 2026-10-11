@@ -672,9 +672,15 @@ Preserve-only sweep, 30 steps (KL at steps 10 / 20 / 30, then ‖ΔW‖ at 30 an
   - In text_warmup it is `--latent-optimizer muonsr`, with the PortMuonAdamW state key "muonsr".
   - NS costs about 16 s of a 19 s update. The cheapest option to try first is 3 iterations.
 - **`behaviour_drift`.** The text warm-up logs held KL to BF16 Mellum on 16 preserve-held rows at every cadence evaluation. It shares `generation_gate.held_kl` with the gate.
-- **Drift guard.** The thresholds are set against the routing-flip floor:
-  - `--drift-warn 0.06` logs a warning;
-  - `--drift-stop 0.1` stops the run with its full state.
+- **Drift guard.** It is keyed on the response-position KL and the response greedy agreement. Prompt-position KL is reported but never guarded: whole-trajectory training moves it by design (owner policy).
+  - The SFT positive test showed why. LionSR at 3e-6 on a narrow task gave prompt KL 0.26 against response KL 0.025 after 50 steps.
+  - `--drift-warn 0.03` / `--drift-agreement-warn 0.97` log a warning.
+  - `--drift-stop 0.05` / `--drift-agreement-stop 0.95` stop the run with its full state.
+  - Calibration on the 16 rows:
+    - BF16 Mellum: response KL 0.0003, agreement 0.9999.
+    - Equal-norm noise of 0.1–0.37% (the routing-flip floor): about 0.009 / 0.98.
+    - Preserve-only, 30 steps: MuonSR 7.5e-7 0.009, MuonSR 2.5e-6 0.014, LionSR 1e-5 0.022, LionSR 3e-5 0.063.
+  - The behaviour gate stays the qualification check.
   - The guard and the drift metric are operational recipe parameters.
 - **Behaviour reports keep the gate's generations** (`gate_results` with texts).
 
