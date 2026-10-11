@@ -11049,3 +11049,12 @@ backward, 21 vectors, 6,641 producer context tokens, peak3.5GiB, loss7.1553,
 writer gradient norm140.97. This verifies the memory repair on that exercised
 update; reader updates/20-step outcome and consumer qualification remain pending.
 No context reduction, frozen backbone or detached producer gradient was used.
+
+## Pop continuation — 2026-10-11 15:07 UTC
+
+- Six-row v7 closed20updates with zero errors and peak3.5–4.07GiB. Held soft CE2.4637→3.4798; held crisp CE1.7793→2.2527 atstep15. Projection preclip norms reached4.04e13 despite finite FP64 global clipping. Preserve this failure; do not deploy/admit those weights. New shared telemetry500c8979 reports separate NL/TCP gradient and actual update norms.
+- Broader endpoint epoch is active from ORIGINAL qualified V8, not the degraded smoke: recipe6ea02f3f, frozen687train/556testpool/32held, nominal687updates, checkpoint/eval25. Session64249/containerpop-direct-native-e2e-endpoint-v1. No context exclusions;95softparams/880indexedproducers. Atupdate7, both projections actually changed (NL0.03988/TCP0.04357), preclip norms23.42/22.25,global76.88,error0,three48vectorwrites,peak5.03GiB. Task/stopping/admission remain unqualified.
+- Shared input coverage issue identified: trajectory_probe scans literal $write but misses validated neuralese_code sidecars, unlike trajectories. Six-row cohort would STILL have zero safe reciprocal donors after fixing discovery (missing function-body identities and group disjointness). Design registered as heldv2; do not invent donor compatibility.
+- Native1243endpoint materialization and six-row file registered/synced2063c06c; corrected selector design separately c995f2bc. Helper caught a post-publication edit, restoredv1exact from verified artifact copy, and registered corrected bytes as additivev2.
+- Root rejected paired prompt probev9 before spending provider calls: variants changed reference code only; real semantics were identical and no authored-root execution contract was present. Collector would sample identical root prompts. Helper preparingv10 with candidate guidance in actual NLrootinstructions and rerendered/replayed evidence. Keepv9as diagnostic, not a live measurement.
+- Googlev43 source prepared2048fresh IDs from58,500master. Root independently verified exact id/group/family/kind/state/question/options/answer fields for all2048, zero mismatch. SourceSHA9d84b3f3df60325dfac3117da40c24c7769601d4518debb9898efac33478654b. Provider launcher/lockchain review pending; no requests yet.
