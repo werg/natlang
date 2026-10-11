@@ -174,3 +174,18 @@ The Pop differences are explicit recipe overrides; the wider capacity and smalle
 target keep long context available within8GB. The gentler rates follow actual
 local drift failures. Frequent early evaluation gives local diagnostics at a lower
 cost than the larger DGX gate. Completion alone does not qualify either model.
+
+### Current Pop direct V8 inventory — 2026-10-11 11:08 UTC
+
+The preceding V7 recipe comparison was a declared pin, not an active Pop run:
+V7 aborted before model load on a concurrent package edit. Current direct V8
+freezes the reviewed package before import preflight through the shared launcher.
+Against the verified DGX direct run-v1 frozen inventory, V8 has **148/151 identical
+Python files, zero Pop-only or DGX-only modules**. The additional difference is
+`data/text_corpus.py`: a shared, published exact failed-history context-span
+producer, inactive for this run's already-prepared text input. The other two
+differences remain operational trainer/recipe status and launch changes.
+No differences in trained loss, projection, forward pass or optimizer math.
+V8 retains the V7 recipe settings in the preceding table. At local step460,
+CE4.688 vs base6.192, projection value delta−.270, responseKL.0150, guard ok.
+These intermediate diagnostics do not replace final behavior/runtime qualification.
