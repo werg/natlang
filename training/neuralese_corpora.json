@@ -32621,74 +32621,137 @@
       "notes": "Held exact-run and frozen-package evidence for the synthetic TCP stream extension, launched from shared commit 68ea1f35e28e34febeffd83b705d9001e5448726 with uncommitted_runtime_changes=false. The deterministic synthetic TCP tensor-state identity is ad78f387d1ef14a7bd436726181ca046ba7791f9038bda72a7725ffbd4d17f79; saved state file SHA is 1d837a96492c7a06da7189ceee111c9a51b9dbf51077e85e52c9f283f2d93eb6. Multi-turn weighted context scoring matched sequence readout on 42 targets over four target segments (max delta 0). Actual Engine syntax-guidance rollback restored/replayed five tokens; token-history and next-logit replay deltas were both 0. The exact direct artifact runtime report still has runtime_qualified=false; these synthetic checks do not establish trained TCP behavior, consumer/task qualification, end-to-end gates, or training admission."
     },
     {
-        "id": "luna-choice-confidence-v90-lane03-runtime-bound-recovery-held-20261011-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v90-v40-runtimev17-prepared-v1",
-        "include": [
-          "reviewed-plan-root-lane03-runtime-bound-recovery-v1.json",
-          "root-lane03-runtime-repair-v1.json",
-          "root-lane03-supervisor-launch-v1.json"
-        ],
-        "exclude_dirs": [
-          "__pycache__"
-        ],
-        "split": "inherited-source-train-single-lane-recovery-evidence",
-        "source_class": "root-approved-runtime-bound-lane-recovery-launch",
-        "training_admission": false,
-        "trace_admission": false,
-        "recurrence_admission": false,
-        "independent_new_worlds": 0,
-        "admission": "recovery launch evidence only; no data admission",
-        "notes": "One-lane recovery of V90 lane 3 on the exact original queue after terminal V89 model_request_budget incomplete. The repair evidence verifies predecessor completion using the V89 approved plan runtime; original blocked launch and original lane queue/source remain unchanged."
+      "id": "luna-choice-confidence-v90-lane03-runtime-bound-recovery-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v90-v40-runtimev17-prepared-v1",
+      "include": [
+        "reviewed-plan-root-lane03-runtime-bound-recovery-v1.json",
+        "root-lane03-runtime-repair-v1.json",
+        "root-lane03-supervisor-launch-v1.json"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-train-single-lane-recovery-evidence",
+      "source_class": "root-approved-runtime-bound-lane-recovery-launch",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "recovery launch evidence only; no data admission",
+      "notes": "One-lane recovery of V90 lane 3 on the exact original queue after terminal V89 model_request_budget incomplete. The repair evidence verifies predecessor completion using the V89 approved plan runtime; original blocked launch and original lane queue/source remain unchanged."
     },
     {
-        "id": "luna-choice-confidence-v89-v41-multiitem-closed-raw-held-20261011-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v89-v41-multiitem-runtimev17-prepared-v1",
-        "include": [
-          "campaign-launch.json",
-          "reviewed-plan-root-approved-v1.json",
-          "root-generation-source-review-v1.json",
-          "root-owner-approval-v1.json",
-          "root-supervisor-launch-v1.json",
-          "worker-*/**/*"
-        ],
-        "exclude_dirs": [
-          "__pycache__"
-        ],
-        "split": "inherited-source-train-closed-generation-evidence",
-        "source_class": "held-provider-generated-static-program-evaluation",
-        "training_admission": false,
-        "trace_admission": false,
-        "recurrence_admission": false,
-        "independent_new_worlds": 0,
-        "admission": "closed raw generation evidence only; no training or trajectory admission",
-        "parent_registry_ids": [
-          "luna-choice-confidence-v89-v41-multiitem-inputs-held-20261011-v1",
-          "luna-choice-confidence-v89-approved-launch-held-20261011-v1"
-        ],
-        "notes": "Closed five-worker V89 output. Ten programs completed (80 items); worker 03 index 7 ended in model_request_budget after partial exploration and remains unscored. Includes terminal worker evidence and partial/error records; source and prepared inputs are separately registered."
+      "id": "luna-choice-confidence-v89-v41-multiitem-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v89-v41-multiitem-runtimev17-prepared-v1",
+      "include": [
+        "campaign-launch.json",
+        "reviewed-plan-root-approved-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-owner-approval-v1.json",
+        "root-supervisor-launch-v1.json",
+        "worker-*/**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-train-closed-generation-evidence",
+      "source_class": "held-provider-generated-static-program-evaluation",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "closed raw generation evidence only; no training or trajectory admission",
+      "parent_registry_ids": [
+        "luna-choice-confidence-v89-v41-multiitem-inputs-held-20261011-v1",
+        "luna-choice-confidence-v89-approved-launch-held-20261011-v1"
+      ],
+      "notes": "Closed five-worker V89 output. Ten programs completed (80 items); worker 03 index 7 ended in model_request_budget after partial exploration and remains unscored. Includes terminal worker evidence and partial/error records; source and prepared inputs are separately registered."
     },
     {
-        "id": "luna-choice-confidence-v89-quality-review-held-20261011-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/quality-review-v89-choice-confidence-closeout-v1",
-        "include": [
-          "audit.json",
-          "audit.md"
-        ],
-        "split": "inherited-source-train-quality-review",
-        "source_class": "held-source-bound-output-and-visibility-audit",
-        "training_admission": false,
-        "trace_admission": false,
-        "recurrence_admission": false,
-        "independent_new_worlds": 0,
-        "admission": "quality evidence only; no data admission",
-        "parent_registry_ids": [
-          "luna-choice-confidence-v89-v41-multiitem-closed-raw-held-20261011-v1",
-          "luna-choice-confidence-v89-v41-multiitem-inputs-held-20261011-v1"
-        ],
-        "notes": "Independent closeout of V89 output vs exact source annotations, files/maps, child request visibility, and typed invocation evidence. Agreement is source-label agreement, not a truth claim. The 8 items in the budget-failed program are unscored."
+      "id": "luna-choice-confidence-v89-quality-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v89-choice-confidence-closeout-v1",
+      "include": [
+        "audit.json",
+        "audit.md"
+      ],
+      "split": "inherited-source-train-quality-review",
+      "source_class": "held-source-bound-output-and-visibility-audit",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "quality evidence only; no data admission",
+      "parent_registry_ids": [
+        "luna-choice-confidence-v89-v41-multiitem-closed-raw-held-20261011-v1",
+        "luna-choice-confidence-v89-v41-multiitem-inputs-held-20261011-v1"
+      ],
+      "notes": "Independent closeout of V89 output vs exact source annotations, files/maps, child request visibility, and typed invocation evidence. Agreement is source-label agreement, not a truth claim. The 8 items in the budget-failed program are unscored."
+    },
+    {
+      "id": "luna-choice-confidence-v90-joint-closeout-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v90-joint-closeout-v3",
+      "include": [
+        "joint-completion-v3.json",
+        "quality-review-v3.json",
+        "quality-review-v3.md",
+        "FILES.sha256"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-train-generation-quality-evidence",
+      "source_class": "joint-luna-lane-completion-and-quality-review",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "held provider quality review only; no training, native, or recurrence admission",
+      "notes": "V90 five-lane joint closeout. Original campaign launch remains finished_with_blocked_predecessor_lanes; lane 3 is separately bound through runtime-bound recovery evidence. 52 programs/402 decisions; source-label agreement is descriptive only."
+    },
+    {
+      "id": "luna-choice-confidence-v90-joint-closeout-superseded-v1-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v90-joint-closeout-v1",
+      "include": [
+        "joint-completion-v1.json",
+        "quality-review.json",
+        "quality-review.md",
+        "FILES.sha256"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-train-superseded-diagnostic",
+      "source_class": "superseded-joint-closeout-diagnostic",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "superseded diagnostic retained; not a valid lane-specific PID receipt",
+      "notes": "Superseded by V90 joint closeout v3 because v1 incorrectly repeated lane 1 PID on lanes 2/4/5. Kept as history; use v3."
+    },
+    {
+      "id": "luna-choice-confidence-v90-joint-closeout-superseded-v2-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v90-joint-closeout-v2",
+      "include": [
+        "joint-completion-v2.json"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-train-superseded-diagnostic",
+      "source_class": "incomplete-joint-closeout-diagnostic",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "incomplete superseded diagnostic retained; no quality receipt",
+      "notes": "Intermediate corrected PID receipt only. Superseded by v3; do not use as the quality result."
     }
   ],
   "coverage_backlog": [

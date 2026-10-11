@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v90-joint-closeout-superseded-v1-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v90-joint-closeout-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 261,
+      "sha256": "79abeb21378fe7e0c8c8465581f3483f27abe4021c578bd69bc50f65b812ff96"
+    },
+    {
+      "path": "joint-completion-v1.json",
+      "bytes": 87411,
+      "sha256": "373a4885e3eeafa6699f858ec596c8b516f774a70bbfe0ac3c847e61bc72a817"
+    },
+    {
+      "path": "quality-review.json",
+      "bytes": 80587,
+      "sha256": "833276ce01babd54a8cacd251fe840faad36d2fd8781c0fb0878850e7cf34288"
+    },
+    {
+      "path": "quality-review.md",
+      "bytes": 1018,
+      "sha256": "cada683acad63711519ce25d3e166e150c3476da4718fe877cda2bef794d5f7b"
+    }
+  ],
+  "bytes": 169277
+}

@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v90-joint-closeout-superseded-v2-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v90-joint-closeout-v2",
+  "files": [
+    {
+      "path": "joint-completion-v2.json",
+      "bytes": 87435,
+      "sha256": "f0ad6d4acaba1cd0a26058b7c6e05a2f612d3335348dcf90e5ab9140dffbadf4"
+    }
+  ],
+  "bytes": 87435
+}
