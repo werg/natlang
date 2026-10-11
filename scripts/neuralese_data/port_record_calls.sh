@@ -44,8 +44,9 @@ echo "$(date -Is) build $(echo $families | wc -w) families"
 # Builds (I/O bound on the HDD families) run beside the replays: a family's shards replay as soon as its build is done.
 printf '%s\n' $families | xargs -P 3 -I{} bash -c 'build {} || echo "build failed: {}" >&2' &
 builder=$!
+# return 0: under set -e/pipefail a last shard already done (the && chain fails) would end the whole driver.
 pending() { for b in "$OUT"/ir/*/build.json; do [ -f "$b" ] || continue; d=$(dirname "$b"); f=$(basename "$d")
-  for s in "$d"/*.ir.jsonl; do [ -f "$s" ] && [ ! -f "$OUT/turns/$f/$(basename "$s" .ir.jsonl).summary.json" ] && echo "$s"; done; done; }
+  for s in "$d"/*.ir.jsonl; do [ -f "$s" ] && [ ! -f "$OUT/turns/$f/$(basename "$s" .ir.jsonl).summary.json" ] && echo "$s"; done; done; return 0; }
 while :; do
   building=0; kill -0 $builder 2>/dev/null && building=1
   work=$(pending | sort)

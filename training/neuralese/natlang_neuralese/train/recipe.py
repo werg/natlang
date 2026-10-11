@@ -27,7 +27,8 @@ HANDLERS = {
     # Its data is either prepared text (text_data, the shared declared input of neuralese-direct-v2) or records and
     # pieces rendered by gold_text_rows: missing_stage_inputs() states that alternative.
     'neuralese_direct': {'module':'natlang_neuralese.train.direct_sft', 'required_inputs':set(),
-                         'optional_inputs':{'records','pieces','text_data','heads','continue_from'},
+                         'optional_inputs':{'records','pieces','text_data','heads','continue_from',
+                                            'continue_identity','continue_monitor_reference'},
                          'parameters':{'steps','epochs','batch_tokens','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
                            'checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
                            'latent_optimizer','latent_lr','head_lr','neuralese_weight','projection_blocks',
@@ -211,6 +212,8 @@ def missing_stage_inputs(kind, roles):
     missing = HANDLERS[kind]['required_inputs'] - set(roles)
     if kind == 'neuralese_direct' and 'text_data' not in roles and 'records' not in roles:
         missing = missing | {'text_data or records'}
+    if kind == 'neuralese_direct' and 'continue_from' in roles:
+        missing |= {'continue_identity', 'continue_monitor_reference'} - set(roles)
     return missing
 
 
@@ -278,7 +281,8 @@ def stage_input_args(resolved, kind):
     """Serialize already-validated file roles to the shared handler CLIs."""
     args = []
     supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
-    for role in ('records', 'pieces', 'text_data', 'continue_from', 'student_checkpoint', 'warmup_checkpoint',
+    for role in ('records', 'pieces', 'text_data', 'continue_from', 'continue_identity',
+                 'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
                  'direct_parent_proof'):
         if role in resolved and role in supported:

@@ -12,9 +12,11 @@ replay-demonstrations.mjs); the programs, their questions and the confidence gat
       3. assemble the confidence-gated cases, replay them into native teacher-training turns (no model calls);
       4. write summary.json and registry-entry.json (the batch's registry entry, ready to merge);
       5. queue the shared render (render_native_turn_corpus.sh, both tokenizers) as a low-priority ledger unit.
-  register --day YYYYMMDD
-      merge registry-entry.json into training/neuralese_corpora.json and publish the immutable manifest. Committing
-      is left to the agent (shared checkout).
+      6. register the batch and every finished render of earlier batches (register_corpora.py: entries and manifests
+         committed and pushed from a private worktree off origin/main; no agent commits by hand). A render finishes
+         after the run, so its registration happens on the next timer run (06:10 or the next day's), or with
+  register [--day YYYYMMDD]
+      register that day's batch and every finished, unregistered render now.
 
 Budget: the free allocation (~1.22M Clef-flash input tokens/day, reset 00:00 UTC) is shared with Pop; the DGX share is
 800k/day (plans/neuralese/CLEF_DECISION_DISTILLATION.md, memory clef-quota-shared). Credentials: DGX's own wrangler
@@ -30,6 +32,9 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from register_corpora import register as register_entries, registered_ids  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 TS = ROOT / 'ts-host'
@@ -79,13 +84,13 @@ def count_lines(path: Path) -> int:
 
 
 def registered(day: str) -> bool:
-    registry = json.loads((ROOT / 'training/neuralese_corpora.json').read_text())
-    return any(c.get('id') == corpus_id(day) for c in registry['corpora'])
+    return corpus_id(day) in registered_ids()
 
 
 def run(day: str, budget: int, count: int) -> None:
     if registered(day):  # a published manifest is immutable: never rewrite a registered batch
         print(json.dumps({'day': day, 'skipped': 'already registered'}))
+        register(None)  # renders of earlier batches that finished since
         return
     out = batch_dir(day)
     out.mkdir(parents=True, exist_ok=True)
@@ -138,6 +143,7 @@ def run(day: str, budget: int, count: int) -> None:
     (out / 'registry-entry.json').write_text(json.dumps(entry, indent=1) + '\n')
     print(json.dumps(summary))
     render(day)
+    register(day)
 
 
 HELD_TEXT = ['runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl',
@@ -146,7 +152,7 @@ HELD_TEXT = ['runs/neuralese-foundation-text-input-4962-root-adopted-union-20261
 
 def render(day: str) -> None:
     """Queue the shared three-rendering twin build (both tokenizers) as a low-priority resumable ledger unit."""
-    out = ROOT / f'runs/natlang-native-turns-{corpus_id(day)}-render'
+    out = render_dir(corpus_id(day))
     if (out / 'receipt.json').exists():
         return
     turns = batch_dir(day) / f'clef-pools-{day}.turns.jsonl'
@@ -157,16 +163,29 @@ def render(day: str) -> None:
                     '--shards', '8', '--held-text', *HELD_TEXT], cwd=ROOT, check=False)
 
 
-def register(day: str) -> None:
-    entry = json.loads((batch_dir(day) / 'registry-entry.json').read_text())
-    path = ROOT / 'training/neuralese_corpora.json'
-    registry = json.loads(path.read_text())
-    if any(c.get('id') == entry['id'] for c in registry['corpora']):
-        raise SystemExit(f"{entry['id']} is already registered (manifests are immutable; a new batch needs a new id)")
-    registry['corpora'].append(entry)
-    path.write_text(json.dumps(registry, indent=2, ensure_ascii=False) + '\n')
-    subprocess.run([sys.executable, str(ROOT / 'scripts/sync_training_corpora.py'), 'publish', '--machine', 'dgx',
-                    '--id', entry['id']], cwd=ROOT, check=True)
+def render_dir(cid: str) -> Path:
+    return ROOT / f'runs/natlang-native-turns-{cid}-render'
+
+
+def register(day: str | None = None) -> None:
+    """Register DAY's batch (if built) and every finished render whose batch is registered, through the worktree
+    helper. Idempotent: registered ids are skipped (a published manifest is immutable)."""
+    known = registered_ids()
+    if day and (batch_dir(day) / 'registry-entry.json').exists() and corpus_id(day) not in known:
+        entry = json.loads((batch_dir(day) / 'registry-entry.json').read_text())
+        register_entries([entry], f"Register Clef pools batch {entry['id']}")
+        known.add(entry['id'])
+    sys.path.insert(0, str(ROOT / 'scripts/neuralese_data'))
+    import register_native_turn_render as rntr
+    batches = sorted(json.loads(f.read_text())['id'] for f in CORPORA.glob('clef-pools-*/registry-entry.json'))
+    for cid in batches:
+        if any(other.rsplit('-', 1)[0] == cid.rsplit('-', 1)[0] and other > cid for other in batches):
+            continue  # superseded by a rebuilt version of the same day
+        out, rid = render_dir(cid), f'natlang-native-turns-{cid}-render'
+        if cid not in known or rid in known or not (out / 'receipt.json').exists():
+            continue
+        a = rntr.parse(['--id', rid, '--render-dir', str(out), '--source-corpus', cid])
+        register_entries([rntr.make_entry(a)], f'Register {rid}')
 
 
 def main() -> None:

@@ -43,7 +43,8 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
                   'epochs': None, 'batch_tokens': 0, 'continue_from': None}
 OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
-                         'gate_held_rows', 'window_execution', 'continue_from'})
+                         'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
+                         'continue_monitor_reference'})
 
 
 def parse(argv=None):
@@ -61,6 +62,10 @@ def parse(argv=None):
                    'many forward tokens (count x longest, right-padded, length-bucketed); 0: --batch windows per update')
     p.add_argument('--continue-from', type=Path, help="a predecessor neuralese_direct stage's full state (its "
                    'checkpoint.pt): weights, projections and optimizer continue on this stage\'s data from update 0')
+    p.add_argument('--continue-identity', type=Path,
+                   help='the predecessor stage identity-check.json, pinned separately from a relocated checkpoint')
+    p.add_argument('--continue-monitor-reference', type=Path,
+                   help='the predecessor stage monitor-reference.pt, pinned separately from a relocated checkpoint')
     p.add_argument('--tokens', type=int, default=8192, help='window capacity: the whole preceding document, system '
                    'prompt included, up to this many tokens')
     p.add_argument('--target-tokens', type=int, default=1024, help='supervised (Neuralese) positions per window')
@@ -251,18 +256,22 @@ def main(argv=None):
 
     torch.manual_seed(a.seed)
     random.seed(a.seed)
+    if a.continue_from is not None and (a.continue_identity is None or a.continue_monitor_reference is None):
+        raise ValueError('--continue-from requires declared identity and monitor reference inputs')
+    if a.continue_from is None and (a.continue_identity is not None or a.continue_monitor_reference is not None):
+        raise ValueError('continuation sidecars require --continue-from')
     a.out.mkdir(parents=True, exist_ok=True)
     reference = a.out / 'monitor-reference.pt'
-    if a.continue_from is not None and not reference.exists() and \
-            (Path(a.continue_from).parent / reference.name).is_file():
-        # A continued stage measures drift against the lineage's base-model reference, not its predecessor's weights.
+    if a.continue_from is not None and not reference.exists():
+        # These sidecars are declared inputs: resolving a checkpoint symlink may relocate its parent directory.
         import shutil
-        shutil.copyfile(Path(a.continue_from).parent / reference.name, reference)
+        shutil.copyfile(a.continue_monitor_reference, reference)
     options = {k: str(v) if isinstance(v, Path) else v for k, v in vars(a).items()}
     code = {str(path.relative_to(Path(__file__).parents[1])): sha256_file_hex(path)
             for path in sorted(Path(__file__).parents[1].rglob('*.py'))}
     inputs = {str(path): sha256_file_hex(path)
-              for path in (a.heads, a.records, a.pieces, a.text_data, a.continue_from) if path}
+              for path in (a.heads, a.records, a.pieces, a.text_data, a.continue_from, a.continue_identity,
+                           a.continue_monitor_reference) if path}
     identity = {'schema': SCHEMA, 'options': {k: v for k, v in options.items() if k not in OPERATIONAL
                                               and not (k in LATER_DEFAULTS and v == LATER_DEFAULTS[k])},
                 'inputs': inputs, 'code': code}
@@ -568,7 +577,9 @@ def main(argv=None):
                                    if key not in phase_keys and previous_options[key] != current_options[key])
         if changed_objective:
             raise ValueError('--continue-from training options differ: ' + ', '.join(changed_objective))
-        expected_backbone = {name.removeprefix('backbone.'): parameter for name, parameter in backbone_named}
+        # Full direct checkpoints keep optimizer-schema names in their canonical ``backbone.*`` form.
+        # Keep that same form here; only the destination tensor lookup strips the prefix below.
+        expected_backbone = dict(backbone_named)
         saved_backbone = state.get('student_parameters') or {}
         if set(saved_backbone) != set(expected_backbone):
             raise ValueError('--continue-from backbone trainable names differ')
@@ -584,21 +595,13 @@ def main(argv=None):
                    for name, value in current_projection.items()):
                 raise ValueError('--continue-from projection shape differs: ' + key)
         saved_optimizer = state.get('optimizer') or {}
-        saved_groups = saved_optimizer.get('param_groups') or []
-        current_groups = optimizer.param_groups
-        if len(saved_groups) != len(current_groups):
-            raise ValueError('--continue-from optimizer group count differs')
+        current_optimizer = optimizer.state_dict()
+        if (saved_optimizer.get('format') != current_optimizer.get('format') or
+                saved_optimizer.get('schema') != current_optimizer.get('schema')):
+            raise ValueError('--continue-from optimizer names, shapes, dtypes, or partitions differ')
         saved_names = state.get('optimizer_parameter_names')
         if saved_names is not None and saved_names != optimizer_parameter_names:
             raise ValueError('--continue-from optimizer parameter names differ')
-        for group_index, (saved_group, current_group) in enumerate(zip(saved_groups, current_groups)):
-            saved_ids, current_parameters = saved_group.get('params', []), current_group.get('params', [])
-            if len(saved_ids) != len(current_parameters):
-                raise ValueError('--continue-from optimizer parameter count differs in group ' + str(group_index))
-            for saved_id, parameter in zip(saved_ids, current_parameters):
-                for slot_name, slot_value in (saved_optimizer.get('state', {}).get(saved_id, {})).items():
-                    if torch.is_tensor(slot_value) and slot_value.ndim and tuple(slot_value.shape) != tuple(parameter.shape):
-                        raise ValueError('--continue-from optimizer slot shape differs: ' + slot_name)
         from .text_warmup import copy_restored_values
         tensors_by_name = plain_named_tensors(backbone.hf)
         copy_restored_values({'backbone.' + n: t for n, t in tensors_by_name.items()}, state['student_parameters'])
@@ -710,11 +713,12 @@ def main(argv=None):
     # Step 0: the NeuraleseProjection is exactly the base soft-token mixture on a held batch.
     if step == 0 and a.continue_from is not None:
         # The lineage's identity qualification is its first stage's; a continued stage carries it forward.
-        inherited = Path(a.continue_from).parent / 'identity-check.json'
-        if not inherited.is_file():
-            raise ValueError('the predecessor stage has no identity-check.json')
+        inherited = a.continue_identity
+        inherited_identity = json.loads(inherited.read_text())
+        if inherited_identity.get('passed') is not True:
+            raise ValueError('the declared predecessor identity check did not pass')
         (a.out / 'identity-check.json').write_text(json.dumps({
-            **json.loads(inherited.read_text()), 'inherited_from': str(inherited)}, indent=2) + '\n')
+            **inherited_identity, 'inherited_from': str(inherited)}, indent=2) + '\n')
         evaluate()
         base_eval['drift_ce'] = drift_ce()
     elif step == 0:
