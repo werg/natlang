@@ -17,6 +17,7 @@ on a stop and at the end; a restart resumes from it.
 from __future__ import annotations
 
 import argparse
+import atexit
 import contextlib
 import hashlib
 import json
@@ -453,6 +454,41 @@ def main(argv=None):
         result['passed'] = behaviour.passed(result)
         return result
 
+    # Disk: hold the blocks of the next full-state write (its tensors, 5% margin; at least the last write's size) so a
+    # write never meets a full disk. The reserve is released just for a write and taken back after it; a run that
+    # cannot hold it refuses to start, and one that cannot take it back after a write stops on that complete state.
+    from .checkpoint_safety import CheckpointDiskReserve, CheckpointReserveError, _state_tensor_bytes
+    reserve = None
+
+    def next_write_bytes():
+        written = policy.slot.stat().st_size if policy.slot.exists() else 0
+        return max(written, int(1.05 * _state_tensor_bytes(full_state())))
+
+    if a.save_state:
+        reserve = CheckpointDiskReserve(a.out / '.checkpoint-space.reserve', next_write_bytes())
+        try:
+            reserve.acquire()
+        except CheckpointReserveError as error:
+            print(json.dumps({'event': 'checkpoint_space_preflight_refused', 'step': step, 'error': str(error)}),
+                  flush=True)
+            reserve.cleanup()
+            raise SystemExit(2)
+        atexit.register(reserve.cleanup)
+        save_full_state = policy.save
+
+        def reserved_save(state, **options):
+            reserve.release_space()
+            event = save_full_state(state, **options)
+            try:
+                reserve.acquire()
+                reserve.grow_to(next_write_bytes())
+            except CheckpointReserveError as error:
+                print(json.dumps({'event': 'checkpoint_space_after_write_refused', 'step': state.get('step'),
+                                  'error': str(error)}), flush=True)
+                stop.request()  # the state just written is complete; no further write is attempted
+            return event
+        policy.save = reserved_save
+
     # Step 0: the NeuraleseProjection is exactly the base soft-token mixture on a held batch.
     if step == 0:
         with torch.no_grad():
@@ -475,6 +511,7 @@ def main(argv=None):
     for _ in range(step):  # the sampler is keyed by step: replay its draws
         order.randrange(len(train_windows))
     loop = TrainingLoop(step, a.steps, stop)
+    start_index = step
     saved_step = None
     started = time.time()
     for step_index in loop:
@@ -497,6 +534,13 @@ def main(argv=None):
         optimizer.step()  # routers, norms and projections (the latents stepped in backward)
         optimizer.zero_grad(set_to_none=True)
         step = step_index + 1
+        if reserve is not None and step_index == start_index:  # optimizer slots exist now: size the next write
+            try:
+                reserve.grow_to(next_write_bytes())
+            except CheckpointReserveError as error:
+                print(json.dumps({'event': 'checkpoint_space_preflight_refused', 'step': step, 'error': str(error)}),
+                      flush=True)
+                raise SystemExit(2)
         log('train.jsonl', {'step': step, 'loss': float(loss), 'precision': point, 'mix': mix, **metrics,
                             'seconds': time.time() - tick})
         if step % a.eval_every == 0 or step == a.steps:
