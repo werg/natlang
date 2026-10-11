@@ -59,3 +59,15 @@ synthetic state is not a trained TCP artifact or certificate.
 Still required are a trained TCP artifact/export-load path, the owner-defined
 end-to-end task and behavior gates, and consumer improvement. Synthetic mechanism
 success does not qualify those items or grant training admission.
+
+## Frozen readout storage (2026-10-11)
+
+Native recurrence smoke v5 exhausted Pop VRAM before its first update at the
+LFM vocabulary readout: each FP32 hidden state cast the frozen BF16 embedding
+table into another 256 MiB allocation retained by autograd. Reusing the identical
+frozen cast is a crisp numerical/storage mechanism, with no model-facing policy.
+The shared helper owns one nonpersistent module buffer, invalidates it on source
+identity/version/device/dtype changes, and bypasses caching for trainable tables.
+Module device transfers also transfer/release this buffer; no global cache holds
+GPU tensors. Hidden-state gradients and vocabulary precision remain unchanged.
+The failed smoke remains held; this change alone grants no qualification.

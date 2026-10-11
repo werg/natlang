@@ -131,7 +131,8 @@ class QwenPortBackbone(PortBackbone):
 
     def logits(self, h_final: torch.Tensor) -> torch.Tensor:
         normed = self.final_norm(h_final)
-        logits = (normed @ self.output_weight.t().to(normed.dtype)).clone()
+        from .readout_storage import readout_weight
+        logits = (normed @ readout_weight(self, self.output_weight, normed.dtype).t()).clone()
         rows = (self.control_rows if self.tied else self.control_head_rows).to(normed.dtype)
         logits[..., self.controls.open_id] = normed @ rows[0]
         logits[..., self.controls.close_id] = normed @ rows[1]

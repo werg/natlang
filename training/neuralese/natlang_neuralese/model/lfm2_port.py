@@ -20,6 +20,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from .layer_staging import staged_layers
+from .readout_storage import readout_weight
 
 DEFAULT_BASE = "LiquidAI/LFM2.5-350M"
 DEFAULT_REVISION = "9e6c6ccf47cd318696e137d381a7ded8fe4df09f"
@@ -396,7 +397,7 @@ class PortBackbone(nn.Module):
     def logits(self, h_final: torch.Tensor) -> torch.Tensor:
         """LM-head logits from the last residual (before the final norm)."""
         normed = self.final_norm(h_final)
-        logits = normed @ self.embedding_weight.t().to(normed.dtype)
+        logits = normed @ readout_weight(self, self.embedding_weight, normed.dtype).t()
         rows = self.control_rows.to(normed.dtype)
         logits = logits.clone()
         logits[..., self.controls.open_id] = normed @ rows[0]
