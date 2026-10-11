@@ -11007,3 +11007,7 @@ passed=true: the injected TCP is not trained checkpoint state. Engine/GradSessio
 and exporter support is now ready to publish. Actual trained TCP export/load,
 rollback/multi-turn segment coverage and held consumer usefulness are next; do
 not use ordinaryHF generation to assess a TCP-adapted model.
+
+### 2026-10-11 V87 persistent-helper compiler correction
+
+Two V87 source_index29 helper failures incorrectly reported unavailable `const` from a TypeScript `as const` assertion. `persistentHelperTypeNames` now excludes only the assertion-shaped special type reference; arbitrary unavailable named types remain checked. Exact original failures are preserved in the held V87 quality packet. Existing frozen V88 generation is unchanged; future runtime snapshots can adopt this fix. Live acceptance measurement remains recorded debt in MODEL_FACING_CHANGES.md.

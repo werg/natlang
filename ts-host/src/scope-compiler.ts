@@ -368,7 +368,13 @@ function persistentHelperTypeNames(node: ts.Node): string[] {
   const typeParameters = new Set<string>();
   const visit = (item: ts.Node): void => {
     if (ts.isTypeParameterDeclaration(item)) typeParameters.add(item.name.text);
+    // TypeScript represents `as const` as a TypeReferenceNode, but it is an
+    // assertion keyword, not a named type that the persistent helper captures.
+    const constAssertion = ts.isTypeReferenceNode(item) && ts.isIdentifier(item.typeName) &&
+      item.typeName.text === 'const' && !item.typeArguments?.length && item.parent !== undefined &&
+      (ts.isAsExpression(item.parent) || ts.isTypeAssertionExpression(item.parent)) && item.parent.type === item;
     if (ts.isTypeReferenceNode(item) && ts.isIdentifier(item.typeName) &&
+        !constAssertion &&
         !typeParameters.has(item.typeName.text) && !PERSISTENT_HELPER_TYPES.has(item.typeName.text)) names.add(item.typeName.text);
     ts.forEachChild(item, visit);
   };

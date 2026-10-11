@@ -55,3 +55,5 @@ Keep search overlays separate from authored source. Load a compatible artifact e
 - Report real blockers. Do not return invented success, manufacture receipts, weaken assertions, or treat an unknown effect outcome as safe to retry.
 
 For embedding in an application, pair this skill with `natlang-integration` when available; this skill is usable on its own.
+
+Persistent eval helpers support TypeScript `as const` assertions for literal and tuple results; the assertion needs no captured type binding. Other referenced named types must remain available in the call scope.

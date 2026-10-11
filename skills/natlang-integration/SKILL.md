@@ -32,3 +32,5 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 - Verify live-model quality separately from fixture wiring and rendering, and name the remaining empirical gates.
 
 Pair with `natlang-authoring` for substantial natural-language algorithms when that skill is available; this skill is independently usable.
+
+Persistent eval helpers support TypeScript `as const` assertions for literal and tuple results; the assertion needs no captured type binding. Other referenced named types must remain available in the call scope.
