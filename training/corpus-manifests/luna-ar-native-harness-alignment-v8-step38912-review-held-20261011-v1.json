@@ -1,0 +1,82 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-ar-native-harness-alignment-v8-step38912-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-ar-native-harness-alignment-v8-step38912-review-held-20261011-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 1070,
+      "sha256": "6f8f50d7f0d715b386d304337b15a48b636bc53afc965455fabf1367c01ae258"
+    },
+    {
+      "path": "baseline-step-37888.json",
+      "bytes": 458704,
+      "sha256": "7268a47f0b3d64fb7f62cd515d0fde93bee42c455a53ba30195a68bd74992e12"
+    },
+    {
+      "path": "best-checkpoint-step-38912.json",
+      "bytes": 481210,
+      "sha256": "5597dead4e0a2ec781bb8fcbe3526772cb1da307afc41734614a4c9187061bcc"
+    },
+    {
+      "path": "direct-stage-launch.json",
+      "bytes": 4305,
+      "sha256": "0a21b95448f51136a1d86f164bc9460e698731f4cc1e3a499c7852376bd29b16"
+    },
+    {
+      "path": "evaluation-history-through-38912.jsonl",
+      "bytes": 667698,
+      "sha256": "5eb18725403caffe147f181de70ba243432751310a0a2afc918d18c1ceef7d7f",
+      "lines": 2
+    },
+    {
+      "path": "evaluation-step-38912.jsonl",
+      "bytes": 333948,
+      "sha256": "dfd067953a887b55987f8aa1030f9c491752f125ecd3fdb55ad7f6a4c7e1b531",
+      "lines": 1
+    },
+    {
+      "path": "executed-recipe.json",
+      "bytes": 19721,
+      "sha256": "13094b197a5c47e695bfc69ba76e5bc00603f64ac1e07770c76d18e27503ae37"
+    },
+    {
+      "path": "optimizer-restore.jsonl",
+      "bytes": 518,
+      "sha256": "9ccd3a23861faa8d6f507e438ca735e9806297c37f5b9556a84644e0463617e1",
+      "lines": 1
+    },
+    {
+      "path": "report-step-38912.json",
+      "bytes": 459015,
+      "sha256": "29ce3318a9eae9932e44dd1e1b00e9657552eb6d7ae6d326d9cc91b514dd072f"
+    },
+    {
+      "path": "review.json",
+      "bytes": 4562,
+      "sha256": "0a1d73eafa18a5868849c4180bbc528cab19f20493720e5d5f16265aa29258dd"
+    },
+    {
+      "path": "review.md",
+      "bytes": 591,
+      "sha256": "465f9de4b2deff2c70eabbe4fcdaeccb71f2714289b7854aed9ac6dc22079475"
+    },
+    {
+      "path": "root-launch-receipt.json",
+      "bytes": 2047,
+      "sha256": "e8c10d27e9da939c227ec57858f07364154269aafa8eadb7402506cf0716a112"
+    },
+    {
+      "path": "run-plan.json",
+      "bytes": 123102,
+      "sha256": "edd45f348c0dfae069d88b8c0bdf553b5520cbca0c8d36537cacfc3bb553e889"
+    },
+    {
+      "path": "snapshot-manifest.json",
+      "bytes": 2035,
+      "sha256": "45c1b1b224d9e8224a76c76c0efda1e12688976ec5493609c20d8e0cb11ab48b"
+    }
+  ],
+  "bytes": 2558526
+}

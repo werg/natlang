@@ -29713,6 +29713,94 @@
       "admission": "active-launch-receipt-only-no-output-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Immutable approval and launch receipts for V72 lane 02 supplement over the original V72 worker-02 queue. Pins the completed V71 index16 recovery predecessor (PID 1032812) and actual supplement worker PID 1033871. Mutable original worker-02 journal/log/results and changing campaign status are excluded until lane closure. This is execution provenance only, not output quality or admission."
+    },
+    {
+      "id": "google-choice-confidence-v35-semantic-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v35-semantic-review-v1",
+      "include": [
+        "review.json",
+        "review.md",
+        "FILES.sha256"
+      ],
+      "split": "inherited-train-source-quality-review-only",
+      "source_class": "provider-label-semantic-review",
+      "training_admission": false,
+      "admission": "held-disagreement-review-no-automatic-source-holds-or-relabels-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Exact V35 source/case/label/master line binding for 117 paired disagreements. Two answerability candidates are identified for root review; disagreement is not source defect or training admission. All original outputs remain unchanged."
+    },
+    {
+      "id": "decision-source-quality-root-review-v16-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v16",
+      "include": [
+        "root-review.json",
+        "source-quality-holds.json"
+      ],
+      "split": "inherited-source-quality-policy-and-review",
+      "source_class": "decision-source-quality-review-and-hold-policy",
+      "training_admission": false,
+      "admission": "root-reviewed-source-hold-policy-evidence-only-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root-reviewed answerability disposition and exact 75-item source-quality hold policy V16. Adds the single V35 Newsgroups case dc-5d21114a28d432792a47; the VitaminC Savoy-list candidate was declined as insufficient evidence of a source defect. Policy does not imply other admissions."
+    },
+    {
+      "id": "luna-choice-confidence-v73-root-launch-supplement-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v73-v35-runtimev16-v3",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "split": "inherited-train-launch-approval-evidence",
+      "source_class": "held-luna-generation-root-approval-and-launch-receipt",
+      "training_admission": false,
+      "admission": "root-approved-launch-evidence-no-quality-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Separate immutable two-file supplement records root approval and supervisor launch PID 1036055 for the V73 input plan. The earlier prepared input snapshot remains unchanged; active campaign-launch/journals/logs are excluded. This records launch only, not result quality or training admission."
+    },
+    {
+      "id": "luna-ar-native-harness-alignment-v8-step38912-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-v8-step38912-review-held-20261011-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "training-runtime-diagnostic-evidence",
+      "source_class": "held-alignment-checkpoint-review",
+      "training_admission": false,
+      "admission": "one-alignment-gate-only-no-runtime-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Exact V8 step 38912 held review snapshot. One strict alignment gate passed; the required two-consecutive-gate alignment qualification remains false. Exact checkpoint/eval/report metadata only; no weights copied. Does not qualify adapted runtime, foundation, recurrence, task quality, or authorize training."
+    },
+    {
+      "id": "luna-ar-native-harness-alignment-v8-recurrence-source-readiness-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-v8-recurrence-source-readiness-review-held-20261011-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-r4961-source-and-context-review",
+      "source_class": "recurrence-source-readiness-audit",
+      "training_admission": false,
+      "admission": "review-evidence-only-no-new-admission-or-weight-qualification",
+      "independent_new_worlds": 0,
+      "notes": "Read-only audit of the unchanged R4961 source prefix, its exact 554 train writer-reader edge candidates, per-row source pins, groups, and context/structural closure. The original R4961 source admission is separately pinned in the additive clarification snapshot. No model/runtime/gradient or causal-use qualification is asserted."
+    },
+    {
+      "id": "luna-ar-native-harness-alignment-v8-recurrence-source-admission-clarification-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-v8-recurrence-source-admission-clarification-held-20261011-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-r4961-source-admission-clarification",
+      "source_class": "additive-review-interpretation-correction",
+      "training_admission": false,
+      "admission": "clarifies-existing-source-admission-no-new-data-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Additive correction: the exact unchanged R4961 prefix was explicitly root-admitted in V9; V18/V19 no-new-recurrence-admission applies to their ordinary-action delta and does not revoke the inherited recurrence prefix. V8 exact-weight runtime and training-stage qualification remain separate. Does not modify the earlier sealed readiness review."
     }
   ],
   "coverage_backlog": [
