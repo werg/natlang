@@ -32619,7 +32619,6 @@
         "luna-neuralese-direct-lfm-base-v8-full-checkpoint-held-20261011-v1"
       ],
       "notes": "Held exact-run and frozen-package evidence for the synthetic TCP stream extension, launched from shared commit 68ea1f35e28e34febeffd83b705d9001e5448726 with uncommitted_runtime_changes=false. The deterministic synthetic TCP tensor-state identity is ad78f387d1ef14a7bd436726181ca046ba7791f9038bda72a7725ffbd4d17f79; saved state file SHA is 1d837a96492c7a06da7189ceee111c9a51b9dbf51077e85e52c9f283f2d93eb6. Multi-turn weighted context scoring matched sequence readout on 42 targets over four target segments (max delta 0). Actual Engine syntax-guidance rollback restored/replayed five tokens; token-history and next-logit replay deltas were both 0. The exact direct artifact runtime report still has runtime_qualified=false; these synthetic checks do not establish trained TCP behavior, consumer/task qualification, end-to-end gates, or training admission."
-    }
     },
     {
         "id": "luna-choice-confidence-v90-lane03-runtime-bound-recovery-held-20261011-v1",
