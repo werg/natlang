@@ -126,18 +126,22 @@ def held_kl(model, held: dict, rows: int = 48, prompt_weight: float = 0.25) -> d
 
 @torch.no_grad()
 def capture_reference(model, tokenizer, prompts: list[dict], render, eos: int, *, max_new: int = 256, k: int = 64,
-                      max_tokens: int = 4096) -> dict:
+                      max_tokens: int = 4096, generated_responses: list[list[int]] | None = None) -> dict:
     """A drift-monitor reference captured from ``model`` itself (the base model, before any update), in the teacher
     shards' format (``ids``, ``top_ids``, ``top_logp``, ``prompt_len``): each prompt rendered, answered greedily, and
     the model's own top-``k`` log-probabilities at every position. ``held_kl`` against it measures how far a later
     model has moved from this one: the monitor path of a lineage without a registered teacher artifact (no
     preservation loss reads it)."""
+    if generated_responses is not None and len(generated_responses) != len(prompts):
+        raise ValueError('saved reference responses must align one-to-one with prompts')
     device = next(model.parameters()).device
     reference = {"ids": [], "top_ids": [], "top_logp": [], "prompt_len": [], "capture_coverage": []}
-    for prompt in prompts:
+    for index, prompt in enumerate(prompts):
         prefix = render(tokenizer, prompt)
         budget = output_budget(prompt, ordinary=max_new, thinking=max_new)
-        generated = greedy_any(model, prefix, budget, eos)
+        generated = greedy_any(model, prefix, budget, eos) if generated_responses is None else generated_responses[index]
+        if not isinstance(generated, list) or not generated or any(type(t) is not int or t < 0 for t in generated):
+            raise ValueError('reference responses must be nonempty lists of token IDs')
         # Never chop the prompt to fit the teacher shard budget: that used to remove
         # every response position from long native prompts and produce NaN drift.
         kept = generated[:max(1, max_tokens - len(prefix))]
