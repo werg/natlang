@@ -48,6 +48,7 @@ import os
 import shlex
 import subprocess
 import sys
+import threading
 import time
 
 STATE = os.path.expanduser(os.environ.get('NATLANG_MEMORY_LEDGER', '~/.local/state/natlang/memory-ledger.json'))
@@ -87,6 +88,14 @@ def mem_available():
             if line.startswith('MemAvailable:'):
                 return int(line.split()[1]) * 1024
     raise RuntimeError('MemAvailable missing from /proc/meminfo')
+
+
+def mem_total():
+    with open('/proc/meminfo') as stream:
+        for line in stream:
+            if line.startswith('MemTotal:'):
+                return int(line.split()[1]) * 1024
+    raise RuntimeError('MemTotal missing from /proc/meminfo')
 
 
 def mem_free():
@@ -284,7 +293,7 @@ def learned_budget(state, unit, budget):
     """The admission budget: at least the family's measured peak plus 10% (guessed budgets were the main cause of
     over-budget stops and of refused admissions)."""
     peak = state.get('family_peaks', {}).get(family(unit), 0)
-    return max(budget, int(peak * 1.1))
+    return max(budget, min(int(peak * 1.1), mem_total() - 2 * 8 * GIB))
 
 
 def unit_cuda(unit, gpu, command=None):
@@ -338,7 +347,9 @@ def resumable(claim):
     """Whether the guard may stop the unit for a higher priority and relaunch it later: declared at ``run``, default
     true for experiments and collections (their commands resume from checkpoints), false for services."""
     declared = claim.get('resumable')
-    return bool(claim.get('spec')) and (claim.get('class') != 'service' if declared is None else declared)
+    if declared is None:  # not declared (older claims, adopted units): resumable only when the ledger holds its launch spec
+        return bool(claim.get('spec')) and claim.get('class') != 'service'
+    return bool(declared)  # declared resumable without a spec: stopped, logged, and its owner restarts it
 
 
 def outstanding(claim, now=None):
@@ -401,9 +412,12 @@ def preemption_plan(live, free, wanted, graces=None):
 def requeue_spec(state, unit, now=None):
     """Put a stopped resumable unit back in the waiting queue with the spec it was launched from."""
     claim = state['claims'].get(unit, {})
+    now = now or time.time()
     if not resumable(claim):
         return False
-    now = now or time.time()
+    if not claim.get('spec'):
+        state['events'].append({'time': now, 'event': 'stopped without launch spec; owner must restart', 'unit': unit})
+        return False
     state.setdefault('waiting', {})[unit] = {'priority': PRIORITY_NAMES[priority_of(claim)], 'since': now,
                                              'requeued': True, 'not_before': now + REQUEUE_DELAY,
                                              'budget': claim['budget'], 'reserve': claim['spec'].get('reserve', 8 * GIB),
@@ -456,8 +470,11 @@ def run(args):
     priority = args.priority or DEFAULT_PRIORITY[args.cls]
     # Before admission: a claim whose unit has not started within 30 s is released by the next ledger call, and a
     # cache walk takes minutes. Walk only when there is cache to drop; skip it when another walk is running.
+    # In a thread: the walk takes minutes and the waiter must stay in the queue (refreshed every loop) meanwhile, or the
+    # guard cannot see it and preempts nothing.
     if mem_free() < budget + reserve and reclaimable() >= GIB:
-        print(json.dumps({'released_cache': release_cache()}), file=sys.stderr)
+        threading.Thread(target=lambda: print(json.dumps({'released_cache': release_cache()}), file=sys.stderr),
+                         daemon=True).start()
     deadline = time.time() + args.wait
     since = time.time()
     while True:

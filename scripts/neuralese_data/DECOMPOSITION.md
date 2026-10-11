@@ -21,7 +21,9 @@ it does not decide which targets are admitted or change their source labels.
    declared piece-table hashes agree. Supplying an exact body is a crisp lookup;
    missing references continue to produce explicit omissions. Source,
    manifest, and piece-table hashes are recorded in the receipt. No undeclared
-   files are searched and no body is authored, normalized, or inferred here.
+   files are searched. A caller may pass an explicit `--pieces` table for an
+   unregistered source; its exact path, size, and hash are recorded, and
+   conflicting bodies fail. No body is authored, normalized, or inferred here.
 3. **Render each approved decision.** Use the shared `gold_text_rows` and
    `authenticated_crisp_context_messages` functions for full-prompt and
    program-header rows. Use the same authenticated messages and shared chat

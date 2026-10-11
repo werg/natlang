@@ -34148,6 +34148,189 @@
       "required_conversion": "render full, program-header, and whole-trajectory twins for both tokenizers",
       "consumable_by_direct_stage": false,
       "notes": "Only 8 fully approved trajectories were admitted (16 turns); 22 trajectories with any pending/held decision and 124 associated turns remain held as whole trajectories. No generated teacher reasoning or execution plans are trained. Training admission does not qualify recurrence or runtime behavior."
+    },
+    {
+      "id": "natlang-native-turns-clef-pools-20261011-v2-render",
+      "owner": "dgx",
+      "path": "runs/natlang-native-turns-clef-pools-20261011-v2-render",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: clef-pools-20261011-v2; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "clef-pools-20261011-v2"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "9c4f2883574aede5dd925df31ce6917607dffc85f3fdad770ee56a16c6c9bb8f",
+            "documents": 2480,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2480,
+                "supervised_tokens": 68496,
+                "tokens": 9530650,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 4281,
+            "merge_omissions": {
+              "exact_duplicate_document": 72
+            }
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "0915998798315073c097221845ed92e3a6a74a1a99335e912eaf6ce58d354226",
+            "documents": 2480,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2480,
+                "supervised_tokens": 97471,
+                "tokens": 9544391,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 4321,
+            "merge_omissions": {
+              "exact_duplicate_document": 72
+            }
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "1f9b459952605a30f9839b6ad28812c35b0d54cb715ffb96a26ecfcf4c51fb6b",
+            "documents": 2480,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2480,
+                "supervised_tokens": 68496,
+                "tokens": 1502890,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 1044,
+            "merge_omissions": {
+              "exact_duplicate_document": 72
+            }
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "e6deb8b6c42227f19f3378593f486042ba1a9b434d425d0cea93c29d429b687a",
+            "documents": 2480,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2480,
+                "supervised_tokens": 97471,
+                "tokens": 1553831,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 1099,
+            "merge_omissions": {
+              "exact_duplicate_document": 72
+            }
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "297e1b472ffd4a87d998fb38fd98911bb8da8df745fe2077764eadbec3957024",
+            "documents": 2325,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 416993,
+                "documents": 2325,
+                "opening_tokens": 312229,
+                "supervised_tokens": 104764,
+                "tokens": 1387010,
+                "tool_tokens": 327917
+              }
+            },
+            "max_document_tokens": 1029,
+            "merge_omissions": {
+              "exact_duplicate_document": 67
+            }
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "c279b2af14fef38721b45ede43eeccb9a71d7ba70399e7e521df7ca1991ade7b",
+            "documents": 2325,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 513453,
+                "documents": 2325,
+                "opening_tokens": 361745,
+                "supervised_tokens": 151708,
+                "tokens": 1484518,
+                "tool_tokens": 333659
+              }
+            },
+            "max_document_tokens": 1105,
+            "merge_omissions": {
+              "exact_duplicate_document": 67
+            }
+          }
+        }
+      },
+      "selection": {
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 2838,
+        "selected:train": 2838,
+        "source_rows": 2838
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "mellum21/all/decontaminated": 0
+      },
+      "program_header_parity": {
+        "equal": 5104,
+        "retokenization_checked": 5104
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "eacad6601602c03cded95f9b9f3ed621db7c0c85eabdfd35aff27a731a94122c",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "3fc79d524b38dd200aa4bad71ea1318d6f695d224e71f3f8af4ba86709206c16",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "099a293efc7f83a675bc38bda4677391419a8e68a035dbfe0a5f44b9342fd1a6",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "16f5941d4a6ddc876ace120949281ca25aebee5c40581d079a6862490ccfac9c",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc"
+        },
+        "receipt": "runs/natlang-native-turns-clef-pools-20261011-v2-render/receipt.json",
+        "sources": {
+          "data/neuralese/corpora/clef-pools-20261011-v2/clef-pools-20261011.turns.jsonl": {
+            "bytes": 124279082,
+            "sha256": "7f7aaaa9877ca6e6d15a3d1b017b196d95229d06d30f3d7344d0adce5fa7ec36"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": null,
+        "protected": null,
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": "Clef-flash pool batch of 2026-10-11 (skill routing, wellbeing triage, edit review, clause risk); action-notes reasoning is not trained (teacher_reasoning_trained false); root rationales pending a teacher window."
     }
   ],
   "coverage_backlog": [
