@@ -46,7 +46,7 @@ def checkpoint_identity_sha256(paths, chunk_size=1024 * 1024):
     return combined.hexdigest()
 
 
-def _json_schema(case):
+def _json_schema(case, *, choice_enum_policy='include'):
     kind = case.get('kind')
     if kind == 'noul':
         return {'name': 'noul_probability', 'strict': True, 'schema': {
@@ -61,10 +61,15 @@ def _json_schema(case):
     if (not isinstance(labels, list) or len(labels) < 2 or
             any(not isinstance(x, str) or not x for x in labels) or len(labels) != len(set(labels))):
         raise ValueError(f"{kind} case requires distinct nonempty option/level strings")
+    if choice_enum_policy not in ('include', 'omit'):
+        raise ValueError("choice_enum_policy must be 'include' or 'omit'")
     if kind == 'choice' and case.get('choice_contract') == 'label-confidence':
+        choice_schema = {'type': 'string'}
+        if choice_enum_policy == 'include':
+            choice_schema['enum'] = labels
         return {'name': 'choice_label_confidence', 'strict': True, 'schema': {
             'type': 'object', 'properties': {
-                'choice': {'type': 'string', 'enum': labels},
+                'choice': choice_schema,
                 'confidence': {'type': 'number', 'minimum': 0, 'maximum': 1},
             }, 'required': ['choice', 'confidence'], 'additionalProperties': False}}
     return {'name': f'{kind}_probabilities', 'strict': True, 'schema': {
@@ -76,7 +81,7 @@ def _json_schema(case):
 
 
 def _http_payload(case, model, reasoning_effort, max_output_tokens, response_format='json_schema',
-                  choice_contract='probabilities'):
+                  choice_contract='probabilities', choice_enum_policy='include'):
     case = {**case, 'choice_contract': choice_contract}
     labels = case.get('options') if case.get('kind') == 'choice' else case.get('levels')
     task = {'kind': case['kind'], 'question': case['question'], 'state': case['state']}
@@ -114,7 +119,8 @@ def _http_payload(case, model, reasoning_effort, max_output_tokens, response_for
         'max_tokens': max_output_tokens,
     }
     if response_format == 'json_schema':
-        payload['response_format'] = {'type': 'json_schema', 'json_schema': _json_schema(case)}
+        payload['response_format'] = {'type': 'json_schema', 'json_schema': _json_schema(
+            case, choice_enum_policy=choice_enum_policy)}
     elif response_format == 'json_object':
         payload['response_format'] = {'type': 'json_object'}
     if reasoning_effort != 'omit':
@@ -215,9 +221,10 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_backoff,
                   max_backoff, reasoning_effort, max_output_tokens, response_format='json_schema',
-                  choice_contract='probabilities', openrouter_free_only=False):
+                  choice_contract='probabilities', choice_enum_policy='include',
+                  openrouter_free_only=False):
     payload = _http_payload(case, model, reasoning_effort, max_output_tokens, response_format,
-                            choice_contract=choice_contract)
+                            choice_contract=choice_contract, choice_enum_policy=choice_enum_policy)
     if openrouter_free_only:
         payload['provider'] = {'sort': 'throughput', 'max_price': {'prompt': 0, 'completion': 0, 'request': 0}}
     body = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
@@ -401,6 +408,8 @@ def main():
                         help='provider wire format; all responses still undergo identical strict JSON validation')
     parser.add_argument('--choice-contract', choices=['probabilities', 'label-confidence'], default='probabilities',
                         help='choice output contract; score/noul keep their existing probability contracts')
+    parser.add_argument('--choice-enum-policy', choices=['include', 'omit'], default='include',
+                        help='provider-side JSON-schema choice enum; local option validation is always strict')
     parser.add_argument('--max-output-tokens', type=int, default=256)
     parser.add_argument('--request-interval-seconds', type=float, default=0,
                         help='minimum interval between case request starts; HTTP backend only')
@@ -436,6 +445,7 @@ def main():
                                  'openrouter_free_only': args.openrouter_free_only,
                                  'response_format': args.response_format,
                                  'choice_contract': args.choice_contract,
+                                 'choice_enum_policy': args.choice_enum_policy,
                                  'max_output_tokens': args.max_output_tokens,
                                  'request_interval_seconds': args.request_interval_seconds},
             'training_admission': False,
@@ -518,6 +528,7 @@ def main():
                                  max_output_tokens=args.max_output_tokens,
                                  response_format=args.response_format,
                                  choice_contract=args.choice_contract,
+                                 choice_enum_policy=args.choice_enum_policy,
                                  openrouter_free_only=args.openrouter_free_only)
 
     started, count, errors = time.time(), 0, 0

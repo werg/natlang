@@ -61,6 +61,8 @@ def main():
                    help='choice response shape; score/noul cases retain the probability contract')
     p.add_argument('--response-format', choices=['json_schema', 'json_object'], default='json_schema',
                    help='declared provider wire format; responses always use the same strict local validation')
+    p.add_argument('--choice-enum-policy', choices=['include', 'omit'], default='include',
+                   help='provider-side JSON-schema choice enum; local option validation remains strict')
     p.add_argument('--timeout', type=float, default=120)
     p.add_argument('--workers', type=int, default=4, help='total concurrent requests across paced quota groups')
     p.add_argument('--max-inflight-per-quota-group', type=int, default=2,
@@ -136,6 +138,7 @@ def main():
                 'cases_sha256': hashlib.sha256(Path(args.cases).read_bytes()).hexdigest(),
                 'choice_contract': args.choice_contract,
                 'response_format': args.response_format,
+                'choice_enum_policy': args.choice_enum_policy,
                 'max_output_tokens': args.max_output_tokens,
                 'models': models, 'endpoint': ENDPOINT, 'workers': args.workers,
                 'max_inflight_per_quota_group': args.max_inflight_per_quota_group,
@@ -157,7 +160,8 @@ def main():
         return _http_teacher(case, endpoint=ENDPOINT, model=model['id'], api_key=key,
             timeout=args.timeout, retries=0, initial_backoff=30, max_backoff=300,
             reasoning_effort=model['reasoning_effort'], max_output_tokens=args.max_output_tokens,
-            response_format=args.response_format, choice_contract=args.choice_contract)
+            response_format=args.response_format, choice_contract=args.choice_contract,
+            choice_enum_policy=args.choice_enum_policy)
     with ThreadPoolExecutor(max_workers=args.workers) as executor, out_path.open('a') as out, open(str(out_path) + '.attempts.jsonl', 'a') as journal:
         while cases or pending:
             now = time.time()
