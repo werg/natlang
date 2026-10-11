@@ -345,16 +345,77 @@ def rationalize(root: Path, b: int, concurrency: int) -> bool:
     return True
 
 
+def collect_teacher(root: Path, b: int, cases_per_batch: int, workers: int) -> bool:
+    """Whole-program teacher sampling (v13 / semantic-teacher style) on a stable sample of batch bNN's cases with the
+    exact-oracle admission, as batch tNN. Resumable through the collector's jobs dir. False while the teacher is down."""
+    name, tname = f'b{b:02d}', f't{b:02d}'
+    if (root / 'batches' / tname / 'batch.json').exists():
+        return True
+    work = root / 'teacher' / name
+    work.mkdir(parents=True, exist_ok=True)
+    ir = work / 'sample.ir.jsonl'
+    if not ir.exists():
+        import hashlib
+        lines = sorted(zlines(root / 'batches' / name / 'cases.ir.jsonl.zst'),
+                       key=lambda line: hashlib.sha256(json.loads(line)['id'].encode()).hexdigest())
+        (work / 'sample.tmp').write_bytes(b''.join(lines[:cases_per_batch]))
+        (work / 'sample.tmp').rename(ir)
+    n = sum(1 for _ in open(ir, 'rb'))
+    results = work / 'results.jsonl'
+    if not (work / 'collected.done').exists():
+        if not teacher_serving():
+            ensure_teacher_queued()
+            return False
+        try:
+            sh(['node', 'scripts/teacher-collector.mjs', str(ir), str(work / 'jobs'), str(results),
+                '--server', 'http://127.0.0.1:8082', '--model-id', 'nvidia/Qwen3.6-35B-A3B-NVFP4',
+                '--root-seed', str(9700 + b), '--limit', str(n), '--workers', str(workers), '--kv-tokens', '2400000',
+                '--context-tokens', '16384', '--max-turns', '40', '--cache-stable-tools', '--transport-retries', '6'],
+               work / 'log.txt')
+        except subprocess.CalledProcessError:
+            return False  # teacher preempted mid-run: the jobs dir resumes next time
+        done = len(list((work / 'jobs').glob('**/*.result.json'))) if (work / 'jobs').exists() else 0
+        rows = sum(1 for _ in open(results, 'rb')) if results.exists() else 0
+        if rows < n * 0.9 and not teacher_serving():
+            return False
+        (work / 'collected.done').write_text(json.dumps({'rows': rows, 'cases': n, 'job_files': done}))
+    admitted, turns = work / 'admitted.jsonl', work / 'turns.jsonl'
+    sh(['node', 'scripts/inline-curriculum/admit.mjs', str(results), '--ledger', str(work / 'ledger.jsonl'),
+        '--admitted', str(admitted)], work / 'log.txt')
+    sh(['node', 'scripts/materialize-native-teacher.mjs', str(admitted), str(turns)], work / 'log.txt')
+    tmp = root / 'batches' / f'.{tname}.building'
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    count = lambda path: sum(1 for _ in open(path, 'rb')) if path.exists() else 0
+    stats = {'batch': tname, 'samples': name, 'cases': n, 'collected_rows': count(results),
+             'admitted_rows': count(admitted), 'decisions': count(turns), 'model': 'nvidia/Qwen3.6-35B-A3B-NVFP4'}
+    for path, out in ((results, 'rows.jsonl.zst'), (turns, 'turns.jsonl.zst'), (ir, 'cases.ir.jsonl.zst')):
+        subprocess.run(['zstd', '-q', '-3', '--long=27', '-T4', '-f', str(path), '-o', str(tmp / out)], check=True)
+    save(tmp / 'batch.json', stats)
+    tmp.rename(root / 'batches' / tname)
+    for path in (results, admitted, turns):
+        path.unlink(missing_ok=True)
+    return True
+
+
 def rationalize_loop(args) -> None:
-    """Teacher rationales for every consolidated batch, in GPU gaps (the teacher is queued at low priority)."""
+    """Local-teacher work in GPU gaps (the teacher is queued at low priority, training preempts it): first root-turn
+    rationales for every consolidated batch (cheap, ~220 tokens a turn), then whole-program teacher sampling."""
     root = Path(args.root)
-    b = 0
-    while args.batches is None or b < args.batches:
-        if not (root / 'batches' / f'b{b:02d}' / 'batch.json').exists() or not rationalize(root, b, args.concurrency):
+    while True:
+        ready = sorted(int(p.parent.name[1:]) for p in (root / 'batches').glob('b*/batch.json'))
+        need_r = [b for b in ready if not (root / 'batches' / f'r{b:02d}' / 'batch.json').exists()]
+        need_t = [b for b in ready if not (root / 'batches' / f't{b:02d}' / 'batch.json').exists()]
+        if need_r:
+            ok = rationalize(root, need_r[0], args.concurrency)
+            print(json.dumps({'batch': need_r[0], 'rationalized': ok}), flush=True)
+        elif need_t and args.teacher_cases:
+            ok = collect_teacher(root, need_t[0], args.teacher_cases, args.teacher_workers)
+            print(json.dumps({'batch': need_t[0], 'teacher_collected': ok}), flush=True)
+        else:
+            ok = False
+        if not ok:
             time.sleep(300)
-            continue
-        print(json.dumps({'batch': b, 'rationalized': True}), flush=True)
-        b += 1
 
 
 def run(args) -> None:
@@ -388,7 +449,7 @@ def render_loop(args) -> None:
     """Render every batch (bNN as it is consolidated, rNN when its rationales land); runs beside `run`."""
     root = Path(args.root)
     while True:
-        names = sorted(p.parent.name for p in (root / 'batches').glob('[br]*/batch.json'))
+        names = sorted(p.parent.name for p in (root / 'batches').glob('[brt]*/batch.json'))
         todo = [n for n in names if not (root / 'renders' / n / 'receipt.json').exists()]
         if not todo:
             time.sleep(120)
@@ -419,7 +480,7 @@ def registry_entries(root: Path, name: str) -> list[dict]:
     stats, receipt = load(root / 'batches' / name / 'batch.json'), load(root / 'renders' / name / 'receipt.json')
     cfg = load(root / 'config.json')
     base, rel = f'{root.name}-{name}', f'{LINK}/{root.name}'
-    rationalized = name.startswith('r')
+    rationalized, sampled = name.startswith('r'), name.startswith('t')
     source = {
         'id': base, 'owner': 'dgx', 'path': f'{rel}/batches/{name}', 'include': ['*'],
         'source_class': 'static-inline-curriculum-reference-demonstrations' + ('-teacher-rationales' if rationalized else ''),
@@ -441,6 +502,11 @@ def registry_entries(root: Path, name: str) -> list[dict]:
     }
     if rationalized:
         source['supersedes'] = f'{root.name}-{stats["rationalizes"]}'
+    if sampled:
+        source.update(source_class='local-teacher-whole-program-samples-on-static-curriculum-cases',
+                      admission='Qwen3.6 teacher (local vLLM) trajectories on a stable sample of '
+                                f'{root.name}-{stats["samples"]} cases; admit.mjs exact-oracle admission; teacher-sampled',
+                      split='inherits the sampled cases (train build; source families keep upstream splits)')
     renders = {mode: {tok: {k: v for k, v in info.items() if k in ('documents', 'by_split', 'max_document_tokens')}
                       for tok, info in [(key.split('/')[1], val) for key, val in receipt['renders'].items()
                                         if key.split('/')[0] == mode]}
@@ -495,7 +561,7 @@ def register(args) -> None:
 def status(args) -> None:
     root = Path(args.root)
     out = {'batches': [], 'renders': []}
-    for p in sorted((root / 'batches').glob('[br]*/batch.json')):
+    for p in sorted((root / 'batches').glob('[brt]*/batch.json')):
         s = load(p)
         out['batches'].append({k: s.get(k) for k in ('batch', 'seeds', 'cases', 'decisions', 'duplicate_cases', 'replay')})
     out['renders'] = sorted(p.parent.name for p in (root / 'renders').glob('*/receipt.json'))
@@ -520,6 +586,8 @@ def main() -> None:
     p.add_argument('--root', required=True)
     p.add_argument('--batches', type=int)
     p.add_argument('--concurrency', type=int, default=48)
+    p.add_argument('--teacher-cases', type=int, default=1500, help='whole-program teacher samples per batch (0: off)')
+    p.add_argument('--teacher-workers', type=int, default=64)
     p = sub.add_parser('render-loop')
     p.add_argument('--root', required=True)
     p.add_argument('--render-cpus', type=int, default=6)
