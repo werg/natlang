@@ -120,6 +120,29 @@ def read_prior_cases(prior_root):
     source_ids, source_groups = set(), set()
     manifests = []
     for path in files:
+        campaign = path.parent if path.parent.parent == root else path.parent.parent
+        disposition_path = campaign / 'reservation-disposition.json'
+        if disposition_path.exists():
+            disposition = json.loads(disposition_path.read_text())
+            if (disposition.get('schema') != 'natlang.decision-source-reservation-disposition/1'
+                    or disposition.get('decision') != 'cancelled-unused-preparation'
+                    or disposition.get('root_approved') is not True
+                    or disposition.get('provider_calls') != 0
+                    or not isinstance(disposition.get('reason'), str)
+                    or not disposition['reason'].strip()):
+                raise ValueError(f'{disposition_path}: invalid source reservation disposition')
+            relative = path.relative_to(campaign).as_posix()
+            if disposition.get('artifacts', {}).get(relative) != sha256_file(path):
+                raise ValueError(f'{disposition_path}: cancelled preparation artifact changed: {relative}')
+            manifests.append({'path': str(path), 'sha256': sha256_file(path),
+                              'reservation_status': 'cancelled-unused-preparation',
+                              'disposition_path': str(disposition_path),
+                              'disposition_sha256': sha256_file(disposition_path),
+                              'reason': disposition['reason'],
+                              'unique_ids': 0, 'unique_groups': 0,
+                              'direct_program_ids': 0, 'direct_program_groups': 0,
+                              'nested_source_ids': 0, 'nested_source_groups': 0})
+            continue
         file_program_ids, file_program_groups = set(), set()
         file_source_ids, file_source_groups = set(), set()
         raw_sha = sha256_file(path)
