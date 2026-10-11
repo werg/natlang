@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v87-root-approval-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v87-v41-prefix-runtimev17-v1",
+  "files": [
+    {
+      "path": "reviewed-plan-root-approved-v1.json",
+      "bytes": 11262,
+      "sha256": "2804cc7ee26040dafb08074717d29cc86831016f2dc4488c1afb09860a211040"
+    },
+    {
+      "path": "root-disjointness-verified-v1.json",
+      "bytes": 453,
+      "sha256": "e71b080e575f6600eda113614f6efd42ec48cc22f8b1c102cfc406ee6b791c9e"
+    },
+    {
+      "path": "root-owner-approval-v1.json",
+      "bytes": 739,
+      "sha256": "5b2dc533126036c9a529bce64b7cd6d7b869d745a88f55607f272ecc35f101bd"
+    }
+  ],
+  "bytes": 12454
+}
