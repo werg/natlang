@@ -1,0 +1,57 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v36-source-closure-pop-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-source-closure-packet-v2",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 763,
+      "sha256": "d50e46b8390b85eff71a9aa6bd4ae8b5494324d81ddd24c7739159682e2126a1"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1107,
+      "sha256": "8760afd0fa0726ed6fb76e9e2bd31c5f674742270d8e4ce4dc7e11e26b9f9c04"
+    },
+    {
+      "path": "closure-input-v1/check_raw_group_keys.py",
+      "bytes": 1933,
+      "sha256": "b945cbe89c3fe6ad76b562d59a1206a5d85b051620b64ec4bf541ec0f7ee8c4a"
+    },
+    {
+      "path": "closure-input-v1/closure-source-cases.jsonl",
+      "bytes": 475731,
+      "sha256": "1a264d8c2fd67a27c1dfe4d2feb21f5ac73feaf4103edffd7c386879122a85f7",
+      "lines": 390
+    },
+    {
+      "path": "closure-input-v1/closure-source-manifest.json",
+      "bytes": 2633,
+      "sha256": "fcff7e43b21010d32ae03e984f9902979993e0d6be7bcd99c0c0a1309d309113"
+    },
+    {
+      "path": "closure-input-v1/current-source-quality-holds.json",
+      "bytes": 61430,
+      "sha256": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994"
+    },
+    {
+      "path": "closure-input-v1/selected-program-index.jsonl",
+      "bytes": 68130,
+      "sha256": "0983c2b8a650ec1f17bbb65597dfa50aadec575331c22e0eb1792ab9bcd9e9a0",
+      "lines": 54
+    },
+    {
+      "path": "closure-input-v1/selected-source-case-index.jsonl",
+      "bytes": 95851,
+      "sha256": "59de0c68dbe8b71e17c8ffc7b172dc88a937ccadbea88c09e63f384f8dc992d1",
+      "lines": 390
+    },
+    {
+      "path": "closure-packet-v1.json",
+      "bytes": 1885,
+      "sha256": "6b563da318684bd1c0abc859a0c7bf3b0ec2bed4ce4b339df64485332f2aff0e"
+    }
+  ],
+  "bytes": 709463
+}
