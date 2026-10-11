@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v36-model-rotation-fairness-supplement-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-model-rotation-fairness-v1",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 14850,
+      "sha256": "7cef859602aecba9e507be9e83f0859ea33e7aa1ede9c9a7abab789778b8cdf1"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 1734,
+      "sha256": "269e8724b571ad16c34287dbe618bd29ac830e51d5ccc8d44ed108cfe9c940df"
+    }
+  ],
+  "bytes": 16584
+}

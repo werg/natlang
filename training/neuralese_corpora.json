@@ -30507,6 +30507,97 @@
       "admission": "held-launch-evidence-only-no-training-admission",
       "independent_new_worlds": 0,
       "notes": "Separate root-approved plan and launch receipt for V75 v4. Supervisor PID 1052262 replaces empty/stopped V75 v3 supervisor 1048971; approved plan SHA 1458c439... . Five workers authorized; lane 2 is currently running while other lanes await exact predecessors. This is launch evidence, not output quality or admission."
+    },
+    {
+      "id": "luna-annotation-folder-v72-v22-runtimev16-full-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-annotation-folder-v72-runtimev16-v1",
+      "include": [
+        "campaign-launch.json",
+        "reviewed-plan-v1.json",
+        "root-approved-plan-v1.json",
+        "root-supervisor-launch-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl",
+        "worker-*/journal.jsonl",
+        "worker-*/worker.log",
+        "worker-*/case-*/**/*"
+      ],
+      "split": "inherited-train-raw-generation-evidence",
+      "source_class": "held-luna-annotation-folder-closed-raw-output",
+      "training_admission": false,
+      "admission": "raw-generation-evidence-only-no-source-quality-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V72 closed raw evidence snapshot. Main campaign launched lanes 1,3,4,5; lane 2 completed via separate approved supplement PID1033871 on the same original queue. All 88 queue keys terminal: 87 result records plus one index49 model_request_budget failure preserved with partial/evidence. No quality inference/admission."
+    },
+    {
+      "id": "luna-annotation-folder-v72-v22-runtimev16-quality-review-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v72-annotation-folder-final-v2",
+      "include": [
+        "audit.json",
+        "audit.md"
+      ],
+      "split": "inherited-train-quality-review-only",
+      "source_class": "held-luna-source-annotation-comparison-and-visibility-audit",
+      "training_admission": false,
+      "admission": "audit-only-no-semantic-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V72 exact-row final review v2 supersedes the unregistered local v1 diagnostic. 87/88 outputs; 504/632 completed-item exact source-annotation matches; 8 unscored index49 items retained. Every completed input folder file and output/return map matched exactly; exact source-state request joins are pinned. Disagreements are not automatic negatives."
+    },
+    {
+      "id": "luna-choice-confidence-v73-v35-runtimev16-full-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v73-v35-runtimev16-v3",
+      "include": [
+        "campaign-launch.json",
+        "reviewed-plan-v1.json",
+        "root-approved-plan-v1.json",
+        "root-supervisor-launch-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-generation-source-review-v2.json",
+        "predecessor-bindings-v1.json",
+        "worker-*/queue.jsonl",
+        "worker-*/journal.jsonl",
+        "worker-*/worker.log",
+        "worker-*/case-*/**/*"
+      ],
+      "split": "inherited-train-raw-generation-evidence",
+      "source_class": "held-luna-choice-confidence-closed-raw-output",
+      "training_admission": false,
+      "admission": "raw-generation-evidence-only-no-source-quality-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Complete V73 v3 closed raw campaign, all five actual lanes. 55/55 terminal result rows on V35 source cases; preserves all wrong-label outputs and scoped action errors. The earlier four-lane raw snapshot is superseded for whole-campaign coverage by this full snapshot. No admission."
+    },
+    {
+      "id": "luna-choice-confidence-v73-v35-runtimev16-quality-review-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-choice-confidence-final-v2",
+      "include": [
+        "audit.json",
+        "audit.md"
+      ],
+      "split": "inherited-train-quality-review-only",
+      "source_class": "held-luna-source-annotation-comparison-and-visibility-audit",
+      "training_admission": false,
+      "admission": "audit-only-no-semantic-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V73 exact-row review v2. 55/55 programs; 376/395 exact source-annotation matches; 19 disagreements retained for review, not converted to negatives. All input files and returned/saved decision maps were exact. No source quality/training admission."
+    },
+    {
+      "id": "google-choice-confidence-v36-model-rotation-fairness-supplement-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-model-rotation-fairness-v1",
+      "include": [
+        "audit.json",
+        "audit.md"
+      ],
+      "split": "inherited-train-quota-allocation-review",
+      "source_class": "held-provider-model-availability-and-scheduler-review",
+      "training_admission": false,
+      "admission": "scheduler-diagnostic-only-no-quality-ranking-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Supplement to V36 model-coverage accounting. Records exact 10-model frozen pool, 2-model V36 use, observed shared project quota state and earlier free-tier daily quota evidence. Eight no-request models are not semantic failures; exact prelaunch state was not archived, so the report keeps that uncertainty."
     }
   ],
   "coverage_backlog": [
