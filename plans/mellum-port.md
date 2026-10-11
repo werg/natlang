@@ -562,7 +562,12 @@ documents):
   latter: P(pass) ≈ 0.92 per eval, ≈ 0.84 for two in a row.
 
 **v12 (raw-recurrence-mellum-v12).**
-- core_text_warmup goes to **6,144** updates, at ~6–7 s/update ≈ 3.5–4 h more.
+- core_text_warmup goes to **6,144** updates. Since ternary-experts started (~3,520), the mean is 15.8 s/update:
+  - bf16: 7.0 s (41% of updates);
+  - q4: 12.1 s (19%);
+  - ternary-experts: 26.6 s (40%).
+
+  So the 2,048 more updates take ~9 h. The ternary-experts update is the next speed target.
 - `quantization_steps: 4096` keeps the quantization ramp's update range. Updates past 4,096 train at the stage-end
   mixes (q4 λ 1, ternary-experts 0.125), and the quantization component — part of the trainer's resume identity —
   is unchanged.
@@ -590,6 +595,12 @@ autoregressive controls, which decode token by token, ran outside the cache.
 
 The 1 : 3.6 ratio of q4 to ternary decode cost matches the 784 s : 2,440 s columns.
 
+**Resumed (07:08).**
+- `lineage_handoff` recorded `extended: {core_text_warmup: [4096, 6144]}`.
+- The trainer logged `code_handoff` at step 4096 (options_changed steps 4096→6144, options_added
+  report_column_fraction 0.25) and an exact optimizer restore.
+- The first updates ran at the held mixes (ternary-experts 0.125, q4 1.0).
+
 **Changes in the same push** (operational; no evaluation added; the required columns still gate):
 1. **Cache per column.** Each precision column runs inside one deployed-weights cache, so each weight is quantized
    once per column. `deployed_cache` is now reentrant, so the gate's own block keeps the outer cache. The values are
@@ -605,5 +616,6 @@ The 1 : 3.6 ratio of q4 to ternary decode cost matches the 784 s : 2,440 s colum
 
 **Expected decision cost:**
 - Final decision: ~4 min (BF16 behaviour) + ~4 min (q4) + ~1 min (ternary-experts at 0.25).
-- With cadence evals at ~50 s per 256 updates (~3%), the stage's eval share stays near 3–4%.
+- Cadence evals cost ~50 s per 256 updates, about 4,000 s of training at the current mix (~1.2%).
+- One final decision of ~9 min is ~1.7% of the extension's ~9 h, so the eval share stays under ~3%.
 - This is a forecast until the first decision under v12 is measured.
