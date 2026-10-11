@@ -73,13 +73,33 @@ test('scope inline lowering keeps awaited substitutions outside the capture acce
     'const judge = nl.with(makeRecord())`Check ${await makeText()}`;\njudge',
     'const judge = nl`Check ${await makeText()}`.with(makeRecord());\njudge',
   ]) {
-    const templateStart = source.indexOf('nl.with') >= 0 ? source.indexOf('nl.with') : source.indexOf('nl`');
+    const sourceStart = source.indexOf('nl.with') >= 0 ? source.indexOf('nl.with') : source.indexOf('nl`');
     const opening = source.indexOf('`');
     const templateEnd = source.indexOf('`', opening + 1) + 1;
+    const captureRecordStart = source.indexOf('makeRecord()');
+    const interpolationText = 'await makeText()';
+    const interpolationStart = source.indexOf(interpolationText);
+    const span = (start, end) => ({ file: 'snippet.ts', start, end,
+      line: source.slice(0, start).split('\n').length,
+      column: start - source.lastIndexOf('\n', start - 1) });
+    const stringType = { text: 'string', natlang: 'string', aliases: {} };
     const compiled = compileScopeSnippet(source, {
       helperBindings: ['makeRecord', 'makeText'],
-      analyze: () => ({ plans: [{ sourceSpan: { file: 'snippet.ts', start: templateStart, end: templateEnd, line: 1, column: 1 },
-        explicitCaptures: true, captures: [{ name: 'note', mode: 'snapshot' }], softBody: undefined }], diagnostics: [] }),
+      analyze: () => ({ plans: [{
+        sourceSpan: span(sourceStart, templateEnd),
+        templateSpan: span(opening, templateEnd),
+        interpolations: [{ expression: interpolationText,
+          sourceSpan: span(interpolationStart, interpolationStart + interpolationText.length), type: stringType }],
+        definitionId: 'nl:test-inline-await-substitution',
+        strings: ['Check ', ''],
+        instructions: 'Check ${…}',
+        parameters: [],
+        returns: stringType,
+        explicitCaptures: true,
+        captures: [{ name: 'note', type: stringType, mutable: false, source: 'input',
+          mentionSpan: captureRecordStart, mode: 'snapshot' }],
+        inheritedCodebaseRevision: 'scope-compiler-test',
+      }], diagnostics: [] }),
     });
     assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
     assert.match(compiled.program, /\[await makeText\(\)\], \(\(__natlang_capture_record/);
