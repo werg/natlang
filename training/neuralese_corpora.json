@@ -33688,6 +33688,111 @@
         "luna-neuralese-direct-lfm-v8-held-gpu-evidence-20261011-v1"
       ],
       "notes": "Exact v2 recipe file referenced by the immutable failed-context stage plan; its SHA-256 is a6f949a92e43ff1d332f48bedc879c5a5139f3b7db7d6e45fae610a7fc489bdd."
+    },
+    {
+      "id": "quality-review-choice-enum-paired-probe-v15-accounting-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-choice-enum-paired-probe-v15-accounting-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "paired-diagnostic-no-independent-world-credit",
+      "source_class": "provider-prompt-probe-accounting-review",
+      "training_admission": false,
+      "admission": "held accounting supplement only; no training or trace admission",
+      "derived_from": [
+        "free-provider-choice-enum-paired-probe-v15-launch-evidence-held-20261011-v1"
+      ],
+      "notes": "Additive telemetry/rejection accounting for the sealed V15 V2 quality review. Collector start counts are not physical attempts; prompt/completion token usage is unavailable. The V2 review and raw trajectories are unchanged."
+    },
+    {
+      "id": "luna-v41-invalid-recovery-seven-runtimev17-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v41-invalid-recovery-seven-runtimev17-prepared-v2",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-provider-generation-no-admission",
+      "source_class": "provider-generated-native-closeout",
+      "training_admission": false,
+      "admission": "closed generation evidence only; no native, trace, recurrence, or text admission",
+      "derived_from": [
+        "google-v41-prefix-static-held-20261011-v1"
+      ],
+      "notes": "Closed 7-program additive V41 run, exact source/reference and rendered-child visibility audit is separately registered. Result maps include five disagreements across 39 items; raw output and worker evidence are preserved."
+    },
+    {
+      "id": "quality-review-luna-v41-invalid-recovery-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-luna-v41-invalid-recovery-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-quality-review-no-admission",
+      "source_class": "provider-generated-native-quality-review",
+      "training_admission": false,
+      "admission": "quality review only; disagreements remain held",
+      "derived_from": [
+        "luna-v41-invalid-recovery-seven-runtimev17-closed-raw-held-20261011-v1"
+      ],
+      "notes": "Exact source-static map comparison, item-level saved-request visibility, result/trace hashes, and worker terminal accounting. Saved rendered-message evidence is not raw wire evidence; held source references are not independent truth."
+    },
+    {
+      "id": "google-v43-choice-confidence-prefix-329-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v43-prefix-329-20261011-v1",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "labels.jsonl",
+        "labels.jsonl.attempts.jsonl",
+        "labels.jsonl.manifest.json",
+        "resume-plan.json",
+        "root-independent-approval-v1.json",
+        "launch-receipt-v1.json",
+        "locked-prior-successes.json",
+        "prefix-snapshot.json"
+      ],
+      "split": "held-prefix-snapshot-no-admission",
+      "source_class": "provider-generated-label-prefix",
+      "training_admission": false,
+      "admission": "immutable active-prefix evidence only; static source and Luna queues remain held",
+      "derived_from": [
+        "free-provider-google-choice-confidence-v43-launch-inputs-held-20261011-v1"
+      ],
+      "notes": "Byte-stable complete-line snapshot of 329 rows from still-active V43 enum-omission resume. Includes strict-invalid response and full source/provenance bindings; no active worker log or changing labels are included."
+    },
+    {
+      "id": "google-v43-choice-confidence-prefix-329-static-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v43-prefix-329-adapter-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-static-reference-no-independent-world-credit",
+      "source_class": "authored-static-decision-reference",
+      "training_admission": false,
+      "admission": "static reference only; provider labels are strict-scored and source matched; no training admission",
+      "derived_from": [
+        "google-v43-choice-confidence-prefix-329-held-20261011-v1"
+      ],
+      "notes": "Shared decision-label adapter accepted 231 of 329 saved label rows into 31 static native cases; it recorded 98 rejections. All 31 scripted reference replays completed. The static scaffold is authored and does not claim teacher-generated reasoning."
+    },
+    {
+      "id": "luna-v43-prefix-329-runtimev17-prepared-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-generation-plan-no-admission",
+      "source_class": "provider-generation-preparation",
+      "training_admission": false,
+      "admission": "unapproved preparation only; no provider calls or training admission",
+      "derived_from": [
+        "google-v43-choice-confidence-prefix-329-static-held-20261011-v1"
+      ],
+      "notes": "Five-worker V17 Luna plan created by the shared preparation tool from 31 exact static source cases; reviewed-plan has root_approved=false. Do not launch without owner review and current disjointness/resource checks."
     }
   ],
   "coverage_backlog": [

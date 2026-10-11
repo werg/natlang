@@ -1,0 +1,62 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-v43-choice-confidence-prefix-329-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v43-prefix-329-20261011-v1",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 4087506,
+      "sha256": "3caa918786f7ac092f2dabe33a37f6688981e172b6f2a11bf2ea42f7e0270f6c",
+      "lines": 1941
+    },
+    {
+      "path": "labels.jsonl",
+      "bytes": 391931,
+      "sha256": "140f9796f25ae1482aa5ffd5a9f140ba6cf65da09432b13507dc1fcc6c6cce2c",
+      "lines": 329
+    },
+    {
+      "path": "labels.jsonl.attempts.jsonl",
+      "bytes": 388840,
+      "sha256": "a43b29fabcd2979fc8d7849f29a84b1def0e8d78288474b1f1a89aa55ba431a8",
+      "lines": 397
+    },
+    {
+      "path": "labels.jsonl.manifest.json",
+      "bytes": 2617,
+      "sha256": "3311c400c171fb13814c6b4125c78edc3e880443baaad519ac4c5925f6d1d5f4"
+    },
+    {
+      "path": "launch-receipt-v1.json",
+      "bytes": 1448,
+      "sha256": "9e5f2efbff1c98b0c40f4eefad74d428f2b7463d58b01839253caa363b38c874"
+    },
+    {
+      "path": "locked-prior-successes.json",
+      "bytes": 55936,
+      "sha256": "b2571830a10a3b91b4ad1ffd2a60e7553c939106eaf4f9fdee8ff352cad47479"
+    },
+    {
+      "path": "prefix-snapshot.json",
+      "bytes": 4565,
+      "sha256": "196be0e8cd9e5604ab5862da22a6dacabad929fa789e9d4d0dc5f4e4e480cce9"
+    },
+    {
+      "path": "resume-plan.json",
+      "bytes": 3601,
+      "sha256": "52d84efec995f99546042cc5c8e37b04f91a5c4d1ba010a2f6041b806ba41ba4"
+    },
+    {
+      "path": "root-independent-approval-v1.json",
+      "bytes": 258,
+      "sha256": "2c49a1e0ef9a90065f3714a8432642e1e5b3c72812e9cad21ebde4dd7daa29ab"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 725550,
+      "sha256": "326b66638d9caa2995a002f3c958511738f218bfcfc77594e29f95a0ba8f12f4"
+    }
+  ],
+  "bytes": 5662252
+}
