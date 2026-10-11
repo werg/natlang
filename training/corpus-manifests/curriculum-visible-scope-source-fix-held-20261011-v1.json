@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "curriculum-visible-scope-source-fix-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/curriculum-visible-scope-source-fix-v1",
+  "files": [
+    {
+      "path": "case-reviews.json",
+      "bytes": 1669,
+      "sha256": "d83cc7e93270d561e36a67424cf65255b0436b116f73b7cc5c0503cd038d39ec"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 67154,
+      "sha256": "3fa3842a68b7744d728d3c26fa8824cc1c1fae5b32bf3e2e34d596c77ec58249",
+      "lines": 7
+    }
+  ],
+  "bytes": 68823
+}

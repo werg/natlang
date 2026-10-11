@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v73-four-terminal-lanes-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v73-four-terminal-lane-review-v1",
+  "files": [
+    {
+      "path": "case-audit.jsonl",
+      "bytes": 69465,
+      "sha256": "c2f39f73a23884d73edd6083a9e7ea4b068fc57947e2843ed7cfb10b760483bd",
+      "lines": 44
+    },
+    {
+      "path": "closed-files.json",
+      "bytes": 13074,
+      "sha256": "f76aafd3e2f3a3053b4665221468eefc40cb13f350392545471d12ec1b0c5b72"
+    },
+    {
+      "path": "review.json",
+      "bytes": 7956,
+      "sha256": "ca5538705908fd69c9accff18ba6fdb910f867021df54cc1adde83c2af90f0d6"
+    }
+  ],
+  "bytes": 90495
+}
