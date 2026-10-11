@@ -77,6 +77,32 @@ def _model_input_inventory(root: Path) -> dict[str, str]:
     return {name: sha256_file_hex(root / name) for name in sorted(names)}
 
 
+def _maple_temporal_binding(proof: dict, checkpoint_sha: str, snapshot: Path,
+                            files: dict[str, str]) -> dict:
+    """Describe whether today's local Maple base is proven identical to train-time bytes."""
+    relation = proof.get("source_temporal_relation")
+    if relation == "current-snapshot-reconstructed-training-bytes-unproven":
+        return {"relation": relation, "training_base_equivalence_proven": False,
+                "exact_training_base_restore": False}
+    if relation != "owner-confirmed-same-bytes-used-at-training":
+        raise ValueError("Maple source proof must state whether base bytes are historically pinned or reconstructed")
+    receipt_path = proof.get("training_base_confirmation_path")
+    receipt_sha = proof.get("training_base_confirmation_sha256")
+    if not receipt_path or not receipt_sha or sha256_file_hex(receipt_path) != receipt_sha:
+        raise ValueError("owner-confirmed Maple base identity requires a pinned training-base confirmation receipt")
+    receipt = json.loads(Path(receipt_path).read_text())
+    required = {"schema": "natlang.maple-training-base-confirmation/1",
+                "checkpoint_sha256": checkpoint_sha, "model_path": str(snapshot),
+                "files_sha256": canonical_json_sha256_hex(files),
+                "same_bytes_used_during_training": True}
+    if any(receipt.get(name) != value for name, value in required.items()):
+        raise ValueError("Maple training-base confirmation does not bind this checkpoint and exact model files")
+    return {"relation": relation, "training_base_equivalence_proven": True,
+            "exact_training_base_restore": True,
+            "confirmation_path": str(Path(receipt_path).resolve()),
+            "confirmation_sha256": receipt_sha}
+
+
 def _save_torch_atomic(value, path: Path) -> None:
     temporary = path.with_name(path.name + f".tmp-{os.getpid()}")
     try:
@@ -267,7 +293,7 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
                 "profile": "maple-bf16-mellum-direct-v1-attention-omitted/1",
                 "attention_trained": False, "complete_for_declared_policy": False,
                 "missing_declared_names": sorted(expected_attention),
-                "omission_pattern": "q-k-v-o-projection-weights-remain-at-pinned-base-values/1",
+                "omission_pattern": "q-k-v-o-projection-weights-absent-from-checkpoint/1",
                 "expected_latent_policy_names": sorted(expected_core | expected_attention)}
         elif saved_names == expected_core | expected_attention:
             training_parameter_coverage = {
@@ -280,6 +306,7 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
         declared_base_files = schema_proof.get("base_model", {}).get("files") or {}
         if any(files.get(name) != digest for name, digest in declared_base_files.items()):
             raise ValueError("Maple schema proof base model/tokenizer file hashes differ from current snapshot")
+        temporal_binding = _maple_temporal_binding(base_source_proof, checkpoint_sha, snapshot, files)
         source_binding = {"kind": "externally-reconstructed-from-closed-owner-schema-proof",
                           "backbone_adapter": backbone_adapter, "model_id": expected_base,
                           "snapshot_path_at_export": str(snapshot), "files": files,
@@ -294,14 +321,39 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
                                                    "neuralese_projection_catalog": schema_proof["neuralese_projection_catalog"],
                                                    "base_model": schema_proof["base_model"]},
                           "anchor_backbone_identity": maple,
-                          "source_temporal_relation": base_source_proof.get("source_temporal_relation"),
+                          "temporal_binding": temporal_binding,
                           "source_proof": base_source_proof,
                           "parameter_selector_correction_commit": "a897248888297c8989230a3534dea5fb3545a52f",
                           "training_parameter_selector_sha256": code_pins.get("train/backbone_policy.py"),
                           "export_parameter_selector_sha256": sha256_file_hex(package_root / "train/backbone_policy.py")}
-        if source_binding["source_temporal_relation"] not in (
-                "owner-confirmed-same-bytes-used-at-training", "current-snapshot-reconstructed-training-bytes-unproven"):
-            raise ValueError("Maple source proof must state whether base bytes are historically pinned or reconstructed")
+        quantization_option = options.get("quantization")
+        source_binding["inference_profile"] = {
+            "backbone_precision": maple["precision"],
+            "neuralese_representation": "native-latents",
+            "inherits_training_quantization_or_gate": False}
+        if quantization_option:
+            source_binding["training_precision"] = {
+                "mode": "quantization-component-point-distribution-sampled-during-training",
+                "identity_option": quantization_option,
+                "component_content_sha256": None,
+                "inference_artifact_precision_is_separate": True}
+            if isinstance(quantization_option, str) and not quantization_option.lstrip().startswith("{"):
+                quant_path = Path(quantization_option)
+                if not quant_path.is_absolute():
+                    quant_path = Path(__file__).resolve().parents[4] / quant_path
+                if quant_path.is_file():
+                    source_binding["training_precision"]["component_content_sha256"] = sha256_file_hex(quant_path)
+                    source_binding["training_precision"]["component_path"] = str(quant_path.resolve())
+        else:
+            source_binding["training_precision"] = {
+                "mode": "BF16-without-quantization-component",
+                "identity_option": quantization_option,
+                "inference_artifact_precision_is_separate": True}
+        training_parameter_coverage["exact_training_base_restore"] = temporal_binding["exact_training_base_restore"]
+        training_parameter_coverage["non_trainable_base_values_source"] = (
+            "the current locally hashed base snapshot; exact training-time identity is not proven"
+            if not temporal_binding["exact_training_base_restore"] else
+            "the owner-confirmed exact training-time base snapshot")
 
     controls = {
         "control_rows": anchor["control_rows"].detach().cpu().contiguous(),
@@ -428,7 +480,8 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
     else:
         if str(snapshot) != base.get("model_id") or str(snapshot) != base.get("snapshot_path_at_export"):
             raise ValueError("loaded Maple base path differs from direct artifact source proof")
-        if _model_input_inventory(snapshot) != base.get("files"):
+        loaded_files = _model_input_inventory(snapshot)
+        if loaded_files != base.get("files"):
             raise ValueError("loaded Maple model/tokenizer files differ from direct artifact's exact file inventory")
         schema_proof = base.get("schema_proof_binding") or {}
         if schema_proof.get("checkpoint_sha256") != manifest["training_checkpoint"]["sha256"]:
@@ -436,9 +489,27 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
         if (schema_proof.get("identity_sha256") != canonical_json_sha256_hex(manifest.get("identity")) or
                 schema_proof.get("step") != manifest["training_checkpoint"].get("step")):
             raise ValueError("embedded Maple schema proof identity or step differs from the artifact")
-        if base.get("source_temporal_relation") not in (
-                "owner-confirmed-same-bytes-used-at-training", "current-snapshot-reconstructed-training-bytes-unproven"):
-            raise ValueError("Maple base temporal binding is missing or invalid")
+        temporal_binding = _maple_temporal_binding(proof, manifest["training_checkpoint"]["sha256"],
+                                                   snapshot, loaded_files)
+        if temporal_binding != base.get("temporal_binding"):
+            raise ValueError("Maple training-base temporal proof differs from the exported binding")
+        inference_profile = base.get("inference_profile") or {}
+        if (inference_profile.get("backbone_precision") != "bf16" or
+                inference_profile.get("neuralese_representation") != "native-latents" or
+                inference_profile.get("inherits_training_quantization_or_gate") is not False):
+            raise ValueError("Maple direct artifact inference precision profile is missing or inconsistent")
+        training_precision = base.get("training_precision") or {}
+        quantization_option = (manifest.get("identity", {}).get("options") or {}).get("quantization")
+        expected_training_precision_mode = ("quantization-component-point-distribution-sampled-during-training"
+                                            if quantization_option else "BF16-without-quantization-component")
+        if (training_precision.get("identity_option") != quantization_option or
+                training_precision.get("mode") != expected_training_precision_mode or
+                training_precision.get("inference_artifact_precision_is_separate") is not True):
+            raise ValueError("Maple inference profile conflates training quantization with serving precision")
+        component_sha = training_precision.get("component_content_sha256")
+        component_path = training_precision.get("component_path")
+        if component_sha is not None and (not component_path or sha256_file_hex(component_path) != component_sha):
+            raise ValueError("Maple training quantization component changed after export")
         proof_heads = schema_proof.get("heads") or {}
         if proof_heads.get("sha256") != manifest["anchor"]["sha256"]:
             raise ValueError("embedded Maple schema proof does not bind the clean-head anchor")
@@ -526,10 +597,12 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
         if missing:
             if (missing != allowed_attention or
                     coverage.get("profile") != "maple-bf16-mellum-direct-v1-attention-omitted/1" or
-                    coverage.get("omission_pattern") != "q-k-v-o-projection-weights-remain-at-pinned-base-values/1"):
+                    coverage.get("omission_pattern") != "q-k-v-o-projection-weights-absent-from-checkpoint/1"):
                 raise ValueError("Maple partial restore is accepted only for the schema-bound q/k/v/o omission profile")
         elif coverage.get("profile") != "maple-bf16-mellum-direct-full-attention/1":
             raise ValueError("Maple complete restore has an inconsistent trainable-coverage profile")
+        if coverage.get("exact_training_base_restore") != temporal_binding["exact_training_base_restore"]:
+            raise ValueError("Maple checkpoint base-fidelity flag conflicts with the source temporal proof")
         from .backbone_policy import __file__ as selector_source
         if sha256_file_hex(selector_source) != base.get("export_parameter_selector_sha256"):
             raise ValueError("Maple restore parameter selector changed after export")
