@@ -60,8 +60,10 @@ EXCLUDED = {
     'anli_batch': 'source_review_pending (current source-conflict rule holds these sources)',
     'folio_batch': 'source_review_pending (current source-conflict rule holds these sources)',
     'folio_entailment': 'source_review_pending (current source-conflict rule holds these sources)',
-    'textworld_iterate': 'reference actions diverge on some games (iteration diverged); reported as a bug candidate',
 }
+# Fixed 2026-10-12 (the object_missing reference now declares its one expected divergent-stop failure); the running
+# s7k campaign keeps its fixed config without it, the next campaign includes it. Same day: folder_extract long CUAD
+# clauses and kqapro dangling relations no longer drop cases, so newer batches lose fewer cases.
 # Case-id sources of corpora this campaign must not repeat.
 EXISTING_IR = [
     'data/neuralese/corpora/static-lambda-rationalized-20261006-v2/lambda-v3-s61.ir.jsonl',
