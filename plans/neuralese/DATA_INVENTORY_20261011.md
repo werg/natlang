@@ -295,6 +295,12 @@ files that exist on DGX and not on Pop; 91.2 GB of them sit in entries without `
 
 Recovered (all set to `training_admission: true` with `review_status`; JeFF reserved-text scan found 0 hits in each):
 - `luna-v17-v9-portable-context-view-20261010-v1`: label was "root-admitted" with no flag. 3,207 train native records (~582k target+reasoning tokens, chars/4). 2,792 are decisions already in the 4962 union. **415 train decisions are not in the union text** (413 `curriculum_decision_extract_chain` from 58 trajectories whose other decisions are in the union; ~55k tokens). The 2,035 test records stay out.
+  - **Correction (2026-10-11, Pop pop-6bde/pop-b9fa, confirmed by DGX):** the 415 are not new. Each is a
+    `source_record_id` of one of 198 train union documents with identical text (the union deduplicates identical
+    documents), and its target is inside that document's supervised suffix. Incremental decision coverage is 0;
+    drop the ~55k-token claim. What V17 adds is the whole-trajectory rendering
+    (`natlang-native-turns-luna-v17-v9-render-20261011-v1`: no decision documents, `--decision-exclude-ids` over the
+    union's 5,733 source records; whole trajectories only).
 - `refine-judge-exact-20261009-v1`: 1,020 train rows of exact predicate labels; 307 held-out predicate/family rows stay out.
 - `refine-author-static-20261009-v1`: 28 authoring pairs (~197k tokens).
 - `neuralese-operator-cases-20261009-v1`: 1,166 train spans (834 test stay out); S5 objective cases.
