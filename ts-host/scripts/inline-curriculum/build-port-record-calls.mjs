@@ -19,7 +19,9 @@
 //       the concise form. Model-facing: recorded as debt in plans/MODEL_FACING_CHANGES.md until measured live.
 //   - Selection -> crisp helper, each exclusion an omission with its reason: malformed record, no request, empty
 //     target, evidence over --max-evidence characters (long-context families need a paged-reading program shape;
-//     registered as required conversion, not dropped silently). A target that also appears in the request (a repeated
+//     registered as required conversion, not dropped silently). A second pass with --min-evidence 32000
+//     --max-evidence 120000 converts the large-evidence records in the same paged-reading shape (the child pages
+//     through up to ~60 cut-off pages; the context stays inside the 65,536-token budget). A target that also appears in the request (a repeated
 //     agent action, a file named in a repository question) is ordinary data, not a leak.
 //   - Splits: the record's split is kept; explicit JeFF test reservations (training/source-split-reservations.json,
 //     defect D3) force test when a reserved normalized text equals a whole source text, consumer message or line.
@@ -40,11 +42,12 @@ import { curriculumCase, evalCall, returnCall } from './lib.mjs';
 import { normalizeSourceText } from './source-split.mjs';
 
 const { values } = parseArgs({ options: { input: { type: 'string' }, out: { type: 'string' }, items: { type: 'string', default: '4' },
-  'shard-cases': { type: 'string', default: '250' }, 'max-evidence': { type: 'string', default: '32000' },
+  'shard-cases': { type: 'string', default: '250' }, 'max-evidence': { type: 'string', default: '32000' }, 'min-evidence': { type: 'string', default: '0' },
   reservations: { type: 'string', default: 'data/external_pilot/jeff-test-tasks.jsonl' }, 'corpus-id': { type: 'string', default: 's1-full-final-20261003' },
   limit: { type: 'string' } } });
 if (!values.input || !values.out) throw new Error('usage: build-port-record-calls.mjs --input F --out DIR');
 const ITEMS = Number(values.items), SHARD = Number(values['shard-cases']), MAX_EVIDENCE = Number(values['max-evidence']);
+const MIN_EVIDENCE = Number(values['min-evidence']);
 const LIMIT = values.limit ? Number(values.limit) : Infinity;
 const sha = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => JSON.stringify(value);
@@ -213,6 +216,8 @@ for await (const line of input) {
   if (!target) { omit(record, 'empty-target'); continue; }
   const evidence = (record.sources ?? []).map(sourceText).join('\n\n');
   if (evidence.length > MAX_EVIDENCE) { omit(record, 'evidence-over-cap-needs-paged-program'); continue; }
+  // A large-evidence pass (--min-evidence = the base pass's cap) converts exactly what the base pass left out.
+  if (evidence.length <= MIN_EVIDENCE) { stats.covered_by_base_pass = (stats.covered_by_base_pass ?? 0) + 1; continue; }
   const hit = reservedHit(record);
   const split = hit ? 'test' : (record.split ?? 'train');
   if (hit) stats.reserved_to_test++;
@@ -225,6 +230,6 @@ await flushShard(true);
 await writeFile(resolve(outDir, 'omissions.jsonl'), omissions.map(row => JSON.stringify(row)).join('\n') + (omissions.length ? '\n' : ''));
 const builder = readFileSync(new URL(import.meta.url));
 await writeFile(resolve(outDir, 'build.json'), JSON.stringify({ schema: 'natlang.port-record-calls-build/1', input: resolve(values.input),
-  family: family0, corpus: values['corpus-id'], options: { items: ITEMS, shard_cases: SHARD, max_evidence: MAX_EVIDENCE },
+  family: family0, corpus: values['corpus-id'], options: { items: ITEMS, shard_cases: SHARD, max_evidence: MAX_EVIDENCE, min_evidence: MIN_EVIDENCE },
   reservations: { path: values.reservations, texts: reserved.size }, builder_sha256: sha(builder), ...stats }, null, 2) + '\n');
 console.log(JSON.stringify({ family: family0, ...stats }));
