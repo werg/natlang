@@ -16,6 +16,7 @@ import { materializeNativeRows } from '../../dist/teacher/native-materializer.js
 import { defaultToolSurfaceHash } from '../../dist/teacher/collector.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { renderValue } from '../../dist/native/agent.js';
+import { ordinalDistanceRecordReview } from '../../dist/evaluation/oracles.js';
 import { requireValue, equal, sha } from './common.mjs';
 import { archiveDecisionExecutionComponents, verifyDecisionExecutionComponents } from './execution-components.mjs';
 
@@ -84,9 +85,15 @@ function captureVisibility(row, record) {
       if (!idLine || JSON.parse(idLine) !== item.id) continue;
       const evalObserved = turns.some(turn => (turn.assistant?.calls ?? []).some(call =>
         call.tool === 'eval' && call.arguments?.code === expectedEval));
-      const returnObserved = turns.some(turn => (turn.assistant?.calls ?? []).some(call =>
-        call.tool === 'return_result' && call.arguments?.status === 'success' &&
-        equal(call.arguments?.value, record.semantics.expected[item.id])));
+      const returnObserved = turns.some(turn => (turn.assistant?.calls ?? []).some(call => {
+        if (call.tool !== 'return_result' || call.arguments?.status !== 'success') return false;
+        const expected = record.semantics.expected[item.id];
+        const spec = record.semantics.oracle;
+        if (spec?.normalization === 'ordinal-distance-record')
+          return ordinalDistanceRecordReview({ [item.id]: call.arguments?.value }, { [item.id]: expected },
+            spec.ordinal_levels, spec.ordinal_distance_max).accepted;
+        return equal(call.arguments?.value, expected);
+      }));
       if (evalObserved && returnObserved) { matched = { invocationId, context }; break; }
     }
     const context = matched?.context ?? '';
@@ -396,13 +403,17 @@ async function main() {
       const row = await referenceRow(record, i, options);
       const visibility = captureVisibility(row, record);
       const materialized = materializeNativeRows([row]);
-      const outputMatches = equal(row.outcome?.value, record.semantics.expected);
+      const ordinalSpec = record.semantics.oracle;
+      const outputReview = ordinalSpec?.normalization === 'ordinal-distance-record' ?
+        ordinalDistanceRecordReview(row.outcome?.value, record.semantics.expected,
+          ordinalSpec.ordinal_levels, ordinalSpec.ordinal_distance_max) : null;
+      const outputMatches = outputReview?.accepted ?? equal(row.outcome?.value, record.semantics.expected);
       materializer.push({ record_id: record.id, accepted_rows: materialized.acceptedRows,
         rejected_rows: materialized.rejectedRows, turns: materialized.turns.length,
         unlinked: materialized.unlinked.length,
         note: 'Held annotation-derived rows are intentionally not promoted by reference replay.' });
       replay.push({ row, visible_input_check: visible, context_visibility: visibility,
-        output_matches_annotation: outputMatches });
+        output_matches_annotation: outputMatches, ...(outputReview ? { ordinal_reference_review: outputReview } : {}) });
       if (!visibility.visible) throw new Error('full_source_state_not_visible_in_reference_context');
       if (!outputMatches || row.outcome?.accepted !== true) throw new Error('reference_output_not_exactly_accepted');
     } catch (error) {
@@ -451,7 +462,10 @@ async function main() {
       source_groups_preserved: sourceGroups.size,
       note: 'Annotations appear only in hidden semantics.expected/reference outputs. Visible task files and typed item inputs contain no answer/gold property. No provider-authored labels, no independent semantic adjudication, no admission.' },
     replay: { attempts: replay.length,
-      exact_accepted: replay.filter(item => item.row.outcome?.accepted && item.output_matches_annotation).length,
+      accepted_by_source_reference: replay.filter(item => item.row.outcome?.accepted && item.output_matches_annotation).length,
+      ordinal_reviewed_items: replay.reduce((sum, item) => sum + (item.ordinal_reference_review?.entries?.length ?? 0), 0),
+      ordinal_out_of_tolerance_items: replay.reduce((sum, item) => sum +
+        (item.ordinal_reference_review?.entries?.filter(entry => !entry.accepted).length ?? 0), 0),
       failures: failures.length, materializer_rejected_held_rows: materializer.reduce((sum, item) => sum + item.rejected_rows, 0),
       tool_surface_sha256: options.toolSurfaceSha256,
       options_sha256: jsonSha({ ...options, systemPrompt_sha256: sha(TOOLS_PROMPT) }) },

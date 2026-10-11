@@ -12,13 +12,14 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "training" / "neuralese"))
+from natlang_neuralese.common.hashing import sha256_hex
+from natlang_neuralese.common.jsonio import canonical_json_bytes
 
 
 def digest(value: str) -> str:
-    return sha(value.encode())
+    return sha256_hex(value.encode())
 
 
 def normalize_state(text: str) -> str:
@@ -28,10 +29,6 @@ def normalize_state(text: str) -> str:
 def identity_state(text: str, limit: int = 1500) -> str:
     text = normalize_state(text)
     return text if len(text) <= limit else text[:limit] + " ..."
-
-
-def canonical(value) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
 
 
 def main():
@@ -146,8 +143,8 @@ def main():
                         "upstream": {"revision": dataset["revision"], "path": shard["upstream_path"],
                             "lfs_sha256": shard["hub_lfs_sha256"]},
                         "upstream_metadata_status": "pinned_and_byte_bound"}]}
-                record_sha = sha(canonical(record))
-                variant_id = "dv-" + sha(f"visible-task-v1:decision:toxicity:{case_id}".encode())[:20]
+                record_sha = sha256_hex(canonical_json_bytes(record))
+                variant_id = "dv-" + sha256_hex(f"visible-task-v1:decision:toxicity:{case_id}".encode())[:20]
                 variant = {"version": "natlang.decision-case/1", "id": variant_id,
                     "source": "google/civil_comments", "family": "decision:toxicity-binary-threshold-v1",
                     "role": "train", "kind": "noul",
@@ -163,7 +160,7 @@ def main():
                     "source_row_group": group_index, "source_row_in_group": row_index,
                     "source_physical_row": physical_start + row_index}
                 bucket = "boundary" if score < 0.6 else "moderate" if score <= 0.8 else "clear"
-                rank = sha(f"toxicity-positive-pool-v1:{case_id}".encode())
+                rank = sha256_hex(f"toxicity-positive-pool-v1:{case_id}".encode())
                 bins[bucket].append((rank, variant, binding, record))
                 seen_identity.add(ident)
             physical_start += parquet.metadata.row_group(group_index).num_rows
@@ -201,13 +198,13 @@ def main():
     summary = {"schema": "natlang.visible-toxicity-positive-pool/1", "training_admission": False,
         "count": len(extras), "answer_counts": {"true": len(extras)},
         "strata": {name: len(values) for name, values in bins.items()}, "stratum_quotas": quotas,
-        "cases_sha256": sha(case_bytes), "source_bindings_sha256": sha(binding_bytes),
-        "additional_source_cases_sha256": sha(source_bytes),
-        "base_cases_sha256": sha(base_cases_bytes), "base_bindings_sha256": sha(base_bindings_bytes),
-        "source_manifest_sha256": sha(source_manifest_bytes),
-        "download_manifest_sha256": sha(download_manifest_bytes),
-        "quality_hold_policy_sha256": sha(args.quality_holds.read_bytes()),
-        "jeff_test_cases_sha256": sha(args.jeff_cases.read_bytes()),
+        "cases_sha256": sha256_hex(case_bytes), "source_bindings_sha256": sha256_hex(binding_bytes),
+        "additional_source_cases_sha256": sha256_hex(source_bytes),
+        "base_cases_sha256": sha256_hex(base_cases_bytes), "base_bindings_sha256": sha256_hex(base_bindings_bytes),
+        "source_manifest_sha256": sha256_hex(source_manifest_bytes),
+        "download_manifest_sha256": sha256_hex(download_manifest_bytes),
+        "quality_hold_policy_sha256": sha256_hex(args.quality_holds.read_bytes()),
+        "jeff_test_cases_sha256": sha256_hex(args.jeff_cases.read_bytes()),
         "dataset_revision": dataset["revision"], "source_split": "train",
         "source_license": dataset["license"], "independent_new_worlds": 0,
         "live_prompt_sampling_required": True}

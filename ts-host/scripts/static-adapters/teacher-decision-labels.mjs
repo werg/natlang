@@ -241,12 +241,15 @@ function contractOf(source, decisionContract) {
     criteria = selected.criteria;
     taskCriteriaProvenance = selected.provenance;
   }
+  const ordinalTolerance = source.family === satisfactionEstimateFamily ?
+    { kind: 'ordinal-distance', levels: choiceLabels, max_distance: 1, model_visible: false } : null;
   const signature = { kind: source.kind, family: source.family, source: source.source,
     options: source.options ?? [], levels: source.levels ?? [], criteria, license: source.license, role: source.role };
+  if (ordinalTolerance) signature.oracle_tolerance = ordinalTolerance;
   if (decisionContract === choiceConfidenceContract) signature.decision_contract = decisionContract;
   return { kind: source.kind, decisionContract, family: source.family, source: source.source, options: source.options ?? [],
     levels: source.levels ?? [], labels: choiceLabels, criteria, taskCriteriaProvenance, license: source.license,
-    signature: jsonSha(signature) };
+    ...(ordinalTolerance ? { ordinalTolerance } : {}), signature: jsonSha(signature) };
 }
 
 function createRecord(contract, batch, sourceMeta) {

@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 """Build versioned, source-bound tasks whose requested answer is visible-text based."""
 import argparse
-import hashlib
 import json
 from pathlib import Path
 
-
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def canonical(value) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "training" / "neuralese"))
+from natlang_neuralese.common.hashing import sha256_hex
+from natlang_neuralese.common.jsonio import canonical_json_bytes
 
 
 TOXICITY_QUESTION = (
@@ -44,7 +40,7 @@ def main():
     args = parser.parse_args()
 
     source_bytes = args.cases.read_bytes()
-    source_sha = sha(source_bytes)
+    source_sha = sha256_hex(source_bytes)
     source_manifest_bytes = args.source_manifest.read_bytes()
     source_manifest = json.loads(source_manifest_bytes)
     if source_manifest.get("selected_sha256", source_manifest.get("cases_sha256")) != source_sha:
@@ -69,9 +65,9 @@ def main():
             continue
         if roles_by_group[row["group"]] != {"train"}:
             continue
-        original_hash = sha(canonical(row))
+        original_hash = sha256_hex(canonical_json_bytes(row))
         variant = dict(row)
-        variant_id = "dv-" + sha(f"visible-task-v1:{family}:{row['id']}".encode())[:20]
+        variant_id = "dv-" + sha256_hex(f"visible-task-v1:{family}:{row['id']}".encode())[:20]
         variant["id"] = variant_id
         if family == "decision:toxicity":
             if row.get("kind") != "noul" or not isinstance(row.get("answer"), (int, float)):
@@ -108,18 +104,18 @@ def main():
                                 ensure_ascii=False, indent=2) + "\n").encode()
     (args.out / "source-bindings.json").write_bytes(binding_bytes)
     new_manifest = {"schema": "natlang.decision-case-source-manifest/1", "source": str(args.cases),
-        "source_sha256": source_sha, "selected_sha256": sha(case_bytes), "cases_sha256": sha(case_bytes),
+        "source_sha256": source_sha, "selected_sha256": sha256_hex(case_bytes), "cases_sha256": sha256_hex(case_bytes),
         "count": len(variants), "families": {}, "training_admission": False, "new_world_credit": 0,
         "selection": "train-only source-bound task revisions; canonical item/group holds excluded",
         "adaptations": ["visible-text toxicity judgment with binary label boundary; source threshold retained only in source annotations", "visible review satisfaction estimate with one-star annotation tolerance retained only in oracle metadata"],
         "oracle_tolerances": {"decision:review-satisfaction-estimate-v1": {"absolute_ordinal_distance_max": 1, "model_visible": False}},
-        "source_manifest_sha256": sha(source_manifest_bytes), "quality_hold_policy_sha256": sha(holds_bytes),
-        "source_bindings_sha256": sha(binding_bytes), "live_prompt_sampling": "required before provider launch or task adoption"}
+        "source_manifest_sha256": sha256_hex(source_manifest_bytes), "quality_hold_policy_sha256": sha256_hex(holds_bytes),
+        "source_bindings_sha256": sha256_hex(binding_bytes), "live_prompt_sampling": "required before provider launch or task adoption"}
     for row in variants:
         new_manifest["families"][row["family"]] = new_manifest["families"].get(row["family"], 0) + 1
     (args.out / "source-manifest.json").write_text(json.dumps(new_manifest, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps({"cases": len(variants), "families": new_manifest["families"],
-        "cases_sha256": sha(case_bytes), "training_admission": False,
+        "cases_sha256": sha256_hex(case_bytes), "training_admission": False,
         "live_prompt_sampling_required": True}, indent=2))
 
 

@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """Build a stratified, train-only 48-sample pilot per visible task variant."""
 import argparse
-import hashlib
 import json
 from pathlib import Path
 
-
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "training" / "neuralese"))
+from natlang_neuralese.common.hashing import sha256_hex
 
 
 def rank(prefix: str, row: dict) -> str:
-    return sha(f"{prefix}:{row['id']}".encode())
+    return sha256_hex(f"{prefix}:{row['id']}".encode())
 
 
 def main():
@@ -109,9 +108,9 @@ def main():
         for row in selected) for value in sorted({str(row["answer"]) for row in selected if row["family"] == family})}
         for family in ("decision:toxicity-binary-threshold-v1", "decision:review-satisfaction-estimate-v1")}
     manifest = {"schema": "natlang.visible-decision-task-pilot-manifest/1", "training_admission": False,
-        "review_only": True, "cases_sha256": sha(selected_bytes), "source_bindings_sha256": sha(selected_bindings_bytes),
-        "parent_cases_sha256": sha(cases_bytes), "parent_source_bindings_sha256": sha(bindings_bytes),
-        "parent_source_manifest_sha256": sha(parent_bytes), "count": len(selected),
+        "review_only": True, "cases_sha256": sha256_hex(selected_bytes), "source_bindings_sha256": sha256_hex(selected_bindings_bytes),
+        "parent_cases_sha256": sha256_hex(cases_bytes), "parent_source_bindings_sha256": sha256_hex(bindings_bytes),
+        "parent_source_manifest_sha256": sha256_hex(parent_bytes), "count": len(selected),
         "families": {"decision:toxicity-binary-threshold-v1": 48,
             "decision:review-satisfaction-estimate-v1": 48}, "answer_counts": labels,
         "toxicity_source_annotation_strata": toxicity_strata,

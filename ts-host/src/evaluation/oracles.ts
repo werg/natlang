@@ -20,6 +20,7 @@ export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknow
   rubric?: string; context?: unknown; [key: string]: unknown };
 const BUILTIN_NORMALIZATIONS = ['qa', 'qa-string-map', 'named-tree', 'json-string-record'] as const;
 const BUILTIN_FILE_COMPARES = ['content', 'exact', 'moves', 'rewrite', 'csv', 'counts', 'json-string-record', 'qa-string-map',
+  'ordinal-distance-json-record',
   'markdown-terminal-newline'] as const;
 export type OracleVerdict = { accepted: boolean; level: OracleLevel; score?: number; verdict?: string;
   needs_review?: boolean; comparison_version?: string };
@@ -290,6 +291,10 @@ export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' 
   numeric_list_fields?: NumericListFieldSpec[];
   /** Explicit answer-map fields whose lowercase values are unsigned numerals in a declared base. */
   radix_fields?: Array<{ key: string; base: number }>;
+  /** Exact output-map label domain for bounded ordinal source references. */
+  ordinal_levels?: string[];
+  /** Maximum per-entry ordinal distance for the explicitly selected output map. */
+  ordinal_distance_max?: number;
   /** Explicitly allowlisted Markdown files whose one terminal line ending may vary. */
   markdown_terminal_newline_paths?: string[];
   /** Reports may only quote the corresponding original source. */
@@ -392,6 +397,37 @@ export function markdownTerminalNewlineEqual(path: string, actual: string | unde
     markdownTerminalNewlineBody(actual) === markdownTerminalNewlineBody(expected);
 }
 
+/** Compare a source-bound map of ordinal labels without relaxing its keys or label domain. */
+export function ordinalDistanceRecordReview(actual: unknown, expected: unknown, levels: unknown, maxDistance: unknown) {
+  const invalid = (error: string) => ({ accepted: false, errors: [error], entries: [] as Array<Record<string, unknown>> });
+  if (!Array.isArray(levels) || levels.length < 2 || levels.some(level => typeof level !== 'string' || !level) ||
+      new Set(levels).size !== levels.length || !Number.isSafeInteger(maxDistance) || Number(maxDistance) < 0)
+    return invalid('invalid_ordinal_record_spec');
+  const parseRecord = (value: unknown): Record<string, unknown> | null => {
+    if (typeof value === 'string') { try { value = JSON.parse(value); } catch { return null; } }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    return value as Record<string, unknown>;
+  };
+  const got = parseRecord(actual), want = parseRecord(expected);
+  if (!got || !want) return invalid('invalid_ordinal_record_value');
+  const gotKeys = Object.keys(got).sort(), wantKeys = Object.keys(want).sort();
+  if (canonical(gotKeys) !== canonical(wantKeys)) return invalid('ordinal_record_keys_mismatch');
+  const order = new Map((levels as string[]).map((label, index) => [label, index]));
+  const entries = gotKeys.map(key => {
+    const actualLabel = got[key], expectedLabel = want[key];
+    const actualIndex = typeof actualLabel === 'string' ? order.get(actualLabel) : undefined;
+    const expectedIndex = typeof expectedLabel === 'string' ? order.get(expectedLabel) : undefined;
+    const distance = actualIndex === undefined || expectedIndex === undefined ? null : Math.abs(actualIndex - expectedIndex);
+    return { key, actual: actualLabel, expected: expectedLabel, ordinal_distance: distance,
+      accepted: distance !== null && distance <= Number(maxDistance) };
+  });
+  const errors = entries.filter(entry => !entry.accepted).map(entry =>
+    entry.ordinal_distance === null ? `unknown_ordinal_label:${entry.key}` : `ordinal_distance_exceeded:${entry.key}`);
+  return { accepted: errors.length === 0, errors, entries };
+}
+
 export function checkFiles(actual: Record<string, string>, expected: Record<string, string>, input: Record<string, string>,
     spec: FilesOracle = {}, judgments: FilesVerdict['judgments'] = {}): FilesVerdict {
   assertKnownComparator('compare', spec.compare, BUILTIN_FILE_COMPARES);
@@ -468,6 +504,12 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
     if (got === undefined || want === undefined) { item(path, got === want); continue; }
     // Existing source files are checked exactly, even in a CSV/rewrite task.
     if (want === input[path]) { item(path, got === want); continue; }
+    if (compare === 'ordinal-distance-json-record') {
+      const review = ordinalDistanceRecordReview(got, want, spec.ordinal_levels, spec.ordinal_distance_max);
+      item(path, path === 'decisions.json' && review.accepted);
+      if (!review.accepted) errors.push(...review.errors.map(error => `${path}:${error}`));
+      continue;
+    }
     if (compare === 'json-string-record') {
       const parsed = jsonStringRecordAnswerCanonical(got, spec.numeric_keys, spec.radix_fields, spec.numeric_list_fields);
       const candidates = [want, ...(spec.alternates?.[path] ?? [])];
@@ -628,6 +670,11 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
   if (!ORACLE_LEVELS.includes(level)) throw new RangeError(`unknown oracle level: ${level}`);
   const candidates = [expected, ...('alternates' in spec ? spec.alternates ?? [] : [])];
   if (level === 'exact') return { accepted: candidates.some(candidate => canonical(actual) === canonical(candidate)), level };
+  if (level === 'normalized' && spec.normalization === 'ordinal-distance-record') {
+    const review = ordinalDistanceRecordReview(actual, expected, spec.ordinal_levels, spec.ordinal_distance_max);
+    return { accepted: review.accepted, level, verdict: JSON.stringify(review),
+      comparison_version: 'bounded-ordinal-record/1' };
+  }
   if (level === 'constraints') {
     // `expected` is the list of verifiable writing constraints; every one must hold (evaluation/constraints.ts).
     const result = checkConstraints(actual, expected as WritingConstraint[]);

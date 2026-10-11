@@ -93,6 +93,13 @@ return decisions;`;
       'pass all captures separately for every item', 'save and return the exact aggregate map'],
     reference: { root: [evalCall(controller), returnCall(expected)], children: childRefs },
   });
+  if (contract.ordinalTolerance) {
+    const { levels, max_distance: maxDistance } = contract.ordinalTolerance;
+    record.semantics.oracle = { level: 'normalized', normalization: 'ordinal-distance-record',
+      ordinal_levels: levels, ordinal_distance_max: maxDistance };
+    record.semantics.files_oracle = { compare: 'ordinal-distance-json-record', threshold: 1,
+      ordinal_levels: levels, ordinal_distance_max: maxDistance };
+  }
   record.family = recordFamily ?? `curriculum_teacher_decision_labels_${String(first.family).toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${contract.kind}`;
   record.source = 'held-provider-decision-label-adapter';
   record.source_ids = ids;
