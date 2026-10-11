@@ -30802,6 +30802,57 @@
       "admission": "artifact-disposition-only-no-source-quality-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Documents V2 outline as unchanged, superseded, and intentionally unregistered because its abbreviated closure digest/path were not a valid full receipt pin. Corrected evidence is in outline V3 and actual V36 receipt files."
+    },
+    {
+      "id": "luna-v76-choice-confidence-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v76-v37-runtimev17-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "source-review/**/*",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-generation-input",
+      "source_class": "held-luna-provider-generation-input",
+      "training_admission": false,
+      "admission": "generation-input-only-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V76 input queues derive from 54 reviewed V37 static references over 414 original train rows; plan and source review are preserved. Mutable launch state, worker journals/logs/results are excluded. All outputs remain held."
+    },
+    {
+      "id": "luna-v76-choice-confidence-launch-authorization-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v76-v37-runtimev17-v1",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-launch-receipt-v1.json"
+      ],
+      "split": "inherited-train-generation-control-evidence",
+      "source_class": "held-luna-launch-authorization-evidence",
+      "training_admission": false,
+      "admission": "launch-evidence-only-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Separate root-reviewed V76 plan and launch receipt; launch receipt pins plan SHA ba29e14472a16ef7db38300ddefabd605db6e28a481cd47380459bff62fa3c6d. Five-lane launch under supervisor 1075640. No mutable campaign launch state, results, or logs included."
+    },
+    {
+      "id": "luna-v76-predecessor-lane-snapshot-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v76-v37-runtimev17-predecessor-snapshot-v1",
+      "include": [
+        "FILES.sha256",
+        "campaign-launch.json",
+        "predecessors.json",
+        "snapshot.json",
+        "worker-*.queue.jsonl",
+        "worker-*.journal.snapshot.jsonl"
+      ],
+      "split": "inherited-train-generation-lineage-evidence",
+      "source_class": "held-luna-predecessor-lane-snapshot",
+      "training_admission": false,
+      "admission": "predecessor-lineage-only-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Immutable lane-by-lane predecessor snapshot binding V76 to five logical V75 lanes and their captured queue/journal evidence. This is scheduling lineage only."
     }
   ],
   "coverage_backlog": [
