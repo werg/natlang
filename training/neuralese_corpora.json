@@ -30137,6 +30137,62 @@
       "admission": "reference-and-source-fix-evidence-held-no-training-admission",
       "independent_new_worlds": 0,
       "notes": "Seven source-derived authored cases correct two visibility assumptions in inline_cohort_policy and paged_late_row by using named visits()/checks() callables to retrieve complete arrays. The source facts and expected numerical policies are preserved; seven case reviews report successful shared verification/reference grading. These are source-contract/reference artifacts, not teacher observations, semantic admission, or new independent-world credit."
+    },
+    {
+      "id": "google-choice-confidence-v37-source-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v37-source",
+      "include": [
+        "cases.jsonl",
+        "omissions.jsonl",
+        "source-manifest.json",
+        "root-source-preparation-review-v1.json",
+        "frozen-adapter-v1/frozen-runtime.json",
+        "frozen-adapter-v1/models.json",
+        "frozen-adapter-v1/scripts/label_decision_cases.py",
+        "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py"
+      ],
+      "split": "inherited-train-input",
+      "source_class": "held-provider-generation-inputs",
+      "training_admission": false,
+      "admission": "input-only-launched-held-no-label-admission",
+      "independent_new_worlds": 0,
+      "notes": "V37 source input and frozen pool only. 512 cases are exact original-master inherited-train rows with unchanged source identity/group/split/answer, selected across available families; current V16 policy holds, prior provider/annotation reservations and V22 source groups were excluded. Frozen ten-model free pool uses the pinned six-file execution bundle and 2048 output tokens. Root separately approved/launched supervisor PID 1045263; launch receipt is registered separately. No labels/results/active worker logs or requests are included; no training admission."
+    },
+    {
+      "id": "google-choice-confidence-v37-launch-receipt-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v37-source",
+      "include": [
+        "root-launch-receipt-v1.json"
+      ],
+      "split": "inherited-train-launch-evidence",
+      "source_class": "provider-pool-launch-receipt",
+      "training_admission": false,
+      "admission": "held-launch-evidence-only",
+      "independent_new_worlds": 0,
+      "notes": "Separate immutable receipt binds the root-approved V37 launch (supervisor PID 1045263) to the V37 source and frozen free-pool inputs. This is launch evidence only; active labels, logs and output artifacts are excluded."
+    },
+    {
+      "id": "luna-annotation-folder-v74-v23v5-runtimev16-approval-launch-receipt-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v74-approval-launch-receipt-held-v1",
+      "include": [
+        "root-approved-plan.json",
+        "root-launch-receipt.json",
+        "receipt.json",
+        "README.md",
+        "FILES.sha256"
+      ],
+      "split": "inherited-train-launch-evidence",
+      "source_class": "held-luna-generation-approval-launch-receipt",
+      "training_admission": false,
+      "admission": "held-generation-evidence-only-no-admission",
+      "independent_new_worlds": 0,
+      "notes": "Append-only copy of root approval and launch receipt for V74's four-lane, 80-program successor campaign on frozen runtime V16. V74 lanes 1,3,4,5 were launched under supervisor PID 1044457; lane 2 was deliberately omitted because its V73 predecessor lane was still pending, avoiding duplicate workers. This receipt does not imply output quality or admission; live queues, journals, logs and results are excluded."
     }
   ],
   "coverage_backlog": [

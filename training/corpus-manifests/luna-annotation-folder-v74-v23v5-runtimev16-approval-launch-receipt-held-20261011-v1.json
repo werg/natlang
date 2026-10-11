@@ -1,0 +1,34 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-annotation-folder-v74-v23v5-runtimev16-approval-launch-receipt-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v74-approval-launch-receipt-held-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 336,
+      "sha256": "06b5c2d5d42e6e05d53af03105f6a5f107e7b0139296063cef01ba2cacb62846"
+    },
+    {
+      "path": "README.md",
+      "bytes": 389,
+      "sha256": "651705ca2b5d84335000ee7a9494722f6d4cd209b2bdb70de0be74602f744cde"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 2533,
+      "sha256": "87ab9f054301788ea0aaece3ae0e28d7e0cf52a51d6eb922df323cb3ff85d7f2"
+    },
+    {
+      "path": "root-approved-plan.json",
+      "bytes": 7701,
+      "sha256": "1be40e531332ec25ab19c8a66ce8179e33df8219fc602715e93a841b217418b2"
+    },
+    {
+      "path": "root-launch-receipt.json",
+      "bytes": 353,
+      "sha256": "bbbaf707e8902991c48011a415463fa89b7ede1c0f26363e6f525678f7c3d37e"
+    }
+  ],
+  "bytes": 11312
+}
