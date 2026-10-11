@@ -262,3 +262,20 @@ def test_direct_sft_resume_copies_through_the_shared_restore_and_keeps_no_view_o
              and "student_parameters" in ast.unparse(node.iter)]
     assert not loops, "restore student_parameters with copy_restored_values, never a loop in main()"
     assert "copy_restored_values" in inspect.getsource(direct_sft.main)
+
+
+def test_direct_monitor_and_gate_fields_change_at_a_handoff():
+    """The drift monitor's and the gate's fields are operational: a lineage resumes across their addition, change or
+    retirement (v2: drift_gate_now -> drift_gate_rise, drift_ce_windows, gate_response_kl)."""
+    import copy
+    from natlang_neuralese.train.recipe import _without_operational, resolve_recipe_data
+    new = resolve_recipe_data(RECIPES / 'neuralese-direct-mellum-v2.json')
+    old = copy.deepcopy(new)
+    defaults = old['stage_parameter_defaults']['neuralese_direct']
+    for key in ('drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'drift_gate_every', 'drift_every'):
+        defaults.pop(key, None)
+    defaults['drift_gate_now'] = 0.35
+    assert _without_operational(old) == _without_operational(new)
+    changed = copy.deepcopy(new)
+    changed['stage_parameter_defaults']['neuralese_direct']['latent_lr'] = 1e-5
+    assert _without_operational(changed) != _without_operational(new)  # training semantics still refuse
