@@ -74,6 +74,12 @@ def _load_model(checkpoint: Path | None, *, device: str, base: str | None):
         model, tokenizer = load_backbone(base=base, dtype=dtype, device=device)
         return model, tokenizer
     dtype = torch.float32 if device == "cpu" else torch.bfloat16
+    if checkpoint.is_dir():
+        from ..train.direct_export import load_direct_artifact
+        if base is None:
+            raise ValueError("direct serving artifacts require the exact explicit local base snapshot")
+        restored = load_direct_artifact(checkpoint, base_snapshot=base, device=device, dtype=dtype)
+        return restored.engine.backbone.hf, restored.engine.tokenizer
     # Both the older recurrence checkpoint and current full-head exports pass
     # through the shared strict checkpoint loader. Decoding below bypasses its
     # Neuralese Engine.generate path and calls the restored HF backbone directly.
