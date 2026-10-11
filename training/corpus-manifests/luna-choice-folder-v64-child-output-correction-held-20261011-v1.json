@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-folder-v64-child-output-correction-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-child-output-capture-correction-v1",
+  "files": [
+    {
+      "path": "correction.json",
+      "bytes": 703873,
+      "sha256": "55acb9baf47a3c1d60c5180cafd066f77c46088b2d4bc70261ead5a22efba6f6"
+    },
+    {
+      "path": "correction.md",
+      "bytes": 1439,
+      "sha256": "3d0bd6fb848bf6375502a4d000fabb9f89d4fd36ebd72ef0bdc5e0aa8acfc237"
+    }
+  ],
+  "bytes": 705312
+}

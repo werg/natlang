@@ -28223,6 +28223,36 @@
         "root-predecessor-disposition-v1.json",
         "supervisor.log"
       ]
+    },
+    {
+      "id": "luna-choice-folder-v64-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v64-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "54planned/53terminal398items373matches25differences37accepted. OneDBpediaindex0request-budgetpartial8itemsheldunaccounted; allattempts preserved. No implicitcompletion/admission."
+    },
+    {
+      "id": "luna-choice-folder-v64-quality-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-choice-folder-final-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Closed53terminalresults398typedvalid options/maps/filesexact.398item-boundrequeststates. Initial child-output comparison anddetaildiagnosticcount flaws correctedadditively; use supplements."
+    },
+    {
+      "id": "luna-choice-folder-v64-child-output-correction-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-child-output-capture-correction-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Exact typeddecision/answer/label/option extraction proves398/398 childhostoutputs match returnedmaps; preserve matchingversions notextracases.26scopeevents perprogram, item-loopinflateddetailcounts corrected. Noadmission."
     }
   ],
   "coverage_backlog": [
