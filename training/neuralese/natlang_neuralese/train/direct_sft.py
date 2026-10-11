@@ -32,7 +32,7 @@ from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_
 from .checkpoint_policy import CheckpointPolicy
 
 SCHEMA = 'natlang.neuralese-direct/1'
-OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
+OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_now', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows'})
 
@@ -75,6 +75,11 @@ def parse(argv=None):
                    '{"gate": <quantization.gate schema>, "data": {"path", "sha256"}}; "data" is JSONL of chat '
                    'prompts whose base-model answers and top-k are captured at step 0 as the drift reference')
     p.add_argument('--drift-rows', type=int, default=16)
+    p.add_argument('--drift-gate-every', type=int, default=300,
+                   help='while the guard warns, run the behaviour gate at most every this many updates (KL still every '
+                        '--drift-every); always at the stage end')
+    p.add_argument('--drift-gate-now', type=float, default=0.35,
+                   help='run the gate at once, whatever --drift-gate-every, when response KL reaches this level')
     p.add_argument('--drift-every', type=int, default=0,
                    help='also run the drift monitor (held KL on --drift-rows, its guard and the gate at a warn) every '
                         'this many updates between evals, logged to drift.jsonl; 0: only at evals')
@@ -345,6 +350,7 @@ def main(argv=None):
     if not a.save_state:
         policy.save = lambda state, **_: None  # a smoke: logs and report only, never a full state
     step, best, base_eval, history = 0, None, None, []
+    last_gate = None  # the update at which the guard last ran the behaviour gate
     if policy.slot.exists():
         state = CheckpointPolicy.load(policy.slot)
         if state.get('schema') != SCHEMA or state['identity']['options'] != identity['options'] or \
@@ -361,6 +367,7 @@ def main(argv=None):
         own_host_tensors(optimizer)  # no view of the mmap'd state outlives the restore
         optimizer.param_groups = optimizer._groups()
         step, best, base_eval, history = state['step'], state.get('best'), state['base_eval'], state['history']
+        last_gate = state.get('last_gate')
         restore_training_rng_state(state['rng'], a.device)
         print(json.dumps({'event': 'resumed', 'step': step, 'code_changed': sorted(
             k for k in code if state['identity']['code'].get(k) != code[k])}), flush=True)
@@ -373,7 +380,7 @@ def main(argv=None):
                 'student_parameters': {n: values[n.removeprefix('backbone.')].detach() for n, _ in backbone_named},
                 **{key: module.state_dict() for key, module in projections.items()},
                 'optimizer': optimizer.state_dict(), 'rng': capture_training_rng_state(a.device),
-                'best': best, 'base_eval': base_eval, 'history': history}
+                'best': best, 'base_eval': base_eval, 'history': history, 'last_gate': last_gate}
 
     def log(name, value):
         with (a.out / name).open('a') as handle:
@@ -410,13 +417,20 @@ def main(argv=None):
 
     def drift_check():
         """The drift monitor: held KL on --drift-rows, its guard level, and at a warn the behaviour gate (stop below
-        its reference minus max_gate_drop)."""
+        its reference minus max_gate_drop) -- at most every --drift-gate-every updates, at once when response KL
+        reaches --drift-gate-now, and at the stage end."""
+        nonlocal last_gate
         with torch.no_grad(), contextlib.ExitStack() as scope:
             if quant is not None:
                 scope.enter_context(quant.context('bf16', 0.0))
             drift = held_kl(backbone.hf, gate_held, a.drift_rows, 0.25)
         drift['guard'] = behaviour_drift_level(drift, a)
-        if drift['guard'] == 'warn' and a.drift_gate and behaviour is not None:
+        due = (last_gate is None or step - last_gate >= a.drift_gate_every or step >= a.steps or
+               drift['held_response_kl'] >= a.drift_gate_now)
+        if drift['guard'] == 'warn' and a.drift_gate and behaviour is not None and not due:
+            drift['gate_at_warn'] = {'deferred': True, 'last_gate': last_gate}
+        elif drift['guard'] == 'warn' and a.drift_gate and behaviour is not None:
+            last_gate = step
             gate = gate_by_step[step] = gate_report()
             floor = behaviour.config['reference']['gate_pass'] - behaviour.config.get('max_gate_drop', 0.0)
             drift['gate_at_warn'] = {k: gate[k] for k in ('gate_pass', 'gate_checks', 'gate_kinds', 'gate_results')}

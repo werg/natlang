@@ -36,6 +36,8 @@
    "token_choice_projection": false,
    "drift_rows": 16,
    "drift_every": 100,
+   "drift_gate_every": 300,
+   "drift_gate_now": 0.35,
    "drift_warn": 0.05,
    "drift_stop": 0.5,
    "drift_agreement_warn": 0.97,

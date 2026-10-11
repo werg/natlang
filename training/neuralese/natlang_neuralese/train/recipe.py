@@ -29,7 +29,7 @@ HANDLERS = {
                          'parameters':{'steps','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
                            'checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
                            'latent_optimizer','latent_lr','head_lr','neuralese_weight','projection_blocks',
-                           'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows','drift_every',
+                           'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows','drift_every','drift_gate_every','drift_gate_now',
                            'drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop','drift_gate','gate_held_rows','monitor',
                            'value_margin','seed'},'result':'report.json'},
     'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads','student_checkpoint'},
@@ -704,7 +704,7 @@ def write_json(path, value):
 
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
-OPERATIONAL_STAGE_PARAMETERS = frozenset({'moe_kernel', 'checkpoint_layers', 'report_column_fraction', 'drift_rows', 'drift_every',
+OPERATIONAL_STAGE_PARAMETERS = frozenset({'moe_kernel', 'checkpoint_layers', 'report_column_fraction', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_now',
                                           'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop'})
 # Stage parameters the runner consumes itself (never passed to a trainer).
 RUNNER_STAGE_PARAMETERS = frozenset({'quantization_steps'})

@@ -89,6 +89,7 @@ def test_direct_recipes_resolve_for_both_lines_and_gate_on_qualification():
         assert '--no-token-choice-projection' in args
         assert defaults['value_margin'] > 0 and '--value-margin' in args  # report-only (owner 2026-10-11)
         assert 0 < defaults['drift_every'] < defaults['eval_every'] and '--drift-every' in args  # the guard sees the run
+        assert defaults['drift_gate_every'] >= defaults['drift_every'] and defaults['drift_warn'] < defaults['drift_gate_now'] < defaults['drift_stop']
     assert mellum['stage_parameter_defaults']['neuralese_direct']['moe_kernel'] == 'grouped'
     assert mellum['quantization']['preserve']['weight'] == 0.0
     stage = mellum['stages'][0]

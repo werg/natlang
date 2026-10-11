@@ -363,3 +363,12 @@ The coordinator's decisions under the owner's "keep moving forward" rule. Change
 - 2000 steps. Eval at the end only, full state at 1000 and 2000.
 
 run-v1 stays as evidence only: attention untrained, legacy anchor.
+
+## neuralese-direct-v1 gate cadence while warning (2026-10-11)
+
+`drift_gate_every` (300) and `drift_gate_now` (0.35) are operational parameters, in the shared defaults. KL is still
+checked every `drift_every` (100). While the guard warns, the behaviour gate runs at most every 300 updates, and at
+once when response KL reaches 0.35. The hard stop stays at 0.5, and the stage end always runs the gate. Reason: in v2,
+response KL was above the warn level from step 100, so every 100-update check ran the full gate (about 3.3 min per
+10 min of training, a third of wall time). The owner's eval budget is 3–5%. A deferred check logs
+`gate_at_warn: {deferred, last_gate}`. `last_gate` is kept in the full state.
