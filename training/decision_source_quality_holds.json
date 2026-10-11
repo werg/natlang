@@ -1,6 +1,6 @@
 {
   "schema": "natlang.decision-source-quality-holds/1",
-  "policy_id": "decision-visible-answerability-holds-v16",
+  "policy_id": "decision-visible-answerability-holds-v17",
   "status": "canonical_forward_source_filter",
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
@@ -14,8 +14,10 @@
     }
   ],
   "parent_decision_receipt": {
-    "path": "runs/free-provider-generation-20261009-v1/pubmedqa-visible-answerability-holds-v2/source-quality-holds.json",
-    "sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    "path": "training/decision_source_quality_holds.json",
+    "sha256": "6908448472eaefde49a16bbba852aac396aa9c4d6bc32d2721df42ca6bfd11aa",
+    "policy_id": "decision-visible-answerability-holds-v16",
+    "note": "Previous immutable75hold snapshot retained in published root-review-v16 artifacts."
   },
   "source": {
     "path": "runs/dgx-development-generated/decision-data-20261004/decision-v1/decision-cases.jsonl",
@@ -30,7 +32,7 @@
       "item_id": "dc-69522cb3e1b5d8c52d11",
       "original_source_group": "g-36762ffd97b257fedc14536d",
       "split": "train",
-      "reason": "Source-internal comparator-direction conflict: the abstract says \u201ctamoxifen versus AI\u201d RR=1.31 while its separate long_answer attributes higher CVAE risk to AI; the task label cannot be safely source-aligned without adjudication.",
+      "reason": "Source-internal comparator-direction conflict: the abstract says “tamoxifen versus AI” RR=1.31 while its separate long_answer attributes higher CVAE risk to AI; the task label cannot be safely source-aligned without adjudication.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "official_row_sha256": "a8d5e6dfa98ffe62094173cb9e74bafea2018f2fe5ec4ebfb69787cdb69fb270",
@@ -56,7 +58,7 @@
       "item_id": "dc-4c2f9df175a623b83303",
       "original_source_group": "g-ffe725df39df7940c00e77ca",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract says it evaluates feasibility of GFRUP limitation-of-treatment guidelines and describes case inclusion, meetings, decisions, and implementation timing. It does not state a direct feasibility result or explicitly conclude that the recommendations are applicable. \u201cMaybe\u201d is plausible; the gold \u201cyes\u201d is not established by the reported outcomes alone.",
+      "reason": "Root hold for strict single-label supervision: The abstract says it evaluates feasibility of GFRUP limitation-of-treatment guidelines and describes case inclusion, meetings, decisions, and implementation timing. It does not state a direct feasibility result or explicitly conclude that the recommendations are applicable. “Maybe” is plausible; the gold “yes” is not established by the reported outcomes alone.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "166fdd888a8174180c4bf6eba403e57d3806f4604a6ec1c7bacd3c51784167cd",
@@ -69,7 +71,7 @@
       "item_id": "dc-845c16d1dc3af5b9d3e0",
       "original_source_group": "g-6a51fa7e97e5b89fe5aaa49d",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract lists common characteristics among young men who died (poisoning, unemployment, single status, self-destructive behavior). It is a retrospective description of cases and does not test whether these factors are preventable or whether changing them reduces mortality. \u201cMaybe\u201d appropriately reflects the unsupported amenability step; \u201cyes\u201d is not established by this abstract.",
+      "reason": "Root hold for strict single-label supervision: The abstract lists common characteristics among young men who died (poisoning, unemployment, single status, self-destructive behavior). It is a retrospective description of cases and does not test whether these factors are preventable or whether changing them reduces mortality. “Maybe” appropriately reflects the unsupported amenability step; “yes” is not established by this abstract.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "01d8e0c917a17d2102f693ee48325ab2eea1e3e31e8ca8182f88672c6f14cf51",
@@ -82,7 +84,7 @@
       "item_id": "dc-e3eb31373ee4d551eef9",
       "original_source_group": "g-fa9a289591200ad71f6b0e4b",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract proposes progression criteria and states thresholds make future surgery probable, but gives no accuracy statistic, calibration, sensitivity/specificity, or validation result. The gold \u201cyes\u201d is stronger than the visible evidence about accurate prediction. \u201cMaybe\u201d is a defensible answer to the stated accuracy question.",
+      "reason": "Root hold for strict single-label supervision: The abstract proposes progression criteria and states thresholds make future surgery probable, but gives no accuracy statistic, calibration, sensitivity/specificity, or validation result. The gold “yes” is stronger than the visible evidence about accurate prediction. “Maybe” is a defensible answer to the stated accuracy question.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "6319779c26e6cd81e122d71d7cbb3fd84976ba2e51bd63c54ab9c1b2c3554cde",
@@ -95,7 +97,7 @@
       "item_id": "dc-e68969a87c8a662215b3",
       "original_source_group": "g-4341e8795b6c6a09e6682c94",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract reports a higher response rate for exon 11 than non-exon-11 mutations (84% vs 40%, p=.01), which supports a possible predictive role. It then says there were no differences between exon variants in outcomes and responses. Because these statements conflict at the level relevant to \u201cpathfinder,\u201d the abstract alone does not yield a clear yes/no; \u201cmaybe\u201d is defensible, while the gold \u201cyes\u201d is not unambiguous.",
+      "reason": "Root hold for strict single-label supervision: The abstract reports a higher response rate for exon 11 than non-exon-11 mutations (84% vs 40%, p=.01), which supports a possible predictive role. It then says there were no differences between exon variants in outcomes and responses. Because these statements conflict at the level relevant to “pathfinder,” the abstract alone does not yield a clear yes/no; “maybe” is defensible, while the gold “yes” is not unambiguous.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "0c85d22028deb08fe3c89d25ee53aca77628d3bcec917246c2156e351c1e79e1",
@@ -108,7 +110,7 @@
       "item_id": "dc-ee6743fb9c22812bd3e5",
       "original_source_group": "g-82d4ca091a2fd32fc7a2c2a1",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract reports inverse cross-sectional relationships in both sexes and prospective inverse associations in women, but prospective results among men were equivocal and no association appeared for recurrence among people with baseline pain. \u201cYes\u201d is supported for some endpoints/subgroups, not uniformly for the broad question; \u201cmaybe\u201d is a plausible cautious interpretation.",
+      "reason": "Root hold for strict single-label supervision: The abstract reports inverse cross-sectional relationships in both sexes and prospective inverse associations in women, but prospective results among men were equivocal and no association appeared for recurrence among people with baseline pain. “Yes” is supported for some endpoints/subgroups, not uniformly for the broad question; “maybe” is a plausible cautious interpretation.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "1a0a49819e0a328c17c96316ff09199e190c53601dd42d7669eb020b73aa06ae",
@@ -912,11 +914,63 @@
         "official_row_sha256": "475355a0fe3ac63038c1c1394a821d5fd41c042e77a15834a71668fdacfca572"
       },
       "decision_receipt_sha256": "de5b61f75149781fafdebb65d01461345b3e98472824e764058f8e2d0f8931e9"
+    },
+    {
+      "item_id": "dc-74af9c378dd4f3634902",
+      "original_source_group": "g-2dd930cc702a6904a9069a21",
+      "split": "train",
+      "reason": "Visible post lacks the subject or thread context needed to identify the recorded destination forum. Preserve source annotation; do not train strict forum target or make automatic negative.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_index": 15041,
+        "official_row_sha256": "deddc5d1006964f9308f611d8ecc9eda5567355a9fc474852fa5c137c7686887",
+        "state": "I think the next time I post something like this, I obviously need to make the sarcasm a bit more obvious... chuck"
+      },
+      "decision_receipt_sha256": "bda6f310d5dfddeed5800dc8cf8f0d4c0a9e00731c2ac14f94a8521a33429cf1"
+    },
+    {
+      "item_id": "dc-3897b9f8e2f6503915d1",
+      "original_source_group": "g-71658760bb2547bd8ab4f967",
+      "split": "train",
+      "reason": "Visible post lacks the subject or thread context needed to identify the recorded destination forum. Preserve source annotation; do not train strict forum target or make automatic negative.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_index": 15042,
+        "official_row_sha256": "1eb32306fa942a75b377d321b3b53c9da19e42203e5d434b1ac7ce9cd6a21ce6",
+        "state": "It's only test message."
+      },
+      "decision_receipt_sha256": "bda6f310d5dfddeed5800dc8cf8f0d4c0a9e00731c2ac14f94a8521a33429cf1"
+    },
+    {
+      "item_id": "dc-4d14120a20f69c5871da",
+      "original_source_group": "g-8cc1ae8cda0d3d21763969b7",
+      "split": "train",
+      "reason": "Visible post lacks the subject or thread context needed to identify the recorded destination forum. Preserve source annotation; do not train strict forum target or make automatic negative.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_index": 15073,
+        "official_row_sha256": "5fb7ac851709ca315c1aa24c906fe99b22524395405c2299aaa9ce65ff696fc5",
+        "state": "Opps! typed in the phone numbers wrong. Here are the correct numbers. 303-530-9000 505-277-6563"
+      },
+      "decision_receipt_sha256": "bda6f310d5dfddeed5800dc8cf8f0d4c0a9e00731c2ac14f94a8521a33429cf1"
+    },
+    {
+      "item_id": "dc-1d30afdaf80463b890d8",
+      "original_source_group": "g-684bdecbc473f9776b5ffd54",
+      "split": "train",
+      "reason": "Visible post lacks the subject or thread context needed to identify the recorded destination forum. Preserve source annotation; do not train strict forum target or make automatic negative.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_index": 15074,
+        "official_row_sha256": "67cb94769c47e90cfa8ea4e336fd132532710dffada236fc1dba1b41e86eb1d5",
+        "state": "You definetly are in need of a shrink, loser!"
+      },
+      "decision_receipt_sha256": "bda6f310d5dfddeed5800dc8cf8f0d4c0a9e00731c2ac14f94a8521a33429cf1"
     }
   ],
   "root_review": {
-    "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v15/review.json",
-    "sha256": "26fbc277fb319d9ad5eb110329a351d07bad45b8a965363ca5a9e3f816178edc",
-    "scope": "Six prospective root holds; prior68 retained. Four missing-thread forum labels and two unsupported VitaminC REFUTES relations. Active fresh sources disjoint; no relabel or automatic negatives."
+    "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v17/root-review.json",
+    "sha256": "bda6f310d5dfddeed5800dc8cf8f0d4c0a9e00731c2ac14f94a8521a33429cf1",
+    "scope": "Four prospective contextless Newsgroups holds; prior75 retained; three candidate holds declined with exact master evidence. No relabel or automatic negatives."
   }
 }
