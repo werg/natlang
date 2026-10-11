@@ -1,3 +1,12 @@
+# Main goal: keep moving forward (owner, 2026-10-11)
+
+The main goal in everything is to keep moving the work forward: move training
+along and keep the machines doing useful work. Don't be overly cautious, and
+don't wait for the owner to approve decisions. If something is sensible, do it,
+record why, brief the other machine, and keep going. Raise with the owner only
+what is truly theirs to decide, and keep working on everything else in the
+meantime.
+
 # Machine ownership and coordination
 
 - Use `/home/werg/natlang` as the canonical development checkout on both Pop and
@@ -55,8 +64,8 @@ afterwards. The rules below are consequences of this one.
   natural-language stages decomposed like the real system. For every part,
   record whether it becomes its own function, one instruction, implicit (rare)
   or a crisp helper, and why. Spell algorithms out as numbered steps over named
-  data for small models. Write DECOMPOSITION.md first and get the owner's review
-  before restructuring (queue: `plans/OWNER_REVIEW.md`).
+  data for small models. Write DECOMPOSITION.md first, then implement and merge;
+  owner review happens afterwards (queue: `plans/OWNER_REVIEW.md`).
 - **Measure model-facing changes live.** Anything the executing model sees
   (prompts, rendering of values, tool text, error and feedback text, type text in
   signatures, removed or added instruction sentences) is sampled on the live
