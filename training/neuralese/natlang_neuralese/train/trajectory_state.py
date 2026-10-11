@@ -317,6 +317,11 @@ def validate_resume(state, identity, *, defaults=None):
     keys = set((identity.get('options') or {}))
     saved = _with_defaults(state.get('identity'), {k: v for k, v in (defaults or {}).items() if k in keys})
     current = dict(identity)
+    # Evaluation timing is operational: evaluation_state restores all samplers.
+    # Preserve its declared value in receipts, but allow cadence-only resumes.
+    for document in (saved, current):
+        document['options'] = {key: value for key, value in document.get('options', {}).items()
+                               if key != 'eval_every'}
     saved_code, current_code = saved.pop('code', {}) or {}, current.pop('code', {}) or {}
     if saved != current:
         raise ValueError('recurrence inputs or training controls changed')
@@ -371,6 +376,8 @@ def validate_continuation(state, identity, *, allowed_changes=(), defaults=None)
     if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient', 'member_weight', 'member_tokens', 'member_eval', 'member_mask_system', 'member_full_weight', 'heads_lr', 'qat_latent_lr', 'projection_anchor_weight', 'projection_anchor_backbone_scale', 'projection_anchor_decay_steps', 'read_adapter'}:
         raise ValueError('unsupported continuation curriculum changes')
     previous, current = dict(old.get('options', {})), dict(identity.get('options', {}))
+    previous.pop('eval_every', None)
+    current.pop('eval_every', None)
     # Checkpoints predating the shared gold-projection anchor trained no such term.
     if 'projection_anchor_weight' in keys and 'projection_anchor_weight' not in original_options:
         previous['projection_anchor_weight'] = 0.0
