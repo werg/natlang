@@ -84,7 +84,6 @@ def _load_model(checkpoint: Path | None, *, device: str, base: str | None):
     return engine.backbone.hf, engine.tokenizer
 
 
-@torch.inference_mode()
 def _run_role(role: str, checkpoint: Path | None, probes: list[dict], *, device: str,
               base: str | None, max_new_tokens: int, journal: Path,
               status_path: Path, progress: dict) -> list[dict]:
@@ -115,11 +114,12 @@ def _run_role(role: str, checkpoint: Path | None, probes: list[dict], *, device:
         if encoded.ndim == 1:
             encoded = encoded[None, :]
         prompt_len = int(encoded.shape[-1])
-        generated = model.generate(
-            input_ids=encoded.to(device_obj), do_sample=False, num_beams=1,
-            max_new_tokens=max_new_tokens, use_cache=True,
-            eos_token_id=sorted(end_ids), pad_token_id=(tokenizer.pad_token_id
-                                                        if tokenizer.pad_token_id is not None else min(end_ids)))
+        with torch.inference_mode():
+            generated = model.generate(
+                input_ids=encoded.to(device_obj), do_sample=False, num_beams=1,
+                max_new_tokens=max_new_tokens, use_cache=True,
+                eos_token_id=sorted(end_ids), pad_token_id=(tokenizer.pad_token_id
+                                                            if tokenizer.pad_token_id is not None else min(end_ids)))
         output_ids = generated[0, prompt_len:].detach().cpu().tolist()
         text = tokenizer.decode(output_ids, skip_special_tokens=False)
         checks = check(probe, text, output_ids, sorted(end_ids))
