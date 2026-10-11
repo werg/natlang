@@ -221,12 +221,11 @@ function contractOf(source, decisionContract) {
   const options = source.kind === 'choice' ? source.options : source.kind === 'score' ? source.levels : ['false', 'true'];
   const choiceLabels = source.kind === 'noul' ? ['false', 'true'] : options;
   if (!Array.isArray(choiceLabels) || choiceLabels.length < 2 || !choiceLabels.every(nonempty)) return null;
-  const defaultCriteria = source.kind === 'noul' ? { false: 'No', true: 'Yes' } :
-    Object.fromEntries(choiceLabels.map(label => [label, label]));
-  let criteria = defaultCriteria, taskCriteriaProvenance = null;
-  if (Object.hasOwn(source, 'criteria') || source.family === 'decision:trec-question') {
-    const selected = decisionCriteria({ family: source.family, source: source.source, kind: source.kind,
-      labels: choiceLabels, explicitCriteria: source.criteria, where: source.id ?? source.family });
+  let criteria = source.kind === 'noul' ? { false: 'No', true: 'Yes' } : undefined;
+  let taskCriteriaProvenance = null;
+  const selected = decisionCriteria({ family: source.family, source: source.source, kind: source.kind,
+    labels: choiceLabels, explicitCriteria: source.criteria, where: source.id ?? source.family });
+  if (selected.provenance) {
     criteria = selected.criteria;
     taskCriteriaProvenance = selected.provenance;
   }
@@ -247,7 +246,8 @@ function createRecord(contract, batch, sourceMeta) {
     sourceSnapshot, sourceGroups: groupIds,
     curriculumFamily, recordFamily: `curriculum_${curriculumFamily}`,
     variant: contract.decisionContract === choiceConfidenceContract
-      ? 'exact-choice-with-held-confidence-receipt-v1' : 'strict-top-label-v2-ordinal-source-mapping',
+      ? 'exact-choice-with-held-confidence-receipt-v2-no-synthetic-identity-criteria'
+      : 'strict-top-label-v3-no-synthetic-identity-criteria',
     splitGroup: `source-groups:${groupIds.join(',')}` });
   const childResults = Object.fromEntries(batch.map(entry => [entry.source.id, entry.decision]));
   record.source_revisions = [...new Set([sourceRev, `folder-decision-scaffold:${sourceMeta.folder_decision_scaffold_sha256}`,
@@ -319,8 +319,9 @@ function replayCaptureVisibility(row, record) {
     .map(([, text]) => JSON.parse(text));
   const results = [];
   for (const item of items) {
+    const criteria = Object.hasOwn(item, 'criteria') ? item.criteria : task.criteria;
     const captures = { caseId: item.id, state: item.state, question: item.question,
-      criteria: Object.hasOwn(item, 'criteria') ? item.criteria : task.criteria,
+      ...(criteria === undefined ? {} : { criteria }),
       options: item.options ?? task.options ?? [], levels: item.levels ?? task.levels ?? [] };
     const matching = row.trajectory.map((turn, index) => ({ turn, index })).find(({ turn }) => {
       const context = (turn.context ?? []).map(message => String(message.content ?? '')).join('\n');
@@ -552,8 +553,11 @@ async function main() {
       manifest: item.manifest })), adapter_sha256: adapterSha,
     decision_contracts: [...new Set(eligible.map(entry => entry.label.value.decision_contract ?? probabilityContract))],
     transformations: 'Probability-contract rows retain raw probability receipts, use argmax (first declared option wins ties), and pass existing scoreGraded gates without normalization. Choice-label-confidence rows retain choice and bounded confidence as separate typed values, create no probability distribution, and pass only when choice exactly matches the source annotation. Binary noul uses p>=0.5. Gold annotations stay out of model-facing files and prompts.',
-    model_visible_fields: [...new Set([...sourceFields.filter(key => key !== 'answer'), 'criteria'])],
-    criteria_provenance: { source: 'explicit source criteria wins after exact label-key validation; otherwise the shared versioned family task contract is applied when declared; the historical label-name fallback is used only for families with no shared contract',
+    model_visible_fields: [...new Set([...sourceFields.filter(key => key !== 'answer'),
+      ...(records.some(record => Object.hasOwn(JSON.parse(record.semantics.folder_files['task.json']), 'criteria') ||
+        Object.keys(record.semantics.folder_files).some(path => path.startsWith('items/') && path.endsWith('.json') &&
+          Object.hasOwn(JSON.parse(record.semantics.folder_files[path]), 'criteria'))) ? ['criteria'] : [])])],
+    criteria_provenance: { source: 'explicit source criteria wins after exact label-key validation; otherwise the shared versioned family task contract is applied when declared; generated label-identity maps are omitted and options/levels define the answer domain',
       contract_path: DECISION_TASK_CONTRACT_PATH, contract_sha256: DECISION_TASK_CONTRACT_SHA256 },
     hidden_fields: ['source answer annotation', 'teacher judgment payload', 'provider response content/hash receipt'],
     source_field_review: { observed_fields: sourceFields, reviewed_visible_fields: sourceFields.filter(key => key !== 'answer'),
