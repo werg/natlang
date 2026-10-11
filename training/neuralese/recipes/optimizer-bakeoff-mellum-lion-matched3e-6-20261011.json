@@ -1,0 +1,20 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "optimizer-bakeoff-mellum-lion-matched3e-6-20261011",
+ "parity": "diagnostic",
+ "extends": "neuralese-direct-mellum-v2",
+ "description": "Optimizer bakeoff arm (plans/neuralese/OPTIMIZER_BAKEOFF_20261011.md): neuralese-direct-mellum-v2's schedule (2000 declared steps, so no QAT point is active yet) run to update 300 (stop_at), same data and seed as run v2c, no full state, latent weight drift against the base snapshot. LionSR with idle-expert skipping at the per-element update size of MuonSR lr 3e-6 (0.2 x 3e-6 = 6e-7 = lr 1.5e-5 x mean row scale 0.04).",
+ "overrides": {
+  "stage_parameter_defaults": {
+   "neuralese_direct": {
+    "stop_at": 300,
+    "save_state": false,
+    "drift_every": 100,
+    "weight_drift_base": "/home/werg/data/optimizer-bakeoff-20261011/mellum-base-latents",
+    "latent_optimizer": "lionsr",
+    "latent_lr": 1.5e-05,
+    "latent_skip_idle": true
+   }
+  }
+ }
+}
