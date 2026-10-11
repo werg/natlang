@@ -211,12 +211,6 @@ def main(argv=None):
                 print(json.dumps({'event': 'monitor_reference_captured', 'prompts': len(prompts)}), flush=True)
         if behaviour is None and monitor.get('gate'):
             behaviour = Behaviour(monitor['gate'], engine.tokenizer, gate_held, root=path_root('repo'))
-    from ..maple.model import MapleForCausalLM
-    if behaviour is not None and not isinstance(backbone.hf, MapleForCausalLM):
-        print(json.dumps({'event': 'behaviour_gate_unavailable', 'reason': 'the gate\'s greedy decode is the Maple '
-                          'port\'s; drift (held KL) still runs'}), flush=True)
-        behaviour = None
-
     # Trainables: backbone (latent policy), the projections. Embedding, final norm and lm_head stay frozen.
     for parameter in engine.heads.parameters():
         parameter.requires_grad_(False)
@@ -327,7 +321,7 @@ def main(argv=None):
                    'value_relative_mse': float(value_error)}
         if not torch.is_grad_enabled():
             mixture_error = relative_mse(mixture, target, weights)
-            nearest = (value.float() @ table.t()).argmax(-1)
+            nearest = (2 * (value.float() @ table.t()) - table.square().sum(-1)).argmax(-1)
             metrics.update(value_mixture_relative_mse=float(mixture_error),
                            value_relative_mse_delta=float(value_error - mixture_error),
                            value_nearest_accuracy=float((nearest == span).float().mean()))
@@ -463,12 +457,15 @@ def main(argv=None):
         if step % a.eval_every == 0 or step == a.steps:
             report = evaluate()
             history.append({k: report[k] for k in ('step', 'ce', 'ce_delta', 'value_relative_mse_delta')})
-            if best is None or report['ce'] < best['ce']:
-                best = {'step': step, 'ce': report['ce']}
+            improved = best is None or report['ce'] < best['ce']
             if (report.get('behaviour_drift') or {}).get('guard') == 'stop':
                 report['stopped_by'] = 'behaviour_drift'
                 print(json.dumps({'event': 'behaviour_drift_stop', 'step': step}), flush=True)
                 stop.request()
+            if improved and not stop.requested:
+                best = {'step': step, 'ce': report['ce']}
+                policy.save(full_state(), metric=report['ce'])
+                saved_step = step
             (a.out / 'report.json').write_text(json.dumps({**report, 'status': 'running'}, indent=2) + '\n')
         if policy.due(step) or stop.requested:
             policy.save(full_state())
@@ -478,10 +475,12 @@ def main(argv=None):
     final = json.loads((a.out / 'report.json').read_text()) if (a.out / 'report.json').exists() else {}
     drift_stopped = any((json.loads(line).get('behaviour_drift') or {}).get('guard') == 'stop'
                         for line in (a.out / 'eval.jsonl').open())
-    qualified = bool(finished and final.get('ce_delta', 0.0) < 0 and not drift_stopped and
+    value_delta = final.get('value_relative_mse_delta', math.inf)
+    value_qualified = math.isfinite(value_delta) and value_delta < 0
+    qualified = bool(finished and final.get('ce_delta', 0.0) < 0 and value_qualified and not drift_stopped and
                      (gate is None or gate['passed']))
     final.update(status='complete' if finished else 'checkpointed_on_signal', steps=step, best=best,
-                 behaviour_gate=gate, drift_stopped=drift_stopped, qualified=qualified,
+                 behaviour_gate=gate, drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
                  seconds=time.time() - started, scope='Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md)')
     if saved_step != step:
         policy.save(full_state())
