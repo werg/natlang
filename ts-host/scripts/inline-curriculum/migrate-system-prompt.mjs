@@ -15,11 +15,13 @@
  * be passed again; each rewritten row is marked in provenance.system_prompt_migration.
  */
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { DIRECTORY_REDUCER_PROMPT, FUNCTION_TOOLS_PROMPT, TOOLS_PROMPT } from '../../dist/native/prompt.js';
+import { promptPieces } from '../../dist/native/system-prompts.js';
 import { migrateIrLine as renameCodeTools } from './migrate-code-tools.mjs';
 
 const MIGRATION = 'current-prompt/1';
@@ -41,6 +43,77 @@ export async function promptHistory() {
   }
   return Object.fromEntries(Object.entries(parts).map(([name, versions]) =>
     [name, [...versions].filter(Boolean).sort((a, b) => b.length - a.length)]));
+}
+
+/**
+ * Exact historical prompt pieces from native/prompt.ts, with the same scope as the current runtime registry.
+ * The source commit identifies the original text; code-tool-renamed variants are derived by the established
+ * code-tool migrator and say so explicitly. This is a data export helper, not a second prompt renderer.
+ */
+export async function historicalPromptPieces() {
+  const scopes = new Map(promptPieces().map(({ id, scope }) => [id, scope]));
+  const revisions = execFileSync('git', ['log', '--format=%H', '--', FILE], { cwd: REPO, encoding: 'utf8' }).split('\n').filter(Boolean);
+  const byText = new Map();
+  const add = (commit, logicalId, text) => {
+    if (typeof text !== 'string' || !text.trim()) return;
+    const scope = scopes.get(logicalId);
+    if (!scope) return;
+    const variants = [{ text, variant: 'source' }];
+    const renamed = JSON.parse(renameCodeTools(JSON.stringify(text)));
+    if (renamed !== text) variants.push({ text: renamed, variant: 'code-tools-renamed' });
+    for (const item of variants) {
+      const sha256 = createHash('sha256').update(item.text, 'utf8').digest('hex');
+      const key = `${scope}\0${item.text}`;
+      // Revisions are newest first, so identical source text retains the newest exact provenance.
+      if (!byText.has(key)) byText.set(key, {
+        id: `historical/${logicalId}/${sha256.slice(0, 16)}`, scope, text: item.text,
+        commit, historical: true, sha256,
+        ...(item.variant === 'source' ? {} : { variant: item.variant }),
+      });
+    }
+  };
+  for (const commit of revisions) {
+    const source = execFileSync('git', ['show', `${commit}:${FILE}`], { cwd: REPO, encoding: 'utf8', maxBuffer: 1 << 26 });
+    const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+    const module = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
+    add(commit, 'interpreter', module.TOOLS_PROMPT);
+    add(commit, 'interpreter/depth-limit', module.TOOLS_PROMPT_AT_NL_DEPTH_LIMIT);
+    add(commit, 'depth-limit-notice', module.NL_DEPTH_LIMIT_NOTICE);
+    add(commit, 'directory-reducer/declaration', module.DIRECTORY_REDUCER_DECLARATION);
+    add(commit, 'neuralese/text-emulation', module.TEXT_NEURALESE_EMULATION_PROMPT);
+    if (typeof module.SEMANTIC_RESULT_PROMPT === 'string')
+      add(commit, 'neuralese/string-boundaries', module.SEMANTIC_RESULT_PROMPT.split('\n\n')[1]);
+    if (typeof module.FUNCTION_TOOLS_PROMPT === 'string') {
+      add(commit, 'function-tools/edit-capability', module.FUNCTION_TOOLS_PROMPT.split('\n')[1]);
+      add(commit, 'function-tools', module.FUNCTION_TOOLS_PROMPT);
+    }
+    add(commit, 'generation-guidance', module.GENERATION_GUIDANCE);
+    if (module.GENERATION_GUIDANCE && module.TOOLS_PROMPT && module.TOOLS_PROMPT_AT_NL_DEPTH_LIMIT &&
+        typeof module.promptAtNlDepthLimit === 'function') {
+      const depthPrompt = module.promptAtNlDepthLimit(module.TOOLS_PROMPT + module.GENERATION_GUIDANCE);
+      if (depthPrompt.startsWith(module.TOOLS_PROMPT_AT_NL_DEPTH_LIMIT))
+        add(commit, 'generation-guidance', depthPrompt.slice(module.TOOLS_PROMPT_AT_NL_DEPTH_LIMIT.length));
+    }
+    add(commit, 'approach', module.APPROACH_PROMPT);
+    add(commit, 'approach', module.APPROACH_PROMPT_AT_NL_DEPTH_LIMIT);
+    add(commit, 'directory-reducer/all', module.DIRECTORY_REDUCER_PROMPT);
+    add(commit, 'compaction-notice', module.COMPACTION_NOTICE);
+    add(commit, 'automatic-note', module.AUTOMATIC_NOTE);
+    add(commit, 'handover/open', module.HANDOVER_NOTE_OPEN);
+    add(commit, 'handover/close', module.HANDOVER_NOTE_CLOSE);
+    add(commit, 'last-turn-notice', module.LAST_TURN_NOTICE);
+    add(commit, 'compacted-result', module.COMPACTED_RESULT);
+    if (typeof module.directoryReducerPrompt === 'function') {
+      const surfaces = module.FILE_TOOL_SURFACES ?? ['all'];
+      for (const surface of surfaces) {
+        add(commit, `directory-reducer/${surface}`, module.directoryReducerPrompt(surface, true, true));
+        add(commit, `directory-reducer/${surface}/depth-limit`, module.directoryReducerPrompt(surface, false, true));
+        add(commit, `directory-reducer/${surface}/read-only`, module.directoryReducerPrompt(surface, true, false));
+        add(commit, `directory-reducer/${surface}/read-only/depth-limit`, module.directoryReducerPrompt(surface, false, false));
+      }
+    }
+  }
+  return [...byText.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /** The current prompt for a system message made of known parts, or undefined when it is not. */
