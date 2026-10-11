@@ -79,6 +79,9 @@ def main(argv=None):
         engine, _ = load_recurrence_checkpoint(args.recurrence_checkpoint, device=args.device)
         if proof.get('conv_kernel_enabled') != (getattr(engine.backbone, 'conv_kernel', None) is not None):
             parser.error('convolution execution differs from the qualified runtime')
+        if (proof.get('conv_kernel_runtime_info') is not None
+                and proof['conv_kernel_runtime_info'] != engine.backbone.conv_kernel_runtime_info):
+            parser.error('convolution implementation differs from the qualified runtime')
         engine.recurrence_checkpoint['runtime_requalified'] = True
         engine.recurrence_checkpoint['runtime_report_sha256'] = sha(args.runtime_qualification)
     else:

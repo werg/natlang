@@ -134,7 +134,7 @@ The trainer reuses the repository's conventions: `scripts/training_optimizers.py
 
 ### 4.3 Kernels on ARM64
 
-The LFM2 short-convolution path benefits from `causal-conv1d`; an ARM64/GB10 build exists in the home directory tree and must be validated against the PyTorch fallback before training. Flash-attention availability on GB10 is checked the same way. Correctness tests run on both the 4060 and the DGX.
+The former Hub `causal-conv1d` revision is invalid, and the old claim of an available ARM64/GB10 binary is not verified. The GB10 therefore remains on the reference PyTorch convolution until a Torch/CUDA/SM 12.1 source build is installed and checked against it. Pop has a separate opt-in source build for Torch 2.14/CUDA 13.4/SM 8.9 (`causal-conv1d-pop-torch214-cu134-sm89-v1`); its same-input GPU fidelity and throughput gate is pending. Flash-attention availability on GB10 is checked separately. Correctness tests run on both the 4060 and the DGX.
 
 ### 4.4 What trains when
 

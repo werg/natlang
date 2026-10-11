@@ -12,6 +12,8 @@ Equivalence with HF's forward is a tested invariant (tests/neuralese).
 
 from __future__ import annotations
 
+import importlib.metadata
+import logging
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -30,6 +32,8 @@ OPEN_TOKEN = "<|reserved_7|>"
 CLOSE_TOKEN = "<|reserved_8|>"
 OPEN_NAME = "<|neuralese|>"
 CLOSE_NAME = "<|/neuralese|>"
+
+_logger = logging.getLogger(__name__)
 
 
 class KVBuffer:
@@ -276,25 +280,117 @@ def backbone_identity(lora: str | None, base: str | None = None) -> dict:
     return identity
 
 
-# Pinned revision of the hub kernel (works offline once cached; has an aarch64 sm_121 build).
-CONV_KERNEL_REPO = "kernels-community/causal-conv1d"
-CONV_KERNEL_REVISION = "2a73868ad241e86b8ebd9917d7be07986bfa645d"
+# This Pop-only source build is derived from the official Dao-AILab v1.7.0
+# release. Its immutable wheel and build provenance live outside the source
+# tree; see the artifact ID and hashes below. Do not select an unqualified
+# Hub build: Torch, CUDA and GPU architecture are part of the ABI.
+CONV_KERNEL_PACKAGE = "causal-conv1d"
+CONV_KERNEL_PACKAGE_VERSION = "1.7.0+pop.torch214.cu134.sm89"
+CONV_KERNEL_SOURCE_REPOSITORY = "https://github.com/Dao-AILab/causal-conv1d"
+CONV_KERNEL_SOURCE_COMMIT = "cd81f0413cad2fc1e6f17e785ac39f59aae690cd"
+CONV_KERNEL_ARTIFACT_ID = "causal-conv1d-pop-torch214-cu134-sm89-v1"
+CONV_KERNEL_WHEEL_SHA256 = "2598fa2b74b7433fa16ea29d2b310b735cea00a2e0dcced98c20feb735eec319"
+CONV_KERNEL_BUILD_MANIFEST_SHA256 = "353881270486e684143ee90aa27607f0f6af4e3cd3a1182e130bf0ee21e80520"
+CONV_KERNEL_TORCH_VERSION = "2.14.0a0+b2c75dd062.nv26.09"
+CONV_KERNEL_CUDA_VERSION = "13.4"
+CONV_KERNEL_DEVICE_CAPABILITY = (8, 9)
+
+
+def conv_kernel_provenance(kernel) -> dict:
+    """Describe the convolution implementation selected for an LFM2 run."""
+    if kernel is None:
+        return {
+            "implementation": "torch.nn.functional.conv1d",
+            "kernel_loaded": False,
+        }
+    try:
+        version = importlib.metadata.version(CONV_KERNEL_PACKAGE)
+    except Exception:
+        version = None
+    result = {
+        "implementation": "causal_conv1d.causal_conv1d_fn",
+        "kernel_loaded": True,
+        "package": CONV_KERNEL_PACKAGE,
+        "package_version": version,
+    }
+    if version == CONV_KERNEL_PACKAGE_VERSION:
+        result.update({
+            "artifact_id": CONV_KERNEL_ARTIFACT_ID,
+            "source_repository": CONV_KERNEL_SOURCE_REPOSITORY,
+            "source_commit": CONV_KERNEL_SOURCE_COMMIT,
+            "wheel_sha256": CONV_KERNEL_WHEEL_SHA256,
+            "build_manifest_sha256": CONV_KERNEL_BUILD_MANIFEST_SHA256,
+        })
+    return result
 
 
 def load_conv_kernel():
-    """The hub `causal-conv1d` kernel (it has an sm_121/aarch64 build), or None.
+    """Load the exact Pop source-built package, or use the Torch fallback.
 
-    Opt out with NATLANG_NEURALESE_KERNELS=0. Only used for fresh prefills on CUDA.
+    The approved wheel matches the Pop executor's pinned Torch/CUDA and SM 8.9.
+    A different wheel, host, or build is deliberately not selected. Enable it
+    with NATLANG_NEURALESE_KERNELS=1 after runtime qualification; it stays off
+    by default until same-input fidelity and throughput are qualified.
     """
     import os
 
-    if os.environ.get("NATLANG_NEURALESE_KERNELS", "1") == "0" or not torch.cuda.is_available():
+    if os.environ.get("NATLANG_NEURALESE_KERNELS", "0") != "1":
+        _logger.info("LFM2 convolution uses Torch fallback: native kernel is not qualified by default")
         return None
     try:
-        from kernels import get_kernel
+        cuda_available = torch.cuda.is_available()
+    except Exception as exc:
+        _logger.info("LFM2 convolution uses Torch fallback: CUDA availability check failed (%s: %s)",
+                     type(exc).__name__, exc)
+        return None
+    if not cuda_available:
+        _logger.info("LFM2 convolution uses Torch fallback: CUDA is unavailable")
+        return None
+    if torch.__version__ != CONV_KERNEL_TORCH_VERSION or torch.version.cuda != CONV_KERNEL_CUDA_VERSION:
+        _logger.info(
+            "LFM2 convolution uses Torch fallback: unsupported Torch/CUDA build (%s, CUDA %s)",
+            torch.__version__, torch.version.cuda,
+        )
+        return None
+    try:
+        capability = tuple(torch.cuda.get_device_capability())
+    except Exception as exc:
+        _logger.info("LFM2 convolution uses Torch fallback: device capability query failed (%s: %s)",
+                     type(exc).__name__, exc)
+        return None
+    if capability != CONV_KERNEL_DEVICE_CAPABILITY:
+        _logger.info(
+            "LFM2 convolution uses Torch fallback: unsupported device capability %s",
+            capability,
+        )
+        return None
+    try:
+        installed_version = importlib.metadata.version(CONV_KERNEL_PACKAGE)
+    except importlib.metadata.PackageNotFoundError:
+        _logger.info("LFM2 convolution uses Torch fallback: %s wheel is not installed", CONV_KERNEL_PACKAGE)
+        return None
+    except Exception as exc:
+        _logger.info("LFM2 convolution uses Torch fallback: package metadata could not be read (%s: %s)",
+                     type(exc).__name__, exc)
+        return None
+    if installed_version != CONV_KERNEL_PACKAGE_VERSION:
+        _logger.info(
+            "LFM2 convolution uses Torch fallback: %s version %s does not match pinned %s",
+            CONV_KERNEL_PACKAGE, installed_version, CONV_KERNEL_PACKAGE_VERSION,
+        )
+        return None
+    try:
+        import causal_conv1d
 
-        return get_kernel(CONV_KERNEL_REPO, revision=CONV_KERNEL_REVISION)
-    except Exception:
+        if getattr(causal_conv1d, "__version__", None) != "1.7.0" or not callable(
+            getattr(causal_conv1d, "causal_conv1d_fn", None)
+        ):
+            raise RuntimeError("installed package does not expose the pinned 1.7.0 causal_conv1d_fn API")
+        _logger.info("LFM2 convolution uses pinned source build %s", CONV_KERNEL_ARTIFACT_ID)
+        return causal_conv1d
+    except Exception as exc:
+        _logger.info("LFM2 convolution uses Torch fallback: causal_conv1d import failed (%s: %s)",
+                     type(exc).__name__, exc)
         return None
 
 
@@ -349,6 +445,10 @@ class PortBackbone(nn.Module):
     @property
     def embedding_weight(self) -> torch.Tensor:
         return self.hf.model.embed_tokens.weight
+
+    @property
+    def conv_kernel_runtime_info(self) -> dict:
+        return conv_kernel_provenance(self.conv_kernel)
 
     @property
     def output_weight(self) -> torch.Tensor:

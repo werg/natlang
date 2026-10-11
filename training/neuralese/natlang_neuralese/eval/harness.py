@@ -219,7 +219,8 @@ def cache_agreement(backbone: PortBackbone, heads: PortHeads, prefixes: list[lis
     return {"cases": len(prefixes), "identical_greedy_rate": same / max(1, len(prefixes)),
             "token_agreement_rate": matching_tokens / max(1, compared_tokens), "max_logit_diff": max_diff,
             "dtype": str(backbone.embedding_weight.dtype), "device": str(device), "fast": backbone.fast,
-            "conv_kernel_loaded": backbone.conv_kernel is not None, "case_details": cases}
+            "conv_kernel_loaded": backbone.conv_kernel is not None,
+            "conv_kernel_runtime_info": backbone.conv_kernel_runtime_info, "case_details": cases}
 
 
 @torch.no_grad()

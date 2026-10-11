@@ -13,8 +13,10 @@ the part receipts are merged into one receipt for the corpus.
                             full/ = the 5% warm-up sample, zstd)
   OUT/receipt.json          merged receipt (documents and per-split counts summed over parts)
 
-Parts render independently: exact-duplicate removal and the internal train/test group-overlap check are per part
-(held-text decontamination against other corpora is not). Resumable: finished parts are skipped.
+After the parts, merge_parts() joins them into OUT/RENDERING/TOK/text-data.jsonl (full: .jsonl.zst) and re-applies the
+renderer's corpus-level rules ACROSS parts: held groups/texts of every part, exact duplicates, twin alignment (Pop
+2026-10-12). The union builder (build_native_turn_union.py) enforces the same across corpora. Resumable: finished
+parts are skipped.
 
   render_parts.py render --corpus-id ID --out OUT --source F.turns.jsonl.zst [F ...] [--register ENTRY.json]
 """
@@ -147,8 +149,108 @@ def pending_units(prefix: str) -> list[str]:
     return [u for u in listed + queued if u.startswith(prefix)]
 
 
-def merge_receipts(receipts: list[dict], cuts: list[int]) -> dict:
-    """One corpus-level receipt over its parts: per-rendering documents and per-split counts summed, maxima kept."""
+RENDERINGS = ('full', 'program-header', 'whole-trajectory')
+
+
+def part_files(out: Path, rendering: str, tok: str) -> list[Path]:
+    files = []
+    for part in sorted((out / 'parts').glob('p*')):
+        for name in ('text-data.jsonl', 'text-data.jsonl.zst'):
+            if (part / rendering / tok / name).exists():
+                files.append(part / rendering / tok / name)
+    return files
+
+
+def read_rows(path: Path):
+    if path.suffix == '.zst':
+        proc = subprocess.Popen(['zstd', '-dcq', '--long=27', str(path)], stdout=subprocess.PIPE)
+        lines = proc.stdout
+    else:
+        proc, lines = None, open(path, 'rb')
+    for line in lines:
+        if line.strip():
+            yield line, json.loads(line)
+    if proc and proc.wait():
+        raise RuntimeError(f'zstd failed on {path}')
+
+
+def text_sha(row: dict) -> str:
+    import hashlib
+    return hashlib.sha256(row['text'].encode()).hexdigest()
+
+
+def merge_parts(out: Path) -> dict:
+    """Join the parts into one member file per rendering and tokenizer (OUT/RENDERING/TOK/text-data.jsonl, the layout
+    the target-set manifest reads), restoring the renderer's corpus-level rules across parts (Pop 2026-10-12: part
+    renders must keep global split decontamination): held stays held; a train document sharing a source group with a
+    held document of ANY part, or equal in text to one, is dropped; exact duplicates (split, text) across parts are kept
+    once; twin alignment: a document dropped for one tokenizer is dropped for all. Part text files are removed after
+    the merge (their receipts and omissions stay). The union builder applies the same rules across corpora."""
+    toks = sorted({p.parent.name for p in (out / 'parts').glob('p*/*/*/text-data.jsonl*')})
+    held_groups, held_texts = set(), set()
+    for rendering in RENDERINGS:
+        for tok in toks:
+            for path in part_files(out, rendering, tok):
+                for _, row in read_rows(path):
+                    if row['split'] != 'train':
+                        held_groups.update(row.get('source_groups') or [])
+                        held_texts.add(text_sha(row))
+    counts: dict = {}
+    for rendering in RENDERINGS:
+        drop: dict[str, str] = {}
+        for tok in toks:
+            seen = set()
+            for path in part_files(out, rendering, tok):
+                for _, row in read_rows(path):
+                    key = (row['split'], text_sha(row))
+                    if row['split'] == 'train' and set(row.get('source_groups') or []) & held_groups:
+                        drop.setdefault(row['id'], 'train_document_shares_held_source_group_across_parts')
+                    elif row['split'] == 'train' and key[1] in held_texts:
+                        drop.setdefault(row['id'], 'train_copy_of_held_document_across_parts')
+                    elif key in seen:
+                        drop.setdefault(row['id'], 'exact_duplicate_document_across_parts')
+                    seen.add(key)
+        for tok in toks:
+            files = part_files(out, rendering, tok)
+            if not files:
+                continue
+            dst = out / rendering / tok
+            dst.mkdir(parents=True, exist_ok=True)
+            compress = rendering == 'full'
+            target = dst / ('text-data.jsonl.zst' if compress else 'text-data.jsonl')
+            tmp = target.with_name(target.name + '.tmp')
+            with open(tmp, 'wb') as raw:
+                zp = subprocess.Popen(['zstd', '-q', '-3', '--long=27', '-T2', '-c'], stdin=subprocess.PIPE,
+                                      stdout=raw) if compress else None
+                sink = zp.stdin if zp else raw
+                kept = by_split = 0
+                splits: dict = {}
+                for path in files:
+                    for line, row in read_rows(path):
+                        if row['id'] in drop:
+                            continue
+                        sink.write(line if line.endswith(b'\n') else line + b'\n')
+                        splits[row['split']] = splits.get(row['split'], 0) + 1
+                        kept += 1
+                if zp:
+                    zp.stdin.close()
+                    if zp.wait():
+                        raise RuntimeError('zstd failed')
+            tmp.replace(target)
+            with open(dst / 'omissions.jsonl', 'w') as f:
+                for doc, reason in sorted(drop.items()):
+                    f.write(json.dumps({'id': doc, 'reason': reason}) + '\n')
+            counts[f'{rendering}/{tok}'] = {'documents': kept, 'documents_by_split': splits,
+                                            'merge_omissions': dict(sorted(
+                                                {r: list(drop.values()).count(r) for r in set(drop.values())}.items()))}
+            for path in files:
+                path.unlink()
+    return {'held_groups': len(held_groups), 'held_texts': len(held_texts), 'merged': counts}
+
+
+def merge_receipts(receipts: list[dict], cuts: list[int], merged: dict | None = None) -> dict:
+    """One corpus-level receipt over its parts: per-split counts summed over parts (before the cross-part merge),
+    documents after the merge, maxima kept."""
     renders: dict = {}
     for receipt in receipts:
         for key, info in receipt['renders'].items():
@@ -159,8 +261,14 @@ def merge_receipts(receipts: list[dict], cuts: list[int]) -> dict:
                 into = agg['by_split'].setdefault(split, {})
                 for field, value in counts.items():
                     into[field] = into.get(field, 0) + value
-    return {'schema': 'natlang.render-parts/1', 'parts': len(receipts), 'cuts': cuts, 'renders': renders,
-            'note': 'parts render independently: exact-duplicate removal and internal group-overlap checks are per part'}
+    for key, info in ((merged or {}).get('merged') or {}).items():
+        if key in renders:
+            renders[key]['documents_before_merge'] = renders[key]['documents']
+            renders[key]['documents'] = info['documents']
+            renders[key]['merge_omissions'] = info['merge_omissions']
+    return {'schema': 'natlang.render-parts/2', 'parts': len(receipts), 'cuts': cuts, 'renders': renders,
+            'cross_part_merge': {k: v for k, v in (merged or {}).items() if k != 'merged'},
+            'note': 'by_split token counts are summed over parts before the cross-part merge; documents are after it'}
 
 
 def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpus: int = 6, budget_gb: int = 6,
@@ -172,14 +280,18 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
     for k, (start, stop) in enumerate(zip(cuts, cuts[1:])):
         render_part(sources, out, k, start, stop, corpus_id, unit_prefix, cpus, budget_gb, docker_gb)
         receipts.append(load(out / 'parts' / f'p{k:02d}' / 'receipt.json'))
-    receipt = merge_receipts(receipts, cuts)
+    merged = load(out / 'merge.json') if (out / 'merge.json').exists() else None
+    if merged is None:
+        merged = merge_parts(out)
+        save(out / 'merge.json', merged)
+    receipt = merge_receipts(receipts, cuts, merged)
     save(out / 'receipt.json', receipt)
     return receipt
 
 
-INCLUDE = ['receipt.json', 'parts.json', 'parts/*/receipt.json', 'parts/*/*.jsonl', 'parts/*/*/*/text-data.jsonl',
-           'parts/*/*/*/text-data.jsonl.zst', 'parts/*/*/*/omissions.jsonl', 'parts/*/*/*/omissions.jsonl.zst',
-           'parts/*/render-omissions/*/omissions.jsonl']
+INCLUDE = ['receipt.json', 'parts.json', 'merge.json', '*/*/text-data.jsonl', '*/*/text-data.jsonl.zst',
+           '*/*/omissions.jsonl', 'parts/*/receipt.json', 'parts/*/*.jsonl', 'parts/*/*/*/omissions.jsonl',
+           'parts/*/*/*/omissions.jsonl.zst', 'parts/*/render-omissions/*/omissions.jsonl']
 
 
 def render_summary(receipt: dict) -> dict:

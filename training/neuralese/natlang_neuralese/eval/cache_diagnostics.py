@@ -98,6 +98,7 @@ def main(argv=None):
         cases = [compare(backbone, heads, p, z, args.steps) for p, z in zip(prefixes, payloads)]
         result = {"variant": name, "dtype": str(dtype), "device": args.device,
                   "fast": fast, "conv_kernel_loaded": conv is not None,
+                  "conv_kernel_runtime_info": backbone.conv_kernel_runtime_info,
                   "buffer_dtypes": {name: str(value.dtype) for name, value in backbone.hf.named_buffers()},
                   "cases": cases}
         results.append(result)

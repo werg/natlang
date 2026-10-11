@@ -123,6 +123,7 @@ def qualify_raw_transport(engine, texts, *, limit=8):
               'device_type': torch.device(engine.device).type,
               'model_dtype': str(engine.backbone.embedding_weight.dtype),
               'conv_kernel_enabled': getattr(engine.backbone, 'conv_kernel', None) is not None,
+              'conv_kernel_runtime_info': getattr(engine.backbone, 'conv_kernel_runtime_info', None),
               'prepared_prompt_embeddings_equal': prepared_prompt_equal, 'queued_generation_equal': queued_prompt_equal,
               'runtime_transport_passed': passed, 'greedy_fixed_length_writer_equal': writer_equal,
               'typed_greedy_fixed_length_writer_equal': typed_writer_equal, 'typed_wire_value_restored': typed_wire_passed,
