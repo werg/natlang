@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v3",
+  "owner": "dgx",
+  "path": "runs/neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v3",
+  "files": [
+    {
+      "path": "omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1432,
+      "sha256": "a02707315fd907c3518e6eaf89e136c4cd31373eb43252918eded8f1dfb0b739"
+    },
+    {
+      "path": "row-stats.jsonl",
+      "bytes": 1317386,
+      "sha256": "abf6cab83d23e250268380009edfaa0ffc223d627019eb1782dcf75d3eb67398",
+      "lines": 4962
+    },
+    {
+      "path": "text-data.jsonl",
+      "bytes": 62173664,
+      "sha256": "efebf09974dd9ea6d92dc2159efc99d9c17ebbabedc23e110c33fd41b7eefcb7",
+      "lines": 4962
+    }
+  ],
+  "bytes": 63492482
+}

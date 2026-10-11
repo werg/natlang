@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = ROOT / 'training' / 'neuralese_corpora.json'
 SPEC = ROOT / 'plans' / 'neuralese' / 'TARGET_SET_20261011.json'
-ID = 'natlang-target-set-20261011'
+BASE_ID = 'natlang-target-set-20261011'  # revisions: BASE_ID-r<N> (manifests are immutable snapshots)
 
 
 def file_stats(path: Path) -> dict:
@@ -40,6 +40,8 @@ def file_stats(path: Path) -> dict:
 
 def main():
     spec = json.loads(SPEC.read_text())
+    spec['revision'] = int(spec.get('revision', 0)) + 1
+    ID = f"{BASE_ID}-r{spec['revision']}"
     registry = json.loads(REGISTRY.read_text())
     by_id = {c['id']: c for c in registry['corpora']}
     members, totals = [], {}
@@ -79,7 +81,7 @@ def main():
         members.append({'id': ext['id'], 'registry_ids': ext['registry_ids'], 'note': ext.get('note', ''),
                         'renders': renders})
     entry = {
-        'id': ID, 'owner': 'dgx', 'path': 'plans/neuralese', 'include': ['TARGET_SET_20261011.json'],
+        'id': ID, 'owner': 'dgx', 'path': 'plans/neuralese/target-set', 'include': [f'{ID}.json'],
         'source_class': 'shared-natlang-target-training-set-manifest',
         'admission': 'manifest of training-admitted member renders (owner 2026-10-11: expand the target set by '
                      'everything found that can be integrated); exclusions only protected eval sets, held splits '
@@ -92,7 +94,19 @@ def main():
         'pending': spec['pending'],
         'notes': spec.get('notes', ''),
     }
+    registry = json.loads(REGISTRY.read_text())  # re-read: other agents may have registered meanwhile
+    for c in registry['corpora']:
+        if c['id'] == BASE_ID or c['id'].startswith(BASE_ID + '-r'):
+            c['superseded_by'] = ID
+            if c['id'] == BASE_ID:
+                c['retired'] = True  # its included spec file is the living spec, so its snapshot no longer verifies
     registry['corpora'] = [c for c in registry['corpora'] if c['id'] != ID] + [entry]
+    SPEC.write_text(json.dumps(spec, indent=2, ensure_ascii=False) + '\n')
+    snapshot = ROOT / 'plans' / 'neuralese' / 'target-set' / f'{ID}.json'  # immutable per revision
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    snapshot.write_text(json.dumps({**spec, 'members_resolved': members, 'totals_before_cross_member_dedup': totals},
+                                   indent=1, ensure_ascii=False) + '\n')
+    print(ID)
     REGISTRY.write_text(json.dumps(registry, indent=2, ensure_ascii=False) + '\n')
     print(json.dumps(totals, indent=1))
 

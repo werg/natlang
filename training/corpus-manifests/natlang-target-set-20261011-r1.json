@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-target-set-20261011-r1",
+  "owner": "dgx",
+  "path": "plans/neuralese/target-set",
+  "files": [
+    {
+      "path": "natlang-target-set-20261011-r1.json",
+      "bytes": 33293,
+      "sha256": "fa5b7c2bec52feaf502d24f8b164614eecea41257a6c97b9e78305a2095dd13f"
+    }
+  ],
+  "bytes": 33293
+}

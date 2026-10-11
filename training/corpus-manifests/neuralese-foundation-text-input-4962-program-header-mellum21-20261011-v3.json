@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v3",
+  "owner": "dgx",
+  "path": "runs/neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v3",
+  "files": [
+    {
+      "path": "omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1383,
+      "sha256": "ff2d61f0ff8ef11dc5b0853c153bba9a4256466eb46d3e78b080687be5403df9"
+    },
+    {
+      "path": "row-stats.jsonl",
+      "bytes": 1317721,
+      "sha256": "5b9eacdc7db05573f8578d84590c8fdffa3b16b19a239de3584b5d0188e091cc",
+      "lines": 4962
+    },
+    {
+      "path": "text-data.jsonl",
+      "bytes": 62856551,
+      "sha256": "f1b8d55024771888068ff5fe4815b2e1aaea215c2496b929a180263a8059a4ea",
+      "lines": 4962
+    }
+  ],
+  "bytes": 64175655
+}

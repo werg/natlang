@@ -10,8 +10,8 @@
     "sha256": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
    },
    "direct_text_program_header": {
-    "path": "runs/neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v2/text-data.jsonl",
-    "sha256": "82f2ac1df8999f7ebf65dd882e7710db7ed1d1ef762cf78599fbbae52bc0e00d"
+    "path": "runs/neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v3/text-data.jsonl",
+    "sha256": "efebf09974dd9ea6d92dc2159efc99d9c17ebbabedc23e110c33fd41b7eefcb7"
    }
   },
   "stages": {
