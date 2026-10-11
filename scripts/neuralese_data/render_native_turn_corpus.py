@@ -617,7 +617,7 @@ def merge(out: Path, mode: str, tok_name: str, shards: list[str], held_external:
     held = test_groups | held_external
     final = out / mode / tok_name
     final.mkdir(parents=True, exist_ok=True)
-    omissions, seen = [], set()
+    omissions, seen = [], {}
     stats = {'documents': 0, 'by_split': {}, 'max_document_tokens': 0}
     roles_total = Counter()
     with open(final / 'text-data.jsonl', 'w') as dst:
@@ -637,9 +637,12 @@ def merge(out: Path, mode: str, tok_name: str, shards: list[str], held_external:
                     key = (row['split'], sha(row['text'].encode()), sha(canonical(row['token_ids']).encode()),
                            row.get('supervised_suffix_start'))
                     if key in seen:
-                        omissions.append({'id': row['id'], 'reason': 'exact_duplicate_document'})
+                        # Same document as a kept one: its source decisions are covered there (lineage kept here).
+                        omissions.append({'id': row['id'], 'reason': 'exact_duplicate_document',
+                                          'duplicate_of': seen[key],
+                                          'source_record_ids': row.get('source_record_ids', [])})
                         continue
-                    seen.add(key)
+                    seen[key] = row['id']
                     n = len(row['token_ids'])
                     s = stats['by_split'].setdefault(row['split'], {'documents': 0, 'tokens': 0, 'supervised_tokens': 0,
                                                                    'assistant_tokens': 0, 'tool_tokens': 0})

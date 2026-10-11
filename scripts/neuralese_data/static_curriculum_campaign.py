@@ -46,6 +46,11 @@ REPO = Path(__file__).resolve().parents[2]
 TS = REPO / 'ts-host'
 # The ts-host scripts need Node >= 22 (util.parseArgs allowNegative); user units see only the system Node 18.
 NODE = os.environ.get('NATLANG_NODE') or next((str(p) for p in (Path.home() / '.local/bin/node',) if p.exists()), 'node')
+# The external HDD is saturated: source corpora the families read on every shard are staged to NVMe.
+STAGED = Path.home() / 'data/staged-inputs/sdkb'
+for var, name in (('NATLANG_CITANCES', 'tasks-citance-recall-20260928'), ('NATLANG_SYNTH_PEOPLE', 'tasks-synth-people-r4-20260928')):
+    if (STAGED / name / '.staged').exists():
+        os.environ.setdefault(var, str(STAGED / name))
 STRIDE = 4  # largest family weight: a family indexes round(shapes * weight) items from start
 # Families that cannot run here today, with the reason (recorded in config.json and the registry note).
 EXCLUDED = {
