@@ -11,11 +11,16 @@ import { parseArgs } from 'node:util';
 import { materializeNativeRows, nativeRowDigest } from '../ts-host/dist/teacher/native-materializer.js';
 import { nativeDecisionTargetDigest } from '../ts-host/dist/native/decision-review.js';
 import { renderValue } from '../ts-host/dist/native/agent.js';
+import { ordinalDistanceRecordReview } from '../ts-host/dist/evaluation/oracles.js';
+import { sourceQualityClearanceForProgram, sourceQualityClearanceProblems } from '../ts-host/dist/teacher/source-quality-clearance.js';
+import { canonical as sharedCanonical } from '../ts-host/dist/adaptation/identity.js';
+import { hexDigest } from '../ts-host/dist/native/hash.js';
 
 const { values } = parseArgs({ options: {
   'results-dir': { type: 'string' }, 'source-cases': { type: 'string' },
   'source-manifest': { type: 'string' }, 'candidate-out': { type: 'string' },
-  review: { type: 'string' }, out: { type: 'string' },
+  review: { type: 'string' }, out: { type: 'string' }, 'source-quality-review': { type: 'string' },
+  'source-label-corrections': { type: 'string' },
 } });
 if (!values['results-dir'] || !values['source-cases'] || !values['source-manifest'] || !values['candidate-out'])
   throw new Error('usage: node scripts/materialize-reviewed-decision-children.mjs --results-dir DIR --source-cases FILE --source-manifest FILE --candidate-out FILE [--review FILE --out DIR]');
@@ -58,6 +63,21 @@ function effectiveFields(item, task) {
   }
   return fields;
 }
+function sourceOutputReview(item, semantics, expected, actual, correctionsByItem = new Map()) {
+  const spec = semantics.oracle;
+  if (item.family === 'decision:review-satisfaction-estimate-v1' &&
+      spec?.normalization === 'ordinal-distance-record') {
+    return ordinalDistanceRecordReview({ [item.id]: actual }, { [item.id]: expected },
+      spec.ordinal_levels, spec.ordinal_distance_max);
+  }
+  if (same(actual, expected)) return { accepted: true, errors: [], entries: [] };
+  const correction = correctionsByItem.get(item.id);
+  if (item.family === 'decision:toxicity-binary-threshold-v1' && correction &&
+      correction.original_annotation === expected && correction.corrected_label === actual &&
+      correction.actual_generated_value === actual && actual !== expected)
+    return { accepted: true, errors: [], entries: [], source_label_correction: correction };
+  return { accepted: false, errors: ['source_label_mismatch'], entries: [] };
+}
 function turnText(turn) {
   return (turn.messages ?? []).map(message => `${message.content ?? ''}\n${(message.tool_calls ?? [])
     .map(call => call.function?.arguments ?? '').join('\n')}`).join('\n');
@@ -74,6 +94,7 @@ if (sourceManifest.selected_sha256 && sourceManifest.selected_sha256 !== sourceS
     sourceManifest.cases_sha256 && sourceManifest.cases_sha256 !== sourceSha)
   throw new Error('source manifest does not bind the supplied source cases');
 const sourceRows = new Map(parseLines(sourceText, sourceCasesPath).map(({ value: row }) => [row.id, row]));
+const sourceRawById = new Map(parseLines(sourceText, sourceCasesPath).map(({ value: row, raw }) => [row.id, raw]));
 const groupRoles = new Map();
 for (const row of sourceRows.values()) {
   const roles = groupRoles.get(row.group) ?? new Set();
@@ -95,6 +116,31 @@ const reservationSourceBytes = await readFile(reservationSourcePath);
 if (sha(reservationSourceBytes) !== reservationPolicy.source.sha256)
   throw new Error('JeFF reservation source checksum mismatch');
 const reservedIds = new Set(reservationPolicy.records.flatMap(item => item.source_ids ?? []));
+let labelCorrectionSha = null;
+const correctionsByItem = new Map();
+if (values['source-label-corrections']) {
+  const correctionBytes = await readFile(resolve(values['source-label-corrections']));
+  const correctionDoc = JSON.parse(correctionBytes.toString('utf8'));
+  labelCorrectionSha = sha(correctionBytes);
+  if (correctionDoc.schema !== 'natlang.visible-decision-source-label-corrections/1' ||
+      correctionDoc.source_cases?.sha256 !== sourceSha || !Array.isArray(correctionDoc.corrections))
+    throw new Error('source-label corrections do not bind the supplied case snapshot');
+  for (const correction of correctionDoc.corrections) {
+    const source = sourceRows.get(correction.item_id);
+    const raw = sourceRawById.get(correction.item_id);
+    const input = source && { state: source.state, question: source.question, criteria: source.criteria ?? null,
+      options: source.options ?? null, levels: source.levels ?? null };
+    if (!source || correction.source_group !== source.group || correction.source_row_sha256 !== sha(raw) ||
+        correction.input_sha256 !== hexDigest(sharedCanonical(input)) ||
+        correction.source_revision !== sourceManifest.source_sha256 ||
+        correction.original_annotation !== source.answer || typeof correction.corrected_label !== 'boolean' ||
+        correction.actual_generated_value !== correction.corrected_label ||
+        correction.corrected_label === correction.original_annotation || !correction.rubric_reason?.trim() ||
+        correctionsByItem.has(correction.item_id))
+      throw new Error(`invalid source-label correction binding: ${correction.item_id ?? '(missing ID)'}`);
+    correctionsByItem.set(correction.item_id, { ...correction, evidence_sha256: labelCorrectionSha });
+  }
+}
 const reservedNeedles = [];
 for (const { value } of parseLines(reservationSourceBytes.toString('utf8'), reservationSourcePath)) {
   if (!reservedIds.has(value.id) || typeof value.state !== 'string') continue;
@@ -122,6 +168,37 @@ if (values.review) {
   if (review.schema !== 'natlang.provider-child-action-review/1' || !Array.isArray(review.approvals))
     throw new Error('review must use natlang.provider-child-action-review/1 with approvals[]');
 }
+let sourceQualityClearance = null;
+const sourceQualityReviewPath = values['source-quality-review'] ? resolve(values['source-quality-review']) : null;
+if (sourceQualityReviewPath) {
+  const reviewBytes = await readFile(sourceQualityReviewPath);
+  const sourceQualityReview = JSON.parse(reviewBytes.toString('utf8'));
+  const problems = sourceQualityClearanceProblems(sourceQualityReview);
+  if (problems.length) throw new Error(`invalid source-quality clearance: ${problems.join(', ')}`);
+  const policyPath = resolve(sourceQualityReview.source_policy.path);
+  if (policyPath !== resolve('training/decision_source_quality_holds.json'))
+    throw new Error('source-quality clearance must bind the current canonical policy');
+  const policyBytes = await readFile(policyPath);
+  if (sha(policyBytes) !== sourceQualityReview.source_policy.sha256)
+    throw new Error('source-quality clearance policy hash mismatch');
+  const policy = JSON.parse(policyBytes.toString('utf8'));
+  const heldIds = [...new Set(policy.excluded_items.map(item => item.item_id))].sort();
+  const heldGroups = [...new Set(policy.excluded_items.map(item => item.original_source_group))].sort();
+  if (!same(heldIds, [...sourceQualityReview.source_policy.held_source_ids].sort()) ||
+      !same(heldGroups, [...sourceQualityReview.source_policy.held_source_groups].sort()))
+    throw new Error('source-quality clearance held ID/group census mismatch');
+  for (const evidence of sourceQualityReview.evidence) {
+    const evidenceBytes = await readFile(resolve(evidence.path));
+    if (sha(evidenceBytes) !== evidence.sha256) throw new Error(`source-quality evidence hash mismatch: ${evidence.path}`);
+  }
+  const reviewIds = new Set(sourceQualityReview.programs.map(program => program.program_id));
+  if (reviewIds.size !== sourceQualityReview.programs.length) throw new Error('duplicate source-quality program binding');
+  sourceQualityClearance = { schema: 'natlang.verified-source-quality-clearance/1',
+    review_sha256: sha(reviewBytes), review_canonical_sha256: hexDigest(sharedCanonical(sourceQualityReview)),
+    evidence_files_verified: true, review: sourceQualityReview };
+  const clearanceProblems = sourceQualityClearanceProblems(sourceQualityClearance);
+  if (clearanceProblems.length) throw new Error(`invalid verified source-quality clearance: ${clearanceProblems.join(', ')}`);
+}
 const approvalsByKey = new Map();
 for (const approval of review?.approvals ?? []) {
   if (approval.approved !== true || !approval.item_id || !/^[a-f0-9]{64}$/.test(approval.item_sha256 ?? '') ||
@@ -141,19 +218,31 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
     const semantics = program?.semantics;
     const taskText = semantics?.folder_files?.['task.json'];
     if (!program || !semantics || typeof taskText !== 'string') { rejected.push({ resultsPath, line, reason: 'missing-program-or-task-contract' }); continue; }
-    if (program.generation?.source_cases_sha256 !== sourceSha) throw new Error(`${row.id}: source cases hash mismatch`);
+    const sourceBound = program.generation?.source_cases_sha256 === sourceSha ||
+      program.source_revisions?.includes(sourceSha) === true;
+    if (!sourceBound) throw new Error(`${row.id}: source cases hash mismatch`);
     const task = JSON.parse(taskText), originalDigest = nativeRowDigest(row);
     const reservedSourceId = jeffReservationHit(row);
     const rootInvocation = (row.outcome?.invocation_ledger ?? []).find(item => item.parent_invocation_id == null)?.invocation_id;
     if (!rootInvocation) { rejected.push({ id: row.id, reason: 'root-invocation-missing' }); continue; }
-    const materialized = materializeNativeRows([row], { failedRuns: true });
+    const qualityBinding = sourceQualityClearance && sourceQualityClearanceForProgram(sourceQualityClearance, program);
+    if (sourceQualityClearance && !qualityBinding)
+      throw new Error(`source-quality clearance does not bind exact program: ${program.id}`);
+    if (qualityBinding && (program.external_source?.source_path !== sourceCasesPath ||
+        program.external_source?.snapshot_sha256 !== sourceSha ||
+        program.external_source?.source_manifest_sha256 !== sha(sourceManifestBytes)))
+      throw new Error(`source-quality clearance is bound to different source bytes: ${program.id}`);
+    const materialized = materializeNativeRows([row], { failedRuns: true,
+      ...(qualityBinding ? { sourceQualityClearance } : {}) });
     if (materialized.unlinked.length) { rejected.push({ id: row.id, reason: 'action-ledger-unlinked', unlinked: materialized.unlinked }); continue; }
     const ledger = row.outcome?.invocation_ledger ?? [];
     for (const [path, raw] of Object.entries(semantics.folder_files)) {
       if (!path.startsWith('items/') || !path.endsWith('.json')) continue;
       const item = JSON.parse(raw), itemSha = sha(raw), id = item.id;
       const source = sourceRows.get(id);
-      if (!source || source.role !== 'train' || item.role !== 'train' || source.group !== item.group ||
+      const itemRole = item.role ?? item.split;
+      const itemGroup = item.group ?? item.group_id;
+      if (!source || source.role !== 'train' || itemRole !== 'train' || source.group !== itemGroup ||
           (source.split !== undefined && source.split !== 'train')) {
         rejected.push({ program_id: program.id, item_id: id, item_sha256: itemSha, reason: 'source-row-or-train-split-binding-failed' });
         continue;
@@ -170,18 +259,22 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         continue;
       }
       const expected = semantics.expected?.[id], observed = row.outcome?.value?.[id];
+      const sourceReview = sourceOutputReview(item, semantics, expected, observed, correctionsByItem);
       if (['decision:toxicity', 'decision:app-stars', 'decision:yelp-stars'].includes(item.family)) {
         rejected.push({ program_id: program.id, item_id: id, item_sha256: itemSha, group: source.group,
           reason: `adapter-contract-repair-required:${item.family}` });
         continue;
       }
-      if (expected === undefined || !same(expected, observed)) continue;
+      if (expected === undefined || !sourceReview.accepted) continue;
+      if (sourceReview.source_label_correction && !labelCorrectionSha)
+        throw new Error(`source-label correction lacks immutable evidence file: ${id}`);
       const fields = effectiveFields(item, task);
       const matches = [];
       const bindingGaps = [];
       for (const entry of ledger) {
         if (entry.parent_invocation_id !== rootInvocation || entry.completion_status !== 'done' ||
-            entry.host_result?.complete !== true || !same(entry.host_result.value, expected)) continue;
+            entry.host_result?.complete !== true || !sourceOutputReview(item, semantics, expected,
+              entry.host_result.value, correctionsByItem).accepted) continue;
         const invocationTurns = materialized.turns.filter(turn => turn.source_ref?.invocation_id === entry.invocation_id);
         const turn = invocationTurns.at(-1);
         if (!turn) { bindingGaps.push({ invocation_id: entry.invocation_id, reason: 'materializer_has_no_child_turn' }); continue; }
@@ -225,6 +318,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         target_tool: turn.target?.tool_calls?.[0]?.function?.name ?? null,
         visible_fields: Object.keys(visible), scope_bound_fields: scopeBoundFields,
         source_item_id_runtime_bound: caseIdBound,
+        source_reference_review: sourceReview,
         scope_snapshot_sha256: sha(JSON.stringify(entry.inline_instruction_site?.runtime_capture_snapshots ?? null)),
         group_role_closure: [...roles] };
       candidates.push(candidate);
@@ -233,11 +327,25 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
       if (approval.item_sha256 !== itemSha || approval.group !== source.group ||
           approval.decision_index !== candidate.decision_index || approval.target_sha256 !== candidate.target_sha256)
         throw new Error(`review/source/target binding mismatch for ${program.id}/${id}`);
+      const correction = sourceReview.source_label_correction;
+      if (correction) {
+        if (approval.source_label_correction?.evidence_sha256 !== correction.evidence_sha256 ||
+            approval.source_label_correction?.item_id !== id ||
+            approval.source_label_correction?.item_sha256 !== itemSha ||
+            approval.source_label_correction?.input_sha256 !== correction.input_sha256 ||
+            approval.source_label_correction?.original_annotation !== expected ||
+            approval.source_label_correction?.corrected_label !== observed ||
+            approval.source_label_correction?.actual_generated_value !== observed)
+          throw new Error(`review is missing exact source-label correction binding for ${program.id}/${id}`);
+      } else if (approval.source_label_correction)
+        throw new Error(`review claims an unverified source-label correction for ${program.id}/${id}`);
       const decisionApproval = { schema: 'natlang.native-decision-approval/1', trajectory_id: row.id,
         source_row_sha256: originalDigest, decision_index: turn.decision.index,
         target_sha256: candidate.target_sha256, review_sha256: reviewSha,
-        reason: approval.reason, evidence: approval.evidence };
-      const approved = materializeNativeRows([row], { failedRuns: true, decisionApprovals: [decisionApproval] });
+        reason: approval.reason, evidence: approval.evidence,
+        ...(correction ? { source_label_correction: approval.source_label_correction } : {}) };
+      const approved = materializeNativeRows([row], { failedRuns: true, decisionApprovals: [decisionApproval],
+        ...(qualityBinding ? { sourceQualityClearance } : {}) });
       const selected = approved.turns.filter(value => value.decision.index === turn.decision.index &&
         value.training_admission?.approved === true);
       if (selected.length !== 1) throw new Error(`selected target was not admitted exactly once: ${program.id}/${id}`);
