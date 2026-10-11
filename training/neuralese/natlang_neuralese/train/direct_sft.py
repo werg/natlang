@@ -33,7 +33,7 @@ from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_
 from .checkpoint_policy import CheckpointPolicy
 
 SCHEMA = 'natlang.neuralese-direct/1'
-OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_now', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
+OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows'})
 
@@ -79,8 +79,15 @@ def parse(argv=None):
     p.add_argument('--drift-gate-every', type=int, default=300,
                    help='while the guard warns, run the behaviour gate at most every this many updates (KL still every '
                         '--drift-every); always at the stage end')
-    p.add_argument('--drift-gate-now', type=float, default=0.35,
-                   help='run the gate at once, whatever --drift-gate-every, when response KL reaches this level')
+    p.add_argument('--drift-gate-rise', type=float, default=0.05,
+                   help='run the gate at once, whatever --drift-gate-every, when response KL has risen by this much '
+                        'since the last gate')
+    p.add_argument('--gate-response-kl', type=float, default=None,
+                   help="the behaviour gate's KL bound for this stage, on response positions (overrides the gate's "
+                        'max_held_kl and held_kl_bound); response KL measures change from base, the gate pass rate '
+                        'and held CE measure damage')
+    p.add_argument('--drift-ce-windows', type=int, default=4,
+                   help='held CE on this many held windows at every drift check (where held CE bottoms out); 0: off')
     p.add_argument('--drift-every', type=int, default=0,
                    help='also run the drift monitor (held KL on --drift-rows, its guard and the gate at a warn) every '
                         'this many updates between evals, logged to drift.jsonl; 0: only at evals')
@@ -227,6 +234,9 @@ def main(argv=None):
                 print(json.dumps({'event': 'monitor_reference_captured', 'prompts': len(prompts)}), flush=True)
         if behaviour is None and monitor.get('gate'):
             behaviour = Behaviour(monitor['gate'], engine.tokenizer, gate_held, root=path_root('repo'))
+    if behaviour is not None and a.gate_response_kl is not None:
+        # The stage's declared KL bound (coordinator decision 2026-10-11): on response positions, at the hard stop.
+        behaviour.config = {**behaviour.config, 'max_held_kl': a.gate_response_kl, 'held_kl_bound': 'response'}
     # Trainables: backbone (latent policy), the projections. Embedding, final norm and lm_head stay frozen.
     for parameter in engine.heads.parameters():
         parameter.requires_grad_(False)
@@ -352,6 +362,7 @@ def main(argv=None):
         policy.save = lambda state, **_: None  # a smoke: logs and report only, never a full state
     step, best, base_eval, history = 0, None, None, []
     last_gate = None  # the update at which the guard last ran the behaviour gate
+    last_gate_kl = None  # response KL at that gate
     if policy.slot.exists():
         state = CheckpointPolicy.load(policy.slot)
         if state.get('schema') != SCHEMA or state['identity']['options'] != identity['options'] or \
@@ -369,7 +380,7 @@ def main(argv=None):
         own_host_tensors(optimizer)  # no view of the mmap'd state outlives the restore
         optimizer.param_groups = optimizer._groups()
         step, best, base_eval, history = state['step'], state.get('best'), state['base_eval'], state['history']
-        last_gate = state.get('last_gate')
+        last_gate, last_gate_kl = state.get('last_gate'), state.get('last_gate_kl')
         restore_training_rng_state(state['rng'], a.device)
         print(json.dumps({'event': 'resumed', 'step': step, 'code_changed': sorted(
             k for k in code if state['identity']['code'].get(k) != code[k])}), flush=True)
@@ -382,7 +393,8 @@ def main(argv=None):
                 'student_parameters': {n: values[n.removeprefix('backbone.')].detach() for n, _ in backbone_named},
                 **{key: module.state_dict() for key, module in projections.items()},
                 'optimizer': optimizer.state_dict(), 'rng': capture_training_rng_state(a.device),
-                'best': best, 'base_eval': base_eval, 'history': history, 'last_gate': last_gate}
+                'best': best, 'base_eval': base_eval, 'history': history, 'last_gate': last_gate,
+                'last_gate_kl': last_gate_kl}
 
     def log(name, value):
         with (a.out / name).open('a') as handle:
@@ -417,22 +429,34 @@ def main(argv=None):
         log('eval.jsonl', report)
         return report
 
+    def drift_ce():
+        """Held CE on the first --drift-ce-windows held windows (BF16): where held CE bottoms out, between evals."""
+        if not a.drift_ce_windows:
+            return None
+        total = 0.0
+        with torch.no_grad(), contextlib.ExitStack() as scope:
+            if quant is not None:
+                scope.enter_context(quant.context('bf16', 0.0))
+            for window in held[:a.drift_ce_windows]:
+                total += forward([window], gradients=False)[1]['ce']
+        return total / len(held[:a.drift_ce_windows])
+
     def drift_check():
         """The drift monitor: held KL on --drift-rows, its guard level, and at a warn the behaviour gate (stop below
-        its reference minus max_gate_drop) -- at most every --drift-gate-every updates, at once when response KL
-        reaches --drift-gate-now, and at the stage end."""
-        nonlocal last_gate
+        its reference minus max_gate_drop) -- at most every --drift-gate-every updates, at once when response KL rose
+        by --drift-gate-rise since the last gate, and at the stage end."""
+        nonlocal last_gate, last_gate_kl
         with torch.no_grad(), contextlib.ExitStack() as scope:
             if quant is not None:
                 scope.enter_context(quant.context('bf16', 0.0))
             drift = held_kl(backbone.hf, gate_held, a.drift_rows, 0.25)
         drift['guard'] = behaviour_drift_level(drift, a)
         due = (last_gate is None or step - last_gate >= a.drift_gate_every or step >= a.steps or
-               drift['held_response_kl'] >= a.drift_gate_now)
+               (last_gate_kl is not None and drift['held_response_kl'] - last_gate_kl >= a.drift_gate_rise))
         if drift['guard'] == 'warn' and a.drift_gate and behaviour is not None and not due:
             drift['gate_at_warn'] = {'deferred': True, 'last_gate': last_gate}
         elif drift['guard'] == 'warn' and a.drift_gate and behaviour is not None:
-            last_gate = step
+            last_gate, last_gate_kl = step, drift['held_response_kl']
             gate = gate_by_step[step] = gate_report()
             floor = behaviour.config['reference']['gate_pass'] - behaviour.config.get('max_gate_drop', 0.0)
             drift['gate_at_warn'] = {k: gate[k] for k in ('gate_pass', 'gate_checks', 'gate_kinds', 'gate_results')}
@@ -508,6 +532,7 @@ def main(argv=None):
             'token_choice_projection': 'absent' if token_choice is None else 'identity',
             'logits_equal_base': True}, indent=2) + '\n')
         evaluate()
+        base_eval['drift_ce'] = drift_ce()
     order = random.Random(f'{a.seed}:direct')
     for _ in range(step):  # the sampler is keyed by step: replay its draws
         order.randrange(len(train_windows))
@@ -559,7 +584,10 @@ def main(argv=None):
             (a.out / 'report.json').write_text(json.dumps({**report, 'status': 'running'}, indent=2) + '\n')
         elif a.drift_every and step % a.drift_every == 0 and gate_held is not None and a.drift_rows:
             drift = drift_check()
-            log('drift.jsonl', {'step': step, 'behaviour_drift': drift})
+            if base_eval is not None and 'drift_ce' not in base_eval:
+                base_eval['drift_ce'] = None  # a lineage resumed from before the measure has no base value
+            log('drift.jsonl', {'step': step, 'held_ce_subset': drift_ce(), 'base_held_ce_subset':
+                                base_eval.get('drift_ce') if base_eval else None, 'behaviour_drift': drift})
             if drift['guard'] == 'stop':
                 print(json.dumps({'event': 'behaviour_drift_stop', 'step': step}), flush=True)
                 stop.request()

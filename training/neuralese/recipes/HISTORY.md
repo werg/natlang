@@ -372,3 +372,16 @@ once when response KL reaches 0.35. The hard stop stays at 0.5, and the stage en
 response KL was above the warn level from step 100, so every 100-update check ran the full gate (about 3.3 min per
 10 min of training, a third of wall time). The owner's eval budget is 3–5%. A deferred check logs
 `gate_at_warn: {deferred, last_gate}`. `last_gate` is kept in the full state.
+
+## neuralese-direct-v1 gate bound and gate trigger (coordinator decisions 2026-10-11)
+
+- `gate_response_kl` 0.5 is a shared declared stage parameter for both backbones. It overrides the declared gate's
+  KL bound for the direct stage, on response positions, at the hard stop. Response KL measures change from base, not
+  damage. The damage measures are the behaviour gate's pass rate (≥ base − 0.1, texts kept) and held CE.
+  Mellum v2 plateaued at response KL 0.36–0.38 with the gate at 0.75–0.83 (base 0.75), which the 0.25 bound would
+  have failed.
+- `drift_gate_rise` 0.05 replaces `drift_gate_now`. The gate runs while warning every `drift_gate_every` (300)
+  updates, and at once when response KL has risen 0.05 since the last gate. In v2 a level trigger at 0.35 fired at
+  every check once KL plateaued above it, which brought back ~30% gate overhead.
+- `drift_ce_windows` 4: every drift check logs held CE on the first 4 held windows, with its step-0 base, so the
+  held-CE minimum is visible between evals (v2's train CE 0.07 suggested memorisation).
