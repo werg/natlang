@@ -100,11 +100,12 @@ def main():
     for name in ('probes', 'base-outputs', 'candidate-outputs'):
         p.add_argument('--' + name + '-sha256', required=True)
     p.add_argument('--device', default='cuda')
-    p.add_argument('--reference-tokens', type=int, default=4096)
+    p.add_argument('--reference-tokens', type=int, default=None,
+                   help='optional explicit per-row reference cap; by default each rendered prompt gets its full declared response budget')
     p.add_argument('--max-response-kl', type=float, default=.5)
     p.add_argument('--max-gate-drop', type=float, default=.1)
     a = p.parse_args()
-    if a.reference_tokens < 1 or a.max_response_kl < 0 or not 0 <= a.max_gate_drop <= 1:
+    if (a.reference_tokens is not None and a.reference_tokens < 1) or a.max_response_kl < 0 or not 0 <= a.max_gate_drop <= 1:
         p.error('invalid assessment bounds')
     run(a)
 

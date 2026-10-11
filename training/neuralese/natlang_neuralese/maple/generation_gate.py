@@ -126,14 +126,17 @@ def held_kl(model, held: dict, rows: int = 48, prompt_weight: float = 0.25) -> d
 
 @torch.no_grad()
 def capture_reference(model, tokenizer, prompts: list[dict], render, eos: int, *, max_new: int = 256, k: int = 64,
-                      max_tokens: int = 4096, generated_responses: list[list[int]] | None = None) -> dict:
+                      max_tokens: int | None = None, generated_responses: list[list[int]] | None = None) -> dict:
     """A drift-monitor reference captured from ``model`` itself (the base model, before any update), in the teacher
     shards' format (``ids``, ``top_ids``, ``top_logp``, ``prompt_len``): each prompt rendered, answered greedily, and
     the model's own top-``k`` log-probabilities at every position. ``held_kl`` against it measures how far a later
     model has moved from this one: the monitor path of a lineage without a registered teacher artifact (no
-    preservation loss reads it)."""
+    preservation loss reads it). By default each row is sized to its rendered prompt plus its declared generation
+    budget; callers may pass an explicit per-row cap only when response truncation is acceptable."""
     if generated_responses is not None and len(generated_responses) != len(prompts):
         raise ValueError('saved reference responses must align one-to-one with prompts')
+    if max_tokens is not None and (isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1):
+        raise ValueError('reference token cap must be a positive integer when supplied')
     device = next(model.parameters()).device
     reference = {"ids": [], "top_ids": [], "top_logp": [], "prompt_len": [], "capture_coverage": []}
     for index, prompt in enumerate(prompts):
@@ -144,13 +147,17 @@ def capture_reference(model, tokenizer, prompts: list[dict], render, eos: int, *
             raise ValueError('reference responses must be nonempty lists of token IDs')
         # Never chop the prompt to fit the teacher shard budget: that used to remove
         # every response position from long native prompts and produce NaN drift.
-        kept = generated[:max(1, max_tokens - len(prefix))]
+        # By default reserve the declared generation budget after the actual rendered prompt.
+        # An explicit cap remains available for callers that deliberately accept response truncation.
+        row_limit = max_tokens if max_tokens is not None else len(prefix) + budget
+        kept = generated[:max(1, row_limit - len(prefix))]
         if not kept:
             raise ValueError("reference capture produced no response tokens")
         ids = prefix + kept
         reference['capture_coverage'].append({'id': prompt.get('id'), 'prompt_tokens': len(prefix),
                                               'generated_tokens': len(generated), 'response_tokens': len(kept),
                                               'response_truncated': len(kept) < len(generated),
+                                              'reference_token_limit': row_limit,
                                               'max_new_tokens': budget, 'effective_tokens': len(ids)})
         sequence = torch.tensor([ids], device=device)
         hidden = model.model(input_ids=sequence).last_hidden_state[0, :-1]
