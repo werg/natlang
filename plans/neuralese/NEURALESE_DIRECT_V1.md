@@ -226,6 +226,72 @@ with a test.
 Storage: the 44 GB full state was written twice at step 1000 (best, then the due point), which split the hard link.
 The two files were byte-identical and are re-linked. Fixed in 32314556.
 
+## End-to-end stage (DRAFT for review; not implemented)
+
+The owner's decision of 2026-10-11 gives the Neuralese value requirement to this stage. It starts from a qualified
+direct stage. Its prerequisite is Pop's shared runtime/export qualification on the exact starting weights, which passed
+on Mellum run-v1 with raw-token heads (above).
+
+**1. Producers and consumers.** Training data are natlang trajectories in which one call's result is read by a later
+call: a producer span, then a consumer span whose input contains that result.
+- **Producer:** the producer span is written with the shared `serve.direct_write.DirectWriter`, through the full
+  backbone, one causal-conv segment per call. Its output is a block of Neuralese values, one per written position, up
+  to the call's length.
+- **Consumer:** the consumer reads the block where the runtime reads any block, `heads.read_embeddings`
+  (raw-token heads frame it with the control rows). The values live in input-embedding space by construction, so the
+  reader is the identity at init.
+- **Reader mapping:** if one is needed, it is the heads' existing `read_adapter`, declared in the recipe,
+  zero-initialised as a residual, and present only if a measurement asks for it (one implementation per concept, no
+  premature components).
+
+**2. The TokenChoiceProjection comes on.** It is recipe-declared and identity at init, so step 0 still equals the
+direct stage (an identity check like the direct stage's).
+- **Why:** it lets the readout used for token prediction separate from the hidden state that produces Neuralese.
+  Without it, every gradient that makes values more useful to consumers also moves the token readout, and the
+  reverse.
+- **Shared code:** it is the `token_choice_projection` already in `direct_sft` (lm_head(norm(TCP(h)))).
+- **Pending:** the shared Engine and `direct_export` refuse it today (f4c7211b). Wiring it through the writer and
+  the export is a prerequisite, and Pop owns the runtime.
+
+**3. What trains, and on which losses.**
+- **Trainable parts:**
+  - the backbone latents (attention and experts, now really selected, a8972488), plus routers and norms at the
+    backbone lr;
+  - the NeuraleseProjection;
+  - the TokenChoiceProjection;
+  - the reader mapping, only if declared.
+- **Losses:**
+  - (a) whole-trajectory token CE as in the direct stage, so producer turns stay supervised on their gold tokens;
+  - (b) the consumer's CE on its gold continuation, reading the producer's Neuralese block, with gradients flowing
+    through the block into the producer's writer (the replay path the runtime review verified: producer replay
+    gradient delta 0, finite projection gradients);
+  - (c) no value-reconstruction loss. The run-v1 metric showed it saturates; it stays a report.
+- **Optimizer, guard and QAT:** same as direct (LionSR 3e-6 latents, guard option 2, `drift_every`), with QAT woven in
+  as before.
+
+**4. The gate is values against tokens.** On held trajectories, each consumer is evaluated twice on the same producer
+calls:
+- (V) reading the producer's Neuralese block;
+- (T) reading the producer's token text (the gold, or the model's own greedy text, to be decided; the model's own is
+  the fair runtime comparison).
+
+Measured: consumer task success (exact verifiers where the task has them) and consumer CE on the gold continuation.
+- **Passes when:** V is at least as good as T on success, and V's consumer CE is lower than T's by a declared margin,
+  both on held data.
+- **Also required:** the behaviour gate and no drift stop.
+- **Controls, reported:** zeroed and shuffled blocks. V must beat both by more than noise, so a consumer that ignores
+  its input cannot pass.
+- **Runtime requalification:** on the exact final weights (AGENTS.md: runtime transport/gradient replay is qualified
+  against those weights).
+
+**5. Open questions for review.**
+- T reads gold text or the model's own greedy text.
+- The declared margins.
+- Which natlang trajectories provide producer→consumer pairs, and how many held pairs.
+- Whether the block length is fixed (e.g. 8/32 as in the runtime review) or follows the call's token length.
+- The anchor heads: raw-token heads for Mellum, which needs a raw-token Mellum anchor.
+- Whether the gate's KL bound is combined or response-only (the open run-v1 question).
+
 ## Exact semantics (answers to Pop, pop-f7c5 / pop-b359)
 
 1. **Positional shift and Neuralese span.**
