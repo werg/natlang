@@ -1039,6 +1039,16 @@ def main(argv=None):
         from .direct_export import load_direct_artifact
         direct = load_direct_artifact(args.direct_artifact, base_snapshot=args.direct_base_snapshot, device=args.device)
         engine = direct.engine
+        if direct.token_choice_projection is None:
+            # Direct SFT deliberately has no TCP. The end-to-end stage enables
+            # its distinct identity readout projection from its first update.
+            from ..model.neuralese_projection import TokenChoiceProjection
+            direct.token_choice_projection = TokenChoiceProjection(
+                **direct.neuralese_projection.stack.config).to(args.device)
+            engine.token_choice_projection = direct.token_choice_projection
+            print(json.dumps({'event': 'direct_e2e_token_choice_initialized',
+                              'initialization': 'identity',
+                              'config': direct.token_choice_projection.stack.config}), flush=True)
     else:
         engine = load_engine(args.base, heads_checkpoint=args.heads, device=args.device)
     if args.token_cache_mib:
