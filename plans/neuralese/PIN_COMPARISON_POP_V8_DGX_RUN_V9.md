@@ -141,3 +141,36 @@ MuonSR5e-7 passed guard20 (CE5.795,value delta−.09954,responseKL.01213), was s
 checkpointed40 when the new optimizer decision arrived, and remains evidence.
 V5 launch refused a changing live documentation hash before model work; V6
 pins immutable lineage-doc snapshots. Old failed/stopped lineages remain held.
+
+### Actual new direct runs — verified 2026-10-11 10:49 UTC
+
+Read-only inspection resolved the active DGX location:
+`/home/werg/natlang/runs/neuralese-direct-mellum-20261011/run-v1/runtime/natlang_neuralese`.
+Its 151 Python files exactly match `recipe-plan.json`'s code inventory.
+Compared with Pop V7's frozen package pin, **149/151 are byte-identical; no
+machine-only modules**. The two differing files contain operational changes:
+`train/direct_sft.py`: newer optional smoke no-save-state switch (off for both
+production runs), distinct drift termination status/completed flag;
+`train/recipe.py`: accept pinned heads in declared direct launches, distinguish
+process exit from completed step count. No differences in loss, forward pass,
+projection, readout, or optimizer math. All changes are published shared code.
+The stale canonical development package and active frozen package are different
+inventories; neither should be used as a substitute for the other.
+
+| Current direct setting | Pop V7 | DGX direct run-v1 |
+|---|---|---|
+| Model | LFM2.5-350M dense | Mellum2.1 12B MoE |
+| Context capacity / supervised target | 32768 / 256 | 8192 / 1024 |
+| Batch | 1 | 1 |
+| Matrix optimizer | LionSR3e-7 (gentler after local drift) | LionSR3e-6 |
+| Norm/router LR / projection LR | 7.5e-7 / 3e-4 | 7.5e-6 / 3e-4 |
+| Input | root-adopted4962 text (3258train/1704test) | native records/pieces from existing assembled-v3 |
+| Quantization | none | shared q4/ternary ladder, progress0→.35 |
+| Preservation loss | none | none (teacher shards monitor only) |
+| Steps / eval / full checkpoint cadence | 1000 / 20 / 100 | 1000 / 1000 / 1000 |
+| Behavior reference | cleanbase26/48; heldKL bound.5 | conversionbase18/24; heldKL bound.25 |
+
+The Pop differences are explicit recipe overrides; the wider capacity and smaller
+target keep long context available within8GB. The gentler rates follow actual
+local drift failures. Frequent early evaluation gives local diagnostics at a lower
+cost than the larger DGX gate. Completion alone does not qualify either model.
