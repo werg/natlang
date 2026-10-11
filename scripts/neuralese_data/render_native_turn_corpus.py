@@ -133,7 +133,9 @@ def reserved_hit(row: dict, needles) -> str | None:
     index = needles if isinstance(needles, dict) else None
     if index is None:
         raise TypeError('reserved needles must be indexed with index_needles')
-    haystack = reserved_normalize(' '.join(_strings(row.get('task'), [])))
+    # The program IR (task) and the user turns: a row without a program IR carries its inputs in the user turn.
+    haystack = reserved_normalize(' '.join(_strings([row.get('task'), [m.get('content') for m in row.get('messages') or []
+                                                                         if m.get('role') == 'user']], [])))
     for i in range(len(haystack) - _PREFIX + 1):
         for sid, needle in index.get(haystack[i:i + _PREFIX], ()):
             if haystack.startswith(needle, i):
@@ -149,7 +151,7 @@ def index_needles(needles):
 
 
 def program_key(row: dict) -> str:
-    return (row.get('source_ref') or {}).get('program_ir_id') or row.get('program_id') or ''
+    return (row.get('source_ref') or {}).get('program_ir_id') or row.get('program_id') or row.get('id') or ''
 
 
 def chain_key(row: dict) -> str:
@@ -291,6 +293,16 @@ def select(args, shard_dir: Path):
                     reason = 'duplicate_source_row_id'
                 elif args.train_only and row.get('split') != 'train':
                     reason = 'held_split_kept_out'
+                elif (args.registry_admits_reason and isinstance(row.get('training_admission'), dict)
+                      and row['training_admission'].get('approved') is False
+                      and str(row['training_admission'].get('reason') or '').startswith(args.registry_admits_reason)):
+                    # The registry's training admission overrides this row-level hold (recorded per row).
+                    row['training_admission'] = {**row['training_admission'], 'approved': True,
+                                                 'row_hold_overridden_by_registry_admission': args.corpus_id}
+                    line = json.dumps(row, ensure_ascii=False).encode()
+                    counts['approved_by_registry_admission'] += 1
+                if reason is not None:
+                    pass
                 elif not (isinstance(row.get('training_admission'), dict)
                           and row['training_admission'].get('approved') is True):
                     reason = 'not_approved:' + str((row.get('training_admission') or {}).get('reason') or 'approved=false')[:80]
@@ -453,6 +465,12 @@ def render_shard(job):
             parity['program_header_missing'] += 1
             continue
         stripped, reason, info = _G['strip_row'](full, tok, im_start, im_end)
+        if stripped is None and reason == 'no leading system turn' and (full['text'], full['token_ids']) == (
+                ph['text'], ph['token_ids']):
+            parity['equal_no_system_turn'] += 1  # nothing to strip: both renderings are the same document
+            ph['system_prompt_mode'] = 'none'
+            kept_ph.append(ph)
+            continue
         if stripped is None:
             parity['strip_failed'] += 1
             omissions.append({'id': full['id'], 'rendering': 'program-header', 'stage': 'parity', 'reason': 'strip_failed: ' + reason})
@@ -658,6 +676,8 @@ def main(argv=None):
     p.add_argument('--program-header-as-full', action='store_true',
                    help="the system prompt is the program's own prompt, not generic runtime prose: keep it")
     p.add_argument('--pieces', type=Path, nargs='*', default=[], help='jsonl {name, text}: soft prompt pieces')
+    p.add_argument('--registry-admits-reason', default='',
+                   help='rows held only for a reason starting with this text are admitted by the registry entry')
     p.add_argument('--train-only', action='store_true', help='leave held rows out entirely (their held set lives elsewhere)')
     p.add_argument('--decision-exclude-ids', type=Path, nargs='*', default=[],
                    help='jsonl {id}: decisions already rendered elsewhere; used only inside whole trajectories')
