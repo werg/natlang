@@ -29038,6 +29038,26 @@
       "training_admission": false,
       "admission": "held-pending-explicit-quality-and-source-review",
       "notes": "Fourrootreviewed prospectiveholds; prior64retained68total. Originalsources/outcomes unchanged; noautomaticDPOnegative."
+    },
+    {
+      "id": "luna-choice-confidence-v67-closed-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v67-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-generation-quality-and-source-closure",
+      "training_admission": false,
+      "admission": "held-pending-explicit-quality-and-source-review",
+      "notes": "56completequeueaccounting55done1quiesced,37oracleaccept18semanticreject1quiesced. No blanketpositive/admission; eightunanswered unscored."
+    },
+    {
+      "id": "luna-choice-confidence-v67-quality-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v67-folder-terminal-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-source-and-trajectory-quality-evidence",
+      "training_admission": false,
+      "admission": "quality-evidence-only",
+      "notes": "Exactall56pins/maps/files,21explicitdisagreements,perchild visibilitylimited218IDs/403. Additivecorrection/rootattribution prohibits treatingall8unanswered asbadsource; BoBilinskyblockinginput reviewcandidate only. Allheld."
     }
   ],
   "coverage_backlog": [
