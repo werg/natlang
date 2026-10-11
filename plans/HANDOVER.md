@@ -11353,3 +11353,15 @@ Muon3e-6 finite300 comparison: heldCE1.048767 vsbase6.192337, behavior26/48 same
 Best225 heads_lr3e-5 continuation launched through sharedcontainerlauncher at `native-e2e-best225-heads-lr3e-5-diagnostic-launch-v3`. Original preparedv1 omitted diagnosticparity and failed beforetraining; v2 correctedparity but collidedwith same-parent launcher-runtime. Bothfailure receipts retained. V3freshdirectory corrects theseoperationalissues, unchangedapprovednumericparameters. Sharedlauncher now checksdeclaredparity inhostpreflight and names frozenruntime byreceiptstem so differentretryreceipts cannotcollide. AST/diffchecks only; no automatedtests thisturn.
 
 Closednativev3finalcheckpoint and directbase1000 checkpoint/best were SHAverified relocatedto canonical.local/checkpoint-storage-relief withoriginalpaths symlinked. Nooptimizer state discarded. Closedstep600servingexport similarlyrelocated withmanifest/payloadhashes preserved.
+
+### 19:33 UTC — continued low-cadence training, fresh generation, admitted data
+
+Actual best225 heads_lr3e-5 diagnostic continuation passed step400 with errors0: softCE1.094201, crispCE1.180741, reciprocal written.753968 vs shuffled1.242900 (parent written.929003). Forcednative lengths remain; no broad semantic/stopping qualification. Evalshare4.21% inclstartup, regular200cadence. Continue samefullstate/objectives through687; independently scoretrainedTCPvsraw exactselectedweights afterward.
+
+Root approved69fresh V43suffix658–1374 programs/543 exactsourceagreement labels usingruntimeV19. Independent374queue/2877job/60source scan matched14950 reservedIDs/14958groups withzeroID/groupoverlap; approvedplan29634734d5cc0ccd166ea0314a11b9ce628a84213c4980095f8a333dc571b3af. FiveLuna lanesrunning; static69/69reference replays passed, output heldpendingqualityreview.
+
+Rootadopted926 successfulnative SFT decision targets from37exact-map V17/V18parents and274train sourceitems;59failed/unexecutedtargets preservedexcluded.65successfulrows legitimatelyincludepriorfailed-response history. Manifest/registry aa462d40 synchronizedDGX16/16files. All8Yahoo unknown-license programs includedprovenanceonly. No recurrence/channel qualification inherited; sharedconversionaudit nowassigned. Genericinlineadmit reportsrootTurns0/all985admitted andwasnotusedfornativegate.
+
+Pulled shared2cd3bb87/8c1714ea decisions: behaviorgate ishard, responseKL.5warn/1.5stop, cheapMuonSRcubic5 shareddirectdefault (LFM3e-6/Mellum1e-5), supervisedbudget768000positions (~2epochs). LFM futuredirect3000steps/eval3000/save1500; activeE2E diagnostic remainsitsdeclaredLion3e-7 unchanged tofinishheadsremediation. HistoricalMuon300report/certificateunchanged; acceptablecomparativeresultundernewpolicyisnotretroactivefullstagequalification.
+
+SharedCallStore fix bccb1cc4: lowfree disk forcedbound0, per-rowcollect caused~TB processreadtraffic duringauthoredreference replay. executeProgram exposesexistingcalls:false; onlystaticauthoredreferenceoptsout. Evictionbatches64oldesteligible records/events withtransactionalpinprotection andonecollectperbatch. Defaultlivegenerationrecordingunchanged. Typecheckpassed; noautomatedtestsclaimed.
