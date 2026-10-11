@@ -363,9 +363,10 @@ def build(args):
                                 'max_state_chars': args.max_state_chars})
             if not isinstance(options, list) or any(not isinstance(option, str) for option in options):
                 reasons.append({'code': 'source_quality_invalid_options'})
-            elif not 2 <= len(options) <= args.max_options:
+            elif len(options) < 2 or (args.max_options is not None and len(options) > args.max_options):
                 reasons.append({'code': 'option_count_out_of_range', 'option_count': len(options),
-                                'min_options': 2, 'max_options': args.max_options})
+                                'min_options': 2, 'max_options': args.max_options,
+                                'max_limit_kind': 'explicit_operator_limit' if args.max_options is not None else None})
             elif len(set(options)) != len(options):
                 reasons.append({'code': 'source_quality_duplicate_options'})
             if not isinstance(case.get('answer'), str) or (isinstance(options, list) and case.get('answer') not in options):
@@ -508,6 +509,8 @@ def build(args):
             'shortfall': args.count - len(selected),
             'max_state_chars': args.max_state_chars,
             'max_options': args.max_options,
+            'option_count_policy': ('explicit operator limit applied; this is a selection limit, not a data-quality judgment' if args.max_options is not None else
+                                    'no upper option-count source filter; exact rendered visibility/replay and the live provider context budget are checked downstream'),
             'required_role': 'train', 'required_kind': 'choice',
             'disjointness': 'case IDs and source groups are checked against every prior-root provider-*/cases.jsonl and against the selected rows',
             'preservation': 'selected source answers, IDs, groups, and original row hashes are preserved; only explicitly derived shared criteria may be added to prepared model input rows',
@@ -551,7 +554,8 @@ def main():
     parser.add_argument('--out', required=True, help='Fresh output directory; existing directories are refused')
     parser.add_argument('--count', type=int, required=True)
     parser.add_argument('--max-state-chars', type=int, default=3000)
-    parser.add_argument('--max-options', type=int, default=20)
+    parser.add_argument('--max-options', type=int, default=None,
+                        help='Optional explicit source-selection ceiling; default leaves option counts unfiltered and relies on downstream exact rendering/replay and live context budget checks')
     parser.add_argument('--families', action='append', required=True,
                         help='Family name or comma-separated family names; may be repeated')
     parser.add_argument('--source-quality-holds',
@@ -559,8 +563,8 @@ def main():
     parser.add_argument('--exclude-cases', action='append', default=[],
                         help='Prior annotation program JSONL; validates and reserves its exact source IDs/groups; may be repeated')
     args = parser.parse_args()
-    if args.count <= 0 or args.max_state_chars <= 0 or args.max_options < 2:
-        parser.error('--count and --max-state-chars must be positive; --max-options must be at least 2')
+    if args.count <= 0 or args.max_state_chars <= 0 or (args.max_options is not None and args.max_options < 2):
+        parser.error('--count and --max-state-chars must be positive; an explicit --max-options must be at least 2')
     try:
         manifest = build(args)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
