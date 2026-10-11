@@ -11240,3 +11240,32 @@ No context reduction, frozen backbone or detached producer gradient was used.
   disagreements, including an ambiguous Yahoo annotation),39/39 complete same
   child-request visibility. Held V15/V41/V43 receipts and approved V43 launch
   are registered and DGX verified (1b722e25,d4c24dbc); no admission changes.
+
+### 16:42 UTC — owner cadence correction, actual full-state resume
+
+- Owner asked to stop superfrequent local evaluation/checkpoints. The local25
+  cadence was consuming~25% eval wall, versus DGX direct recipeeval2000/save1000.
+  Changed local native epoch to200/200: next evaluations/checkpoints400,600,
+  then final687. Emergency saves and final evaluation remain. Cadence is
+  operational in shared runner/resume validation (43707500); evaluation sampler
+  state restoration preserves training RNG. Do not revert to25 on continuation.
+- Safely stopped v2 at251, checkpointSHA
+  4c0a67e5af0041ba168f2a3d9be14640061d442673a2ce6e4cc76965a1138acb.
+  Proof builder e92fb5b8 actually verified stage/launch/recipe/source/parent
+  identity in pinned CPU container. ProofSHA
+  fcb21e2510b2f3c8a6b9df4f3fc76f1c706ad9c03c7d30e940ec75a9d8821e93
+  under `native-e2e-cadence-handoff-v3/parent-proof.json`. Prior outputs unchanged.
+- Declared v3 recipe5b7981a7, fileSHA
+  aafb6a155c4a132ed9b9a4b1a004d661b782d9dcc1ce99bf7c66c96bfc8576c4,
+  continues the SAME687-update pass, corpus/objectives/rates, full optimizer/RNG
+  and cursor.161-file frozen shared package. Container
+  `pop-direct-native-e2e-endpoint-v3`, session99060, wrapper1173266,
+  actual trainer1173368. Launch/log in `native-e2e-cadence-handoff-v3`;
+  outputs `native-e2e-full-endpoint-epoch-v3/native_e2e`. Past261,errors0,
+  GPU observed100%/5.96GiB. Original/best v2 retained; no discarded pilot.
+- Actual restore report verifies266 slots kept,0 initialized, modeexact,
+ 102 omitted latent receipt names recovered from saved named groups. This
+  exercises parent proof and corrected shared latent restoration. Explicit
+  projection-rate handoff is still unexercised; heads rate remains3e-4.
+  Serving-export and nonlinear forced-sequence diagnostics remain next-window
+  work; no semantic/stopping qualification inferred from the resume.
