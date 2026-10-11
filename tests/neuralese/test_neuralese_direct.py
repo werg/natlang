@@ -223,6 +223,9 @@ def test_raw_token_mellum_anchor_opens_on_the_direct_serving_path(tmp_path, monk
             return {'<|extra_token_7|>': 33, '<|extra_token_8|>': 34}
 
         eos_token_id = 2
+        # Already bound to Mellum's declared history policy (the stub has no chat template to probe).
+        from natlang_neuralese.serve.chat import declared_history_reasoning
+        natlang_history_reasoning = {'policy': declared_history_reasoning('mellum')}
 
         def convert_tokens_to_ids(self, token):
             return self.get_vocab().get(token)
