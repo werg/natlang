@@ -59,6 +59,8 @@ def main():
                    help='maximum provider output tokens per response; recorded in the pool manifest')
     p.add_argument('--choice-contract', choices=['probabilities', 'label-confidence'], default='probabilities',
                    help='choice response shape; score/noul cases retain the probability contract')
+    p.add_argument('--response-format', choices=['json_schema', 'json_object'], default='json_schema',
+                   help='declared provider wire format; responses always use the same strict local validation')
     p.add_argument('--timeout', type=float, default=120)
     p.add_argument('--workers', type=int, default=4, help='total concurrent requests across paced quota groups')
     p.add_argument('--max-inflight-per-quota-group', type=int, default=2,
@@ -133,6 +135,7 @@ def main():
     identity = {'schema': 'natlang.gemini-decision-pool/1', 'training_admission': False,
                 'cases_sha256': hashlib.sha256(Path(args.cases).read_bytes()).hexdigest(),
                 'choice_contract': args.choice_contract,
+                'response_format': args.response_format,
                 'max_output_tokens': args.max_output_tokens,
                 'models': models, 'endpoint': ENDPOINT, 'workers': args.workers,
                 'max_inflight_per_quota_group': args.max_inflight_per_quota_group,
@@ -154,7 +157,7 @@ def main():
         return _http_teacher(case, endpoint=ENDPOINT, model=model['id'], api_key=key,
             timeout=args.timeout, retries=0, initial_backoff=30, max_backoff=300,
             reasoning_effort=model['reasoning_effort'], max_output_tokens=args.max_output_tokens,
-            response_format='json_schema', choice_contract=args.choice_contract)
+            response_format=args.response_format, choice_contract=args.choice_contract)
     with ThreadPoolExecutor(max_workers=args.workers) as executor, out_path.open('a') as out, open(str(out_path) + '.attempts.jsonl', 'a') as journal:
         while cases or pending:
             now = time.time()
@@ -284,11 +287,26 @@ def main():
                     group.update(not_before=time.time() + delay, quota_ids=quota_ids)
                     cases.appendleft(case)
                     print(json.dumps({'event': 'model_cooldown', 'model': model['id'], 'seconds': delay}), flush=True)
-                elif status in (400, 401, 403, 404):
+                elif status in (401, 403, 404):
                     group['disabled'] = f'http_{status}_requires_review'
                     cases.appendleft(case)
                     print(json.dumps({'event': 'model_disabled', 'model': model['id'], 'status': status}), flush=True)
                 else:
+                    # HTTP 400 describes this request's argument/payload, not the
+                    # model quota group's health. Preserve the failed case as a
+                    # provider error row below and continue using the model for
+                    # later cases; any alternate wire format needs a fresh,
+                    # explicitly reviewed plan rather than a hidden fallback.
+                    if status == 400:
+                        provider['failure_class'] = 'request_specific_http_400'
+                        structured_error = next((h.get('provider_error') for h in provider.get('retry_history', [])
+                                                 if h.get('provider_error')), {})
+                        print(json.dumps({'event': 'provider_request_rejected',
+                                          'id': case['id'], 'model': model['id'],
+                                          'status': status,
+                                          'provider_error_code': structured_error.get('code'),
+                                          'provider_error_status': structured_error.get('status'),
+                                          'response_sha256': provider.get('response_sha256')}), flush=True)
                     group['failure_streak'] = 0
                     reprobe = group.get('daily_quota_reprobe')
                     if reprobe is not None:

@@ -160,12 +160,36 @@ def _google_retry_metadata(decoded):
     return max(delays, default=None), sorted(set(quotas))
 
 
+def _provider_error_object(decoded):
+    """Extract a provider error from known top-level response envelopes."""
+    candidates = []
+    if isinstance(decoded, dict):
+        candidates.append(decoded.get('error'))
+    elif isinstance(decoded, list):
+        candidates.extend(item.get('error') for item in decoded if isinstance(item, dict))
+    for candidate in candidates:
+        if isinstance(candidate, dict):
+            return candidate
+    return None
+
+
 def _decode_http_answer(content):
-    """Accept one JSON value with an optional Markdown wrapper, never arbitrary suffix prose."""
+    """Accept one JSON value with recognized wrappers, never arbitrary prose."""
     if not isinstance(content, str):
         raise ValueError('response content must be text')
     text = content.strip()
     wrapper = None
+    teacher_reasoning = None
+    for tag in ('thought', 'think'):
+        opening, closing = f'<{tag}>', f'</{tag}>'
+        if text.startswith(opening):
+            end = text.find(closing, len(opening))
+            if end < 0:
+                raise ValueError(f'unterminated leading {tag} block')
+            teacher_reasoning = text[len(opening):end]
+            text = text[end + len(closing):].strip()
+            wrapper = f'leading_{tag}_block'
+            break
     if text.startswith('```'):
         first, separator, remainder = text.partition('\n')
         if not separator or first.lower() not in {'```', '```json'}:
@@ -173,14 +197,14 @@ def _decode_http_answer(content):
         if not remainder.rstrip().endswith('```'):
             raise ValueError('unterminated JSON fence')
         text = remainder.rstrip()[:-3].strip()
-        wrapper = 'markdown_json_fence'
+        wrapper = 'markdown_json_fence' if wrapper is None else wrapper + '+markdown_json_fence'
     parsed, end = json.JSONDecoder().raw_decode(text)
     suffix = text[end:].strip()
     if suffix == '```' and wrapper is None:
         wrapper = 'trailing_markdown_fence'
     elif suffix:
         raise ValueError('extra content after JSON answer')
-    return parsed, wrapper
+    return parsed, wrapper, teacher_reasoning
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -245,13 +269,21 @@ def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_b
             decoded = None
         history_entry = {'attempt': attempt + 1, 'status': response_status,
                          'response_sha256': response_hash}
-        if response_status != 200 and isinstance(decoded, dict):
-            provider_error = decoded.get('error', {})
-            if isinstance(provider_error, dict):
+        if response_status != 200:
+            provider_error = _provider_error_object(decoded)
+            if provider_error is not None:
                 history_entry['provider_error'] = {
                     'code': provider_error.get('code'), 'status': provider_error.get('status'),
                     'message': str(provider_error.get('message', '')).replace(api_key or '\0', '[REDACTED]')[:2000],
+                    'envelope': 'top_level_array' if isinstance(decoded, list) else 'top_level_object',
                 }
+            else:
+                history_entry['error_envelope'] = (
+                    'json_array_without_error' if isinstance(decoded, list) else
+                    'json_object_without_error' if isinstance(decoded, dict) else
+                    'non_json_or_empty'
+                )
+            history_entry['response_body_bytes'] = len(raw)
         retry_after = _retry_after_seconds(headers.get('retry-after'))
         google_delay, quota_ids = _google_retry_metadata(decoded)
         if google_delay is not None:
@@ -275,7 +307,7 @@ def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_b
         time.sleep(delay)
 
     answer, error, validation_detail = None, None, None
-    response_content, finish_reason, response_wrapper = None, None, None
+    response_content, finish_reason, response_wrapper, teacher_reasoning = None, None, None, None
     if response_status != 200:
         error = f'http_{response_status}' if response_status else 'network_error'
     else:
@@ -283,7 +315,7 @@ def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_b
             choice = response_body['choices'][0]
             finish_reason = choice.get('finish_reason')
             response_content = choice['message']['content']
-            parsed, response_wrapper = _decode_http_answer(response_content)
+            parsed, response_wrapper, teacher_reasoning = _decode_http_answer(response_content)
             answer = _validate_http_answer(case, parsed, choice_contract=choice_contract)
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
             error = 'invalid_typed_response'
@@ -305,6 +337,9 @@ def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_b
         provenance['response_content'] = response_content[:65536]
         provenance['response_content_truncated'] = len(response_content) > 65536
         provenance['response_content_sha256'] = hashlib.sha256(response_content.encode('utf-8')).hexdigest()
+    if teacher_reasoning is not None:
+        provenance['teacher_reasoning'] = teacher_reasoning[:65536]
+        provenance['teacher_reasoning_truncated'] = len(teacher_reasoning) > 65536
     return answer, provenance
 
 
