@@ -173,7 +173,14 @@ guard never stopped. The behaviour gate as declared still fails. Its pass rate o
 `max_held_kl` of 0.25 (inherited from raw-recurrence-mellum-v11's gate) bounds the combined prompt+response held KL,
 which is 0.681. The accepted direct-v1 drift policy keys on response KL and keeps prompt KL report-only, and response
 KL at gate time is 0.246, under 0.25. So run-v1 is unqualified as declared, and would qualify if the gate's KL bound
-were read as response KL. That decision is open, so no certificate is written.
+were read as response KL.
+
+Resolved by the coordinator the same day under the owner's "keep moving forward" rule: the gate's KL bound reads
+response positions (`held_kl_bound: response`, 58e901f6), matching the guard. run-v1 now qualifies without retraining:
+gate 0.75 ≥ 0.65 and response KL 0.246 ≤ 0.25. `run-v1/direct-certificate.json` is written and marked **evidence only,
+not a forward base**, because attention was untrained (a8972488) and the anchor is legacy-rms-v1. The forward Mellum
+lineage is `neuralese-direct-mellum-v2`: a raw-token anchor built by `foundation_heads --profile raw-token-v1`,
+attention trained, `drift_every` 100, 2000 steps, `runs/neuralese-direct-mellum-20261011/run-v2`.
 
 **Runtime review on Mellum** (Pop's shared `eval/direct_runtime`, 06f3a5ab, on run-v1's step-1000 weights;
 `run-v1/runtime-review`): `runtime_qualified` true at write lengths 8 and 32.
