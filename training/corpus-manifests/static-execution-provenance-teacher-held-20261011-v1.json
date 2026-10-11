@@ -1,0 +1,359 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "static-execution-provenance-teacher-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/static-execution-provenance-teacher-20261011-v1",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 11119,
+      "sha256": "55bcc6faff2b588e33fd6e9e0b16313d84e201bc58cab270ef7fcf8eefb3b579",
+      "lines": 1
+    },
+    {
+      "path": "execution-components/manifest.json",
+      "bytes": 23578,
+      "sha256": "5661caebdc6d7764db3fc7e23e9de82cf070dfc08a1f6fdcf526cfa81dbd7bf4"
+    },
+    {
+      "path": "execution-components/manifest.sha256",
+      "bytes": 80,
+      "sha256": "29e645615dd0a3dbb705a37ebeb6525b9a9d8ef1cf67965d324ce0798841c2d1"
+    },
+    {
+      "path": "execution-components/payload/001-decision_task_contracts.json",
+      "bytes": 2114,
+      "sha256": "b941a04443d3a47768ef8bdf68730b4fae86a1959aa16abdc6db7b559767ec73"
+    },
+    {
+      "path": "execution-components/payload/002-environment.js",
+      "bytes": 19178,
+      "sha256": "10177b5437c3f81ddb96112ddd4133d113995751392799086162696170a27274"
+    },
+    {
+      "path": "execution-components/payload/003-agent.js",
+      "bytes": 96883,
+      "sha256": "6e0ef3304e2e1fd2a177b2746e86b792bc4e0f94e4c838482859119dbe9dbe88"
+    },
+    {
+      "path": "execution-components/payload/004-archive.js",
+      "bytes": 2677,
+      "sha256": "db4d9b3e88fc59cb04fe002aeb46769d75cd489a0a5b2f6f702c49e865e444b9"
+    },
+    {
+      "path": "execution-components/payload/005-cutoff.js",
+      "bytes": 2346,
+      "sha256": "63e175e4925e69e5324f49eacf5774bc9b67f2dc256f34daf2510c7a6bd4508e"
+    },
+    {
+      "path": "execution-components/payload/006-data-layout.js",
+      "bytes": 10945,
+      "sha256": "8d358171a00a422574f8bcd5d3e3114e210b39addf8d5788a21e5c4179934cd3"
+    },
+    {
+      "path": "execution-components/payload/007-decision-review.js",
+      "bytes": 1161,
+      "sha256": "c940c27195ce7af1f2f6a9c130b2f0c76a7b605279d4e89d67dae9dba88437d9"
+    },
+    {
+      "path": "execution-components/payload/008-decision.js",
+      "bytes": 2846,
+      "sha256": "3d7bc8773a9dab098f374cdeca0ec9de2d812870953212fe9cf70606a3d90486"
+    },
+    {
+      "path": "execution-components/payload/009-effects.js",
+      "bytes": 5420,
+      "sha256": "350777166ebc11ac55946ff1ff8c4c4876e610198173ef685e1fe7c9d7bde8c6"
+    },
+    {
+      "path": "execution-components/payload/010-eval-types.js",
+      "bytes": 3805,
+      "sha256": "b53bc5bebd07a675f4ad1184149e6770cd29a11c1f3fb91dfed19957dd96f182"
+    },
+    {
+      "path": "execution-components/payload/011-evaluator.js",
+      "bytes": 1159,
+      "sha256": "1d4a4569c9be2381dd07d6102fedb41a90cc0776a2a9413eeeb5de79dbe04da4"
+    },
+    {
+      "path": "execution-components/payload/012-external.js",
+      "bytes": 2131,
+      "sha256": "7abe4557e8703cd7da988cc35215a41c26526a841f73a153329410b7982d2fd1"
+    },
+    {
+      "path": "execution-components/payload/013-file-diff-preview.js",
+      "bytes": 2459,
+      "sha256": "0230fb319ee478d58e3a0a56531d32260a2283ea3a87790e0dc7edb1386d446e"
+    },
+    {
+      "path": "execution-components/payload/014-folder-python.js",
+      "bytes": 7997,
+      "sha256": "ccaec9ddaa14f7588e6f54f2e98d1b0a1c38845fdde5d95becbad853e660fc83"
+    },
+    {
+      "path": "execution-components/payload/015-folder-shell.js",
+      "bytes": 16792,
+      "sha256": "3ee57b63eb633686bbda420ab49239b58d41a8ab7267b2a947acded8e93309aa"
+    },
+    {
+      "path": "execution-components/payload/016-fusion-blocks.js",
+      "bytes": 1166,
+      "sha256": "a13ebc7006155a724aa79ee24f4148b0fb3d37f5ce0bc5d5c8b15b745c0eef2c"
+    },
+    {
+      "path": "execution-components/payload/017-graph.js",
+      "bytes": 8439,
+      "sha256": "e4c039b04156e08f1762e5c87470c21238fcab390ed73fc3a54f1265d6a5b4ba"
+    },
+    {
+      "path": "execution-components/payload/018-hash.js",
+      "bytes": 362,
+      "sha256": "4ee149d265d8a8a56009ada87c78ecf719a3e718d2363e492e2c1014cff3afe2"
+    },
+    {
+      "path": "execution-components/payload/019-introspection.js",
+      "bytes": 1732,
+      "sha256": "157d5ceabc8e3cd1e4506dd3c6d9627fd80758db41bda4c9c4f765258a10930b"
+    },
+    {
+      "path": "execution-components/payload/020-natlang-command.js",
+      "bytes": 3514,
+      "sha256": "53c9ae9e1cde203ab73d6f79340af48febdd56f77c24842dc6a5fddd0768e8f8"
+    },
+    {
+      "path": "execution-components/payload/021-neuralese-preview.js",
+      "bytes": 5032,
+      "sha256": "fad0daa89baffe980c13ec893d4c09bc7f49ea98511e7b1c5c82bf4e18c5855c"
+    },
+    {
+      "path": "execution-components/payload/022-neuralese-store.js",
+      "bytes": 6879,
+      "sha256": "0165d23034cbdd7ca71126fd1e6749495022717487d36e276e06059a3056f2d3"
+    },
+    {
+      "path": "execution-components/payload/023-neuralese.js",
+      "bytes": 9825,
+      "sha256": "3678475e743d6a280f5a97c3298895c5091714a45b78c4e3c35bd07deb219d23"
+    },
+    {
+      "path": "execution-components/payload/024-node-files.js",
+      "bytes": 5191,
+      "sha256": "5b57bb0061fefac5288212e988b98318eed3a60422f98046fc7016c9b6cbd5e1"
+    },
+    {
+      "path": "execution-components/payload/025-nz-file.js",
+      "bytes": 20388,
+      "sha256": "e07cbfa9d03bee539e42586f7d3dc6b164842eabe00f4e1db6ed617e90d0ee1e"
+    },
+    {
+      "path": "execution-components/payload/026-pages.js",
+      "bytes": 2551,
+      "sha256": "71503c4ee9a1e94cd1b321e9d90869194d46b9feb6b78ecc782a072938673533"
+    },
+    {
+      "path": "execution-components/payload/027-prompt.js",
+      "bytes": 35313,
+      "sha256": "1a5892f39074bbbbfe2797916135bac7eb0476101604ea515048c1f359d5905a"
+    },
+    {
+      "path": "execution-components/payload/028-pseudo-call.js",
+      "bytes": 3315,
+      "sha256": "bcea8ba1878ed0363ed1b5fa7f44d9c092a9aa830ea2082bd786023e2275336c"
+    },
+    {
+      "path": "execution-components/payload/029-python-folderfs.js",
+      "bytes": 7782,
+      "sha256": "c0c20c81c88ddcfd14a99154984c4019279b65bbb7359c2d959e749f4c63e969"
+    },
+    {
+      "path": "execution-components/payload/030-python-sources.js",
+      "bytes": 10148,
+      "sha256": "b63dc2b5d5bdc7f1f1648a0881a02a7501d5946f3c094defbd92fe710d3a8568"
+    },
+    {
+      "path": "execution-components/payload/031-refinement-settings.js",
+      "bytes": 3922,
+      "sha256": "9570ecb362859d2e8c47421e1b14d3e31f23887f36fb66acabf0f890c3214cda"
+    },
+    {
+      "path": "execution-components/payload/032-refinement.js",
+      "bytes": 15541,
+      "sha256": "965cdee33b033ce07785269438476a36e608859ad76117cea2783452fdee01be"
+    },
+    {
+      "path": "execution-components/payload/033-representation.js",
+      "bytes": 3865,
+      "sha256": "f879a1aa89ddf9d084e030b346f7d65a04c727566e804a7b8753ec05d512d52c"
+    },
+    {
+      "path": "execution-components/payload/034-runtime.js",
+      "bytes": 160333,
+      "sha256": "0bd6493485a6775e4d3fd70cbe4f6a8b0f0927a89f40ed5d07abe9fa2488c5a8"
+    },
+    {
+      "path": "execution-components/payload/035-scenario.js",
+      "bytes": 2525,
+      "sha256": "f8a9de34cbbd9bf6b478410570cacc2bbc498b10e5a928c9b4e22d9c5a823287"
+    },
+    {
+      "path": "execution-components/payload/036-scoped-fs.js",
+      "bytes": 35998,
+      "sha256": "4e42d185d70f0912acecd3decdd17985fe188b21e8f22c67e5b4f29a692cafe9"
+    },
+    {
+      "path": "execution-components/payload/037-system-prompts.js",
+      "bytes": 6264,
+      "sha256": "43a8071aa51bc1d82af2825a6de3b45ba9feb3f665f3d27ff51eaaa957fe4772"
+    },
+    {
+      "path": "execution-components/payload/038-tool-surface.js",
+      "bytes": 151,
+      "sha256": "49a3fbefcb171c20dae1e1fd4f1ea00df9a41784f80def6379f5531e81549538"
+    },
+    {
+      "path": "execution-components/payload/039-trace.js",
+      "bytes": 5616,
+      "sha256": "5330ff72927cd20cb2fa2ed3da7b5dcdd0c782869c30a8d87df74d5f123c04e3"
+    },
+    {
+      "path": "execution-components/payload/040-type-aliases.js",
+      "bytes": 944,
+      "sha256": "4daab72d6d1affb881c41fd10230270a820018449cdf0b5db6ed708472594a93"
+    },
+    {
+      "path": "execution-components/payload/041-types.js",
+      "bytes": 29456,
+      "sha256": "8ed10ad30dd107604082b9bc957db296c094a441fc35569de8cfd3351a1dd082"
+    },
+    {
+      "path": "execution-components/payload/042-untrusted.js",
+      "bytes": 5369,
+      "sha256": "f59f16b1fae0fd658eba067cf17d45eb693029b427777c7a51cc7470b712e3e2"
+    },
+    {
+      "path": "execution-components/payload/043-values.js",
+      "bytes": 20890,
+      "sha256": "4aba335069227efe95ad7e774736d3bae1367bb2609ed721d15430b107a5d70c"
+    },
+    {
+      "path": "execution-components/payload/044-scope-compiler.js",
+      "bytes": 80688,
+      "sha256": "c6101ed383046baf52665ba2112e08f7afb4168419542275117405896b3a600e"
+    },
+    {
+      "path": "execution-components/payload/045-graded.js",
+      "bytes": 22094,
+      "sha256": "171f554c7f097c39d53f916a2bdd69a9d6543e2dcb4a31bd1629d2c4213d16a1"
+    },
+    {
+      "path": "execution-components/payload/046-collector.js",
+      "bytes": 102805,
+      "sha256": "3445aafe0312d110964729480c29d9f960a3c9329ab806937679179ac285a5ef"
+    },
+    {
+      "path": "execution-components/payload/047-curriculum.js",
+      "bytes": 30024,
+      "sha256": "a77f724f6145ac566cb2caa724fb7fe43e2daaf446bc35af570c065b0780d4bc"
+    },
+    {
+      "path": "execution-components/payload/048-native-materializer.js",
+      "bytes": 128618,
+      "sha256": "6cb490b99e281a343e5a8ec17e4b4674a60c5bc29e3c776d038b4c8c9846c6d8"
+    },
+    {
+      "path": "execution-components/payload/049-program.js",
+      "bytes": 5664,
+      "sha256": "955871e9e69258b5d2e2bc48641325ca119a3dedbe2f4688cd9f884573a41005"
+    },
+    {
+      "path": "execution-components/payload/050-advisory-file.mjs",
+      "bytes": 2235,
+      "sha256": "00cfe276b2f5fdf45614d1302e3428be386ad25f3d84ed11c4d8fa732708eba0"
+    },
+    {
+      "path": "execution-components/payload/051-references.mjs",
+      "bytes": 7904,
+      "sha256": "cab72a8d77735965ece55e457d8cda8d0702bf92207a9fef8ad4f17b58625bbf"
+    },
+    {
+      "path": "execution-components/payload/052-common.mjs",
+      "bytes": 3989,
+      "sha256": "38f1998767a6feaabe8a74f004c9740c69426215aff18fe8956a5d4856eb71ca"
+    },
+    {
+      "path": "execution-components/payload/053-decision-task-contracts.mjs",
+      "bytes": 2637,
+      "sha256": "2c1fb0d096354ab7437bdf66d8ff3ff1c312bc95bf39fae9119f13ac749e26f1"
+    },
+    {
+      "path": "execution-components/payload/054-decisions.mjs",
+      "bytes": 9753,
+      "sha256": "0372490865a747edf2b94a3d1697a4482c47e0f1115818ca083373915aac7c3e"
+    },
+    {
+      "path": "execution-components/payload/055-execution-components.mjs",
+      "bytes": 6523,
+      "sha256": "8164009e6a9a4a59fac53fc023e3821a6f41edd466da218c75adb45c532091b4"
+    },
+    {
+      "path": "execution-components/payload/056-folder-decision-scaffold.mjs",
+      "bytes": 5098,
+      "sha256": "215783b934af59592abbb1dd66e6105c9b34bbdbafea09ff77e469c3f84db881"
+    },
+    {
+      "path": "execution-components/payload/057-teacher-decision-labels.mjs",
+      "bytes": 44183,
+      "sha256": "14fba20ad69588e069ecea0a1d01ddeba3b77d0b7e9c742fe794a54b247bb4e4"
+    },
+    {
+      "path": "execution-components/payload/058-graded.ts",
+      "bytes": 22460,
+      "sha256": "dd3737b68ad891845c8895146878b7db2b17f358271fd7298519c84d740a32f1"
+    },
+    {
+      "path": "label-manifest.json",
+      "bytes": 4871,
+      "sha256": "a36b86eadfc1895204699d7bb9240be5fb5f1a0caea83a2120bb5984082853cb"
+    },
+    {
+      "path": "native.held.jsonl",
+      "bytes": 321775,
+      "sha256": "04a22cf5d3e784c163a1a6016eaa186bfee7da0be6a6312519c5f44a1da65838",
+      "lines": 4
+    },
+    {
+      "path": "rejections.jsonl",
+      "bytes": 1197,
+      "sha256": "f8adab8f59fecfb1778643d10fc6eac1a05c1b49a65a0db2a40d209d3e107b7a",
+      "lines": 3
+    },
+    {
+      "path": "replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "replay.results.jsonl",
+      "bytes": 144944,
+      "sha256": "b8611d2ce673353aa2483348b205e44e88a112d6c04f7f6ed93670ed4f1c2a73",
+      "lines": 1
+    },
+    {
+      "path": "scorer-manifest.json",
+      "bytes": 1741,
+      "sha256": "896a7c45637a2ec77bb1db5bc8aa3bcc85a5d7bd6996debfdc91daef4be0e5c5"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 35462,
+      "sha256": "769fadcd1b581d19d040070ec6946d228787098f17766a9b702b30f8318c4b68"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 26979,
+      "sha256": "e404d03c8b33b10b440c88d901f4391a51a66e072e931a33d851bb984d5e1580"
+    }
+  ],
+  "bytes": 1636845
+}

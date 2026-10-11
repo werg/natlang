@@ -21,6 +21,7 @@ import { folderDecisionScaffold } from './folder-decision-scaffold.mjs';
 import { decisionCriteria, DECISION_TASK_CONTRACT_PATH, DECISION_TASK_CONTRACT_SHA256 } from './decision-task-contracts.mjs';
 import { canonical } from '../advisory-file.mjs';
 import { referenceRow } from '../inline-curriculum/references.mjs';
+import { archiveDecisionExecutionComponents, verifyDecisionExecutionComponents } from './execution-components.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(here, '../../../');
@@ -487,6 +488,15 @@ async function main() {
   const options = { modelId: 'held-decision-label-static-reference', rootSeed: 4041, systemPrompt: TOOLS_PROMPT,
     contextTokens: 32768, maxTurns: 128, toolSurfaceSha256, collectionRole: 'reference',
     authoredActionPlans: false };
+  await mkdir(outDir, { recursive: true });
+  if ((await readdir(outDir)).length) throw new Error(`refusing to overwrite non-empty output directory: ${outDir}`);
+  const executionArchive = await archiveDecisionExecutionComponents({ outDir,
+    adapterPath: fileURLToPath(import.meta.url), additional: [
+      { path: resolve(here, 'common.mjs'), role: 'adapter-validation-and-hashing' },
+      { path: resolve(here, 'decisions.mjs'), role: 'decision-contract-plumbing' },
+      { path: resolve(here, '../../src/skills/graded.ts'), role: 'scorer-source-reference' },
+      { path: resolve(here, '../../dist/skills/graded.js'), role: 'loaded-scorer-runtime' },
+    ] });
   const replaySelection = [];
   for (const kind of ['choice', 'noul', 'score']) {
     const candidate = records.find(record => record.generation.transformations.kind === kind);
@@ -524,15 +534,18 @@ async function main() {
       scorer_source_sha256: sourceMeta.scorer_source_sha256, scorer_dist_sha256: sourceMeta.scorer_dist_sha256,
       tool_surface_sha256: toolSurfaceSha256 } };
 
-  await mkdir(outDir, { recursive: true });
-  if ((await readdir(outDir)).length) throw new Error(`refusing to overwrite non-empty output directory: ${outDir}`);
+  summary.execution_component_archive = executionArchive;
   await writeExclusive(outDir, 'cases.jsonl', records.map(row => JSON.stringify(row)).join('\n') + '\n');
   await writeExclusive(outDir, 'replay.results.jsonl', replayRows.map(entry => JSON.stringify(entry)).join('\n') + (replayRows.length ? '\n' : ''));
   await writeExclusive(outDir, 'native.held.jsonl', nativeRows.map(row => JSON.stringify(row)).join('\n') + (nativeRows.length ? '\n' : ''));
   await writeExclusive(outDir, 'replay.failures.jsonl', replayFailures.map(row => JSON.stringify(row)).join('\n') + (replayFailures.length ? '\n' : ''));
   await writeExclusive(outDir, 'rejections.jsonl', rejections.map(row => JSON.stringify(row)).join('\n') + (rejections.length ? '\n' : ''));
+  const executionComponentVerification = await verifyDecisionExecutionComponents(executionArchive);
+  summary.execution_component_verification = executionComponentVerification;
   await writeExclusive(outDir, 'source-manifest.json', JSON.stringify({ schema: 'natlang.held-static-decision-source-manifest/1',
-    training_admission: false, ...sourceMeta, folder_decision_scaffold_sha256: folderDecisionScaffoldSha,
+    training_admission: false, ...sourceMeta, execution_component_archive: executionArchive,
+    execution_component_verification: executionComponentVerification,
+    folder_decision_scaffold_sha256: folderDecisionScaffoldSha,
     folder_decision_scaffold_components: scaffoldDependencyComponents,
     labels: artifacts.map(item => ({ path: item.path,
       labels_sha256: item.labels_sha256, label_rows: item.label_rows, manifest_path: item.manifest_path, manifest_sha256: item.manifest_sha256,

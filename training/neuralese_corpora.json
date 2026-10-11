@@ -28647,6 +28647,46 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "Actualtwoacceptedprograms7exactoriginaltrainitems alltyped/file/map/source/childrequestevidence verified. ExcludedDynamo5parentlineage preserved,0newworldcredit. TwoV65simpleterminal proposals only."
+    },
+    {
+      "id": "static-execution-provenance-annotation-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/static-execution-provenance-annotation-20261011-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-static-execution-provenance",
+      "training_admission": false,
+      "admission": "held-reference-and-provenance-only",
+      "notes": "Exact related-source reference generation/input/provenance evidence. Zero provider calls and independent new worlds; no trajectory or operator admission. Fresh declared-component byte archive verified before summary publication."
+    },
+    {
+      "id": "static-execution-provenance-teacher-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/static-execution-provenance-teacher-input-20261011-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-static-execution-provenance",
+      "training_admission": false,
+      "admission": "held-reference-and-provenance-only",
+      "notes": "Exact related-source reference generation/input/provenance evidence. Zero provider calls and independent new worlds; no trajectory or operator admission. Fresh declared-component byte archive verified before summary publication."
+    },
+    {
+      "id": "static-execution-provenance-teacher-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/static-execution-provenance-teacher-20261011-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-static-execution-provenance",
+      "training_admission": false,
+      "admission": "held-reference-and-provenance-only",
+      "notes": "Exact related-source reference generation/input/provenance evidence. Zero provider calls and independent new worlds; no trajectory or operator admission. Fresh declared-component byte archive verified before summary publication."
+    },
+    {
+      "id": "static-execution-provenance-root-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/static-execution-provenance-root-review-20261011-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-static-execution-provenance",
+      "training_admission": false,
+      "admission": "held-reference-and-provenance-only",
+      "notes": "Exact related-source reference generation/input/provenance evidence. Zero provider calls and independent new worlds; no trajectory or operator admission. Fresh declared-component byte archive verified before summary publication."
     }
   ],
   "coverage_backlog": [

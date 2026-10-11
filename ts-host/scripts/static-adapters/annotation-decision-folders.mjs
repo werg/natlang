@@ -15,7 +15,8 @@ import { referenceRow } from '../inline-curriculum/references.mjs';
 import { materializeNativeRows } from '../../dist/teacher/native-materializer.js';
 import { defaultToolSurfaceHash } from '../../dist/teacher/collector.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
-import { fileHash, requireValue, equal, sha } from './common.mjs';
+import { requireValue, equal, sha } from './common.mjs';
+import { archiveDecisionExecutionComponents, verifyDecisionExecutionComponents } from './execution-components.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../../../');
@@ -333,7 +334,11 @@ async function main() {
     resolve(here, '../../dist/teacher/collector.js'), resolve(here, '../../dist/teacher/native-materializer.js'),
     resolve(here, '../../dist/teacher/program.js'), resolve(here, '../../dist/native/prompt.js'),
   ];
-  const componentPins = Object.fromEntries(await Promise.all(componentPaths.map(async path => [path, await fileHash(path)])));
+  const executionArchive = await archiveDecisionExecutionComponents({ outDir: out,
+    adapterPath: fileURLToPath(import.meta.url),
+    additional: componentPaths.map(path => ({ path, role: 'annotation-adapter-declared-component' })) });
+  const componentPins = Object.fromEntries(executionArchive.components
+    .map(component => [component.path, component.sha256]));
   const replay = [], materializer = [], failures = [];
   for (let i = 0; i < records.length; i++) {
     const { record, visible } = records[i];
@@ -401,6 +406,7 @@ async function main() {
       tool_surface_sha256: options.toolSurfaceSha256,
       options_sha256: jsonSha({ ...options, systemPrompt_sha256: sha(TOOLS_PROMPT) }) },
     execution_components: componentPins,
+    execution_component_archive: executionArchive,
     adapter: { path: fileURLToPath(import.meta.url), sha256: sha(await readFile(fileURLToPath(import.meta.url)) ) },
     artifacts: { cases_sha256: sha(casesText), replay_sha256: sha(replayText), materializer_review_sha256: sha(materializerText),
       families_sha256: sha(familyText), exclusions_sha256: sha(exclusionText),
@@ -412,6 +418,7 @@ async function main() {
   await writeExclusive(out, 'exclusions.json', exclusionText);
   await writeExclusive(out, 'source-quality-omissions.jsonl', truncationText);
   await writeExclusive(out, 'replay.failures.jsonl', failuresText);
+  summary.execution_component_verification = await verifyDecisionExecutionComponents(executionArchive);
   await writeExclusive(out, 'summary.json', JSON.stringify(summary, null, 2) + '\n');
   console.log(JSON.stringify({ out, programs: records.length, annotations: selected.length,
     replayed: replay.length, exact_accepted: summary.replay.exact_accepted, failures: failures.length,

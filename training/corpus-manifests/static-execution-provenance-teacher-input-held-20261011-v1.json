@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "static-execution-provenance-teacher-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/static-execution-provenance-teacher-input-20261011-v1",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 6527,
+      "sha256": "7c5b341d5dc3efd10851600c2c54a6508b301d02e9b629367c242b7e23f3a8fd",
+      "lines": 4
+    },
+    {
+      "path": "labels.jsonl",
+      "bytes": 4734,
+      "sha256": "1928b7d11d945467f30b3b8d962e6981d2dda03c45350aa04cea30082e244ce0",
+      "lines": 4
+    },
+    {
+      "path": "labels.jsonl.manifest.json",
+      "bytes": 2549,
+      "sha256": "0ad3a37ba171d769ebabfb4209996e6d33b4560d1f4edae655950db6d0bfad9f"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 2468,
+      "sha256": "e5019d01c74b048622010cbd6774750762a5e0d1a503acaa108166101c7f3921"
+    }
+  ],
+  "bytes": 16278
+}
