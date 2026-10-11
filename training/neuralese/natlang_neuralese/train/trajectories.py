@@ -1058,7 +1058,7 @@ def main(argv=None):
     capacity = args.max_write_vectors
     if capacity is None:
         capacity = (resumed or {}).get('port_config', {}).get('max_length', engine.heads.max_length)
-    set_write_capacity(engine.heads, capacity)
+    set_write_capacity(engine.heads, capacity, token_stopping=direct is not None)
     engine.heads.set_content_transport(args.content_transport)
     engine.max_block = capacity
     if args.stop_supervision == 'gold-native-boundary' and engine.heads.read_markers:

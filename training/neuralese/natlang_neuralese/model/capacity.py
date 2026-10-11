@@ -2,13 +2,13 @@
 import math
 
 
-def set_write_capacity(heads, capacity):
+def set_write_capacity(heads, capacity, *, token_stopping=False):
     if not isinstance(capacity, int) or isinstance(capacity, bool) or capacity < 1:
         raise ValueError('write capacity must be a positive integer')
-    if heads.stop.use_position and capacity >= heads.stop.position.weight.shape[0]:
+    if not token_stopping and heads.stop.use_position and capacity >= heads.stop.position.weight.shape[0]:
         raise ValueError('position-dependent stop head lacks learned rows for this write capacity')
-    # Constant-position stops only ever read row zero. Changing the bound needs
-    # no new weights or optimizer moments, nor a parameter schema migration.
+    # Constant-position stops only read row zero; direct writers stop through
+    # token logits and never read this position table. Neither needs new rows.
     heads.max_length = capacity
     heads.stop.max_length = capacity
 
