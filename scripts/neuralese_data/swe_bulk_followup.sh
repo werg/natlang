@@ -1,6 +1,6 @@
 #!/bin/sh
 # Chain after the bulk SWE-rebench records run (harness_bench_bulk.sh, D13): wait until every shard has its records,
-# render both text twins under the ledger (low priority, resumable), then register and publish the registry entries
+# render both whole-trajectory text twins under the ledger (low priority, resumable), then register and publish the registry entries
 # and manifests (pushed by register_corpora.py), and brief Pop. Costs nothing while it waits; safe to rerun (each step resumes).
 #   nohup scripts/neuralese_data/swe_bulk_followup.sh BULK_OUT TWIN_ROOT > LOG 2>&1 &
 set -eu
@@ -31,5 +31,5 @@ echo "twins complete $(date -u +%FT%TZ)"
 # shared checkout; it retries races and red checks itself.
 .venv-neuralese/bin/python scripts/neuralese_data/register_swe_bulk.py --bulk "$BULK" --twin-root "$TWINS" || { echo "register exit $?"; exit 1; }
 python3 scripts/coord.py --as dgx-datagen-swe send --to pop --subject "D13 done: bulk SWE-rebench harness-bench records + LFM/Mellum text twins registered" \
-  -m "Registered harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1 and its text twins (lfm25-350m / mellum21-12b -bulk-20261011-v1), training_admission true, additive to v4 (parquet rows >= 1000). Counts in the registry entries. Built by training/neuralese/scripts/harness_bench_bulk.sh + scripts/neuralese_data/swe_bulk_twins.py." || true
+  -m "Registered harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1 and its whole-trajectory text twins (harness-bench-swe-rebench-openhands-pi-wholetraj-{lfm25-350m,mellum21-12b}-bulk-20261011-v1; one document per trajectory, every assistant turn supervised), training_admission true, additive to v4 (parquet rows >= 1000). Counts in the registry entries. Built by training/neuralese/scripts/harness_bench_bulk.sh + scripts/neuralese_data/swe_bulk_twins.py." || true
 echo "done $(date -u +%FT%TZ)"
