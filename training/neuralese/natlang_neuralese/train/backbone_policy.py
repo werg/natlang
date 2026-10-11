@@ -71,8 +71,11 @@ def latent_backbone_parameters(backbone):
         prefixes=('.self_attn.q_proj.weight','.self_attn.k_proj.weight','.self_attn.v_proj.weight',
                   '.self_attn.o_proj.weight','.mlp.experts.gate_up','.mlp.experts.down','.mlp.gate.weight',
                   'input_layernorm.weight','post_attention_layernorm.weight','q_norm.weight','k_norm.weight')
-        named=[(name,parameter) for name,parameter in backbone.hf.named_parameters()
-               if name.startswith('model.layers.') and name.endswith(prefixes)]
+        # Plain names: with precision points installed first (neuralese_direct), an attention weight is
+        # ``...q_proj.parametrizations.weight.original``; it is the same latent and must stay selected.
+        from .quantization import plain_parameter_name
+        named=[(plain_parameter_name(name),parameter) for name,parameter in backbone.hf.named_parameters()
+               if name.startswith('model.layers.') and plain_parameter_name(name).endswith(prefixes)]
     for _,parameter in named:
         parameter.requires_grad_(True)
     return named
