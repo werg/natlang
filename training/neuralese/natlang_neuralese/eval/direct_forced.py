@@ -32,6 +32,12 @@ def _compare(left, right):
 def diagnose(artifact, base_snapshot, out, lengths, device='cuda', float32_reference=False):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=False)
+    if float32_reference:
+        # Casting weights alone still permits TF32 matmuls. This diagnostic
+        # needs a full-precision reference before attributing deltas to BF16.
+        torch.set_float32_matmul_precision('highest')
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
     model = load_direct_artifact(artifact, base_snapshot=base_snapshot, device=device)
     engine = model.engine
     backbone, projection = engine.backbone, model.neuralese_projection
@@ -121,6 +127,9 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda', float32_refer
               'artifact_manifest_sha256': sha256_file_hex(Path(artifact) / 'manifest.json'),
               'synthetic_identity_tcp': synthetic_identity_tcp,
               'float32_reference': float32_reference,
+              'float32_matmul_precision': torch.get_float32_matmul_precision(),
+              'cuda_matmul_allow_tf32': torch.backends.cuda.matmul.allow_tf32,
+              'cudnn_allow_tf32': torch.backends.cudnn.allow_tf32,
               'rows': rows, 'task_qualified': False, 'autonomous_stopping_qualified': False,
               'scope': 'Known-token sequence versus incremental shared writer; explicit output/cache/all exercised parameter and prefix adjoint deltas. No weight updates or automatic tolerance relaxation.'}
     (out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
