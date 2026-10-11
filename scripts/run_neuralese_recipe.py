@@ -238,6 +238,16 @@ def main(argv=None) -> int:
     kernel_cache = output.parent / "kernel-cache"
     kernel_cache.mkdir(exist_ok=True)
     container_kernel_cache = map_path(kernel_cache, mounts)
+    # Other agents may publish during the import preflight. Freeze the verified
+    # package now, then bind it over its canonical path inside the container.
+    # The recipe runner still makes its usual per-run runtime snapshot from
+    # these exact bytes, never from a moving development tree.
+    launcher_package = output.parent / "launcher-runtime" / "natlang_neuralese"
+    shutil.copytree(package, launcher_package, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    launcher_code = {str(path.relative_to(launcher_package)): sha256(path)
+                     for path in sorted(launcher_package.rglob("*.py")) if path.is_file()}
+    if launcher_code != package_code:
+        raise ValueError("shared package changed while freezing the launch snapshot; no container started")
     if output.exists():
         raise ValueError("output appeared during preflight; refusing to launch")
     child = ["-m", "natlang_neuralese.train.recipe", "--recipe", str(container_recipe),
@@ -248,6 +258,7 @@ def main(argv=None) -> int:
                      "--user", f"{os.getuid()}:{os.getgid()}", "-w", str(map_path(REPO, mounts))]
     for host, target, mode in mounts:
         common_docker += ["-v", f"{host}:{target}:{mode}"]
+    common_docker += ["-v", f"{launcher_package}:{package}:ro"]
     common_docker += ["-e", f"HF_HOME={container_hf_home}", "-e", f"HF_HUB_CACHE={container_hub_cache}",
                       "-e", "HF_HUB_OFFLINE=1", "-e", "TRANSFORMERS_OFFLINE=1",
                       "-e", "PYTHONDONTWRITEBYTECODE=1",
@@ -283,6 +294,8 @@ def main(argv=None) -> int:
               "inputs": input_bindings, "lineage_evidence": lineage, "package_code_count": len(package_code),
               "artifact_root": str(artifact_root), "output": str(output), "launch_metadata": str(metadata),
               "hf_hub_cache": str(hf_hub_cache),
+              "launcher_package_snapshot": str(launcher_package),
+              "launcher_package_target": str(package),
               "log": str(log_path), "device": args.device, "mounts": [
                   {"host": str(host), "container": str(target), "mode": mode} for host, target, mode in mounts],
               "child_recipe_metadata": str(child_metadata), "python_executable": "/usr/bin/python3",
