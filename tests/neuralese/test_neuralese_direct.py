@@ -88,6 +88,7 @@ def test_direct_recipes_resolve_for_both_lines_and_gate_on_qualification():
         args = stage_parameter_args({**defaults, **stage['parameters']})
         assert '--no-token-choice-projection' in args
         assert defaults['value_margin'] > 0 and '--value-margin' in args  # useful Neuralese is part of the gate
+        assert 0 < defaults['drift_every'] < defaults['eval_every'] and '--drift-every' in args  # the guard sees the run
     assert mellum['stage_parameter_defaults']['neuralese_direct']['moe_kernel'] == 'grouped'
     assert mellum['quantization']['preserve']['weight'] == 0.0
     stage = mellum['stages'][0]

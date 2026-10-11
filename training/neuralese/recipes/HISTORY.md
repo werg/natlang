@@ -334,3 +334,11 @@ plans/neuralese/WARMUP_AUDIT_20261011.md.
   hard-links it as `best-checkpoint.pt`.
 - The behaviour gate is no longer restricted to Maple. `run_gate` decodes through the shared `greedy_any` (Pop
   178a6160), so LFM gets the same gate.
+
+## neuralese-direct-v1 drift monitor cadence (2026-10-11, after run-v1's launch)
+
+`drift_every` is an operational stage parameter, set to 100 in the shared recipe. Between evals, the drift monitor
+runs every 100 updates and logs to `drift.jsonl`. It computes held KL on the 16 drift rows, applies its guard, and runs
+the behaviour gate at a warn. A guard stop stops the stage with its full state, and qualification counts stops from
+both logs. Before this, the guard ran only inside evals; at the stage-end eval cadence (d5dc7342) it never saw
+run-v1. Cost: one held-KL pass over 16 rows per check, plus about 3.5 min when a warn runs the gate.

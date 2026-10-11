@@ -32,7 +32,7 @@ from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_
 from .checkpoint_policy import CheckpointPolicy
 
 SCHEMA = 'natlang.neuralese-direct/1'
-OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
+OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows'})
 
@@ -75,6 +75,9 @@ def parse(argv=None):
                    '{"gate": <quantization.gate schema>, "data": {"path", "sha256"}}; "data" is JSONL of chat '
                    'prompts whose base-model answers and top-k are captured at step 0 as the drift reference')
     p.add_argument('--drift-rows', type=int, default=16)
+    p.add_argument('--drift-every', type=int, default=0,
+                   help='also run the drift monitor (held KL on --drift-rows, its guard and the gate at a warn) every '
+                        'this many updates between evals, logged to drift.jsonl; 0: only at evals')
     # The drift guard (owner 2026-10-11): response KL or agreement past warn runs the behaviour gate at that eval and
     # stops when the gate falls below its reference minus max_gate_drop; response KL past --drift-stop stops at once.
     p.add_argument('--drift-warn', type=float, default=.05)
@@ -398,22 +401,29 @@ def main(argv=None):
             report.update(base_ce=base_eval['ce'], ce_delta=report['ce'] - base_eval['ce'],
                           base_agreement=sum(agree) / len(agree))
             if gate_held is not None and a.drift_rows:
-                drift = held_kl(backbone.hf, gate_held, a.drift_rows, 0.25)
-                drift['guard'] = behaviour_drift_level(drift, a)
-                if drift['guard'] == 'warn' and a.drift_gate and behaviour is not None:
-                    gate = gate_by_step[step] = gate_report()
-                    floor = behaviour.config['reference']['gate_pass'] - behaviour.config.get('max_gate_drop', 0.0)
-                    drift['gate_at_warn'] = {k: gate[k] for k in ('gate_pass', 'gate_checks', 'gate_kinds',
-                                                                  'gate_results')}
-                    drift['gate_floor'] = floor
-                    if gate['gate_pass'] < floor - 1e-9:
-                        drift['guard'] = 'stop'
-                        drift['stop_reason'] = 'behaviour gate below its reference minus max_gate_drop'
-                elif drift['guard'] == 'stop':
-                    drift['stop_reason'] = 'response KL or agreement past the hard stop'
-                report['behaviour_drift'] = drift
+                report['behaviour_drift'] = drift_check()
         log('eval.jsonl', report)
         return report
+
+    def drift_check():
+        """The drift monitor: held KL on --drift-rows, its guard level, and at a warn the behaviour gate (stop below
+        its reference minus max_gate_drop)."""
+        with torch.no_grad(), contextlib.ExitStack() as scope:
+            if quant is not None:
+                scope.enter_context(quant.context('bf16', 0.0))
+            drift = held_kl(backbone.hf, gate_held, a.drift_rows, 0.25)
+        drift['guard'] = behaviour_drift_level(drift, a)
+        if drift['guard'] == 'warn' and a.drift_gate and behaviour is not None:
+            gate = gate_by_step[step] = gate_report()
+            floor = behaviour.config['reference']['gate_pass'] - behaviour.config.get('max_gate_drop', 0.0)
+            drift['gate_at_warn'] = {k: gate[k] for k in ('gate_pass', 'gate_checks', 'gate_kinds', 'gate_results')}
+            drift['gate_floor'] = floor
+            if gate['gate_pass'] < floor - 1e-9:
+                drift['guard'] = 'stop'
+                drift['stop_reason'] = 'behaviour gate below its reference minus max_gate_drop'
+        elif drift['guard'] == 'stop':
+            drift['stop_reason'] = 'response KL or agreement past the hard stop'
+        return drift
 
     def gate_report():
         if behaviour is None:
@@ -485,6 +495,12 @@ def main(argv=None):
                 policy.save(full_state(), metric=report['ce'])
                 saved_step = step
             (a.out / 'report.json').write_text(json.dumps({**report, 'status': 'running'}, indent=2) + '\n')
+        elif a.drift_every and step % a.drift_every == 0 and gate_held is not None and a.drift_rows:
+            drift = drift_check()
+            log('drift.jsonl', {'step': step, 'behaviour_drift': drift})
+            if drift['guard'] == 'stop':
+                print(json.dumps({'event': 'behaviour_drift_stop', 'step': step}), flush=True)
+                stop.request()
         if policy.due(step) or stop.requested:
             policy.save(full_state())
             saved_step = step
@@ -492,7 +508,8 @@ def main(argv=None):
     gate = (gate_by_step.get(step) or gate_report()) if finished else None
     final = json.loads((a.out / 'report.json').read_text()) if (a.out / 'report.json').exists() else {}
     drift_stopped = any((json.loads(line).get('behaviour_drift') or {}).get('guard') == 'stop'
-                        for line in (a.out / 'eval.jsonl').open())
+                        for name in ('eval.jsonl', 'drift.jsonl') if (a.out / name).is_file()
+                        for line in (a.out / name).open())
     value_delta = final.get('value_relative_mse_delta', math.inf)
     value_qualified = math.isfinite(value_delta) and value_delta < -a.value_margin
     qualified = bool(finished and final.get('ce_delta', 0.0) < 0 and value_qualified and not drift_stopped and
