@@ -179,6 +179,27 @@ its pinned content identity. Existing recipes without stage `inputs` retain the
 shared `--records`/`--pieces` fallback; the resolved stage roles and hashes are
 recorded in the recipe plan.
 
+For a declared direct stage, use `scripts/run_neuralese_recipe.py` to execute
+the shared recipe CLI in the exact locally available `runtime.image`. It checks
+the declared input and package hashes, requires a fresh output under the chosen
+artifact root, and runs a CPU-only stage-import/cache-visibility preflight before the
+training CLI. The container has no network; Hugging Face offline variables point
+at the selected hub cache. On Pop the default artifact root is `/srv/storage`;
+use `--artifact-root` and `--hf-hub-cache` for machine-specific mounts. Inputs
+outside the repository, artifact root, or Hugging Face home need an explicit
+`--bind HOST:CONTAINER:ro|rw`.
+
+```sh
+python3 scripts/run_neuralese_recipe.py \
+  --recipe training/neuralese/recipes/RECIPE.json \
+  --artifact-root /srv/storage \
+  --hf-hub-cache /srv/storage/path/to/hub
+```
+
+The launcher writes its intent and final process receipt beside the declared
+output, outside the stage directory. It never pulls a replacement image or
+forwards the host environment wholesale.
+
 For same-architecture continuation from a trained map, declare a
 `verified_heads_handoff` stage after raw runtime qualification. Bind its full
 warm-up checkpoint, best-checkpoint manifest, matching serving-head export and
