@@ -10567,3 +10567,12 @@ V64closed54plannedjobswith53complete,1model_request_budgetincomplete(index0,DBpe
 The 384-request cap counts planner and action sends separately:192 logical turns,384 physical starts,383 completed and one planner disconnect recovered by fallback. Counter is correct. The unfinished DBpedia case repeatedly debated a fictional team versus its eponymous comic series, plus scope/API errors; no transport retry loop or proven infrastructure stall. Root holds the Dynamo5 source from future strict-label derivatives because its primary subject does not uniquely fit the supplied taxonomy. Retain partial and seven other source items; no automatic semantic-negative/DPO classification or blind budget increase.
 
 Five other narrow holds cover bike/car destination ambiguity, two underspecified emotion targets, positive reviews not refuting ambiguous wording, and manual ventilation accuracy lacking a target/tolerance. Canonical57 holds. Eight proposed exclusions declined where topic clues, paired subject reference or study outcomes suffice; TREC boundaries use the shared taxonomy criteria. Active V65/V29 sources remain disjoint. Source/trace/semantic admission still explicit.
+
+
+### Pop monitoring 2026-10-11T00:26:12.603958+00:00 — Google refill and source preparation correction
+
+Google V29 closed: 512 responses, 507 typed valid, 396 exact annotation choices, 111 disagreements and five malformed outputs. Shared static adapter reference replay accepted all 54 programs /396 items /900 turns. These remain held; original provider TREC requests did not contain the criteria added by the static adapter. Further failure review is assigned.
+
+Google V30 now runs PID981324 on 512 fresh complete inherited-train inputs across nine families, source SHA e9f9f99be6b8a03c2972d1e2f920e041e14a33e94970ea095b58fb91ed3532b0. It applies 57 canonical holds, exact V21 reservations and prior original ID/group exclusions; TREC criteria are now visible in provider requests. Same free model pool, quota state, four total/two per quota group requests and backoff. No paid fallback or training admission.
+
+Owner initially supplied incorrect family spellings, producing an empty unlaunched V30 preparation. Preserved that receipt. Shared preparer now rejects requested families absent from the source, while actual known families with exhausted eligible rows still report omissions/shortfalls. No tests added or run. Active V7 and five-worker Luna V65 continue unchanged.

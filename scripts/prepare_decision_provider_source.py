@@ -273,6 +273,7 @@ def build(args):
     source_ids_seen = {}
     seen_quality_hold_ids = set()
     source_row_keys = {}
+    observed_families = set()
 
     with source_path.open('rb') as stream:
         for line_number, raw_line in enumerate(stream, 1):
@@ -292,6 +293,8 @@ def build(args):
                     raise ValueError(f'{source_path}:{line_number}: duplicate source case ID {case_id}')
                 source_ids_seen[case_id] = line_number
             family = case.get('family')
+            if isinstance(family, str):
+                observed_families.add(family)
             if family not in family_set or case.get('role') != 'train' or case.get('kind') != 'choice':
                 continue
             source_scope_rows += 1
@@ -360,6 +363,11 @@ def build(args):
                 'case': case, 'source_line_number': line_number,
                 'source_row_sha256': row_sha
             })
+
+    unknown_families = family_set - observed_families
+    if unknown_families:
+        raise ValueError('requested families absent from source: ' + ', '.join(sorted(unknown_families)) +
+                         '; available families: ' + ', '.join(sorted(observed_families)))
 
     optional_hold_ids = {item_id for item_id in quality_holds
                          if any(not hold['canonical_policy'] for hold in quality_holds[item_id]['holds'])}
