@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-v31-final-quality-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v31-final-v3",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 328,
+      "sha256": "5959e363392c09dff859804d69226845e442293fa451a8b183d40bd51ba518e8"
+    },
+    {
+      "path": "README.md",
+      "bytes": 690,
+      "sha256": "560bec5f2b5081b9953237185210fa2f293acfd2223c2249341585e8bf3c8119"
+    },
+    {
+      "path": "disagreements-full-inputs.jsonl",
+      "bytes": 414692,
+      "sha256": "d857f8e7c29d9ae68ff37a1388aa7bd74dee351a67eb408fe386fcffca7f917e",
+      "lines": 105
+    },
+    {
+      "path": "review.json",
+      "bytes": 24518,
+      "sha256": "fde8e4be7f1315fe0105e4035fbea610806dfc075ec0774e04f911ecbc824ef1"
+    },
+    {
+      "path": "review.md",
+      "bytes": 4040,
+      "sha256": "812d2e6efab1fc6a67a55e20be4105d7a0fb142e07cfdd80355162f7376ff148"
+    }
+  ],
+  "bytes": 444268
+}

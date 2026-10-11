@@ -28797,6 +28797,56 @@
       "training_admission": false,
       "admission": "held-pending-full-source-and-trace-review",
       "notes": "Seven exact original train DBpedia rows, two related programs, root source/quality and current62holds no overlap, Pop harness no cross-corpus errors/protected hits. Full S1 pending; source-quality attestation remains held. No new independent worlds."
+    },
+    {
+      "id": "google-v31-final-quality-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v31-final-v3",
+      "split": "inherited-train-evidence",
+      "source_class": "held-generation-quality-and-source-closure",
+      "training_admission": false,
+      "admission": "held-pending-explicit-quality-and-source-review",
+      "notes": "Full512provider/105 complete differences, actual58execution payloads and reference57program407items/928native turns. No automatic source holds, negatives, newworlds or admission."
+    },
+    {
+      "id": "google-v31-source-closure-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v31-source-closure-v5",
+      "split": "inherited-train-evidence",
+      "source_class": "held-generation-quality-and-source-closure",
+      "training_admission": false,
+      "admission": "held-pending-explicit-quality-and-source-review",
+      "notes": "57 related reference programs bound to407 unique originaltrain IDs/groups, complete question/state leaves and derivedTRECcriteria separately pinned. Portable harness no hits; fullS1 pendingDGX, upstream external revision not established."
+    },
+    {
+      "id": "luna-choice-confidence-v66-closed-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v66-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-generation-quality-and-source-closure",
+      "training_admission": false,
+      "admission": "held-pending-explicit-quality-and-source-review",
+      "notes": "Actual55/55 complete/5workerexit0 including fresh relatedretry ofV65index135.400original sourceitems. Detailed quality audit pending; saved originals/partials preserved and alloutputsheld. RuntimeV15/sourcepolicy/current62approval exactpins retained."
+    },
+    {
+      "id": "v35-sixteen-structural-admission-proposal-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v35-v5-sixteen-admission-proposal-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-trace-structural-and-semantic-quality",
+      "training_admission": false,
+      "admission": "held-pending-action-level-review",
+      "notes": "Structural/actionproof review only.16parentaccepted485converted turns,42/64 typedprior-noteedges; none approved. Exact modelwriter evidence distinct from graph closure."
+    },
+    {
+      "id": "v35-sixteen-semantic-admission-proposal-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v35-v5-sixteen-admission-proposal-semantic-supplement-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-trace-structural-and-semantic-quality",
+      "training_admission": false,
+      "admission": "held-pending-action-level-review",
+      "notes": "64iterative updates reviewed/60exact bodies/3narrow semantic-action candidates,8placeholderseed exclusions,3no-decision instruction conflicts,4missing exactbodies. Wholetrajectory/finalmap notapproved solely fromgoldmatch; no independentworlds."
     }
   ],
   "coverage_backlog": [

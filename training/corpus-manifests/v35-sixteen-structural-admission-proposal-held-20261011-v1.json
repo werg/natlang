@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v35-sixteen-structural-admission-proposal-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v35-v5-sixteen-admission-proposal-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 71726,
+      "sha256": "07eb2bbfffaf4cb0fc2287bfe12feb954ae508b77b75abcc331ec1f9954e495a"
+    }
+  ],
+  "bytes": 71726
+}

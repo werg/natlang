@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v35-sixteen-semantic-admission-proposal-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v35-v5-sixteen-admission-proposal-semantic-supplement-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 646872,
+      "sha256": "8ba5644d41034decad7b1caff873b2542c5c1485c203f8e090f0a86233d0b943"
+    }
+  ],
+  "bytes": 646872
+}
