@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "decision-source-quality-v17-policy-adoption-v1-diagnostic-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v17-policy-adoption-v1",
+  "files": [
+    {
+      "path": "adoption.json",
+      "bytes": 703,
+      "sha256": "838ee1d54ea770ec1df871a2b2e8c97654c090736facfc8e9ab475aa62799df0"
+    },
+    {
+      "path": "decision_source_quality_holds.json",
+      "bytes": 61359,
+      "sha256": "836ec431ed95be887eb77dd50a3e640a9ffe1f1f339fbf0b8c6f92cd7c934ef2"
+    }
+  ],
+  "bytes": 62062
+}

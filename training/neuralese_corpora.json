@@ -30441,6 +30441,36 @@
       "admission": "held-launch-receipt-only-no-label-admission",
       "independent_new_worlds": 0,
       "notes": "Separate immutable root launch receipt for V38 supervisor PID 1051685. The receipt pins the fresh V38 input cases and manifest, validates current canonical 79-hold policy (source-policy prep snapshot remains V16/75 and the four approved new hold IDs are separately checked disjoint), and pins the frozen ten-model pool. It records 4 workers, two in-flight calls per quota group, 2048 max output tokens, wait-for-owner enabled, and paid fallback disabled. Launch evidence only; no label quality or training admission."
+    },
+    {
+      "id": "decision-source-quality-v17-policy-adoption-v1-diagnostic-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v17-policy-adoption-v1",
+      "include": [
+        "adoption.json",
+        "decision_source_quality_holds.json"
+      ],
+      "split": "inherited-train-policy-provenance",
+      "source_class": "held-source-quality-policy-adoption-diagnostic",
+      "training_admission": false,
+      "admission": "diagnostic-policy-provenance-superseded-no-admission",
+      "independent_new_worlds": 0,
+      "notes": "Preserves the initial V17 policy adoption artifact. Its parent-policy metadata is incorrect, so this snapshot is diagnostic and superseded by the distinct V2 adoption receipt. Do not treat it as the authoritative policy chain."
+    },
+    {
+      "id": "decision-source-quality-v17-policy-adoption-v2-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v17-policy-adoption-v2",
+      "include": [
+        "adoption.json",
+        "decision_source_quality_holds.json"
+      ],
+      "split": "inherited-train-policy-provenance",
+      "source_class": "held-source-quality-policy-adoption-receipt",
+      "training_admission": false,
+      "admission": "held-policy-provenance-only-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Corrected V17 policy adoption receipt: pins the exact parent V16 policy snapshot, the root-reviewed V17 hold decisions, and exact 79-hold policy bytes (SHA c8eab8b4...). It records unchanged source labels and does not itself grant training admission."
     }
   ],
   "coverage_backlog": [
