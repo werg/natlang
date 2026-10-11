@@ -5,7 +5,7 @@ Usage: validate_text_twin_cpu.py TWIN_TEXT SOURCE_TEXT TOKENIZER_DIR [--context 
 Prints counts, token length stats and, for each N, the fraction of supervised tokens whose
 preceding context exceeds N tokens (twin and source).
 """
-import argparse, hashlib, json, os, platform, statistics, sys
+import argparse, json, os, platform, statistics, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training/neuralese"))
 from transformers import AutoTokenizer
@@ -13,11 +13,7 @@ import transformers, torch
 from natlang_neuralese.train.text_warmup import load_text_rows
 from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
 
-def sha(p):
-    h = hashlib.sha256()
-    with open(p, "rb") as f:
-        for b in iter(lambda: f.read(8 << 20), b""): h.update(b)
-    return h.hexdigest()
+from natlang_neuralese.common.hashing import sha256_file_hex as sha
 
 def shape(rows, contexts):
     lens = sorted(len(r["token_ids"]) for r in rows)
