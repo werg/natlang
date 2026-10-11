@@ -33157,7 +33157,7 @@
       "admission": "D16 conversion of the S3 subset of S1 (45 families) into natlang call programs; consume and continue records; reconstruct none in S1",
       "owner": "dgx",
       "include": [
-        "ir/*/*.ir.jsonl",
+        "runtime-page.json",
         "ir/*/build.json",
         "ir/*/omissions.jsonl",
         "turns/*/*.turns.jsonl.zst",
@@ -33180,7 +33180,14 @@
           "max_evidence_chars": 32000
         }
       },
-      "notes": "Each port record is one item of an answer_collection() directory-reducer program (4 items per case): the root iterates the item files with iterateOn and calls an inline nl<string> child per item; the reference child reads item.evidence (following the runtime's 2,000-character cut-off pages with read_page) and returns the record's target (direct answer, children act without reasoning). Root turns carry stock action notes (untrained reasoning) until rationalized. Turn format natlang.teacher_training_turn.native/1, runtime contract 19. Model-facing texts recorded as unmeasured debt in plans/MODEL_FACING_CHANGES.md."
+      "notes": "Each port record is one item of an answer_collection() directory-reducer program (4 items per case): the root iterates the item files with iterateOn and calls an inline nl<string> child per item; the reference child reads item.evidence (following the runtime's 2,000-character cut-off pages with read_page) and returns the record's target (direct answer, children act without reasoning). Root turns carry stock action notes (untrained reasoning) until rationalized. Turn format natlang.teacher_training_turn.native/1, runtime contract 19. Model-facing texts recorded as unmeasured debt in plans/MODEL_FACING_CHANGES.md.",
+      "page_size": {
+        "page_size": "fixed-2000",
+        "dist_commit": "unknown (built before 2026-10-12 cutover)",
+        "context_tokens": 65536
+      },
+      "runtime_cutover": "Runtime cutover 2026-10-12 (coordinator): ts-host dist rebuilt with 8267b177 (tool-output page = an eighth of the context budget instead of a fixed 2,000 characters); one corpus version = one page size, recorded in runtime-page.json and in every shard summary (runtime). v1 holds the 207 shards replayed at fixed-2000 pages before it; every other shard is in port-record-calls-s3-20261011-v2.",
+      "continued_by": "port-record-calls-s3-20261011-v2"
     },
     {
       "id": "port-record-calls-view-ask-20261011-v1",
@@ -33192,16 +33199,11 @@
       "admission": "D15 conversion of view-ask-20261010-v4 into natlang call programs; consume and compare records; reconstruct records omitted (reproducing the source verbatim is the identity function as a call: omission reason reconstruct-is-identity-as-a-call)",
       "owner": "dgx",
       "include": [
-        "ir/*/*.ir.jsonl",
-        "ir/*/build.json",
-        "ir/*/omissions.jsonl",
-        "turns/*/*.turns.jsonl.zst",
-        "turns/*/*.rows.jsonl.zst",
-        "turns/*/*.summary.json"
+        "superseded.json"
       ],
       "source_class": "public-dataset-port-records-as-natlang-call-programs (static reference replay through the native runtime, zero model calls)",
-      "training_admission": true,
-      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect; record splits kept (train/validation/test per port record), JeFF reservations checked (0 hits; D3 does not apply to S1 per plans/neuralese/JEFF_RESERVATION_OVERLAP_20261011.json), protected bgkit benchmarks removed at render (--protected data/neuralese/corpora/protected-bgkit-20261003/bgkit-benchmarks.protected.json). Licences are provenance facts only (owner rule 2026-10-10)",
+      "training_admission": false,
+      "training_admission_reason": "no data: never replayed before the 2026-10-12 runtime cutover; superseded by port-record-calls-view-ask-20261011-v2",
       "review_status": "replayed and admitted per case (admitRow); every decision approved by the materializer; generation in progress (resumable unit), manifest published when the run completes",
       "required_conversion": "render with scripts/neuralese_data/render_native_turn_corpus.py (decompress turns/*/*.turns.jsonl.zst; pass --protected); evidence over 32,000 characters omitted (ir/*/omissions.jsonl: evidence-over-cap-needs-paged-program) and needs a paged-reading program shape",
       "consumable_by_direct_stage": false,
@@ -33215,7 +33217,8 @@
           "max_evidence_chars": 32000
         }
       },
-      "notes": "Each port record is one item of an answer_collection() directory-reducer program (4 items per case): the root iterates the item files with iterateOn and calls an inline nl<string> child per item; the reference child reads item.evidence (following the runtime's 2,000-character cut-off pages with read_page) and returns the record's target (direct answer, children act without reasoning). Root turns carry stock action notes (untrained reasoning) until rationalized. Turn format natlang.teacher_training_turn.native/1, runtime contract 19. Model-facing texts recorded as unmeasured debt in plans/MODEL_FACING_CHANGES.md."
+      "notes": "Each port record is one item of an answer_collection() directory-reducer program (4 items per case): the root iterates the item files with iterateOn and calls an inline nl<string> child per item; the reference child reads item.evidence (following the runtime's 2,000-character cut-off pages with read_page) and returns the record's target (direct answer, children act without reasoning). Root turns carry stock action notes (untrained reasoning) until rationalized. Turn format natlang.teacher_training_turn.native/1, runtime contract 19. Model-facing texts recorded as unmeasured debt in plans/MODEL_FACING_CHANGES.md.",
+      "superseded_by": "port-record-calls-view-ask-20261011-v2"
     },
     {
       "id": "luna-v43-suffix658-1374-runtimev19-closed-raw-held-20261011-v1",
@@ -33853,16 +33856,11 @@
       "admission": "Large-evidence pass of the D16 conversion (Pop request coord 2026-10-11T20:36:10Z-pop-f575): exactly the S3 records whose evidence is over 32,000 and at most 120,000 characters (the base pass omissions evidence-over-cap-needs-paged-program), same paged-reading program shape; the child reads up to ~60 cut-off pages, context stays inside 65,536 tokens. Records over 120,000 characters remain omitted (ir/*/omissions.jsonl) pending a map-over-chunks program shape",
       "owner": "dgx",
       "include": [
-        "ir/*/*.ir.jsonl",
-        "ir/*/build.json",
-        "ir/*/omissions.jsonl",
-        "turns/*/*.turns.jsonl.zst",
-        "turns/*/*.rows.jsonl.zst",
-        "turns/*/*.summary.json"
+        "superseded.json"
       ],
       "source_class": "public-dataset-port-records-as-natlang-call-programs (static reference replay through the native runtime, zero model calls)",
-      "training_admission": true,
-      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect; record splits kept (train/validation/test per port record), JeFF reservations checked (0 hits; D3 does not apply to S1 per plans/neuralese/JEFF_RESERVATION_OVERLAP_20261011.json), protected bgkit benchmarks removed at render (--protected data/neuralese/corpora/protected-bgkit-20261003/bgkit-benchmarks.protected.json). Licences are provenance facts only (owner rule 2026-10-10)",
+      "training_admission": false,
+      "training_admission_reason": "no data: never replayed before the 2026-10-12 runtime cutover; superseded by port-record-calls-s3-large-20261011-v2",
       "review_status": "replayed and admitted per case (admitRow); every decision approved by the materializer; generation in progress (resumable unit), manifest published when the run completes",
       "required_conversion": "render with scripts/neuralese_data/render_native_turn_corpus.py (decompress turns/*/*.turns.jsonl.zst; pass --protected); evidence over 120,000 characters omitted (ir/*/omissions.jsonl: evidence-over-cap-needs-paged-program) and needs a paged-reading program shape",
       "consumable_by_direct_stage": false,
@@ -33877,7 +33875,8 @@
           "min_evidence_chars": 32000
         }
       },
-      "notes": "Each port record is one item of an answer_collection() directory-reducer program (4 items per case): the root iterates the item files with iterateOn and calls an inline nl<string> child per item; the reference child reads item.evidence (following the runtime's 2,000-character cut-off pages with read_page) and returns the record's target (direct answer, children act without reasoning). Root turns carry stock action notes (untrained reasoning) until rationalized. Turn format natlang.teacher_training_turn.native/1, runtime contract 19. Model-facing texts recorded as unmeasured debt in plans/MODEL_FACING_CHANGES.md."
+      "notes": "Each port record is one item of an answer_collection() directory-reducer program (4 items per case): the root iterates the item files with iterateOn and calls an inline nl<string> child per item; the reference child reads item.evidence (following the runtime's 2,000-character cut-off pages with read_page) and returns the record's target (direct answer, children act without reasoning). Root turns carry stock action notes (untrained reasoning) until rationalized. Turn format natlang.teacher_training_turn.native/1, runtime contract 19. Model-facing texts recorded as unmeasured debt in plans/MODEL_FACING_CHANGES.md.",
+      "superseded_by": "port-record-calls-s3-large-20261011-v2"
     },
     {
       "id": "clef-pools-20261011-v1",

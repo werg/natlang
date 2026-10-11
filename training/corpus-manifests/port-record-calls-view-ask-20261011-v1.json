@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "port-record-calls-view-ask-20261011-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/port-record-calls-view-ask-20261011-v1",
+  "files": [
+    {
+      "path": "superseded.json",
+      "bytes": 196,
+      "sha256": "fbd084cbbe1c19caabd73cbc874fc730fcddb08f3a41c8f946f8921321eb9bdd"
+    }
+  ],
+  "bytes": 196
+}

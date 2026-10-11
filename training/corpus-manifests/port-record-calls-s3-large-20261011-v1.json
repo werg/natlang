@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "port-record-calls-s3-large-20261011-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/port-record-calls-s3-large-20261011-v1",
+  "files": [
+    {
+      "path": "superseded.json",
+      "bytes": 196,
+      "sha256": "ebd04d04b3d36b7cf79df6af33a023e26c632783b395463e23ed66db384d6f8a"
+    }
+  ],
+  "bytes": 196
+}
