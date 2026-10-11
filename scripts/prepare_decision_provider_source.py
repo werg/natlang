@@ -120,6 +120,7 @@ def read_prior_cases(prior_root):
     source_ids, source_groups = set(), set()
     manifests = []
     for path in files:
+        cancelled_receipt = None
         campaign = path.parent if path.parent.parent == root else path.parent.parent
         disposition_path = campaign / 'reservation-disposition.json'
         if disposition_path.exists():
@@ -134,15 +135,11 @@ def read_prior_cases(prior_root):
             relative = path.relative_to(campaign).as_posix()
             if disposition.get('artifacts', {}).get(relative) != sha256_file(path):
                 raise ValueError(f'{disposition_path}: cancelled preparation artifact changed: {relative}')
-            manifests.append({'path': str(path), 'sha256': sha256_file(path),
-                              'reservation_status': 'cancelled-unused-preparation',
-                              'disposition_path': str(disposition_path),
-                              'disposition_sha256': sha256_file(disposition_path),
-                              'reason': disposition['reason'],
-                              'unique_ids': 0, 'unique_groups': 0,
-                              'direct_program_ids': 0, 'direct_program_groups': 0,
-                              'nested_source_ids': 0, 'nested_source_groups': 0})
-            continue
+            cancelled_receipt = {'reservation_status': 'cancelled-unused-preparation',
+                                 'disposition_path': str(disposition_path),
+                                 'disposition_sha256': sha256_file(disposition_path),
+                                 'reason': disposition['reason'],
+                                 'reserved_ids': 0, 'reserved_groups': 0}
         file_program_ids, file_program_groups = set(), set()
         file_source_ids, file_source_groups = set(), set()
         raw_sha = sha256_file(path)
@@ -153,10 +150,12 @@ def read_prior_cases(prior_root):
                 case = json.loads(raw_line)
                 if isinstance(case.get('id'), str):
                     file_program_ids.add(case['id'])
-                    program_ids.add(case['id'])
+                    if not cancelled_receipt:
+                        program_ids.add(case['id'])
                 if isinstance(case.get('group'), str):
                     file_program_groups.add(case['group'])
-                    program_groups.add(case['group'])
+                    if not cancelled_receipt:
+                        program_groups.add(case['group'])
                 for field, target, file_target in (
                         ('source_ids', source_ids, file_source_ids),
                         ('source_groups', source_groups, file_source_groups)):
@@ -165,14 +164,16 @@ def read_prior_cases(prior_root):
                         continue
                     if not isinstance(values, list) or any(not isinstance(value, str) or not value for value in values):
                         raise ValueError(f'{path}:{line_no}: {field} must be an array of nonempty strings')
-                    target.update(values)
+                    if not cancelled_receipt:
+                        target.update(values)
                     file_target.update(values)
         manifests.append({
             'path': str(path), 'sha256': raw_sha,
             # Retain the old keys as explicit direct program-level counts.
             'unique_ids': len(file_program_ids), 'unique_groups': len(file_program_groups),
             'direct_program_ids': len(file_program_ids), 'direct_program_groups': len(file_program_groups),
-            'nested_source_ids': len(file_source_ids), 'nested_source_groups': len(file_source_groups)
+            'nested_source_ids': len(file_source_ids), 'nested_source_groups': len(file_source_groups),
+            **(cancelled_receipt or {})
         })
     return root, program_ids, program_groups, source_ids, source_groups, manifests
 
