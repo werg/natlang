@@ -33959,6 +33959,39 @@
         "luna-v43-prefix-646-runtimev18-static-held-20261011-v1"
       ],
       "notes": "Exact per-case/source/result provenance and source-label agreement review. SDK turn starts are distinct from physical network requests and billable usage; physical request and total billing counts are unavailable."
+    },
+    {
+      "id": "luna-v43-runtimev18-repeat14-approved-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-runtimev18-repeat14-inputs-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-generation-plan-no-admission",
+      "source_class": "approved-same-world-comparison-inputs",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "root-approved inputs and stable source provenance only; active journals, logs, results and mutable campaign status are excluded",
+      "derived_from": [
+        "luna-v43-prefix-646-runtimev18-approved-inputs-held-20261011-v1",
+        "luna-v43-runtimev18-closed-raw-held-20261011-v1",
+        "luna-v43-prefix-646-runtimev18-static-held-20261011-v1"
+      ],
+      "notes": "14 repeated source programs/111 items selected at original V43 indices [0,4,8,9,13,17,19,22,24,26,28,30,31,32], with seed base 43101. This repeats existing source worlds; independent_new_worlds=0. Plan and root approval bind five queues; launch observation is a time-bounded receipt only."
+    },
+    {
+      "id": "zero-arg-local-inputs-runtime-probe-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-zero-arg-inputs-probe-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-mechanism-probe-no-admission",
+      "source_class": "authored-runtime-mechanism-diagnostic",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "single authored zero-argument reference probe and V18/V19 result traces; no provider call, teacher trajectory, or training admission",
+      "notes": "V18 action ledger rejects the local const inputs eval although a subsequent scripted return makes the final expected map accepted. V19 eval succeeds. Preserve the action-level evidence; one case is not comparative model-quality evidence."
     }
   ],
   "coverage_backlog": [

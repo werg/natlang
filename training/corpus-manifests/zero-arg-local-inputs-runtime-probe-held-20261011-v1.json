@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "zero-arg-local-inputs-runtime-probe-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-zero-arg-inputs-probe-v1",
+  "files": [
+    {
+      "path": "probe.ir.jsonl",
+      "bytes": 1962,
+      "sha256": "ac4694b9cfd4024687ca312cf6f5ce480edf2e70ad3c4ce18b4dc974b5d1f0ff",
+      "lines": 1
+    },
+    {
+      "path": "review.json",
+      "bytes": 5350,
+      "sha256": "9014945e0867507a1c06c42f6bb843e4baece59ebc1de8ede29a791a4a7df600"
+    },
+    {
+      "path": "review.md",
+      "bytes": 1181,
+      "sha256": "32132e1983e92beaaffd101e82789d7cb0d898c197f30668d2147fec166b992c"
+    },
+    {
+      "path": "v18/results.jsonl",
+      "bytes": 41325,
+      "sha256": "7d524940ae92335c103a294dd4c24c53076bc5873deca7fc1871d86470c1af42",
+      "lines": 1
+    },
+    {
+      "path": "v18/turns.jsonl",
+      "bytes": 79516,
+      "sha256": "6e59b5e4deb804c391d860bd4e9abc4289c920cb1345861a37d19b96286223c9",
+      "lines": 2
+    },
+    {
+      "path": "v19/results.jsonl",
+      "bytes": 40542,
+      "sha256": "1a8736052e1950ae4e0514e2fc9ed3942ae7f3379ded104532ffcfdef7eed4ac",
+      "lines": 1
+    },
+    {
+      "path": "v19/turns.jsonl",
+      "bytes": 78969,
+      "sha256": "458b099a368df5d0b5f0f4f6e78a36d8ec772981f8791f7f78be994e069d07ce",
+      "lines": 2
+    }
+  ],
+  "bytes": 248845
+}
