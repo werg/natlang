@@ -16,7 +16,9 @@ import sys
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-MODEL = '/home/werg/data/models/mellum21-12b-a2.5b-thinking'
+from natlang_neuralese.common.paths import resolve  # noqa: E402
+
+MODEL = str(resolve('models', 'mellum21-12b-a2.5b-thinking'))
 SUFFIXES = ('.self_attn.q_proj.weight', '.self_attn.k_proj.weight', '.self_attn.v_proj.weight',
             '.self_attn.o_proj.weight', '.mlp.experts.gate_up', '.mlp.experts.down', '.mlp.gate.weight')
 
