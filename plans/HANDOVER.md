@@ -10965,3 +10965,8 @@ Actual PopGPU qualification using shared eval/direct_runtime.py (06f3a5abcb), fr
 DGX owner reports closed Mellum direct1000 run: CE2.224→.379, behavior.75 equalbase, responseKL.307, projection error.0888 vsmixture.0885 (delta+.0003; required−.05). Its value gate FAILED, no qualification. Confident token predictions may saturate this auxiliary comparison; preserve failure and define prospective downstream consumer evaluation, not retroactivepassing.
 
 LunaV86 suppliesfive lanes,20programs147items, newfield-owned scaffold; GoogleV41 remainslive. Root authorized V73V4 ordinary-text-only admission for846 rows, exact145 failure-history spans masked on82rows (25517 tokenpositions), all63 failed targets excluded/unscored. Registry helper is publishing immutable decision/subset closure; no native trace/action/recurrence or DPOnegative admission, no retroactive addition to completedV8 or liveDGXinputs.
+
+
+### Direct run parameter-selection correction — 2026-10-11 12:43 UTC
+
+Do not interpret148/151 sharedsourcefiles as proofbothmodelsupdatedtheintendedsameparameterclasses. Mellum run-v1's196savedstudenttensorsomitall112q/k/v/o projections (28layers): sharedsuffixselector missedQATparametrizations installedfirst. Popunquantizeddensefullpolicyunaffected. Shareda8972488fixplain-namecanonicalization published; originalMellumcheckpointmustretainbaseattention anddeclareomissions, neverclaimfullattentiontraining. SeePIN_COMPARISON effectivecoveragecorrection+exactDGXschema proof. V73ordinary846maskedSFTadmission nowpublished/syncedfde8a62ecb; existingtraininginputsunchanged. V86nowterminalall20programsaccounted; helperauditsandpreparesfreshfive-lanesuccessor.
