@@ -138,7 +138,9 @@ function slice(row) {
     const entity = kb.entities[id];
     const attributes = entity.attributes.filter(a => keys.has(a.key));
     const decoyAttributes = entity.attributes.filter(a => !keys.has(a.key)).slice(0, DECOY_ATTRIBUTES);
-    const needed = entity.relations.filter(r => keys.has(r.predicate) || touched.has(r.object));
+    // Only relations to entities the KB has: the local check's api drops dangling ones, so a slice that kept them
+    // answered there but failed in the world module ("no entity Q..."; 2026-10-11).
+    const needed = entity.relations.filter(r => kb.entities[r.object] && (keys.has(r.predicate) || touched.has(r.object)));
     const decoys = entity.relations.filter(r => !needed.includes(r) && kb.entities[r.object]).slice(0, DECOY_RELATIONS);
     entities[id] = { name: entity.name, concepts: (entity.instanceOf ?? []).flatMap(conceptNames), attributes: [...attributes, ...decoyAttributes],
       relations: [...needed, ...decoys].map(r => ({ ...r, objectName: kb.entities[r.object]?.name })) };

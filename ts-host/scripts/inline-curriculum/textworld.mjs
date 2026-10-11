@@ -212,7 +212,10 @@ world.certificate()`;
         reference: { root: playable ?
           [['eval', { code: `const task = ${JSON.stringify(task)};\n${loop}`, finish: true }]] :
           [evalCall(`const task = ${JSON.stringify(task)};\n${loop}`),
-            blockedCall('The loop made no progress: the object the task needs is nowhere in the world.')], children } },
+            blockedCall('The loop made no progress: the object the task needs is nowhere in the world.')], children,
+          // The progress review's divergent verdict stops the loop by failing that eval (iteration diverged): the one
+          // expected failed action before the blocked report, as in actor.mjs's impossible variant.
+          failures: playable ? 0 : 1 } },
       semantics: { ...record.semantics, files: { ...record.semantics.files,
         'play_quest.nl': record.semantics.files['play_quest.nl'].replace('When the task is accomplished', TEXTWORLD_ITERATE) } },
     };
