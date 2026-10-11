@@ -287,7 +287,7 @@ def test_the_guard_signals_one_victim_then_watches_it_without_stopping_another(m
     assert passes[1] == [('term', 'other.service')]  # checkpointing within its grace: nothing new
     assert passes[2] == [('term', 'other.service'), ('kill', 'other.service')]
     events = json.loads(path.read_text())['events']
-    assert [e['event'] for e in events] == ['stopped', 'killed after grace'] and events[1]['reason'] == 'emergency'
+    assert [e['event'] for e in events if not e['event'].startswith('stopped without')] == ['stopped', 'killed after grace'] and events[-1]['reason'] == 'emergency'
 
 
 def test_stop_grace_scales_with_the_familys_measured_checkpoint():
@@ -456,7 +456,9 @@ def test_a_unit_declared_resumable_without_a_spec_is_preemptible_but_logged_not_
     assert not ledger.requeue_spec(state, 'u.service', now=5.0)
     assert 'waiting' not in state or 'u.service' not in state['waiting']
     assert 'owner must restart' in state['events'][-1]['event']
-    assert not ledger.resumable(claim('experiment', 10, 5, 0))  # undeclared and no spec (adopted): protected
+    assert ledger.resumable(claim('experiment', 10, 5, 0))  # undeclared: rerunnable by default
+    assert not ledger.resumable(dict(claim('experiment', 10, 5, 0), adopted=True))  # adopted: protected
+    assert not ledger.resumable(claim('service', 10, 5, 0))
     assert ledger.preemption_plan({'u.service': c}, 0, {'priority': 'high', 'budget': 5 * GIB, 'reserve': 0}) == ['u.service']
 
 
@@ -486,3 +488,51 @@ def test_a_waiting_run_registers_in_the_queue_before_any_slow_cache_walk(monkeyp
     with pytest.raises(KeyboardInterrupt):
         ledger.run(args)
     assert seen == [['e2e.service']]
+
+
+def test_blockers_name_the_non_preemptible_units_in_status_and_refusals():
+    live = {'tests.service': running('experiment', 40, 32, priority='medium', resumable=False),
+            'train.service': running('experiment', 40, 30, priority='high'),
+            'render.service': running('collection', 20, 10, priority='low')}
+    rows = ledger.non_preemptible(live, {'priority': 'high'})
+    assert [(r['unit'], r['reason']) for r in rows] == [('tests.service', 'not resumable'),
+                                                       ('train.service', 'priority high is not below high')]
+    assert 'tests.service' in ledger.blocked_by(live, {'priority': 'high'}) and 'render.service' not in ledger.blocked_by(live, {'priority': 'high'})
+
+
+def test_a_undeclared_test_unit_is_preempted_for_high_priority_work():
+    live = {'tests.service': dict(claim('experiment', 40, 32, 1), priority='medium')}
+    assert ledger.preemption_plan(live, 20 * GIB, {'priority': 'high', 'budget': 40 * GIB, 'reserve': 8 * GIB}) == ['tests.service']
+
+
+def test_unit_containers_find_detached_runs_from_the_command_line_of_the_client(monkeypatch, tmp_path):
+    cg = tmp_path / 'cg'
+    cg.mkdir()
+    (cg / 'cgroup.procs').write_text('4242\n')
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('active', '/../../..' + str(cg)))
+    proc = tmp_path / 'proc' / '4242'
+    proc.mkdir(parents=True)
+    (proc / 'cmdline').write_bytes(b'docker\0run\0--rm\0--name\0render-b00\0img\0')
+    real_open = open
+    monkeypatch.setattr('builtins.open', lambda path, *a, **k: real_open(str(path).replace('/proc/4242', str(proc)), *a, **k))
+    assert ledger.unit_containers('static-render-b00-57085.service', ['env', 'x.sh'], ['extra']) == \
+        ['extra', 'static-render-b00-57085', 'render-b00']
+
+
+def test_stop_containers_stops_only_running_ones_and_a_requeue_waits_for_them(monkeypatch):
+    stopped = []
+    monkeypatch.setattr(ledger, 'container_running', lambda name: name == 'render-b00')
+    monkeypatch.setattr(ledger.subprocess, 'Popen', lambda cmd, **k: stopped.append(cmd))
+    ledger.stop_containers(['render-b00', 'gone'])
+    assert stopped == [['docker', 'stop', '-t', '10', 'render-b00']]
+
+
+def test_launch_puts_local_bin_first_on_path(monkeypatch):
+    seen = []
+    monkeypatch.setattr(ledger.subprocess, 'run', lambda cmd, **k: seen.append(cmd) or type('R', (), {'returncode': 0})())
+    spec = {'unit': 'u.service', 'budget': GIB, 'priority': 'low', 'oom_policy': 'stop', 'workdir': '.', 'env': [],
+            'command': ['node', '-v'], 'stop_seconds': 5, 'containers': ['c1']}
+    ledger.launch(spec)
+    cmd = seen[-1]
+    assert any(a.startswith('PATH=') and a[5:].startswith(ledger.os.path.expanduser('~/.local/bin') + ':') for a in cmd)
+    assert 'docker stop -t 5 u c1' in ' '.join(cmd)

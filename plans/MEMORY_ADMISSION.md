@@ -100,3 +100,5 @@ priority GPU job, which then got a reduced cap and OOMed). The sum of claims may
   The guard floor is 10 GB and polls every 2 s (was 8 GB / 5 s) because CUDA allocation bursts can outrun it.
 - `status` shows priority, budget, use, reserved, resumable, and the waiting queue with `would_preempt`.
 - Superseded: the claim-shrinking design (effective claims, commit 4f32386a) was dropped.
+
+- Follow-up 2026-10-12: (1) detached containers: on preempt/pressure stops the guard finds the unit's containers (command, `run --container`, `docker run --name` client in the cgroup, unit name), signals them, `docker stop`s survivors when the unit exits, and does not relaunch a requeued unit while one runs (a wrapper shell runs its TERM trap only after its foreground `docker run` ends, so the unit's end never stopped the container). (2) Undeclared units are resumable (tests, checks, data jobs; only services and adopted units are protected; `--no-resumable` for long non-checkpointed jobs); `status` waiting entries list `blocked_by` (non-preemptible units with reason) and refusals name them.
