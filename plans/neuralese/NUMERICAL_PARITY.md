@@ -109,3 +109,32 @@ Evidence is in the active V8 artifact's `window-gradacc-v31/` recipes, logs and
 checkpoints. Sustained speed, gradient/update correctness and larger-window
 memory policy remain under qualification. This does not resolve or qualify the
 separate incremental/full-sequence runtime transport difference.
+
+## Sustained BF16 continuation and memory-policy correction
+
+The full-source continuation is running through the shared declared V14 recipe
+with BF16 backbone parameters, FP32 floating buffers and activation checkpointing.
+At update 100, held CE improved from 3.57669 to 3.45925; response KL was 0.02170,
+response agreement 0.99688 and the behavior guard remained clear. Value relative
+MSE rose from 0.21104 to 0.22447, so the value channel needs separate monitoring.
+These interim results do not qualify runtime transport, stopping or gradient replay.
+Evaluation and resumable checkpoints occur every 100 updates for this continuation.
+
+The automatic uncheckpointed attempt failed before its first update. Its memory
+geometry omitted FP32 activations retained by LFM2 RMSNorm. The shared estimator
+now counts those tensors, and logs the selected plan before a forward pass. A
+bounded CPU saved-tensor inspection established one unique full-shape FP32 input
+per norm; repeated hook entries were storage aliases. The actual model has 16
+layers, width 1024, six attention layers and FFN width 4608. The earlier offline
+4101-token first-window reconstruction was not verified against execution and
+is superseded: V14's first recorded plan had 6807 context tokens.
+
+V14 currently forces checkpointing to keep useful training running. Removing it
+remains the preferred route where the complete update fits; the shorter matched
+comparison above establishes a speed opportunity, not a blanket fit guarantee.
+The refreshed V3 program-header corpus is locally manifest-verified and can be
+considered at a checkpoint boundary after checking exact target/group identity.
+
+Continuation now declares hash-bound predecessor identity and monitor-reference
+sidecars explicitly. Moving checkpoint files or resolving symlinks must not
+change qualification provenance or silently reset the original drift reference.
