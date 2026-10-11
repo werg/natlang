@@ -1,0 +1,90 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v30-disagreement-evidence-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v30-disagreement-candidates-v1",
+  "files": [
+    {
+      "path": "candidate-evidence-v1.jsonl",
+      "bytes": 188574,
+      "sha256": "65dca82eff56623dc2d668684c77be7ae75212b45bfa73192d43e3a58980e8f9",
+      "lines": 112
+    },
+    {
+      "path": "review.json",
+      "bytes": 8161,
+      "sha256": "977a459553d4528c498c3a1563d60559c93e29904cfade8ab411e42895e71ac6"
+    },
+    {
+      "path": "review.md",
+      "bytes": 1792,
+      "sha256": "6033db2b888762ab3ebb32cfeccdbcc96759661e06d5420218867982d5e93afa"
+    },
+    {
+      "path": "v30-response-budget-evidence-v1.json",
+      "bytes": 1533,
+      "sha256": "3e75433ed19e46c78fd34fb38c83f89c84b0aa3c1c78b4a5736382d5d380265f"
+    },
+    {
+      "path": "v30-static-execution-components-v1/manifest.json",
+      "bytes": 11546,
+      "sha256": "3083e4c76555b966e1a526b04f6fa40e41c41e533903b624776c55fb820aefdb"
+    },
+    {
+      "path": "v30-static-execution-components-v1/training/decision_task_contracts.json",
+      "bytes": 2114,
+      "sha256": "b941a04443d3a47768ef8bdf68730b4fae86a1959aa16abdc6db7b559767ec73"
+    },
+    {
+      "path": "v30-static-execution-components-v1/ts-host/dist/native/tool-surface.js",
+      "bytes": 151,
+      "sha256": "49a3fbefcb171c20dae1e1fd4f1ea00df9a41784f80def6379f5531e81549538"
+    },
+    {
+      "path": "v30-static-execution-components-v1/ts-host/dist/skills/graded.js",
+      "bytes": 22094,
+      "sha256": "171f554c7f097c39d53f916a2bdd69a9d6543e2dcb4a31bd1629d2c4213d16a1"
+    },
+    {
+      "path": "v30-static-execution-components-v1/ts-host/dist/teacher/collector.js",
+      "bytes": 102805,
+      "sha256": "3445aafe0312d110964729480c29d9f960a3c9329ab806937679179ac285a5ef"
+    },
+    {
+      "path": "v30-static-execution-components-v1/ts-host/scripts/advisory-file.mjs",
+      "bytes": 2235,
+      "sha256": "00cfe276b2f5fdf45614d1302e3428be386ad25f3d84ed11c4d8fa732708eba0"
+    },
+    {
+      "path": "v30-static-execution-components-v1/ts-host/scripts/static-adapters/decision-task-contracts.mjs",
+      "bytes": 2637,
+      "sha256": "2c1fb0d096354ab7437bdf66d8ff3ff1c312bc95bf39fae9119f13ac749e26f1"
+    },
+    {
+      "path": "v30-static-execution-components-v1/ts-host/scripts/static-adapters/folder-decision-scaffold.mjs",
+      "bytes": 5098,
+      "sha256": "215783b934af59592abbb1dd66e6105c9b34bbdbafea09ff77e469c3f84db881"
+    },
+    {
+      "path": "v30-static-execution-components-v1/ts-host/scripts/static-adapters/teacher-decision-labels.mjs",
+      "bytes": 43204,
+      "sha256": "2757fb0ccc8ed5f2ef462d38d07dae5681e96704b6a2e80cf7765dd8607b3334"
+    },
+    {
+      "path": "v30-static-execution-components-v1/ts-host/src/native/tool-surface.ts",
+      "bytes": 151,
+      "sha256": "49a3fbefcb171c20dae1e1fd4f1ea00df9a41784f80def6379f5531e81549538"
+    },
+    {
+      "path": "v30-static-execution-components-v1/ts-host/src/skills/graded.ts",
+      "bytes": 22460,
+      "sha256": "dd3737b68ad891845c8895146878b7db2b17f358271fd7298519c84d740a32f1"
+    },
+    {
+      "path": "v30-static-execution-components-v1/ts-host/src/teacher/collector.ts",
+      "bytes": 105644,
+      "sha256": "38e00b6c2496113c75654315e063dbb9d0d060f7bfcd69ff9d02817eed51d314"
+    }
+  ],
+  "bytes": 520199
+}

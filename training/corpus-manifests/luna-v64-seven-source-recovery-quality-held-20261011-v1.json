@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v64-seven-source-recovery-quality-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-seven-source-recovery-final-v1",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 70188,
+      "sha256": "7fcbb84a2ebe79aac9140118f4e53912703aede5f9c84db51c76e0959402bd0d"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 932,
+      "sha256": "ff6b7b4a7464d6c4f5536f24d82a0fbfd9cf83218ee75f7a7f1570c8ec944a3b"
+    },
+    {
+      "path": "v65-correction-rationale.json",
+      "bytes": 1903,
+      "sha256": "ffc56203e1b0f1080e51681f1983e6856dda34fdcb7ffbaedb3fe908e34c0a1c"
+    }
+  ],
+  "bytes": 73023
+}

@@ -28582,6 +28582,71 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "56program403originalIDs/groups806question/stateleaves Popportableharnessclosure nohits; actualexecutioncomponents frozen; fullS1ownercheckpending."
+    },
+    {
+      "id": "free-provider-google-v32-reviewed-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v32-source",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "512fresh9-familytraininputs62holds2048budget; sharedquotawaiter991941behindV31. Activeoutputs excluded.",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl",
+        "root-source-launch-review-v1.json",
+        "frozen-adapter-v1/**",
+        "source-preparation-code/**"
+      ]
+    },
+    {
+      "id": "luna-choice-confidence-v67-reviewed-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v67-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Five-worker56program403itemreviewed successorwaitsallV66completeaccounting. Approvald1dad62d/frozen62policy. FullS1sourceclosurepending noadmission.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-approved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-current-policy-at-approval-v1.json",
+        "worker-*/queue.jsonl"
+      ]
+    },
+    {
+      "id": "free-provider-google-v30-disagreement-evidence-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v30-disagreement-candidates-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "112fullsource semanticdisagreements, responsebudget evidence andhoneststaticbytearchive supplement:7directV30filehashmatches4reference-onlyruntimefiles; notcompleteexecutionfreeze. No automatictruth/holds."
+    },
+    {
+      "id": "luna-v64-seven-source-recovery-quality-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-seven-source-recovery-final-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Initialrecovery audit andexactV65correctionrationale archived. UseV2authoritative7itemchildvisibility/sourcebindings; noadmission."
+    },
+    {
+      "id": "luna-v64-seven-source-recovery-quality-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-seven-source-recovery-final-v2",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Actualtwoacceptedprograms7exactoriginaltrainitems alltyped/file/map/source/childrequestevidence verified. ExcludedDynamo5parentlineage preserved,0newworldcredit. TwoV65simpleterminal proposals only."
     }
   ],
   "coverage_backlog": [
