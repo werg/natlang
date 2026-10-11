@@ -36000,6 +36000,28 @@
         }
       ],
       "notes": "Exclusions are only protected eval sets, held splits and defect rows under repair. Full-prompt documents carry the recorded runtime system prompt, which differs from current ts-host pieces in about 7 of 12 paragraphs (check_prompt_against_ts_host.py)."
+    },
+    {
+      "id": "static-inline-iterate-reference-20261011-v2",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/static-inline-iterate-reference-20261011-v2",
+      "include": [
+        "teacher-turns.jsonl",
+        "salvage-receipt.json"
+      ],
+      "split": "train",
+      "source_class": "authored-static-reference-trajectories",
+      "training_admission": true,
+      "trace_admission": false,
+      "admission": "28 exact successful static inline/iterate reference trajectories plus 2 exact expected divergence reports; 136 complete source-bound teacher turns",
+      "derived_from": [
+        "static-inline-iterate-reference-pilot-20261005-v1"
+      ],
+      "training_admission_reason": "All 28 done source replays are exact, accepted and pass every reference check; the 78 formerly withheld return_result rows are promoted only after each target action exactly matches a completed source-reference action. Two impossible-schedule cases contribute only their independently approved exact final failure report; failed iterate code and intermediate output remain context-only. All rows are inherited train and preserve complete captured visible inputs. No teacher reasoning or execution plans are trained.",
+      "review_status": "exact replay, per-target action-ledger equality, existing renderer selector, JeFF/protected scan, and source overlap checks passed",
+      "required_conversion": "render full, program-header, and whole-trajectory twins for both tokenizers",
+      "consumable_by_direct_stage": false,
+      "notes": "136 targets across 30 source trajectories, including 78 recovered exact source-oracle actions. The two impossible schedule cases include only their final failure reports as targets; the failing eval and intermediate semantic answer occur only in their captured messages. Teacher reasoning remains untrained. Training admission does not qualify recurrence or runtime behavior."
     }
   ],
   "coverage_backlog": [

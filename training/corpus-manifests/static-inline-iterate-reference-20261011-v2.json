@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "static-inline-iterate-reference-20261011-v2",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/static-inline-iterate-reference-20261011-v2",
+  "files": [
+    {
+      "path": "salvage-receipt.json",
+      "bytes": 25554,
+      "sha256": "b62612a2058bfcf3f41ee6411b2a4ec574284e0bb2ea9e29e10a3d44d63a51c7"
+    },
+    {
+      "path": "teacher-turns.jsonl",
+      "bytes": 6183875,
+      "sha256": "a8387ccecd2ff4917a550b0723d930e2e164e11d5e0018de966ad48abd5620e5",
+      "lines": 136
+    }
+  ],
+  "bytes": 6209429
+}
