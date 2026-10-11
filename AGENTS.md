@@ -146,6 +146,11 @@ afterwards. The rules below are consequences of this one.
   (`scripts/memory_ledger.py run --unit <family>-<id> --budget-gb N -- ...`;
   units run asynchronously, so wait for the unit to finish and read its log).
   Never report a merge as verified when the ledgered tests did not run.
+- Ledger priority (owner, 2026-10-11): pass `--priority high` for training and
+  GPU direct/E2E runs, `low` for data generation, rendering and check-main, and
+  leave smokes/evals at the default `medium`. Claims may be generous: admission
+  uses real headroom, and lower-priority resumable units are preempted and
+  requeued (plans/MEMORY_ADMISSION.md).
 - In the shared checkout, stage only your own paths. Never push while a rebase
   or merge is unfinished. Never stage `node_modules` symlinks.
 - Before pushing, run `scripts/check-main.sh --quick` (ratchets, spec links,
