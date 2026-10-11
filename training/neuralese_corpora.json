@@ -6825,16 +6825,17 @@
       },
       "notes": "The registered digest->view conversion (DECISIONS.md 2026-10-09, one summarizer family) of the source corpus's assembled-v3 records, which the trajectory trainer refuses while they carry digest parts. native-records.jsonl (5,242 records, 16 digest parts in 16 records) with native-pieces.jsonl, recurrence-records.jsonl (4,961 records, 16 digest parts in 16 records) with recurrence-pieces.jsonl, and delta-native-records.jsonl (26 records, none) converted; no prompt:digest piece existed (0 renamed); proposal-manifest.json and recurrence-audit.json copied byte for byte; conversion-<part>.json record input/output SHA-256 and counts. No digest part remains; 32 view parts. Not converted (unchanged in the source corpus, still with their own forms): context-bound-delta/, inputs/, review/, text-proposal-26-v3/ (text, no record parts). Admission is the source's, unchanged; the source corpus stays as published. No recipe pinned assembled-v3 at conversion time.",
       "training_admission": true,
-      "review_status": "2026-10-11 dgx-held-recovery: held-by-label only (root-admitted exact-oracle native records, \"not runtime-qualified\"); admitted. Train rows 3207 of 5242 (test 2035 stay out). The old claim of 415 incremental decisions (~55k tokens) was an ID-level miss: target-specific loss-span audit finds all 415 supervised across 198 existing 4962 union train documents (231 exact eval code and 184 semantic return_result; zero mapping failures or held/test matches). These 415 audited rows add zero incremental targets/documents/tokens; target-level incremental coverage for the other 2,792 rows was not established by this audit. Receipt plans/neuralese/LUNA_V16_415_UNION_SUPERVISION_AUDIT_20261011.json. JeFF reserved-text scan: 0 hits. ~582k tokens describes native source rows, not incremental union coverage.",
+      "review_status": "2026-10-11 dgx-held-recovery: held-by-label only (root-admitted exact-oracle native records, \"not runtime-qualified\"); admitted. Train rows 3,207 of 5,242 (test 2,035 stay out). The former 415-new-decision estimate came from ID-only comparison. The hash-bound audit of V16 parent records (SHA bbfb87f3e626a56c1f16794aa138f8d8a15c18ae66f95d3bf2d59574b94417ed) finds all 3,178 V16 train rows have their exact prompt prefix and action target together in existing union train loss spans (2,691 prompt prefixes, 2,763 prompt/action pairs); zero incremental V16 parent pairs. V17 portable-context rows are a distinct source snapshot with corrected context; do not infer their prompt/action coverage from V16. V17 exact pair audit remains pending. Receipt plans/neuralese/LUNA_V16_415_UNION_SUPERVISION_AUDIT_20261011.json. JeFF reserved-text scan: 0 hits. ~582k tokens describes native source rows, not incremental union coverage.",
       "coverage_audit": "plans/neuralese/LUNA_V16_415_UNION_SUPERVISION_AUDIT_20261011.json",
-      "incremental_union_train_targets": 0,
-      "incremental_union_train_documents": 0,
-      "incremental_union_tokens": 0,
-      "incremental_coverage_scope": "415 alias-only V16 rows with exact tokenizer-decoded loss-span proof; no target-level claim for remaining source rows",
+      "incremental_union_train_targets": null,
+      "incremental_union_train_documents": null,
+      "incremental_union_tokens": null,
+      "incremental_coverage_scope": "V16 parent-source prompt/action pairs are audited (0 incremental among 3,178 V16 train rows); canonical V17 portable-context source has its own prompts and is not yet audited for exact prompt/action-pair coverage.",
       "consumable_by_direct_stage": false,
       "required_conversion": "render with native_gold_packet in both modes/tokenizers, or as whole trajectories (every assistant turn supervised); recurrence-records.jsonl (4961) is the recurrence-lineage twin",
       "recovered_rows_train": 415,
-      "train_rows": 3207
+      "train_rows": 3207,
+      "v17_context_pair_coverage": "pending exact source-context audit"
     },
     {
       "id": "neuralese-v9-root-review-20261008-v1",

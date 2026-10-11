@@ -1,7 +1,7 @@
 {
-  "schema": "natlang.native-union-supervision-audit/1",
+  "schema": "natlang.luna-v16-union-supervision-audit/2",
   "created_utc": "2026-10-11T21:17:00Z",
-  "scope": "V16 native targets versus the already admitted 4962-document LFM union",
+  "scope": "V16 native targets and exact model-visible prompt/action pairs versus the already admitted 4962-document LFM union; includes the 415 reviewed alias-only subset and 16 digest-reference repair rows.",
   "sources": {
     "native_records": {
       "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1/proposed-cumulative-native-records.jsonl",
@@ -28,10 +28,12 @@
     "mapping": "Match native source record IDs through union document source_record_ids, then map each target call to its rendered target text.",
     "loss_span": "Decode each union token_ids slice beginning at supervised_suffix_start with the pinned LFM tokenizer; verify the mapped target text occurs in that supervised suffix, not only in context. This exact target-specific result is independent of the normalized cohort routing key below.",
     "split_rule": "Count only union documents with split=train; any held/test match fails coverage.",
-    "target_classes": "231 eval code targets require exact code text; 184 return_result targets require their semantic result fields in the supervised suffix."
+    "target_classes": "All 3,178 V16 train rows were rendered through crisp_messages + assistant_reply_segments with the pinned LFM tokenizer. The exact target token sequence was checked inside the supervised loss suffix of a same-source-ID union train document.",
+    "prompt_action_pair": "For each V16 train row, compare literal uint32 little-endian token IDs before supervised_suffix_start from the shared native renderer to the union prompt prefix. Resolve renderer exact-duplicate aliases through omissions.jsonl to their rendered representative. Require the target token sequence to occur within the loss suffix of a union train doc with that exact same prompt prefix. Prompt and target digests are identity indexes over literal token IDs, not normalized text.",
+    "scope_limit": "This proves exact input prefix and exact action-target supervision for the audited native rows. It does not claim exact whole-document token equality for renderer documents with additional supervised turns/text."
   },
   "result": {
-    "native_target_ids_audited": 415,
+    "native_target_ids_audited": 3178,
     "union_train_documents_covering_targets": 198,
     "targets_with_supervised_loss_span": 415,
     "exact_eval_code_targets": 231,
@@ -41,7 +43,16 @@
     "incremental_train_targets": 0,
     "incremental_documents": 0,
     "incremental_tokens": 0,
-    "decision": "V16 native source admission remains valid. It adds no target coverage or tokens beyond the already admitted 4962 union."
+    "decision": "V16 native source admission remains valid, but the exact audit finds no incremental action-target or model-visible prompt/action-pair coverage beyond the already admitted 4962 union. All 3,178 train targets and their exact prompt prefixes are present together in union train loss spans. This does not establish exact equality of each complete rendered document.",
+    "additional_digest_rows_with_exact_supervised_target_suffix": 16,
+    "aggregate_exact_target_ids_audited_across_415_alias_and_16_digest_rows": 431,
+    "aggregate_exact_targets_with_supervised_loss_span_across_these_audits": 431,
+    "target_ids_with_exact_supervised_loss_span": 3178,
+    "exact_prompt_prefixes_present_in_union": 3178,
+    "exact_prompt_action_pairs_present_in_union": 3178,
+    "distinct_native_exact_prompt_prefixes": 2691,
+    "distinct_native_exact_prompt_action_pairs": 2763,
+    "incremental_prompt_action_pairs": 0
   },
   "consumption_bindings": {
     "shared_recipe_lfm": {
@@ -266,6 +277,152 @@
     "documents_with_literal_text_and_token_id_equality_to_mapped_union_document": 117,
     "documents_with_different_supervised_suffix_token_ids_than_mapped_union_document": 2641,
     "render_omissions_unresolved_or_malformed_digest_piece_records": 16,
-    "interpretation": "Source-ID mapping is not target-coverage proof. Exact full document and supervised-suffix token equality is established for 117 rendered docs only; 2,641 rendered docs have differing supervised suffix token IDs, so this audit does not establish their target equivalence or incremental contribution. The separate 415-target audit above checks those 415 alias-only targets directly and passes them all. The renderer audit is diagnostic, not a new corpus admission."
+    "interpretation": "Source-ID mapping and whole-document/suffix equality are diagnostic, not target-coverage proof. Literal full-document and complete supervised-suffix token equality is established for 117 rendered docs only; 2,641 have differing complete supervised suffixes. A separate exact per-row audit checks all 3,178 native action targets in context: the exact prompt prefix and exact target token sequence co-occur within an existing union train document for every row. Thus these differences do not yield incremental native action-target or prompt/action-pair coverage, though this receipt does not claim full-document equality.",
+    "digest_omission_resolution": "All 16 omissions are fixed by applying the existing digest_to_view.py@1 deterministic type/name conversion in memory; gold_text_rows rendered all 16 and each target suffix exactly matches its union target token IDs. See digest_reference_repair_audit."
+  },
+  "digest_reference_repair_audit": {
+    "converter": "scripts/neuralese_data/digest_to_view.py@1; existing exact digest→view type/name migration",
+    "source_records_sha256": "bbfb87f3e626a56c1f16794aa138f8d8a15c18ae66f95d3bf2d59574b94417ed",
+    "source_records": [
+      "teacher-program:140274a5284893813ba1:decision:0000",
+      "teacher-program:140274a5284893813ba1:decision:0005",
+      "teacher-program:140274a5284893813ba1:decision:0006",
+      "teacher-program:24c9be49061738481408:decision:0000",
+      "teacher-program:24c9be49061738481408:decision:0005",
+      "teacher-program:24c9be49061738481408:decision:0006",
+      "teacher-program:271c735763f93ab9163d:decision:0000",
+      "teacher-program:271c735763f93ab9163d:decision:0005",
+      "teacher-program:271c735763f93ab9163d:decision:0006",
+      "teacher-program:4a076483d15d2374b623:decision:0000",
+      "teacher-program:4a076483d15d2374b623:decision:0005",
+      "teacher-program:b6626c885cf2db6f4b09:decision:0000",
+      "teacher-program:b6626c885cf2db6f4b09:decision:0005",
+      "teacher-program:b6626c885cf2db6f4b09:decision:0006",
+      "teacher-program:f0f23140c0ad32eb18d6:decision:0000",
+      "teacher-program:f0f23140c0ad32eb18d6:decision:0005"
+    ],
+    "source_row_sha256s_and_ids": {
+      "1db730ec07528bf995b556d35656ef4371cd735df474159a943959ff6c29f7c1": [
+        "teacher-program:140274a5284893813ba1:decision:0000",
+        "teacher-program:140274a5284893813ba1:decision:0005",
+        "teacher-program:140274a5284893813ba1:decision:0006"
+      ],
+      "4fc4684e9078cb7b9f1d320190acdbe110dd73e56c8f8d62fd636c53caa72d52": [
+        "teacher-program:4a076483d15d2374b623:decision:0000",
+        "teacher-program:4a076483d15d2374b623:decision:0005"
+      ],
+      "778ad63fc5865a219802ffe845f872c897659a3bd904708d1a8a01dc4e093197": [
+        "teacher-program:b6626c885cf2db6f4b09:decision:0000",
+        "teacher-program:b6626c885cf2db6f4b09:decision:0005",
+        "teacher-program:b6626c885cf2db6f4b09:decision:0006"
+      ],
+      "caa679ffef381d05251e722bf5a2db8e6a59197972d6eaaea16a3449c2dfd2a7": [
+        "teacher-program:f0f23140c0ad32eb18d6:decision:0000",
+        "teacher-program:f0f23140c0ad32eb18d6:decision:0005"
+      ],
+      "f4cd5fc27d541e0645d593658ff26d74e7e4d27f5eac9e41bcd6493618e64d89": [
+        "teacher-program:271c735763f93ab9163d:decision:0000",
+        "teacher-program:271c735763f93ab9163d:decision:0005",
+        "teacher-program:271c735763f93ab9163d:decision:0006"
+      ],
+      "ff6311f276458b48826ba7467e252ffbce6285766b856e9047f904f967c571bc": [
+        "teacher-program:24c9be49061738481408:decision:0000",
+        "teacher-program:24c9be49061738481408:decision:0005",
+        "teacher-program:24c9be49061738481408:decision:0006"
+      ]
+    },
+    "digest_parts": {
+      "digest:13274a8552a9": {
+        "sha256": "13274a8552a965652872f5e5e87f82949ed3635f0f9ab2422abbd2a2280f6e49",
+        "characters": 871,
+        "holder": "candidates",
+        "value_type": "Record<string, SkillPlan>",
+        "occurrences": 2
+      },
+      "digest:218e5e874fa9": {
+        "sha256": "218e5e874fa90c0123be2802e82e231a6a79405da3149e4a9092fff03ace3bb1",
+        "characters": 871,
+        "holder": "candidates",
+        "value_type": "Record<string, SkillPlan>",
+        "occurrences": 3
+      },
+      "digest:3783f7f955de": {
+        "sha256": "3783f7f955dedd35a48a138755cb1960218eccc6e7a0de710cedb66aefe58ee6",
+        "characters": 871,
+        "holder": "candidates",
+        "value_type": "Record<string, SkillPlan>",
+        "occurrences": 3
+      },
+      "digest:474abebc5183": {
+        "sha256": "474abebc51833cb506226c1353a671c9fa1fd4158361b20bc853d04cc8937e77",
+        "characters": 871,
+        "holder": "candidates",
+        "value_type": "Record<string, SkillPlan>",
+        "occurrences": 3
+      },
+      "digest:980b2ba5be78": {
+        "sha256": "980b2ba5be78671f8ff9f49f3c14a900df2566ec3e75869c7afed2b8b962bf0a",
+        "characters": 871,
+        "holder": "candidates",
+        "value_type": "Record<string, SkillPlan>",
+        "occurrences": 3
+      },
+      "digest:da50a4260dfc": {
+        "sha256": "da50a4260dfc5d8f5a519e7b7fee8274623265453c4e6a368e2aa16c49904aaf",
+        "characters": 871,
+        "holder": "candidates",
+        "value_type": "Record<string, SkillPlan>",
+        "occurrences": 2
+      }
+    },
+    "converted_memory_only": true,
+    "shared_renderer_api": "training/neuralese/natlang_neuralese/data/text_corpus.py::gold_text_rows",
+    "rendered_rows": 16,
+    "render_omissions": 0,
+    "target_suffix_comparison": {
+      "union_ids_mapped": 16,
+      "literal_decoded_target_suffix_equal": 16,
+      "exact_token_id_target_suffix_equal": 16,
+      "held_or_test_matches": 0
+    },
+    "temporary_validation_artifact_sha256": "400f8332f2d769cf9cea4884c5c106051fd3329fc05d0b98b49d8098e741ad05",
+    "conclusion": "The raw digest rows are repairable by the already registered deterministic converter. The 16 source target suffixes are all byte/token equal to supervised union suffixes, so this repair prevents renderer loss without claiming any incremental targets or changing admitted source bytes.",
+    "source_split_matches_union_train": 16,
+    "source_union_split_mismatches": 0,
+    "union_test_mappings": 0
+  },
+  "exact_prompt_action_pair_coverage_audit": {
+    "source_records_sha256": "bbfb87f3e626a56c1f16794aa138f8d8a15c18ae66f95d3bf2d59574b94417ed",
+    "union_text_sha256": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576",
+    "renderer_path": "scripts/neuralese_data/render_native_turn_corpus.py",
+    "renderer_sha256": "b22c802e0c83b684a3907633510f9e0963b0d731e246fd50641baec2c3734428",
+    "render_output_sha256": "a0664861e76b3b752b5ad96c6873f6c95fcf66524f34fa93d0981c631d919d83",
+    "tokenizer_id": "LFM2.5-350M",
+    "tokenizer_json_sha256": "df1d8d5ec5d091b460562ffd545e4a5e91d17d4a0db7ebe733be34ed374377bd",
+    "counts": {
+      "source_train_rows": 3178,
+      "rows_with_exact_prompt_prefix_in_union_train": 3178,
+      "rows_with_exact_target_token_sequence_in_union_loss_suffix": 3178,
+      "rows_with_same_union_doc_containing_exact_prompt_and_target": 3178,
+      "distinct_exact_prompt_prefixes": 2691,
+      "distinct_exact_prompt_target_pairs": 2763,
+      "distinct_exact_prompt_prefixes_absent": 0,
+      "distinct_exact_prompt_target_pairs_absent": 0,
+      "duplicate_alias_source_ids_resolved_to_rendered_representatives": 398
+    },
+    "target_action_counts": {
+      "eval": 2230,
+      "return_result": 807,
+      "read_code": 87,
+      "assistant_content": 26,
+      "read_page": 6,
+      "read_file": 16,
+      "multi_action_or_list": 6
+    },
+    "proof_artifact_sha256": {
+      "exact_action_loss_span_audit": "0352934718de8140b9af83f69c7f48a6e19709ada324ecdc83e385e7a1702c17",
+      "exact_prompt_action_pair_audit": "3e66c415ea008ddf8ff88ebabb2d44c4f7da87ebd085b6beccc353ea360ccbdb"
+    },
+    "conclusion": "No incremental target actions or exact prompt/action pairs among the 3,178 V16 train rows. Exact prompt-prefix equality also establishes that these decisions had the same model-visible input context, including prior rendered context in the prefix. This comparison is scoped to each target action; the separately reported 2,641 full supervised-suffix differences are not evidence of unique targets by themselves."
   }
 }
