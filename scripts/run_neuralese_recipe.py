@@ -9,7 +9,6 @@ the recipe's output directory.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -23,13 +22,8 @@ import time
 REPO = Path(__file__).resolve().parents[1]
 NEURALESE = REPO / "training" / "neuralese"
 
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
+sys.path.insert(0, str(NEURALESE))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256  # noqa: E402
 
 
 def under(path: Path, root: Path) -> bool:

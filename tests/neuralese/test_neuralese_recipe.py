@@ -335,6 +335,7 @@ def test_direct_shared_stage_recipe_pins_contract_and_builds_frozen_launch(tmp_p
         def __init__(self, command, env):
             del env
             stage_out = Path(command[command.index('--out') + 1])
+            stage_out.mkdir(parents=True, exist_ok=True)
             (stage_out / 'report.json').write_text(json.dumps({'qualified': True}))
             (stage_out / 'heads.pt').write_bytes(b'head artifact')
 
