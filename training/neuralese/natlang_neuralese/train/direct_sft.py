@@ -33,6 +33,7 @@ from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_
 from .checkpoint_policy import CheckpointPolicy
 
 SCHEMA = 'natlang.neuralese-direct/1'
+MUON_MIN_SIDE = 16  # MuonSR latents: both matrix sides at least this (smaller ones: AdamW)
 # Options added after runs had started, at their defaults, stay out of the resume identity (a run started before them
 # resumes; idle-expert skipping is a defect fix that applies to it from then on).
 LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_beta2_half_life_tokens': 4e6,
@@ -314,8 +315,13 @@ def main(argv=None):
     projections = {'neuralese_projection': neuralese, **({'token_choice_projection': token_choice}
                                                          if token_choice is not None else {})}
     head_named = [(key + '.' + n, q) for key, module in projections.items() for n, q in module.named_parameters()]
-    latent_named = [(n, q) for n, q in backbone_named if q.ndim >= 2 and '.mlp.gate.' not in n]
-    other_backbone = [(n, q) for n, q in backbone_named if not (q.ndim >= 2 and '.mlp.gate.' not in n)]
+    def is_latent(n, q):
+        # MuonSR: matrices narrower than MUON_MIN_SIDE (LFM's short-conv kernels [d, 1, k]) have no meaningful
+        # orthogonalization; they go to AdamW with the routers and norms, as Moonlight keeps non-matrix weights on Adam.
+        narrow = a.latent_optimizer == 'muonsr' and min(q.shape[-2:]) < MUON_MIN_SIDE if q.ndim >= 2 else False
+        return q.ndim >= 2 and '.mlp.gate.' not in n and not narrow
+    latent_named = [(n, q) for n, q in backbone_named if is_latent(n, q)]
+    other_backbone = [(n, q) for n, q in backbone_named if not is_latent(n, q)]
     from ..maple.qat_convert import row_scale
     from .optim import beta_for_half_life, latent_block_rows
     config = backbone.hf.config
