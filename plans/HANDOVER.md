@@ -11184,3 +11184,25 @@ No context reduction, frozen backbone or detached producer gradient was used.
   and options, not injected gold. Complete paired provenance/quality review is
   pending; preserve that correction and do not suppress legitimate dynamic lambda
   formulation or invent a new prompt experiment from the mistaken warning.
+
+### 16:08 UTC — resumed monitoring and strict precision reference
+
+- Native endpoint epoch passed101 updates without numerical/replay errors. Held75
+  soft/crisp CE1.857/1.800 and held100 1.990/2.001 remain above original
+  1.728/1.358. Written/shuffled CE at100 is1.506/2.230: context helps, but
+  absolute quality is still unqualified. Preserve original V8 and best25; inspect
+  optimization/generalization rather than promoting a contrast-only win.
+- Shared forced-sequence FP32 reference now disables TF32 and records actual
+  precision flags (6072ccef). Prior cast-only reference still permitted TF32;
+  old evidence remains intact. Bulk writing remains undispatched pending numeric
+  and consumer review. No GPU benchmark interrupted the resumed epoch here.
+- Five Luna V41 lanes finished seven programs with exact export receipts and
+  exit0; semantic/source/visibility review and fresh refill are underway. Google
+  V43 resume is active:247 unique HTTP200 labels at helper cutoff, one invalid
+  Massive Intent answer `unknown` held for bounded recovery after quota-owner
+  closure. No duplicate Google owner.
+- V15 closeoutV2 corrected receipts:44/48 baseline versus46/48 candidate, exact
+  maps3/6 versus4/6. Source-specific lambda explanations were model-authored,
+  not gold leakage.89/96 items have exact complete visible child context; seven
+  literal-join unknowns are not evidence of missing context. Small single-family
+  evidence remains held, with no global superiority or admission claim.
