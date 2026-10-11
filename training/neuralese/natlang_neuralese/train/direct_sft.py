@@ -33,7 +33,11 @@ from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_
 from .checkpoint_policy import CheckpointPolicy
 
 SCHEMA = 'natlang.neuralese-direct/1'
-OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
+# Options added after runs had started, at their defaults, stay out of the resume identity (a run started before them
+# resumes; idle-expert skipping is a defect fix that applies to it from then on).
+LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_beta2_half_life_tokens': 4e6,
+                  'latent_ns': 'quintic', 'latent_weight_decay': 0.0}
+OPERATIONAL = frozenset({'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows'})
 
@@ -58,7 +62,27 @@ def parse(argv=None):
     p.add_argument('--context-weight', type=float, default=1.0)
     p.add_argument('--feedback-weight', type=float, default=.25, help='tool-output weight inside context supervision')
     p.add_argument('--backbone-lr', type=float, default=7.5e-6, help='AdamW lr of routers and norms')
-    p.add_argument('--latent-optimizer', choices=('lionsr', 'muonsr'), default='lionsr')
+    p.add_argument('--latent-optimizer', choices=('lionsr', 'muonsr', 'adaminisr'), default='lionsr')
+    p.add_argument('--latent-skip-idle', action=argparse.BooleanOptionalAction, default=True,
+                   help='lionsr/adaminisr: an expert matrix with an exactly zero gradient this update (no routed tokens) '
+                        'is not stepped (train/optim.py LionSR)')
+    p.add_argument('--latent-cautious', action=argparse.BooleanOptionalAction, default=False,
+                   help='lionsr/adaminisr: the cautious mask (a coordinate moves only where the update agrees in sign '
+                        'with its gradient), without lr renormalization')
+    p.add_argument('--latent-beta2-half-life-tokens', type=float, default=4e6,
+                   help="adaminisr: the second moment's half-life in tokens (beta2 from tokens x batch per update; "
+                        'Marek et al., arXiv:2507.07101)')
+    p.add_argument('--latent-ns', choices=('quintic', 'cubic5'), default='quintic',
+                   help="muonsr: the Newton-Schulz variant (cubic5: arXiv:2606.00371, a third fewer matmuls)")
+    p.add_argument('--latent-weight-decay', type=float, default=0.0,
+                   help='decoupled weight decay of the latents (Mellum2 SFT: 0.1 with Muon)')
+    p.add_argument('--stop-at', type=int, default=0,
+                   help='operational: end the stage at this update (eval, gate and report as at the end) while the '
+                        'schedules (QAT ramps) follow --steps: a prefix of the declared run; 0: --steps')
+    p.add_argument('--weight-drift-base', type=Path,
+                   help='report-only: a directory holding the base latents (written before the first update when '
+                        'absent); at the end weight-drift.json records each latent\'s drift from it, per expert for '
+                        'stacked latents with its idle-update count')
     p.add_argument('--latent-lr', type=float, default=3e-6,
                    help='lionsr: per row ternary scale; muonsr: on AdamW\'s scale')
     p.add_argument('--head-lr', type=float, default=3e-4, help='the projections\' lr (Muon/AdamW)')
@@ -166,6 +190,45 @@ def relative_mse(predicted, target, weights=None):
     return (per_position * weights).sum() / weights.sum().clamp_min(1e-12)
 
 
+def snapshot_latents(directory: Path, named) -> None:
+    """The base latents, one file each, for ``latent_drift`` (written before the first update)."""
+    directory.mkdir(parents=True, exist_ok=True)
+    for index, (name, q) in enumerate(named):
+        torch.save(q.detach().cpu(), directory / f'{index:04d}.pt')
+    (directory / 'manifest.json').write_text(json.dumps([[n, list(q.shape)] for n, q in named]) + '\n')
+
+
+@torch.no_grad()
+def latent_drift(directory: Path, named, optimizer, step: int) -> dict:
+    """Report-only: each latent's drift ``||w - w0||`` from the snapshot and ``||w0||``, per matrix for stacked (expert)
+    latents with the optimizer's count of updates in which that matrix was idle (no routed tokens)."""
+    manifest = json.loads((directory / 'manifest.json').read_text())
+    if [n for n, _ in manifest] != [n for n, _ in named]:
+        raise ValueError('weight drift snapshot holds other latents')
+    rows, total, reference = [], 0.0, 0.0
+    for index, (name, q) in enumerate(named):
+        base = torch.load(directory / f'{index:04d}.pt', mmap=True, map_location='cpu').to(q.device)
+        delta = q.float() - base.float()
+        dims = (-2, -1)
+        row = {'name': name, 'shape': list(q.shape)}
+        if q.ndim > 2:
+            drift = torch.linalg.vector_norm(delta, dim=dims).reshape(-1)
+            norm = torch.linalg.vector_norm(base.float(), dim=dims).reshape(-1)
+            idle = (optimizer.idle_updates or {}).get(id(q))
+            row.update(expert_drift=drift.tolist(), expert_norm=norm.tolist(),
+                       expert_idle_updates=None if idle is None else idle.reshape(-1).tolist(),
+                       updates=(optimizer.updates or {}).get(id(q)))
+            drift, norm = drift.square().sum().sqrt(), norm.square().sum().sqrt()
+        else:
+            drift, norm = torch.linalg.vector_norm(delta), torch.linalg.vector_norm(base.float())
+        row.update(drift=float(drift), norm=float(norm))
+        total, reference = total + float(drift) ** 2, reference + float(norm) ** 2
+        rows.append(row)
+        del base, delta
+    return {'schema': 'natlang.latent-weight-drift/1', 'step': step, 'drift': total ** .5, 'norm': reference ** .5,
+            'relative': (total / reference) ** .5 if reference else None, 'latents': rows}
+
+
 def main(argv=None):
     stop = StopSignal().install()
     a = parse(argv)
@@ -190,7 +253,8 @@ def main(argv=None):
     code = {str(path.relative_to(Path(__file__).parents[1])): sha256_file_hex(path)
             for path in sorted(Path(__file__).parents[1].rglob('*.py'))}
     inputs = {str(path): sha256_file_hex(path) for path in (a.heads, a.records, a.pieces, a.text_data) if path}
-    identity = {'schema': SCHEMA, 'options': {k: v for k, v in options.items() if k not in OPERATIONAL},
+    identity = {'schema': SCHEMA, 'options': {k: v for k, v in options.items() if k not in OPERATIONAL
+                                              and not (k in LATER_DEFAULTS and v == LATER_DEFAULTS[k])},
                 'inputs': inputs, 'code': code}
 
     engine = load_engine(heads_checkpoint=str(a.heads), device=a.device)
@@ -253,9 +317,21 @@ def main(argv=None):
     latent_named = [(n, q) for n, q in backbone_named if q.ndim >= 2 and '.mlp.gate.' not in n]
     other_backbone = [(n, q) for n, q in backbone_named if not (q.ndim >= 2 and '.mlp.gate.' not in n)]
     from ..maple.qat_convert import row_scale
-    latent = [(n, q, a.latent_lr, row_scale(q) if a.latent_optimizer == 'lionsr' else None) for n, q in latent_named]
+    from .optim import beta_for_half_life, latent_block_rows
+    config = backbone.hf.config
+    head_dim = getattr(config, 'head_dim', None) or config.hidden_size // config.num_attention_heads
+    latent = [(n, q, a.latent_lr, row_scale(q) if a.latent_optimizer == 'lionsr' else
+               latent_block_rows(n, q, head_dim) if a.latent_optimizer == 'adaminisr' else None)
+              for n, q in latent_named]
+    latent_options = dict(weight_decay=a.latent_weight_decay)
+    if a.latent_optimizer in ('lionsr', 'adaminisr'):
+        latent_options.update(skip_idle=a.latent_skip_idle, cautious=a.latent_cautious)
+    if a.latent_optimizer == 'muonsr':
+        latent_options.update(ns=a.latent_ns)
+    if a.latent_optimizer == 'adaminisr':
+        latent_options['betas'] = (0.9, beta_for_half_life(a.tokens * a.batch, a.latent_beta2_half_life_tokens))
     optimizer = PortMuonAdamW(head_named + other_backbone, lr=a.head_lr, vocab_size=int(backbone.embedding_weight.shape[0]),
-                              latent=latent, latent_optimizer=a.latent_optimizer)
+                              latent=latent, latent_optimizer=a.latent_optimizer, latent_options=latent_options)
     other_ids = {id(q) for _, q in other_backbone}
     for child in (optimizer.muon, optimizer.auxiliary):  # routers and norms at the backbone lr
         if child is None:
@@ -272,9 +348,13 @@ def main(argv=None):
     in_backward = optimizer.latent
     in_backward.step_in_backward(gated=True)
     print(json.dumps({'event': 'trainables', 'latent_optimizer': a.latent_optimizer, 'latents': len(latent),
+                      'latent_options': {k: list(v) if isinstance(v, tuple) else v for k, v in latent_options.items()},
                       'adamw_or_muon_backbone': [n for n, _ in other_backbone][:4] + ['...'],
                       'projections': {k: sum(q.numel() for q in m.parameters()) for k, m in projections.items()}}),
           flush=True)
+
+    if a.weight_drift_base is not None and not (a.weight_drift_base / 'manifest.json').is_file():
+        snapshot_latents(a.weight_drift_base, latent_named)
 
     # Windows: the whole preceding document (system prompt included) up to --tokens, --target-tokens supervised.
     rows, receipt = load_text_rows(a.records, a.pieces, a.text_data, tokenizer=engine.tokenizer)
@@ -453,7 +533,7 @@ def main(argv=None):
                 scope.enter_context(quant.context('bf16', 0.0))
             drift = held_kl(backbone.hf, gate_held, a.drift_rows, 0.25)
         drift['guard'] = behaviour_drift_level(drift, a)
-        due = (last_gate is None or step - last_gate >= a.drift_gate_every or step >= a.steps or
+        due = (last_gate is None or step - last_gate >= a.drift_gate_every or step >= min(a.stop_at or a.steps, a.steps) or
                (last_gate_kl is not None and drift['held_response_kl'] - last_gate_kl >= a.drift_gate_rise))
         if drift['guard'] == 'warn' and a.drift_gate and behaviour is not None and not due:
             drift['gate_at_warn'] = {'deferred': True, 'last_gate': last_gate}
@@ -538,7 +618,8 @@ def main(argv=None):
     order = random.Random(f'{a.seed}:direct')
     for _ in range(step):  # the sampler is keyed by step: replay its draws
         order.randrange(len(train_windows))
-    loop = TrainingLoop(step, a.steps, stop)
+    end = min(a.stop_at or a.steps, a.steps)  # --stop-at: a prefix of the declared schedule
+    loop = TrainingLoop(step, end, stop)
     start_index = step
     saved_step = None
     started = time.time()
@@ -571,7 +652,7 @@ def main(argv=None):
                 raise SystemExit(2)
         log('train.jsonl', {'step': step, 'loss': float(loss), 'precision': point, 'mix': mix, **metrics,
                             'seconds': time.time() - tick})
-        if step % a.eval_every == 0 or step == a.steps:
+        if step % a.eval_every == 0 or step == end:
             report = evaluate()
             history.append({k: report[k] for k in ('step', 'ce', 'ce_delta', 'value_relative_mse_delta')})
             improved = best is None or report['ce'] < best['ce']
@@ -596,7 +677,7 @@ def main(argv=None):
         if (policy.due(step) or stop.requested) and saved_step != step:  # never a second write of one step:
             policy.save(full_state())  # it would replace the slot and break best-checkpoint.pt's hard link
             saved_step = step
-    finished = step >= a.steps
+    finished = step >= end
     gate = (gate_by_step.get(step) or gate_report()) if finished else None
     final = json.loads((a.out / 'report.json').read_text()) if (a.out / 'report.json').exists() else {}
     drift_stopped = any((json.loads(line).get('behaviour_drift') or {}).get('guard') == 'stop'
@@ -606,19 +687,24 @@ def main(argv=None):
     value_qualified = math.isfinite(value_delta) and value_delta < -a.value_margin
     # Owner 2026-10-11: the Neuralese value requirement belongs to the end-to-end stage (consumers reading values
     # against consumers reading tokens); here the value metric and its margin are report-only.
-    qualified = bool(finished and final.get('ce_delta', 0.0) < 0 and not drift_stopped and
+    qualified = bool(finished and step >= a.steps and final.get('ce_delta', 0.0) < 0 and not drift_stopped and
                      (gate is None or gate['passed']))
     identity_file = a.out / 'identity-check.json'
     final.update(identity_check=json.loads(identity_file.read_text()) if identity_file.is_file() else None)
-    status = 'complete' if finished else ('checkpointed_on_drift_guard' if drift_stopped else 'checkpointed_on_signal')
-    final.update(status=status, completed=finished, steps=step, best=best,
+    status = ('complete' if step >= a.steps else 'stopped_at') if finished else ('checkpointed_on_drift_guard' if drift_stopped else 'checkpointed_on_signal')
+    final.update(status=status, completed=step >= a.steps, steps=step, stopped_at=a.stop_at or None, best=best,
                  behaviour_gate=gate, drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
                  value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta'),
                              'report_only': True, 'moved_to': 'end-to-end stage (owner 2026-10-11)'},
-                 seconds=time.time() - started, scope='Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md)')
+                 seconds=time.time() - started,
+                 cuda_peak_allocated_gb=torch.cuda.max_memory_allocated() / 2 ** 30 if torch.cuda.is_available() else None,
+                 scope='Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md)')
     if saved_step != step:
         policy.save(full_state())
     (a.out / 'report.json').write_text(json.dumps(final, indent=2) + '\n')
+    if a.weight_drift_base is not None:
+        (a.out / 'weight-drift.json').write_text(json.dumps(
+            latent_drift(a.weight_drift_base, latent_named, in_backward, step), indent=1) + '\n')
     print(json.dumps({'event': 'neuralese_direct_' + final['status'], 'step': step, 'qualified': qualified}), flush=True)
 
 

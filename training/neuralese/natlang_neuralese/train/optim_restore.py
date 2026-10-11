@@ -70,7 +70,7 @@ def declared_added_names(named_params, prefixes):
 
 def _saved_children(saved):
     if "muon" in saved:  # PortMuonAdamW
-        latent_keys = [key for key in ("lion", "muonsr") if saved.get(key) is not None]
+        latent_keys = [key for key in ("lion", "muonsr", "adamini") if saved.get(key) is not None]
         if len(latent_keys) > 1:
             raise OptimizerRestoreError("saved optimizer has multiple latent partitions")
         return ([("muon", saved["muon"])]

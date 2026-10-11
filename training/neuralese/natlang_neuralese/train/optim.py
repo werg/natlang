@@ -17,6 +17,8 @@ from torch import nn
 
 POLICIES = ("adamw", "muon")
 FORMAT = "natlang.port-muon-adamw/1"
+# latent optimizer -> its state key in PortMuonAdamW's checkpoint (and its schema label)
+LATENT_KEYS = {"lionsr": "lion", "muonsr": "muonsr", "adaminisr": "adamini"}
 
 
 def port_named_parameters(backbone, heads) -> list[tuple[str, torch.nn.Parameter]]:
@@ -34,11 +36,14 @@ def muon_eligible(name: str, parameter: torch.Tensor, vocab_size: int, embedding
 
 class PortMuonAdamW(torch.optim.Optimizer):
     def __init__(self, named_parameters, *, lr: float, vocab_size: int, embedding_ids=(), momentum: float = 0.95,
-                 ns_steps: int = 5, latent=(), latent_optimizer: str = "lionsr"):
+                 ns_steps: int = 5, latent=(), latent_optimizer: str = "lionsr", latent_options=None):
         """``latent``: (name, parameter, lr, row_scale) of BF16 latents stepped in backward with one BF16 momentum and
         stochastic-rounding writes, for the latent backbone policy. ``latent_optimizer``: ``lionsr`` (per-row step
         ``lr x row_scale``, the memory-lean path of Mellum's conversion v3; ``lr`` in units of each row's ternary
-        scale) or ``muonsr`` (Muon per matrix, ``lr`` on AdamW's scale; row_scale unused)."""
+        scale), ``muonsr`` (Muon per matrix, ``lr`` on AdamW's scale; row_scale unused) or ``adaminisr`` (Adam-mini,
+        ``lr`` on AdamW's scale; the fourth element is the latent's ``block_rows``, ``latent_block_rows``).
+        ``latent_options``: constructor options of the latent optimizer (LionSR/AdamMiniSR: ``skip_idle``,
+        ``cautious``; AdamMiniSR: ``betas``; MuonSR: ``ns``) plus ``weight_decay`` of every latent group."""
         if not hasattr(torch.optim, "Muon"):
             raise RuntimeError("the muon policy needs a PyTorch build with torch.optim.Muon")
         embedding_ids = set(embedding_ids)
@@ -57,20 +62,28 @@ class PortMuonAdamW(torch.optim.Optimizer):
                 raise ValueError(f"duplicate trainable parameter {name}")
             seen.add(id(parameter))
             self.schema.append({"name": name, "shape": list(parameter.shape), "dtype": str(parameter.dtype),
-                                "optimizer": "lion" if latent_optimizer == "lionsr" else latent_optimizer})
-        if latent_optimizer not in ("lionsr", "muonsr"):
+                                "optimizer": LATENT_KEYS.get(latent_optimizer, latent_optimizer)})
+        if latent_optimizer not in LATENT_KEYS:
             raise ValueError(f"unknown latent optimizer {latent_optimizer!r}")
-        self.latent_key = "lion" if latent_optimizer == "lionsr" else "muonsr"
+        self.latent_key = LATENT_KEYS[latent_optimizer]
+        options = dict(latent_options or {})
         if not latent:
             self.latent = None
         elif latent_optimizer == "lionsr":
+            decay = options.pop("weight_decay", 0.0)
             self.latent = LionSR([{"params": [parameter], "lr": rate, "row_scale": scale, "qat_latent_lr": rate,
-                                   "weight_decay": 0.0, "name": name} for name, parameter, rate, scale in latent],
-                                 lr=latent[0][2], fused=True)
+                                   "weight_decay": decay, "name": name} for name, parameter, rate, scale in latent],
+                                 lr=latent[0][2], fused=True, **options)
+        elif latent_optimizer == "adaminisr":
+            decay = options.pop("weight_decay", 0.0)
+            self.latent = AdamMiniSR([{"params": [parameter], "lr": rate, "block_rows": int(rows or 1),
+                                       "qat_latent_lr": rate, "weight_decay": decay, "name": name}
+                                      for name, parameter, rate, rows in latent], lr=latent[0][2], **options)
         else:
-            self.latent = MuonSR([{"params": [parameter], "lr": rate, "qat_latent_lr": rate, "weight_decay": 0.0,
+            decay = options.pop("weight_decay", 0.0)
+            self.latent = MuonSR([{"params": [parameter], "lr": rate, "qat_latent_lr": rate, "weight_decay": decay,
                                    "name": name} for name, parameter, rate, _ in latent], lr=latent[0][2],
-                                 momentum=momentum, ns_steps=ns_steps)
+                                 momentum=momentum, ns_steps=ns_steps, **options)
         if not muon:
             raise ValueError("the muon policy found no eligible hidden matrices")
         self.muon = torch.optim.Muon(muon, lr=lr, weight_decay=0.0, momentum=momentum, ns_steps=ns_steps,
@@ -151,41 +164,73 @@ def stochastic_round_(target: torch.Tensor, value: torch.Tensor) -> None:
     target.copy_(((bits + noise) & -65536).view(torch.float32))
 
 
-def _lion_chunk(p, g, m, lr, beta1, beta2, decay):
-    """One fused Lion update of a BF16 chunk with stochastic rounding; returns (new p, new momentum)."""
+def _lion_kernel(p, g, m, scale, active, lr, beta1, beta2, decay, cautious: bool = False, rounding: bool = True):
+    """One Lion update (FP32 math) of a BF16 latent; returns (new p, new momentum). ``scale``: per-row step multiplier
+    (``lr x row_scale``) or None. ``active``: a bool mask broadcastable to ``p`` (False for an idle expert matrix: no
+    update, no weight decay, momentum unchanged) or None. ``cautious`` (Liang et al., arXiv:2411.16085, without the
+    paper's lr renormalization): a coordinate moves only where the update's sign agrees with this gradient's sign.
+    ``rounding``: stochastic-rounding write (BF16 targets); rounding an unchanged BF16 value is exact."""
     gf, mf, value = g.float(), m.float(), p.float()
-    value = value * (1 - lr * decay) - lr * torch.sign(beta1 * mf + (1 - beta1) * gf)
-    bits = value.view(torch.int32)
-    rounded = ((bits + torch.randint_like(bits, 0, 1 << 16)) & -65536).view(torch.float32)
-    return rounded.to(p.dtype), (beta2 * mf + (1 - beta2) * gf).to(m.dtype)
+    update = torch.sign(beta1 * mf + (1 - beta1) * gf)
+    if cautious:
+        update = update * (update * gf > 0).to(update.dtype)
+    stepped = value * (1 - lr * decay) - (lr if scale is None else lr * scale) * update
+    momentum = beta2 * mf + (1 - beta2) * gf
+    if active is not None:
+        stepped = torch.where(active, stepped, value)
+        momentum = torch.where(active, momentum, mf)
+    if rounding:
+        bits = stepped.view(torch.int32)
+        stepped = ((bits + torch.randint_like(bits, 0, 1 << 16)) & -65536).view(torch.float32)
+    return stepped.to(p.dtype), momentum.to(m.dtype)
 
 
-_fused_lion_chunk = torch.compile(_lion_chunk, dynamic=True)
+_fused_lion_chunk = torch.compile(_lion_kernel, dynamic=True)
+_fused_lion_rows = torch.compile(_lion_kernel, dynamic=False)
 
 
-def _lion_rows(p, g, m, scale, lr, beta1, beta2, decay):
-    gf, mf, value = g.float(), m.float(), p.float()
-    value = value * (1 - lr * decay) - (lr * scale) * torch.sign(beta1 * mf + (1 - beta1) * gf)
-    if p.dtype != torch.bfloat16:  # stochastic rounding only for BF16 latents
-        return value.to(p.dtype), (beta2 * mf + (1 - beta2) * gf).to(m.dtype)
-    bits = value.view(torch.int32)
-    rounded = ((bits + torch.randint_like(bits, 0, 1 << 16)) & -65536).view(torch.float32)
-    return rounded.to(p.dtype), (beta2 * mf + (1 - beta2) * gf).to(m.dtype)
-
-
-_fused_lion_rows = torch.compile(_lion_rows, dynamic=False)
+def stack_activity(grad: torch.Tensor) -> torch.Tensor:
+    """Per matrix of a stacked (ndim > 2) gradient, whether any entry is nonzero (an expert routed no tokens in this
+    update has an exactly zero slice). Shape ``grad.shape[:-2]``; no host sync, no full-size temporary."""
+    flat = grad.reshape(-1, grad.shape[-2] * grad.shape[-1])
+    return ((flat.amax(1) != 0) | (flat.amin(1) != 0)).view(grad.shape[:-2])
 
 
 class LionSR(torch.optim.Optimizer):
     """Lion (sign of interpolated momentum; one BF16 momentum buffer) for BF16 latents with stochastic-rounding
     writes: the memory-lean optimizer of Mellum's full-latent QAT (2 copies of the weights instead of 4-6). The update
-    magnitude is ``lr`` per element, so for ternary latents ``lr`` is set in units of the codes' scale."""
+    magnitude is ``lr`` per element, so for ternary latents ``lr`` is set in units of the codes' scale.
+
+    Idle matrices of a stack (``skip_idle``, default on; 2026-10-11 optimizer review): Lion moves every coordinate by
+    the full ``lr`` even where the gradient is zero (the sign of a decaying momentum stays +-1), so an expert routed no
+    tokens in an update drifted at full rate. A matrix of a stacked (ndim > 2) latent whose gradient slice is exactly
+    zero gets no update and no weight decay, and its momentum is left unchanged (lazy semantics: an expert's momentum
+    is the history of its own gradients, so an update it took no part in neither steps nor ages it; MuonSR instead
+    decays an idle expert's momentum). ``cautious``: Liang et al.'s mask (arXiv:2411.16085) without the paper's
+    ``d/(nnz+1)`` lr renormalization (it about doubles the step at batch-1 noise). Both are configuration, not state:
+    they are constructor arguments kept across ``load_state_dict`` (the saved state format is unchanged).
+    ``idle_updates``: per stacked latent, the count of updates in which each matrix was idle (diagnostic only)."""
 
     def __init__(self, params, lr: float, betas=(0.9, 0.99), weight_decay: float = 0.0, chunk: int = 1 << 26,
-                 fused: bool = False):
+                 fused: bool = False, skip_idle: bool = True, cautious: bool = False):
         super().__init__(params, dict(lr=lr, betas=betas, weight_decay=weight_decay))
         self.chunk, self.fused = chunk, fused
+        self.skip_idle, self.cautious = skip_idle, cautious
+        self.idle_updates, self.updates = {}, {}
         self._hooks, self._gated, self._armed = [], False, None
+
+    def _activity(self, p):
+        """The stacked latent's per-matrix activity mask (shape ``p.shape[:-2]``) when idle skipping applies, else None;
+        counts idle matrices either way."""
+        if p.ndim <= 2:
+            return None
+        active = stack_activity(p.grad)
+        key = id(p)
+        if key not in self.idle_updates:
+            self.idle_updates[key] = torch.zeros(active.shape, dtype=torch.int32, device=active.device)
+        self.idle_updates[key] += (~active).to(torch.int32)
+        self.updates[key] = self.updates.get(key, 0) + 1
+        return active if self.skip_idle else None
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -254,49 +299,56 @@ class LionSR(torch.optim.Optimizer):
         state = self.state[p]
         if "momentum" not in state:
             state["momentum"] = torch.zeros_like(p, dtype=torch.bfloat16)
+        active = self._activity(p)
+        options = dict(lr=group["lr"], beta1=beta1, beta2=beta2, decay=group["weight_decay"], cautious=self.cautious,
+                       rounding=p.dtype == torch.bfloat16)
         if group.get("row_scale") is not None:  # per-row step size (lr x row scale), whole tensor at once
             value, momentum = _fused_lion_rows(p, p.grad, state["momentum"], group["row_scale"].to(p.device),
-                                               group["lr"], beta1, beta2, group["weight_decay"])
+                                               None if active is None else active.view(*active.shape, 1, 1), **options)
             p.copy_(value)
             state["momentum"].copy_(momentum)
             return
-        flat_p, flat_g, flat_m = p.view(-1), p.grad.view(-1), state["momentum"].view(-1)
-        if self.fused and p.is_cuda and p.dtype == torch.bfloat16:
-            for start in range(0, flat_p.numel(), self.chunk):
-                end = start + self.chunk
-                value, momentum = _fused_lion_chunk(flat_p[start:end], flat_g[start:end], flat_m[start:end],
-                                                    group["lr"], beta1, beta2, group["weight_decay"])
-                flat_p[start:end].copy_(value)
-                flat_m[start:end].copy_(momentum)
-            return
-        for start in range(0, flat_p.numel(), self.chunk):
-            end = start + self.chunk
-            g = flat_g[start:end].float()
-            m = flat_m[start:end].float()
-            update = (beta1 * m + (1 - beta1) * g).sign_()
-            value = flat_p[start:end].float()
-            if group["weight_decay"]:
-                value.mul_(1 - group["lr"] * group["weight_decay"])
-            value.add_(update, alpha=-group["lr"])
-            if flat_p.dtype == torch.bfloat16:
-                stochastic_round_(flat_p[start:end], value)
-            else:
-                flat_p[start:end].copy_(value)
-            flat_m[start:end].copy_(m.mul_(beta2).add_(g, alpha=1 - beta2))
+        kernel = _fused_lion_chunk if self.fused and p.is_cuda and p.dtype == torch.bfloat16 else _lion_kernel
+        if active is None:  # flat chunks
+            pieces, step = (p.view(-1), p.grad.view(-1), state["momentum"].view(-1)), self.chunk
+        else:  # whole matrices per chunk, each with its activity
+            width = p.shape[-2] * p.shape[-1]
+            pieces = (p.view(-1, width), p.grad.view(-1, width), state["momentum"].view(-1, width))
+            step, flags = max(1, self.chunk // width), active.reshape(-1, 1)
+        flat_p, flat_g, flat_m = pieces
+        for start in range(0, flat_p.shape[0], step):
+            end = start + step
+            value, momentum = kernel(flat_p[start:end], flat_g[start:end], flat_m[start:end], None,
+                                     None if active is None else flags[start:end], **options)
+            flat_p[start:end].copy_(value)
+            flat_m[start:end].copy_(momentum)
 
 
 NS_COEFFICIENTS = (3.4445, -4.7750, 2.0315)  # torch.optim.Muon's quintic (Keller Jordan's Muon)
 
 
-def newton_schulz(update: torch.Tensor, steps: int = 5, eps: float = 1e-7) -> torch.Tensor:
+# "cubic5" (arXiv:2606.00371): five cubic steps X <- a X + b (X X^T) X with per-step coefficients, 10 dominant
+# matmuls instead of the quintic's 15, from the same Frobenius-normalized BF16 start.
+CUBIC5_COEFFICIENTS = ((3.3656576, -3.3420992), (2.5744352, -1.4957376), (2.5368962, -1.4312570),
+                       (2.4418906, -1.2764040), (2.2230472, -0.9630650))
+
+
+def newton_schulz(update: torch.Tensor, steps: int = 5, eps: float = 1e-7, variant: str = "quintic") -> torch.Tensor:
     """torch.optim.Muon's orthogonalization (5 quintic Newton-Schulz steps in BF16) over the last two dims, batched over
-    any leading dims, so each expert of a stacked [E, rows, cols] tensor is its own matrix."""
+    any leading dims, so each expert of a stacked [E, rows, cols] tensor is its own matrix. ``variant="cubic5"``: the
+    five-step cubic iteration (``steps`` is then fixed at 5)."""
     a, b, c = NS_COEFFICIENTS
+    if variant not in ("quintic", "cubic5"):
+        raise ValueError(f"unknown Newton-Schulz variant {variant!r}")
     x = update.bfloat16()
     transposed = x.shape[-2] > x.shape[-1]
     if transposed:
         x = x.transpose(-2, -1)
     x = x / (torch.linalg.vector_norm(x.float(), dim=(-2, -1), keepdim=True).to(x.dtype) + eps)
+    if variant == "cubic5":
+        for a, b in CUBIC5_COEFFICIENTS:
+            x = a * x + b * ((x @ x.transpose(-2, -1)) @ x)
+        return x.transpose(-2, -1) if transposed else x
     for _ in range(steps):
         gram = x @ x.transpose(-2, -1)
         x = a * x + (b * gram + c * gram @ gram) @ x
@@ -313,13 +365,15 @@ class MuonSR(LionSR):
     Idle matrices of a stack: an expert routed no tokens in this update has a zero gradient, yet its decaying
     momentum would still get a full-size orthogonal update (noise amplified on rarely routed experts). Such a matrix
     (gradient norm at most ``idle_fraction`` of its running gradient norm; 0: exactly zero) is not stepped; its
-    momentum still decays."""
+    momentum still decays, and it gets no weight decay. ``ns``: the Newton-Schulz variant (``quintic``, or ``cubic5``:
+    a third fewer matmuls), configuration kept across ``load_state_dict``. Mellum2 was pretrained and SFT'd with this
+    Muon (Nesterov 0.95, 5 NS steps, 0.2 sqrt(max(m, n)) scale, wd 0.1; Mellum2 report arXiv:2605.31268)."""
 
     def __init__(self, params, lr: float, momentum: float = 0.95, weight_decay: float = 0.0, ns_steps: int = 5,
-                 idle_fraction: float = 0.0):
+                 idle_fraction: float = 0.0, ns: str = "quintic"):
         torch.optim.Optimizer.__init__(self, params, dict(lr=lr, momentum=momentum, weight_decay=weight_decay,
                                                           ns_steps=ns_steps, idle_fraction=idle_fraction))
-        self.chunk, self.fused = None, False
+        self.chunk, self.fused, self.ns = None, False, ns
         self._hooks, self._gated, self._armed = [], False, None
         for group in self.param_groups:
             for p in group["params"]:
@@ -343,18 +397,119 @@ class MuonSR(LionSR):
                                                                              running)
         m = state["momentum"].float().mul_(beta).add_(g)
         state["momentum"].copy_(m)
-        direction = newton_schulz(g.add_(m, alpha=beta), group["ns_steps"])
+        direction = newton_schulz(g.add_(m, alpha=beta), group["ns_steps"], variant=getattr(self, "ns", "quintic"))
         if active is not None:
             direction = direction * active.to(direction.dtype)
         scale = 0.2 * math.sqrt(max(p.shape[-2], p.shape[-1]))
         value = p.float()
         if group["weight_decay"]:
-            value.mul_(1 - group["lr"] * group["weight_decay"])
+            decay = 1 - group["lr"] * group["weight_decay"]
+            value.mul_(decay if active is None else 1 - (1 - decay) * active)
         value.add_(direction.float(), alpha=-group["lr"] * scale)
         if p.dtype == torch.bfloat16:
             stochastic_round_(p, value)
         else:
             p.copy_(value)
+
+
+def _adamini_kernel(p, g, m, v, count, active, block_rows: int, lr, beta1, beta2, eps, decay, cautious: bool = False,
+                    rounding: bool = True):
+    """One Adam-mini update (FP32 math) of a latent ``p`` [..., rows, cols]: full first moment ``m`` (BF16), one
+    second moment per block of ``block_rows`` consecutive rows (``v`` FP32 [..., rows // block_rows, 1]), per-matrix
+    step counts ``count`` [..., 1, 1] for the bias corrections. ``active``/``cautious``/``rounding`` as in
+    ``_lion_kernel``. Returns (new p, new m, new v, new count)."""
+    gf, mf, value = g.float(), m.float(), p.float()
+    lead, rows, cols = p.shape[:-2], p.shape[-2], p.shape[-1]
+    blocks = (*lead, rows // block_rows, block_rows * cols)
+    m_new = beta1 * mf + (1 - beta1) * gf
+    v_new = beta2 * v + (1 - beta2) * gf.square().reshape(blocks).mean(-1, keepdim=True)
+    count_new = count + 1
+    if active is not None:
+        count_new = torch.where(active, count_new, count)
+    first = 1 - torch.pow(beta1, count_new)
+    second = 1 - torch.pow(beta2, count_new)
+    update = ((m_new / first).reshape(blocks) / ((v_new / second).sqrt() + eps)).reshape(p.shape)
+    if cautious:
+        update = update * (update * gf > 0).to(update.dtype)
+    stepped = value * (1 - lr * decay) - lr * update
+    if active is not None:
+        stepped = torch.where(active, stepped, value)
+        m_new = torch.where(active, m_new, mf)
+        v_new = torch.where(active, v_new, v)
+    if rounding:
+        bits = stepped.view(torch.int32)
+        stepped = ((bits + torch.randint_like(bits, 0, 1 << 16)) & -65536).view(torch.float32)
+    return stepped.to(p.dtype), m_new.to(m.dtype), v_new, count_new
+
+
+_fused_adamini = torch.compile(_adamini_kernel, dynamic=False)
+
+
+def beta_for_half_life(tokens_per_update: float, half_life_tokens: float) -> float:
+    """The EMA coefficient whose half-life is ``half_life_tokens`` at ``tokens_per_update`` (Marek et al.,
+    arXiv:2507.07101: at small batch keep the second moment's half-life fixed in tokens, not in updates)."""
+    return 0.5 ** (tokens_per_update / half_life_tokens)
+
+
+class AdamMiniSR(LionSR):
+    """Adam-mini (Zhang et al., arXiv:2406.16793) for BF16 latents with LionSR's mechanics: one BF16 first moment like
+    LionSR's momentum, one FP32 second moment per parameter block (a group's ``block_rows`` consecutive rows: a head
+    for attention q/k, one output row otherwise; a stacked expert tensor's blocks never cross experts), Adam's bias
+    corrections, stochastic-rounding writes, stepping in backward. Unlike Lion's sign, the step scales with the
+    gradient relative to its block's history, so weights with small or noisy gradients move little; ``lr`` is on
+    AdamW's scale. Idle matrices of a stack (``skip_idle``) and ``cautious`` as in LionSR (an idle expert's moments
+    and step count stay unchanged). ``betas[1]`` is usually derived from a token half-life (``beta_for_half_life``)."""
+
+    def __init__(self, params, lr: float, betas=(0.9, 0.999), eps: float = 1e-8, weight_decay: float = 0.0,
+                 skip_idle: bool = True, cautious: bool = False):
+        torch.optim.Optimizer.__init__(self, params, dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
+                                                          block_rows=1))
+        self.chunk, self.fused = None, False
+        self.skip_idle, self.cautious = skip_idle, cautious
+        self.idle_updates, self.updates = {}, {}
+        self._hooks, self._gated, self._armed = [], False, None
+        for group in self.param_groups:
+            for p in group["params"]:
+                if p.ndim < 2 or p.shape[-2] % group["block_rows"]:
+                    raise ValueError("AdamMiniSR latents are matrices (or stacks) whose rows divide into blocks")
+
+    def load_state_dict(self, state_dict):
+        """torch casts floating state to the parameter's dtype on load; the FP32 second moments are put back from the
+        saved values (``step`` is never cast)."""
+        saved = {index: entry["v"] for index, entry in state_dict["state"].items() if "v" in entry}
+        super().load_state_dict(state_dict)
+        params = [p for group in self.param_groups for p in group["params"]]
+        for index, value in saved.items():
+            self.state[params[index]]["v"] = value.to(params[index].device, torch.float32, copy=True)
+
+    @torch.no_grad()
+    def _update(self, p, group):
+        beta1, beta2 = group["betas"]
+        block_rows = group.get("block_rows", 1)
+        state = self.state[p]
+        if "momentum" not in state:
+            state["momentum"] = torch.zeros_like(p, dtype=torch.bfloat16)
+            state["v"] = torch.zeros(*p.shape[:-2], p.shape[-2] // block_rows, 1, dtype=torch.float32, device=p.device)
+            state["step"] = torch.zeros(*p.shape[:-2], 1, 1, dtype=torch.float32, device=p.device)
+        active = self._activity(p)
+        kernel = _fused_adamini if p.is_cuda else _adamini_kernel
+        value, momentum, v, count = kernel(
+            p, p.grad, state["momentum"], state["v"], state["step"],
+            None if active is None else active.view(*active.shape, 1, 1), block_rows, lr=group["lr"], beta1=beta1,
+            beta2=beta2, eps=group["eps"], decay=group["weight_decay"], cautious=self.cautious,
+            rounding=p.dtype == torch.bfloat16)
+        p.copy_(value)
+        state["momentum"].copy_(momentum)
+        state["v"].copy_(v)
+        state["step"].copy_(count)
+
+
+def latent_block_rows(name: str, parameter: torch.Tensor, head_dim: int | None) -> int:
+    """Adam-mini's partition for one latent: a block per attention head for q/k projections (Hessian blocks per head),
+    one block per output row otherwise (value, output, MLP and each expert's rows)."""
+    if head_dim and any(part in name for part in (".q_proj.", ".k_proj.")) and parameter.shape[-2] % head_dim == 0:
+        return head_dim
+    return 1
 
 
 class _InBackward:

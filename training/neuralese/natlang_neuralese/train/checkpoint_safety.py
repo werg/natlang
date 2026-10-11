@@ -142,8 +142,10 @@ def _state_tensor_bytes(value):
 def _optimizer_family(optimizer):
     import torch
 
-    if type(optimizer).__name__ == 'LionSR':
-        return 'lion'
+    if type(optimizer).__name__ in ('LionSR', 'MuonSR'):
+        return 'lion'  # one BF16 momentum per latent
+    if type(optimizer).__name__ == 'AdamMiniSR':
+        return 'adamini'
     muon_type = getattr(torch.optim, 'Muon', None)
     if (muon_type is not None and isinstance(optimizer, muon_type)) or type(optimizer).__name__ == 'Muon':
         return 'muon'
@@ -176,6 +178,10 @@ def optimizer_state_size_upper_bound(optimizer, lazy=True):
                 if family == 'lion':
                     if 'momentum' not in state:
                         total += parameter.numel() * 2  # one BF16 momentum
+                elif family == 'adamini':
+                    if 'momentum' not in state:  # BF16 first moment, FP32 per-row second moment and step counts
+                        rows = parameter.numel() // parameter.shape[-1]
+                        total += parameter.numel() * 2 + rows * 4 + (rows // parameter.shape[-2]) * 4
                 elif family == 'muon':
                     if 'momentum_buffer' not in state:
                         total += parameter.numel() * parameter.element_size()

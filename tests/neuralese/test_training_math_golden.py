@@ -307,12 +307,12 @@ def test_shared_row_reductions_reproduce_maples_rule():
 
 
 def test_fused_lion_chunk_matches_reference_within_one_bf16_ulp_and_momentum_exact():
-    from natlang_neuralese.train.optim import _lion_chunk
+    from natlang_neuralese.train.optim import _lion_kernel
 
     torch.manual_seed(0)
     p = torch.randn(256).to(torch.bfloat16)
     g, m = torch.randn(256).to(torch.bfloat16), torch.randn(256).to(torch.bfloat16)
-    new_p, new_m = _lion_chunk(p, g, m, 0.01, 0.9, 0.99, 0.1)
+    new_p, new_m = _lion_kernel(p, g, m, None, None, 0.01, 0.9, 0.99, 0.1)
     ref_p, ref_m = lion_reference(p.float(), g.float(), m.float(), 0.01, wd=0.1)
     ulp = ref_p.abs().clamp_min(1e-3) * 2 ** -7
     assert new_p.dtype == torch.bfloat16 and ((new_p.float() - ref_p).abs() <= ulp * 1.01).all()

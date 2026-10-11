@@ -43,10 +43,10 @@ def deterministic_rounding(monkeypatch):
     order vs backward order). Fix the rounding offset so both paths write identical BF16 values."""
     real = torch.randint_like
 
-    def rows(p, g, m, scale, lr, beta1, beta2, decay):
+    def rows(p, g, m, scale, active, **options):
         torch.randint_like = lambda t, low, high: torch.full_like(t, 1 << 15)
         try:
-            return optim._lion_rows(p, g, m, scale, lr, beta1, beta2, decay)
+            return optim._lion_kernel(p, g, m, scale, active, **options)
         finally:
             torch.randint_like = real
     monkeypatch.setattr(optim, '_fused_lion_rows', rows)
