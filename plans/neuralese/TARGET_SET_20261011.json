@@ -7,7 +7,9 @@
     "natlang-free-provider-v28-render-20261011-v1",
     "natlang-free-provider-v29-render-20261011-v1",
     "natlang-free-provider-v73-render-20261011-v1",
-    "natlang-native-turns-static-lambda-expansion-render-20261011-v1"
+    "natlang-native-turns-static-lambda-expansion-render-20261011-v1",
+    "natlang-native-turns-refine-render-20261011-v1",
+    "natlang-native-turns-luna-v17-v9-render-20261011-v1"
   ],
   "external_members": [
     {
@@ -106,6 +108,23 @@
       "dataset": "whole-trajectory rendering of the 4962 union, harness bench and free-provider packets",
       "status": "not rendered",
       "reason": "decision-level packets; whole trajectories need the source native records (union) or the raw harness trajectories"
+    },
+    {
+      "dataset": "neuralese-operator-cases-20261009-v1 (1,166 train spans)",
+      "status": "not integrated",
+      "reason": "S5 operator-objective cases (text + transform + expected value), not chat documents",
+      "conversion": "render each case as a natlang call (instruction over the text, typed result = expected) or keep for the S5 operator objective"
+    },
+    {
+      "dataset": "natlang-specialization-cases-declines-20261009-v1 (7 cases, 8 declines)",
+      "status": "not integrated",
+      "reason": "compiled specialization cases (definition + recorded calls), not chat documents",
+      "conversion": "render the recorded calls as native decisions; tiny"
+    },
+    {
+      "dataset": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4 (2,969 train records)",
+      "status": "integrated through its text renders",
+      "reason": "the records are the source of the admitted harness text v2 (both tokenizers), already an external member"
     }
   ],
   "notes": "Exclusions are only protected eval sets, held splits and defect rows under repair. Full-prompt documents carry the recorded runtime system prompt, which differs from current ts-host pieces in about 7 of 12 paragraphs (check_prompt_against_ts_host.py)."
