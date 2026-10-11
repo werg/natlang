@@ -30721,6 +30721,71 @@
       "admission": "launch-evidence-only-no-provider-label-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Retry waiter PID1064015 uses the existing reviewed V39 input approval, same frozen runtime and shared quota state. Status started-waiting-for-project-owner; this separate receipt references the prior zero-call launcher failure. No secrets, labels, attempts, or logs included."
+    },
+    {
+      "id": "luna-v74-budget-diagnostic-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v74-budget-diagnostic-v1",
+      "include": [
+        "diagnosis.json",
+        "diagnosis.md",
+        "FILES.sha256"
+      ],
+      "split": "inherited-train-quality-review-only",
+      "source_class": "held-luna-incomplete-budget-diagnostic",
+      "training_admission": false,
+      "admission": "incomplete-failure-review-only-no-semantic-score-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V74 two model_request_budget failures reviewed as incomplete/unscored. Exact two invocation phases and visible source inputs preserved. Not a full campaign audit or semantic negative."
+    },
+    {
+      "id": "luna-v73-v75-admission-blockers-outline-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-v75-admission-blockers-v1",
+      "include": [
+        "outline.json",
+        "outline.md",
+        "FILES.sha256"
+      ],
+      "split": "inherited-train-quality-review-only",
+      "source_class": "held-native-generation-admission-blocker-outline",
+      "training_admission": false,
+      "admission": "audit-only-no-source-quality-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Original v1 blocker outline preserved as historical evidence. Later correction distinguishes V36 used-adapter 390-key closure and folder-level single_call topology."
+    },
+    {
+      "id": "luna-v73-v75-admission-blockers-outline-held-20261011-v3",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-v75-admission-blockers-v3",
+      "include": [
+        "outline.json",
+        "outline.md",
+        "FILES.sha256"
+      ],
+      "split": "inherited-train-quality-review-only",
+      "source_class": "held-native-generation-admission-blocker-outline",
+      "training_admission": false,
+      "admission": "audit-only-no-source-quality-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Corrected additive outline supersedes v2 diagnostic. Pins local V36 exact S1/harness/protected receipt files, scoped to 390 source keys actually used by the static adapter; distinguishes folder-level single_call from a single NL invocation."
+    },
+    {
+      "id": "luna-v74-exact-source-closure-request-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v74-source-closure-packet-v5",
+      "include": [
+        "README.md",
+        "FILES.sha256",
+        "closure-packet-v1.json",
+        "closure-input-v1/**/*"
+      ],
+      "split": "inherited-train-source-closure-input",
+      "source_class": "held-source-closure-evidence-request",
+      "training_admission": false,
+      "admission": "full-s1-dgx-key-closure-pending",
+      "independent_new_worlds": 0,
+      "notes": "V74 exact source closure request binds 640 original train rows to archived master line numbers and raw row hashes, and maps them to 80 static programs. Sent to DGX owner for full S1/harness-v4/protected exact-key checks; request only, no closure result, source-quality clearance, or admission."
     }
   ],
   "coverage_backlog": [

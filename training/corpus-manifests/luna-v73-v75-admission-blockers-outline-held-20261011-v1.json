@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v73-v75-admission-blockers-outline-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-v75-admission-blockers-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 156,
+      "sha256": "5eeb64d5617aed8423299fa467316fa5d2f845bbc3c192718485abe919a8743e"
+    },
+    {
+      "path": "outline.json",
+      "bytes": 13640,
+      "sha256": "cdce8271f9df9b1644c9b631401aa68f894ccd54051f504f6731ab2e20ca316d"
+    },
+    {
+      "path": "outline.md",
+      "bytes": 4929,
+      "sha256": "5af3e31952183d8247bbf868833c658cdcdc6e42735a4c85ec23d4287b1fd42c"
+    }
+  ],
+  "bytes": 18725
+}

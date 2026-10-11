@@ -1,0 +1,57 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v74-exact-source-closure-request-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v74-source-closure-packet-v5",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 839,
+      "sha256": "a2251fbd38e9d9d863185688381c300651665f9948e7e36df608ae3f5bf0b953"
+    },
+    {
+      "path": "README.md",
+      "bytes": 633,
+      "sha256": "55fae88832056288ed51973a87bf625645e77d09dcc619ec5f85321e56e5eff9"
+    },
+    {
+      "path": "closure-input-v1/check_raw_group_keys.py",
+      "bytes": 1933,
+      "sha256": "b945cbe89c3fe6ad76b562d59a1206a5d85b051620b64ec4bf541ec0f7ee8c4a"
+    },
+    {
+      "path": "closure-input-v1/closure-source-cases.jsonl",
+      "bytes": 1383928,
+      "sha256": "8bf30f5d9216be271ccd4479d412f4bdce72c2adf8c50a375a1acb7d48acf908",
+      "lines": 640
+    },
+    {
+      "path": "closure-input-v1/closure-source-manifest.json",
+      "bytes": 148649,
+      "sha256": "a4c3077e2167b4f1ecb6dbe2cd6356eb49670068a5102fc81c4c0eb6a0a3e898"
+    },
+    {
+      "path": "closure-input-v1/current-source-quality-holds.json",
+      "bytes": 61430,
+      "sha256": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994"
+    },
+    {
+      "path": "closure-input-v1/selected-program-index.jsonl",
+      "bytes": 70840,
+      "sha256": "11299078a0a79c69b29e28429959d3f665c5676c53f065c69a7b86d803538996",
+      "lines": 80
+    },
+    {
+      "path": "closure-input-v1/selected-source-case-index.jsonl",
+      "bytes": 250880,
+      "sha256": "72ba1737fb1a6410cc337a9f37bb8e2117954c31ce15c4a88d83c00c72aeda38",
+      "lines": 640
+    },
+    {
+      "path": "closure-packet-v1.json",
+      "bytes": 4151,
+      "sha256": "80f269ed01d884bd07089300b2cc539445ddb2c7672425dfe341223a7b36b320"
+    }
+  ],
+  "bytes": 1923283
+}

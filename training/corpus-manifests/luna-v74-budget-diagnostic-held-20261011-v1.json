@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v74-budget-diagnostic-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v74-budget-diagnostic-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 160,
+      "sha256": "dea5c3586d81aa87c74bb96b5b7cdf79889404e4be9a26ba0beaa5ffb415fb46"
+    },
+    {
+      "path": "diagnosis.json",
+      "bytes": 29066,
+      "sha256": "4b320d2d6f3319439cd7f7af47bbd7c1ac6d93bc72923ab98bbe16525598c536"
+    },
+    {
+      "path": "diagnosis.md",
+      "bytes": 2410,
+      "sha256": "cf0f2f311211c1501020abdd1665146099812acc592a881b4e536dd7929396a1"
+    }
+  ],
+  "bytes": 31636
+}
