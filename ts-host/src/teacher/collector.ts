@@ -1311,7 +1311,7 @@ export function programRow(record: ProgramRecord, modelId: string, runId: string
 export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   maxTurns?: number; temperature?: number; rootSeed: number; runId: string; signal?: AbortSignal; fileTools?: FileToolSurface;
   /** Explicitly disable or provide the call store for bounded replays; default collection still records normally. */
-  calls?: import('../calls/recorder.js').CallStoreLike | false;
+  calls?: import('../runtime/runtime.js').NatlangRuntimeOptions['calls'];
   /** Optional Neuralese store/port for source-authentic inline soft-body collection and replay. */
   neuralese?: import('../native/neuralese.js').NeuraleseRuntimeOptions;
   /** Explicit library service for the non-learned text-provider read implementation. */

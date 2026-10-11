@@ -2,7 +2,7 @@
  * A narrowly scoped review receipt may clear a held source-quality annotation for conversion.
  * It never changes the source IR or grants training/trace admission.
  */
-import { canonical } from '../adaptation/identity.js';
+import { canonical } from '../native/canonical-data.js';
 import { hexDigest } from '../native/hash.js';
 
 type Dict = Record<string, unknown>;
