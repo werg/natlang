@@ -29,8 +29,9 @@ from collections import defaultdict
 import pyarrow.parquet as pq
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from episode_lib import digest, group_commitment, run_gate  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'training', 'neuralese'))
+from episode_lib import digest, group_commitment, run_gate  # noqa: E402
+from decision_task_contracts import criteria_for  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 ROOT = resolve_str('data_hdd', 'natlang-development-data', 'data', 'decision-sources')
@@ -385,6 +386,11 @@ def build_cases(name, spec, per_train, per_heldout, licenses, source_pins=None, 
                 }
             if kind == 'choice':
                 case.update(options=list(options), answer=answer)
+                derived_criteria, contract_provenance = criteria_for(
+                    family=case['family'], source=repo, kind=kind, labels=list(options),
+                    where=f"{case['family']}:{case['id']}")
+                if contract_provenance is not None:
+                    case['criteria'] = derived_criteria
             elif kind == 'noul':
                 case['answer'] = answer if isinstance(answer, bool) else round(float(answer), 6)
             else:
@@ -522,6 +528,19 @@ def main():
         'source_catalog_path': os.path.relpath(source_catalog_path, os.path.realpath(ROOT)).replace(os.sep, '/'),
         'source_catalog_sha256': hashlib.sha256(source_catalog_bytes).hexdigest(),
         'source_catalog_license_status': 'local_catalog_values_recorded_but_not_bound_to_upstream_revision',
+        'decision_task_contracts': {
+            'path': os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                '..', 'training', 'decision_task_contracts.json')),
+            'sha256': _file_sha256(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                '..', 'training', 'decision_task_contracts.json')),
+            'loader_path': os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                'decision_task_contracts.py')),
+            'loader_sha256': _file_sha256(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                'decision_task_contracts.py')),
+            'schema': 'natlang.decision-task-contracts/1',
+            'applied_families': ['decision:trec-question'],
+            'meaning': 'Derived criteria are an explicit model-visible taxonomy gloss; upstream labels, golds, IDs, groups, and source row refs remain unchanged.'
+        },
         'source_pin_receipt': source_pin_receipt,
         'source_files_read': [source_files[k] for k in sorted(source_files)],
         'upstream_metadata_unknown_datasets': sorted(unknown_repos),

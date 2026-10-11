@@ -2,8 +2,9 @@
 """Prepare a bounded, provenance-pinned subset of existing typed choice cases.
 
 This script only prepares source inputs. It does not call a provider, launch a
-worker, or grant training admission. Source case objects are copied unchanged;
-all filtering is represented in omissions.jsonl.
+worker, or grant training admission. Original case bytes/row hashes remain
+pinned; a declared shared family criterion may be added as a separate derived
+model-visible field. All filtering is represented in omissions.jsonl.
 """
 import argparse
 import collections
@@ -15,6 +16,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes  # noqa: E402
+from decision_task_contracts import CONTRACT_PATH, criteria_for, load_contracts  # noqa: E402
 
 
 def parse_families(values):
@@ -397,8 +399,28 @@ def build(args):
     destination.mkdir(parents=True, exist_ok=False)
     case_path = destination / 'cases.jsonl'
     omission_path = destination / 'omissions.jsonl'
-    case_data = ''.join(json.dumps(candidate['case'], sort_keys=True, ensure_ascii=False) + '\n'
-                        for candidate in selected).encode('utf-8')
+    task_contract_doc, task_contract_sha = load_contracts()
+    prepared_cases = []
+    derived_criteria_rows = []
+    for candidate in selected:
+        source_case = candidate['case']
+        prepared_case = dict(source_case)
+        if source_case.get('kind') == 'choice':
+            labels = source_case.get('options')
+            criteria, provenance = criteria_for(family=source_case.get('family'),
+                source=source_case.get('source'), kind=source_case.get('kind'), labels=labels,
+                explicit=source_case.get('criteria'), where=str(source_case.get('id')))
+            if provenance and (provenance['family_contract_applied'] or 'criteria' in source_case):
+                prepared_case['criteria'] = criteria
+                derived_criteria_rows.append({
+                    'id': source_case.get('id'), 'source_row_sha256': candidate['source_row_sha256'],
+                    'criteria_sha256': sha256_bytes(json.dumps(criteria, sort_keys=True,
+                        ensure_ascii=False, separators=(',', ':')).encode('utf-8')),
+                    **provenance,
+                })
+        prepared_cases.append(prepared_case)
+    case_data = ''.join(json.dumps(case, sort_keys=True, ensure_ascii=False) + '\n'
+                        for case in prepared_cases).encode('utf-8')
     omission_data = ''.join(json.dumps(row, sort_keys=True, ensure_ascii=False) + '\n'
                             for row in omissions).encode('utf-8')
     case_path.write_bytes(case_data)
@@ -419,6 +441,18 @@ def build(args):
             'scope_row_count': source_scope_rows,
             'row_hash_contract': 'SHA-256 of exact UTF-8 JSONL row bytes excluding the line terminator'
         },
+        'model_visible_task_criteria': {
+            'contract_path': str(CONTRACT_PATH.resolve()),
+            'contract_sha256': task_contract_sha,
+            'contract_schema': task_contract_doc['schema'],
+            'loader_path': str(Path(__file__).with_name('decision_task_contracts.py').resolve()),
+            'loader_sha256': sha256_file(Path(__file__).with_name('decision_task_contracts.py')),
+            'derived_rows': derived_criteria_rows,
+            'selected_original_rows': [{'id': item['case'].get('id'),
+                'source_line_number': item['source_line_number'], 'source_row_sha256': item['source_row_sha256'],
+                'group': item['case'].get('group')} for item in selected],
+            'source_integrity': 'Original source bytes and row SHA-256 values are preserved in source pins/selected_rows; criteria are an explicit derived model-visible field in prepared cases.jsonl.',
+        },
         'source_quality_holds': {
             'policy_path': str(canonical_policy_path.resolve()),
             'policy_sha256': quality_receipts[0]['sha256'],
@@ -437,7 +471,7 @@ def build(args):
             'max_options': args.max_options,
             'required_role': 'train', 'required_kind': 'choice',
             'disjointness': 'case IDs and source groups are checked against every prior-root provider-*/cases.jsonl and against the selected rows',
-            'preservation': 'selected source case objects are serialized without field edits; no gold is added or removed',
+            'preservation': 'selected source answers, IDs, groups, and original row hashes are preserved; only explicitly derived shared criteria may be added to prepared model input rows',
             'order': 'source file order within each family, selected in repeated round-robin passes'
         },
         'prior_provider_cases': {

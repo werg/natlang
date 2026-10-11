@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-ar-native-harness-alignment-v7-step35840-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-luna-alignment-v7-step35840-v1",
+  "files": [
+    {
+      "path": "evaluation.json",
+      "bytes": 458490,
+      "sha256": "bec8e0be69eb971c31764786059f54f08ecd25d9f4fb32171f4e63f65f4f2ce0"
+    },
+    {
+      "path": "review.json",
+      "bytes": 1881,
+      "sha256": "d25b6f26b51bb4e8da0251a6c6a2c3a0790512548b898843cf666910c8651137"
+    }
+  ],
+  "bytes": 460371
+}

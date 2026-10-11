@@ -28188,6 +28188,26 @@
         "static-policy-application-clarification-v1.json",
         "static-policy-application-clarification-v1.md"
       ]
+    },
+    {
+      "id": "trec-taxonomy-criteria-reference-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/trec-taxonomy-criteria-reference-20261011-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "TRECcriteriaactualreference/providerpayloadpreparation0calls. Twooriginalrows1acceptedprogram; v1/v2explorationspreserved, v2exact16componentsrecovered/hashverified; v3/v4exactcomponentsfrozen. Taxonomydefinitiononly,nogold/IDrewrite/admission."
+    },
+    {
+      "id": "luna-ar-native-harness-alignment-v7-step35840-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-luna-alignment-v7-step35840-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Exactstep35840evalsnapshotfivefailedstrictgatesvs8prior; shortmeasuredgatespass. Thresholdsunchanged,noqualification/transport/stopping/admission."
     }
   ],
   "coverage_backlog": [

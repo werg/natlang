@@ -1,0 +1,475 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "trec-taxonomy-criteria-reference-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/trec-taxonomy-criteria-reference-20261011-v1",
+  "files": [
+    {
+      "path": "preedit-freeze-supplement-v1/components/scripts/prepare_decision_provider_source.py",
+      "bytes": 31935,
+      "sha256": "62f41fc989bbfcc61006a08cac93f2348e52b80c576b4df98c4a0647b4cf4d4b"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/training/decision_source_quality_holds.json",
+      "bytes": 38921,
+      "sha256": "6f648524a959cb6685d1490d8349e0784c5bb631f309ddb8807adbc0d3aace5d"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/training/decision_task_contracts.json",
+      "bytes": 2165,
+      "sha256": "be7dfc9b4b2d7fc1312b027c472672d04018787edadcc7dbe752d5afa0608d0b"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/dist/native/prompt.js",
+      "bytes": 35313,
+      "sha256": "1a5892f39074bbbbfe2797916135bac7eb0476101604ea515048c1f359d5905a"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/dist/teacher/collector.js",
+      "bytes": 102805,
+      "sha256": "3445aafe0312d110964729480c29d9f960a3c9329ab806937679179ac285a5ef"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/dist/teacher/curriculum.js",
+      "bytes": 30024,
+      "sha256": "a77f724f6145ac566cb2caa724fb7fe43e2daaf446bc35af570c065b0780d4bc"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/dist/teacher/native-materializer.js",
+      "bytes": 128618,
+      "sha256": "6cb490b99e281a343e5a8ec17e4b4674a60c5bc29e3c776d038b4c8c9846c6d8"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/dist/teacher/program.js",
+      "bytes": 5664,
+      "sha256": "955871e9e69258b5d2e2bc48641325ca119a3dedbe2f4688cd9f884573a41005"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/scripts/advisory-file.mjs",
+      "bytes": 2235,
+      "sha256": "00cfe276b2f5fdf45614d1302e3428be386ad25f3d84ed11c4d8fa732708eba0"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/scripts/inline-curriculum/lib.mjs",
+      "bytes": 9262,
+      "sha256": "aaa09b1c992fd4651db984ed58c0fb148f877a991f578c0123cb368694866c15"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/scripts/inline-curriculum/references.mjs",
+      "bytes": 7904,
+      "sha256": "cab72a8d77735965ece55e457d8cda8d0702bf92207a9fef8ad4f17b58625bbf"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/scripts/static-adapters/annotation-decision-folders.mjs",
+      "bytes": 31179,
+      "sha256": "8e13132fb46a6844c19f1dd7b77fdb45482cdddfd26860bc72e9546842f9d3cd"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/scripts/static-adapters/common.mjs",
+      "bytes": 3989,
+      "sha256": "38f1998767a6feaabe8a74f004c9740c69426215aff18fe8956a5d4856eb71ca"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/scripts/static-adapters/decision-task-contracts.mjs",
+      "bytes": 2681,
+      "sha256": "ac0bcfd1b49808b00986abe9dc2f08737c429415bc964d59c1bda2a75ddd4137"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/scripts/static-adapters/folder-decision-scaffold.mjs",
+      "bytes": 5098,
+      "sha256": "215783b934af59592abbb1dd66e6105c9b34bbdbafea09ff77e469c3f84db881"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/components/ts-host/scripts/static-adapters/teacher-decision-labels.mjs",
+      "bytes": 43204,
+      "sha256": "2757fb0ccc8ed5f2ef462d38d07dae5681e96704b6a2e80cf7765dd8607b3334"
+    },
+    {
+      "path": "preedit-freeze-supplement-v1/manifest.json",
+      "bytes": 7227,
+      "sha256": "ddeddd2e3c24e5794e21543d3f05ccc6fabebe195da8bf9edc6a0034994ccae9"
+    },
+    {
+      "path": "provider-preparation/cases.jsonl",
+      "bytes": 2958,
+      "sha256": "eb6e9b8d9b9020282f4d52769b50a46068fa8f615dc97f915e88b6f4b1a99cea",
+      "lines": 2
+    },
+    {
+      "path": "provider-preparation/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-preparation/source-manifest.json",
+      "bytes": 8089,
+      "sha256": "7b49f85981950b2c2174e3ead556a21142330bc5586ae4783df533ad80d0dc1f"
+    },
+    {
+      "path": "provider-preparation-v2/cases.jsonl",
+      "bytes": 2958,
+      "sha256": "eb6e9b8d9b9020282f4d52769b50a46068fa8f615dc97f915e88b6f4b1a99cea",
+      "lines": 2
+    },
+    {
+      "path": "provider-preparation-v2/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-preparation-v2/source-manifest.json",
+      "bytes": 8089,
+      "sha256": "630563d59a283cf9195413ea4f341d6e0149efbb9e98bab0a4ccc110eceaea63"
+    },
+    {
+      "path": "reference/cases.jsonl",
+      "bytes": 21408,
+      "sha256": "b0a6644a2a4669ca915b84ffdea8a399bf2939521b6c64134f8aa9b9d65113fc",
+      "lines": 1
+    },
+    {
+      "path": "reference/exclusions.json",
+      "bytes": 506,
+      "sha256": "962d822dde9993e0b69d15343c6918bd79b6a7b2d629854059580147fa949818"
+    },
+    {
+      "path": "reference/families.json",
+      "bytes": 321,
+      "sha256": "a4a5736430bef9aea71135cca463b6482dcf8881ab17930e8a3ed6673f9f521f"
+    },
+    {
+      "path": "reference/materializer.review.json",
+      "bytes": 472,
+      "sha256": "9942debd73adf1ebdc78c26a27e99a62e0ebbee07009ab7d7e547607dffaf7a5"
+    },
+    {
+      "path": "reference/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "reference/replay.results.jsonl",
+      "bytes": 227697,
+      "sha256": "f23ed304ef7a2bd3ff214187319fb4f2bd9e7d6cdcf2f3609d7b1d19cbfe01ca",
+      "lines": 1
+    },
+    {
+      "path": "reference/source-quality-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "reference/summary.json",
+      "bytes": 6867,
+      "sha256": "64bf3f8f3146c0161594732a55e6dedbf51941326bfa5dd1710f6865eacdd4d3"
+    },
+    {
+      "path": "reference-v2/cases.jsonl",
+      "bytes": 17372,
+      "sha256": "d3b2134510e6a363ea286d4066c0e25aedc962e0aae158971f150448f272cb6a",
+      "lines": 1
+    },
+    {
+      "path": "reference-v2/exclusions.json",
+      "bytes": 506,
+      "sha256": "962d822dde9993e0b69d15343c6918bd79b6a7b2d629854059580147fa949818"
+    },
+    {
+      "path": "reference-v2/families.json",
+      "bytes": 321,
+      "sha256": "a4a5736430bef9aea71135cca463b6482dcf8881ab17930e8a3ed6673f9f521f"
+    },
+    {
+      "path": "reference-v2/materializer.review.json",
+      "bytes": 472,
+      "sha256": "9942debd73adf1ebdc78c26a27e99a62e0ebbee07009ab7d7e547607dffaf7a5"
+    },
+    {
+      "path": "reference-v2/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "reference-v2/replay.results.jsonl",
+      "bytes": 217682,
+      "sha256": "23d5928c88b24c661fc445edc857d195f744b3266b0048f14c372d416331b11f",
+      "lines": 1
+    },
+    {
+      "path": "reference-v2/source-quality-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "reference-v2/summary.json",
+      "bytes": 6867,
+      "sha256": "8a2e197b0871c4acd42e518fb881fe616e9d3d72fee7ddc5ff1dffb9c2a595b5"
+    },
+    {
+      "path": "reference-v3/cases.jsonl",
+      "bytes": 17372,
+      "sha256": "d3b2134510e6a363ea286d4066c0e25aedc962e0aae158971f150448f272cb6a",
+      "lines": 1
+    },
+    {
+      "path": "reference-v3/exclusions.json",
+      "bytes": 506,
+      "sha256": "962d822dde9993e0b69d15343c6918bd79b6a7b2d629854059580147fa949818"
+    },
+    {
+      "path": "reference-v3/execution-source/scripts/prepare_decision_provider_source.py",
+      "bytes": 31935,
+      "sha256": "62f41fc989bbfcc61006a08cac93f2348e52b80c576b4df98c4a0647b4cf4d4b"
+    },
+    {
+      "path": "reference-v3/execution-source/training/decision_source_quality_holds.json",
+      "bytes": 38921,
+      "sha256": "6f648524a959cb6685d1490d8349e0784c5bb631f309ddb8807adbc0d3aace5d"
+    },
+    {
+      "path": "reference-v3/execution-source/training/decision_task_contracts.json",
+      "bytes": 2165,
+      "sha256": "be7dfc9b4b2d7fc1312b027c472672d04018787edadcc7dbe752d5afa0608d0b"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/dist/native/prompt.js",
+      "bytes": 35313,
+      "sha256": "1a5892f39074bbbbfe2797916135bac7eb0476101604ea515048c1f359d5905a"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/dist/teacher/collector.js",
+      "bytes": 102805,
+      "sha256": "3445aafe0312d110964729480c29d9f960a3c9329ab806937679179ac285a5ef"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/dist/teacher/curriculum.js",
+      "bytes": 30024,
+      "sha256": "a77f724f6145ac566cb2caa724fb7fe43e2daaf446bc35af570c065b0780d4bc"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/dist/teacher/native-materializer.js",
+      "bytes": 128618,
+      "sha256": "6cb490b99e281a343e5a8ec17e4b4674a60c5bc29e3c776d038b4c8c9846c6d8"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/dist/teacher/program.js",
+      "bytes": 5664,
+      "sha256": "955871e9e69258b5d2e2bc48641325ca119a3dedbe2f4688cd9f884573a41005"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/scripts/advisory-file.mjs",
+      "bytes": 2235,
+      "sha256": "00cfe276b2f5fdf45614d1302e3428be386ad25f3d84ed11c4d8fa732708eba0"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/scripts/inline-curriculum/lib.mjs",
+      "bytes": 9262,
+      "sha256": "aaa09b1c992fd4651db984ed58c0fb148f877a991f578c0123cb368694866c15"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/scripts/inline-curriculum/references.mjs",
+      "bytes": 7904,
+      "sha256": "cab72a8d77735965ece55e457d8cda8d0702bf92207a9fef8ad4f17b58625bbf"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/scripts/static-adapters/annotation-decision-folders.mjs",
+      "bytes": 31179,
+      "sha256": "8e13132fb46a6844c19f1dd7b77fdb45482cdddfd26860bc72e9546842f9d3cd"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/scripts/static-adapters/common.mjs",
+      "bytes": 3989,
+      "sha256": "38f1998767a6feaabe8a74f004c9740c69426215aff18fe8956a5d4856eb71ca"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/scripts/static-adapters/decision-task-contracts.mjs",
+      "bytes": 2637,
+      "sha256": "2c1fb0d096354ab7437bdf66d8ff3ff1c312bc95bf39fae9119f13ac749e26f1"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/scripts/static-adapters/folder-decision-scaffold.mjs",
+      "bytes": 5098,
+      "sha256": "215783b934af59592abbb1dd66e6105c9b34bbdbafea09ff77e469c3f84db881"
+    },
+    {
+      "path": "reference-v3/execution-source/ts-host/scripts/static-adapters/teacher-decision-labels.mjs",
+      "bytes": 43204,
+      "sha256": "2757fb0ccc8ed5f2ef462d38d07dae5681e96704b6a2e80cf7765dd8607b3334"
+    },
+    {
+      "path": "reference-v3/families.json",
+      "bytes": 321,
+      "sha256": "a4a5736430bef9aea71135cca463b6482dcf8881ab17930e8a3ed6673f9f521f"
+    },
+    {
+      "path": "reference-v3/materializer.review.json",
+      "bytes": 472,
+      "sha256": "9942debd73adf1ebdc78c26a27e99a62e0ebbee07009ab7d7e547607dffaf7a5"
+    },
+    {
+      "path": "reference-v3/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "reference-v3/replay.results.jsonl",
+      "bytes": 217676,
+      "sha256": "6fa5b8911ae406f52d6d999384e0b2a84d96ef897604c3d00fb01dcce8e4a583",
+      "lines": 1
+    },
+    {
+      "path": "reference-v3/source-quality-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "reference-v3/summary.json",
+      "bytes": 6867,
+      "sha256": "eb389795bf567d5f610fea62cd3bd3781f9b243fc446c16ea02ce5473b008cc4"
+    },
+    {
+      "path": "reference-v4/cases.jsonl",
+      "bytes": 17270,
+      "sha256": "06cbf11337f787a89d4a70814808dd2f0286b2ce65f3eb783a19c9bc11dec7c1",
+      "lines": 1
+    },
+    {
+      "path": "reference-v4/exclusions.json",
+      "bytes": 506,
+      "sha256": "962d822dde9993e0b69d15343c6918bd79b6a7b2d629854059580147fa949818"
+    },
+    {
+      "path": "reference-v4/execution-source/scripts/prepare_decision_provider_source.py",
+      "bytes": 31935,
+      "sha256": "62f41fc989bbfcc61006a08cac93f2348e52b80c576b4df98c4a0647b4cf4d4b"
+    },
+    {
+      "path": "reference-v4/execution-source/training/decision_source_quality_holds.json",
+      "bytes": 38921,
+      "sha256": "6f648524a959cb6685d1490d8349e0784c5bb631f309ddb8807adbc0d3aace5d"
+    },
+    {
+      "path": "reference-v4/execution-source/training/decision_task_contracts.json",
+      "bytes": 2114,
+      "sha256": "b941a04443d3a47768ef8bdf68730b4fae86a1959aa16abdc6db7b559767ec73"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/dist/native/prompt.js",
+      "bytes": 35313,
+      "sha256": "1a5892f39074bbbbfe2797916135bac7eb0476101604ea515048c1f359d5905a"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/dist/teacher/collector.js",
+      "bytes": 102805,
+      "sha256": "3445aafe0312d110964729480c29d9f960a3c9329ab806937679179ac285a5ef"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/dist/teacher/curriculum.js",
+      "bytes": 30024,
+      "sha256": "a77f724f6145ac566cb2caa724fb7fe43e2daaf446bc35af570c065b0780d4bc"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/dist/teacher/native-materializer.js",
+      "bytes": 128618,
+      "sha256": "6cb490b99e281a343e5a8ec17e4b4674a60c5bc29e3c776d038b4c8c9846c6d8"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/dist/teacher/program.js",
+      "bytes": 5664,
+      "sha256": "955871e9e69258b5d2e2bc48641325ca119a3dedbe2f4688cd9f884573a41005"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/scripts/advisory-file.mjs",
+      "bytes": 2235,
+      "sha256": "00cfe276b2f5fdf45614d1302e3428be386ad25f3d84ed11c4d8fa732708eba0"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/scripts/inline-curriculum/lib.mjs",
+      "bytes": 9262,
+      "sha256": "aaa09b1c992fd4651db984ed58c0fb148f877a991f578c0123cb368694866c15"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/scripts/inline-curriculum/references.mjs",
+      "bytes": 7904,
+      "sha256": "cab72a8d77735965ece55e457d8cda8d0702bf92207a9fef8ad4f17b58625bbf"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/scripts/static-adapters/annotation-decision-folders.mjs",
+      "bytes": 31179,
+      "sha256": "8e13132fb46a6844c19f1dd7b77fdb45482cdddfd26860bc72e9546842f9d3cd"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/scripts/static-adapters/common.mjs",
+      "bytes": 3989,
+      "sha256": "38f1998767a6feaabe8a74f004c9740c69426215aff18fe8956a5d4856eb71ca"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/scripts/static-adapters/decision-task-contracts.mjs",
+      "bytes": 2637,
+      "sha256": "2c1fb0d096354ab7437bdf66d8ff3ff1c312bc95bf39fae9119f13ac749e26f1"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/scripts/static-adapters/folder-decision-scaffold.mjs",
+      "bytes": 5098,
+      "sha256": "215783b934af59592abbb1dd66e6105c9b34bbdbafea09ff77e469c3f84db881"
+    },
+    {
+      "path": "reference-v4/execution-source/ts-host/scripts/static-adapters/teacher-decision-labels.mjs",
+      "bytes": 43204,
+      "sha256": "2757fb0ccc8ed5f2ef462d38d07dae5681e96704b6a2e80cf7765dd8607b3334"
+    },
+    {
+      "path": "reference-v4/families.json",
+      "bytes": 321,
+      "sha256": "a4a5736430bef9aea71135cca463b6482dcf8881ab17930e8a3ed6673f9f521f"
+    },
+    {
+      "path": "reference-v4/materializer.review.json",
+      "bytes": 472,
+      "sha256": "9942debd73adf1ebdc78c26a27e99a62e0ebbee07009ab7d7e547607dffaf7a5"
+    },
+    {
+      "path": "reference-v4/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "reference-v4/replay.results.jsonl",
+      "bytes": 217575,
+      "sha256": "e5fb160afbc4f6c5f7cea4859002504f34e0fc431f54d35424e2c67a3c1f827d",
+      "lines": 1
+    },
+    {
+      "path": "reference-v4/source-quality-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "reference-v4/summary.json",
+      "bytes": 6867,
+      "sha256": "baed9e7a24f44f162257409b96cdad9997ca82455b9a14b6f5435219183f45c9"
+    },
+    {
+      "path": "source/cases.jsonl",
+      "bytes": 1018,
+      "sha256": "80291f8f099dbccdc3a5b9bb496dad9b8c364a8d06dbf83e9399e7d10cee65b5",
+      "lines": 2
+    },
+    {
+      "path": "source/source-manifest.json",
+      "bytes": 1914,
+      "sha256": "a0d2899594dc00e1ceaf3adcaa4337b351cb89502ec04563dc6fd97b10d611f6"
+    }
+  ],
+  "bytes": 2461821
+}

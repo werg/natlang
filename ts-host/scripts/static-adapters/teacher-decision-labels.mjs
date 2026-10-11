@@ -18,6 +18,7 @@ import { markAuthoredStaticReferencePending, materializeNativeRows } from '../..
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { renderValue } from '../../dist/native/agent.js';
 import { folderDecisionScaffold } from './folder-decision-scaffold.mjs';
+import { decisionCriteria, DECISION_TASK_CONTRACT_PATH, DECISION_TASK_CONTRACT_SHA256 } from './decision-task-contracts.mjs';
 import { canonical } from '../advisory-file.mjs';
 import { referenceRow } from '../inline-curriculum/references.mjs';
 
@@ -221,12 +222,18 @@ function contractOf(source, decisionContract) {
   if (!Array.isArray(choiceLabels) || choiceLabels.length < 2 || !choiceLabels.every(nonempty)) return null;
   const defaultCriteria = source.kind === 'noul' ? { false: 'No', true: 'Yes' } :
     Object.fromEntries(choiceLabels.map(label => [label, label]));
-  const criteria = Object.hasOwn(source, 'criteria') ? source.criteria : defaultCriteria;
+  let criteria = defaultCriteria, taskCriteriaProvenance = null;
+  if (Object.hasOwn(source, 'criteria') || source.family === 'decision:trec-question') {
+    const selected = decisionCriteria({ family: source.family, source: source.source, kind: source.kind,
+      labels: choiceLabels, explicitCriteria: source.criteria, where: source.id ?? source.family });
+    criteria = selected.criteria;
+    taskCriteriaProvenance = selected.provenance;
+  }
   const signature = { kind: source.kind, family: source.family, source: source.source,
     options: source.options ?? [], levels: source.levels ?? [], criteria, license: source.license, role: source.role };
   if (decisionContract === choiceConfidenceContract) signature.decision_contract = decisionContract;
   return { kind: source.kind, decisionContract, family: source.family, source: source.source, options: source.options ?? [],
-    levels: source.levels ?? [], labels: choiceLabels, criteria, license: source.license,
+    levels: source.levels ?? [], labels: choiceLabels, criteria, taskCriteriaProvenance, license: source.license,
     signature: jsonSha(signature) };
 }
 
@@ -243,6 +250,7 @@ function createRecord(contract, batch, sourceMeta) {
     splitGroup: `source-groups:${groupIds.join(',')}` });
   const childResults = Object.fromEntries(batch.map(entry => [entry.source.id, entry.decision]));
   record.source_revisions = [...new Set([sourceRev, `folder-decision-scaffold:${sourceMeta.folder_decision_scaffold_sha256}`,
+    ...(contract.taskCriteriaProvenance ? [`decision-task-contracts:${contract.taskCriteriaProvenance.contract_sha256}`] : []),
     ...batch.map(entry => entry.label.file_sha256)])];
   record.license = first.license;
   record.gold_sources = [`source-decision-annotation:${sourceMeta.cases_sha256}`];
@@ -268,6 +276,7 @@ function createRecord(contract, batch, sourceMeta) {
     training_admission: false,
     source_cases_sha256: sourceMeta.cases_sha256,
     folder_decision_scaffold_sha256: sourceMeta.folder_decision_scaffold_sha256,
+    decision_task_contract: contract.taskCriteriaProvenance,
     folder_decision_scaffold_components: sourceMeta.folder_decision_scaffold_components,
     label_file_sha256s: [...new Set(batch.map(entry => entry.label.file_sha256))],
     label_manifest_sha256s: [...new Set(batch.map(entry => entry.label.artifact.manifest_sha256))],
@@ -467,6 +476,8 @@ async function main() {
   const scaffoldDependencyComponents = {
     [fileURLToPath(new URL('./folder-decision-scaffold.mjs', import.meta.url))]: folderDecisionScaffoldSha,
     [fileURLToPath(new URL('../advisory-file.mjs', import.meta.url))]: await hashFile(new URL('../advisory-file.mjs', import.meta.url)),
+    [fileURLToPath(new URL('./decision-task-contracts.mjs', import.meta.url))]: await hashFile(new URL('./decision-task-contracts.mjs', import.meta.url)),
+    [DECISION_TASK_CONTRACT_PATH]: await hashFile(DECISION_TASK_CONTRACT_PATH),
   };
   const records = batches.map(batch => createRecord(batch.contract, batch.entries,
     { ...sourceMeta, adapter_sha256: adapterSha, folder_decision_scaffold_sha256: folderDecisionScaffoldSha,
@@ -529,7 +540,8 @@ async function main() {
     decision_contracts: [...new Set(eligible.map(entry => entry.label.value.decision_contract ?? probabilityContract))],
     transformations: 'Probability-contract rows retain raw probability receipts, use argmax (first declared option wins ties), and pass existing scoreGraded gates without normalization. Choice-label-confidence rows retain choice and bounded confidence as separate typed values, create no probability distribution, and pass only when choice exactly matches the source annotation. Binary noul uses p>=0.5. Gold annotations stay out of model-facing files and prompts.',
     model_visible_fields: [...new Set([...sourceFields.filter(key => key !== 'answer'), 'criteria'])],
-    criteria_provenance: 'source criteria is preserved exactly when present; otherwise a criteria map naming each declared label is generated',
+    criteria_provenance: { source: 'explicit source criteria wins after exact label-key validation; otherwise the shared versioned family task contract is applied when declared; the historical label-name fallback is used only for families with no shared contract',
+      contract_path: DECISION_TASK_CONTRACT_PATH, contract_sha256: DECISION_TASK_CONTRACT_SHA256 },
     hidden_fields: ['source answer annotation', 'teacher judgment payload', 'provider response content/hash receipt'],
     source_field_review: { observed_fields: sourceFields, reviewed_visible_fields: sourceFields.filter(key => key !== 'answer'),
       hidden_source_fields: sourceFields.filter(key => key === 'answer'),

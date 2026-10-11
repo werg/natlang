@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.decision-task-contracts/1",
+  "contracts": {
+    "decision:trec-question": {
+      "source": "SetFit/TREC-QC",
+      "kind": "choice",
+      "label_order": [
+        "abbreviation",
+        "description and abstract concepts",
+        "entities",
+        "human beings",
+        "locations",
+        "numeric values"
+      ],
+      "criteria": {
+        "abbreviation": "TREC ABBR: the expected answer is an abbreviation or its expansion.",
+        "description and abstract concepts": "TREC DESC: the expected answer is a definition, description, manner, or reason.",
+        "entities": "TREC ENTY: the expected answer is an entity in the TREC ENTY classes, such as an animal, product, sport, substance, vehicle, or other listed entity. Do not use this as a generic label for every real-world thing.",
+        "human beings": "TREC HUM: the expected answer is a person or a human group or organization. HUM includes the fine-grained group class, so an organization such as a sports league belongs here.",
+        "locations": "TREC LOC: the expected answer is a location, such as a city, country, mountain, state, or other location.",
+        "numeric values": "TREC NUM: the expected answer is a numeric value, such as a code, count, date, distance, amount of money, period, percentage, speed, size, temperature, weight, or other numeric value."
+      },
+      "provenance": {
+        "taxonomy": "Li and Roth (2002), Learning Question Classifiers, COLING 2002, ACL Anthology C02-1150",
+        "taxonomy_url": "https://aclanthology.org/C02-1150/",
+        "taxonomy_basis": "Six coarse classes ABBR, ENTY, DESC, HUM, LOC, NUM; HUM fine classes include group, individual, title, description; ENTY has its own entity subtypes including sport.",
+        "source_dataset": "SetFit/TREC-QC exposes the coarse English labels; its rows do not expose the original fine-grained HUM subtype.",
+        "decision": "Preserve source labels and answers. Use criteria to state the source taxonomy's intended coarse-class meaning; do not infer or add a fine-grained label per row."
+      }
+    }
+  }
+}

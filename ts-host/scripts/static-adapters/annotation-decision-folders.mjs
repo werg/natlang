@@ -9,6 +9,7 @@ import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { folderDecisionScaffold } from './folder-decision-scaffold.mjs';
+import { decisionCriteria, DECISION_TASK_CONTRACT_PATH, DECISION_TASK_CONTRACT_SHA256 } from './decision-task-contracts.mjs';
 import { canonical } from '../advisory-file.mjs';
 import { referenceRow } from '../inline-curriculum/references.mjs';
 import { materializeNativeRows } from '../../dist/teacher/native-materializer.js';
@@ -238,13 +239,16 @@ async function main() {
     requireValue(!sourceIds.has(row.id) && !sourceGroups.has(row.group), 'duplicate_source_identity');
     sourceIds.add(row.id); sourceGroups.add(row.group);
     const instruction = row.question;
+    const { criteria, provenance: criteriaProvenance } = decisionCriteria({ family: row.family,
+      source: row.source, kind: row.kind, labels: row.options, explicitCriteria: row.criteria, where: row.id });
     const task = { id: row.id, family: row.family, state: row.state, kind: 'choice', labels: row.options,
-      criteria: Object.fromEntries(row.options.map(label => [label, label])),
+      criteria,
       question: row.question, instruction, gold: row.answer, gold_source: 'dataset-annotation', group_id: row.group,
       split: row.role, license: row.license, source_meta: { family_id: row.family, source_index: index,
         source_version: row.version, source_name: row.source } };
     const familyTasks = tasksByFamily.get(row.family) ?? [];
     familyTasks.push({ task, sourceRow: row, sourceIndex: index,
+      criteriaProvenance,
       sourceRowRaw: selected.find(item => item.index === index).raw,
       sourceRowSha256: sha(selected.find(item => item.index === index).raw) }); tasksByFamily.set(row.family, familyTasks);
   }
@@ -294,13 +298,18 @@ async function main() {
       delete record.external_source.original_row;
       record.external_source.quality = { version: 'natlang.source_quality/1', status: 'held',
         checks: ['source_annotation_reference_only', 'no_independent_semantic_adjudication',
-          'canonical_source_quality_holds_applied', 'zero_provider_calls'] };
+          'canonical_source_quality_holds_applied', 'zero_provider_calls',
+          'shared_decision_task_contract_applied_when_declared'] };
       record.external_source.source_manifest_sha256 = sha(sourceManifestBytes);
       record.external_source.source_rows = group.map(entry => ({ id: entry.sourceRow.id,
         row_index: entry.sourceIndex, row_sha256: entry.sourceRowSha256, group: entry.sourceRow.group,
         split: entry.sourceRow.role }));
       record.generation = { ...record.generation, mode: 'static_dataset_annotation_reference',
-        provider_calls: 0, independent_new_worlds: 0, training_admission: false };
+        provider_calls: 0, independent_new_worlds: 0, training_admission: false,
+        decision_task_contract_sha256: DECISION_TASK_CONTRACT_SHA256,
+        decision_task_contract_path: DECISION_TASK_CONTRACT_PATH,
+        task_criteria_provenance: group.map(entry => ({ id: entry.task.id,
+          ...(entry.criteriaProvenance ?? {}) })) };
       const visible = visibleInputs(record);
       records.push({ record, visible });
     }
@@ -315,6 +324,7 @@ async function main() {
     toolSurfaceSha256: await defaultToolSurfaceHash(), collectionRole: 'reference' };
   const componentPaths = [
     resolve(here, 'annotation-decision-folders.mjs'), resolve(here, 'folder-decision-scaffold.mjs'),
+    resolve(here, 'decision-task-contracts.mjs'), DECISION_TASK_CONTRACT_PATH,
     resolve(here, 'teacher-decision-labels.mjs'), resolve(here, '../advisory-file.mjs'),
     resolve(repo, 'scripts/prepare_decision_provider_source.py'),
     policyPath,
@@ -367,6 +377,8 @@ async function main() {
     training_admission: false, provider_calls: 0, independent_new_worlds: 0,
     source: { path: casesPath, sha256: sourceSha, source_manifest_path: sourceManifestPath,
       source_manifest_sha256: sha(sourceManifestBytes), selected_rows: declaredCaseCount },
+    task_contracts: { path: DECISION_TASK_CONTRACT_PATH, sha256: DECISION_TASK_CONTRACT_SHA256,
+      schema: 'natlang.decision-task-contracts/1' },
     quality_policy: { path: policyPath, sha256: sha(policyBytes), policy_id: policy.policy_id,
       canonical_holds_present_in_source: omittedHeld.map(({row}) => row.id),
       state_truncation_rules: policy.state_truncation_rules },

@@ -10547,3 +10547,9 @@ Sharedproviderpreparer nowvalidates exactannotationreservationmanifest/sourceind
 ### V27 root full-input review, 2026-10-10 23:54 UTC
 
 Rootread8completecandidates:6newforwardholds(51total) for emoticon-onlynewsgroupandunsupported/mixedaffectsingletargets. Retaineduncertainty/reluctancefearinterpretation; no requirement tosayemotionliterally. SportsleagueTREC humanbeings targetdeferredfortaxonomycriteriareview: coarseHUM includesgroups/orgs, so goldrelabelmaybewrongfix. TheseV27disagreementswerealreadyexcludedstatic, V65/V29sourcesdisjoint. Policytimingclarificationpreserves45holdbefore/aftersharedrulebytechange; originalV27snapshotverifiedunchanged.
+
+### Shared taxonomy criteria and V7 progress, 2026-10-11 00:06 UTC
+
+training/decision_task_contracts.json declaresTRECcoarsecriteria/provenance; thinPython/JSreaderssharedbybuilder/providerprep/bothstaticadapters. Exactsourcecriteriawin; no gold orIDrewrites. Derivedcriteriaconversion isexplicit withsource-rowhashandcontract/helperpins. HUMincludesgroups/orgs, ENTYisnotgenericallthings. SportsleagueV27disagreementiscriterionergonomics, notcleansemanticfailure. Fresh2rowreferenceV4accepted1program withcriterionvisible/noanswerleak/0providercalls. V2initialpin-onlypreservationcorrectedbyrecoveringandhash-verifyingall16actualcomponentbytes; V3/V4componentsfrozen. No tests or modelcalls.
+
+V7step35840strictfailures5(previous8): longcontextembeddingdelta.028825andgeneratedagreement.986950; mediumpass0delta.045731, contextdelta.037290, generatedagreement.986150. Shortmeasuredgatespass. Exactevalsnapshotsealed; trainingcontinuesunqualified withunchangedthresholds. Runtime/stopping/transportnotqualifiedbytheseimprovements.
