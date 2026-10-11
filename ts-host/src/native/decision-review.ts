@@ -15,11 +15,32 @@ export type NativeDecisionApproval = {
     evidence_sha256: string;
     item_id: string;
     item_sha256: string;
+    source_row_sha256: string;
     input_sha256: string;
     original_annotation: boolean;
     corrected_label: boolean;
     actual_generated_value: boolean;
   };
+};
+
+export type NativeSourceLabelCorrection = {
+  item_id: string;
+  source_group: string;
+  source_revision: string;
+  source_row_sha256: string;
+  input_sha256: string;
+  original_annotation: boolean;
+  corrected_label: boolean;
+  actual_generated_value: boolean;
+  rubric_reason: string;
+};
+
+export type VerifiedNativeSourceLabelCorrections = {
+  schema: 'natlang.verified-source-label-corrections/1';
+  evidence_sha256: string;
+  source_cases_sha256: string;
+  evidence_files_verified: true;
+  corrections: readonly NativeSourceLabelCorrection[];
 };
 
 export function nativeDecisionTargetDigest(target: unknown): string {
@@ -38,6 +59,8 @@ export function validNativeDecisionApproval(approval: unknown, expected: {
     typeof (correction as Record<string, unknown>).item_id === 'string' &&
     typeof (correction as Record<string, unknown>).item_sha256 === 'string' &&
     /^[a-f0-9]{64}$/.test((correction as Record<string, unknown>).item_sha256 as string) &&
+    typeof (correction as Record<string, unknown>).source_row_sha256 === 'string' &&
+    /^[a-f0-9]{64}$/.test((correction as Record<string, unknown>).source_row_sha256 as string) &&
     typeof (correction as Record<string, unknown>).input_sha256 === 'string' &&
     /^[a-f0-9]{64}$/.test((correction as Record<string, unknown>).input_sha256 as string) &&
     typeof (correction as Record<string, unknown>).original_annotation === 'boolean' &&

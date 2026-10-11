@@ -1,6 +1,7 @@
 import { handoffTurns, type Turn } from './replay.js';
 import { hexDigest } from '../native/hash.js';
-import { nativeDecisionTargetDigest, validNativeDecisionApproval, type NativeDecisionApproval } from '../native/decision-review.js';
+import { nativeDecisionTargetDigest, validNativeDecisionApproval, type NativeDecisionApproval,
+  type NativeSourceLabelCorrection, type VerifiedNativeSourceLabelCorrections } from '../native/decision-review.js';
 import { sourceConversionProblems, retiredWorkflowEvaluationReleased } from './source-conversion.js';
 import { sourceQualityClearanceForProgram, type VerifiedSourceQualityClearance } from './source-quality-clearance.js';
 import { trainingQualityReason, runtimeFailureReason, quarantineReason, retiredFamily } from './curriculum-policy.js';
@@ -1217,7 +1218,9 @@ function onlyBoundedOrdinalSiblingFailure(row: NativeRow): boolean {
   const program = row.task.program_ir as ProgramRecord | undefined;
   const oracleSpec = program?.semantics?.oracle as Dict | undefined;
   const outcome = row.outcome;
-  if (oracleSpec?.normalization !== 'ordinal-distance-record' ||
+  const maxDistance = oracleSpec?.ordinal_distance_max;
+  if (oracleSpec?.normalization !== 'ordinal-distance-record' || !Number.isSafeInteger(maxDistance) ||
+      Number(maxDistance) < 0 ||
       (outcome.quality_pending as unknown[] | undefined)?.length || !outcome.oracle ||
       typeof outcome.oracle !== 'object') return false;
   const oracle = outcome.oracle as Dict;
@@ -1229,8 +1232,9 @@ function onlyBoundedOrdinalSiblingFailure(row: NativeRow): boolean {
   const failed = (verdict.entries as Dict[]).filter(entry => entry.accepted === false);
   if (!failed.length || (verdict.entries as Dict[]).some(entry =>
       typeof entry.key !== 'string' || !Number.isSafeInteger(entry.ordinal_distance) ||
-      typeof entry.accepted !== 'boolean' || (entry.accepted && Number(entry.ordinal_distance) > 1) ||
-      (!entry.accepted && Number(entry.ordinal_distance) <= 1))) return false;
+      typeof entry.accepted !== 'boolean' ||
+      (entry.accepted && Number(entry.ordinal_distance) > Number(maxDistance)) ||
+      (!entry.accepted && Number(entry.ordinal_distance) <= Number(maxDistance)))) return false;
   const expectedErrors = failed.map(entry => `ordinal_distance_exceeded:${String(entry.key)}`).sort();
   if (canonical((verdict.errors as unknown[]).map(String).sort()) !== canonical(expectedErrors)) return false;
   const files = outcome.files_check as Dict | undefined;
@@ -1249,8 +1253,78 @@ function onlyBoundedOrdinalSiblingFailure(row: NativeRow): boolean {
  * when its sole oracle/file failure is the decisions map. The selected child
  * must bind one exact source item, its original expected label and its actual
  * generated boolean to the immutable correction receipt in the approval. */
+function reviewedSourceLabelCorrection(row: NativeRow, approval: NativeDecisionApproval,
+  verified: VerifiedNativeSourceLabelCorrections | undefined): NativeSourceLabelCorrection | null {
+  const program = row.task.program_ir as ProgramRecord | undefined;
+  const generation = program?.generation as Dict | undefined;
+  const sourceRevisions = program?.source_revisions as unknown[] | undefined;
+  const claimed = approval.source_label_correction;
+  if (!claimed || !verified || verified.schema !== 'natlang.verified-source-label-corrections/1' ||
+      verified.evidence_files_verified !== true || !/^[a-f0-9]{64}$/.test(verified.evidence_sha256) ||
+      !/^[a-f0-9]{64}$/.test(verified.source_cases_sha256) ||
+      (generation?.source_cases_sha256 !== verified.source_cases_sha256 &&
+        !sourceRevisions?.includes(verified.source_cases_sha256))) return null;
+  const matches = verified.corrections.filter(correction => correction.item_id === claimed.item_id);
+  if (matches.length !== 1) return null;
+  const correction = matches[0];
+  if (!correction) return null;
+  if (!/^[a-f0-9]{64}$/.test(correction.source_row_sha256) ||
+      !/^[a-f0-9]{64}$/.test(correction.input_sha256) ||
+      typeof correction.source_revision !== 'string' || !correction.source_revision.trim() ||
+      (typeof generation?.source_revision === 'string' && generation.source_revision !== correction.source_revision) ||
+      typeof correction.rubric_reason !== 'string' || !correction.rubric_reason.trim()) return null;
+  const itemText = program?.semantics?.folder_files?.[`items/${correction.item_id}.json`];
+  if (typeof itemText !== 'string' || hexDigest(itemText) !== claimed.item_sha256 ||
+      correction.source_row_sha256 !== claimed.source_row_sha256 ||
+      correction.input_sha256 !== claimed.input_sha256 || correction.original_annotation !== claimed.original_annotation ||
+      correction.corrected_label !== claimed.corrected_label ||
+      correction.actual_generated_value !== claimed.actual_generated_value ||
+      claimed.evidence_sha256 !== verified.evidence_sha256) return null;
+  let item: Dict;
+  try { item = JSON.parse(itemText) as Dict; } catch { return null; }
+  const expected = program?.semantics?.expected as Dict | undefined;
+  const observed = row.outcome.value as Dict | undefined;
+  if (item.id !== correction.item_id ||
+      (item.group ?? item.group_id) !== correction.source_group ||
+      expected?.[correction.item_id] !== correction.original_annotation ||
+      observed?.[correction.item_id] !== correction.actual_generated_value ||
+      correction.corrected_label !== correction.actual_generated_value ||
+      correction.corrected_label === correction.original_annotation) return null;
+  return correction;
+}
+
+function hasVerifiedSourceLabelCorrectionMismatch(row: NativeRow,
+  verified: VerifiedNativeSourceLabelCorrections | undefined): boolean {
+  const program = row.task.program_ir as ProgramRecord | undefined;
+  const generation = program?.generation as Dict | undefined;
+  const sourceRevisions = program?.source_revisions as unknown[] | undefined;
+  if (!verified || verified.schema !== 'natlang.verified-source-label-corrections/1' ||
+      verified.evidence_files_verified !== true || !/^[a-f0-9]{64}$/.test(verified.evidence_sha256) ||
+      !/^[a-f0-9]{64}$/.test(verified.source_cases_sha256) ||
+      (generation?.source_cases_sha256 !== verified.source_cases_sha256 &&
+        !sourceRevisions?.includes(verified.source_cases_sha256))) return false;
+  const expected = program?.semantics?.expected as Dict | undefined;
+  const observed = row.outcome.value as Dict | undefined;
+  return verified.corrections.some(correction => {
+    if (!/^[a-f0-9]{64}$/.test(correction.source_row_sha256) ||
+        !/^[a-f0-9]{64}$/.test(correction.input_sha256) ||
+        typeof correction.source_revision !== 'string' || !correction.source_revision.trim() ||
+        (typeof generation?.source_revision === 'string' && generation.source_revision !== correction.source_revision) ||
+        typeof correction.rubric_reason !== 'string' || !correction.rubric_reason.trim()) return false;
+    const itemText = program?.semantics?.folder_files?.[`items/${correction.item_id}.json`];
+    if (typeof itemText !== 'string') return false;
+    let item: Dict;
+    try { item = JSON.parse(itemText) as Dict; } catch { return false; }
+    return item.id === correction.item_id && (item.group ?? item.group_id) === correction.source_group &&
+      expected?.[correction.item_id] === correction.original_annotation &&
+      observed?.[correction.item_id] === correction.actual_generated_value &&
+      correction.corrected_label === correction.actual_generated_value &&
+      correction.corrected_label !== correction.original_annotation && correction.rubric_reason.trim();
+  });
+}
+
 function onlyReviewedSourceLabelSiblingFailure(row: NativeRow,
-  approvals: ReadonlyMap<number, NativeDecisionApproval>): boolean {
+  approvals: ReadonlyMap<number, NativeDecisionApproval>, verified: VerifiedNativeSourceLabelCorrections | undefined): boolean {
   const program = row.task.program_ir as ProgramRecord | undefined;
   const outcome = row.outcome;
   const oracle = outcome.oracle as Dict | undefined;
@@ -1268,15 +1342,9 @@ function onlyReviewedSourceLabelSiblingFailure(row: NativeRow,
       !observed || typeof observed !== 'object' || Array.isArray(observed)) return false;
   const sourceExpected = expected as Dict, generated = observed as Dict;
   for (const [index, approval] of approvals) {
-    const correction = approval.source_label_correction;
-    if (!correction) continue;
-    const itemText = program?.semantics?.folder_files?.[`items/${correction.item_id}.json`];
-    if (typeof itemText !== 'string' || hexDigest(itemText) !== correction.item_sha256 ||
-        sourceExpected[correction.item_id] !== correction.original_annotation ||
-        generated[correction.item_id] !== correction.actual_generated_value ||
-        correction.corrected_label !== correction.actual_generated_value ||
-        correction.corrected_label === correction.original_annotation ||
-        !row.trajectory[index]?.assistant) continue;
+    const correction = reviewedSourceLabelCorrection(row, approval, verified);
+    if (!correction || sourceExpected[correction.item_id] !== correction.original_annotation ||
+        generated[correction.item_id] !== correction.actual_generated_value || !row.trajectory[index]?.assistant) continue;
     return true;
   }
   return false;
@@ -1306,7 +1374,8 @@ export function markAuthoredStaticReferencePending(turns: Dict[]): Dict[] {
 
 export function materializeNativeRows(input: unknown[], options: { directAnswers?: boolean; failedRuns?: boolean;
   decisionHolds?: readonly NativeDecisionHold[]; decisionApprovals?: readonly NativeDecisionApproval[];
-  sourceQualityClearance?: VerifiedSourceQualityClearance } = {}): {
+  sourceQualityClearance?: VerifiedSourceQualityClearance;
+  sourceLabelCorrections?: VerifiedNativeSourceLabelCorrections } = {}): {
   turns: Dict[]; authored_actions: Dict[]; acceptedRows: number; rejectedRows: number;
   unlinked: { id: string; outcomes: number; reason?: string }[];
 } {
@@ -1351,8 +1420,11 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     const reviewedOrdinalSibling = options.failedRuns === true && hasExactDecisionReview &&
       rowQualityReason === 'quality_pending' && onlyBoundedOrdinalSiblingFailure(row);
     const reviewedLabelCorrectionSibling = options.failedRuns === true && hasExactDecisionReview &&
-      rowQualityReason === 'quality_pending' && onlyReviewedSourceLabelSiblingFailure(row, reviewedApprovals);
-    if ((rowQualityReason && !reviewedOrdinalSibling && !reviewedLabelCorrectionSibling) || runtimeFailureReason(row) || quarantineReason(program) || retiredFamily(program)) {
+      rowQualityReason === 'quality_pending' && onlyReviewedSourceLabelSiblingFailure(row, reviewedApprovals,
+        options.sourceLabelCorrections);
+    const verifiedCorrectionCandidate = options.failedRuns === true && rowQualityReason === 'quality_pending' &&
+      hasVerifiedSourceLabelCorrectionMismatch(row, options.sourceLabelCorrections);
+    if ((rowQualityReason && !reviewedOrdinalSibling && !reviewedLabelCorrectionSibling && !verifiedCorrectionCandidate) || runtimeFailureReason(row) || quarantineReason(program) || retiredFamily(program)) {
       rejectedRows++; continue;
     }
     // Rows from before conversation rollover was retired contain checkpoint notes and cut contexts.
@@ -1686,6 +1758,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const afterChunkCutoff = cutoff !== undefined && cutoff !== null && index > Number(cutoff);
       const semanticHold = reviewedHolds.get(index);
       const semanticApproval = reviewedApprovals.get(index);
+      const invalidSourceLabelCorrectionApproval = !!semanticApproval?.source_label_correction &&
+        !reviewedSourceLabelCorrection(row, semanticApproval, options.sourceLabelCorrections);
       if (semanticApproval && !validNativeDecisionApproval(semanticApproval, { trajectory_id: row.id,
           source_row_sha256: rowDigest, decision_index: index, target_sha256: nativeDecisionTargetDigest(target) }))
         throw new Error(`semantic decision approval target or evidence mismatch: ${row.id}:${index}`);
@@ -1698,6 +1772,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const authoredGuidanceBlocked = authoredGuidancePending && !semanticApproval;
       const sourceQualityActionReviewPending = !!sourceQualityBinding && !semanticApproval;
       const decisionApproved = (!authoredRootAction || !!semanticApproval) && !sourceQualityActionReviewPending && !authoredGuidanceBlocked && !semanticHold && !afterChunkCutoff &&
+        !invalidSourceLabelCorrectionApproval &&
         (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
         !heldDirect && !variantContext && !invalidStatusOnlySuccess;
       const targetBindingAdapter = providerActionNormalizationAdapter(source, target, rowDigest, index);

@@ -1157,6 +1157,72 @@ test('exact reviewed decisions in a failed run are admitted without changing its
   assert.equal(materializeNativeRows([failed], { failedRuns: true, decisionApprovals: [failedApproval] }).turns[0].training_admission.approved, false);
 });
 
+test('source-label correction admits only its exact reviewed child and rejects mismatched receipts', () => {
+  const row = nativeRow('source-label-correction-child', false);
+  const sourceCasesSha = 'd'.repeat(64), evidenceSha = 'e'.repeat(64);
+  const item = { id: 'case-a', group: 'group-a', role: 'train', state: 'A person calls neighbors “deadbeats”.',
+    question: 'Is the comment insulting or degrading?', answer: false };
+  const itemText = JSON.stringify(item);
+  row.task.program_ir = { id: 'decision-fixture', version: 'natlang.program/2', generation: {
+    source_cases_sha256: sourceCasesSha, source_revision: 'revision-a' }, semantics: {
+      expected: { 'case-a': false }, folder_files: { 'items/case-a.json': itemText },
+      oracle: { normalization: 'exact' } } };
+  row.outcome.value = { 'case-a': true };
+  row.outcome.oracle = { level: 'exact', accepted: false, needs_review: true };
+  row.outcome.files_check = { failed: ['decisions.json'], errors: [], pending: [] };
+  row.outcome.checks = { files: false, answer: false, runtime: true };
+  const correction = { item_id: item.id, source_group: item.group, source_revision: 'revision-a',
+    source_row_sha256: 'f'.repeat(64), input_sha256: 'a'.repeat(64), original_annotation: false,
+    corrected_label: true, actual_generated_value: true, rubric_reason: 'Visible degrading name meets the stated rule.' };
+  const verified = { schema: 'natlang.verified-source-label-corrections/1', evidence_sha256: evidenceSha,
+    source_cases_sha256: sourceCasesSha, evidence_files_verified: true, corrections: [correction] };
+  const unreviewed = materializeNativeRows([row], { failedRuns: true, sourceLabelCorrections: verified });
+  assert.equal(unreviewed.acceptedRows, 1, 'a bound corrected batch can be inspected without approving its decisions');
+  assert.ok(unreviewed.turns.every(turn => turn.training_admission.approved === false));
+
+  const candidate = unreviewed.turns[0];
+  const approval = { schema: 'natlang.native-decision-approval/1', trajectory_id: row.id,
+    source_row_sha256: nativeRowDigest(row), decision_index: candidate.decision.index,
+    target_sha256: nativeDecisionTargetDigest(candidate.target), review_sha256: 'b'.repeat(64),
+    reason: 'The exact visible comment satisfies the task rubric.', evidence: ['source item and generated action reviewed'],
+    source_label_correction: { evidence_sha256: evidenceSha, item_id: item.id,
+      item_sha256: createHash('sha256').update(itemText).digest('hex'), source_row_sha256: correction.source_row_sha256,
+      input_sha256: correction.input_sha256, original_annotation: false, corrected_label: true,
+      actual_generated_value: true } };
+  const approved = materializeNativeRows([row], { failedRuns: true, sourceLabelCorrections: verified,
+    decisionApprovals: [approval] });
+  const selected = approved.turns.find(turn => turn.decision.index === candidate.decision.index);
+  assert.equal(selected?.training_admission.approved, true);
+  assert.ok(approved.turns.filter(turn => turn !== selected).every(turn => turn.training_admission.approved === false),
+    'the correction never approves sibling actions');
+
+  const tamperedCases = [
+    { ...approval, source_label_correction: { ...approval.source_label_correction, evidence_sha256: 'c'.repeat(64) } },
+    { ...approval, source_label_correction: { ...approval.source_label_correction, item_id: 'case-other' } },
+    { ...approval, source_label_correction: { ...approval.source_label_correction, source_row_sha256: '0'.repeat(64) } },
+    { ...approval, source_label_correction: { ...approval.source_label_correction, original_annotation: true } },
+    { ...approval, source_label_correction: { ...approval.source_label_correction, corrected_label: false } },
+    { ...approval, source_label_correction: { ...approval.source_label_correction, actual_generated_value: false } },
+  ];
+  for (const tampered of tamperedCases) {
+    let result;
+    try { result = materializeNativeRows([row], { failedRuns: true, sourceLabelCorrections: verified,
+      decisionApprovals: [tampered] }); } catch { continue; }
+    assert.ok(result.turns.every(turn => turn.training_admission.approved === false),
+      `tampered correction must remain held: ${JSON.stringify(tampered.source_label_correction)}; got ${JSON.stringify(result.turns.map(turn => turn.training_admission))}`);
+  }
+  for (const tamperedEvidence of [
+    { ...verified, corrections: [{ ...correction, item_id: 'case-other' }] },
+    { ...verified, corrections: [{ ...correction, source_row_sha256: '0'.repeat(64) }] },
+    { ...verified, corrections: [{ ...correction, corrected_label: false }] },
+  ]) {
+    const result = materializeNativeRows([row], { failedRuns: true, sourceLabelCorrections: tamperedEvidence,
+      decisionApprovals: [approval] });
+    assert.ok(result.turns.every(turn => turn.training_admission.approved === false),
+      `a wrong source ID/hash/value in the verified receipt cannot approve a target: ${JSON.stringify(tamperedEvidence.corrections)}`);
+  }
+});
+
 test('materialization preserves same-call provider-expanded read provenance with distinct root and producer origins', () => {
   const row = nativeRow('provider-expanded-context');
   const invocation = 'provider-call';
