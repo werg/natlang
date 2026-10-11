@@ -10,10 +10,11 @@ answer). A probe passes when all its checks pass.
 from __future__ import annotations
 
 import contextlib
+import math
 import torch
 from torch.nn.utils import parametrize
 
-from ..eval.generation_checks import check, summarize
+from ..eval.generation_checks import check, summarize, output_budget
 from .ternary import QUANT_MIX
 
 
@@ -62,12 +63,15 @@ def run_gate(model, tokenizer, probes: list[dict], render, eos: int, max_new: in
     results = []
     with deployed_cache():
         for probe in probes:
-            limit = max_new_thinking if probe.get("enable_thinking") else max_new
+            limit = output_budget(probe, ordinary=max_new, thinking=max_new_thinking)
             tokens = greedy_any(model, render(tokenizer, probe), limit, eos)
             text = tokenizer.decode(tokens, skip_special_tokens=False)
             checks = check(probe, text, tokens, eos)
             results.append({"id": probe["id"], "kind": probe.get("kind"), "checks": checks, "pass": all(checks.values()),
-                            "tokens": len(tokens), **({"text": text[:1500]} if keep_text else {})})
+                            "tokens": len(tokens), "max_new_tokens": limit,
+                            "budget_exhausted": len(tokens) == limit and (not tokens or tokens[-1] != eos),
+                            **({"signal": probe["signal"]} if "signal" in probe else {}),
+                            **({"text": text} if keep_text else {})})
     report = summarize(results)
     report["gate_results"] = results
     return report
@@ -81,8 +85,7 @@ def behaviour_report(model, tokenizer, probes: list[dict], render, eos: int, hel
     quantization component's per-precision gate columns and its init gate (train/quantization.py): one
     implementation at whatever precision point is active."""
     gate = run_gate(model, tokenizer, probes, render, eos, keep_text=True)
-    report = {"gate_pass": gate["gate_pass"], "gate_checks": gate["gate_checks"], "gate_kinds": gate["gate_kinds"],
-              "gate_results": gate["gate_results"]}
+    report = dict(gate)
     if held is not None:
         report.update(held_kl(model, held, held_rows, prompt_weight))
     return report
@@ -96,14 +99,29 @@ def held_kl(model, held: dict, rows: int = 48, prompt_weight: float = 0.25) -> d
 
     device = next(model.parameters()).device
     sums: dict = {}
+    metric_rows: dict = {}
     count = min(rows, len(held["ids"]))
+    if count < 1:
+        raise ValueError("held drift monitor needs at least one row")
+    response_rows = sum(len(held['ids'][i]) > int(held['prompt_len'][i]) for i in range(count))
     with torch.no_grad():
         for i in range(count):
             scores = weighted_topk_kl(model, held["ids"][i][None].long().to(device), held["top_ids"][i],
                                       held["top_logp"][i], held["prompt_len"][i], prompt_weight)
             for key, value in scores.items():
-                sums[key] = sums.get(key, 0.0) + float(value)
-    return {"held_" + k.replace("loss_", ""): v / max(count, 1) for k, v in sums.items()}
+                value = float(value)
+                if not math.isfinite(value):
+                    if key.startswith('response_') and len(held['ids'][i]) <= int(held['prompt_len'][i]):
+                        continue  # A historical truncated row has no response observation, not zero drift.
+                    raise ValueError(f"nonfinite held drift metric {key} at row {i}")
+                sums[key] = sums.get(key, 0.0) + value
+                metric_rows[key] = metric_rows.get(key, 0) + 1
+    report = {"held_" + k.replace("loss_", ""): v / metric_rows[k] for k, v in sums.items()}
+    report['held_coverage'] = {'rows': count, 'response_rows': response_rows,
+                               'response_missing_rows': count - response_rows,
+                               'response_complete': response_rows == count,
+                               'metric_rows': metric_rows}
+    return report
 
 
 @torch.no_grad()
@@ -115,10 +133,21 @@ def capture_reference(model, tokenizer, prompts: list[dict], render, eos: int, *
     model has moved from this one: the monitor path of a lineage without a registered teacher artifact (no
     preservation loss reads it)."""
     device = next(model.parameters()).device
-    reference = {"ids": [], "top_ids": [], "top_logp": [], "prompt_len": []}
+    reference = {"ids": [], "top_ids": [], "top_logp": [], "prompt_len": [], "capture_coverage": []}
     for prompt in prompts:
-        ids = render(tokenizer, prompt)
-        ids = (ids + greedy_any(model, ids, max_new, eos))[:max_tokens]
+        prefix = render(tokenizer, prompt)
+        budget = output_budget(prompt, ordinary=max_new, thinking=max_new)
+        generated = greedy_any(model, prefix, budget, eos)
+        # Never chop the prompt to fit the teacher shard budget: that used to remove
+        # every response position from long native prompts and produce NaN drift.
+        kept = generated[:max(1, max_tokens - len(prefix))]
+        if not kept:
+            raise ValueError("reference capture produced no response tokens")
+        ids = prefix + kept
+        reference['capture_coverage'].append({'id': prompt.get('id'), 'prompt_tokens': len(prefix),
+                                              'generated_tokens': len(generated), 'response_tokens': len(kept),
+                                              'response_truncated': len(kept) < len(generated),
+                                              'max_new_tokens': budget, 'effective_tokens': len(ids)})
         sequence = torch.tensor([ids], device=device)
         hidden = model.model(input_ids=sequence).last_hidden_state[0, :-1]
         top_ids, top_logp = [], []
@@ -130,7 +159,7 @@ def capture_reference(model, tokenizer, prompts: list[dict], render, eos: int, *
         reference["ids"].append(torch.tensor(ids, dtype=torch.int32))
         reference["top_ids"].append(torch.cat(top_ids))
         reference["top_logp"].append(torch.cat(top_logp))
-        reference["prompt_len"].append(min(len(render(tokenizer, prompt)), len(ids)))
+        reference["prompt_len"].append(len(prefix))
     return reference
 
 

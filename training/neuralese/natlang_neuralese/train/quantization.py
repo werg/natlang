@@ -101,7 +101,8 @@ def validate_spec(spec, stages=None):
     if gate is not None:
         if (not isinstance(gate, dict) or set(gate) - {'probes', 'held_rows', 'prompt_weight', 'max_gate_drop',
                                                        'max_held_kl', 'reference', 'column_held_documents'}
-                or not isinstance(gate.get('reference', {}), dict) or set(gate.get('reference', {})) - {'gate_pass', 'source'}
+                or not isinstance(gate.get('reference', {}), dict) or set(gate.get('reference', {})) - {'gate_pass', 'source', 'gate_signal'}
+                or gate.get('reference', {}).get('gate_signal') not in {None, 'ordinary_competence'}
                 or not isinstance(gate.get('probes'), dict) or set(gate['probes']) != {'path', 'sha256'}
                 or not all(_number(gate.get(k, 0)) and gate.get(k, 0) >= 0
                            for k in ('max_gate_drop', 'max_held_kl', 'prompt_weight'))
@@ -476,9 +477,13 @@ class Behaviour:
         """Against ``bf16`` (a live BF16 report) or the declared ``reference`` (the original BF16 model's measured
         generation pass rate, e.g. 0.75 at conversion v3's step 0), so a stage's own BF16 column is gated too."""
         bf16 = bf16 or self.config['reference']
+        if report.get('gate_signal') != bf16.get('gate_signal'):
+            raise ValueError('behaviour gate and reference use different signals; recapture the paired base reference')
         ok = report['gate_pass'] >= bf16['gate_pass'] - self.config.get('max_gate_drop', 0.0) - 1e-9
         if 'max_held_kl' in self.config:
             ok = ok and report.get('held_kl', math.inf) <= self.config['max_held_kl']
+        if report.get('held_coverage', {}).get('response_complete') is False:
+            ok = False
         return bool(ok)
 
 
