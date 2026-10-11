@@ -65,6 +65,11 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda'):
         written = write_direct(backbone, projection, opened_context(engine, context), length, engine.stop_ids,
                                length=length)
         value = written.complete()[0]
+        for vector in written.payloads:
+            vector.retain_grad()
+        for state in written.states:
+            if state.requires_grad:
+                state.retain_grad()
         targets = torch.tensor([engine.tokenizer.encode('It is ready.', add_special_tokens=False)], device=device)
         consumer = torch.cat([value, backbone.embed(targets[:, :-1])], 1)
         result = backbone.forward_embeds(consumer, logits=False)
@@ -72,10 +77,18 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda'):
         loss = torch.nn.functional.cross_entropy(logits.reshape(-1, logits.shape[-1]), targets.reshape(-1))
         loss.backward()
         gradients = {name: float(p.grad.float().norm()) for name, p in projection.named_parameters() if p.grad is not None}
+        feedback_gradients = [float(vector.grad.float().norm()) if vector.grad is not None else None
+                              for vector in written.payloads]
+        state_gradients = [float(state.grad.float().norm()) if state.grad is not None else None
+                           for state in written.states]
         finite = bool(gradients) and all(torch.isfinite(p.grad).all().item() for p in projection.parameters() if p.grad is not None)
         row = {'length': length, 'scheduler_writer_delta': serving_delta, 'cache_readback_delta': cache_delta,
                'cache_lengths_equal': lengths_equal, 'cache_contents_equal': contents_equal,
                'consumer_ce': float(loss.detach()), 'projection_gradients': gradients,
+               'payload_gradient_norm_by_position': feedback_gradients,
+               'final_state_gradient_norm_by_position': state_gradients,
+               'payload_rms_by_position': [float(vector.detach().float().square().mean().sqrt())
+                                           for vector in written.payloads],
                'finite_gradients': finite, 'projection_receives_consumer_gradient': sum(gradients.values()) > 0}
         rows.append(row)
         (out / 'rows.json').write_text(json.dumps(rows, indent=2) + '\n')
