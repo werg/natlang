@@ -165,7 +165,7 @@ def validate_inline_instruction_code(arguments_json: Any, sidecar: Any) -> Inlin
             else:
                 prefix = _WITH_TEMPLATE_PREFIX.search(before)
                 plan = plans.get(name)
-                names = [capture.get("name") for capture in plan.get("capture_binding_plan", {}).get("captures", [])] if isinstance(plan, Mapping) else []
+                names = _explicit_with_property_names(plan)
                 if not prefix or not _capture_names_match(prefix.group(1), names):
                     return InlineInstructionValidation(False, reason="explicit-with-prefix-mismatch")
             start = cursor
@@ -260,6 +260,43 @@ def _capture_names_match(raw: str, expected: Any) -> bool:
     return names == expected
 
 
+def _explicit_with_property_names(plan: Any) -> list[str]:
+    """Return child-visible names proved by either snapshots or shadowed parameters."""
+    if not isinstance(plan, Mapping):
+        return []
+    binding = plan.get("capture_binding_plan")
+    if not isinstance(binding, Mapping):
+        return []
+    snapshots = binding.get("captures")
+    if isinstance(snapshots, list) and snapshots:
+        names = [capture.get("name") for capture in snapshots if isinstance(capture, Mapping)]
+        return names if len(names) == len(snapshots) else []
+    # `nl.with({ input })` can be explicit while `input` is the child function's
+    # parameter. The compiler records that declaration in plan.captures but
+    # correctly omits it from effective snapshot captures. Accept only this
+    # fully parameter-shadowed case; ordinary empty capture plans stay invalid.
+    declarations = plan.get("captures")
+    parameters = plan.get("parameters")
+    if (plan.get("explicit_captures") is not True or not isinstance(declarations, list) or
+            not declarations or not isinstance(parameters, list)):
+        return []
+    parameter_names = {item.get("name") for item in parameters
+                       if isinstance(item, Mapping) and isinstance(item.get("name"), str)}
+    names: list[str] = []
+    for declaration in declarations:
+        if (not isinstance(declaration, Mapping) or declaration.get("shadowedByParameter") is not True or
+                not isinstance(declaration.get("name"), str) or
+                declaration["name"] not in parameter_names or declaration.get("mode") != "snapshot" or
+                declaration.get("mutable") is not False or
+                declaration.get("source") not in {"input", "local", "block"} or
+                not isinstance(declaration.get("type"), Mapping)):
+            return []
+        names.append(declaration["name"])
+    if len(set(names)) != len(names):
+        return []
+    return names
+
+
 def _split_capture_properties(raw: str) -> list[str] | None:
     """Split an object literal's properties without splitting nested expressions."""
     parts: list[str] = []
@@ -334,8 +371,14 @@ def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str, c
         if not valid_body or not _valid_capture_creation(binding, plan, origin_code):
             return False
     captures = binding.get("captures")
-    if not isinstance(captures, list) or not captures:
+    if not isinstance(captures, list):
         return False
+    if not captures:
+        # An empty effective capture list is safe only when the compiler
+        # explicitly attests that every declared nl.with name is shadowed by
+        # the child's parameter. This preserves the distinction between an
+        # explicit child argument and a missing/unverified parent snapshot.
+        return bool(_explicit_with_property_names(plan))
     names: list[str] = []
     for capture in captures:
         if not isinstance(capture, Mapping):
