@@ -38,3 +38,37 @@ Not yet in code: MuonSR (BF16 momentum + stochastic rounding for backbone) is be
 | Optimizer | Muon/AdamW | Muon/AdamW (lr 7.5e-6, heads 3e-4) + LionSR latents (3e-4 x row scale) |
 | Quantization / preserve | none | QAT ladder q4 -> ternary-experts -> ternary; preserve KL to teacher, weight 0.5 |
 | Eval / checkpoint | per Pop | eval 256, checkpoint 2048 |
+
+## Follow-up status at 2026-10-11 08:20 UTC
+
+This comparison describes the pinned runs, not all subsequent changes on main.
+Both compared runs have stopped; Mellum stopped at its failed step-4096 behavior
+check, and Pop V8 completed at selected step 39936. There is no active production
+training run represented by this table.
+
+Shared fixes on main now include MuonSR (4d044692), response-position behavior
+drift thresholds (aa639a38), and a declared container launcher (38b026a0).
+They are not retroactively part of the compared checkpoints. MuonSR remains a
+shared selectable latent optimizer, not the optimizer used by Pop V8.
+
+The shared audit in WARMUP_AUDIT_20261011.md found a genuine architectural gap:
+preservation and behavior monitoring were initialized only through quantization.
+Thus BF16 Pop had no preservation path. Making preservation a stage-level
+component in the existing trainer is in progress; the Pop and DGX owners are
+coordinating edits. This should not create a separate dense-model trainer.
+
+Model-specific loaders, embedding/control conventions, templates, MoE kernels,
+and quantization operations remain necessary shared-repository adapters.
+Ordinary evaluation, checkpoint restoration, recipe execution, channel objectives,
+preservation, and drift monitoring should use common implementations, with model
+adapters providing only the model-specific behavior. Dirty worktrees and new main
+commits are not proof that a frozen running package has adopted an implementation.
+
+Pop's selected weights passed independent runtime transport and gradient-replay
+qualification, but failed ordinary behavior checks. The earliest retained full
+alignment checkpoint (V5, selected step 31744) already has the same math/tool
+regression. The final V8 refinement did not introduce the entire regression.
+Production recurrence optimization remains paused while the shared preservation
+path and applied-update diagnostics are developed. Alignment agreement against
+the current ordinary backbone alone is insufficient evidence of preserved task
+capability.
