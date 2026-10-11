@@ -230,3 +230,24 @@ responseKL0.01301814, base21/36 andcandidate20/36, passing the declared0.5KL/0.1
 allowance. It preserves the original48-row gate with missing/NaNresponse metrics;
 it is a new scoped diagnostic, not a historical report rewrite. Consumer task
 usefulness and autonomous stopping remain unqualified.
+
+### Actual restarted DGX direct-v2 pin — 2026-10-11 13:23 UTC
+
+Read-only snapshot hashes against Pop's completed V8: Pop151/DGX158 Pythonfiles,
+140identical,11differing,0Pop-only,7DGX-added. Added modules are shared published
+`eval/{direct_behavior,direct_drift,direct_rollout,direct_runtime,direct_token_readout}`,
+`serve/direct_write`, and`train/direct_export`; they are also in current Pop main.
+This does not mean7machine-private implementations. Differing files:
+`eval/generation_checks`, `eval/plain_behavior`, `maple/foundation_heads`,
+`maple/generation_gate`, `model/neuralese_projection`, `serve/engine`, `serve/grad`,
+`train/backbone_policy`, `train/direct_sft`, `train/quantization`, `train/recipe`.
+These cover published corrections, evaluation, anchors, and newer direct serving
+mechanisms; actual backbone parameter/anchor fixes alter effective run-v2 coverage.
+
+DGX recipe-plan records a13:19:20UTC handoff, preserving its preceding package at
+runtime-superseded-20261011T131920 and listing changed/added files. The inspected
+runtime is a directory, not a symlink to canonical mutable source. Thus the
+148/151 figure describes the two completed direct runs, while this140/151 plus7
+addition figure describes Pop V8 versus the restarted/handoff DGX direct-v2 pin.
+Hash evidence lives at Pop V8/pin-comparison-dgx-direct-v2-v1.json. No DGX jobs were
+modified in this inspection.
