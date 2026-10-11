@@ -46,3 +46,51 @@ def apply_prompt_rendering(messages, tools, prompt_rendering: str = "full"):
     if any(isinstance(m, dict) and m.get("role") == "system" for m in out[1:]):
         raise ValueError("program-header rendering found a system message after the first turn")
     return out, None
+
+
+# --- Port of ts-host renderSystemPrompt (src/native/system-prompts.ts, 18dda11d) over the exported piece table. ---
+# The table is ts-host's promptPieces() (id, scope, text) exported by ts-host/scripts/export-prompt-pieces.mjs to
+# training/prompt-pieces/pieces.json, later extended with the historical texts of each generic piece (D9). Parity
+# with the TS function is checked on recorded system prompts (tests/neuralese/test_prompt_rendering_parity.py).
+
+def find_pieces(text: str, pieces) -> list:
+    """findPieces: occurrences of each piece's text, longest pieces first, without overlaps, sorted by start."""
+    found = []
+
+    def taken(start, end):
+        return any(start < e and s < end for s, e, _ in found)
+    for piece in sorted(pieces, key=lambda p: -len(p['text'])):  # stable, as Array.prototype.sort
+        needle = piece['text']
+        if not needle:
+            continue
+        at = text.find(needle)
+        while at >= 0:
+            if not taken(at, at + len(needle)):
+                found.append((at, at + len(needle), piece))
+            at = text.find(needle, at + len(needle))
+    return sorted(found, key=lambda item: item[0])
+
+
+def render_system_prompt(text: str, mode: str = 'full', pieces=()) -> str:
+    """renderSystemPrompt: drop generic pieces, keep program pieces nested in them, keep unmatched text verbatim."""
+    if mode not in PROMPT_RENDERINGS:
+        raise ValueError(f"unknown prompt_rendering {mode!r} (declared: {PROMPT_RENDERINGS})")
+    if mode == 'full':
+        return text
+    generic = find_pieces(text, [p for p in pieces if p['scope'] == 'generic'])
+    program = find_pieces(text, [p for p in pieces if p['scope'] == 'program'])
+    out, cursor = '', 0
+    for start, end, _ in generic:
+        out += text[cursor:start]
+        retained = [text[a:b] for a, b, _ in program if a >= start and b <= end]
+        if retained:
+            out += '\n\n' + '\n\n'.join(retained) + '\n\n'
+        cursor = end
+    return (out + text[cursor:]).strip(' \t\n\r\x0b\x0c ﻿  ')
+
+
+def load_pieces(path) -> list:
+    import json
+    from pathlib import Path
+    table = json.loads(Path(path).read_text(encoding='utf-8'))
+    return [p for p in table['pieces'] if p.get('scope') in ('generic', 'program') and isinstance(p.get('text'), str)]
