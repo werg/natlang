@@ -336,7 +336,11 @@ async function main() {
   ];
   const executionArchive = await archiveDecisionExecutionComponents({ outDir: out,
     adapterPath: fileURLToPath(import.meta.url),
-    additional: componentPaths.map(path => ({ path, role: 'annotation-adapter-declared-component' })) });
+    additional: componentPaths.map(path => path === resolve(repo, 'scripts/prepare_decision_provider_source.py')
+      // Selection has already finished. Preserve its exact source bytes, but it
+      // does not execute during the replay and need not stay installed unchanged.
+      ? { path, role: 'upstream-source-selection-provenance', verification: 'archived-provenance' }
+      : { path, role: 'annotation-adapter-declared-component' }) });
   const componentPins = Object.fromEntries(executionArchive.components
     .map(component => [component.path, component.sha256]));
   const replay = [], materializer = [], failures = [];

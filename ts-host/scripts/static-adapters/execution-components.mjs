@@ -40,9 +40,15 @@ export async function archiveDecisionExecutionComponents({ outDir, adapterPath, 
   const byPath = new Map();
   for (const item of declared) {
     const path = resolve(item.path);
+    const verification = item.verification ?? 'live-execution';
+    if (!['live-execution', 'archived-provenance'].includes(verification))
+      throw new Error(`invalid_execution_component_verification:${path}`);
     const existing = byPath.get(path);
-    if (existing) existing.roles.push(item.role);
-    else byPath.set(path, { path, roles: [item.role] });
+    if (existing) {
+      existing.roles.push(item.role);
+      // Any executing consumer keeps the stronger live-byte requirement.
+      if (verification === 'live-execution') existing.verification = verification;
+    } else byPath.set(path, { path, roles: [item.role], verification });
   }
   const components = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
   const archiveDir = resolve(outDir, 'execution-components');
@@ -55,7 +61,7 @@ export async function archiveDecisionExecutionComponents({ outDir, adapterPath, 
     const filename = `${String(index + 1).padStart(3, '0')}-${basename(component.path)}`;
     const payloadPath = resolve(payloadDir, filename);
     await writeFile(payloadPath, bytes, { flag: 'wx' });
-    manifestComponents.push({ path: component.path, roles: component.roles,
+    manifestComponents.push({ path: component.path, roles: component.roles, verification: component.verification,
       size_bytes: bytes.length, sha256: sha(bytes), payload: `payload/${filename}`, payload_sha256: sha(await readFile(payloadPath)) });
   }
   const manifest = { schema: 'natlang.static-decision-execution-components/1',
@@ -81,13 +87,20 @@ export async function verifyDecisionExecutionComponents(archive) {
   const manifestPin = (await readFile(resolve(dirname(archive.manifest_path), 'manifest.sha256'), 'utf8')).trim();
   if (manifestSha !== archive.manifest_sha256 || manifestPin !== `${manifestSha}  manifest.json`)
     throw new Error('execution_component_archive_manifest_drift');
+  const manifest = JSON.parse(manifestBytes.toString('utf8'));
+  if (JSON.stringify(manifest.components) !== JSON.stringify(archive.components))
+    throw new Error('execution_component_archive_receipt_drift');
   const drift = [];
   for (const component of archive.components) {
-    const currentBytes = await readFile(component.path);
     const payloadBytes = await readFile(resolve(dirname(archive.manifest_path), component.payload));
-    const currentSha = sha(currentBytes), payloadSha = sha(payloadBytes);
-    if (currentSha !== component.sha256 || payloadSha !== component.payload_sha256 ||
-        currentSha !== payloadSha || currentBytes.length !== component.size_bytes)
+    const verification = component.verification ?? 'live-execution';
+    if (!['live-execution', 'archived-provenance'].includes(verification))
+      throw new Error(`invalid_execution_component_verification:${component.path}`);
+    const currentBytes = verification === 'live-execution' ? await readFile(component.path) : null;
+    const currentSha = currentBytes === null ? null : sha(currentBytes), payloadSha = sha(payloadBytes);
+    if (payloadSha !== component.sha256 || payloadSha !== component.payload_sha256 ||
+        payloadBytes.length !== component.size_bytes ||
+        (currentBytes !== null && (currentSha !== payloadSha || currentBytes.length !== component.size_bytes)))
       drift.push({ path: component.path, expected_sha256: component.sha256, current_sha256: currentSha,
         expected_payload_sha256: component.payload_sha256, actual_payload_sha256: payloadSha });
   }
@@ -98,5 +111,7 @@ export async function verifyDecisionExecutionComponents(archive) {
   }
   return { schema: 'natlang.static-decision-execution-component-verification/1', verified: true,
     checked_components: archive.components.length, manifest_sha256: manifestSha,
-    verification: 'current listed source bytes equal the archived payload bytes and their recorded SHA-256 pins' };
+    verification: 'all archived payloads match their immutable manifest pins; live-execution components also match current source bytes',
+    live_execution_components: archive.components.filter(c => (c.verification ?? 'live-execution') === 'live-execution').length,
+    archived_provenance_components: archive.components.filter(c => c.verification === 'archived-provenance').length };
 }
