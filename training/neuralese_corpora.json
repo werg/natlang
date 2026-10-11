@@ -31596,6 +31596,61 @@
       "admission": "launch-lineage-only-no-output-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Owner-sealed receipt records the V81 supervisor and five worker PID launch snapshot, bound to the approved plan and independent review. It is separate from the immutable source/queue input snapshot and excludes mutable output journals."
+    },
+    {
+      "id": "luna-direct-lfm-base-v1-launch-failure-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-lfm-base-20261011-v1",
+      "include": [
+        "direct-stage-run.container-launch.json",
+        "direct-stage-run.container-launch.log"
+      ],
+      "split": "held-failed-training-launch",
+      "source_class": "failed-direct-v1-training-launch-diagnostic",
+      "training_admission": false,
+      "admission": "launch-failure-diagnostic-only-no-training-or-qualification",
+      "independent_new_worlds": 0,
+      "notes": "Preserves the failed V1 container launch receipt and log. No training output or qualification is inferred."
+    },
+    {
+      "id": "luna-direct-lfm-base-v2-startup-failure-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-lfm-base-20261011-v2",
+      "include": [
+        "direct-stage-run.container-launch.json",
+        "direct-stage-run.container-launch.log",
+        "direct-stage-run.recipe-launch.json",
+        "direct-stage-run/direct-stage-plan.json",
+        "direct-stage-run/direct-stage-result.json",
+        "direct-stage-run/direct_sft/eval.jsonl",
+        "direct-stage-run/direct_sft/identity-check.json",
+        "direct-stage-run/direct_sft/monitor-reference.pt"
+      ],
+      "split": "held-failed-training-startup",
+      "source_class": "failed-direct-v2-training-startup-diagnostic",
+      "training_admission": false,
+      "admission": "startup-failure-diagnostic-only-no-training-or-qualification",
+      "independent_new_worlds": 0,
+      "notes": "Preserves V2 launch/planning, failure, initial eval/identity and monitor-reference evidence. The run did not produce a trained checkpoint; these bytes are diagnostic only."
+    },
+    {
+      "id": "luna-direct-lfm-base-v3-step20-guard-stop-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-lfm-base-20261011-v3",
+      "include": [
+        "direct-stage-run/**/*",
+        "direct-stage-run.container-launch.json",
+        "direct-stage-run.container-launch.log",
+        "direct-stage-run.recipe-launch.json",
+        "gpu-observations.jsonl",
+        "gpu-observer-launch.json"
+      ],
+      "split": "held-step20-guard-stopped-training-diagnostic",
+      "source_class": "direct-v1-lfm-training-checkpoint-and-gate-diagnostics",
+      "training_admission": false,
+      "admission": "guard-stopped-step20-diagnostic-and-resumability-only-no-qualification-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Preserves V3 plan/result, full step-20 checkpoint and optimizer state, report/train/eval, identity check, monitor reference, exact runtime code snapshot and launch/GPU observations. Training stopped at its guard after step 20; qualification is false. Excludes mutable Triton/TorchInductor kernel-cache files."
     }
   ],
   "coverage_backlog": [
