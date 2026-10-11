@@ -1,0 +1,58 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-ar-native-harness-alignment-v8-startup-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-ar-native-harness-alignment-v8-startup-review-held-20261011-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 577,
+      "sha256": "9498c158fb28fa4e3c1f0002769dd5d59e031e3c541cab85afbdbe8a28f245f4"
+    },
+    {
+      "path": "baseline.json",
+      "bytes": 458704,
+      "sha256": "7268a47f0b3d64fb7f62cd515d0fde93bee42c455a53ba30195a68bd74992e12"
+    },
+    {
+      "path": "eval.jsonl",
+      "bytes": 333750,
+      "sha256": "bf61fbe4a1f7e8fa649075b411fad2af25e4b9ec4b52006a661b47985742d8a5",
+      "lines": 1
+    },
+    {
+      "path": "optimizer-restore.jsonl",
+      "bytes": 518,
+      "sha256": "9ccd3a23861faa8d6f507e438ca735e9806297c37f5b9556a84644e0463617e1",
+      "lines": 1
+    },
+    {
+      "path": "review.json",
+      "bytes": 2124,
+      "sha256": "a3278e22d02e1b1e2e987aebabbafe8b9ac1926e3806b563a091ca0704265eb4"
+    },
+    {
+      "path": "review.md",
+      "bytes": 494,
+      "sha256": "819deea54d4848180bea9ced8f9d84a54143683987b6846fa9b77c277bf76173"
+    },
+    {
+      "path": "snapshot-manifest.json",
+      "bytes": 1190,
+      "sha256": "abf2c5d942e89285a34b11e85ccd9a4e7d397aff4cdc5a7689dcac06a868917a"
+    },
+    {
+      "path": "startup-events.jsonl",
+      "bytes": 911,
+      "sha256": "dd4501794d804d6685b83b5dc6f0b08e748adfa31dd2ccab8ee18429f348287b",
+      "lines": 3
+    },
+    {
+      "path": "train-initial-15.jsonl",
+      "bytes": 139535,
+      "sha256": "e8e4898fd7e8bce89c716aa2d9df306a6938b8fc66b1b286a8ea60fe83d3b5ae",
+      "lines": 15
+    }
+  ],
+  "bytes": 937803
+}

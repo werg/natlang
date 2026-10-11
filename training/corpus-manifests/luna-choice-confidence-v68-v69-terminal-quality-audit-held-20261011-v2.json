@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v68-v69-terminal-quality-audit-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/quality-review-v68-v69-folder-terminal-v1",
+  "files": [
+    {
+      "path": "closed-raw-audit-manifest-v1.json",
+      "bytes": 198670,
+      "sha256": "25679c562f4748b49aae89be94cdbda8b3a2105f83e4f55028e18c0a11f2a41d"
+    },
+    {
+      "path": "closed-raw-audit-manifest-v2.json",
+      "bytes": 199071,
+      "sha256": "c243a2da564de3aca0fa8852d99a7ea7cb85d667ad6636d32605e74f221c52ae"
+    },
+    {
+      "path": "v68-quality-review-v1.json",
+      "bytes": 2208425,
+      "sha256": "09ed10fc831816ab25aa77cab12dcb13bdae8254d5434bb05176a7fc15b6edd1"
+    },
+    {
+      "path": "v68-quality-review-v2.json",
+      "bytes": 1925000,
+      "sha256": "3e2c2c1076042cf01110987f3fafbac6e0820764010ee6ee754bbad19a5e77a4"
+    },
+    {
+      "path": "v68-v69-scope-failure-attribution-v1.json",
+      "bytes": 177488,
+      "sha256": "15f92a20958ff15fac635cd1da4893a41f43405509a3743a2f98512c01c33764"
+    },
+    {
+      "path": "v68-v69-scope-failure-attribution-v2.json",
+      "bytes": 295378,
+      "sha256": "9c59c4a6ae528e85967f47fbed82d73ecdb6a72ca62c9a5df51a5d03df6af118"
+    },
+    {
+      "path": "v69-quality-review-v1.json",
+      "bytes": 2171079,
+      "sha256": "a0a32b05397fba8972358a22c6fbe3a22c68376c0fffe2773d94fcd491d19a74"
+    },
+    {
+      "path": "v69-quality-review-v2.json",
+      "bytes": 1880263,
+      "sha256": "eb1ed97132cc5fdfca7dce3425270d58a0399ae83b8ddd928f4fda8a5868fef9"
+    }
+  ],
+  "bytes": 9055374
+}

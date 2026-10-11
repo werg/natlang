@@ -29244,6 +29244,65 @@
       "independent_new_worlds": 0,
       "notes": "Nine exact reviewed model targets from two source-bound V64 recovery programs/seven original DBpedia train items. Full S1+harness+protected closure, current68holds, per-action semantic approval and native source-quality binding verified; shared LFM350 renderer/token audit passes9/9, max16512,648supervisedtokens. Native/text views count the same9targets. Other20materializedtargets/firstwrongapprovaldiagnostic/neuraleseconversion remainheld. Not inrunningV8fixeddata; future declared intake required.",
       "data_file": "selected-nine-lfm350-token-audited-v1.jsonl"
+    },
+    {
+      "id": "luna-choice-confidence-v68-v31-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v68-v31-runtimev15-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "closed-provider-generation-raw-audit",
+      "training_admission": false,
+      "admission": "held-raw-only-no-training-admission-no-DPO",
+      "notes": "Immutable raw V68 campaign artifact snapshot, including plans, queues, journals, per-case results and traces. See linked held V68/V69 audit snapshots for independent terminal quality and scope-failure reviews. Repeated existing Google choice-confidence source records; no new independent-world credit and no training/action/DPO admission."
+    },
+    {
+      "id": "luna-choice-confidence-v69-v32-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v69-v32-runtimev15-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "closed-provider-generation-raw-audit",
+      "training_admission": false,
+      "admission": "held-raw-only-no-training-admission-no-DPO",
+      "notes": "Immutable raw V69 campaign artifact snapshot, including plans, queues, journals, per-case results and traces. See linked held V68/V69 audit snapshots for independent terminal quality and scope-failure reviews. Repeated existing Google choice-confidence source records; no new independent-world credit and no training/action/DPO admission."
+    },
+    {
+      "id": "luna-choice-confidence-v68-v69-terminal-quality-audit-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs/quality-review-v68-v69-folder-terminal-v1",
+      "include": [
+        "v68-quality-review-v1.json",
+        "v68-quality-review-v2.json",
+        "v69-quality-review-v1.json",
+        "v69-quality-review-v2.json",
+        "v68-v69-scope-failure-attribution-v1.json",
+        "v68-v69-scope-failure-attribution-v2.json",
+        "closed-raw-audit-manifest-v1.json",
+        "closed-raw-audit-manifest-v2.json"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "closed-provider-generation-independent-quality-review",
+      "training_admission": false,
+      "admission": "held-quality-review-no-training-admission-no-DPO",
+      "notes": "Immutable V2 terminal outcome audits and action-level V1/V2 scope-failure attributions plus raw-campaign fingerprint manifests. Parent accepted/rejected counts and earlier failures are distinguished; all failed actions remain preserved. Review does not grant action approval, training admission, or DPO eligibility."
+    },
+    {
+      "id": "luna-ar-native-harness-alignment-v8-startup-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-v8-startup-review-held-20261011-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-training-state-evidence",
+      "source_class": "closed-training-startup-diagnostic-review",
+      "training_admission": false,
+      "admission": "held-startup-review-only-no-training-admission",
+      "notes": "Root requested preservation of the V8 startup review snapshot and its exact artifacts. This is diagnostic evidence only; it does not qualify a training state or authorize a new job."
     }
   ],
   "coverage_backlog": [
