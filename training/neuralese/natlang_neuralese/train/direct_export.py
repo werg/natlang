@@ -164,8 +164,6 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
         raise ValueError("direct checkpoint has no student backbone parameters")
     if not isinstance(state.get("neuralese_projection"), dict):
         raise ValueError("direct checkpoint has no NeuraleseProjection")
-    if state.get("token_choice_projection") is not None:
-        raise NotImplementedError("the current DirectWriter does not consume TokenChoiceProjection; refusing an unusable serving export")
     package_root = Path(__file__).resolve().parents[1]
     training_parameter_coverage = {"profile": "lfm-full-layer-policy/1",
                                    "attention_trained": True,
@@ -545,7 +543,7 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
         raise ValueError("direct tensor payload schema mismatch")
 
     from ..serve import load_engine
-    from ..model.neuralese_projection import NeuraleseProjection
+    from ..model.neuralese_projection import NeuraleseProjection, TokenChoiceProjection
     from .backbone_policy import full_backbone_parameter_names, restore_backbone_trainables
 
     anchor = manifest["anchor"]
@@ -618,7 +616,12 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
         parameter.requires_grad_(False)
     token_choice = None
     if manifest["projection"]["token_choice"] is not None:
-        raise NotImplementedError("TokenChoiceProjection artifacts cannot be loaded by the current DirectWriter")
+        config = {k: v for k, v in manifest['projection']['token_choice'].items() if k != 'present'}
+        token_choice = TokenChoiceProjection(width, **config)
+        token_choice.load_state_dict(payload['token_choice_projection'], strict=True)
+        token_choice.to(device=device).eval()
+        for parameter in token_choice.parameters():
+            parameter.requires_grad_(False)
     if not torch.equal(engine.backbone.control_rows.cpu(), payload["control_rows"].cpu()):
         raise ValueError("loaded clean-base controls differ from exported control rows")
     expected_head_controls = payload["control_head_rows"]

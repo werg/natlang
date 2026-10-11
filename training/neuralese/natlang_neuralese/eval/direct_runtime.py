@@ -26,12 +26,23 @@ def opened_context(engine, embeds):
     return Opened(pre.cache, pre.state, engine.backbone.logits(pre.top[:, None])[:, -1], pre.top)
 
 
-def diagnose(artifact, base_snapshot, out, lengths, device='cuda'):
+def diagnose(artifact, base_snapshot, out, lengths, device='cuda', token_choice_diagnostic=False):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=False)
     model = load_direct_artifact(artifact, base_snapshot=base_snapshot, device=device)
     engine = model.engine
     backbone, projection = engine.backbone, model.neuralese_projection
+    if token_choice_diagnostic:
+        from ..model.neuralese_projection import TokenChoiceProjection
+        torch.set_float32_matmul_precision('highest')
+        tcp = TokenChoiceProjection(backbone.embedding_weight.shape[1], blocks=2, hidden=64, kernel=7).to(device)
+        generator = torch.Generator(device=device).manual_seed(37)
+        with torch.no_grad():
+            for block in tcp.stack.blocks:
+                block.taps[1:].fill_(0.125)
+                block.down.weight.copy_(torch.randn(block.down.weight.shape, generator=generator, device=device) * .001)
+        engine.token_choice_projection = tcp
+    writer_options = {'token_choice_projection': getattr(engine, 'token_choice_projection', None)}
     for parameter in backbone.parameters():
         parameter.requires_grad_(False)
     ids = engine.tokenizer.encode('The package arrived yesterday. It is ready for collection.', add_special_tokens=False)
@@ -40,11 +51,11 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda'):
     for length in lengths:
         with torch.no_grad():
             opened = opened_context(engine, context)
-            direct = write_direct(backbone, projection, opened, length, engine.stop_ids, length=length)
+            direct = write_direct(backbone, projection, opened, length, engine.stop_ids, length=length, **writer_options)
             payload = direct.complete()[0]
             # Scheduler's batched layer path, one row at this qualification point.
             from ..serve.batch import step_rows
-            served = DirectWriter(backbone, projection, opened, length, engine.stop_ids, length=length)
+            served = DirectWriter(backbone, projection, opened, length, engine.stop_ids, length=length, **writer_options)
             while True:
                 value = served.decide()
                 if value is None:
@@ -63,7 +74,7 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda'):
         for parameter in projection.parameters():
             parameter.requires_grad_(True)
         written = write_direct(backbone, projection, opened_context(engine, context), length, engine.stop_ids,
-                               length=length)
+                               length=length, **writer_options)
         value = written.complete()[0]
         for vector in written.payloads:
             vector.retain_grad()
@@ -73,7 +84,9 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda'):
         targets = torch.tensor([engine.tokenizer.encode('It is ready.', add_special_tokens=False)], device=device)
         consumer = torch.cat([value, backbone.embed(targets[:, :-1])], 1)
         result = backbone.forward_embeds(consumer, logits=False)
-        logits = backbone.logits(result['h_final'][:, -targets.shape[1]:]).float()
+        states = result['h_final'][:, -targets.shape[1]:]
+        segments = torch.zeros(states.shape[:2], dtype=torch.long, device=states.device)
+        logits = engine.token_logits(states, segments).float()
         loss = torch.nn.functional.cross_entropy(logits.reshape(-1, logits.shape[-1]), targets.reshape(-1))
         loss.backward()
         gradients = {name: float(p.grad.float().norm()) for name, p in projection.named_parameters() if p.grad is not None}
@@ -100,11 +113,11 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda'):
     prompt = [('tok', t) for t in engine.tokenizer.encode('Context: ', add_special_tokens=False)] + [('block', source.id)]
     with torch.no_grad():
         writer = write_direct(backbone, projection, opened_context(engine, session._embed_items(prompt, {})), 8,
-                              engine.stop_ids, length=8)
+                              engine.stop_ids, length=8, **writer_options)
         stored = engine.store.put(make_block(writer.complete()[0][0], engine.dialect))
     leaf = source.payload.to(device).detach().requires_grad_(True)
     writer = write_direct(backbone, projection, opened_context(engine, session._embed_items(prompt, {source.id: leaf})),
-                          8, engine.stop_ids, length=8)
+                          8, engine.stop_ids, length=8, **writer_options)
     payload = writer.complete()[0][0]
     adjoint = torch.linspace(-1, 1, payload.numel(), device=device).reshape_as(payload).float()
     direct_gradient, = torch.autograd.grad((payload.float() * adjoint).sum(), leaf)
@@ -128,7 +141,16 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda'):
     calls = response['choices'][0]['message'].get('tool_calls') or []
     wire = len(calls) == 1 and json.loads(calls[0]['function']['arguments']).get('value') == [
         {'type': 'neuralese', 'id': response['neuralese']['blocks'][0]['id'], 'value_type': 'unknown'}]
-    passed = replay_delta == 0 and replay_equal and input_delta == 0 and wire and all(
+    decision_delta = None
+    if token_choice_diagnostic:
+        options = ['yes', 'no']
+        with torch.no_grad():
+            decision_scores, own_lengths = session.decision_logprobs(messages, None, options, {})
+            prompt_items, rests = session.decision_render(messages, None, options)
+            full_scores = [session._score(prompt_items, [('tok', token) for token in rest], {}, False)['token_logp'][-n:].sum()
+                           for rest, n in zip(rests, own_lengths)]
+            decision_delta = float((decision_scores - torch.stack(full_scores)).abs().max())
+    passed = (decision_delta is None or decision_delta <= 1e-4) and replay_delta == 0 and replay_equal and input_delta == 0 and wire and all(
         r['scheduler_writer_delta'] == 0 and r['cache_readback_delta'] == 0 and r['cache_lengths_equal'] and
         r['cache_contents_equal'] and r['finite_gradients'] and r['projection_receives_consumer_gradient'] for r in rows)
     package = Path(__file__).resolve().parents[1]
@@ -138,7 +160,9 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda'):
               'runtime_code': {str(p.relative_to(package)): sha256_file_hex(p) for p in sorted(package.rglob('*.py'))},
               'rows': rows, 'producer_replay_gradient_delta': replay_delta, 'producer_replay_value_equal': replay_equal,
               'public_input_gradient_delta': input_delta, 'typed_wire_value_restored': wire,
-              'runtime_qualified': passed, 'consumer_task_qualified': False, 'autonomous_stopping_qualified': False,
+              'runtime_qualified': passed and not token_choice_diagnostic,
+              'synthetic_tcp_mechanism_passed': passed if token_choice_diagnostic else None,
+              'token_choice_diagnostic': token_choice_diagnostic, 'decision_score_delta': decision_delta, 'consumer_task_qualified': False, 'autonomous_stopping_qualified': False,
               'scope': 'Exact restored direct writer, cache readback, input/producer adjoints and typed wire; no weight updates.'}
     (out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     if not passed:
@@ -153,10 +177,11 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--lengths', type=int, nargs='+', default=[8, 32])
+    parser.add_argument('--token-choice-diagnostic', action='store_true', help='Inject a synthetic TCP; mechanism evidence only')
     args = parser.parse_args()
     if not args.lengths or any(n < 1 for n in args.lengths):
         parser.error('positive write lengths required')
-    diagnose(args.artifact, args.base_snapshot, args.out, args.lengths, args.device)
+    diagnose(args.artifact, args.base_snapshot, args.out, args.lengths, args.device, args.token_choice_diagnostic)
 
 
 if __name__ == '__main__':

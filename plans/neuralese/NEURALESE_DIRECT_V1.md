@@ -236,8 +236,9 @@ The two files were byte-identical and are re-linked. Fixed in 32314556.
 ## End-to-end stage (DRAFT for review; not implemented)
 
 The owner's decision of 2026-10-11 gives the Neuralese value requirement to this stage. It starts from a qualified
-direct stage. Its prerequisite is Pop's shared runtime/export qualification on the exact starting weights, which passed
-on Mellum run-v1 with raw-token heads (above).
+direct stage. Its prerequisite is shared runtime/export qualification on the exact starting weights.
+The Mellum run-v1 diagnostic substituted raw-token heads and a loader shim; it does not qualify the original
+legacy-anchor checkpoint as a forward base. The new raw-token run-v2 must qualify its own exact artifact.
 
 **1. Producers and consumers.** Training data are natlang trajectories in which one call's result is read by a later
 call: a producer span, then a consumer span whose input contains that result.
@@ -245,8 +246,8 @@ call: a producer span, then a consumer span whose input contains that result.
   backbone, one causal-conv segment per call. Its output is a block of Neuralese values, one per written position, up
   to the call's length.
 - **Consumer:** the consumer reads the block where the runtime reads any block, `heads.read_embeddings`
-  (raw-token heads frame it with the control rows). The values live in input-embedding space by construction, so the
-  reader is the identity at init.
+  (raw-token heads return the payload directly, without marker framing). The values live in input-embedding space
+  by construction, so the reader is the identity at init.
 - **Reader mapping:** if one is needed, it is the heads' existing `read_adapter`, declared in the recipe,
   zero-initialised as a residual, and present only if a measurement asks for it (one implementation per concept, no
   premature components).
@@ -257,8 +258,9 @@ direct stage (an identity check like the direct stage's).
   Without it, every gradient that makes values more useful to consumers also moves the token readout, and the
   reverse.
 - **Shared code:** it is the `token_choice_projection` already in `direct_sft` (lm_head(norm(TCP(h)))).
-- **Pending:** the shared Engine and `direct_export` refuse it today (f4c7211b). Wiring it through the writer and
-  the export is a prerequisite, and Pop owns the runtime.
+- **Shared runtime:** Pop integrates TCP through the existing Engine, GradSession and direct exporter. Synthetic
+  nonidentity mechanism diagnostics cover causal history, readout, decision scoring and replay; each trained
+  artifact still requires exact runtime qualification and held consumer gates.
 
 **3. What trains, and on which losses.**
 - **Trainable parts:**

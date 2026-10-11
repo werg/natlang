@@ -206,6 +206,7 @@ class Sequence:
     cache: PortCache | None = None
     logits: torch.Tensor | None = None
     cut_state: torch.Tensor | None = None
+    token_history: torch.Tensor | None = None  # current target segment, bounded TCP receptive field
     top_state: torch.Tensor | None = None  # top-layer state at the last position (raw writes: autoregressive payload 0)
     items: list = field(default_factory=list)  # generated token IDs and Block objects
     writer: StepWriter | None = None
@@ -257,6 +258,28 @@ class Engine:
         self._ids = itertools.count()
         self._adapter_bank = None
         self.projections: dict = {}  # name → AdapterProjection (model/projections.py), from --projection
+
+    def token_logits(self, hidden, segments=None, *, last_only=False):
+        from ..model.neuralese_projection import token_choice_logits
+        return token_choice_logits(self.backbone, hidden, getattr(self, 'token_choice_projection', None),
+                                   segments, last_only=last_only)
+
+    def advance_token_readout(self, history, hidden, *, last_only=False):
+        """Score new target states and retain only the current segment's causal suffix.
+
+        A new reply seeds this with its last prefix state. Caller contexts are
+        never silently included in the token-choice convolution's history.
+        """
+        projection = getattr(self, 'token_choice_projection', None)
+        if projection is None:
+            return self.token_logits(hidden, last_only=last_only), None
+        from ..model.neuralese_projection import causal_conv_receptive_field
+        states = hidden if history is None else torch.cat([history, hidden], 1)
+        segments = torch.zeros(states.shape[:2], dtype=torch.long, device=states.device)
+        logits = self.token_logits(states, segments, last_only=last_only)
+        if not last_only:
+            logits = logits[:, -hidden.shape[1]:]
+        return logits, states[:, -causal_conv_receptive_field(projection):]
 
     # Lifecycle -----------------------------------------------------------------------------
     def start(self):
@@ -549,9 +572,14 @@ class Engine:
                 cut, caches = step_rows(self.backbone, self.backbone.embed(ids), [seq.cache for seq, _ in rows],
                                         range(0, self.heads.cutoff))
                 h, caches = step_rows(self.backbone, cut, caches, range(self.heads.cutoff, self.backbone.num_layers))
-            logits = self.backbone.logits(h)[:, -1]
+            logits = self.backbone.logits(h)[:, -1] if getattr(self, 'token_choice_projection', None) is None else None
         for index, (seq, token) in enumerate(rows):
-            seq.cache, seq.logits = caches[index], logits[index:index + 1]
+            if logits is None:
+                with self.using([seq]):
+                    score, seq.token_history = self.advance_token_readout(seq.token_history, h[index:index + 1], last_only=True)
+                seq.cache, seq.logits = caches[index], score[:, -1]
+            else:
+                seq.cache, seq.logits = caches[index], logits[index:index + 1]
             if not self.heads.read_markers:
                 seq.cut_state = cut[index:index + 1, -1]
                 seq.top_state = h[index:index + 1, -1]
@@ -575,7 +603,7 @@ class Engine:
         if verdict is None:
             # A line that starts where the reply now ends: snapshot here (cheap restore for the next rejection).
             if reply.endswith("\\n") or reply.endswith("\n") or reply.endswith("["):
-                seq.snapshots = (seq.snapshots + [(len(seq.items), seq.cache, seq.logits, seq.generated_positions, seq.cut_state, seq.top_state)])[-4:]
+                seq.snapshots = (seq.snapshots + [(len(seq.items), seq.cache, seq.logits, seq.generated_positions, seq.cut_state, seq.top_state, seq.token_history)])[-4:]
             return
         reason, at = verdict
         target = max(i for i, start in enumerate(starts) if start <= at)  # the item holding the line's first character
@@ -589,17 +617,21 @@ class Engine:
         seq.retries[at] = tries + 1
         seq.guide.rejections.append({"reason": reason, "offset": at})
         seq.bans.setdefault(target, set()).add(seq.items[target])
-        count, cache, logits, generated, cut_state, top_state = usable[-1]
+        count, cache, logits, generated, cut_state, top_state, token_history = usable[-1]
         if between:
             with self.using([seq]):
                 out = self.backbone.forward_ids(torch.tensor([between], device=self.device), cache=cache,
                                                 cutoff=self.heads.cutoff if not self.heads.read_markers else None)
             cache, logits = out["cache"], out["logits"][:, -1]
+            if getattr(self, 'token_choice_projection', None) is not None:
+                with self.using([seq]):
+                    score, token_history = self.advance_token_readout(token_history, out['h_final'], last_only=True)
+                logits = score[:, -1]
             if not self.heads.read_markers:
                 cut_state, top_state = out['h_cut'][:, -1], out['h_final'][:, -1]
             generated += len(between)
         seq.cache, seq.logits, seq.generated_positions = cache, logits, generated
-        seq.cut_state, seq.top_state = cut_state, top_state
+        seq.cut_state, seq.top_state, seq.token_history = cut_state, top_state, token_history
         seq.guide.rewind(starts[target])
         del seq.items[target:], seq.pieces[target:]
         seq.snapshots = [snap for snap in seq.snapshots if snap[0] <= target]
@@ -649,10 +681,12 @@ class Engine:
             try:
                 with self.using([seq]):
                     out = self.backbone.forward_embeds(embeds, logits=False, cutoff=self.heads.cutoff if not self.heads.read_markers else None)
-                    logits = self.backbone.logits(out["h_final"][:, -1:])[:, -1]
+                    start = out['h_final'].shape[1] - len(seq.prefilled_forced) - 1
+                    score, token_history = self.advance_token_readout(None, out['h_final'][:, start:], last_only=True)
+                    logits = score[:, -1]
                 self._prefilled(seq, out["cache"], logits, int(embeds.shape[1]),
                                 out['h_cut'][:, -1] if not self.heads.read_markers else None,
-                                out['h_final'][:, -1] if not self.heads.read_markers else None)
+                                out['h_final'][:, -1] if not self.heads.read_markers else None, token_history)
             except Exception as error:
                 self._fail(seq, error)
             return
@@ -673,9 +707,16 @@ class Engine:
             return
         for index, (seq, e) in enumerate(group):
             try:
-                self._prefilled(seq, caches[index], logits[index:index + 1], int(e.shape[1]),
+                token_history = None
+                score = logits[index:index + 1]
+                if getattr(self, 'token_choice_projection', None) is not None:
+                    with self.using([seq]):
+                        start = out['h_final'].shape[1] - len(seq.prefilled_forced) - 1
+                        scores, token_history = self.advance_token_readout(None, out['h_final'][index:index + 1, start:], last_only=True)
+                        score = scores[:, -1]
+                self._prefilled(seq, caches[index], score, int(e.shape[1]),
                                 out['h_cut'][index:index + 1, -1] if not self.heads.read_markers else None,
-                                out['h_final'][index:index + 1, -1] if not self.heads.read_markers else None)
+                                out['h_final'][index:index + 1, -1] if not self.heads.read_markers else None, token_history)
             except Exception as error:
                 self._fail(seq, error)
 
@@ -699,10 +740,10 @@ class Engine:
             del seq.forced[:len(lead)]
         seq.prefilled_forced = lead
 
-    def _prefilled(self, seq: Sequence, cache, logits, positions: int, cut_state=None, top_state=None):
+    def _prefilled(self, seq: Sequence, cache, logits, positions: int, cut_state=None, top_state=None, token_history=None):
         request = seq.request
         seq.cache, seq.logits = cache, logits
-        seq.cut_state, seq.top_state = cut_state, top_state
+        seq.cut_state, seq.top_state, seq.token_history = cut_state, top_state, token_history
         lead = seq.prefilled_forced
         seq.prompt_positions = positions - len(lead)
         if request.guidance is not None:
@@ -712,7 +753,7 @@ class Engine:
             prefix = seq.guide.forced_prefix()
             if prefix and seq.forced is None:
                 seq.forced, seq.free_after_forced = self._tokens(prefix), True
-            seq.snapshots = [(0, seq.cache, seq.logits, 0, seq.cut_state, seq.top_state)]
+            seq.snapshots = [(0, seq.cache, seq.logits, 0, seq.cut_state, seq.top_state, seq.token_history)]
         for token in lead:  # already in the cache: emitted as the decode steps would have
             seq.items.append(token)
             seq.generated_positions += 1
@@ -794,7 +835,8 @@ class Engine:
             if direct is not None:
                 from .direct_write import DirectWriter
                 seq.writer = DirectWriter(self.backbone, direct, opened, min(limit, self.max_block, remaining - 2),
-                                          self.stop_ids, length=request.neuralese_length)
+                                          self.stop_ids, length=request.neuralese_length,
+                                          token_choice_projection=getattr(self, 'token_choice_projection', None))
             else:
                 seq.writer = StepWriter(self.backbone, self.heads, opened, min(limit, self.max_block, remaining - 2),
                                         length=request.neuralese_length)
@@ -820,7 +862,11 @@ class Engine:
         generator = torch.Generator().manual_seed(seed)
         with self.using([seq]):
             payload, mu, log_sigma = writer.complete(tau, generator)
-            back = read_back(self.backbone, self.heads, writer.opened.cache, payload, all_logits=False)
+            back = read_back(self.backbone, self.heads, writer.opened.cache, payload, all_logits=False,
+                             final_states=getattr(self, 'token_choice_projection', None) is not None)
+            if getattr(self, 'token_choice_projection', None) is not None:
+                scores, seq.token_history = self.advance_token_readout(seq.token_history, back['final_states'], last_only=True)
+                back['logits'] = scores[:, -1]
         seq.cache, seq.logits = back["cache"], back["logits"]
         if not self.heads.read_markers:
             seq.cut_state, seq.top_state = back['h_cut'], back['h_final']

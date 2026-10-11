@@ -203,3 +203,30 @@ Latest read-only canonicalDGX check showsHEAD3221718c withfourdirty trackedfiles
 The high source parity did not guarantee identical effective parameter selection. The completed Mellum direct run's exact schema proof shows196 student tensors across28layers and zero q/k/v/o projection matrices. All112 attention matrices were accidentally omitted: QAT was installed before selecting trainables and renamed weights to parametrizations.weight.original, which the old shared suffix selector missed. Experts (56matrices), routers and norms trained. Pop's unquantized dense path was unaffected and trained its full declared transformer-layer policy. Shared fix a897248888297c8989230a3534dea5fb3545a52f canonicalizes parameter names beforeselection. This is a real architecture-dependent shared-code bug, not an intentional recipe difference. No retroactivefull-attention claim forMellum run-v1. Its serving restoration must explicitly retain unchanged baseattention and bind the omission pattern/sourceproof; downstream qualification remainsfailed/pending.
 
 Proof SHA6870d71b787cc31adfcfdc04749c17469fbad6a2860850f117489eb24ec4a308 atDGX runs/neuralese-direct-mellum-20261011/run-v1/export-proof/schema-proof.json; checkpoint096f918a8b5b36379521b9ce2aa4125774ea90bcb858f72ac799db0d1ddcac4d. NoDGXjobmanagement byPop. Root reviewedthe shared exporteradapter draft and requested explicitcoverage metadata, fulltokenizerfileinventory, and source/runtimepin distinction so the selectorfix doesnot masquerade as changedtensorrestore math.
+
+### Shared source is distinct from effective architecture — 2026-10-11 13:15 UTC
+
+The final direct comparison is148/151 identical frozen Python modules, with no
+machine-only module. Those three differences remain launch/status handling and
+an inactive prepared-data renderer, not separate trainers. In addition to the
+attention omission above, DGX run-v1 used a legacy RMS/marker anchor while Pop
+used raw-token heads. Its subsequent runtime diagnostic substituted raw heads
+and a local loader shim; that diagnostic does not qualify the original artifact.
+DGX owner now reports direct-v2 live with a clean raw-token full-stack anchor,
+attention included,2000steps and drift_every100. This run uses published shared
+code and is separate from run-v1's preserved evidence.
+
+The remaining canonical Engine history-policy binding is published in
+f6bb72a6 and pulled on Pop. Both owners are extending the same shared direct
+architecture: DGX owns the end-to-end trainer, Pop the TCP serving/replay routes.
+The common causal projection/readout helper and DirectWriter stop routing are
+published in025219ce12. TCP affects token readout only; the Neuralese value's
+soft-token mixture continues to use base logits. Full TCP export remains blocked
+until Engine/replay routing is qualified. Ordinary HF generation would bypass
+TCP and cannot silently stand in for adapted-model behavior monitoring.
+
+Pop's additive complete ordinary-response drift assessment covers36/36responses,
+responseKL0.01301814, base21/36 andcandidate20/36, passing the declared0.5KL/0.1drop
+allowance. It preserves the original48-row gate with missing/NaNresponse metrics;
+it is a new scoped diagnostic, not a historical report rewrite. Consumer task
+usefulness and autonomous stopping remain unqualified.

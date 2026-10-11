@@ -30,3 +30,20 @@ Steps 1–2 can be published before 3–5; they do not make an artifact with TCP
 servable. No private model-specific trainer, readout, or qualification path is
 introduced. Ordinary HF generation bypasses TCP, so a TCP lineage's behavior
 monitor must use the adapted shared runtime rather than silently reuse that path.
+
+## Integration status (2026-10-11)
+
+Shared Engine and GradSession now carry causal token-readout history through
+ordinary targets, returned payloads, guidance snapshots, and decision-option
+forks. The exporter restores TCP using its declared configuration and strict
+state dictionary. Both projections remain distinct and the value mixture is base.
+
+The synthetic nonidentity TCP GPU mechanism passed (Pop V8 underlying artifact,
+lengths8/16): scheduler payload delta0, producer replay gradient delta0, public
+input gradient delta0, decision score delta0, and exact cached readback. This is
+not a trained TCP artifact certificate. Float32-highest controlled readout
+comparison passed with logitdelta2.57e-5/gradientdelta1.91e-6; the default-precision
+initial failure (.00351logitdelta) remains preserved. Production precision has not
+been changed. Exact trained TCP export/load qualification, guidance rollback
+coverage, multi-turn context segmentation comparison, and held consumer/task
+improvement remain required follow-up.

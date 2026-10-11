@@ -240,7 +240,7 @@ class _Clock:
         return elapsed
 
 
-def read_back(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, payload: torch.Tensor, *, all_logits: bool = True) -> dict:
+def read_back(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, payload: torch.Tensor, *, all_logits: bool = True, final_states: bool = False) -> dict:
     """Restore the block-start cache and prefill payload + close marker through the full model.
 
     `payload` is [B, L, d] with the same L for all rows (use a single-row cache via
@@ -252,6 +252,8 @@ def read_back(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, 
                                   cutoff=heads.cutoff if not heads.read_markers else None)
     logits = out["logits"] if all_logits else backbone.logits(out["h_final"][:, -1:])
     result = {"cache": out["cache"], "logits": logits[:, -1]}
+    if final_states:
+        result["final_states"] = out["h_final"]
     if all_logits:
         result["all_logits"] = logits
     if not heads.read_markers:

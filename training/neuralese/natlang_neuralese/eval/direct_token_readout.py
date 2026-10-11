@@ -20,6 +20,8 @@ from .direct_runtime import opened_context
 
 def run(a):
     a.out.mkdir(parents=True, exist_ok=False)
+    # Qualify the causal equation independently of TF32 matrix-shape low bits.
+    torch.set_float32_matmul_precision('highest')
     restored = load_direct_artifact(a.artifact, base_snapshot=a.base_snapshot, device=a.device)
     engine = restored.engine
     backbone = engine.backbone
@@ -62,7 +64,7 @@ def run(a):
     passed = causal_delta <= 1e-4 and gradient_delta <= 1e-5 and finite and payload_delta == 0 and base_delta > 0 and stop_delta > 0
     report = {'schema': 'natlang.direct-token-readout-mechanism/1',
               'artifact_manifest_sha256': sha256_file_hex(a.artifact / 'manifest.json'),
-              'tcp_config': tcp.stack.config, 'history_limit': adapted.history_limit,
+              'matmul_precision': torch.get_float32_matmul_precision(), 'tcp_config': tcp.stack.config, 'history_limit': adapted.history_limit,
               'sequence_incremental_logits_delta': causal_delta, 'history_gradient_delta': gradient_delta,
               'tcp_vs_base_logits_delta': base_delta, 'fixed_length_payload_delta': payload_delta,
               'stop_log_odds_delta': stop_delta, 'finite_gradients': finite, 'mechanism_passed': passed,

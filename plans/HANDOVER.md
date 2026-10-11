@@ -10970,3 +10970,40 @@ LunaV86 suppliesfive lanes,20programs147items, newfield-owned scaffold; GoogleV4
 ### Direct run parameter-selection correction — 2026-10-11 12:43 UTC
 
 Do not interpret148/151 sharedsourcefiles as proofbothmodelsupdatedtheintendedsameparameterclasses. Mellum run-v1's196savedstudenttensorsomitall112q/k/v/o projections (28layers): sharedsuffixselector missedQATparametrizations installedfirst. Popunquantizeddensefullpolicyunaffected. Shareda8972488fixplain-namecanonicalization published; originalMellumcheckpointmustretainbaseattention anddeclareomissions, neverclaimfullattentiontraining. SeePIN_COMPARISON effectivecoveragecorrection+exactDGXschema proof. V73ordinary846maskedSFTadmission nowpublished/syncedfde8a62ecb; existingtraininginputsunchanged. V86nowterminalall20programsaccounted; helperauditsandpreparesfreshfive-lanesuccessor.
+
+## Pop shared TCP runtime continuation — 2026-10-11 13:15 UTC
+
+- Shared math/producer mechanism published025219ce12; decomposition at
+  `plans/neuralese/direct-runtime/DECOMPOSITION.md`. Engine/GradSession routing is
+  being added to the same implementation, including causal target history,
+  guidance rollback, decision-option forks, and producer replay. TCP is readout
+  only; Neuralese mixtures retain base logits. Export guard remains until exact
+  relevant routes are qualified.
+- Pop V8 complete36response additive drift passed: responseKL.01301814,
+  ordinary21/36base vs20/36candidate. Registered/synced held diagnostics in
+  d00729e127; original report/NaNs preserved.
+- Synthetic nonidentity TCP readout diagnostic v1 failed its strict logit bound
+  (.00351delta), while gradients matched and fixed-length payloads were exact.
+  Preserved. V2 controls float32 matmul precision at highest: logitdelta.00002575,
+  gradientdelta.000001907, mechanismpassed. This is not a trained TCP certificate
+  or a production precision-setting change.
+- Active broader GPU mechanism diagnostic: exec74070/container
+  pop-direct-tcp-runtime-v1, evidence under Pop V8/tcp-runtime-mechanism-v1.
+  Frozen runtime includes unpublished Engine/GradSession edits, exact hashes in
+  launch.json. Inspect result before publishing/claiming full integration.
+- Google V41 closed by exact2047case/output accounting:1977typed valid,
+  70invalid typed responses. Error-only recovery PID1136214 uses frozenV2 runner,
+  separately logged root-invalid-recovery-v2; firstlaunch lacked credential env
+  and made no calls (preserved root-invalid-recovery-v1). Invalid rows stay held.
+- Luna V87 lanes are completing; provider helper prepares disjointV88 inputs for
+  root review/refill. Preserve final exact journals/IDs before deriving closure.
+
+### TCP mechanism closeout (13:19 UTC)
+
+Broader synthetic nonidentity TCP GPU diagnostic finished exit0: writer/scheduler
+8/16payload exact, producer and publicinput gradientdelta0, decisiondelta0, typed
+wire restored. Report explicitly runtime_qualified=false and synthetic mechanism
+passed=true: the injected TCP is not trained checkpoint state. Engine/GradSession
+and exporter support is now ready to publish. Actual trained TCP export/load,
+rollback/multi-turn segment coverage and held consumer usefulness are next; do
+not use ordinaryHF generation to assess a TCP-adapted model.

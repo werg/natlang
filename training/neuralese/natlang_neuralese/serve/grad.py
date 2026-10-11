@@ -55,6 +55,7 @@ import json
 import contextlib
 import math
 import os
+from dataclasses import dataclass
 
 import torch
 
@@ -85,6 +86,13 @@ def _bf16_teacher():
 class Unavailable(RequestError):
     def __init__(self, detail: str):
         super().__init__("neuralese-grad-unavailable", detail)
+
+
+@dataclass(frozen=True)
+class _TokenChoiceDecisionCache:
+    """KV cache plus an immutable causal suffix for token-choice scoring."""
+    backbone_cache: PortCache
+    token_history: torch.Tensor
 
 
 def grad_dialect(dialect: str) -> str:
@@ -245,6 +253,22 @@ class GradSession:
         positions = torch.tensor([starts[j] - 1 for j in index], device=device)
         targets = torch.tensor([prompt[j][1] for j in index], device=device)
         logits_of = self.backbone.logits
+        projection = getattr(self.engine, 'token_choice_projection', None)
+        if projection is not None:
+            from ..model.neuralese_projection import project_token_states
+            # Assign predictor states by the target item they precede. Payload
+            # positions participate in their target turn's convolution history,
+            # but are not vocabulary targets. Uncovered context stays -1.
+            segments = torch.full(h.shape[:2], -1, device=h.device, dtype=torch.long)
+            marker = self.engine.tokenizer.convert_tokens_to_ids('<|im_start|>')
+            segment = 0
+            for j in range(1, len(prompt)):
+                if prompt[j] == ('tok', marker):
+                    segment += 1
+                if weights[j] > 0:
+                    end = starts[j + 1] - 1 if j + 1 < len(starts) else h.shape[1] - 1
+                    segments[:, starts[j] - 1:end] = segment
+            h = project_token_states(h, projection, segments)
 
         def logp(states, gold):
             return torch.log_softmax(logits_of(states[None]).float()[0], -1).gather(1, gold[:, None])[:, 0]
@@ -276,7 +300,8 @@ class GradSession:
         out = backbone.forward_embeds(embeds, logits=False, cutoff=heads.cutoff if not heads.read_markers else None)
         context_logp, context_weight = (self._context_logp(out["h_final"], prompt, starts, context_weights)
                                         if context_weights is not None else (None, None))
-        cache, last = out["cache"], backbone.logits(out["h_final"][:, -1:])[:, -1]
+        scores, token_history = self.engine.advance_token_readout(None, out['h_final'][:, -1:], last_only=True)
+        cache, last = out['cache'], scores[:, -1]
         cut_state = out['h_cut'][:, -1] if not heads.read_markers else None
         top_state = out['h_final'][:, -1] if not heads.read_markers else None
         token_logp, token_logits, write_logp, stop_states = [], [], [], []
@@ -291,8 +316,13 @@ class GradSession:
                     run.append(target[index][1])
                     index += 1
                 ids = torch.tensor([run], device=self.engine.device)
-                step = backbone.forward_ids(ids, cache=cache, cutoff=heads.cutoff if not heads.read_markers else None)
-                logits = torch.cat([last[:, None], step["logits"][:, :-1]], 1)[0]
+                has_tcp = getattr(self.engine, 'token_choice_projection', None) is not None
+                step = backbone.forward_ids(ids, cache=cache, cutoff=heads.cutoff if not heads.read_markers else None, logits=not has_tcp)
+                if has_tcp:
+                    scores, token_history = self.engine.advance_token_readout(token_history, step['h_final'])
+                else:
+                    scores = step['logits']
+                logits = torch.cat([last[:, None], scores[:, :-1]], 1)[0]
                 if collect_token_states:
                     stop_states.append(heads.stop_states(step['h_cut'], step['h_final']))
                 if projection_anchor_weight:
@@ -316,7 +346,7 @@ class GradSession:
                     projection_anchor_count += ids.numel()
                 token_logits.append(logits)
                 token_logp.append(torch.log_softmax(logits.float(), -1).gather(1, ids[0][:, None])[:, 0])
-                cache, last = step["cache"], step["logits"][:, -1]
+                cache, last = step['cache'], scores[:, -1]
                 if not heads.read_markers:
                     cut_state, top_state = step['h_cut'][:, -1], step['h_final'][:, -1]
                 continue
@@ -334,9 +364,14 @@ class GradSession:
                 # Replaying the recorded write needs the stored block; a leaf (a value written afresh) does not.
                 write_logp.append(self._replay_write(self.engine.lookup(value), block_start, state, top))
             payload = self._payload(value, leaves)[None].to(backbone.embedding_weight.dtype)
+            has_tcp = getattr(self.engine, 'token_choice_projection', None) is not None
             back = backbone.forward_embeds(heads.read_embeddings(backbone, payload, close_only=True),
-                                           cache=block_start, cutoff=heads.cutoff if not heads.read_markers else None)
-            cache, last = back["cache"], back["logits"][:, -1]
+                                           cache=block_start, cutoff=heads.cutoff if not heads.read_markers else None, logits=not has_tcp)
+            if has_tcp:
+                scores, token_history = self.engine.advance_token_readout(token_history, back['h_final'])
+            else:
+                scores = back['logits']
+            cache, last = back['cache'], scores[:, -1]
             if not heads.read_markers:
                 cut_state, top_state = back['h_cut'][:, -1], back['h_final'][:, -1]
             index += 1
@@ -367,7 +402,9 @@ class GradSession:
                 # Producer rewriting still carries its consumer gradient.
                 return top.sum() * 0.0
             opened = Opened(block_start, state, backbone.logits(top[:, None])[:, -1], top)
-            writer = write_direct(backbone, direct, opened, max(1, length), self.engine.stop_ids, length=max(1, length))
+            writer = write_direct(backbone, direct, opened, max(1, length), self.engine.stop_ids,
+                                  length=max(1, length),
+                                  token_choice_projection=getattr(self.engine, 'token_choice_projection', None))
             terms = [torch.nn.functional.logsigmoid(logit if index == length - 1 and not block.truncated else -logit)
                      for index, logit in enumerate(writer.stop_tensors)]
             return torch.stack(terms).sum() if terms else top.sum() * 0.0
@@ -440,17 +477,36 @@ class GradSession:
     def decision_prefill(self, prompt, leaves: dict):
         """The prompt's cache and next-token logits (the part decisions over one prompt share)."""
         out = self.backbone.forward_embeds(self._embed_items(prompt, leaves), logits=False)
+        if getattr(self.engine, 'token_choice_projection', None) is not None:
+            # Start a fresh token-choice segment at the final prompt state;
+            # earlier prompt turns are not carried into the reply readout.
+            scores, history = self.engine.advance_token_readout(
+                None, out['h_final'][:, -1:], last_only=True)
+            return _TokenChoiceDecisionCache(out['cache'], history), scores[:, -1]
         return out["cache"], self.backbone.logits(out["h_final"][:, -1:])[:, -1]
 
     def decision_continue(self, cache, last, rests):
         """Extend a prompt cache by the tokens every option shares; returns (cache, last logits, own tokens)."""
+        token_choice = isinstance(cache, _TokenChoiceDecisionCache)
+        kv_cache = cache.backbone_cache if token_choice else cache
+        history = cache.token_history if token_choice else None
         shared = 0
         if len(rests) > 1:
             while all(len(r) > shared for r in rests) and all(r[shared] == rests[0][shared] for r in rests):
                 shared += 1
         if shared:
-            step = self.backbone.forward_ids(torch.tensor([rests[0][:shared]], device=self.engine.device), cache=cache)
-            cache, last = step["cache"], step["logits"][:, -1]
+            step = self.backbone.forward_ids(torch.tensor([rests[0][:shared]], device=self.engine.device),
+                                             cache=kv_cache, logits=not token_choice)
+            kv_cache = step["cache"]
+            if token_choice:
+                scores, history = self.engine.advance_token_readout(history, step['h_final'], last_only=True)
+                last = scores[:, -1]
+            else:
+                last = step["logits"][:, -1]
+        if token_choice:
+            cache = _TokenChoiceDecisionCache(kv_cache, history)
+        else:
+            cache = kv_cache
         return cache, last, [r[shared:] for r in rests]
 
     def option_logprob(self, cache, last, own: list[int]) -> torch.Tensor:
@@ -458,8 +514,12 @@ class GradSession:
         if not own:
             return torch.zeros((), device=last.device)
         ids = torch.tensor([own], device=self.engine.device)
-        step = self.backbone.forward_ids(ids, cache=cache)
-        logits = torch.cat([last[:, None], step["logits"][:, :-1]], 1)[0]
+        token_choice = isinstance(cache, _TokenChoiceDecisionCache)
+        kv_cache = cache.backbone_cache if token_choice else cache
+        step = self.backbone.forward_ids(ids, cache=kv_cache, logits=not token_choice)
+        following = (self.engine.advance_token_readout(cache.token_history, step['h_final'], last_only=False)[0]
+                     if token_choice else step['logits'])
+        logits = torch.cat([last[:, None], following[:, :-1]], 1)[0]
         return torch.log_softmax(logits.float(), -1).gather(1, ids[0][:, None]).sum()
 
     def decision_logprobs(self, messages, tools, options: list[str], leaves: dict) -> tuple[torch.Tensor, list[int]]:
@@ -717,7 +777,8 @@ class GradSession:
                 from ..write import Opened
                 opened = Opened(pre.cache, pre.state, backbone.logits(pre.top[:, None])[:, -1], pre.top)
                 writer = write_direct(backbone, direct, opened, max(1, stored.length), self.engine.stop_ids,
-                                      length=max(1, stored.length))
+                                      length=max(1, stored.length),
+                                      token_choice_projection=getattr(self.engine, 'token_choice_projection', None))
                 payload, _, _ = writer.complete()
                 rewritten = payload[0, :stored.length].float()
             else:
