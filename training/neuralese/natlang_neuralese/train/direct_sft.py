@@ -565,7 +565,9 @@ def main(argv=None):
                                    if previous_options[key] != current_options[key])
         if changed_objective:
             raise ValueError('--continue-from training options differ: ' + ', '.join(changed_objective))
-        expected_backbone = {name.removeprefix('backbone.'): parameter for name, parameter in backbone_named}
+        # Full direct checkpoints keep optimizer-schema names in their canonical ``backbone.*`` form.
+        # Keep that same form here; only the destination tensor lookup strips the prefix below.
+        expected_backbone = dict(backbone_named)
         saved_backbone = state.get('student_parameters') or {}
         if set(saved_backbone) != set(expected_backbone):
             raise ValueError('--continue-from backbone trainable names differ')
@@ -581,21 +583,13 @@ def main(argv=None):
                    for name, value in current_projection.items()):
                 raise ValueError('--continue-from projection shape differs: ' + key)
         saved_optimizer = state.get('optimizer') or {}
-        saved_groups = saved_optimizer.get('param_groups') or []
-        current_groups = optimizer.param_groups
-        if len(saved_groups) != len(current_groups):
-            raise ValueError('--continue-from optimizer group count differs')
+        current_optimizer = optimizer.state_dict()
+        if (saved_optimizer.get('format') != current_optimizer.get('format') or
+                saved_optimizer.get('schema') != current_optimizer.get('schema')):
+            raise ValueError('--continue-from optimizer names, shapes, dtypes, or partitions differ')
         saved_names = state.get('optimizer_parameter_names')
         if saved_names is not None and saved_names != optimizer_parameter_names:
             raise ValueError('--continue-from optimizer parameter names differ')
-        for group_index, (saved_group, current_group) in enumerate(zip(saved_groups, current_groups)):
-            saved_ids, current_parameters = saved_group.get('params', []), current_group.get('params', [])
-            if len(saved_ids) != len(current_parameters):
-                raise ValueError('--continue-from optimizer parameter count differs in group ' + str(group_index))
-            for saved_id, parameter in zip(saved_ids, current_parameters):
-                for slot_name, slot_value in (saved_optimizer.get('state', {}).get(saved_id, {})).items():
-                    if torch.is_tensor(slot_value) and slot_value.ndim and tuple(slot_value.shape) != tuple(parameter.shape):
-                        raise ValueError('--continue-from optimizer slot shape differs: ' + slot_name)
         from .text_warmup import copy_restored_values
         tensors_by_name = plain_named_tensors(backbone.hf)
         copy_restored_values({'backbone.' + n: t for n, t in tensors_by_name.items()}, state['student_parameters'])
