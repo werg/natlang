@@ -118,6 +118,14 @@ is selected until criterion 1 is measured on it.
   (`neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1`, sha 7fe4e055…; per-row ids, splits, groups and
   records equal) and Mellum's measured base gate. Its QAT component has no preserve stream and no gate of its own:
   drift reference and gate are the shared monitor.
+- Mellum at the shared context, measured 2026-10-11 (`runs/neuralese-direct-line-parity-20261011/smoke32k`;
+  tokens 32768, target 1024; the 24 longest documents, 11.2k–13.4k tokens; BF16; 12 updates, no full state):
+  - polled ledger peak 59.6 GB;
+  - 10.4 s/update mean over updates 2–12 (7.0–13.2 s), against 6.8 s at 8192 in v2c (with q4 points mixed in);
+  - most documents are shorter than 8192 (median 4.5k), so their windows are unchanged. A 2000-update v3 run should
+    take about 4–5 h at a claim of about 72 GB.
+- Mellum v2c (V9 data, 8192/1024) completed and qualified: held CE 2.224 → 0.209, gate 20/24 against base 18/24,
+  response KL 0.34. It is the last Mellum direct run on the old settings.
 - Twin caveat: Mellum's template shows every earlier turn's reasoning (2921 documents, 5627 turns), which LFM's
   template drops, so Mellum has 384k supervised tokens against LFM's 344k. This is template-inherent.
 - LFM E2E: Pop's running endpoint epoch v3 (`luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v3`) already matches the E2E base up to the declared differences and is the LFM line's checked E2E recipe. Later E2E launches on both lines declare `parity {line, stage: e2e}`.
