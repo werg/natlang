@@ -108,6 +108,49 @@ class DirectWriter:
         self.advance(value, final[:, 0], cache)
         return False
 
+    def forced_sequence(self):
+        """Process a complete known-token write with the shared causal sequence API.
+
+        Prefix h0 emits value0; consuming token0 produces h1. Thus payloads
+        use h0..h(N-1), while states and recorded stop scores use h1..hN.
+        Greedy writes still use ``step`` because their tokens are not known.
+        """
+        if self.feedback != 'token' or self.length is None or self.tokens is None or len(self.tokens) < self.length:
+            raise ValueError('sequence writing needs a complete forced token prefix and known length')
+        if self.count or self.done:
+            raise ValueError('sequence writing starts at the producer prefix')
+        ids = torch.tensor([self.tokens[:self.length]], device=self.opened.top.device)
+        ids = ids.expand(self.opened.top.shape[0], -1)
+        inputs = self.backbone.embed(ids).detach().to(self.backbone.embedding_weight.dtype)
+        final, cache = self.backbone.run_layers(inputs, range(self.backbone.num_layers), self.cache)
+        history = torch.cat([self.opened.top[:, None], final], 1)
+        hidden = history[:, :-1]
+        # Retain the same differentiable readout->mixture path as decide().
+        # Bound the temporary vocabulary matrix per readout call.
+        mixtures = []
+        for start in range(0, self.length, 128):
+            logits = self.backbone.logits(hidden[:, start:start + 128])
+            mixtures.append(torch.softmax(logits.float(), -1).to(self.backbone.embedding_weight.dtype) @
+                            self.backbone.embedding_weight)
+        segments = torch.zeros(history.shape[:2], dtype=torch.long, device=history.device)
+        values = self.projection(hidden, torch.cat(mixtures, 1), segments[:, :-1])
+        from ..model.neuralese_projection import project_token_states
+        token_states = project_token_states(history, self.token_choice_projection, segments)
+        stops = []
+        for start in range(1, self.length + 1, 128):
+            logits = self.backbone.logits(token_states[:, start:start + 128]).float()
+            logp = torch.log_softmax(logits, -1)
+            stop_logp = torch.logsumexp(logp[:, :, self.stop_ids], -1)
+            stops.append(stop_logp - torch.log1p(-stop_logp.exp().clamp(max=1 - 1e-7)))
+            self.token = logits[:, -1].argmax(-1)
+        self.payloads = list(values.unbind(1))
+        self.states = list(final.unbind(1))
+        self.stop_tensors = list(torch.cat(stops, 1).unbind(1))
+        self.stop_logits = torch.cat(stops, 1).detach()[0].tolist()
+        self.history = list(history[:, -self.history_limit:].unbind(1))
+        self.cache, self.count, self.done = cache, self.length, True
+        return self
+
     def complete(self, temperature=0.0, generator=None):
         if temperature:
             raise ValueError('direct Neuralese values have no trained stochastic payload distribution')
