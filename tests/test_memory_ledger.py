@@ -447,3 +447,42 @@ def test_the_guard_relaunches_a_requeued_unit_once_its_delay_has_passed_and_it_f
     assert launched == ['render.service']
     with ledger.ledger() as state:
         assert 'render.service' in state['claims'] and not state['waiting']
+
+
+def test_a_unit_declared_resumable_without_a_spec_is_preemptible_but_logged_not_requeued():
+    c = dict(claim('experiment', 10, 5, 0), resumable=True)
+    assert ledger.resumable(c)
+    state = {'claims': {'u.service': c}, 'events': []}
+    assert not ledger.requeue_spec(state, 'u.service', now=5.0)
+    assert 'waiting' not in state or 'u.service' not in state['waiting']
+    assert 'owner must restart' in state['events'][-1]['event']
+    assert not ledger.resumable(claim('experiment', 10, 5, 0))  # undeclared and no spec (adopted): protected
+    assert ledger.preemption_plan({'u.service': c}, 0, {'priority': 'high', 'budget': 5 * GIB, 'reserve': 0}) == ['u.service']
+
+
+def test_a_learned_budget_never_exceeds_what_the_machine_can_ever_admit(monkeypatch):
+    monkeypatch.setattr(ledger, 'mem_total', lambda: 121 * GIB)
+    state = {'family_peaks': {'natlang-e2e': 103 * GIB}}
+    assert ledger.learned_budget(state, 'natlang-e2e-7777.service', 96 * GIB) == 105 * GIB
+
+
+def test_a_waiting_run_registers_in_the_queue_before_any_slow_cache_walk(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 1 * GIB)
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 50 * GIB)
+    monkeypatch.setattr(ledger, 'reclaimable', lambda: 40 * GIB)
+    monkeypatch.setattr(ledger, 'release_cache', lambda: {})
+    args = type('A', (), {'budget_gb': 96, 'reserve_gb': 8, 'unit': 'e2e', 'priority': 'high', 'cls': 'experiment', 'wait': 0,
+                          'host_max_gb': None, 'workdir': '.', 'env': [], 'stop_seconds': None, 'command': ['x'],
+                          'resumable': None, 'hold_budget': False, 'oom_policy': 'stop'})()
+    seen = []
+    def peek(_):
+        with ledger.ledger() as state:
+            seen.append(list(state.get('waiting', {})))
+        raise KeyboardInterrupt
+    monkeypatch.setattr(ledger.time, 'sleep', peek)
+    args.wait = 100
+    with pytest.raises(KeyboardInterrupt):
+        ledger.run(args)
+    assert seen == [['e2e.service']]
