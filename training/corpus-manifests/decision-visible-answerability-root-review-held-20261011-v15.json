@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "decision-visible-answerability-root-review-held-20261011-v15",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v15",
+  "files": [
+    {
+      "path": "canonical-policy-v15.json",
+      "bytes": 57341,
+      "sha256": "2ebb873cc1c232eeabcd31d12a4036139782ac3d20e84af8c4bbcd049781e093"
+    },
+    {
+      "path": "review.json",
+      "bytes": 4486,
+      "sha256": "26fbc277fb319d9ad5eb110329a351d07bad45b8a965363ca5a9e3f816178edc"
+    }
+  ],
+  "bytes": 61827
+}

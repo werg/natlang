@@ -1,6 +1,6 @@
 {
   "schema": "natlang.decision-source-quality-holds/1",
-  "policy_id": "decision-visible-answerability-holds-v14",
+  "policy_id": "decision-visible-answerability-holds-v15",
   "status": "canonical_forward_source_filter",
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
@@ -30,7 +30,7 @@
       "item_id": "dc-69522cb3e1b5d8c52d11",
       "original_source_group": "g-36762ffd97b257fedc14536d",
       "split": "train",
-      "reason": "Source-internal comparator-direction conflict: the abstract says “tamoxifen versus AI” RR=1.31 while its separate long_answer attributes higher CVAE risk to AI; the task label cannot be safely source-aligned without adjudication.",
+      "reason": "Source-internal comparator-direction conflict: the abstract says \u201ctamoxifen versus AI\u201d RR=1.31 while its separate long_answer attributes higher CVAE risk to AI; the task label cannot be safely source-aligned without adjudication.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "official_row_sha256": "a8d5e6dfa98ffe62094173cb9e74bafea2018f2fe5ec4ebfb69787cdb69fb270",
@@ -56,7 +56,7 @@
       "item_id": "dc-4c2f9df175a623b83303",
       "original_source_group": "g-ffe725df39df7940c00e77ca",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract says it evaluates feasibility of GFRUP limitation-of-treatment guidelines and describes case inclusion, meetings, decisions, and implementation timing. It does not state a direct feasibility result or explicitly conclude that the recommendations are applicable. “Maybe” is plausible; the gold “yes” is not established by the reported outcomes alone.",
+      "reason": "Root hold for strict single-label supervision: The abstract says it evaluates feasibility of GFRUP limitation-of-treatment guidelines and describes case inclusion, meetings, decisions, and implementation timing. It does not state a direct feasibility result or explicitly conclude that the recommendations are applicable. \u201cMaybe\u201d is plausible; the gold \u201cyes\u201d is not established by the reported outcomes alone.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "166fdd888a8174180c4bf6eba403e57d3806f4604a6ec1c7bacd3c51784167cd",
@@ -69,7 +69,7 @@
       "item_id": "dc-845c16d1dc3af5b9d3e0",
       "original_source_group": "g-6a51fa7e97e5b89fe5aaa49d",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract lists common characteristics among young men who died (poisoning, unemployment, single status, self-destructive behavior). It is a retrospective description of cases and does not test whether these factors are preventable or whether changing them reduces mortality. “Maybe” appropriately reflects the unsupported amenability step; “yes” is not established by this abstract.",
+      "reason": "Root hold for strict single-label supervision: The abstract lists common characteristics among young men who died (poisoning, unemployment, single status, self-destructive behavior). It is a retrospective description of cases and does not test whether these factors are preventable or whether changing them reduces mortality. \u201cMaybe\u201d appropriately reflects the unsupported amenability step; \u201cyes\u201d is not established by this abstract.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "01d8e0c917a17d2102f693ee48325ab2eea1e3e31e8ca8182f88672c6f14cf51",
@@ -82,7 +82,7 @@
       "item_id": "dc-e3eb31373ee4d551eef9",
       "original_source_group": "g-fa9a289591200ad71f6b0e4b",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract proposes progression criteria and states thresholds make future surgery probable, but gives no accuracy statistic, calibration, sensitivity/specificity, or validation result. The gold “yes” is stronger than the visible evidence about accurate prediction. “Maybe” is a defensible answer to the stated accuracy question.",
+      "reason": "Root hold for strict single-label supervision: The abstract proposes progression criteria and states thresholds make future surgery probable, but gives no accuracy statistic, calibration, sensitivity/specificity, or validation result. The gold \u201cyes\u201d is stronger than the visible evidence about accurate prediction. \u201cMaybe\u201d is a defensible answer to the stated accuracy question.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "6319779c26e6cd81e122d71d7cbb3fd84976ba2e51bd63c54ab9c1b2c3554cde",
@@ -95,7 +95,7 @@
       "item_id": "dc-e68969a87c8a662215b3",
       "original_source_group": "g-4341e8795b6c6a09e6682c94",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract reports a higher response rate for exon 11 than non-exon-11 mutations (84% vs 40%, p=.01), which supports a possible predictive role. It then says there were no differences between exon variants in outcomes and responses. Because these statements conflict at the level relevant to “pathfinder,” the abstract alone does not yield a clear yes/no; “maybe” is defensible, while the gold “yes” is not unambiguous.",
+      "reason": "Root hold for strict single-label supervision: The abstract reports a higher response rate for exon 11 than non-exon-11 mutations (84% vs 40%, p=.01), which supports a possible predictive role. It then says there were no differences between exon variants in outcomes and responses. Because these statements conflict at the level relevant to \u201cpathfinder,\u201d the abstract alone does not yield a clear yes/no; \u201cmaybe\u201d is defensible, while the gold \u201cyes\u201d is not unambiguous.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "0c85d22028deb08fe3c89d25ee53aca77628d3bcec917246c2156e351c1e79e1",
@@ -108,7 +108,7 @@
       "item_id": "dc-ee6743fb9c22812bd3e5",
       "original_source_group": "g-82d4ca091a2fd32fc7a2c2a1",
       "split": "train",
-      "reason": "Root hold for strict single-label supervision: The abstract reports inverse cross-sectional relationships in both sexes and prospective inverse associations in women, but prospective results among men were equivocal and no association appeared for recurrence among people with baseline pain. “Yes” is supported for some endpoints/subgroups, not uniformly for the broad question; “maybe” is a plausible cautious interpretation.",
+      "reason": "Root hold for strict single-label supervision: The abstract reports inverse cross-sectional relationships in both sexes and prospective inverse associations in women, but prospective results among men were equivocal and no association appeared for recurrence among people with baseline pain. \u201cYes\u201d is supported for some endpoints/subgroups, not uniformly for the broad question; \u201cmaybe\u201d is a plausible cautious interpretation.",
       "evidence": {
         "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
         "visible_state_sha256": "1a0a49819e0a328c17c96316ff09199e190c53601dd42d7669eb020b73aa06ae",
@@ -822,11 +822,89 @@
         "state": "What the Papers Say, June 25, 2013"
       },
       "decision_receipt_sha256": "5886622a16759dfd2febe3467cb27d971b05f053470493fc52c388e2301461c7"
+    },
+    {
+      "item_id": "dc-94573e02e1997bbc1a54",
+      "original_source_group": "g-87941853663ed0014e79ebe2",
+      "split": "train",
+      "reason": "Classroom scheduling software/articles request does not identify X windows or a unique forum; missing thread context.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_sha256": "8b917086a1b12b5f0fda44861f20f38c39ed4d256d04a294354972ec51d09b16",
+        "official_row_index": 14852,
+        "state": "I am working on a problem of scheduling classroom, and I will like to know if you have some software, papers or articles about it. If you have something relate it, please let me know. thanks"
+      },
+      "decision_receipt_sha256": "26fbc277fb319d9ad5eb110329a351d07bad45b8a965363ca5a9e3f816178edc"
+    },
+    {
+      "item_id": "dc-21adba5de015f0d4d5af",
+      "original_source_group": "g-2af39aa14c1a9ae713601547",
+      "split": "train",
+      "reason": "Right-turn/off-ground joke lacks antecedent vehicle identity; visible reply does not uniquely support motorcycles over autos.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_sha256": "dcb02a572828601431872e7f6f124ddc57e5fd85f51064fca0db500f2df6497c",
+        "official_row_index": 14862,
+        "state": "Bzzzt! Thanks for playing. If he'd been making a right turn, the sucker would have been a couple feet off the ground. Michael"
+      },
+      "decision_receipt_sha256": "26fbc277fb319d9ad5eb110329a351d07bad45b8a965363ca5a9e3f816178edc"
+    },
+    {
+      "item_id": "dc-c8e93a88083c3597b525",
+      "original_source_group": "g-3edd5704eef5aebbc0537b5b",
+      "split": "train",
+      "reason": "Undefined SunPost411Ld identifier alone does not establish a unique forum destination; omitted context/ontology remains unprovided.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_sha256": "a73cb310a65e2cd608c7216b7ef520b28e6c4bb0e9611354df0c4c9d6723b02e",
+        "official_row_index": 14875,
+        "state": "The problem was that SunPost411Ld was not defined."
+      },
+      "decision_receipt_sha256": "26fbc277fb319d9ad5eb110329a351d07bad45b8a965363ca5a9e3f816178edc"
+    },
+    {
+      "item_id": "dc-5d195894833f0092ff54",
+      "original_source_group": "g-d33fd3afb41cf04208395e47",
+      "split": "train",
+      "reason": "Lipstick/chapstick/kissing conversation contains no evidence of the original motorcycle forum; missing thread context.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_sha256": "2db472a8a7756a90b654389444b1129ac3ca3738544ee39f3feaa082dcd0302e",
+        "official_row_index": 14891,
+        "state": "So does clear lipstick/chapstick/etc. fit under the \"natural look\" or the \"waxy shit\" category? I wear something on my lips to keep them from drying out. Kissing dry, cracked, parched lips isn't too fun either. Not if Tom has anything to say about it you won't! Noemi speaks for herself. Beth"
+      },
+      "decision_receipt_sha256": "26fbc277fb319d9ad5eb110329a351d07bad45b8a965363ca5a9e3f816178edc"
+    },
+    {
+      "item_id": "dc-4b1e6a9f1029183e2416",
+      "original_source_group": "g-f9bb6c3a30d583fe2a786860",
+      "split": "train",
+      "reason": "Combined rape/assault/harassment accusation total above100 does not refute a less95 rape-only subset count; annotated REFUTES cannot be derived. Teacher SUPPORTS also unsupported.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_sha256": "12d2ec71370682770acb0dd30db79e9d1ab80c5b721865d099f38a36fdbb3622",
+        "official_row_index": 28102,
+        "state": "Claim: Less than 95 actressess made rape accusations against Harvey Weinstein . Evidence: On 10 October 2017 , Chapman announced she was divorcing Weinstein after over 100 actresses made accusations of rape , assault , or sexual harassment against him."
+      },
+      "decision_receipt_sha256": "26fbc277fb319d9ad5eb110329a351d07bad45b8a965363ca5a9e3f816178edc"
+    },
+    {
+      "item_id": "dc-83d23ed671ce976f97c9",
+      "original_source_group": "g-605a5b13c120aafa022c2bff",
+      "split": "train",
+      "reason": "Music award/producer popularity evidence does not refute musician status; source REFUTES lacks a negating premise. No replacementlabel asserted.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_sha256": "2573b054f599b22a72399580e40b77ef993af16772598bf932ca3d4bb32d70e5",
+        "official_row_index": 28118,
+        "state": "Claim: Selena was a musician . Evidence: Selena 's popularity grew after she won the Tejano Music Award for Producer of the Year in 1987 , which she won nine consecutive times ."
+      },
+      "decision_receipt_sha256": "26fbc277fb319d9ad5eb110329a351d07bad45b8a965363ca5a9e3f816178edc"
     }
   ],
   "root_review": {
-    "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v14/review.json",
-    "sha256": "5886622a16759dfd2febe3467cb27d971b05f053470493fc52c388e2301461c7",
-    "scope": "Prospective four-root-reviewed holds; prior64 retained. Three absent-thread contexts, one English input labeled Polish. No source/gold/attempts changed."
+    "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v15/review.json",
+    "sha256": "26fbc277fb319d9ad5eb110329a351d07bad45b8a965363ca5a9e3f816178edc",
+    "scope": "Six prospective root holds; prior68 retained. Four missing-thread forum labels and two unsupported VitaminC REFUTES relations. Active fresh sources disjoint; no relabel or automatic negatives."
   }
 }
