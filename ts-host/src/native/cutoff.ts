@@ -8,11 +8,29 @@
  * position here, keeping its start and its end, where logs usually say how things went.
  */
 
-/** How many characters of one output or value a message shows. */
+/** The fewest characters of one output or value a message shows (the page size of a session with no context budget). */
 export const SHOWN_CHARS = 2000;
 
 /** Scope and input values may be longer than tool output; larger values remain available in eval. */
 export const SCOPE_VALUE_CHARS = 4096;
+
+/**
+ * The share of the context budget one tool output may fill. Compaction starts past three quarters of the budget and
+ * brings the prompt back under half, so an eighth leaves room for the opening, several reads and the reply.
+ */
+export const OUTPUT_CONTEXT_SHARE = 1 / 8;
+/** Characters per prompt token for sizing pages (the agent's initial estimate, before server calibration). */
+export const PAGE_CHARS_PER_TOKEN = 3.5;
+
+/**
+ * How many characters of one output a message shows, from the call's context budget in prompt tokens (no fixed page
+ * size, owner 2026-10-11): a long text fits in one read where the context allows, and only text that truly exceeds an
+ * eighth of the context is cut off and paged (read_page). Never below SHOWN_CHARS; `null` (no budget) gives that floor.
+ */
+export function shownCharsFor(contextTokens: number | null | undefined): number {
+  if (contextTokens === null || contextTokens === undefined || !Number.isFinite(contextTokens)) return SHOWN_CHARS;
+  return Math.max(SHOWN_CHARS, Math.floor(contextTokens * OUTPUT_CONTEXT_SHARE * PAGE_CHARS_PER_TOKEN));
+}
 
 /** Parts of a note: `holder` is the scope expression that holds all of it; `next` a call that shows the next part. */
 export type Where = { holder?: string; next?: string };

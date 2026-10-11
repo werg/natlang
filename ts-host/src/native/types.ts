@@ -371,6 +371,11 @@ export class TypeEnv {
         const found = this.lookup(type.name);
         if (!found) throw new TypeSyntaxError(`unknown type name ${type.name}`);
         type = found;
+      } else if (type.kind === 'host' && type.contract.kind === 'tag' && type.name === type.contract.tag &&
+        this.lookup(type.name)) {
+        // A program's own type shadows a platform global of the same name in its scope, as in TypeScript:
+        // `type Request = { id: string }` makes `Request` that record, not fetch's Request.
+        type = { kind: 'name', name: type.name };
       } else if (type.kind === 'intersection') type = mergeIntersection(type.members, member => this.resolve(member));
       else if (type.kind === 'index') type = indexedType(this.resolve(type.base) as never, type.key, member => this.resolve(member));
       else return type;

@@ -87,7 +87,7 @@ export default async function prepare(goal: string): Promise<string[]> {
 
 ## Types
 
-Use ordinary TypeScript types in signatures; the supported set (records, arrays, `Record<string, T>`, intersections of object types, indexed access with a literal key, literal unions, optional fields, aliases, `Folder`, `Live<...>`) and the checking rules are in [Types](../../../spec/SPEC.md#types). In eval, reading a field that a declared type does not have is rejected before the eval runs (`undeclared-field`), with the type's fields named. A precise service declaration therefore catches the executor's wrong guesses about result shapes. A well-typed result can still be semantically wrong. A partial record can be built incrementally, but completion requires the declared type.
+Use ordinary TypeScript types in signatures; the supported set (records, arrays, `Record<string, T>`, intersections of object types, indexed access with a literal key, literal unions, optional fields, aliases, `Folder`, `Live<...>`) and the checking rules are in [Types](../../../spec/SPEC.md#types). Your own `type Request = { ... }` (or `Date`, `Map`, `URL`, `Response`, ...) shadows the platform class of that name in your program, as in TypeScript; without a declaration those names mean the live built-in. In eval, reading a field that a declared type does not have is rejected before the eval runs (`undeclared-field`), with the type's fields named. A precise service declaration therefore catches the executor's wrong guesses about result shapes. A well-typed result can still be semantically wrong. A partial record can be built incrementally, but completion requires the declared type.
 
 ## What the interpreter does
 

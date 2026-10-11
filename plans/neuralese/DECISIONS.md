@@ -1469,6 +1469,18 @@ instruction.
   answers 404 rather than 501 `neuralese-init-body-unavailable` for the path; one line beside the `grad`/`optim`
   stubs in `tools/neuralese/neuralese-service.cpp`, then a conformance `lacking` entry, at the next fork rebuild.
 
+## Tool-output page size follows the context budget (coordinator, 2026-10-12)
+
+A fixed 2,000-character tool-output page was a premature limit (owner rule: no premature limits): a 30k-character
+evidence item became fifteen `read_page` turns. The page is now `shownCharsFor(contextTokens)`
+(`ts-host/src/native/cutoff.ts`): an eighth of the call's context budget at 3.5 characters per token, never below 2,000
+(7,168 at 16k tokens, 28,672 at 64k). The eighth follows compaction (starts past three quarters, compacts to a half),
+leaving room for the opening, several reads and the reply. The same `PageStore` mechanism pages what still exceeds it;
+scope and input listings show at least as much as a tool output. Model-facing: unmeasured debt in
+plans/MODEL_FACING_CHANGES.md, measured in the next teacher window. Data produced before this (static curriculum
+batch b00, the first port-record-call shards) used 2,000-character pages; they stay valid trajectories under the old
+size and are recorded as such, not regenerated.
+
 ## Deleted runs (2026-10-11)
 
 Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.

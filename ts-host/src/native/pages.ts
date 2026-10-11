@@ -12,19 +12,21 @@ const WORDS = ['amber', 'birch', 'cedar', 'delta', 'ember', 'fern', 'grove', 'ha
  */
 export class PageStore {
   private readonly pages = new Map<string, string[]>();
+  /** Characters a tool result shows and a page holds; the agent sets it from the call's context budget (shownCharsFor). */
+  budget = SHOWN_CHARS;
 
   /**
    * The text as it fits in a tool result (see cutoff.ts): whole if short, else its first page and a note naming
    * `holder`, which holds all of it, and the read_page call that shows the next page.
    */
-  show(text: string, holder?: string, budget = SHOWN_CHARS): string {
+  show(text: string, holder?: string, budget = this.budget): string {
     if (text.length <= budget) return text;
     const { id } = this.add(text, budget);
     return cutText(text, { holder, next: `read_page("${id}", 2)` }, budget);
   }
 
   /** Keep a text in pages and return its ID. The first page is the head a cut-off shows (cutPoints). */
-  add(text: string, budget = SHOWN_CHARS): { id: string; count: number } {
+  add(text: string, budget = this.budget): { id: string; count: number } {
     const index = this.pages.size;
     const id = WORDS[index % WORDS.length]! + (index < WORDS.length ? '' : String(Math.floor(index / WORDS.length) + 1));
     const { head } = cutPoints(text, budget);

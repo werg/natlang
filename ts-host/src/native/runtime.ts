@@ -1194,7 +1194,7 @@ export class NativeSession {
   private showValue(value: unknown): string {
     const root = this.lam.projectTransaction?.folder;
     const holder = `transcript.entry(${this.transcript.length}).output`;
-    const shown = renderValue(value, { root, holder, liveIdentity: this.runtime.displayLiveId, untrusted: this.runtime.untrusted });
+    const shown = renderValue(value, { root, holder, budget: this.pages.budget, liveIdentity: this.runtime.displayLiveId, untrusted: this.runtime.untrusted });
     // Preserve the existing page route for modest portable values, proven small by a bounded
     // estimator. Large/cyclic values remain intact in eval state but are not fully serialized.
     if (!portableSizeAtMost(value, TRANSCRIPT_VALUE_CHARS) || containsLive(value)) return shown;
