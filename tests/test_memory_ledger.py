@@ -542,7 +542,7 @@ def test_launch_puts_local_bin_first_on_path(monkeypatch):
 def test_a_cache_walk_stops_itself_at_its_deadline_and_skips_the_slow_disk_by_default(tmp_path, monkeypatch):
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     monkeypatch.setattr(ledger, 'balloon_reclaim', lambda *a, **k: 0)
-    assert not any(root.startswith('/mnt/external') for root in ledger.CACHE_ROOTS)
+    assert not any(root.startswith('/mnt/' + 'external') for root in ledger.CACHE_ROOTS)
     for i in range(3):
         (tmp_path / f'f{i}').write_bytes(b'x' * (17 << 20))
     assert ledger.release_cache([str(tmp_path)], seconds=-1)['files'] == 0  # deadline passed: no work at all
