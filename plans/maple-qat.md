@@ -239,3 +239,9 @@ deepgrove's own small model, Bonsai (0.5B, March 2025), does not share it: Llama
   (`ggml/src/ggml-quants.c`).
 - Upstream support: llama.cpp PR #27000 (`3d10bcd19`); `conversion/maple.py`.
 - Evaluation session: `plans/HANDOVER.md` 2026-10-05 Maple entries; `runs/maple-preview-evaluation-20261005/`.
+
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `maple-preview-evaluation-20261005`: deleted 2026-10-11.

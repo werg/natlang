@@ -173,3 +173,10 @@ symlinks into the archive.
 Kept on purpose: base models, teacher outputs (teacher-v7*, teacher-v3 on NVMe as the fast copy of the registered
 artifact), `models/decision/clef-flash` (Clef scripts), the Phase F export (HANDOVER), the browser-CI LFM GGUFs,
 the fork follow-ups' GGUFs, `ling-lora` (unreferenced, pre-Neuralese; owner call), and Pop-owned `runs/luna-*`.
+
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `maple-foundation-20261005`: deleted 2026-10-11.
+- `maple-nested-20261005`: deleted 2026-10-11.

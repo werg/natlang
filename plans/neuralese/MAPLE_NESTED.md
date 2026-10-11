@@ -483,3 +483,12 @@ calibrated per backbone (e.g. against the agreement Maple's own final layer give
 windows at cutoffs 18 and 12 (`runs/maple-foundation-20261005/sweep.sh`); then more admitted sources.
 Memory on DGX unified memory: ~32 GB for Maple with 256-token feed-forward chunks, once the bootstrap stopped
 "parking" layers on CPU (4c2410f0; the copy doubled the footprint to ~50 GB and got runs stopped by the guard).
+
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `maple-foundation-20261005`: deleted 2026-10-11.
+- `maple-member-drift-20261008-v1`: deleted 2026-10-11.
+- `maple-member-warmup-smoke-20261008`: deleted 2026-10-11.
+- `maple-nested-20261005`: deleted 2026-10-11.

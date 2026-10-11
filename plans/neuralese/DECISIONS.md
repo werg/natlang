@@ -1468,3 +1468,17 @@ instruction.
 - `init-body` is a reference-only capability. Open: the llama.cpp fork (native and the vendored wasm builds) still
   answers 404 rather than 501 `neuralese-init-body-unavailable` for the path; one line beside the `grad`/`optim`
   stubs in `tools/neuralese/neuralese-service.cpp`, then a conformance `lacking` entry, at the next fork rebuild.
+
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `maple-native-qat-preflight-20261007.sh`: deleted 2026-10-11.
+- `maple-native-text-warmup-20261007-v1.sh`: deleted 2026-10-11.
+- `maple-native-text-warmup-20261007-v3`: deleted 2026-10-11.
+- `maple-native-text-warmup-20261007-v5.sh`: deleted 2026-10-11.
+- `maple-native-text-warmup-20261008-v10`: deleted 2026-10-11.
+- `maple-native-text-warmup-20261008-v8.sh`: deleted 2026-10-11.
+- `maple-text-warmup-policy-ab-20261007.sh`: deleted 2026-10-11.
+- `maple-text-warmup-runtime-20261008-v10`: deleted 2026-10-11.
+- `neuralese-foundation-text-4880-continuation-20261009-v1`: deleted 2026-10-11.

@@ -714,3 +714,12 @@ and the behaviour gate is 0.75. The drift columns are on the 16 held rows.
 run-v1 completed 1000 updates. It is unqualified on the value gate and on the behaviour gate's held_kl, and trained no
 attention (bug, fixed in a8972488). Details: plans/neuralese/NEURALESE_DIRECT_V1.md "run-v1 on Mellum".
 
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `maple-joint-20261005`: deleted 2026-10-11.
+- `mellum-foundation-qat-20261010/run-v9`: deleted 2026-10-11.
+- `mellum-qat/convert-v3`: deleted 2026-10-11.
+- `mellum-qat/teacher-v3`: deleted 2026-10-11.
+- `teacher-v7-nosys-code`: deleted 2026-10-11.

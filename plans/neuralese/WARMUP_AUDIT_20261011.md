@@ -240,3 +240,10 @@ data pull hard toward the corpus, and the anchor pulling back is weak (findings 
 5. Measure a pass-1 gradient scale into the backbone (finding 5) against the held KL drift metric.
 
 Audit scripts, kept outside the repository: `/home/werg/.claude/jobs/9c849f00/tmp/audit/{data_stats,window_stats,proj_head_sim,sr_sim}.py`.
+
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `mellum-foundation-qat-20261010/run-v9`: deleted 2026-10-11.
+- `mellum-qat/teacher-v3`: deleted 2026-10-11.

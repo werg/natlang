@@ -932,3 +932,9 @@ parameter group is split by requested rate without resetting other settings.
 The restore report records every actual rate change. An ordinary resume keeps
 its saved rates. This enables a controlled continuation; it grants no runtime,
 quality or corpus admission.
+
+## Deleted runs (2026-10-11)
+
+Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
+
+- `neuralese-latent-sketch-v2-diagnostic-20261006-v1`: deleted 2026-10-11.
