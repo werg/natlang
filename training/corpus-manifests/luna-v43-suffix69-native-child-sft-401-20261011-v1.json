@@ -1,0 +1,72 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v43-suffix69-native-child-sft-401-20261011-v1",
+  "owner": "pop",
+  "path": "runs/v43-suffix69-native-child-sft-admitted-20261011-v1",
+  "files": [
+    {
+      "path": "FILES.sha256.json",
+      "bytes": 1789,
+      "sha256": "597785cece8b4ea01a94fa7b2e2b7fb8aff5979853467bf19ab1c46b095ceca5"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1058,
+      "sha256": "f5155f25654bc28db77993fcc39507b1df64766bfb60747c3e5802a7880ed783"
+    },
+    {
+      "path": "decision-source-quality-holds.json",
+      "bytes": 61430,
+      "sha256": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994"
+    },
+    {
+      "path": "native-adoption-binding-v1.json",
+      "bytes": 1502,
+      "sha256": "13dde57e9a4c9edd2e406cad8605979168e734cff3c511b007553e3049656fa6"
+    },
+    {
+      "path": "native-decisions.jsonl",
+      "bytes": 56261037,
+      "sha256": "f9f904ddef2b46e37326504d89e24cb06e09de7ac9d59a79ddd41a7f37d6232f",
+      "lines": 401
+    },
+    {
+      "path": "raw-campaign-binding.json",
+      "bytes": 256,
+      "sha256": "d66f38c8211dd160fb7f5809943336649df9f8b2e2d58a590a51473fc747f33b"
+    },
+    {
+      "path": "review.json",
+      "bytes": 659,
+      "sha256": "1858bac4e370518d14d2ed504341da8fba2d6253899765967ede85c1767c775c"
+    },
+    {
+      "path": "root-adoption-v1.json",
+      "bytes": 666,
+      "sha256": "b67a88618156c471d4f1874792519fc0b5e754795c70568de57e8484f02cc017"
+    },
+    {
+      "path": "selection.json",
+      "bytes": 1118788,
+      "sha256": "00718ba069c427b14fee71f1225d9392da22bb41f0d9f8e1f02f8fee619418fa"
+    },
+    {
+      "path": "selection.md",
+      "bytes": 1381,
+      "sha256": "c3ba0561c628b2d96435e3ae53447bac92309b84f6ceb3303b79de29934ff5dc"
+    },
+    {
+      "path": "source-item-bindings.jsonl",
+      "bytes": 644037,
+      "sha256": "b3af7a699f14866146009a839ddd4cdaf187818e3d273524d7516677fd0f13a3",
+      "lines": 401
+    },
+    {
+      "path": "source-native-candidate.jsonl",
+      "bytes": 56159584,
+      "sha256": "6d4e776944b3db8ac2eef160cbc03c9f66c5b2cf6a4537b61b448d1bbbe37cd6",
+      "lines": 401
+    }
+  ],
+  "bytes": 114252187
+}
