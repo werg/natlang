@@ -1,3 +1,18 @@
+# Continuation guide — updated 2026-10-11 19:35 UTC
+
+Read `python3 scripts/coord.py inbox --ack` and `python3 scripts/coord.py status` first. Coordination status is the authority for live jobs. Dated entries below are evidence and course-change history; their descriptions of an “active” run apply only at that entry’s timestamp.
+
+## Shared code and next work
+
+- Use the canonical checkout on each machine and synchronize through `origin/main`. Pop owns Pop jobs; DGX owns DGX jobs.
+- Neuralese now uses the shared direct-v1 implementation and declared recipes. Do not restart historical sketch or embedding warm-ups for this lineage. See `plans/neuralese/NEURALESE_DIRECT_V1.md` and `plans/neuralese/LINE_PARITY.md`.
+- Regular native evaluation/checkpoint cadence is **200/200**, with emergency and final saves. The owner rejected the earlier 25-step cadence. Current direct-stage defaults have separately scaled, less frequent measurements.
+- Pop’s reviewed best225 continuation changes only projection learning rate to `3e-5`, retaining full optimizer/RNG/cursor state. Its declared recipe is `training/neuralese/recipes/luna-direct-lfm-native-e2e-best225-heads-lr3e-5-diagnostic-20261011-v3.json`. Finish the 687-update epoch, then independently compare its trained token-choice projection with raw readout and qualify reciprocal readers, stopping and runtime transport against the exact selected weights. Improved periodic loss alone is insufficient.
+- Future direct stages share MuonSR cubic5, with declared per-backbone rates. Behavior is the hard forgetting gate; response KL warns at 0.5 and stops at 1.5. Preserve historical failed certificates rather than rewriting them under the newer policy. The active native rate diagnostic retains its declared Lion optimizer to isolate the projection-rate change.
+- Five Luna lanes are supplied with 69 fresh V43 programs / 543 source items using runtime V19. Review exact outputs, input visibility and errors before admission. Source-label disagreements are excluded; copies and reference replays do not grant admission.
+- Newly admitted corpus `luna-v43-exact-map37-native-sft-926-20261011-v1` contains 926 successful native SFT targets from 37 programs / 274 train items, synchronized through the registry and immutable manifest. Preserve 59 failed targets as exclusions and useful failed-history context. Its shared recurrence conversion is the next data task; SFT admission does not grant neuralese qualification.
+- Shared CallStore fixes in `bccb1cc4` avoid per-row global orphan scans during eviction and allow static authored reference replay to disable call recording explicitly. Live generation recording stays enabled. Compiler checks passed; no automated test suite was run in this session.
+
 ## Pop current update — 2026-10-11 11:08 UTC
 
 - Active run is **direct V8**, not historical warm-up V8 or direct V6/V7: `training/neuralese/recipes/luna-neuralese-direct-lfm-base-20261011-v8.json`; outputs `/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-run/direct_sft`. Fresh base LFM350M, shared direct-v1, LionSR3e-7/normAdamW7.5e-7/projection3e-4, native4962 text only, 32K capacity/target256/batch1, 1000 retained steps/eval20/checkpoint100. Latest observed step470; eval460 CE4.688 vs6.192, projectiondelta−.270, responseKL.0150, guard ok. Final qualification pending; do not infer readiness from training completion.
