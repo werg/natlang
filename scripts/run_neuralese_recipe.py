@@ -233,6 +233,11 @@ def main(argv=None) -> int:
     metadata.parent.mkdir(parents=True, exist_ok=True)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)
+    # JIT kernels must not write to the image's read-only home directory.
+    # Keep their caches in the same declared artifact mount as this run.
+    kernel_cache = output.parent / "kernel-cache"
+    kernel_cache.mkdir(exist_ok=True)
+    container_kernel_cache = map_path(kernel_cache, mounts)
     if output.exists():
         raise ValueError("output appeared during preflight; refusing to launch")
     child = ["-m", "natlang_neuralese.train.recipe", "--recipe", str(container_recipe),
@@ -246,6 +251,10 @@ def main(argv=None) -> int:
     common_docker += ["-e", f"HF_HOME={container_hf_home}", "-e", f"HF_HUB_CACHE={container_hub_cache}",
                       "-e", "HF_HUB_OFFLINE=1", "-e", "TRANSFORMERS_OFFLINE=1",
                       "-e", "PYTHONDONTWRITEBYTECODE=1",
+                      "-e", f"TRITON_CACHE_DIR={container_kernel_cache / 'triton'}",
+                      "-e", f"TORCHINDUCTOR_CACHE_DIR={container_kernel_cache / 'inductor'}",
+                      "-e", f"TORCH_EXTENSIONS_DIR={container_kernel_cache / 'extensions'}",
+                      "-e", f"XDG_CACHE_HOME={container_kernel_cache / 'xdg'}",
                       "-e", f"PYTHONPATH={map_path(NEURALESE, mounts)}"]
     preflight_code = (
         "import importlib,json,os,sys; "
