@@ -10,13 +10,13 @@
 #   python3 scripts/memory_ledger.py run --unit natlang-check-main-$(date +%H%M%S) --budget-gb 28 --reserve-gb 0 \
 #     --oom-policy continue --class experiment --wait 600 --workdir "$PWD" -- \
 #     sh -c 'scripts/check-main.sh > /tmp/check-main.log 2>&1; echo exit=$? >> /tmp/check-main.log'
-# Environment: NATLANG_PYTHON (default .venv-neuralese/bin/python), CHECK_MAIN_TS_CONCURRENCY (2).
+# Environment: NATLANG_PYTHON overrides discovery; otherwise prefer .venv-neuralese, then .venv
+# in this checkout or its main worktree. CHECK_MAIN_TS_CONCURRENCY defaults to 2.
 # Node packages come from `npm install` at the workspace root (never `npm ci` while other sessions run).
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # A linked worktree has no venv of its own: use the main checkout's.
 MAIN=$(cd "$ROOT" && cd "$(git rev-parse --git-common-dir)/.." && pwd)
-PY=${NATLANG_PYTHON:-$( [ -x "$ROOT/.venv-neuralese/bin/python" ] && echo "$ROOT" || echo "$MAIN")/.venv-neuralese/bin/python}
 # Nor its own node packages: npm installs them at the workspace root and in ts-host, so link the main checkout's
 # (one missing level leaves e.g. undici or @wllama unresolved and reads as TS2307/TS7006 errors).
 # The bundled applications (applications/*) install their own from their lockfiles (scripts/setup_dev.sh).
@@ -49,8 +49,34 @@ step() {
   results+=("$(printf '%-22s %-12s %4ss' "$name" "$status" $((SECONDS - start)))")
 }
 
+python_setup_error() { printf '%s\n' "$1" >&2; return 2; }
+
 if [ $python = 1 ]; then
-  if [ $quick = 1 ]; then
+  python_error=
+  if [ -n "${NATLANG_PYTHON:-}" ]; then
+    PY=$NATLANG_PYTHON
+    if ! command -v -- "$PY" >/dev/null 2>&1; then
+      python_error="Python checks requested, but NATLANG_PYTHON does not resolve to an executable: $PY"
+    fi
+  else
+    PY=
+    for candidate in \
+      "$ROOT/.venv-neuralese/bin/python" \
+      "$MAIN/.venv-neuralese/bin/python" \
+      "$ROOT/.venv/bin/python" \
+      "$MAIN/.venv/bin/python"; do
+      if [ -x "$candidate" ]; then
+        PY=$candidate
+        break
+      fi
+    done
+    if [ -z "$PY" ]; then
+      python_error="Python checks requested, but no project interpreter was found. Set NATLANG_PYTHON or create .venv-neuralese/bin/python / .venv/bin/python in this checkout or its main worktree."
+    fi
+  fi
+  if [ -n "$python_error" ]; then
+    step python-setup python_setup_error "$python_error"
+  elif [ $quick = 1 ]; then
     step python-ratchets env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider tests/test_machine_paths_ratchet.py \
       tests/test_duplicate_helpers_ratchet.py tests/test_check_spec_links.py
   else
