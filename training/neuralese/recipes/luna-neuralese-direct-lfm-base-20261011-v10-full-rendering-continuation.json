@@ -1,6 +1,6 @@
 {
   "execution": "direct_shared_stage",
-  "id": "luna-neuralese-direct-lfm-base-20261011-v9-full-rendering-continuation",
+  "id": "luna-neuralese-direct-lfm-base-20261011-v10-full-rendering-continuation",
   "inputs": {
     "heads": {
       "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-clean-base-monitor-20261011-v2/artifact/clean-base-untrained-heads.pt",
@@ -38,42 +38,42 @@
     "V7 aborted before model load when a parallel helper added a shared inactive text producer during import preflight; no updates. Launcher now freezes exact reviewed package before container preflight and binds it read-only at canonical package path, eliminating race without a private trainer. Added producer helper is inactive for this already-prepared text input."
   ],
   "lineage": {
-    "scope": "Continues the same already qualified full-rendering V8 data lineage from its exact best full-state checkpoint. The source bytes, tokenizer, template, base heads, objective, optimizer settings and declared drift/value gates are preserved. This is a fresh 1000-update phase with a separate output path; previous phase qualification is retained as provenance only, and this phase must pass its own completion and gates.",
+    "scope": "Fresh 1000-update continuation phase from the exact qualified V8 full-state checkpoint using unchanged original 4962 full-rendering source bytes, base heads, tokenizer, objective, optimizer settings and declared gates. A preceding launcher attempt failed before trainer updates because output location was incorrectly compared as an objective option; output location is now operational. This phase is independently evaluated and does not inherit a qualification claim.",
     "evidence": [
       {
-        "role": "predecessor_recipe",
+        "role": "predecessor_recipe_v8",
         "path": "/home/werg/natlang/training/neuralese/recipes/luna-neuralese-direct-lfm-base-20261011-v8.json",
         "sha256": "6cede93b8d68dc3aa6717b38fb6f598f90c6d0d3618b8e9f4be86bf480728abe"
       },
       {
-        "role": "predecessor_full_state",
+        "role": "predecessor_full_state_v8",
         "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-run/direct_sft/best-checkpoint.pt",
         "sha256": "1768c700444da52ac9d031288174a1c600adfad8f213f63bca302622e7ee935b"
       },
       {
-        "role": "predecessor_report",
+        "role": "predecessor_report_v8",
         "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-run/direct_sft/report.json",
         "sha256": "d75849eb72e01c05957a395612243aeb70fd7744d1e37a3c2fb7a9fd423903d7"
       },
       {
-        "role": "predecessor_direct_stage_result",
+        "role": "predecessor_stage_result_v8",
         "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-run/direct-stage-result.json",
         "sha256": "7a8a178fccb7c63e96cddfaf81bc8e510ee372ecdd35db1c4bccef69c29eedd5"
       },
       {
-        "role": "predecessor_direct_stage_plan",
+        "role": "predecessor_stage_plan_v8",
         "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-run/direct-stage-plan.json",
         "sha256": "8674fc0976010f2bf3812a8ab602c5020938bb7df894c009a6680ee8766f1943"
       },
       {
-        "role": "full_union_source_adoption_review",
+        "role": "source_adoption_review",
         "path": "/home/werg/natlang/runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/root-input-composition-review-v1.json",
         "sha256": "f86c58c6b79e23155d7ab8a28616f5c6a1afb21e144b48fd5862058b223b2666"
       }
     ]
   },
   "outputs": {
-    "directory": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-full-rendering-continuation-v1"
+    "directory": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-full-rendering-continuation-v2"
   },
   "parameters": {
     "backbone_lr": 7.5e-07,
@@ -254,7 +254,7 @@
       "train/delta_e2e.py": "3a5676e1ceb92b5d5ae9ff126be3a13ed2519ad21ffecdadcc116f29792942b5",
       "train/delta_projection.py": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91",
       "train/direct_export.py": "e63b9808a9fb65885ec5f6c216a6490f4bebb70f8e159a36bbe37737db18d6cd",
-      "train/direct_sft.py": "97b211c0bb731a168824c2f894333f51f0bddd226705307405820e2a326122e9",
+      "train/direct_sft.py": "89d923b02c4a4dbd3c1b0508f949ff10da98efdb0d3ea9994e2d13125a645781",
       "train/drift_monitor.py": "29cdb01a0363d4c0af417ac8ae66e4b09fb89084033d2c97f201dc7e01faff4e",
       "train/execution.py": "a847a145e5b4e1987f0c69c8cbc7902406754be8b57e2e37bd1139d8756643b3",
       "train/export_trajectory.py": "5bbc545ff603530fbcc5b5930c6f841c70b09f37732b0f26bd088666250fef14",
@@ -302,6 +302,6 @@
     "id": "direct_sft",
     "kind": "neuralese_direct"
   },
-  "description": "A new shared direct-SFT phase continued from the exact qualified V8 full-state checkpoint on the unchanged, qualified full-rendering text input. It uses shared sequential window gradient accumulation and adaptive checkpointing; this continuation is a new held phase and does not inherit a qualification claim.",
+  "description": "Fresh continuation recipe after V9 launcher attempt failed before trainer updates because the output directory was incorrectly compared as an objective option. Shared direct-SFT identity now treats output location as operational. Continues from the same qualified V8 full state and unchanged full-rendering source; own gates remain required.",
   "parity": "diagnostic"
 }
