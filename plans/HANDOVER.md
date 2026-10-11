@@ -10721,3 +10721,12 @@ Sealed V32semantic audit45a0720145bd76d663240c304c784ccb7bd957a6902d74f6eaef8e30
 Future sharedlabeler prompt now explicitly uses supplied criteria to interpretlabels, replacing wording that limited inputs to state/question despite sendingcriteria. Active frozen jobs unchanged; causal benefit unmeasured. V32sourceclosure packete3fa5c2f25be36b7e2480c95fabb5f0e846b866c31da962b2071750356634c9f covers393original IDs/groups53programs, Popharnessclosed/fullS1DGXpending. Threeheld review snapshots registered.
 
 DGXperf reports eightredTSfiles; Popclaims filetoolguidance fixture, inlinecurriculum mismatch, materializercontextschema/producercontextfixture, scopecompilerawait-lowering issue. No weakening provenance/typing gates. Exact failure stacks requested; other owners take builtinsbaseline/guidedwording/cryptogloballeakage.
+
+
+### Pop 2026-10-11 03:20 UTC — real source clearance exercised; action-gate bug found
+
+Shared pure source-quality clearance verifier and materializer CLI publishedfb05b44c26. One full approvedreceipt path validates exactunchanged IR/sourcequality/source rows/IDs/groups/trainroles, canonicalcurrentpolicy/hold census/clippingrules, filebytes, rootpayload/canonicalreviewdigests. Sourceheld annotation metadata remainsunchanged; onlysource_quality_held conversionreason mayclear. CLI nowwires existingexactNativeDecisionApproval API fromreview.approvals andchecksabsenttrajectoryIDs, previouslyomitted. Compiled currentTSsuccessfully, no tests.
+
+Actualseven-source V64rootreview confirms Building/Animal/OfficeHolder/Film/Animal/Album/Film supported directly byfullsource texts. FullS1heldreceipt5d44497f pluscurrent68policy/rootreview pinnedsidecare4ac9ec0bd55e4c0e88dfae7d2d898f1a6ebcce1ba4db79237c021186ec6cdda. Actualshared materializer2rows→29turns exposedinherited oracle-wide approved/admittedbits despiteconversion-onlyscope. Firstoutput preserveddiagnosticonly; registry/admission notgranted. Fixunderway: sourceclearedtargets staypending unless exactperactionreview; freshsecondexercise planned. ExistingV4proposalcontains9proposedactions(7childterminal,2rootmapconstruction), not11blankettargets. Historicaloriginalrows/messages untouched.
+
+V7stilllive; V8prepared frozenlatestshared146Pythonfiles anddraft fourfoldlowerLR fromselectedbest(35840→39936ifunchanged). No V8launch untilfinalV7strictgate/best review. Default per-lane Luna refill has actuallystartedthreeV69successors whiletwoV68predecessorscontinue, preserving5slots.
