@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -412,7 +413,13 @@ def main(argv: list[str] | None = None) -> int:
                 new_head = commit
                 break
             err = (proc.stdout + proc.stderr).decode(errors="replace")
-            if any(s in err for s in ("non-fast-forward", "fetch first", "[rejected]", "stale info")):
+            # Two valid simultaneous pushes can pass the server's ancestry check,
+            # then race its ref compare-and-swap. Retry only this specific moved-ref
+            # error, not arbitrary remote rejection (permissions/hooks must fail).
+            moved_ref = re.search(
+                r"cannot lock ref ['\"]refs/heads/" + re.escape(a.branch) +
+                r"['\"]: is at [0-9a-f]{40,64} but expected [0-9a-f]{40,64}", err)
+            if moved_ref or any(s in err for s in ("non-fast-forward", "fetch first", "[rejected]", "stale info")):
                 print(f"git_publish: {a.remote}/{a.branch} moved; rebuilding (attempt {attempt + 1})", flush=True)
                 time.sleep(min(2 ** attempt, 10) * 0.2)
                 continue
