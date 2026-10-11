@@ -57,3 +57,17 @@ test('host contracts check built-ins by tag across realms, classes by constructo
   assert.equal(checkHost({ add() {} }, { kind: 'shape', members: ['add', 'total'] }), false);
   assert.equal(checkHost(() => 1, { kind: 'function' }), true);
 });
+
+test("a program's own type shadows a platform global of the same name", async () => {
+  const { coerce } = await import('../dist/native/values.js');
+  const request = parseType('{ id: string, text: string }');
+  const env = new TypeEnv({ Request: request, Item: parseType('{ request: Request }') });
+  assert.deepEqual(env.resolve(parseType('Request')), request);
+  assert.deepEqual(coerce({ id: 'R1', text: 'hi' }, parseType('Request'), env), { id: 'R1', text: 'hi' });
+  assert.ok(fitsType(parseType('{ id: string, text: string }'), parseType('Request'), env));
+  assert.deepEqual(coerce({ request: { id: 'R1', text: 'hi' } }, parseType('Item'), env), { request: { id: 'R1', text: 'hi' } });
+  // Without a declaration the name still means the platform's Request; with type arguments it is never an alias.
+  assert.equal(new TypeEnv().resolve(parseType('Request')).kind, 'host');
+  assert.equal(new TypeEnv({ Map: request }).resolve(parseType('Map<string, number>')).kind, 'host');
+  assert.throws(() => new TypeEnv({ Request: parseType('Request') }).resolve(parseType('Request')), /only in terms of itself/);
+});
