@@ -18,8 +18,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts/neuralese_data'))
 from register_corpora import link as data_link, register  # noqa: E402
 RECORDS_ID = 'harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1'
-TWINS = {'lfm25': ('harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-bulk-20261011-v1', 'last_turn_only', 'LFM'),
-         'mellum21': ('harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-bulk-20261011-v1', 'keep', 'Mellum')}
+# Whole-trajectory twins (coordinator 2026-10-11): one document per trajectory chain, not one per decision.
+TWINS = {'lfm25': ('harness-bench-swe-rebench-openhands-pi-wholetraj-lfm25-350m-bulk-20261011-v1', 'last_turn_only', 'LFM'),
+         'mellum21': ('harness-bench-swe-rebench-openhands-pi-wholetraj-mellum21-12b-bulk-20261011-v1', 'keep', 'Mellum')}
 ADMISSION_REASON = ("owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, "
                     "protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason "
                     "to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)")
@@ -90,19 +91,25 @@ def main() -> int:
         rel_t = link(twin_id, args.twin_root / name)
         entries.append({
             'id': twin_id, 'owner': 'dgx', 'path': rel_t,
-            'include': ['text.jsonl', 'receipt.json', 'shards/*/receipt.json', 'shards/*/provenance.jsonl', 'shards/*/omissions.jsonl'],
+            'include': ['text.jsonl', 'receipt.json', 'shards/*/receipt.json', 'shards/*/omissions.jsonl',
+                        'shards/*/render-omissions.jsonl'],
             'split': 'inherited from the source records (by repository; source groups repository and instance)',
-            'source_class': 'derived-native-chat-gold-text-twin-of-harness-bench-records',
-            'admission': f'admitted-harness_bench-cohort-text-stages, as the v4 twin ({line} line text stages beside the native text); test documents are a reported stratum, never qualification evidence',
+            'source_class': 'rendered-whole-trajectory-text-of-harness-bench-records',
+            'admission': f'admitted-harness_bench-cohort-text-stages ({line} line); whole-trajectory documents: every assistant turn of a trajectory supervised, tool output at the shared feedback weight; test documents are a reported stratum, never qualification evidence',
             'training_admission': True, 'training_admission_reason': ADMISSION_REASON,
             'corpus_publication_for_training': False, 'derived_from': [RECORDS_ID],
             'license': "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
-            'build': {'script': 'scripts/neuralese_data/swe_bulk_twins.py (scripts/build_neuralese_text_packet.py per shard, concatenated)',
-                      'code_commit': commit, 'renderer': 'natlang_neuralese.data.text_corpus.gold_text_rows',
+            'build': {'script': 'scripts/neuralese_data/swe_bulk_twins.py (render_native_turn_corpus.py --renderings '
+                                'whole-trajectory --program-header-as-full per shard, concatenated)',
+                      'code_commit': commit, 'renderer': 'scripts/neuralese_data/render_native_turn_corpus.py whole-trajectory',
                       'renderer_code': receipt['renderer_code'], 'tokenizer': receipt['tokenizer'],
                       'history_reasoning_policy': policy, 'text_jsonl_sha256': receipt['text_jsonl_sha256']},
             'tokens': receipt['tokens'],
-            'notes': f"Text twin of {RECORDS_ID}, same renderer and history-reasoning policy as the v4 twin; per-shard receipts under shards/.",
+            'notes': (f"Whole-trajectory text of {RECORDS_ID} (the system prompt is the pi harness's own, kept whole with its "
+                      "tool schemas). Chosen over v4's one document per decision, which repeats each trajectory's context "
+                      "per target: on 120 v4 trajectories (940 decisions) all 940 decisions are covered, and Mellum train "
+                      "text is 4.06M tokens with 817k supervised assistant tokens against 17.1M / 145k per decision. "
+                      "Per-shard receipts under shards/."),
         })
     added = register(entries, f'Register bulk SWE-rebench harness-bench records and text twins (D13): '
                               f'{total["trajectories"]} trajectories, {total["records"]} records')
