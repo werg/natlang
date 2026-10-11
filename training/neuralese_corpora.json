@@ -31850,6 +31850,58 @@
       "admission": "availability-diagnostic-only-no-labels-accepted-no-training-admission",
       "independent_new_worlds": 0,
       "notes": "Root-authorized Ling 3.1 four-row screen stopped at the first HTTP 429: 1 request, 0 valid labels, 3 rows unrequested, no continuation and no NVIDIA fallback. Completion SHA 2b135cbbcbbf096d432ae304c44d1e388877e676ceaa829f2a98dfb18bfdf248; output SHA 45d0f474fff8af2292bd5bbf9beffbf1b054737146a5cb011826e87ba2a30c7c; source cases SHA 775c1de34540c61d9a040762377cb4fc42625f617a3f6f0337c6419b8ba0f302. The response had no Retry-After or quota IDs, so reset timing remains unknown."
+    },
+    {
+      "id": "v73-native-candidate-v4-context-span-text-derivative-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-candidate-v4-context-spans-v1",
+      "include": [
+        "FILES.sha256.json",
+        "README.md",
+        "receipt.json",
+        "renderer-omissions.jsonl",
+        "row-membership.jsonl",
+        "text-rows.jsonl"
+      ],
+      "split": "inherited-train-held-text-preview",
+      "source_class": "held-native-candidate-rendered-text-with-reviewed-context-only-spans",
+      "training_admission": false,
+      "admission": "held-rendered-text-derivative-only-no-training-admission; native-trajectory-trace-recurrence-and-qualification-remain-unapproved",
+      "independent_new_worlds": 0,
+      "notes": "846 exact native-candidate V3 turns, current shared serving renderer, pinned tokenizer, 0 omissions. 82 rows carry 145 exact reviewed context-only spans (25,517 token positions); 764 rows have no spans and remain normally supervised in this preview. All source IDs/groups/splits and raw native candidate line bindings are recorded per row. Current 79-item source-quality policy has zero ID/group overlap. This exact subset derives from the 909-row V73 ancestor closure; it is not an independent closure receipt or admission. Prior 82-line hash mismatch remains disclosed; corrected literal-row bindings are used."
+    },
+    {
+      "id": "luna-choice-confidence-v85-v41-prefix-runtimev17-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v85-v41-prefix-runtimev17-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "source-review/**/*",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-reviewed-generation-inputs",
+      "source_class": "held-luna-provider-generation-inputs",
+      "training_admission": false,
+      "admission": "root-reviewed-inputs-only-no-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root-approved V85 successor prepared from the immutable disjoint V41 prefix remainder static source: 11 programs/82 items, runtime V17; five per-lane predecessor bindings. Root approval and launch records are registered separately. This entry contains the reviewed plan, snapshotted source policy/preparer and exact five queues; mutable status, logs, journals, results and worker outputs are excluded."
+    },
+    {
+      "id": "luna-choice-confidence-v85-root-approval-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v85-v41-prefix-runtimev17-v1",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-independent-review-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "split": "held-generation-approval-and-launch-evidence",
+      "source_class": "held-campaign-approval-review-and-supervisor-receipt",
+      "training_admission": false,
+      "admission": "root-approval-and-launch-lineage-only-no-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root approved plan SHA f9b47bb46ab5277ab121360d2930502db9e673038400bbff82adc037f35285b0; independent review SHA dd48638cbb445154da0ae28dc150add6e7b62cabeecdeee07d46e7a4c8d8cc40; supervisor launch receipt SHA cc4761e43c5cc3389ebd5bd82a449ed42fe55b08c04fc4937c08d5f3c0a19cd1. Five-worker generation results remain outside this immutable launch-evidence snapshot."
     }
   ],
   "coverage_backlog": [

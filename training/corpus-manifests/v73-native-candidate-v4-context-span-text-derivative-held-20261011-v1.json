@@ -1,0 +1,42 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v73-native-candidate-v4-context-span-text-derivative-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-candidate-v4-context-spans-v1",
+  "files": [
+    {
+      "path": "FILES.sha256.json",
+      "bytes": 911,
+      "sha256": "e35378839338c374142abd1575665176c1ee313785bd9ebccb65441015a2f84c"
+    },
+    {
+      "path": "README.md",
+      "bytes": 963,
+      "sha256": "1890eb44c0e8b4b2496853f888fc8d8a82b4abdf1410752299f19a6ce1ba9e3a"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 6037,
+      "sha256": "19308d172e87590b8f136e2e051ff5256fcbf9394f1698b6da3cb8fcdc58c214"
+    },
+    {
+      "path": "renderer-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "row-membership.jsonl",
+      "bytes": 1122979,
+      "sha256": "79cea250eee4a637a088d39e845ea8545dd527cae03bf73f10f59a49403ca1e7",
+      "lines": 846
+    },
+    {
+      "path": "text-rows.jsonl",
+      "bytes": 72235244,
+      "sha256": "5ae5826d405609f0be2c40899b1d1a1d3aaec73d2e1b145fdcbd728f92519971",
+      "lines": 846
+    }
+  ],
+  "bytes": 73366134
+}
