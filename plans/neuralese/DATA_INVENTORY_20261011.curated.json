@@ -348,7 +348,7 @@
    "docs": 3207,
    "supervised_tokens_est": 582000,
    "consumable_now": false,
-   "decision": "ADMIT (held-recovery 2026-10-11): 3207 train rows (2035 test excluded); 415 train decisions are absent from the 4962 union text and are new",
+   "decision": "ADMIT (held-recovery 2026-10-11): 3207 train rows (2035 test excluded); V16 target-specific loss-span audit found all 415 reviewed targets already supervised in 198 existing 4962 union train docs (231 exact eval-code + 184 semantic return_result; zero mapping failures); incremental targets/documents/tokens for these 415 audited targets = 0; other source-row target coverage is not established by this audit; see plans/neuralese/LUNA_V16_415_UNION_SUPERVISION_AUDIT_20261011.json",
    "required_conversion": "whole-trajectory render or native_gold_packet",
    "owner_of_conversion": "dgx-render"
   },
@@ -683,7 +683,12 @@
     "operator-cases": 1166,
     "specialization": 15
    },
-   "new_to_union_train_decisions": 415
+   "new_train_source_ids_missing_from_union": 0,
+   "target_coverage_audit_scope": "415 alias-only V16 rows with exact tokenizer-decoded loss-span proof; no target-level claim for remaining source rows",
+   "existing_union_loss_span_covered_train_decisions": 415,
+   "existing_union_train_documents_covering_those_targets": 198,
+   "incremental_union_tokens": 0,
+   "coverage_audit": "plans/neuralese/LUNA_V16_415_UNION_SUPERVISION_AUDIT_20261011.json"
   },
   "excluded": {
    "test_or_heldout_splits": "luna 2035 test, judge 307 heldout, operator 834 test, harness 874 test",

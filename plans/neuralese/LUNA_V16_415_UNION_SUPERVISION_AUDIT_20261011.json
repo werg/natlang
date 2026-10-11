@@ -1,0 +1,271 @@
+{
+  "schema": "natlang.native-union-supervision-audit/1",
+  "created_utc": "2026-10-11T21:17:00Z",
+  "scope": "V16 native targets versus the already admitted 4962-document LFM union",
+  "sources": {
+    "native_records": {
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1/proposed-cumulative-native-records.jsonl",
+      "sha256": "bbfb87f3e626a56c1f16794aa138f8d8a15c18ae66f95d3bf2d59574b94417ed"
+    },
+    "native_pieces": {
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1/native-pieces.jsonl",
+      "sha256": "af1a32765c1bbeda9f8208952402d4f230080c2d42934fe9748dfb8f3d8e2a92",
+      "unique_pieces": 150
+    },
+    "union_text": {
+      "path": "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl",
+      "sha256": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576",
+      "manifest": "training/corpus-manifests/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1.json",
+      "manifest_sha256": "6a0b5fa0364a3be88c0bba32e1c38679d0933cc4b2f46000737b16c363a93c53"
+    },
+    "tokenizer": {
+      "id": "LFM2.5-350M",
+      "tokenizer_json_sha256": "df1d8d5ec5d091b460562ffd545e4a5e91d17d4a0db7ebe733be34ed374377bd",
+      "fingerprint": "e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008"
+    }
+  },
+  "method": {
+    "mapping": "Match native source record IDs through union document source_record_ids, then map each target call to its rendered target text.",
+    "loss_span": "Decode each union token_ids slice beginning at supervised_suffix_start with the pinned LFM tokenizer; verify the mapped target text occurs in that supervised suffix, not only in context. This exact target-specific result is independent of the normalized cohort routing key below.",
+    "split_rule": "Count only union documents with split=train; any held/test match fails coverage.",
+    "target_classes": "231 eval code targets require exact code text; 184 return_result targets require their semantic result fields in the supervised suffix."
+  },
+  "result": {
+    "native_target_ids_audited": 415,
+    "union_train_documents_covering_targets": 198,
+    "targets_with_supervised_loss_span": 415,
+    "exact_eval_code_targets": 231,
+    "semantic_return_result_targets": 184,
+    "target_mapping_failures": 0,
+    "held_or_test_matches": 0,
+    "incremental_train_targets": 0,
+    "incremental_documents": 0,
+    "incremental_tokens": 0,
+    "decision": "V16 native source admission remains valid. It adds no target coverage or tokens beyond the already admitted 4962 union."
+  },
+  "consumption_bindings": {
+    "shared_recipe_lfm": {
+      "path": "training/neuralese/recipes/neuralese-direct-v2.json",
+      "sha256": "d42770974d69016eb227d328dbc955134ddec98e1aa09fcd89183d72466081e9",
+      "full_prompt_union": {
+        "path": "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl",
+        "sha256": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+      },
+      "program_header_twin": {
+        "path": "runs/neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v2/text-data.jsonl",
+        "sha256": "82f2ac1df8999f7ebf65dd882e7710db7ed1d1ef762cf78599fbbae52bc0e00d"
+      }
+    },
+    "shared_recipe_mellum": {
+      "path": "training/neuralese/recipes/neuralese-direct-mellum-v3.json",
+      "sha256": "4f8e55d9eff2fe74a4b0b859d0c0a14460c4777f62d0c1043e2e8d7563efcaab",
+      "full_prompt_twin": {
+        "path": "runs/neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1/text-data.jsonl",
+        "sha256": "7fe4e0557a546c2127adf617439d4a0db5b8435a1a68db2cdfa37ac5d511477d"
+      },
+      "program_header_twin": {
+        "path": "runs/neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v2/text-data.jsonl",
+        "sha256": "85201def7cba281eeda03986e84986522002b370ebe9f6799331cafe9c56d5c5"
+      }
+    },
+    "actual_pop_direct_sft_v8": {
+      "plan_path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-run/direct-stage-plan.json",
+      "plan_sha256": "8634fc0976010f2bf3812a8ab602c5020938bb7df894c009a6680ee8766f1943",
+      "recipe_path": "training/neuralese/recipes/luna-neuralese-direct-lfm-base-20261011-v8.json",
+      "recipe_sha256": "6cede93b8d68dc3aa6717b38fb6f598f90c6d0d3618b8e9f4be86bf480728abe",
+      "recipe_id": "luna-neuralese-direct-lfm-base-20261011-v8",
+      "training_text_binding": {
+        "path": "/srv/storage/natlang/prepared/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl",
+        "sha256": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+      },
+      "program_header_twin_bound": false,
+      "stage_result_sha256": "7a8a178fccb7c63e96cddfaf81bc8e510ee372ecdd35db1c4bccef69c29eedd5",
+      "completed_updates": 1000,
+      "qualified": true,
+      "training_native_records": {
+        "path": "runs/luna-authored-root-remaining-four-multilambda-20261009-v1/evidence/compact-62-luna-1-step-native-text-proposal-v1/compact-112-expanded-v1/root-independent-targetbound-replay-v1/repair-native103.jsonl",
+        "sha256": "a261046dacb5e53ddda168acfd4a13ab2ea59a52312e933aa6e901149c1889e6"
+      },
+      "training_native_pieces": {
+        "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/native-pieces.jsonl",
+        "sha256": "b3a30bae2767cbeb7fa5dd4ebd7b8bd062f5eb82449c48d13b9de6a6965592f0"
+      },
+      "stage_plan_sha256": "8634fc0976010f2bf3812a8ab602c5020938bb7df894c009a6680ee8766f1943",
+      "interpretation": "The actual 1000-update V8 direct SFT plan binds the full-prompt 4962 union and its separate native records/pieces. It does not bind the program-header twin; that is present in the later shared v2 recipe, not this historical active V8 recipe."
+    },
+    "actual_native_e2e_687": {
+      "recipe_path": "training/neuralese/recipes/luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v2.json",
+      "recipe_sha256": "9f88311f89f2eb6548aa86e2338027bac929296095f5230af9bf1feffe03c298",
+      "stage_plan_sha256": "4c574e05fcbb5f08e137390f7b3c479ab42bde4d20decc459342241c574f192a",
+      "stage_result_sha256": "cdac1226115b087e6c9aa062b55ca21eed0c1d94d3fbeae14919987c7a674b11",
+      "input_records": {
+        "path": "runs/neuralese-native-e2e-binding-candidate-20261011-v1/full-authenticated-1243-cohort-v1.jsonl",
+        "sha256": "35a52f34de92f226bb68e34c2a28cd11dc51afcc56ccb685b7852b62b8cb549a"
+      },
+      "direct_artifact_manifest_sha256": "f3ff523b6b0d8b0e5bfd3a949a87feb4e91a1ca08c268e1cf0c57b9b106e230c",
+      "best_checkpoint_sha256": "d63f27734990da449332eb403ac5a174ef98a15906182ba9dc9888e7ffa76971",
+      "context_review": {
+        "sha256": "0cb0c87a84a855e113b15ec8208b0436c108ad7616f550b84060dd2be8d1ccf3",
+        "prepared_records": 1243,
+        "train": 687,
+        "test": 556
+      },
+      "held_best_evaluation": {
+        "sha256": "d70b80f386c8d3251fa01861b47c3d5497413996bb5e8c374ccdcfff128deecd",
+        "held_pool_rows": 556,
+        "selected_rows": 32
+      },
+      "program_header_twin_bound": false,
+      "interpretation": "The endpoint stage consumes the 687/556 native split and recurrence pieces, inheriting its direct artifact from V8. It does not consume either 4962 text twin as a stage input; V8 itself binds the full-prompt 4962 union only."
+    }
+  },
+  "other_teacher_cohort_action_delta_audit": {
+    "method": {
+      "source_mapping": "For each admitted train source row, locate its exact ID either as the union document ID or in union source_record_ids; verify source split equals union document split. This proves lineage/split correspondence only; the normalized routing key does not prove target equivalence or supervision coverage. This exact-ID mapping can coexist with different rendered model-facing targets; the renderer_comparison section measures literal full-document and supervised-suffix token equality separately.",
+      "scope": "Cumulative source cohorts V9, V10, V11, V12, V13, V14, V15 and V16; delta counts compare adjacent source snapshots.",
+      "routing_key": "SHA-256 of full current union rendered text after Unicode NFKC normalization and whitespace collapse. This is only a triage/routing heuristic; it is not exact-render equality or proof of duplicate semantics, because normalization can collapse meaningful whitespace, string literals, or Unicode distinctions."
+    },
+    "source_files": [
+      {
+        "cohort": "v9",
+        "path": "runs/neuralese-reviewed-restart-cohort-20261007-v9/native-records.jsonl",
+        "sha256": "445cba8893fbafd22279d55f500f1629c4fda5cf9888e928c91ce0978bd8ed76"
+      },
+      {
+        "cohort": "v10",
+        "path": "runs/neuralese-reviewed-restart-cohort-20261007-v10/native-records.jsonl",
+        "sha256": "9427ea272dfb594404b655e5b1d0a821027b1e657450bebe2c26472acacda6be"
+      },
+      {
+        "cohort": "v11",
+        "path": "runs/neuralese-reviewed-restart-cohort-20261007-v11/native-records.jsonl",
+        "sha256": "08d5447bc6ad398ff548dc5114680a60633d82e3630db22315ef9e4cef58c200"
+      },
+      {
+        "cohort": "v12",
+        "path": "runs/neuralese-reviewed-restart-cohort-20261007-v12-candidate-v2/native-records.jsonl",
+        "sha256": "5703e2ebc711b28697f6561761af3f8000f720adbd9cc034e6457cf71b567d66"
+      },
+      {
+        "cohort": "v13",
+        "path": "runs/neuralese-reviewed-restart-cohort-20261007-v13-final/proposed-cumulative-native-records.jsonl",
+        "sha256": "25050d2990cab96b8f96cb720af7fe20d054df7cca4720afed1831703e142689"
+      },
+      {
+        "cohort": "v14",
+        "path": "runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v2/proposed-cumulative-native-records.jsonl",
+        "sha256": "4806a2dd33778f2d18be09db6199ad4ffe9f6e79946131aaa6f35bc35c5c54e8"
+      },
+      {
+        "cohort": "v15",
+        "path": "runs/neuralese-reviewed-restart-cohort-20261007-v15-candidate-v3/proposed-cumulative-native-records.jsonl",
+        "sha256": "31724e2b57eb72da923d251b356a210e3b0da727688d8f43a203514174df7599"
+      },
+      {
+        "cohort": "v16",
+        "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1/proposed-cumulative-native-records.jsonl",
+        "sha256": "bbfb87f3e626a56c1f16794aa138f8d8a15c18ae66f95d3bf2d59574b94417ed"
+      }
+    ],
+    "cumulative": {
+      "v9": {
+        "rows": 4805,
+        "admitted_train_rows": 2988,
+        "union_source_mapping_misses": 0,
+        "split_mismatches": 0,
+        "unique_normalized_routing_keys": 2573,
+        "source_rows_sharing_normalized_routing_key": 415,
+        "incremental_union_routing_keys": 0
+      },
+      "v10": {
+        "rows": 4919,
+        "admitted_train_rows": 3051,
+        "delta_rows": 114,
+        "delta_train_rows": 63,
+        "union_source_mapping_misses": 0,
+        "split_mismatches": 0,
+        "incremental_union_routing_keys": 0,
+        "delta_unique_normalized_routing_keys": 63
+      },
+      "v11": {
+        "rows": 4943,
+        "admitted_train_rows": 3062,
+        "delta_rows": 24,
+        "delta_train_rows": 11,
+        "union_source_mapping_misses": 0,
+        "split_mismatches": 0,
+        "incremental_union_routing_keys": 0,
+        "delta_unique_normalized_routing_keys": 11
+      },
+      "v12": {
+        "rows": 4955,
+        "admitted_train_rows": 3074,
+        "delta_rows": 12,
+        "delta_train_rows": 12,
+        "union_source_mapping_misses": 0,
+        "split_mismatches": 0,
+        "incremental_union_routing_keys": 0,
+        "delta_unique_normalized_routing_keys": 12
+      },
+      "v13": {
+        "rows": 5016,
+        "admitted_train_rows": 3101,
+        "delta_rows": 61,
+        "delta_train_rows": 27,
+        "union_source_mapping_misses": 0,
+        "split_mismatches": 0,
+        "incremental_union_routing_keys": 0,
+        "delta_unique_normalized_routing_keys": 27
+      },
+      "v14": {
+        "rows": 5112,
+        "admitted_train_rows": 3142,
+        "delta_rows": 96,
+        "delta_train_rows": 41,
+        "union_source_mapping_misses": 0,
+        "split_mismatches": 0,
+        "incremental_union_routing_keys": 0,
+        "delta_unique_normalized_routing_keys": 41
+      },
+      "v15": {
+        "rows": 5173,
+        "admitted_train_rows": 3167,
+        "delta_rows": 61,
+        "delta_train_rows": 25,
+        "union_source_mapping_misses": 0,
+        "split_mismatches": 0,
+        "incremental_union_routing_keys": 0,
+        "delta_unique_normalized_routing_keys": 25
+      },
+      "v16": {
+        "rows": 5184,
+        "admitted_train_rows": 3178,
+        "delta_rows": 11,
+        "delta_train_rows": 11,
+        "union_source_mapping_misses": 0,
+        "split_mismatches": 0,
+        "unique_normalized_routing_keys": 2763,
+        "source_rows_sharing_normalized_routing_key": 415,
+        "incremental_union_routing_keys": 0,
+        "delta_unique_normalized_routing_keys": 11
+      }
+    },
+    "decision": "Exact source-ID and split mappings establish that admitted V9-V16 train rows are represented in the existing union. The normalized text key is triage only and cannot establish exact target equality, duplicate semantics, or incremental supervision coverage. The 415 alias-only V16 IDs separately pass the exact tokenizer-decoded loss-span audit above."
+  },
+  "renderer_comparison": {
+    "source_record_sha256": "bbfb87f3e626a56c1f16794aa138f8d8a15c18ae66f95d3bf2d59574b94417ed",
+    "renderer_path": "scripts/neuralese_data/render_native_turn_corpus.py",
+    "renderer_sha256": "b22c802e0c83b684a3907633510f9e0963b0d731e246fd50641baec2c3734428",
+    "render_mode": "full/lfm25, train-only, pinned CPU container, registered native-pieces sidecar",
+    "rendered_text_path": "/home/werg/natlang/.local/luna-v16-exact-audit-render-shared/full/lfm25/text-data.jsonl",
+    "rendered_text_sha256": "a0664861e76b3b752b5ad96c6873f6c95fcf66524f34fa93d0981c631d919d83",
+    "rendered_documents": 2758,
+    "union_document_count": 4962,
+    "rendered_documents_with_exact_source_id_mapping_to_union": 2758,
+    "rendered_documents_without_source_id_mapping": 0,
+    "documents_with_literal_text_and_token_id_equality_to_mapped_union_document": 117,
+    "documents_with_different_supervised_suffix_token_ids_than_mapped_union_document": 2641,
+    "render_omissions_unresolved_or_malformed_digest_piece_records": 16,
+    "interpretation": "Source-ID mapping is not target-coverage proof. Exact full document and supervised-suffix token equality is established for 117 rendered docs only; 2,641 rendered docs have differing supervised suffix token IDs, so this audit does not establish their target equivalence or incremental contribution. The separate 415-target audit above checks those 415 alias-only targets directly and passes them all. The renderer audit is diagnostic, not a new corpus admission."
+  }
+}
