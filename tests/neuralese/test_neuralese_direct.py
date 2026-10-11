@@ -204,3 +204,43 @@ def test_a_direct_lineage_loads_without_warm_up_stages_and_old_lineages_keep_the
     (tmp_path / 'old.json').write_text(json.dumps(old))
     with pytest.raises(ValueError):
         load_recipe(tmp_path / 'old.json')
+
+
+def test_raw_token_mellum_anchor_opens_on_the_direct_serving_path(tmp_path, monkeypatch):
+    """direct-mellum-v2's clean anchor: maple.foundation_heads --profile raw-token-v1 at the full stack, which
+    serve.load_engine restores without read markers (the direct writer's precondition)."""
+    test_mellum_port = pytest.importorskip('test_mellum_port')
+    from natlang_neuralese.maple import foundation_heads, student
+    from natlang_neuralese.maple.model import load_maple
+    from natlang_neuralese.serve import load_engine
+    model_dir = tmp_path / 'model'
+    model_dir.mkdir()
+    test_mellum_port.tiny_mellum(model_dir)
+
+    class Vocab:  # the tiny model has no tokenizer files: Mellum's spare added tokens are the markers
+        def get_vocab(self):
+            return {'<|extra_token_7|>': 33, '<|extra_token_8|>': 34}
+
+        eos_token_id = 2
+
+        def convert_tokens_to_ids(self, token):
+            return self.get_vocab().get(token)
+
+    def tiny_student(model, state=None, device='cpu', **_):
+        loaded = load_maple(model, device='cpu', dtype=torch.float32, ternary_attention=False)
+        loaded.config.model_type = 'mellum'
+        return loaded, Vocab()
+    monkeypatch.setattr(foundation_heads, 'load_student', tiny_student)
+    monkeypatch.setattr(student, 'load_student', tiny_student)
+    layers = json.loads((model_dir / 'config.json').read_text())['num_hidden_layers']
+    out = tmp_path / 'heads.pt'
+    foundation_heads.main(['--model', str(model_dir), '--precision', 'bf16', '--profile', 'raw-token-v1',
+                           '--cutoff', str(layers), '--stop-source', 'final', '--out', str(out)])
+    saved = torch.load(out, weights_only=False)
+    assert saved['port_config']['profile'] == 'raw-token-v1' and saved['port_config']['cutoff'] == layers
+    engine = load_engine(heads_checkpoint=str(out), device='cpu')
+    assert not engine.heads.read_markers and engine.heads.profile == 'raw-token-v1'
+    assert engine.heads.cutoff == engine.backbone.num_layers
+    with pytest.raises(SystemExit):  # the legacy profile keeps its inside-the-stack cutoff
+        foundation_heads.main(['--model', str(model_dir), '--precision', 'bf16', '--cutoff', str(layers),
+                               '--out', str(tmp_path / 'legacy.pt')])

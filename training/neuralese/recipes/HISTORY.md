@@ -349,3 +349,17 @@ The Neuralese value requirement moves to the end-to-end stage, measured as consu
 reading tokens, on task success and loss. Direct SFT qualification is now the step-0 identity check, held CE below
 base, no drift stop and the behaviour gate. `value_margin` stays as a report-only threshold for `value_qualified`.
 Pop's LFM recipes that declare it are unaffected.
+
+## neuralese-direct-mellum-v2 (2026-10-11): the forward Mellum direct lineage
+
+The coordinator's decisions under the owner's "keep moving forward" rule. Changes relative to v1:
+- The clean anchor is raw-token-v1 heads at the full stack, with final stop source and no stop position. They are
+  built by `maple.foundation_heads --profile raw-token-v1`, and the direct serving path (DirectWriter, Pop's Maple
+  export adapter) opens them. v1's legacy-rms-v1 anchor cannot be served directly.
+- Attention latents train, through the a8972488 fix.
+- `drift_every` is 100.
+- Behaviour gate `held_kl_bound: response`: `max_held_kl` 0.25 bounds the response-position KL, as the guard does.
+  Prompt KL stays report-only. The gate field is new; it defaults to combined for older lineages.
+- 2000 steps. Eval at the end only, full state at 1000 and 2000.
+
+run-v1 stays as evidence only: attention untrained, legacy anchor.

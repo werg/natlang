@@ -24,6 +24,9 @@ def main(argv=None):
     parser.add_argument('--cutoff', type=int, required=True)
     parser.add_argument('--max-length', type=int, default=64)
     parser.add_argument('--stop-source', default='final')
+    parser.add_argument('--profile', choices=['legacy-rms-v1', 'raw-token-v1'], default='legacy-rms-v1',
+                        help='raw-token-v1: the clean raw-token anchor the direct serving path opens (no read markers; '
+                             'cutoff may be the full stack)')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--device', default='cpu')
@@ -49,9 +52,11 @@ def main(argv=None):
     model, tokenizer = load_student(args.model, state, device=args.device, precision=args.precision, init=init)
     torch.manual_seed(args.seed)
     backbone = MaplePortBackbone(model, family_controls(model, tokenizer))
-    if not 0 < args.cutoff < backbone.num_layers:
+    full = args.profile == 'raw-token-v1'
+    if not 0 < args.cutoff < backbone.num_layers + full:
         parser.error(f'cutoff must lie inside the {backbone.num_layers}-layer stack')
-    heads = PortHeads(backbone, cutoff=args.cutoff, max_length=args.max_length, stop_source=args.stop_source)
+    heads = PortHeads(backbone, cutoff=args.cutoff, max_length=args.max_length, stop_source=args.stop_source,
+                      **({'stop_position': False, 'profile': args.profile} if full else {}))
     checkpoint = {
         'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
         'heads': heads.state_dict(),

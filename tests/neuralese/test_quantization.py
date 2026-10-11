@@ -548,6 +548,11 @@ def test_behaviour_gate_compares_with_the_declared_bf16_reference(tmp_path):
     assert not gate.passed({'gate_pass': 0.6, 'held_kl': 0.2})
     assert not gate.passed({'gate_pass': 0.9, 'held_kl': 0.3})
     assert gate.passed({'gate_pass': 0.5, 'held_kl': 0.0}, {'gate_pass': 0.55})  # a live BF16 report instead
+    # held_kl_bound "response" (direct lineages): the KL bound reads the response positions only.
+    response = q.Behaviour({**config, 'held_kl_bound': 'response'}, SimpleNamespace(convert_tokens_to_ids=lambda t: 7))
+    assert response.passed({'gate_pass': 0.75, 'held_kl': 0.68, 'held_response_kl': 0.246})
+    assert not response.passed({'gate_pass': 0.75, 'held_kl': 0.1, 'held_response_kl': 0.3})
+    assert not gate.passed({'gate_pass': 0.75, 'held_kl': 0.68, 'held_response_kl': 0.246})
     probes.write_text('{}\n')
     with pytest.raises(ValueError, match='probes changed'):
         q.Behaviour(config, SimpleNamespace(convert_tokens_to_ids=lambda token: 7))
