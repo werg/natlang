@@ -31698,6 +31698,68 @@
       "admission": "authorization-and-launch-lineage-only-no-output-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Binds root approved-plan SHA 17ab266bfae201d7f4558d7e9e2b8cd0869ff4df4c2ae3c26b13f19c9899cf4c, independent review SHA 1d99a4a1e232e222e7c6cbf69e03850f1820ffae30bff42f386767497154d278 and sealed five-worker supervisor receipt SHA 39224f976770fb4486a5b671d1652522ca3eb040671b23baebd9c387f3cb0714. No model-output data included."
+    },
+    {
+      "id": "google-choice-confidence-v41-prefix-static-v7-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v7-current-criteria",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-static-reference-and-source-label-derivative",
+      "source_class": "held-provider-label-prefix-and-authored-static-reference",
+      "training_admission": false,
+      "admission": "strict-source-label-static-reference-only-no-provider-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Fresh 749-row append-only V41 prefix snapshot with exact V41 source cases/provider manifest, prior-selection exclusions V77–V82, 38 accepted source labels over six programs, all six authored reference replays passed. All label disagreements and rejection records remain preserved. This is held source/static-reference evidence, not teacher trajectories or training admission."
+    },
+    {
+      "id": "luna-choice-confidence-v83-v41-prefix-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v83-v41-prefix-runtimev17-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "source-review/**/*",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-reviewed-generation-inputs",
+      "source_class": "held-prepared-luna-generation-queues",
+      "training_admission": false,
+      "admission": "root-reviewed-queue-inputs-only-no-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Six program/38 item V83 queues produced from V41 V7 static source; all six reference replays and item bindings were reviewed, exact source master/train/current hold/past ID+group/predecessor checks passed. Runtime v17. Queue JSONLs are immutable; mutable journals/results are excluded."
+    },
+    {
+      "id": "luna-choice-confidence-v83-root-approval-and-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v83-v41-prefix-runtimev17-v1",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-independent-review-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "split": "held-generation-approval-and-launch-evidence",
+      "source_class": "held-campaign-approval-review-and-supervisor-receipt",
+      "training_admission": false,
+      "admission": "authorization-and-launch-lineage-only-no-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root-approved V83 plan SHA 092b43be6574762fb36aaa138c3eac7f99b87b373b7fc703ac90cffb467a2c4e; independent review SHA 4b4ef7acddd6c33f42db05f477340c8a36a365b4942b18c0c26f7805e9dc3807; sealed supervisor receipt SHA b23b59c6cfa649480b5f874ab79c4cb54a9f1867d313045c77f10aa4fa6a81ea. Excludes mutable launch status, journals and output."
+    },
+    {
+      "id": "luna-direct-v3-drift-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-v3-drift-review-20261011-v1",
+      "include": [
+        "audit.json",
+        "audit.md"
+      ],
+      "split": "held-training-drift-analysis-diagnostic",
+      "source_class": "direct-v3-step20-gate-and-drift-review",
+      "training_admission": false,
+      "admission": "additive-diagnostic-analysis-only-no-qualification-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Additive review of the guard-stopped V3 direct stage and drift metrics; bound to its exact evidence. Does not supersede or grant qualification; V3 remains unqualified."
     }
   ],
   "coverage_backlog": [

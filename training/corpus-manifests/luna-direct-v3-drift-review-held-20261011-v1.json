@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-direct-v3-drift-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-v3-drift-review-20261011-v1",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 46929,
+      "sha256": "05712c61c65f8353713506050707751c7c111705b284360aac8060e41143c619"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 3455,
+      "sha256": "868007b1b9ead66fea70f73d3c4b5868e169986ac35f94581e2df7e84e299047"
+    }
+  ],
+  "bytes": 50384
+}
