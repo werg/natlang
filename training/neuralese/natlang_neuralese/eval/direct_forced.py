@@ -66,6 +66,9 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda', float32_refer
                                           add_special_tokens=False)
     text_ids = engine.tokenizer.encode('Summarize the evidence, choose the appropriate action, and report the result. ',
                                        add_special_tokens=False)
+    consumer_text = 'It is ready.'
+    consumer_targets = torch.tensor([engine.tokenizer.encode(consumer_text, add_special_tokens=False)],
+                                   device=device)
 
     def run(length, bulk):
         context = backbone.embed(torch.tensor([context_ids], device=device)).detach().requires_grad_(True)
@@ -83,7 +86,19 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda', float32_refer
                 pass
         payload = writer.complete()[0]
         adjoint = torch.linspace(-1, 1, payload.numel(), device=device).reshape_as(payload)
-        loss = (payload.float() * adjoint).mean() + 0.01 * torch.stack(writer.stop_tensors).mean()
+        linear_loss = (payload.float() * adjoint).mean() + 0.01 * torch.stack(writer.stop_tensors).mean()
+        # A downstream ordinary-token decision exercises the nonlinear consumer,
+        # rather than qualifying producer deltas against a linear adjoint alone.
+        consumer = torch.cat([payload, backbone.embed(consumer_targets[:, :-1]).detach()], 1)
+        consumer_final = backbone.forward_embeds(consumer, logits=False)['h_final']
+        from ..model.neuralese_projection import token_choice_logits
+        consumer_segments = torch.zeros(consumer_final.shape[:2], device=device, dtype=torch.long)
+        consumer_logits = token_choice_logits(backbone, consumer_final, tcp, consumer_segments)
+        consumer_logits = consumer_logits[:, -consumer_targets.shape[1]:].float()
+        consumer_ce = torch.nn.functional.cross_entropy(
+            consumer_logits.reshape(-1, consumer_logits.shape[-1]),
+            consumer_targets.expand(payload.shape[0], -1).reshape(-1))
+        loss = linear_loss + consumer_ce
         gradients = torch.autograd.grad(loss, [context] + [p for _, p in parameters], allow_unused=True)
         if device.startswith('cuda'):
             torch.cuda.synchronize()
@@ -97,6 +112,8 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda', float32_refer
                 'stops': torch.stack(writer.stop_tensors, 1).detach().cpu(), 'cache': cache,
                 'cache_lengths': writer.cache.lengths, 'count': writer.count, 'done': writer.done,
                 'loss': float(loss.detach()), 'seconds': elapsed,
+                'linear_loss': float(linear_loss.detach()), 'consumer_ce': float(consumer_ce.detach()),
+                'consumer_logits': consumer_logits.detach().cpu(),
                 'peak_gib': torch.cuda.max_memory_allocated() / 1024**3 if device.startswith('cuda') else None,
                 'gradients': {name: None if g is None else g.detach().cpu()
                               for name, g in zip(['context'] + [n for n, _ in parameters], gradients)}}
@@ -105,7 +122,7 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda', float32_refer
     for length in lengths:
         incremental, sequence = run(length, False), run(length, True)
         tensor_comparisons = {name: _compare(incremental[name], sequence[name])
-                              for name in ('payload', 'states', 'stops')}
+                              for name in ('payload', 'states', 'stops', 'consumer_logits')}
         cache_comparisons = {name: _compare(value, sequence['cache'][name])
                              for name, value in incremental['cache'].items()}
         gradient_comparisons = {name: _compare(value, sequence['gradients'][name])
@@ -114,6 +131,9 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda', float32_refer
                'sequence_seconds': sequence['seconds'], 'speedup': incremental['seconds'] / sequence['seconds'],
                'incremental_peak_gib': incremental['peak_gib'], 'sequence_peak_gib': sequence['peak_gib'],
                'loss_abs_delta': abs(incremental['loss'] - sequence['loss']),
+               'consumer_ce': {name: result['consumer_ce'] for name, result in
+                               [('incremental', incremental), ('sequence', sequence)]},
+               'consumer_ce_abs_delta': abs(incremental['consumer_ce'] - sequence['consumer_ce']),
                'cache_lengths_equal': incremental['cache_lengths'] == sequence['cache_lengths'],
                'count_and_stop_equal': (incremental['count'], incremental['done']) ==
                                        (sequence['count'], sequence['done']),
@@ -130,8 +150,10 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda', float32_refer
               'float32_matmul_precision': torch.get_float32_matmul_precision(),
               'cuda_matmul_allow_tf32': torch.backends.cuda.matmul.allow_tf32,
               'cudnn_allow_tf32': torch.backends.cudnn.allow_tf32,
+              'gradient_objective': 'linear payload/stop diagnostic plus downstream consumer token cross entropy',
+              'consumer_target_text': consumer_text,
               'rows': rows, 'task_qualified': False, 'autonomous_stopping_qualified': False,
-              'scope': 'Known-token sequence versus incremental shared writer; explicit output/cache/all exercised parameter and prefix adjoint deltas. No weight updates or automatic tolerance relaxation.'}
+              'scope': 'Known-token sequence versus incremental shared writer; output/cache/consumer-logit and combined parameter/prefix adjoint deltas. Synthetic consumer fixture is mechanism evidence, not task success. No weight updates or automatic tolerance relaxation.'}
     (out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     return report
 
