@@ -1,0 +1,67 @@
+{
+  "schema": "natlang.decision-source-quality-holds/1",
+  "training_admission": false,
+  "decision": "Additive prospective source holds; originals and existing sealed artifacts unchanged.",
+  "excluded_items": [
+    {
+      "item_id": "dc-196729bea97c0fa87036",
+      "original_source_group": "g-7dd8f82475d8ce3282c3618f",
+      "split": "train",
+      "reason": "Rebelliousness and nail varnish do not uniquely support any listed emotion; forcing anger is unsupported.",
+      "evidence": {
+        "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v29-candidate-evidence-v1/candidate-evidence.json",
+        "sha256": "be00d57ff66ec942a342b3d314971cb1f74c404926a9126e4191561a53b2b01d",
+        "source_row_sha256": "6faac8b8439633b8cf26323f3bb3732627dce368571c65ef28d1ec5e1e61d16e"
+      },
+      "decision_receipt_sha256": "f2cf9dc969a89d5fec133280151652e31de7bdb4973ef1ef117de01855eeb799"
+    },
+    {
+      "item_id": "dc-fe70e503ce93bc3b70a1",
+      "original_source_group": "g-dd07d18f554278226d119f39",
+      "split": "train",
+      "reason": "Mixed reviews include criticism and do not refute the existence of negative fan reviews; audience identity is not resolved in the evidence.",
+      "evidence": {
+        "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v29-candidate-evidence-v1/candidate-evidence.json",
+        "sha256": "be00d57ff66ec942a342b3d314971cb1f74c404926a9126e4191561a53b2b01d",
+        "source_row_sha256": "58c3d23f3fa129285d631e217ad35c982b0d43a73ecc9a438e8b4db8f9937d44"
+      },
+      "decision_receipt_sha256": "f2cf9dc969a89d5fec133280151652e31de7bdb4973ef1ef117de01855eeb799"
+    },
+    {
+      "item_id": "dc-af58ad427ce5bf6934a2",
+      "original_source_group": "g-597e6757855b79c14c44b4fa",
+      "split": "train",
+      "reason": "An auto-loan application question has no visible sports subject. Supplied Sports target is unsupported; preserve source annotation rather than rewriting it.",
+      "evidence": {
+        "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v29-candidate-evidence-v1/candidate-evidence.json",
+        "sha256": "be00d57ff66ec942a342b3d314971cb1f74c404926a9126e4191561a53b2b01d",
+        "source_row_sha256": "24a8321a3fa6a643ac40eee8d9d4bf88d03c94df76ed93496a907f7966d9e787"
+      },
+      "decision_receipt_sha256": "f2cf9dc969a89d5fec133280151652e31de7bdb4973ef1ef117de01855eeb799"
+    },
+    {
+      "item_id": "dc-004f6e96ddef934b4dc8",
+      "original_source_group": "g-3fb138e9ded63e64b4cd885a",
+      "split": "train",
+      "reason": "Chemistry homework straddles Science & Mathematics and Education & Reference without a declared tie-break, so a unique strict topic target is underspecified.",
+      "evidence": {
+        "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v29-candidate-evidence-v1/candidate-evidence.json",
+        "sha256": "be00d57ff66ec942a342b3d314971cb1f74c404926a9126e4191561a53b2b01d",
+        "source_row_sha256": "4297dfe66d3b6a86425fd83784b6195e834f60cd2824bbb07b1942b2d5ae6b23"
+      },
+      "decision_receipt_sha256": "f2cf9dc969a89d5fec133280151652e31de7bdb4973ef1ef117de01855eeb799"
+    },
+    {
+      "item_id": "dc-e9b243ff31c2307bf83d",
+      "original_source_group": "g-1b34d2640fb5f930aa1981c2",
+      "split": "train",
+      "reason": "Griffin, engineering and a turkey do not identify a space topic without missing thread context; this truncated provider response is not a semantic negative.",
+      "evidence": {
+        "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v29-candidate-evidence-v1/candidate-evidence.json",
+        "sha256": "be00d57ff66ec942a342b3d314971cb1f74c404926a9126e4191561a53b2b01d",
+        "source_row_sha256": "4e619e6c90f1fb20c97aa933d52f0dfc0ec9731930f6b2ff090a5598fc6fd4ee"
+      },
+      "decision_receipt_sha256": "f2cf9dc969a89d5fec133280151652e31de7bdb4973ef1ef117de01855eeb799"
+    }
+  ]
+}

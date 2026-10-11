@@ -1,0 +1,693 @@
+{
+  "schema": "natlang.decision-source-quality-holds/1",
+  "policy_id": "decision-visible-answerability-holds-v11",
+  "status": "canonical_forward_source_filter",
+  "training_admission": false,
+  "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
+  "merge_semantics": "Canonical holds are always applied. Optional hold receipts add exclusions. Duplicate item IDs merge their distinct receipt reasons/evidence; all entries for an ID must agree on original_source_group and split.",
+  "state_truncation_rules": [
+    {
+      "rule_id": "legacy_1500_char_truncation_signature",
+      "state_codepoints": 1504,
+      "suffix": " ...",
+      "reason": "known upstream state clipping signature; full source evidence is unavailable"
+    }
+  ],
+  "parent_decision_receipt": {
+    "path": "runs/free-provider-generation-20261009-v1/pubmedqa-visible-answerability-holds-v2/source-quality-holds.json",
+    "sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+  },
+  "source": {
+    "path": "runs/dgx-development-generated/decision-data-20261004/decision-v1/decision-cases.jsonl",
+    "sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097"
+  },
+  "semantic_review": {
+    "path": "runs/free-provider-generation-20261009-v1/quality-review-v56-pubmedqa-disagreements-v1/review.json",
+    "sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+  },
+  "excluded_items": [
+    {
+      "item_id": "dc-69522cb3e1b5d8c52d11",
+      "original_source_group": "g-36762ffd97b257fedc14536d",
+      "split": "train",
+      "reason": "Source-internal comparator-direction conflict: the abstract says “tamoxifen versus AI” RR=1.31 while its separate long_answer attributes higher CVAE risk to AI; the task label cannot be safely source-aligned without adjudication.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_sha256": "a8d5e6dfa98ffe62094173cb9e74bafea2018f2fe5ec4ebfb69787cdb69fb270",
+        "official_row_index": 548,
+        "pubmed_id": 18041059
+      },
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-c063cb9086e165f435db",
+      "original_source_group": "g-a900ffb76994aac16a79e6b6",
+      "split": "train",
+      "reason": "The yes annotation depends on a long_answer inference about exercise adapting aging muscle; the abstract reports no age-related fatigue-index difference in active subjects and does not directly demonstrate that training caused the proposed effect.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_sha256": "05c5e2d8cfb70179a910781a7a3ba6679906a6b7f6add76564b3f86425c10e62",
+        "official_row_index": 505,
+        "pubmed_id": 12690589
+      },
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-4c2f9df175a623b83303",
+      "original_source_group": "g-ffe725df39df7940c00e77ca",
+      "split": "train",
+      "reason": "Root hold for strict single-label supervision: The abstract says it evaluates feasibility of GFRUP limitation-of-treatment guidelines and describes case inclusion, meetings, decisions, and implementation timing. It does not state a direct feasibility result or explicitly conclude that the recommendations are applicable. “Maybe” is plausible; the gold “yes” is not established by the reported outcomes alone.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "visible_state_sha256": "166fdd888a8174180c4bf6eba403e57d3806f4604a6ec1c7bacd3c51784167cd",
+        "semantic_review_sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+      },
+      "assessment": "gold_not_fully_supported; applicability_uncertain",
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-845c16d1dc3af5b9d3e0",
+      "original_source_group": "g-6a51fa7e97e5b89fe5aaa49d",
+      "split": "train",
+      "reason": "Root hold for strict single-label supervision: The abstract lists common characteristics among young men who died (poisoning, unemployment, single status, self-destructive behavior). It is a retrospective description of cases and does not test whether these factors are preventable or whether changing them reduces mortality. “Maybe” appropriately reflects the unsupported amenability step; “yes” is not established by this abstract.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "visible_state_sha256": "01d8e0c917a17d2102f693ee48325ab2eea1e3e31e8ca8182f88672c6f14cf51",
+        "semantic_review_sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+      },
+      "assessment": "answerability_uncertain; gold_overstates_preventability",
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-e3eb31373ee4d551eef9",
+      "original_source_group": "g-fa9a289591200ad71f6b0e4b",
+      "split": "train",
+      "reason": "Root hold for strict single-label supervision: The abstract proposes progression criteria and states thresholds make future surgery probable, but gives no accuracy statistic, calibration, sensitivity/specificity, or validation result. The gold “yes” is stronger than the visible evidence about accurate prediction. “Maybe” is a defensible answer to the stated accuracy question.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "visible_state_sha256": "6319779c26e6cd81e122d71d7cbb3fd84976ba2e51bd63c54ab9c1b2c3554cde",
+        "semantic_review_sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+      },
+      "assessment": "answerability_uncertain; predictive_accuracy_not_demonstrated",
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-e68969a87c8a662215b3",
+      "original_source_group": "g-4341e8795b6c6a09e6682c94",
+      "split": "train",
+      "reason": "Root hold for strict single-label supervision: The abstract reports a higher response rate for exon 11 than non-exon-11 mutations (84% vs 40%, p=.01), which supports a possible predictive role. It then says there were no differences between exon variants in outcomes and responses. Because these statements conflict at the level relevant to “pathfinder,” the abstract alone does not yield a clear yes/no; “maybe” is defensible, while the gold “yes” is not unambiguous.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "visible_state_sha256": "0c85d22028deb08fe3c89d25ee53aca77628d3bcec917246c2156e351c1e79e1",
+        "semantic_review_sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+      },
+      "assessment": "abstract_internal_tension; no_clear_single_label",
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-ee6743fb9c22812bd3e5",
+      "original_source_group": "g-82d4ca091a2fd32fc7a2c2a1",
+      "split": "train",
+      "reason": "Root hold for strict single-label supervision: The abstract reports inverse cross-sectional relationships in both sexes and prospective inverse associations in women, but prospective results among men were equivocal and no association appeared for recurrence among people with baseline pain. “Yes” is supported for some endpoints/subgroups, not uniformly for the broad question; “maybe” is a plausible cautious interpretation.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "visible_state_sha256": "1a0a49819e0a328c17c96316ff09199e190c53601dd42d7669eb020b73aa06ae",
+        "semantic_review_sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+      },
+      "assessment": "partial_association; population_scope_uncertain",
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-0828ab4178339c17f129",
+      "original_source_group": "g-e7707910e9975e971abef582",
+      "split": "train",
+      "reason": "The named subject combines church and school; visible text does not establish Building as unique class over EducationalInstitution.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "934d980ca90a661fd2bfc2a3a194944334a8b62139577ecb3b7d2ad148a65507"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-e25b362156b5b54a14fe",
+      "original_source_group": "g-cb9b00089508fab67606aed0",
+      "split": "train",
+      "reason": "Directory correction omits the topical/thread context needed to identify the original newsgroup.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "13e5fd36ddfc9d8f1a0b4a89018ac9dd5c291321ab945444cf147ba3c410fe9f"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-f0f993061c9487e31040",
+      "original_source_group": "g-8d0a26eeabc05e7d52e52191",
+      "split": "train",
+      "reason": "Short morality reply does not uniquely identify original newsgroup over religion alternatives.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "f4a4e714bd8eb4a61811f5793accc9bbecae25631faa73db82f4a56629878975"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-caf2cd2a1dc6ca32868f",
+      "original_source_group": "g-eb2e0a0871fb812afc31075a",
+      "split": "train",
+      "reason": "Scriptural reply lacks original thread context needed to distinguish atheist and religion newsgroups.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "ca38048b08f214dba6098256877d87483a8236e0e658d026756c50307476f0cb"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-e8ea79f23d5fcced8ec6",
+      "original_source_group": "g-83712600857758aa0e7690b6",
+      "split": "train",
+      "reason": "American rock band does not contradict indie rock band; REFUTES unsupported by supplied evidence.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "5a09476edacb9251fc9325e4091da4776c868469ce7328fd34a3c7833a5b955b"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-13d5f9a8763ed2db8b45",
+      "original_source_group": "g-bc272023818228c917336fc7",
+      "split": "train",
+      "reason": "Instructional planning statement does not express the annotated joy or a unique listed emotion.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "a49a9383807cef633d0d855b0a6a2bf477872bf31240e650467d1a88f70d8e59"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-8a2ae9ef4678f0ebf494",
+      "original_source_group": "g-b57ec1e3f963a288fa4d373f",
+      "split": "train",
+      "reason": "Mixed bruxism endpoints include significant first-night changes; blanket no is not uniquely supported.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "beb9d16bf2018a4ef1c4f896e2b0256c25a3c272c164a72308db13dbea1746c8"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-1291147e4f9d4532ac01",
+      "original_source_group": "g-754f8641e9ebb8cd7df1a440",
+      "split": "train",
+      "reason": "Attendance totals without untreated or pre-exposure comparison do not establish absence of a VODcast effect.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "59e51c85d5f62dc21a932062b271f233ea5d121ab587d0508fc2caa584ac2c2e"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-d8d5bc9eb591c1c8c48b",
+      "original_source_group": "g-6fbca0d94f70ceb8f05507af",
+      "split": "train",
+      "reason": "Procedure efficacy reported but no safety outcomes supplied for conjunctive efficacious-and-safe question.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "aa5e20eda0b1cbb77bf332d5c8f1aa5b6bb4d54e9be9b50129e214136532b8c2"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-272ff3ec34a25dab283c",
+      "original_source_group": "g-0fecae26e4e1f5d768016208",
+      "split": "train",
+      "reason": "Hepatocyte/TGF-beta changes supplied, but prevention of hepatic fibrosis endpoint not established.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "57d01c1ac58adab51fd2230086da95df6ecf3471df3bdbef0404708d1436c4cb"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-bfc70731de189bb734f5",
+      "original_source_group": "g-cd829baa9a225febe0ee9622",
+      "split": "train",
+      "reason": "Missed diagnoses supplied but guideline content/adherence absent; guideline sufficiency cannot be separated from implementation.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "4db846b167ada3717dffb65f5b1ee6de283480e3c160211b68c673cc67b1448f"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-c1d9d4eeed124f53f779",
+      "original_source_group": "g-cc8eaa83a80b11d699d30661",
+      "split": "train",
+      "reason": "Concurrent observational survival and practice changes do not uniquely establish attributed causal effect.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "30dc1814ed7234d168cb6cb5e9afbcf139cce3031ce8e7e8b72d46bc94ada9be"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-e07c683d03cc4ff0d692",
+      "original_source_group": "g-40a9361e3f5f048bfe38a3fc",
+      "split": "train",
+      "reason": "Late postoperative dysfunction does not uniquely establish counterfactual benefit from earlier surgery.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
+        "review_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477",
+        "source_record_sha256": "b19ba1ea723d68e3ca0947d1a2ed9439a73da55afca0f134b77680aba52b9570"
+      },
+      "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-433c4e02fdbf3ed7e4ca",
+      "original_source_group": "g-0aa46cd5879386288187a34d",
+      "split": "train",
+      "reason": "Teaching hospital text describes institution and location without uniquely establishing Building over EducationalInstitution.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4/root-review.json",
+        "review_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585",
+        "source_record_sha256": "4254abb213853c24c409e739e7404d0b07b5ea90e65a4a4afc7bf663cef2f635"
+      },
+      "decision_receipt_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
+    },
+    {
+      "item_id": "dc-f27ac074eae55538adf9",
+      "original_source_group": "g-1785ebe35b3ccc3d8e90fead",
+      "split": "train",
+      "reason": "Short personal reply mentioning David Koresh does not identify original atheist versus religion newsgroup without thread context.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4/root-review.json",
+        "review_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585",
+        "source_record_sha256": "26a59e16e1e57fb4eaf0ead8fccde4f82483bb444e7f8d0cbc581491f6d928c0"
+      },
+      "decision_receipt_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
+    },
+    {
+      "item_id": "dc-0c173ed9923522ab8237",
+      "original_source_group": "g-ecca73f03b4b1d92c3ffbff8",
+      "split": "train",
+      "reason": "British-born describes birthplace, not citizenship; evidence does not entail the claimed citizenship.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4/root-review.json",
+        "review_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585",
+        "source_record_sha256": "5c1290c9287b2e79345cac902507a44e42d6c1ae6af1e1d36c09272aec14f28c"
+      },
+      "decision_receipt_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
+    },
+    {
+      "item_id": "dc-14db3bb5a578383d3333",
+      "original_source_group": "g-b795a7ad085325ea867fff1b",
+      "split": "train",
+      "reason": "Contact/reply invitation does not explicitly express annotated joy or any unique listed emotion.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4/root-review.json",
+        "review_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585",
+        "source_record_sha256": "fed6af32cade5cf20fe76f1ceddf73931120504ac4d3acc7d646331bfdcfbb1a"
+      },
+      "decision_receipt_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
+    },
+    {
+      "item_id": "dc-90e64bed3c0325920be2",
+      "original_source_group": "g-8d9ca6fbac27e523cc66c242",
+      "split": "train",
+      "reason": "Positive residual extra costs and no viability criterion do not uniquely answer economically viable; stated self-funding aim is not achieved by reported savings.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4/root-review.json",
+        "review_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585",
+        "source_record_sha256": "9d47fa582678624872de897ef3318b165b6584dd048176b6a48bd188c6cd2fa1"
+      },
+      "decision_receipt_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
+    },
+    {
+      "item_id": "dc-8281dd16aa9b164bfcb0",
+      "original_source_group": "g-5d5d31856f79a2b56b341ee8",
+      "split": "train",
+      "reason": "Question attributes diabetes to arsenic exposure. Exposure is inferred from job title, pooled intervals cross the null and one unspecified-worker subgroup is positive. Neither a categorical no nor a demonstrated arsenic effect is uniquely established.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v5/root-review.json",
+        "review_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+      },
+      "decision_receipt_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+    },
+    {
+      "item_id": "dc-4b7b2a501f82807d11ca",
+      "original_source_group": "g-1b91205d2f84b3dae0fa85f6",
+      "split": "train",
+      "reason": "Question asks whether all patients should be excluded. Visible survey describes centers opinions, not clinical outcomes or a resolved recommendation.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v5/root-review.json",
+        "review_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+      },
+      "decision_receipt_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+    },
+    {
+      "item_id": "dc-36cd51756fdd5d6a832c",
+      "original_source_group": "g-2b414dbe4e2f9210ad51a307",
+      "split": "train",
+      "reason": "Question asks whether the new fixation improves outcome; visible case series gives success and complications without the promised historical comparison or any comparison outcomes.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v5/root-review.json",
+        "review_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+      },
+      "decision_receipt_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+    },
+    {
+      "item_id": "dc-a83a4b6e16bdb58f5ac0",
+      "original_source_group": "g-26a3ec44ac01008bb8073ed1",
+      "split": "train",
+      "reason": "Visible trial abstract contains design and endpoints but no outcome results. A yes efficacy target cannot be inferred.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v5/root-review.json",
+        "review_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+      },
+      "decision_receipt_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+    },
+    {
+      "item_id": "dc-5325054407d6ae1e5dd8",
+      "original_source_group": "g-5594d6cd3ceef8cd8d4ba2c8",
+      "split": "train",
+      "reason": "Visible entry only identifies a lawyer and Celtic scholar. No supplied taxonomy defines scholar as Artist and neither an artistic role nor public office is stated. Hold this exact short-context classification from strict labels.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v6/root-review.json",
+        "review_sha256": "15f96424bfbfb8bbe8c0e2227ec005886ec7e64e7d258355678258c7fd30eb8d"
+      },
+      "decision_receipt_sha256": "15f96424bfbfb8bbe8c0e2227ec005886ec7e64e7d258355678258c7fd30eb8d"
+    },
+    {
+      "item_id": "dc-cb38208ceed023db2460",
+      "original_source_group": "g-f5dfc5c2166605c7cc76d8e6",
+      "split": "train",
+      "reason": "One generic metaphor about madmen and a broken computer gives no recoverable newsgroup destination or thread context.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v7/root-review.json",
+        "review_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
+      },
+      "decision_receipt_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
+    },
+    {
+      "item_id": "dc-20a6738320ab61bf3a8e",
+      "original_source_group": "g-2e12210aa81d5605d2c59061",
+      "split": "train",
+      "reason": "Surreal satire crosses food, physics and occult topics with no source header or thread provenance identifying sci.med. Exact original destination is not determined by the visible body.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v7/root-review.json",
+        "review_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
+      },
+      "decision_receipt_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
+    },
+    {
+      "item_id": "dc-3ab8e9803c71929dc86f",
+      "original_source_group": "g-a9369454bc708886d286a129",
+      "split": "train",
+      "reason": "Evidence gives a lower bound of over90 million views, which does not entail an upper bound below100 million. Do not force the supplied strict SUPPORTS annotation.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v7/root-review.json",
+        "review_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
+      },
+      "decision_receipt_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
+    },
+    {
+      "item_id": "dc-c8547712353a863f66f2",
+      "original_source_group": "g-8fed014e25481f00c7e3fa2f",
+      "split": "train",
+      "reason": "Variable fasting periods leave gastric contents and raise glucose, but visible study lacks a nonfasting safety comparator or outcome resolving whether fasting is necessary. A categorical no is not uniquely established.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v8/root-review.json",
+        "review_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
+      },
+      "decision_receipt_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
+    },
+    {
+      "item_id": "dc-4c33492efe7f0f3b3326",
+      "original_source_group": "g-98e7454f636137dfc0ad4adb",
+      "split": "train",
+      "reason": "Equality question spans fracture identification, fracture type and dislocation with differing counts. No equivalence margin or common endpoint establishes equal performance; nonsignificant contrasts alone are not an equality proof.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v8/root-review.json",
+        "review_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
+      },
+      "decision_receipt_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
+    },
+    {
+      "item_id": "dc-59cf28dde1c16f446ac3",
+      "original_source_group": "g-8d1e3f2405f7b9ff5e46bd8c",
+      "split": "train",
+      "reason": "Visible findings distinguish adoption of care programs/process-oriented measures from explicitly absent functional-to-process care-delivery change. Without specifying which outcome counts as development, strict yes versus maybe is ambiguous.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v8/root-review.json",
+        "review_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
+      },
+      "decision_receipt_sha256": "ae20123e71a137666d5aafe894cb678b8a0dc39a3006af0fd1797758fc95837d"
+    },
+    {
+      "item_id": "dc-61bae329f11a0eb43997",
+      "original_source_group": "g-be2837445174f29e001a2e8a",
+      "split": "train",
+      "reason": "Generic aphorism has no recoverable topical or destination-group evidence; original newsgroup provenance is omitted.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-39aa1bd2421659adcb21",
+      "original_source_group": "g-659703a2b6c0f471d7c69ea0",
+      "split": "train",
+      "reason": "Generic principles/nutcase reply omits thread and group provenance needed to distinguish the original destination.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-17afc0eb42ffd655709c",
+      "original_source_group": "g-f2b5037058ab8488081910a9",
+      "split": "train",
+      "reason": "Suffocation and charm express competing affects without a visible dominant-affect rule; strict joy target is not unique.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-180e88b106954433dd4b",
+      "original_source_group": "g-8eb4ccee80d61f0df6c47c3d",
+      "split": "train",
+      "reason": "Belonging and isolation are both explicit, with no dominant-affect rule resolving love versus sadness.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-18118794fb2fdd3f844b",
+      "original_source_group": "g-a860fe16f63abcf9f9dc6567",
+      "split": "train",
+      "reason": "Love of work and difficulty feeling content coexist; strict joy is not uniquely grounded without a selection rule.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-e1593d8a2944dc48d2ee",
+      "original_source_group": "g-e16eda14c0afe8a2c7af6c89",
+      "split": "train",
+      "reason": "Selected roles including an extra do not entail an exclusive career-long bit-parts claim.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-ffd94f75681a7d205b77",
+      "original_source_group": "g-922b8c677f2b3ecf6bd7beec",
+      "split": "train",
+      "reason": "Even treating the evidence pronoun as Tiger, being a golfer does not refute also being a musician. An exclusivity premise is absent.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-d93488639a3c8466e653",
+      "original_source_group": "g-9f44f3f67b204a1d2b3a3c3f",
+      "split": "train",
+      "reason": "Deciding to transform Libya does not entail completing that transformation. Intent versus accomplishment distinguishes the evidence from the claim.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-dea9153eb4181d87cd02",
+      "original_source_group": "g-47c2f80a296518957d18985d",
+      "split": "train",
+      "reason": "A single co-occurrence and explicit putative causal discussion, with normal immunological work-up, do not resolve the claimed causative link as yes.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v9/root-review.json",
+        "review_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+      },
+      "decision_receipt_sha256": "a2b221d71899581edb8a5fb7d36cd5f0ad552875d4e75d32af0973909f1d7ff9"
+    },
+    {
+      "item_id": "dc-0d624d9d8a0707494a5b",
+      "original_source_group": "g-4339dac57126821286443375",
+      "split": "train",
+      "reason": "Emoticon-only post contains no topical or original destination-group evidence.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v10/root-review.json",
+        "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+      },
+      "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+    },
+    {
+      "item_id": "dc-185c7f36c484c1b886db",
+      "original_source_group": "g-eeeeeeef403d72f310031403",
+      "split": "train",
+      "reason": "Weird vibe alone does not resolve surprise versus unease or another emotion.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v10/root-review.json",
+        "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+      },
+      "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+    },
+    {
+      "item_id": "dc-186c3727de8f5b255f18",
+      "original_source_group": "g-6dbac44a4a42567d81b8c192",
+      "split": "train",
+      "reason": "Reduced bother describes diminished reactivity, not an unambiguous current anger expression.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v10/root-review.json",
+        "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+      },
+      "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+    },
+    {
+      "item_id": "dc-18dd8663bcbceb238162",
+      "original_source_group": "g-f13e2467003f40082d11ca25",
+      "split": "train",
+      "reason": "Agitation can reflect anger or anxious fear; supplied input lacks a distinguishing circumstance.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v10/root-review.json",
+        "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+      },
+      "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+    },
+    {
+      "item_id": "dc-18e903af83b266b1a4e0",
+      "original_source_group": "g-daf775fd0994b1f3d74fc7c0",
+      "split": "train",
+      "reason": "Feeling better and explicit frustration coexist without a dominant-affect criterion.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v10/root-review.json",
+        "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+      },
+      "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+    },
+    {
+      "item_id": "dc-1951a4794de17639de9d",
+      "original_source_group": "g-7bc3682ed14c74a41894012f",
+      "split": "train",
+      "reason": "General reasoning about feeling bad as motivation does not uniquely express present joy.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v10/root-review.json",
+        "review_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+      },
+      "decision_receipt_sha256": "a4548d12c07dee89be9635c892aaf6c99b0055b21d2bbb8388a08fc4683a2eba"
+    },
+    {
+      "item_id": "dc-158e30a77e28c16e5e6c",
+      "original_source_group": "g-c9f2ce53d17da7efb1bf1a01",
+      "split": "train",
+      "reason": "The entry describes a fictional team and an eponymous comic series. Primary team versus publication is unresolved in a taxonomy lacking groups or fictional characters; no visible mapping rule justifies unique WrittenWork.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11/root-review.json",
+        "review_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+      },
+      "decision_receipt_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+    },
+    {
+      "item_id": "dc-c6dc075d403c75d8f114",
+      "original_source_group": "g-2874d44319b3123509369724",
+      "split": "train",
+      "reason": "Both bike and car are explicit in this generic anti-drunk-driving reply; the omitted thread/list context is needed for unique motorcycle versus automobile destination.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11/root-review.json",
+        "review_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+      },
+      "decision_receipt_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+    },
+    {
+      "item_id": "dc-15a40634db33eaa0e62b",
+      "original_source_group": "g-3997d64cdf4bae9dbbd6e95c",
+      "split": "train",
+      "reason": "Submissiveness alone does not uniquely specify sadness versus fearful anxiety or another affect.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11/root-review.json",
+        "review_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+      },
+      "decision_receipt_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+    },
+    {
+      "item_id": "dc-15c64969bcb660ca7986",
+      "original_source_group": "g-3296fa6292c5032e85210a7c",
+      "split": "train",
+      "reason": "Doomed earth/life expresses compatible fear and sadness without a dominant-affect rule.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11/root-review.json",
+        "review_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+      },
+      "decision_receipt_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+    },
+    {
+      "item_id": "dc-2432545486453b0178f3",
+      "original_source_group": "g-e66308fa289b8ee362a1e0ce",
+      "split": "train",
+      "reason": "Mostly positive sentiment does not establish lack of ambiguous wording or mixed opinions. Evidence does not uniquely refute the ambiguous-reviews claim.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11/root-review.json",
+        "review_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+      },
+      "decision_receipt_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+    },
+    {
+      "item_id": "dc-99eb2027fae73b53860f",
+      "original_source_group": "g-c87dfdad72f1efcd20eeffea",
+      "split": "train",
+      "reason": "Measured tidal-volume variability lacks a prescribed target, acceptable error or reference defining accurate delivery; the comparisons alone do not uniquely establish categorical no.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v11/root-review.json",
+        "review_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+      },
+      "decision_receipt_sha256": "ea593e7296c8d4bc38ef9b4b207f03a60c727b99310fca3c7c87122a9b5a81ab"
+    }
+  ],
+  "root_review": {
+    "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4/root-review.json",
+    "sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
+  }
+}
