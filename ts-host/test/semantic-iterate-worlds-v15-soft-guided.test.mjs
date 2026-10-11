@@ -38,8 +38,10 @@ test('guided V15 source preserves authored data and declares actual Neuralese so
       assert.match(code, /task\.passes\[progress\.pass\]/);
       assert.match(code, /folder\.snapshot\(\)\.file\(current\.evidence_path\)/);
       assert.match(code, /Maintain a complete running evidence record in readable prose, not a Draft-shaped JSON summary/);
-      assert.match(code, /preserve each eligibility finding and the exact metric with its unit/);
-      assert.match(code, /exact named authority prerequisite and its status when observed/);
+      // Wording of 9a44436e (current-status correction history guidance, revision v15/21).
+      assert.match(code, /Preserve every observed candidate eligibility finding, exact metric and unit/);
+      assert.match(code, /exact named authority prerequisite and its observed status/);
+      assert.match(code, /preserve that earlier statement only as explicitly labeled earlier-pass history/);
       assert.match(code, /Keep historical events \(what already happened\) distinct from the requested decision/);
       assert.match(code, /Apply its explicit decision rule to the supported facts and return the requested decision now/);
       assert.match(code, /Do not require evidence that the requested decision has already been executed/);
