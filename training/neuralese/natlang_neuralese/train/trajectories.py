@@ -2511,8 +2511,27 @@ def main(argv=None):
                                      for key, group in projection_groups.items()}
                 direct_update['projection_gradient_norms'] = {
                     key: float(gradient_norm(group)) for key, group in projection_groups.items()}
-            global_grad_norm = clip_finite_gradients(
-                trainables, 1.0, consumed_norm=consumed if armed is not None else None)
+            try:
+                global_grad_norm = clip_finite_gradients(
+                    trainables, 1.0, consumed_norm=consumed if armed is not None else None)
+            except RuntimeError as error:
+                if str(error) == 'nonfinite recurrence gradients before optimizer update':
+                    invalid = []
+                    for name, parameter in optimizer_named.items():
+                        gradient = parameter.grad
+                        if gradient is not None and not torch.isfinite(gradient).all().item():
+                            invalid.append({'name': name, 'shape': list(gradient.shape),
+                                            'dtype': str(gradient.dtype),
+                                            'nan_elements': int(torch.isnan(gradient).sum()),
+                                            'inf_elements': int(torch.isinf(gradient).sum())})
+                    diagnostic = {'step': step, 'completed_updates': step,
+                                  'reader_record_ids': step_record_ids,
+                                  'backward_mode': mode, 'write_lengths': lengths[step_lengths_start:],
+                                  'invalid_parameter_gradients': invalid,
+                                  'optimizer_update_applied': False, 'training_admission': False}
+                    (out / f'nonfinite-gradients-step-{step}.json').write_text(
+                        json.dumps(diagnostic, indent=2, allow_nan=False) + '\n')
+                raise
             direct_update['global_gradient_norm'] = float(global_grad_norm)
             if quant is not None:
                 quant.set_active('bf16', 0.0)  # evaluations and checkpoints after the update see BF16
