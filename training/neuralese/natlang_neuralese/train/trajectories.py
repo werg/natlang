@@ -769,6 +769,12 @@ def main(argv=None):
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
     parser.add_argument("--soft-init", help="warm-start matching soft parameters from a prior soft-params or full recurrence checkpoint; new pieces are text-initialized")
     parser.add_argument("--heads", default=None, help="port heads checkpoint (soft parameters are read through them)")
+    parser.add_argument("--direct-artifact", default=None,
+                        help="Neuralese direct v1 end-to-end stage (plans/neuralese/NEURALESE_DIRECT_V1.md): restore the "
+                             "engine from this shared direct export (train/direct_export.load_direct_artifact); written "
+                             "values are then written by the direct writer (serve/direct_write.write_direct) through the "
+                             "NeuraleseProjection (and the TokenChoiceProjection when exported), which train at --heads-lr")
+    parser.add_argument("--direct-base-snapshot", default=None, help="the base snapshot the direct export binds")
     parser.add_argument("--base", default=None)
     parser.add_argument("--bank", default=None, help="system-prompt bank to initialise current pieces from")
     parser.add_argument("--steps", type=int, default=500)
@@ -909,6 +915,13 @@ def main(argv=None):
         raise ValueError('joint producer batching requires producer batch size >=2')
     if not math.isfinite(args.producer_batch_memory_gb) or args.producer_batch_memory_gb < 0:
         raise ValueError('invalid producer batch memory budget')
+    if args.direct_artifact and (args.heads or args.producer_batch_size > 1 or args.view == "written" or args.stop_pg):
+        parser.error('--direct-artifact restores its own anchor heads and writes one producer at a time with the direct '
+                     'writer: no --heads, --producer-batch-size 1, no written views or --stop-pg')
+    if args.direct_artifact:
+        args.sketch_target_weight = 0.0  # a sketch-recurrence term; the direct writer has no sketch
+        args.content_transport = 'raw-identity'  # the anchor's raw-token transport; the direct writer owns content
+        args.projection_anchor_weight = 0.0  # the sketch port's feedback-projection anchor; not part of direct writing
     if args.producer_batch_size > 1 and (args.tokens_per_vector != 1 or args.content_transport != 'raw-identity'
             or args.writer_supervision != 'native-value' or args.stop_supervision != 'gold-native-boundary'
             or args.stop_pg or args.max_writes or args.write_curriculum != 'joint'):
@@ -1021,7 +1034,13 @@ def main(argv=None):
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    engine = load_engine(args.base, heads_checkpoint=args.heads, device=args.device)
+    direct = None
+    if args.direct_artifact:
+        from .direct_export import load_direct_artifact
+        direct = load_direct_artifact(args.direct_artifact, base_snapshot=args.direct_base_snapshot, device=args.device)
+        engine = direct.engine
+    else:
+        engine = load_engine(args.base, heads_checkpoint=args.heads, device=args.device)
     if args.token_cache_mib:
         from ..serve.token_cache import TokenCache
         engine._token_cache = TokenCache(engine.tokenizer, args.token_cache_mib * 2**20)
@@ -1181,6 +1200,8 @@ def main(argv=None):
                 plain_layers=sum(not backbone.is_attention(i) for i in range(backbone.num_layers)))
             backbone.checkpoint_attention_only = resource_choice.resolve(choose) if resource_choice else choose()
             selective_writer_replays[0] += int(backbone.checkpoint_attention_only)
+        if direct is not None:
+            return direct_write_value(context, length if length is not None else source_length(source))
         try:
             from .execution import prefill_write_context
             pre = prefill_write_context(backbone, heads, context)
@@ -1213,6 +1234,30 @@ def main(argv=None):
                 logp = logp + torch.nn.functional.logsigmoid(logits[n - 1])
             stop_terms.append((logp, n))
         return written.payload[0, :n]
+
+    def direct_projection_state():
+        return {key: {k: v.detach().cpu() for k, v in module.state_dict().items()}
+                for key, module in (('neuralese_projection', direct.neuralese_projection),
+                                    ('token_choice_projection', getattr(direct, 'token_choice_projection', None)))
+                if module is not None}
+
+    def direct_write_value(context, target):
+        """The end-to-end stage's producer write: the shared direct writer (full backbone per value, one causal-conv
+        segment per call, the TokenChoiceProjection's readout deciding the stop) from the site's context, with
+        gradients into the projections, the backbone and the site's soft parameters. Sized from the crisp text when
+        known (no stop decision), else the writer's own stop."""
+        from ..serve.direct_write import write_direct
+        from ..write import Opened
+        from .execution import prefill_write_context
+        pre = prefill_write_context(backbone, heads, context)
+        opened = Opened(pre.cache, pre.state, backbone.logits(pre.top[:, None])[:, -1], pre.top)
+        written = write_direct(backbone, direct.neuralese_projection, opened, target or heads.max_length,
+                               engine.stop_ids, length=target,
+                               token_choice_projection=getattr(direct, 'token_choice_projection', None))
+        payload = written.complete()[0]
+        n = int(payload.shape[1])
+        lengths.append(n)
+        return payload[0, :n]
 
     lengths: list[int] = []
     projection_anchor_values: list[float] = []
@@ -1695,6 +1740,12 @@ def main(argv=None):
     head_named = [(f'heads.{name}', p) for name, p in heads.named_parameters()
                    if not (not heads.read_markers and (name.startswith('feedback.final_norm.') or name.startswith('content.reference.') or
                            (heads.cutoff == backbone.num_layers and name.startswith('feedback.'))))] if args.heads_lr and (args.handover == "written" or args.view == "written") else []
+    if direct is not None:
+        # The direct writer's own modules (not the raw-token anchor heads, which the direct path does not train).
+        head_named = [(f'{key}.{name}', p) for key, module in (('neuralese_projection', direct.neuralese_projection),
+                                                              ('token_choice_projection',
+                                                               getattr(direct, 'token_choice_projection', None)))
+                      if module is not None for name, p in module.named_parameters()] if args.heads_lr else []
     head_params = [p for _, p in head_named]
     if args.train_control_rows:
         head_params += [backbone.control_rows]
@@ -1758,6 +1809,11 @@ def main(argv=None):
             backbone.control_rows.copy_(resumed['control_rows'].to(backbone.control_rows))
             if not getattr(backbone, 'tied', True):
                 backbone.control_head_rows.copy_(resumed['control_head_rows'].to(backbone.control_head_rows))
+        if direct is not None:
+            for key, module in (('neuralese_projection', direct.neuralese_projection),
+                                ('token_choice_projection', getattr(direct, 'token_choice_projection', None))):
+                if module is not None:
+                    module.load_state_dict(resumed[key], strict=True)
         missing, unexpected = heads.load_state_dict(resumed['heads'], strict=False)
         if unexpected or any(not k.startswith('read_adapter.') for k in missing):
             raise ValueError(f'resumed heads differ beyond a new read adapter: {missing} {unexpected}')
@@ -2207,6 +2263,7 @@ def main(argv=None):
             **({'control_head_rows': backbone.control_head_rows.detach().cpu()} if not getattr(backbone, 'tied', True) else {}),
             'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
             'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
+            **(direct_projection_state() if direct is not None else {}),
             'optimizer_param_names': optimizer_param_names(optimizer, optimizer_named),
             'backbone_training': args.backbone_training,
             **({'maple_qat': True} if qat_named else {}),
@@ -2631,6 +2688,8 @@ def main(argv=None):
         if len(ranks) > 1:
             raise ValueError('cannot export mixed-rank adapters in one port checkpoint')
         atomic_checkpoint(out / 'heads.pt', {'heads': heads.state_dict(),
+            **(direct_projection_state() if direct is not None else {}),
+            **({'direct_artifact_manifest': direct.manifest} if direct is not None else {}),
             'port_config': {**source_metadata.get('port_config', {}), 'cutoff': heads.cutoff,
                             'max_length': heads.max_length, **heads.port_config()},
             'control_rows': backbone.control_rows.detach().cpu(),

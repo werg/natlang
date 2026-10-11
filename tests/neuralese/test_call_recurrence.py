@@ -118,3 +118,47 @@ def test_held_out_readers_compare_their_written_values_with_another_readers(load
         got = summary[label]
         assert got["n"] == 2 and got["written"] > 0 and got["shuffled"] > 0 and 0 <= got["written_better"] <= 1
         assert got["written"] != got["shuffled"]
+
+
+def test_direct_writer_end_to_end_stage_trains_the_child_write_through_the_neuralese_projection(loaded, tmp_path,
+                                                                                                monkeypatch):
+    """Neuralese direct v1's end-to-end stage (plans/neuralese/NEURALESE_DIRECT_V1.md): with --direct-artifact the
+    child's result is written by the shared direct writer, and the caller's loss reaches the child's write context and
+    the NeuraleseProjection. The restore is the shared load_direct_artifact; here a stand-in over raw-token heads."""
+    from types import SimpleNamespace
+    from natlang_neuralese.model.heads import PortHeads
+    from natlang_neuralese.model.neuralese_projection import NeuraleseProjection
+    from natlang_neuralese.serve import load_engine
+    from natlang_neuralese.train import direct_export
+
+    backbone = loaded[2]
+    raw = PortHeads(backbone, cutoff=backbone.num_layers, max_length=64, stop_source="final", stop_position=False,
+                    profile="raw-token-v1").eval()
+    anchor = tmp_path / "raw-token-heads.pt"
+    torch.save({"port_config": {"cutoff": raw.cutoff, "max_length": raw.max_length, **raw.port_config()},
+                "heads": raw.state_dict(), "control_rows": backbone.control_rows.detach().cpu()}, anchor)
+    projections = {}
+
+    def restore(artifact, *, base_snapshot=None, device="cpu", dtype=None):
+        engine = load_engine(heads_checkpoint=str(anchor), device=device)
+        torch.manual_seed(0)
+        projection = NeuraleseProjection(int(engine.backbone.hf.config.hidden_size), hidden=16)
+        projections["neuralese"] = projection
+        return SimpleNamespace(engine=engine, neuralese_projection=projection, token_choice_projection=None,
+                               manifest={"schema": "test-stand-in"})
+    monkeypatch.setattr(direct_export, "load_direct_artifact", restore)
+    records, pieces = tmp_path / "records.jsonl", tmp_path / "pieces.jsonl"
+    records.write_text("".join(json.dumps(r) + "\n" for r in RECORDS))
+    pieces.write_text("".join(json.dumps(p) + "\n" for p in PIECES))
+    out = tmp_path / "out"
+    assert main(["--records", str(records), "--pieces", str(pieces), "--out", str(out), "--direct-artifact",
+                 str(tmp_path), "--device", "cpu", "--steps", "1", "--batch", "1", "--eval", "0", "--handover",
+                 "written", "--write-depth", "1", "--tokens-per-vector", "1", "--writer-supervision", "native-value",
+                 "--writer-length-policy", "native-value", "--stop-supervision", "generated-length",
+                 "--writer-text-weight", "0", "--distill", "0", "--lr", "1e-2", "--heads-lr", "1e-2"]) == 0
+    moved = json.loads((out / "summary.json").read_text())["relative_change"]
+    assert moved["instructions@caller"] > 0 and moved["instructions@child"] > 0
+    down = projections["neuralese"].stack.blocks[-1].down.weight
+    assert down.abs().sum() > 0, "the caller's loss trains the NeuraleseProjection (zero-initialised output)"
+    saved = torch.load(out / "heads.pt", weights_only=False)
+    assert torch.equal(saved["neuralese_projection"]["stack.blocks.1.down.weight"], down.detach().cpu())
