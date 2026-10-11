@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v64-terminal-conversion-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v64-recovery-terminal-text-conversion-v1",
+  "files": [
+    {
+      "path": "conversion-review.json",
+      "bytes": 11913,
+      "sha256": "222b8410c981a4314ea0c0f665d735fb957b19d52a4e2ee3e04a33370d906d67"
+    },
+    {
+      "path": "conversion-review.md",
+      "bytes": 1000,
+      "sha256": "8d01116dd9c5a04f7202b1a83daf48ce93248b1b5659e545b50dc86b59dd5027"
+    },
+    {
+      "path": "input-manifest.json",
+      "bytes": 1101,
+      "sha256": "ddf4405157b84d6e33bb9430ceb65ae7c18dfce2d0314d48d5868b87d03c8c81"
+    },
+    {
+      "path": "materialized-all-decisions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "source-results.jsonl",
+      "bytes": 2874699,
+      "sha256": "94f9f815e85e0452f4a9caa1a3db43f96fd9fed2224fc681c0124996b289d078",
+      "lines": 2
+    }
+  ],
+  "bytes": 2888713
+}

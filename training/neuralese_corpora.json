@@ -28687,6 +28687,106 @@
       "training_admission": false,
       "admission": "held-reference-and-provenance-only",
       "notes": "Exact related-source reference generation/input/provenance evidence. Zero provider calls and independent new worlds; no trajectory or operator admission. Fresh declared-component byte archive verified before summary publication."
+    },
+    {
+      "id": "google-v31-closed-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v31-source",
+      "split": "inherited-train-evidence",
+      "source_class": "held-quality-and-generation-evidence",
+      "training_admission": false,
+      "admission": "held-pending-explicit-review",
+      "notes": "Closed 512 exact source rows / 512 strictly valid provider outputs, 407 annotation agreements and 105 semantic differences pending review. Frozen 2048-output budget, actual request receipts. No training admission."
+    },
+    {
+      "id": "google-v31-static-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v31-adapter-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-quality-and-generation-evidence",
+      "training_admission": false,
+      "admission": "held-pending-explicit-review",
+      "notes": "57 related reference programs over 407 original agreed items, 57 actual accepted replays / 0 failures; actual shared execution byte archive. No new independent worlds or training admission."
+    },
+    {
+      "id": "google-v31-root-quality-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v31-root-provider-closeout-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-quality-and-generation-evidence",
+      "training_admission": false,
+      "admission": "held-pending-explicit-review",
+      "notes": "Root strict structure, identity and annotation comparison; 105 complete source/output candidates. No automatic source exclusions or DPO-negative labeling."
+    },
+    {
+      "id": "luna-v64-terminal-conversion-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v64-recovery-terminal-text-conversion-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-quality-and-generation-evidence",
+      "training_admission": false,
+      "admission": "held-pending-explicit-review",
+      "notes": "Actual shared materializer rejected both source-held rows, produced zero turns. Exact 11 model-call bindings and conversion gate evidence retained; no manual target construction."
+    },
+    {
+      "id": "luna-v64-terminal-clarification-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-terminal-text-v4-clarification-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-quality-and-generation-evidence",
+      "training_admission": false,
+      "admission": "held-pending-explicit-review",
+      "notes": "Correction: direct literal label is valid when the same request has full source evidence. Separate from trace admission; sealed proposal versions unchanged."
+    },
+    {
+      "id": "luna-v64-terminal-proposal-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-recovery-terminal-text-proposal-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-quality-and-generation-evidence",
+      "training_admission": false,
+      "admission": "held-pending-explicit-review",
+      "notes": "Exact model target/request provenance proposal; superseded corrections retained. Not converted training rows and not independent worlds."
+    },
+    {
+      "id": "luna-v64-terminal-proposal-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-recovery-terminal-text-proposal-v2",
+      "split": "inherited-train-evidence",
+      "source_class": "held-quality-and-generation-evidence",
+      "training_admission": false,
+      "admission": "held-pending-explicit-review",
+      "notes": "Exact model target/request provenance proposal; superseded corrections retained. Not converted training rows and not independent worlds."
+    },
+    {
+      "id": "luna-v64-terminal-proposal-held-20261011-v3",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-recovery-terminal-text-proposal-v3",
+      "split": "inherited-train-evidence",
+      "source_class": "held-quality-and-generation-evidence",
+      "training_admission": false,
+      "admission": "held-pending-explicit-review",
+      "notes": "Exact model target/request provenance proposal; superseded corrections retained. Not converted training rows and not independent worlds."
+    },
+    {
+      "id": "luna-v64-terminal-proposal-held-20261011-v4",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-recovery-terminal-text-proposal-v4",
+      "split": "inherited-train-evidence",
+      "source_class": "held-quality-and-generation-evidence",
+      "training_admission": false,
+      "admission": "held-pending-explicit-review",
+      "notes": "Exact model target/request provenance proposal; superseded corrections retained. Not converted training rows and not independent worlds."
+    },
+    {
+      "id": "luna-alignment-v7-step36864-quality-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-luna-alignment-v7-step36864-v1",
+      "split": "held-evaluation-evidence",
+      "source_class": "held-quality-and-generation-evidence",
+      "training_admission": false,
+      "admission": "held-pending-explicit-review",
+      "notes": "Exact failed eval row, immutable runtime/recipe/checkpoint pins, unchanged selection/denominators and training-window diagnosis. Eight strict failures; no runtime/transport/stopping qualification."
     }
   ],
   "coverage_backlog": [

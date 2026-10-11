@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v64-terminal-clarification-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-terminal-text-v4-clarification-v1",
+  "files": [
+    {
+      "path": "correction.json",
+      "bytes": 2785,
+      "sha256": "7eda4ef832817483df2cfa57edd19314b8741a37f84d10cc93a29e6fb4392593"
+    }
+  ],
+  "bytes": 2785
+}

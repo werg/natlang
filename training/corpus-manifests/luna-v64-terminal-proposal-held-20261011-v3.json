@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v64-terminal-proposal-held-20261011-v3",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-recovery-terminal-text-proposal-v3",
+  "files": [
+    {
+      "path": "proposal.json",
+      "bytes": 513390,
+      "sha256": "948228757e0fc1420ed64fa844cdd6baa77db87494bc6bc0d238b061038d121f"
+    },
+    {
+      "path": "proposal.md",
+      "bytes": 1022,
+      "sha256": "118844a95ae3021fdbdbd044ea4925c0808da27f57c7497a3dfef4809472d099"
+    }
+  ],
+  "bytes": 514412
+}
