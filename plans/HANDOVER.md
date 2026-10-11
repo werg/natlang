@@ -11269,3 +11269,21 @@ No context reduction, frozen backbone or detached producer gradient was used.
   projection-rate handoff is still unexercised; heads rate remains3e-4.
   Serving-export and nonlinear forced-sequence diagnostics remain next-window
   work; no semantic/stopping qualification inferred from the resume.
+
+### 16:59 UTC — shared cadence policy and closed-state storage relief
+
+- Pulled c209826c, including shared LINE_PARITY.md, declared direct/E2E bases,
+  explicit machine/backbone differences, and low-overhead cadence defaults.
+  Current frozen epoch continues unchanged; next launches must use shared parity.
+  Past351/687 with zero update errors. Five Luna successor lanes are being
+  prepared on runtimeV18 with the exact `as const` saved-helper compiler fix;
+  previous V43 terminal source agreement205/231 remains held, not admitted.
+- Closed v2 checkpoint/best were copied with SHA verification into canonical
+  gitignored `.local/checkpoint-storage-relief-20261011-v1/native-endpoint-v2-closed`.
+  Original artifact paths now symlink to the verified copies; no state deleted.
+  `move-receipt.json` records identities. Active v3 files were untouched.
+  Artifact volume now has~8GiB free, enough for current full-state saves.
+- DGX exercised shared serving exporter against its stable Mellum checkpoint:
+  serialization succeeded with exact matching historical restore code. This does
+  not qualify serving/runtime or transfer Mellum qualification to LFM. Pop's
+  own selected native export/restore remains pending the epoch GPU window.
