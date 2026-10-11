@@ -15,6 +15,7 @@ import { referenceRow } from '../inline-curriculum/references.mjs';
 import { materializeNativeRows } from '../../dist/teacher/native-materializer.js';
 import { defaultToolSurfaceHash } from '../../dist/teacher/collector.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
+import { renderValue } from '../../dist/native/agent.js';
 import { requireValue, equal, sha } from './common.mjs';
 import { archiveDecisionExecutionComponents, verifyDecisionExecutionComponents } from './execution-components.mjs';
 
@@ -37,11 +38,12 @@ function visibleInputs(record) {
   const task = parse(files['task.json']);
   const hasCriteria = Object.hasOwn(task, 'criteria') || input.items.some(item => Object.hasOwn(item, 'criteria'));
   const hasLevels = Object.hasOwn(task, 'levels') || input.items.some(item => Object.hasOwn(item, 'levels'));
+  const inlineReturnType = task.kind === 'noul' ? 'nl<boolean>' : 'nl<Decision>';
   const captureFields = ['caseId', 'state', 'question', ...(hasCriteria ? ['criteria'] : []), 'options',
     ...(hasLevels ? ['levels'] : [])].join(', ');
   const labels = task.labels;
   requireValue(typeof root === 'string' && root.includes('directory') && root.includes('decisions.json'), 'missing_shared_folder_root');
-  requireValue(typeof scriptedRoot === 'string' && scriptedRoot.includes('nl<Decision>') &&
+  requireValue(typeof scriptedRoot === 'string' && scriptedRoot.includes(inlineReturnType) &&
     scriptedRoot.includes('${question}') && scriptedRoot.includes(captureFields),
     'missing_runtime_inline_item_reducer');
   requireValue(Array.isArray(labels) && labels.length >= 2, 'missing_visible_labels');
@@ -101,7 +103,8 @@ function captureVisibility(row, record) {
       equal(capturedOptions.value, expectedOptions) && equal(capturedOptions.value, task.labels);
     const expectedCriteria = Object.hasOwn(item, 'criteria') ? item.criteria : task.criteria;
     const capturedCriteria = capturedValue('criteria');
-    const criteriaVisible = hasCriteria ? capturedCriteria.present && equal(capturedCriteria.value, expectedCriteria)
+    const criteriaVisible = hasCriteria ? (capturedCriteria.present && equal(capturedCriteria.value, expectedCriteria)) ||
+      context.includes(renderValue(expectedCriteria, { budget: Infinity }))
       : !capturedCriteria.present;
     const expectedLevels = Object.hasOwn(item, 'levels') ? item.levels : task.levels;
     const capturedLevels = capturedValue('levels');
@@ -135,7 +138,7 @@ async function main() {
   const sourceManifestBytes = await readFile(sourceManifestPath);
   const sourceManifest = parse(sourceManifestBytes.toString('utf8'));
   const declaredCaseCount = sourceManifest.cases?.rows ?? (Number.isSafeInteger(sourceManifest.cases) ? sourceManifest.cases : undefined) ??
-    sourceManifest.selected_count ?? sourceManifest.selection?.selected_count;
+    sourceManifest.selected_count ?? sourceManifest.selection?.selected_count ?? sourceManifest.count;
   const declaredCaseHash = sourceManifest.cases?.sha256 ?? sourceManifest.selected_sha256 ?? sourceManifest.cases_sha256 ??
     sourceManifest.sha256?.[basename(casesPath)];
   requireValue(declaredCaseHash === sourceSha && Number.isSafeInteger(declaredCaseCount),
@@ -198,6 +201,7 @@ async function main() {
   }
   // Python's len(str) counts Unicode codepoints. Use Array.from here so this
   // shared policy has the same meaning for astral Unicode as the source filter.
+  const supportedKinds = new Set(['choice', 'noul', 'score']);
   const truncationOmissions = rows.filter(({row}) => row.role === 'train' && row.kind === 'choice' &&
     typeof row.state === 'string' && policy.state_truncation_rules.some(rule =>
       Array.from(row.state).length === rule.state_codepoints && row.state.endsWith(rule.suffix)))
@@ -211,8 +215,8 @@ async function main() {
     });
   const truncatedIds = new Set(truncationOmissions.map(item => item.id));
   const eligibleBeforeTruncation = rows.filter(({row}) => !holds.has(row.id) && !excludedIds.has(row.id) &&
-    !excludedGroups.has(row.group) && row.role === 'train' && row.kind === 'choice');
-  const sourceFamilies = [...new Set(rows.filter(({row}) => row.role === 'train' && row.kind === 'choice')
+    !excludedGroups.has(row.group) && row.role === 'train' && supportedKinds.has(row.kind));
+  const sourceFamilies = [...new Set(rows.filter(({row}) => row.role === 'train' && supportedKinds.has(row.kind))
     .map(({row}) => row.family).filter(family => typeof family === 'string'))].sort();
   const preTruncationByFamily = new Map(sourceFamilies.map(family => [family, []]));
   for (const entry of eligibleBeforeTruncation) {
@@ -253,21 +257,26 @@ async function main() {
       'missing_source_identity');
     requireValue(typeof row.question === 'string' && row.question.trim().length > 0, 'empty_source_question');
     requireValue(typeof row.state === 'string' && row.state.trim().length > 0, 'empty_source_state');
-    requireValue(Array.isArray(row.options) && row.options.length >= 2 &&
-      row.options.every(option => typeof option === 'string' && option.trim().length > 0) &&
-      new Set(row.options).size === row.options.length, 'invalid_or_duplicate_options');
-    requireValue(typeof row.answer === 'string' && row.options.includes(row.answer), 'annotation_not_in_options');
+    const labels = row.kind === 'choice' ? row.options : row.kind === 'score' ? row.levels : ['false', 'true'];
+    requireValue(Array.isArray(labels) && labels.length >= 2 &&
+      labels.every(option => typeof option === 'string' && option.trim().length > 0) &&
+      new Set(labels).size === labels.length, 'invalid_or_duplicate_decision_labels');
+    if (row.kind === 'choice') requireValue(typeof row.answer === 'string' && labels.includes(row.answer), 'annotation_not_in_options');
+    if (row.kind === 'noul') requireValue(typeof row.answer === 'boolean', 'annotation_not_boolean');
+    if (row.kind === 'score') requireValue(Number.isSafeInteger(row.answer) && row.answer >= 0 && row.answer < labels.length,
+      'annotation_not_in_ordinal_levels');
     requireValue(!sourceIds.has(row.id) && !sourceGroups.has(row.group), 'duplicate_source_identity');
     sourceIds.add(row.id); sourceGroups.add(row.group);
     const instruction = row.question;
     const { criteria, provenance: criteriaProvenance } = decisionCriteria({ family: row.family,
-      source: row.source, kind: row.kind, labels: row.options, explicitCriteria: row.criteria, where: row.id });
+      source: row.source, kind: row.kind, labels, explicitCriteria: row.criteria, where: row.id });
     const omitDerivedIdentityCriteria = criteriaProvenance === null && equal(criteria,
-      Object.fromEntries(row.options.map(label => [label, label])));
-    const task = { id: row.id, family: row.family, state: row.state, question: row.question, kind: 'choice',
-      options: row.options, labels: row.options,
+      Object.fromEntries(labels.map(label => [label, label])));
+    const task = { id: row.id, family: row.family, state: row.state, question: row.question, kind: row.kind,
+      options: row.kind === 'choice' ? row.options : labels, levels: row.kind === 'score' ? row.levels : [], labels,
       ...(!omitDerivedIdentityCriteria ? { criteria } : {}),
-      instruction, gold: row.answer, gold_source: 'dataset-annotation', group_id: row.group,
+      instruction, gold: row.kind === 'score' ? row.levels[row.answer] : row.answer,
+      gold_source: 'dataset-annotation', group_id: row.group,
       split: row.role, license: row.license, source_meta: { family_id: row.family, source_index: index,
         source_version: row.version, source_name: row.source } };
     const familyTasks = tasksByFamily.get(row.family) ?? [];
@@ -281,24 +290,33 @@ async function main() {
     license: 'source-record-required' };
   const records = [];
   const familySummary = [];
-  for (const [family, entries] of tasksByFamily) {
-    const first = entries[0].task;
-    const tasks = entries.map(entry => entry.task);
-    const instruction = first.instruction;
-    requireValue(tasks.every(task => task.instruction === instruction &&
-      JSON.stringify(task.labels) === JSON.stringify(first.labels) &&
-      JSON.stringify(task.criteria) === JSON.stringify(first.criteria) && task.license === first.license),
-      'family_contract_mismatch');
-    const batchSizes = partitionBatchSizes(entries.length, batchSize);
-    let offset = 0;
-    for (const size of batchSizes) {
-      const group = entries.slice(offset, offset + size);
-      offset += size;
+  for (const [family, familyEntries] of tasksByFamily) {
+    const entriesBySource = new Map();
+    for (const entry of familyEntries) {
+      const source = entry.sourceRow.source;
+      const sourceEntries = entriesBySource.get(source) ?? [];
+      sourceEntries.push(entry);
+      entriesBySource.set(source, sourceEntries);
+    }
+    for (const [datasetName, entries] of entriesBySource) {
+      const first = entries[0].task;
+      const tasks = entries.map(entry => entry.task);
+      const instruction = first.instruction;
+      requireValue(tasks.every(task => task.instruction === instruction &&
+        JSON.stringify(task.labels) === JSON.stringify(first.labels) &&
+        JSON.stringify(task.criteria) === JSON.stringify(first.criteria)),
+        'family_contract_mismatch');
+      requireValue(tasks.every(task => task.license === first.license), 'source_license_mismatch');
+      const batchSizes = partitionBatchSizes(entries.length, batchSize);
+      let offset = 0;
+      for (const size of batchSizes) {
+        const group = entries.slice(offset, offset + size);
+        offset += size;
       const firstTask = group[0].task;
-      const contract = { kind: 'choice', options: firstTask.labels, levels: [], labels: firstTask.labels,
+    const contract = { kind: firstTask.kind, options: firstTask.labels, levels: firstTask.levels, labels: firstTask.labels,
         criteria: firstTask.criteria, signature: jsonSha({ kind: firstTask.kind, labels: firstTask.labels,
           criteria: firstTask.criteria, question: firstTask.instruction }) };
-      const scaffoldEntries = group.map(entry => ({ task: { ...entry.task, gold: entry.sourceRow.answer } }));
+      const scaffoldEntries = group.map(entry => ({ task: { ...entry.task, gold: entry.task.gold } }));
       const originalGroups = group.map(entry => entry.sourceRow.group);
       const record = folderDecisionScaffold({ contract, entries: scaffoldEntries, sourceSha,
         sourceSnapshot: sha(sourceManifestBytes), sourceGroups: originalGroups,
@@ -310,7 +328,6 @@ async function main() {
       record.source_groups = [...new Set(originalGroups)];
       record.license = group[0].sourceRow.license;
       record.gold_sources = [`dataset-annotation:${sourceSha}`];
-      const datasetName = group[0].sourceRow.source;
       requireValue(group.every(entry => entry.sourceRow.source === datasetName), 'family_source_mismatch');
       record.dataset = { source: datasetName, family, source_split: 'train' };
       record.dataset_records = group.map(entry => `${datasetName}:${entry.sourceRow.id}`);
@@ -341,8 +358,10 @@ async function main() {
       const visible = visibleInputs(record);
       records.push({ record, visible });
     }
-    familySummary.push({ family, source_rows: entries.length, programs: batchSizes.length, batch_sizes: batchSizes,
-      source_ids: entries.map(entry => entry.sourceRow.id), source_groups: entries.map(entry => entry.sourceRow.group) });
+      familySummary.push({ family, source: datasetName, source_rows: entries.length,
+        programs: batchSizes.length, batch_sizes: batchSizes,
+        source_ids: entries.map(entry => entry.sourceRow.id), source_groups: entries.map(entry => entry.sourceRow.group) });
+    }
   }
   requireValue(records.length > 0, 'no_annotation_programs_selected');
   await mkdir(out, { recursive: true });

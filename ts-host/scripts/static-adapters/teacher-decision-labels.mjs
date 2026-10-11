@@ -52,6 +52,7 @@ const labelSchema = 'natlang.decision-labels/1';
 const poolSchema = 'natlang.gemini-decision-pool/1';
 const probabilityContract = 'natlang.typed-decision-probabilities/1';
 const choiceConfidenceContract = 'natlang.choice-label-confidence/1';
+const satisfactionEstimateFamily = 'decision:review-satisfaction-estimate-v1';
 const reviewedSourceFields = new Set(['id', 'family', 'kind', 'role', 'source', 'group', 'license', 'state',
   'question', 'options', 'levels', 'criteria', 'version', 'answer', 'source_refs',
   'identity_state_sha256', 'full_state_sha256']);
@@ -158,7 +159,8 @@ function metricAndDecision(source, answer, decisionContract) {
     const sourceDecision = top(Object.fromEntries(levels.map((name, i) => [name, targetDistribution[i]])), levels);
     const score = scoreGraded({ schema: 'natlang.skill-graded/1', kind: 'ordinal-rps' },
       { probabilities: answer.probabilities }, { kind: 'ordinal', levels, answer: source.answer });
-    return { predicted, sourceDecision, raw: { probabilities: answer.probabilities }, score };
+    return { predicted, sourceDecision, predictedIndex: levels.indexOf(predicted),
+      sourceDecisionIndex: levels.indexOf(sourceDecision), raw: { probabilities: answer.probabilities }, score };
   }
   return { error: 'unsupported_source_kind' };
 }
@@ -171,9 +173,19 @@ function checkedLabel(source, label) {
   if (decisionContract === probabilityContract &&
       (!judged.score || typeof judged.score.quality !== 'number' || !Object.values(judged.score.gates ?? {}).every(Boolean)))
     return { error: 'scoreGraded_gate_failure', detail: { score: judged.score ?? null } };
-  if (judged.predicted !== judged.sourceDecision)
+  // The revised review task estimates satisfaction from the visible text. Its
+  // source star is a noisy human reference, so accept the predeclared adjacent
+  // ordinal band instead of pretending that the hidden historical rating is
+  // recoverable. The selected prediction remains the action target.
+  const withinSatisfactionTolerance = source.family === satisfactionEstimateFamily && source.kind === 'score' &&
+    Number.isSafeInteger(judged.predictedIndex) && Number.isSafeInteger(judged.sourceDecisionIndex) &&
+    Math.abs(judged.predictedIndex - judged.sourceDecisionIndex) <= 1;
+  if (judged.predicted !== judged.sourceDecision && !withinSatisfactionTolerance)
     return { error: 'top_decision_disagrees_with_source', detail: { top: judged.predicted, source: judged.sourceDecision } };
-  return { ...judged, decisionContract };
+  return { ...judged, decisionContract, ...(withinSatisfactionTolerance ? {
+    source_tolerance: { kind: 'ordinal-distance', max_distance: 1,
+      reference: 'human star annotation; task is visible-text satisfaction estimation' },
+  } : {}) };
 }
 
 function verifyManifestBinding(manifest, row, source, casesSha) {
@@ -263,7 +275,13 @@ function createRecord(contract, batch, sourceMeta) {
       to: 'the exact teacher choice, admitted only when it equals the source annotation',
       probabilities_normalized: false, synthetic_probabilities_created: false,
       confidence_retained_as_scalar: true, gold_in_prompt: false, reasoning_inferred: false }
-    : { kind: contract.kind, from: 'strict probability judgment',
+    : first.family === satisfactionEstimateFamily
+      ? { kind: contract.kind, from: 'visible-text satisfaction estimate under explicit 1–5 criteria',
+        to: 'provider prediction retained when its ordinal distance from the human star annotation is at most one',
+        source_annotation_used_as: 'bounded noisy reference, not a hidden-value recovery target',
+        accepted_source_tolerance: { kind: 'ordinal-distance', max_distance: 1 },
+        probabilities_normalized: false, gold_in_prompt: false, reasoning_inferred: false }
+      : { kind: contract.kind, from: 'strict probability judgment',
       to: contract.kind === 'noul' ? 'Boolean threshold at p >= 0.5; true means yes is at least as likely as no' : 'highest-probability source option/level',
       probabilities_normalized: false, gold_in_prompt: false, reasoning_inferred: false };
   record.generation = {
@@ -302,6 +320,7 @@ function createRecord(contract, batch, sourceMeta) {
       ...(entry.label.value.decision_contract === choiceConfidenceContract
         ? { decision_contract: choiceConfidenceContract, confidence_receipt: entry.raw }
         : { probabilities: entry.raw }), score: entry.score,
+      ...(entry.source_tolerance ? { source_tolerance: entry.source_tolerance } : {}),
       teacher: entry.label.value.teacher ?? null, provider_model: entry.label.value.provider?.model ?? null })),
   };
   return record;
@@ -451,7 +470,8 @@ async function main() {
       reject(rejections, id, 'incomplete_or_incompatible_source_contract', { family: source.family, kind: source.kind }); continue;
     }
     const decision = source.kind === 'noul' ? result.predicted : stringLabel(result.predicted);
-    eligible.push({ source, label, contract, decision, raw: result.raw, score: result.score });
+    eligible.push({ source, label, contract, decision, raw: result.raw, score: result.score,
+      source_tolerance: result.source_tolerance });
   }
   if (!eligible.length) throw new Error('no source labels passed strict schema, scoreGraded gates, and exact-top checks');
 

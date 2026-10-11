@@ -1,0 +1,291 @@
+#!/usr/bin/env node
+/**
+ * Selectively materialize provider-sampled child decisions from a partial
+ * static decision program. The input remains immutable; an explicit review
+ * file binds each admitted child action to its source item and exact target.
+ */
+import { createHash } from 'node:crypto';
+import { mkdir, open, readFile, readdir, stat } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { parseArgs } from 'node:util';
+import { materializeNativeRows, nativeRowDigest } from '../ts-host/dist/teacher/native-materializer.js';
+import { nativeDecisionTargetDigest } from '../ts-host/dist/native/decision-review.js';
+import { renderValue } from '../ts-host/dist/native/agent.js';
+
+const { values } = parseArgs({ options: {
+  'results-dir': { type: 'string' }, 'source-cases': { type: 'string' },
+  'source-manifest': { type: 'string' }, 'candidate-out': { type: 'string' },
+  review: { type: 'string' }, out: { type: 'string' },
+} });
+if (!values['results-dir'] || !values['source-cases'] || !values['source-manifest'] || !values['candidate-out'])
+  throw new Error('usage: node scripts/materialize-reviewed-decision-children.mjs --results-dir DIR --source-cases FILE --source-manifest FILE --candidate-out FILE [--review FILE --out DIR]');
+if (!!values.review !== !!values.out) throw new Error('--review and --out must be supplied together');
+
+const sha = value => createHash('sha256').update(value).digest('hex');
+const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` :
+  value && typeof value === 'object' ? `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`).join(',')}}` : JSON.stringify(value);
+const same = (a, b) => canonical(a) === canonical(b);
+const parseLines = (text, path) => text.split(/\r?\n/).flatMap((line, index) => {
+  if (!line.trim()) return [];
+  try { return [{ value: JSON.parse(line), line: index + 1, raw: line }]; }
+  catch (error) { throw new Error(`${path}:${index + 1}: invalid JSON: ${error.message}`); }
+});
+async function resultsFiles(dir) {
+  const out = [];
+  for (const item of await readdir(dir, { withFileTypes: true })) {
+    const path = resolve(dir, item.name);
+    if (item.isDirectory()) out.push(...await resultsFiles(path));
+    else if (item.isFile() && item.name === 'results.jsonl') out.push(path);
+  }
+  return out.sort();
+}
+function visibleValue(value, text) {
+  const candidates = [JSON.stringify(value)];
+  if (typeof value === 'string') candidates.push(value);
+  try { candidates.push(renderValue(value, { budget: Infinity })); } catch {}
+  return candidates.some(candidate => typeof candidate === 'string' && candidate.length > 0 && text.includes(candidate));
+}
+function effectiveFields(item, task) {
+  // The item ID is the host-side key used to aggregate results; it does not
+  // classify the task. A child target can be source-bound by the complete
+  // visible state, question, and decision schema even when the controller
+  // keeps its map key outside the inline function's scope.
+  const fields = { state: item.state, question: item.question };
+  for (const key of ['criteria', 'options', 'levels']) {
+    if (Object.hasOwn(item, key)) fields[key] = item[key];
+    else if (Object.hasOwn(task, key)) fields[key] = task[key];
+  }
+  return fields;
+}
+function turnText(turn) {
+  return (turn.messages ?? []).map(message => `${message.content ?? ''}\n${(message.tool_calls ?? [])
+    .map(call => call.function?.arguments ?? '').join('\n')}`).join('\n');
+}
+
+const sourceCasesPath = resolve(values['source-cases']);
+const sourceManifestPath = resolve(values['source-manifest']);
+const sourceBytes = await readFile(sourceCasesPath);
+const sourceText = sourceBytes.toString('utf8');
+const sourceSha = sha(sourceBytes);
+const sourceManifestBytes = await readFile(sourceManifestPath);
+const sourceManifest = JSON.parse(sourceManifestBytes.toString('utf8'));
+if (sourceManifest.selected_sha256 && sourceManifest.selected_sha256 !== sourceSha ||
+    sourceManifest.cases_sha256 && sourceManifest.cases_sha256 !== sourceSha)
+  throw new Error('source manifest does not bind the supplied source cases');
+const sourceRows = new Map(parseLines(sourceText, sourceCasesPath).map(({ value: row }) => [row.id, row]));
+const groupRoles = new Map();
+for (const row of sourceRows.values()) {
+  const roles = groupRoles.get(row.group) ?? new Set();
+  roles.add(row.role ?? row.split);
+  groupRoles.set(row.group, roles);
+}
+const canonicalHolds = JSON.parse(await readFile(resolve('training/decision_source_quality_holds.json'), 'utf8'));
+if (canonicalHolds.schema !== 'natlang.decision-source-quality-holds/1' || !Array.isArray(canonicalHolds.excluded_items))
+  throw new Error('unsupported canonical source-quality hold policy');
+const heldIds = new Set(canonicalHolds.excluded_items.map(row => row.item_id));
+const heldGroups = new Set(canonicalHolds.excluded_items.map(row => row.original_source_group));
+const reservationPath = resolve('training/source-split-reservations.json');
+const reservationBytes = await readFile(reservationPath);
+const reservationPolicy = JSON.parse(reservationBytes.toString('utf8'));
+if (reservationPolicy.schema !== 'natlang.source-split-reservations/1')
+  throw new Error('unsupported source split reservation policy');
+const reservationSourcePath = resolve(reservationPolicy.source.path);
+const reservationSourceBytes = await readFile(reservationSourcePath);
+if (sha(reservationSourceBytes) !== reservationPolicy.source.sha256)
+  throw new Error('JeFF reservation source checksum mismatch');
+const reservedIds = new Set(reservationPolicy.records.flatMap(item => item.source_ids ?? []));
+const reservedNeedles = [];
+for (const { value } of parseLines(reservationSourceBytes.toString('utf8'), reservationSourcePath)) {
+  if (!reservedIds.has(value.id) || typeof value.state !== 'string') continue;
+  const normalized = value.state.replace(/\\/g, ' ').replace(/\s+/g, ' ').trim();
+  if (normalized.length >= 40) reservedNeedles.push({ id: value.id, text: normalized.slice(0, 60) });
+}
+function stringLeaves(value, out = []) {
+  if (typeof value === 'string') out.push(value);
+  else if (Array.isArray(value)) for (const child of value) stringLeaves(child, out);
+  else if (value && typeof value === 'object') for (const child of Object.values(value)) stringLeaves(child, out);
+  return out;
+}
+function jeffReservationHit(row) {
+  const haystack = stringLeaves([row.task, (row.messages ?? [])
+    .filter(message => message.role === 'user').map(message => message.content ?? '')])
+    .join(' ').replace(/\\/g, ' ').replace(/\s+/g, ' ').trim();
+  return reservedNeedles.find(needle => haystack.includes(needle.text))?.id ?? null;
+}
+
+let review = null, reviewBytes = null, reviewSha = null;
+if (values.review) {
+  reviewBytes = await readFile(resolve(values.review));
+  reviewSha = sha(reviewBytes);
+  review = JSON.parse(reviewBytes.toString('utf8'));
+  if (review.schema !== 'natlang.provider-child-action-review/1' || !Array.isArray(review.approvals))
+    throw new Error('review must use natlang.provider-child-action-review/1 with approvals[]');
+}
+const approvalsByKey = new Map();
+for (const approval of review?.approvals ?? []) {
+  if (approval.approved !== true || !approval.item_id || !/^[a-f0-9]{64}$/.test(approval.item_sha256 ?? '') ||
+      !approval.group || !approval.reason?.trim() || !Array.isArray(approval.evidence) || !approval.evidence.length ||
+      approval.evidence.some(item => typeof item !== 'string' || !item.trim()))
+    throw new Error(`invalid reviewed source item: ${approval.item_id ?? '(missing ID)'}`);
+  const key = `${approval.program_id}\0${approval.item_id}`;
+  if (approvalsByKey.has(key)) throw new Error(`duplicate review approval: ${approval.item_id}`);
+  approvalsByKey.set(key, approval);
+}
+
+const candidates = [], prepared = [], rejected = [];
+for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
+  const text = await readFile(resultsPath, 'utf8');
+  for (const { value: row, line } of parseLines(text, resultsPath)) {
+    const program = row.task?.program_ir;
+    const semantics = program?.semantics;
+    const taskText = semantics?.folder_files?.['task.json'];
+    if (!program || !semantics || typeof taskText !== 'string') { rejected.push({ resultsPath, line, reason: 'missing-program-or-task-contract' }); continue; }
+    if (program.generation?.source_cases_sha256 !== sourceSha) throw new Error(`${row.id}: source cases hash mismatch`);
+    const task = JSON.parse(taskText), originalDigest = nativeRowDigest(row);
+    const reservedSourceId = jeffReservationHit(row);
+    const rootInvocation = (row.outcome?.invocation_ledger ?? []).find(item => item.parent_invocation_id == null)?.invocation_id;
+    if (!rootInvocation) { rejected.push({ id: row.id, reason: 'root-invocation-missing' }); continue; }
+    const materialized = materializeNativeRows([row], { failedRuns: true });
+    if (materialized.unlinked.length) { rejected.push({ id: row.id, reason: 'action-ledger-unlinked', unlinked: materialized.unlinked }); continue; }
+    const ledger = row.outcome?.invocation_ledger ?? [];
+    for (const [path, raw] of Object.entries(semantics.folder_files)) {
+      if (!path.startsWith('items/') || !path.endsWith('.json')) continue;
+      const item = JSON.parse(raw), itemSha = sha(raw), id = item.id;
+      const source = sourceRows.get(id);
+      if (!source || source.role !== 'train' || item.role !== 'train' || source.group !== item.group ||
+          (source.split !== undefined && source.split !== 'train')) {
+        rejected.push({ program_id: program.id, item_id: id, item_sha256: itemSha, reason: 'source-row-or-train-split-binding-failed' });
+        continue;
+      }
+      const roles = groupRoles.get(source.group) ?? new Set();
+      if (roles.size !== 1 || !roles.has('train') || heldIds.has(id) || heldGroups.has(source.group)) {
+        rejected.push({ program_id: program.id, item_id: id, item_sha256: itemSha, group: source.group,
+          reason: 'source-group-crosses-split-or-canonical-hold' });
+        continue;
+      }
+      if (reservedSourceId) {
+        rejected.push({ program_id: program.id, item_id: id, item_sha256: itemSha, group: source.group,
+          reason: 'jeff-test-reservation-overlap', reserved_source_id: reservedSourceId });
+        continue;
+      }
+      const expected = semantics.expected?.[id], observed = row.outcome?.value?.[id];
+      if (['decision:toxicity', 'decision:app-stars', 'decision:yelp-stars'].includes(item.family)) {
+        rejected.push({ program_id: program.id, item_id: id, item_sha256: itemSha, group: source.group,
+          reason: `adapter-contract-repair-required:${item.family}` });
+        continue;
+      }
+      if (expected === undefined || !same(expected, observed)) continue;
+      const fields = effectiveFields(item, task);
+      const matches = [];
+      const bindingGaps = [];
+      for (const entry of ledger) {
+        if (entry.parent_invocation_id !== rootInvocation || entry.completion_status !== 'done' ||
+            entry.host_result?.complete !== true || !same(entry.host_result.value, expected)) continue;
+        const invocationTurns = materialized.turns.filter(turn => turn.source_ref?.invocation_id === entry.invocation_id);
+        const turn = invocationTurns.at(-1);
+        if (!turn) { bindingGaps.push({ invocation_id: entry.invocation_id, reason: 'materializer_has_no_child_turn' }); continue; }
+        const text = turnText(turn);
+        const snapshots = entry.inline_instruction_site?.runtime_capture_snapshots?.captures ?? [];
+        const scopeValues = Object.fromEntries(snapshots.map(snapshot => [snapshot.name, snapshot.value]));
+        const scopeBound = Object.fromEntries(Object.entries(fields).map(([key, value]) =>
+          [key, Object.hasOwn(scopeValues, key) && same(scopeValues[key], value)]));
+        const visible = Object.fromEntries(Object.entries(fields).map(([key, value]) =>
+          [key, visibleValue(value, text) || scopeBound[key]]));
+        // caseId is provenance rather than task content, but when the runtime
+        // recorded it, it must bind this exact invocation to this item. This
+        // prevents equal labels from associating another item's child result.
+        const caseIdBound = Object.hasOwn(scopeValues, 'caseId')
+          ? same(scopeValues.caseId, id) : true;
+        if (!caseIdBound) {
+          bindingGaps.push({ invocation_id: entry.invocation_id, reason: 'runtime_case_id_mismatch',
+            case_id_sha256: sha(String(scopeValues.caseId)),
+            visible_fields: Object.keys(visible).filter(key => visible[key]) });
+          continue;
+        }
+        if (Object.values(visible).every(Boolean)) matches.push({ entry, turn, visible, caseIdBound,
+          scopeBoundFields: Object.keys(scopeBound).filter(key => scopeBound[key]) });
+        else bindingGaps.push({ invocation_id: entry.invocation_id, reason: 'source_fields_not_fully_bound',
+          missing_fields: Object.keys(visible).filter(key => !visible[key]),
+          scope_capture_names: Object.keys(scopeValues) });
+      }
+      if (matches.length !== 1) {
+        rejected.push({ program_id: program.id, item_id: id, item_sha256: itemSha, group: source.group,
+          reason: matches.length ? 'ambiguous-exact-child-invocation' : 'no-child-with-complete-exact-visible-inputs',
+          matching_children: matches.length,
+          expected_value_has_completed_child: bindingGaps.length > 0,
+          binding_gaps: bindingGaps.slice(0, 8) });
+        continue;
+      }
+      const { entry, turn, visible, caseIdBound, scopeBoundFields } = matches[0];
+      const candidate = { program_id: program.id, trajectory_id: row.id, trajectory_sha256: originalDigest,
+        item_id: id, item_sha256: itemSha, source_group: source.group, source_role: source.role,
+        expected_value: expected, observed_value: observed, invocation_id: entry.invocation_id,
+        decision_index: turn.decision.index, target_sha256: nativeDecisionTargetDigest(turn.target),
+        target_tool: turn.target?.tool_calls?.[0]?.function?.name ?? null,
+        visible_fields: Object.keys(visible), scope_bound_fields: scopeBoundFields,
+        source_item_id_runtime_bound: caseIdBound,
+        scope_snapshot_sha256: sha(JSON.stringify(entry.inline_instruction_site?.runtime_capture_snapshots ?? null)),
+        group_role_closure: [...roles] };
+      candidates.push(candidate);
+      const approval = approvalsByKey.get(`${program.id}\0${id}`);
+      if (!approval) continue;
+      if (approval.item_sha256 !== itemSha || approval.group !== source.group ||
+          approval.decision_index !== candidate.decision_index || approval.target_sha256 !== candidate.target_sha256)
+        throw new Error(`review/source/target binding mismatch for ${program.id}/${id}`);
+      const decisionApproval = { schema: 'natlang.native-decision-approval/1', trajectory_id: row.id,
+        source_row_sha256: originalDigest, decision_index: turn.decision.index,
+        target_sha256: candidate.target_sha256, review_sha256: reviewSha,
+        reason: approval.reason, evidence: approval.evidence };
+      const approved = materializeNativeRows([row], { failedRuns: true, decisionApprovals: [decisionApproval] });
+      const selected = approved.turns.filter(value => value.decision.index === turn.decision.index &&
+        value.training_admission?.approved === true);
+      if (selected.length !== 1) throw new Error(`selected target was not admitted exactly once: ${program.id}/${id}`);
+      prepared.push({ candidate, turn: selected[0], approval: decisionApproval });
+      approvalsByKey.delete(`${program.id}\0${id}`);
+    }
+  }
+}
+if (approvalsByKey.size) throw new Error(`review names source items without an exact, visible successful child action: ${[...approvalsByKey.values()].map(item => item.item_id).join(', ')}`);
+
+const candidatePath = resolve(values['candidate-out']);
+await mkdir(dirname(candidatePath), { recursive: true });
+const candidateHandle = await open(candidatePath, 'wx');
+try { await candidateHandle.writeFile(JSON.stringify({ schema: 'natlang.provider-child-action-candidates/1',
+  training_admission: false, created_at: new Date().toISOString(), source_cases: { path: sourceCasesPath, sha256: sourceSha },
+  source_manifest: { path: sourceManifestPath, sha256: sha(sourceManifestBytes) },
+  source_split_reservations: { path: reservationPath, sha256: sha(reservationBytes),
+    test_source_path: reservationSourcePath, test_source_sha256: sha(reservationSourceBytes),
+    matching_rule: 'case-sensitive; backslashes to spaces; whitespace collapsed; first 60 characters of reserved state searched in full program IR and user context' },
+  results_dir: resolve(values['results-dir']), review_sha256: reviewSha,
+  candidates,
+  rejected, counts: { candidate_actions: candidates.length, rejected_items: rejected.length, approved_turns: prepared.length } }, null, 2) + '\n'); }
+finally { await candidateHandle.close(); }
+
+if (values.out) {
+  const out = resolve(values.out);
+  await mkdir(out, { recursive: true });
+  if ((await readdir(out)).length || !(await stat(out)).isDirectory()) throw new Error(`output directory must be empty: ${out}`);
+  const outputHandle = await open(resolve(out, 'turns.jsonl'), 'wx');
+  try { for (const item of prepared) await outputHandle.writeFile(JSON.stringify(item.turn) + '\n'); }
+  finally { await outputHandle.close(); }
+  const manifest = { schema: 'natlang.provider-child-action-packet/1', training_admission: true,
+    created_at: new Date().toISOString(), review_sha256: reviewSha,
+    source_cases: { path: sourceCasesPath, sha256: sourceSha }, source_manifest: { path: sourceManifestPath,
+      sha256: sha(sourceManifestBytes) },
+    source_split_reservations: { path: reservationPath, sha256: sha(reservationBytes),
+      test_source_path: reservationSourcePath, test_source_sha256: sha(reservationSourceBytes) },
+    results_dir: resolve(values['results-dir']),
+    candidate_manifest: candidatePath, candidate_manifest_sha256: sha(await readFile(candidatePath)),
+    turns: prepared.map(item => ({ id: item.turn.id, program_id: item.candidate.program_id,
+      trajectory_id: item.candidate.trajectory_id, trajectory_sha256: item.candidate.trajectory_sha256,
+      item_id: item.candidate.item_id, item_sha256: item.candidate.item_sha256, source_group: item.candidate.source_group,
+      invocation_id: item.candidate.invocation_id, decision_index: item.candidate.decision_index,
+      target_sha256: item.candidate.target_sha256, visible_fields: item.candidate.visible_fields,
+      approval: item.approval })) };
+  const manifestHandle = await open(resolve(out, 'manifest.json'), 'wx');
+  try { await manifestHandle.writeFile(JSON.stringify(manifest, null, 2) + '\n'); }
+  finally { await manifestHandle.close(); }
+}
+console.log(JSON.stringify({ candidates: candidates.length, rejected: rejected.length, approved_turns: prepared.length,
+  candidate_manifest: candidatePath, ...(values.out ? { output: resolve(values.out) } : {}) }));
