@@ -173,14 +173,17 @@ def text_warmup_update_geometry_bytes(prefix_tokens: int, target_tokens: int,
 
 def effective_cuda_free_bytes(device_free_bytes: int, total_bytes: int,
                               allocator_reserved_bytes: int,
-                              allocator_allocated_bytes: int):
+                              allocator_allocated_bytes: int,
+                              inactive_split_bytes: int | None = None):
     """Count reusable PyTorch cache without mistaking it for live memory.
 
     ``cuda.mem_get_info`` free bytes exclude PyTorch's cached-but-unused
-    reserved blocks. Those blocks are immediately reusable by this process,
-    so add ``reserved - allocated`` back. Device-wide free bytes already
-    account for live non-PyTorch users. The total-device cap protects against
-    stale/inconsistent counters.
+    reserved blocks. Add cached blocks back, except native-allocator inactive
+    splits, which PyTorch reports as non-releasable and which cannot satisfy a
+    new allocation. ``inactive_split_bytes`` is optional because its stat is
+    backend-specific; when unavailable, retain the previous cache estimate.
+    Device-wide free bytes already account for live non-PyTorch users. The
+    total-device cap protects against stale/inconsistent counters.
     """
     values = (device_free_bytes, total_bytes, allocator_reserved_bytes,
               allocator_allocated_bytes)
@@ -190,7 +193,13 @@ def effective_cuda_free_bytes(device_free_bytes: int, total_bytes: int,
         raise ValueError('memory byte counts must be nonnegative and total_bytes positive')
     if device_free_bytes > total_bytes or allocator_allocated_bytes > total_bytes:
         raise ValueError('free or allocated bytes cannot exceed total_bytes')
+    if (inactive_split_bytes is not None and
+            (not isinstance(inactive_split_bytes, int) or isinstance(inactive_split_bytes, bool) or
+             inactive_split_bytes < 0)):
+        raise ValueError('inactive_split_bytes must be a nonnegative integer when provided')
     reclaimable_cache = max(0, allocator_reserved_bytes - allocator_allocated_bytes)
+    if inactive_split_bytes is not None:
+        reclaimable_cache -= min(reclaimable_cache, inactive_split_bytes)
     return min(total_bytes, device_free_bytes + reclaimable_cache)
 
 
