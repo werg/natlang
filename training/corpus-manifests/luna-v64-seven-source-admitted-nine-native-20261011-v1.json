@@ -1,0 +1,55 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v64-seven-source-admitted-nine-native-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-admitted-nine-native-v1",
+  "files": [
+    {
+      "path": "admission.json",
+      "bytes": 2115,
+      "sha256": "5ac24353e12a8b26cc7e74c617f4aba8103e6d9bbea47a8308e8784e1b24b098"
+    },
+    {
+      "path": "decision-review-nine-targets-v1.json",
+      "bytes": 9566,
+      "sha256": "9ead792225c207dafec9b2a4d1f2de8b2ee567a2474451153249b2f7956c3b10"
+    },
+    {
+      "path": "full-s1-source-closure.json",
+      "bytes": 11039,
+      "sha256": "d6e148eac49d76763de2bc0ea4adf5e004b21cd1d08124987e39b046f8f33410"
+    },
+    {
+      "path": "root-actual-exercise-review-v1.json",
+      "bytes": 1590,
+      "sha256": "6ae63d26237cfb172c84419a5e3c69cceef77e73c3675dbc05ad9a5bf5f2c7b5"
+    },
+    {
+      "path": "root-nine-target-review-v1.json",
+      "bytes": 10309,
+      "sha256": "3c616dc5fbc23dd96a8e953b4af040339884ef67252a519a2c854b783609f419"
+    },
+    {
+      "path": "root-source-correctness-review-v1.json",
+      "bytes": 4234,
+      "sha256": "85218774b6acb11b04a49bc57144e2647ab170ddb54ff8563095246015fa5cb8"
+    },
+    {
+      "path": "selected-nine-native.jsonl",
+      "bytes": 1061746,
+      "sha256": "329bb90b56349dc5e97732a2cb2c2eb2ea4c27d809944b7a8efa6a6e8db610fd",
+      "lines": 9
+    },
+    {
+      "path": "source-hold-policy-v14.json",
+      "bytes": 52055,
+      "sha256": "d448b118f17c09398f25dc06ee88308e1cd3bddce445d794303c4d05f73df0bd"
+    },
+    {
+      "path": "source-quality-clearance.json",
+      "bytes": 10982,
+      "sha256": "e4ac9ec0bd55e4c0e88dfae7d2d898f1a6ebcce1ba4db79237c021186ec6cdda"
+    }
+  ],
+  "bytes": 1163636
+}

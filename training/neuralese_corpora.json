@@ -29083,6 +29083,167 @@
         "source/source-manifest.json",
         "source/parent-source-rows.json"
       ]
+    },
+    {
+      "id": "google-choice-confidence-v34-closed-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v34-source",
+      "split": "inherited-train-evidence",
+      "source_class": "held-provider-label-source-and-results",
+      "training_admission": false,
+      "admission": "closed-source-label-evidence-only",
+      "notes": "Closed512case V34 free-provider choice-confidence source and sanitized labels/attempts, exact frozen adapter and launch provenance. Labels remain held; no training or teacher-trace admission.",
+      "include": [
+        "cases.jsonl",
+        "frozen-adapter-v1/frozen-runtime.json",
+        "frozen-adapter-v1/models.json",
+        "labels.jsonl",
+        "labels.jsonl.attempts.jsonl",
+        "labels.jsonl.manifest.json",
+        "launch-plan-v1.json",
+        "omissions.jsonl",
+        "pool.log",
+        "root-launch-process-v1.json",
+        "root-source-launch-review-v1.json",
+        "source-manifest.json"
+      ]
+    },
+    {
+      "id": "google-choice-confidence-v34-static-reference-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v34-adapter-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-static-source-derived-reference-and-replay",
+      "training_admission": false,
+      "admission": "reference-replay-evidence-only",
+      "notes": "Label-derived static V34 adapter:55 programs/419 strict source-aligned labels,93 typed top-decision disagreements retained in rejections,55/55 actual reference replay successes. All files and component archive are evidence only; no provider-written trajectory or training admission.",
+      "include": [
+        "cases.jsonl",
+        "execution-components/**/*",
+        "label-manifest.json",
+        "native.held.jsonl",
+        "rejections.jsonl",
+        "replay.failures.jsonl",
+        "replay.results.jsonl",
+        "scorer-manifest.json",
+        "source-manifest.json",
+        "summary.json"
+      ]
+    },
+    {
+      "id": "luna-choice-confidence-v70-v34-input-plan-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v70-v34-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-generation-input-plan",
+      "training_admission": false,
+      "admission": "input-plan-only-active-results-excluded",
+      "notes": "Root-approved V70 source/plan and immutable five worker queues; campaign active. Includes input-only plan provenance and queues; intentionally excludes mutable campaign-launch, journals, logs, cases/results, and all active outputs. The V34 static source/replay and label inputs are separately registered. No completion, quality outcome, or training admission is represented.",
+      "include": [
+        "current-source-policy-check-v1.json",
+        "reviewed-plan-v1.json",
+        "root-approved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-supervisor-launch-v1.json",
+        "v34-label-screen-diagnostic-v1.json",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ]
+    },
+    {
+      "id": "google-choice-confidence-v34-label-disagreements-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v34-label-disagreements-v1",
+      "split": "inherited-train-diagnostic",
+      "source_class": "provider-label-quality-review",
+      "training_admission": false,
+      "admission": "held-diagnostic-only-no-relabel-or-admission",
+      "notes": "Detailed exact-source and provider-output review of all 93 V34 top-choice disagreements. Joins provider labels and cases to exact pinned parent source rows/criteria; no gold-in-prompt claim, no relabel, no statistical ranking, no training admission.",
+      "include": [
+        "review.json",
+        "review.md"
+      ]
+    },
+    {
+      "id": "google-choice-confidence-v35-source-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v35-source",
+      "split": "inherited-train-input",
+      "source_class": "held-provider-generation-inputs",
+      "training_admission": false,
+      "admission": "input-only-active-labeling-excluded",
+      "notes": "V35 source selection and frozen Google pool request inputs; 512 source cases, source/frozen adapter, root source review and launch process. The labeling campaign is active; mutable pool.log and all labels, journals, results and worker outputs are intentionally excluded. No output-quality conclusion or training admission.",
+      "include": [
+        "cases.jsonl",
+        "frozen-adapter-v1/frozen-runtime.json",
+        "frozen-adapter-v1/models.json",
+        "frozen-adapter-v1/scripts/label_decision_cases.py",
+        "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+        "omissions.jsonl",
+        "root-launch-process-v1.json",
+        "root-source-launch-review-v1.json",
+        "source-manifest.json"
+      ]
+    },
+    {
+      "id": "luna-ar-native-harness-alignment-v7-final-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-v7-final-review-held-20261011-v1",
+      "include": [
+        "**/*"
+      ],
+      "training_admission": false,
+      "admission": "held",
+      "source_class": "declared-neuralese-training-run-evidence",
+      "notes": "Exact V7 final unqualified metadata or V8 immutable executed recipe/package/launch evidence. Large V7 weights are hash references, not copied weight payloads. Preparation draft retained distinct from executed recipe."
+    },
+    {
+      "id": "luna-ar-native-harness-alignment-v8-launch-evidence-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-v8-launch-evidence-held-20261011-v1",
+      "include": [
+        "**/*"
+      ],
+      "training_admission": false,
+      "admission": "held",
+      "source_class": "declared-neuralese-training-run-evidence",
+      "notes": "Exact V7 final unqualified metadata or V8 immutable executed recipe/package/launch evidence. Large V7 weights are hash references, not copied weight payloads. Preparation draft retained distinct from executed recipe."
+    },
+    {
+      "id": "luna-v64-seven-source-admitted-nine-native-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-admitted-nine-native-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-native-model-actions",
+      "training_admission": true,
+      "admission": "root-reviewed-exact-nine-native-actions-and-ordinary-SFT-only",
+      "independent_new_worlds": 0,
+      "notes": "Nine exact reviewed model targets from two source-bound V64 recovery programs/seven original DBpedia train items. Full S1+harness+protected closure, current68holds, per-action semantic approval and native source-quality binding verified; shared LFM350 renderer/token audit passes9/9, max16512,648supervisedtokens. Native/text views count the same9targets. Other20materializedtargets/firstwrongapprovaldiagnostic/neuraleseconversion remainheld. Not inrunningV8fixeddata; future declared intake required.",
+      "data_file": "selected-nine-native.jsonl"
+    },
+    {
+      "id": "luna-v64-seven-source-admitted-nine-lfm350-text-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-admitted-nine-lfm350-text-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-native-lfm350-rendered-text",
+      "training_admission": true,
+      "admission": "root-reviewed-exact-nine-native-actions-and-ordinary-SFT-only",
+      "independent_new_worlds": 0,
+      "notes": "Nine exact reviewed model targets from two source-bound V64 recovery programs/seven original DBpedia train items. Full S1+harness+protected closure, current68holds, per-action semantic approval and native source-quality binding verified; shared LFM350 renderer/token audit passes9/9, max16512,648supervisedtokens. Native/text views count the same9targets. Other20materializedtargets/firstwrongapprovaldiagnostic/neuraleseconversion remainheld. Not inrunningV8fixeddata; future declared intake required.",
+      "data_file": "selected-nine-lfm350-token-audited-v1.jsonl"
     }
   ],
   "coverage_backlog": [

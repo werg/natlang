@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v34-label-disagreements-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v34-label-disagreements-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 285215,
+      "sha256": "0ee4ed7aa2fec3f1852420b9c70c7b489311db1a972fbad4756d67d61bda66ca"
+    },
+    {
+      "path": "review.md",
+      "bytes": 12286,
+      "sha256": "a3daf398ec7a7d4a13da810a1992f273438e4bfed31c155166141b8586a9573d"
+    }
+  ],
+  "bytes": 297501
+}

@@ -1,0 +1,69 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v70-v34-input-plan-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v70-v34-runtimev15-v1",
+  "files": [
+    {
+      "path": "current-source-policy-check-v1.json",
+      "bytes": 1408,
+      "sha256": "aac7175aa45a52349277ae1417e8eb773f7792fa37a5b6c20a198531252aaed2"
+    },
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 10677,
+      "sha256": "dce56963b3dc0452aedae76a571166ac2372531edef2c2e9540bcaa722649520"
+    },
+    {
+      "path": "root-approved-plan-v1.json",
+      "bytes": 10281,
+      "sha256": "da5931c6bd578dde4c778b1a92f39062b967523e3ae0cf70965654df2517cdd6"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 29905,
+      "sha256": "9764490f13fb36fe67db5af34024b0987137f6adffd1c354c37a842fd8fb8ecf"
+    },
+    {
+      "path": "root-supervisor-launch-v1.json",
+      "bytes": 237,
+      "sha256": "006415de4a2085cefe81a181d85183ec7c052384094139d73f1422700de2bebe"
+    },
+    {
+      "path": "v34-label-screen-diagnostic-v1.json",
+      "bytes": 3343,
+      "sha256": "a9eb59e60ca725060417005009a35330dab1c9f5cfc58ebaa3f57ec5a85927ae"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 9929,
+      "sha256": "2266d9b912c3fa7833e63768d6c71fe9f21993a5d0f18ce86937faa49bd7c597",
+      "lines": 11
+    },
+    {
+      "path": "worker-02/queue.jsonl",
+      "bytes": 9929,
+      "sha256": "32dc36e4b4835acb67025a686699ff3828a9ea1d4fcffe9b428fd3982a007663",
+      "lines": 11
+    },
+    {
+      "path": "worker-03/queue.jsonl",
+      "bytes": 9929,
+      "sha256": "971144f461fc30c77bdbacc7ab969273c0e8ae1e78f6f580a2da031a5416f2c7",
+      "lines": 11
+    },
+    {
+      "path": "worker-04/queue.jsonl",
+      "bytes": 9929,
+      "sha256": "9ce0f7dbb2fc6fc71d0ca962f7d1d4662b64ffe17f8e1a021881dc22f7bf6e74",
+      "lines": 11
+    },
+    {
+      "path": "worker-05/queue.jsonl",
+      "bytes": 9929,
+      "sha256": "027ebd44b7fe1f42d3afb45c3d09d8fc2a58b98e4d491a0a9a055199974df60f",
+      "lines": 11
+    }
+  ],
+  "bytes": 105496
+}

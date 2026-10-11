@@ -1,0 +1,71 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-ar-native-harness-alignment-v7-final-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-ar-native-harness-alignment-v7-final-review-held-20261011-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 837,
+      "sha256": "fca799b74174dcd65c0198a5e72614dfd88e0461c931af349d7beff18a975424"
+    },
+    {
+      "path": "baseline.json",
+      "bytes": 459031,
+      "sha256": "f7aec591c85fa4c2d2970ecff8364c99aeb357bb4b46db59d89bdb2c6be3efac"
+    },
+    {
+      "path": "evaluation-history.jsonl",
+      "bytes": 1669787,
+      "sha256": "9e97a358af6eb962e5bda14e796984b1ec225520aa9362fa847253f265e62a5d",
+      "lines": 5
+    },
+    {
+      "path": "final-report.json",
+      "bytes": 458971,
+      "sha256": "86a4e12bd0e1b4e5a231b42bf4c6d10b2ab6206f829daf7a9412b8339c3e7c27"
+    },
+    {
+      "path": "launch-metadata.json",
+      "bytes": 4186,
+      "sha256": "43f86257046b30b69abfb9b7b0abd5e993a8921d3cce8e48d1e1b9fbdb547b80"
+    },
+    {
+      "path": "optimizer-restore.jsonl",
+      "bytes": 511,
+      "sha256": "dce42e2ef46faff9aa7101fd6065ad0dd5004d7ab58ef5e1db96faccdb182fe0",
+      "lines": 1
+    },
+    {
+      "path": "recipe.json",
+      "bytes": 18836,
+      "sha256": "2971dc4d17c71ca4134726f9267aad0f40aa1e5967a0b294b59849868a790bfb"
+    },
+    {
+      "path": "review.json",
+      "bytes": 4378,
+      "sha256": "c7036b7a8b850c611eecacb69a35b9d0bddcc7212d25d73fd296ab946964a655"
+    },
+    {
+      "path": "review.md",
+      "bytes": 423,
+      "sha256": "1cbce507d8b48ccaa1343fb75ce86f21ac83dc6817ed61f8458f7f45a1f4bfe8"
+    },
+    {
+      "path": "run-plan.json",
+      "bytes": 122767,
+      "sha256": "37483bba9baeeeaf0b888815fa8d4b463df721c7bccaad74eb4f9b72018d3791"
+    },
+    {
+      "path": "selected-best-receipt.json",
+      "bytes": 481168,
+      "sha256": "ddca29939bcf62fef1e697ffa7c0d3205eb8e86834cc9ca7743b8453bc86bb80"
+    },
+    {
+      "path": "snapshot-manifest.json",
+      "bytes": 1650,
+      "sha256": "323bbdcc3f478e38a1bc7bfb0602913a3d6271bfecf590ae90ac72057a6cf29d"
+    }
+  ],
+  "bytes": 3222545
+}

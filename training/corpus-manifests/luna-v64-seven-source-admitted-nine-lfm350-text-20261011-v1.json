@@ -1,0 +1,76 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v64-seven-source-admitted-nine-lfm350-text-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-admitted-nine-lfm350-text-v1",
+  "files": [
+    {
+      "path": "admission.json",
+      "bytes": 2115,
+      "sha256": "c5a980e673f0e63ef23b71830924b4e91d97f9c539676aa934011c747f518a44"
+    },
+    {
+      "path": "decision-review-nine-targets-v1.json",
+      "bytes": 9566,
+      "sha256": "9ead792225c207dafec9b2a4d1f2de8b2ee567a2474451153249b2f7956c3b10"
+    },
+    {
+      "path": "full-s1-source-closure.json",
+      "bytes": 11039,
+      "sha256": "d6e148eac49d76763de2bc0ea4adf5e004b21cd1d08124987e39b046f8f33410"
+    },
+    {
+      "path": "root-actual-exercise-review-v1.json",
+      "bytes": 1590,
+      "sha256": "6ae63d26237cfb172c84419a5e3c69cceef77e73c3675dbc05ad9a5bf5f2c7b5"
+    },
+    {
+      "path": "root-nine-target-review-v1.json",
+      "bytes": 10309,
+      "sha256": "3c616dc5fbc23dd96a8e953b4af040339884ef67252a519a2c854b783609f419"
+    },
+    {
+      "path": "root-source-correctness-review-v1.json",
+      "bytes": 4234,
+      "sha256": "85218774b6acb11b04a49bc57144e2647ab170ddb54ff8563095246015fa5cb8"
+    },
+    {
+      "path": "selected-nine-lfm350-rendered-v1.jsonl.manifest.json",
+      "bytes": 1186,
+      "sha256": "99e59e0a80ab973417892fbf20325ea17f008f0266cfbbaf964bf455518ce58d"
+    },
+    {
+      "path": "selected-nine-lfm350-token-audited-v1.jsonl",
+      "bytes": 368270,
+      "sha256": "91285415399b74c97b1056bea69f829d4decc68d5afc7b45ac982e9ce6466fbc",
+      "lines": 9
+    },
+    {
+      "path": "selected-nine-lfm350-token-audited-v1.jsonl.audit.json",
+      "bytes": 4385,
+      "sha256": "6cc5110bd648e5410811b5ae8eadb1d3a50fab570cc246267467ef815cf293dd"
+    },
+    {
+      "path": "selected-nine-lfm350-token-audited-v1.jsonl.manifest.json",
+      "bytes": 1438,
+      "sha256": "8775162e667d79567bb571e42e713a2259ed68fea17f1b85a5a90c60a5c6670a"
+    },
+    {
+      "path": "selected-nine-lfm350-token-audited-v1.jsonl.rejected.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "source-hold-policy-v14.json",
+      "bytes": 52055,
+      "sha256": "d448b118f17c09398f25dc06ee88308e1cd3bddce445d794303c4d05f73df0bd"
+    },
+    {
+      "path": "source-quality-clearance.json",
+      "bytes": 10982,
+      "sha256": "e4ac9ec0bd55e4c0e88dfae7d2d898f1a6ebcce1ba4db79237c021186ec6cdda"
+    }
+  ],
+  "bytes": 477169
+}

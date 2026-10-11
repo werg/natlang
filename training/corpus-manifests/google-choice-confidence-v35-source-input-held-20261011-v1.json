@@ -1,0 +1,71 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v35-source-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v35-source",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 477081,
+      "sha256": "952a3fe4588114aac0f8c6a6f17c2217407e34e83797cbd59a3427943849996e",
+      "lines": 512
+    },
+    {
+      "path": "frozen-adapter-v1/frozen-runtime.json",
+      "bytes": 1251,
+      "sha256": "cef7a64a3d8399a30016d5d3e32e1542737f3575a69801a2890a696bfa43421b"
+    },
+    {
+      "path": "frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/label_decision_cases.py",
+      "bytes": 29796,
+      "sha256": "00d00cae8162d36d7c528ef463289b6eb1730f746b4fd2c84243fb70d38e725d"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+      "bytes": 10739,
+      "sha256": "ce64c6c65e4c70d08d178970f0e581780db91cda56a83f86472c6c64e1c63ee5"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+      "bytes": 157,
+      "sha256": "8352a509d51ef0dc0be958bdd4492caa968933866b171360be39fda43217364f"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+      "bytes": 1755,
+      "sha256": "d4e71ae9211cd625ea5d74706f9e0d4cc7fbf59e731dd0cba34fddd04674e4d2"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 8564729,
+      "sha256": "d0bf1d55fa3f24e65cfc48c1ed75f354f8e12b2816d8c225f47719e319650760",
+      "lines": 12639
+    },
+    {
+      "path": "root-launch-process-v1.json",
+      "bytes": 221,
+      "sha256": "0b14eabea0a6bf8605b44db9de5a71e1714a540d22d5d62173d87a0c09d4179a"
+    },
+    {
+      "path": "root-source-launch-review-v1.json",
+      "bytes": 1669,
+      "sha256": "52e98ba1058171dee5f3f0ec618953bb2b40517adf2c56e1f2d3de8b0ed828ce"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 219672,
+      "sha256": "36ed5f88627f56bef6062d120ee6ff42748a5b5e5190b1e3dfe1cfafb4a72d2a"
+    }
+  ],
+  "bytes": 9309952
+}
