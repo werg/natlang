@@ -134,8 +134,13 @@ The stage passes when all of these hold:
 - the drift guard never stopped;
 - the behaviour gate passes against its recipe thresholds (the final eval is the gate; it reuses a gate already run
   at that step on a warn);
-- the Neuralese value is useful. The final held `value_relative_mse_delta` must be finite and below
-  `-value_margin`, with 0.05 in the shared recipe (Pop review; `value_qualified`, `value_gate`).
+- the step-0 identity check passed.
+
+The Neuralese value is report-only here (owner decision 2026-10-11). `value_relative_mse_delta`, `value_qualified` and
+`value_gate` with `value_margin` stay in the report. From 2026-10-11 (Pop review) until this decision, the margin was
+part of the gate. The value requirement moves to the end-to-end stage, where consumers reading Neuralese values are
+compared with consumers reading tokens, on task success and loss. A next-token-embedding reconstruction margin
+saturates once SFT makes predictions confident (run-v1).
 
 The lineage's identity qualification is the step-0 identity check (owner decision 2026-10-11, AGENTS.md "Neuralese
 training foundation"). It checks that the NeuraleseProjection equals the soft-token mixture, the TokenChoiceProjection
@@ -161,6 +166,28 @@ within about 40 updates at LionSR 3e-6. This matches the SFT positive test (plan
 the gate at warn and the final gate, not on the KL warn level.
 
 ## run-v1 on Mellum (2026-10-11): complete, unqualified
+
+**Re-evaluated under the corrected gate** (owner decision 2026-10-11, value report-only), recorded in
+`run-v1/requalification-20261011.json`. The identity check passes, held CE is below base (2.224 → 0.379), and the drift
+guard never stopped. The behaviour gate as declared still fails. Its pass rate of 0.75 is at least base − 0.1, but its
+`max_held_kl` of 0.25 (inherited from raw-recurrence-mellum-v11's gate) bounds the combined prompt+response held KL,
+which is 0.681. The accepted direct-v1 drift policy keys on response KL and keeps prompt KL report-only, and response
+KL at gate time is 0.246, under 0.25. So run-v1 is unqualified as declared, and would qualify if the gate's KL bound
+were read as response KL. That decision is open, so no certificate is written.
+
+**Runtime review on Mellum** (Pop's shared `eval/direct_runtime`, 06f3a5ab, on run-v1's step-1000 weights;
+`run-v1/runtime-review`): `runtime_qualified` true at write lengths 8 and 32.
+- scheduler/writer delta 0, cache readback delta 0, cache lengths and contents equal;
+- finite projection gradients from a consumer loss;
+- producer replay gradient delta 0 with values equal;
+- public input gradient delta 0; typed wire value restored.
+
+Deviation: run-v1's anchor heads are the legacy-rms-v1 foundation heads, which have read markers. The Engine's direct
+path does not open those (DirectWriter needs the final causal prefix state), so the review swaps in fresh raw-token-v1
+PortHeads over the same backbone, as the LFM lineage uses. The first attempt with the legacy heads failed exactly
+there (journal of unit natlang-direct-runtime-review-143418), after its transport and gradient rows had passed. Later Mellum direct lineages should anchor on raw-token heads.
+The run-local loader stands in for the shared Mellum restore adapter, which is pending (Pop).
+
 
 Run: unit `natlang-neuralese-direct-mellum-122234`, code 5db8fcd0, claim 72 GB, output
 `runs/neuralese-direct-mellum-20261011/run-v1`. It ran 1000 updates in 7342 s. Updates took 5 s in BF16, rising to

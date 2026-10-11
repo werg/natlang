@@ -91,8 +91,8 @@ def parse(argv=None):
                    help='write the full training state (weights, optimizer); smokes pass --no-save-state and keep '
                         'only their logs and report')
     p.add_argument('--value-margin', type=float, default=0.0,
-                   help='qualification needs the final held value_relative_mse_delta (NeuraleseProjection minus the '
-                        'soft-token mixture) below minus this margin: the Neuralese value must be useful')
+                   help='report-only: value_qualified says whether the final held value_relative_mse_delta is below '
+                        'minus this margin (the value requirement is the end-to-end stage\'s, owner 2026-10-11)')
     p.add_argument('--seed', type=int, default=0)
     a = p.parse_args(argv)
     if min(a.steps, a.tokens, a.target_tokens, a.batch, a.eval_batch, a.eval_every, a.held_documents) < 1:
@@ -512,14 +512,17 @@ def main(argv=None):
                         for line in (a.out / name).open())
     value_delta = final.get('value_relative_mse_delta', math.inf)
     value_qualified = math.isfinite(value_delta) and value_delta < -a.value_margin
-    qualified = bool(finished and final.get('ce_delta', 0.0) < 0 and value_qualified and not drift_stopped and
+    # Owner 2026-10-11: the Neuralese value requirement belongs to the end-to-end stage (consumers reading values
+    # against consumers reading tokens); here the value metric and its margin are report-only.
+    qualified = bool(finished and final.get('ce_delta', 0.0) < 0 and not drift_stopped and
                      (gate is None or gate['passed']))
     identity_file = a.out / 'identity-check.json'
     final.update(identity_check=json.loads(identity_file.read_text()) if identity_file.is_file() else None)
     status = 'complete' if finished else ('checkpointed_on_drift_guard' if drift_stopped else 'checkpointed_on_signal')
     final.update(status=status, completed=finished, steps=step, best=best,
                  behaviour_gate=gate, drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
-                 value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta')},
+                 value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta'),
+                             'report_only': True, 'moved_to': 'end-to-end stage (owner 2026-10-11)'},
                  seconds=time.time() - started, scope='Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md)')
     if saved_step != step:
         policy.save(full_state())

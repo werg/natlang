@@ -130,4 +130,8 @@ afterwards. The rules below are consequences of this one.
   (NeuraleseProjection equals the soft-token mixture, TokenChoiceProjection
   absent or the identity, logits equal the base) is the identity qualification,
   declared as the recipe's `identity_qualification` and recorded in
-  `direct-certificate.json`. Older lineages keep the rule above.
+  `direct-certificate.json`. Older lineages keep the rule above. Direct-stage
+  qualification is the identity check, held CE below base, no drift stop and
+  the behaviour gate. The Neuralese value is report-only there: its
+  requirement is the end-to-end stage's, consumers reading values against
+  consumers reading tokens (owner decision 2026-10-11).

@@ -342,3 +342,10 @@ runs every 100 updates and logs to `drift.jsonl`. It computes held KL on the 16 
 the behaviour gate at a warn. A guard stop stops the stage with its full state, and qualification counts stops from
 both logs. Before this, the guard ran only inside evals; at the stage-end eval cadence (d5dc7342) it never saw
 run-v1. Cost: one held-KL pass over 16 rows per check, plus about 3.5 min when a warn runs the gate.
+
+## neuralese-direct-v1 qualification: value report-only (owner decision 2026-10-11)
+
+The Neuralese value requirement moves to the end-to-end stage, measured as consumers reading values against consumers
+reading tokens, on task success and loss. Direct SFT qualification is now the step-0 identity check, held CE below
+base, no drift stop and the behaviour gate. `value_margin` stays as a report-only threshold for `value_qualified`.
+Pop's LFM recipes that declare it are unaffected.
