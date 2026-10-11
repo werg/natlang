@@ -56,7 +56,7 @@ def validate_predecessor_identity(predecessors):
 
 
 def predecessor_completion(predecessor):
-    """Return (complete, reason) for the exact pinned queue/journal pair."""
+    """Check terminal scheduling accounting, independently of training success."""
     queue_path = Path(predecessor['queue'])
     journal_path = Path(predecessor['journal'])
     if digest(queue_path) != predecessor['queue_sha256']:
@@ -90,13 +90,41 @@ def predecessor_completion(predecessor):
         missing = sorted(set(keys) - set(finishes))
         extra = sorted(set(finishes) - set(keys))
         return False, f'journal terminal keys differ from queue (missing={missing}, extra={extra})'
+    terminal_failures = []
+    entries = {entry['key']: entry for entry in queue}
     for key in keys:
         event = finishes[key]
         if event.get('status') not in {'complete', 'complete_with_skips', 'skipped'}:
-            return False, f'{key} terminal status is {event.get("status")!r}'
+            accounting = event.get('output_accounting', {})
+            if (event.get('status') != 'incomplete' or event.get('exit_code') != 2
+                    or accounting.get('disposition') not in {'failed', 'transport_failed'}):
+                return False, f'{key} terminal status is {event.get("status")!r}'
+            # An exhausted request budget or transport error ends that attempt.
+            # It must not starve unrelated work in the same lane. Recompute the
+            # shared collector accounting from the exact files, rather than
+            # accepting a journal assertion or manufacturing a result.
+            runtime_path = predecessor.get('runtime')
+            if not runtime_path:
+                return False, f'{key} failed-attempt runtime is not declared'
+            runtime = Path(runtime_path)
+            frozen = json.loads((runtime / 'frozen-runtime.json').read_text())['files']
+            if tree_identity(runtime) != frozen:
+                raise ValueError(f'Failed predecessor runtime changed: {runtime}')
+            from run_bonsai_queue import output_accounting
+            actual = output_accounting(entries[key], runtime=runtime)
+            states = actual.get('job_states', [])
+            if (actual != accounting or not actual.get('manifest_valid')
+                    or not states or len(states) != actual.get('expected_jobs')
+                    or any(state.get('state') not in
+                           {'result', 'generation_held', 'failed', 'transport_failed'}
+                           for state in states)):
+                return False, f'{key} failed-attempt evidence is not exactly terminal-accounted'
+            terminal_failures.append({'key': key, 'disposition': actual['disposition'],
+                                      'resource_limit_reason': actual.get('resource_limit_reason')})
+            continue
         if not event.get('output_accounting', {}).get('complete'):
             return False, f'{key} output accounting is incomplete'
-    return True, None
+    return True, {'terminal_failed_attempts': terminal_failures} if terminal_failures else None
 
 
 def verify_execution_pins(plan, runtime, plan_path, expected_plan_sha):
@@ -218,9 +246,11 @@ def main():
             process = subprocess.Popen(command, cwd=plan['cwd'], stdin=subprocess.DEVNULL,
                                        stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         processes.append(process)
-        launched.append({**worker, 'lane': lane, 'pid': process.pid, 'command': command})
+        launched.append({**worker, 'lane': lane, 'pid': process.pid, 'command': command,
+                         **({'predecessor_accounting': reason} if predecessor and reason else {})})
         lane_states[lane] = {'status': 'running', 'pid': process.pid,
-                             'predecessor_pid': predecessor['pid'] if predecessor else None}
+                             'predecessor_pid': predecessor['pid'] if predecessor else None,
+                             **({'predecessor_accounting': reason} if predecessor and reason else {})}
         atomic_json(record, {'status': 'running', 'workers': launched, 'lanes': lane_states,
                              'plan': str(args.plan), 'time': time.time()})
         return True
