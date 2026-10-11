@@ -24,7 +24,7 @@ import { failureFeedback, type RefinementChecker, type RefinementFailure, type R
 import { containsRefinement } from './types.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
-import { activeSystemPrompts, softenMessages } from './system-prompts.js';
+import { activeSystemPrompts, softenMessages, renderPromptMessages, type PromptRendering } from './system-prompts.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
 export const READ_CODE_DESCRIPTION = 'Inspect a named item this call can use but does not show: source of a function in the program\'s codebase; ' +
@@ -389,7 +389,7 @@ export class NativeToolAgent {
   readonly reviews: Record<string, unknown>[] = [];
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
-      temperature?: number; maxSeconds?: number; systemPrompt?: string | (() => string); programGuidance?: string;
+      temperature?: number; maxSeconds?: number; promptRendering?: PromptRendering; systemPrompt?: string | (() => string); programGuidance?: string;
       review?: NativeReviewOptions;
       maxFailureRepairs?: number;
       /** The readout's system prompt (default DECISION_SYSTEM_PROMPT; the kernel adds iteration addenda). */
@@ -880,7 +880,7 @@ export class NativeToolAgent {
     const replies = values.map(value => JSON.stringify(value));
     const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + programGuidance(this.options.programGuidance ?? '');
     const messages = [{ role: 'system', content: system }, ...opening.slice(1), { role: 'user', content: decisionPrompt(replies) }];
-    const encoded = encodeMessages(this.softened(messages));
+    const encoded = encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering)));
     if (encoded.blocks && !supportsNeuralese(this.driver))
       throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
     const started = performance.now();
@@ -889,7 +889,7 @@ export class NativeToolAgent {
       const adapters = adapterCells(lam);
       if (adapters.length && !supportsNeuralese(this.driver))
         throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
-      scores = await decide({ messages: encoded.blocks ? encoded.messages : messages, options: replies, ...(adapters.length ? { adapters } : {}) }, session.runtime.signal);
+      scores = await decide({ messages: encoded.messages, options: replies, ...(adapters.length ? { adapters } : {}) }, session.runtime.signal);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.startsWith('decision-unsupported')) throw error;
@@ -957,7 +957,8 @@ export class NativeToolAgent {
     const budget = this.options.contextTokens === undefined ? await defaultContextBudget(this.driver) : this.options.contextTokens;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.
     let tokensPerChar = 1 / 3.5;
-    const requestChars = (tools: unknown[]) => JSON.stringify(messages).length + JSON.stringify(tools).length;
+    const requestChars = (tools: unknown[]) => JSON.stringify(renderPromptMessages(messages, this.options.promptRendering)).length +
+      JSON.stringify(this.options.promptRendering === 'program-header' ? [] : tools).length;
     // Tool call id -> index in session.transcript, for compaction stubs.
     // Messages compaction never touches: the opening, and the latest compaction note once there is one.
     let protectedLength = openingLength;
@@ -1049,12 +1050,12 @@ export class NativeToolAgent {
       const callId = session.runtime.currentCallId ?? null;
       const started = performance.now();
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn: turns + 1,
-        tool_schema_bytes: new TextEncoder().encode(JSON.stringify(availableTools)).length,
+        tool_schema_bytes: new TextEncoder().encode(JSON.stringify(this.options.promptRendering === 'program-header' ? [] : availableTools)).length,
         messages: messages.length });
       let response: ModelTurn;
       try {
         // Blocks in the conversation travel as content parts; a backend that cannot carry them fails the call.
-        const encoded = encodeMessages(this.softened(messages));
+        const encoded = encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering)));
         if (encoded.blocks && !supportsNeuralese(this.driver))
           throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
         const adapters = adapterCells(session.lam);
@@ -1074,9 +1075,9 @@ export class NativeToolAgent {
         const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
           ...(template ? { template } : {}),
           ...(this.options.guidance && supportsNeuralese(this.driver) ? { guidance: this.options.guidance } : {}),
-          messages: encoded.blocks ? encoded.messages : messages, tools: availableTools,
+          messages: encoded.messages, tools: this.options.promptRendering === 'program-header' ? [] : availableTools,
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
-          ...(availableTools !== allTools ? { tool_choice: 'required' as const } : {}),
+          ...(availableTools !== allTools && this.options.promptRendering !== 'program-header' ? { tool_choice: 'required' as const } : {}),
           ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'model-turn', turns),
@@ -1178,7 +1179,8 @@ export class NativeToolAgent {
           return 'careful review budget exhausted before applying proposal';
         const budget = allowance();
         const fork = [...messages, { role: 'user', content: this.reviewPrompt(messages, calls, index) }];
-        const answer = await (review.driver ?? this.driver)({ messages: fork, tools: this.reviewTools(),
+        const answer = await (review.driver ?? this.driver)({ messages: review.driver && review.driver !== this.driver ? fork : renderPromptMessages(fork, this.options.promptRendering),
+          tools: this.options.promptRendering === 'program-header' && (!review.driver || review.driver === this.driver) ? [] : this.reviewTools(),
           temperature: 0, seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'review', turns),
           max_tokens: budget }, session.runtime.signal);

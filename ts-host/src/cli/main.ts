@@ -286,7 +286,7 @@ function modelSession(choice: ResolvedModelChoice, assumeYes = false) {
 
 function runtimeModel(choice: ResolvedModelChoice, driver: ModelDriver): Pick<NatlangRuntimeOptions, 'model' | 'seed'> {
   const { seed, ...settings } = choice.runtime ?? {};
-  return { model: { ...settings, driver }, ...(seed ? { seed } : {}) };
+  return { model: { ...settings, promptRendering: choice.promptRendering ?? 'full', driver }, ...(seed ? { seed } : {}) };
 }
 
 

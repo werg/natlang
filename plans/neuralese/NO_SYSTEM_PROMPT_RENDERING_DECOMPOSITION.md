@@ -82,3 +82,16 @@ not programs: 1,688,424 distinct tokens against 21.5M rendered.
   - `neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v1`
 - Every new text set (sections C and E of `DATA_INVENTORY_20261011.md`) gets a full-prompt render for the warm-up
   share and a program-header render for the rest. The program-header render is about 4× cheaper per document.
+
+## 6. TS serving implementation (Pop, 2026-10-11)
+
+Units 1/2/7 are implemented: scoped prompt pieces, `ModelProfile.promptRendering`,
+runtime propagation, empty tool lists omitted by the chat-completion wire driver,
+skill guidance and empirical measurement debt. Export the current table with
+`node ts-host/scripts/neuralese-prompt-pieces.mjs` after building ts-host.
+`renderSystemPrompt` removes exact generic spans, retains nested program spans
+with paragraph separators, and preserves unknown/custom additions. Rendering
+precedes soft-bank substitution. Full mode is unchanged. Read-only folder and
+ad-hoc depth variants share this registry. The emulation prompt is declared in
+native/prompt and re-exported from its provider adapter, avoiding a second copy.
+Python parity and trained-weight evaluations remain outstanding on DGX.
