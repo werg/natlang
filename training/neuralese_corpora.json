@@ -31651,6 +31651,53 @@
       "admission": "guard-stopped-step20-diagnostic-and-resumability-only-no-qualification-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Preserves V3 plan/result, full step-20 checkpoint and optimizer state, report/train/eval, identity check, monitor reference, exact runtime code snapshot and launch/GPU observations. Training stopped at its guard after step 20; qualification is false. Excludes mutable Triton/TorchInductor kernel-cache files."
+    },
+    {
+      "id": "google-choice-confidence-v41-prefix-static-v5-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v5-current-criteria",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-static-reference-and-source-label-derivative",
+      "source_class": "held-provider-label-prefix-and-authored-static-reference",
+      "training_admission": false,
+      "admission": "strict-source-label-static-reference-only-no-provider-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Atomic 703-row newline-terminated prefix of live V41 JSON-object labels, with exact parent source cases/frozen model manifest. The selection records excluded prior V77–V81 IDs/groups; 254 remaining labels entered the shared adapter, yielding 148 exact-label accepted cases across 20 programs and 1,899 retained rejection rows; all 20 authored reference replays passed. The run is still held; replay/schema validity is not oracle or training admission."
+    },
+    {
+      "id": "luna-choice-confidence-v82-v41-prefix-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v82-v41-prefix-runtimev17-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "source-review/**/*",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-reviewed-generation-inputs",
+      "source_class": "held-prepared-luna-generation-queues",
+      "training_admission": false,
+      "admission": "root-reviewed-queue-inputs-only-no-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V82 source/capture and queue preparation, five immutable queues, copied canonical hold policy, and prep source. Queue source comprises 20 statically authored programs/148 train labels after exact master, hold, and prior source ID/group filtering; root approved and launched separately. Mutable journals/logs/status are excluded."
+    },
+    {
+      "id": "luna-choice-confidence-v82-root-approval-and-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v82-v41-prefix-runtimev17-v1",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-independent-review-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "split": "held-generation-approval-and-launch-evidence",
+      "source_class": "held-campaign-approval-review-and-supervisor-receipt",
+      "training_admission": false,
+      "admission": "authorization-and-launch-lineage-only-no-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Binds root approved-plan SHA 17ab266bfae201d7f4558d7e9e2b8cd0869ff4df4c2ae3c26b13f19c9899cf4c, independent review SHA 1d99a4a1e232e222e7c6cbf69e03850f1820ffae30bff42f386767497154d278 and sealed five-worker supervisor receipt SHA 39224f976770fb4486a5b671d1652522ca3eb040671b23baebd9c387f3cb0714. No model-output data included."
     }
   ],
   "coverage_backlog": [
