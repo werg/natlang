@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v80-root-approval-launch-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v80-v41-prefix-runtimev17-v1",
+  "files": [
+    {
+      "path": "root-approved-plan-v1.json",
+      "bytes": 9477,
+      "sha256": "90e3dafb53bc1c8cc64a3074d55de17e54dbba51211de30ec82a22898861b027"
+    },
+    {
+      "path": "root-independent-review-v1.json",
+      "bytes": 390,
+      "sha256": "e21fd968110c002fa6fe892279f064d5d7c5fdec95f6f73da9a33adc690d8d6a"
+    },
+    {
+      "path": "root-supervisor-launch-v1.json",
+      "bytes": 244,
+      "sha256": "72e80c1668e30f7116c9b9c14dca240dbea1f6f9f4450d05dc14df93fa2c5fcb"
+    }
+  ],
+  "bytes": 10111
+}

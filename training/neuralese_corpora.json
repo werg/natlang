@@ -31332,6 +31332,71 @@
       "admission": "authorized-queue-launch-evidence-only-no-label-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Root queued V40 process PID 1095755 behind active Google quota ownership with --wait-for-owner; no retry-state reset, paid fallback, provider result, or admission is asserted. Runner log and mutable label output are excluded."
+    },
+    {
+      "id": "google-choice-confidence-v41-criteria-omission-reference-v3-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v3-no-identity-criteria",
+      "include": [
+        "review/criteria-omission-review.json",
+        "static/**/*"
+      ],
+      "split": "inherited-train-static-reference-only",
+      "source_class": "held-static-label-derived-reference-criteria-fix",
+      "training_admission": false,
+      "admission": "authored-reference-and-capture-proof-only-no-provider-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Fresh shared scaffold/adapter derivative after omission of generated identity-only criteria when the source has no criteria or shared family rubric. Preserves real criteria and keeps the complete option domain; five CLINC reference rows now have full captures. This is static reference evidence, not model wire-request evidence or training admission."
+    },
+    {
+      "id": "google-choice-confidence-v41-v78-v79-prefix-remainder-combined-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-v78-v79-remainder-static-v1",
+      "include": [
+        "prefix-snapshot-receipt.json",
+        "prefix-input/**/*",
+        "static/**/*",
+        "combined-v80-input/**/*"
+      ],
+      "split": "inherited-train-static-source-and-replay-input",
+      "source_class": "held-provider-label-prefix-and-static-replay-source",
+      "training_admission": false,
+      "admission": "static-reference-and-future-generation-source-only-no-provider-call-admission",
+      "independent_new_worlds": 0,
+      "notes": "Immutable V41 append-only prefix snapshot at 356 label rows. The selected remainder excludes V78\u2019s 187-row prefix and V78/V79 already-selected items/groups. Static adapter used 132 completed label rows to produce 16 programs/102 labels/zero replay failures; combined V80 source has 5 criteria-fixed CLINC programs plus 16 remainder programs, 139 unique inherited-train items/groups. Raw labels, source master cases/manifest, adapter rejections, held native scaffold, component archive, replay evidence, and combined input provenance are included."
+    },
+    {
+      "id": "luna-choice-confidence-v80-v41-prefix-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v80-v41-prefix-runtimev17-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "source-review/**/*",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-provider-generation-input",
+      "source_class": "held-luna-generation-inputs-and-plan",
+      "training_admission": false,
+      "admission": "root-approved-launch-receipt-recorded-separately; generation-only-no-data-admission",
+      "independent_new_worlds": 0,
+      "notes": "21 authored static-reference programs/139 original train items/groups: five repaired CLINC plus 16 new V41 remainder programs. Prepared using frozen V17 and actual V79 lane predecessors, with exact original annotation, group, current-hold and no-reuse checks. Source/plan review, copied policy/preparer and five queues pinned; mutable campaign state/journals/logs and generated outputs excluded."
+    },
+    {
+      "id": "luna-choice-confidence-v80-root-approval-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v80-v41-prefix-runtimev17-v1",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-independent-review-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "split": "inherited-train-generation-authorization-evidence",
+      "source_class": "held-root-review-and-launch-receipt",
+      "training_admission": false,
+      "admission": "review-and-launch-evidence-only-no-data-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root reviewed 21 programs/139 exact original train items, master/gold/no-hold checks, all artifact/replay pins and no reuse of V78/V79 selected source groups, then launched supervisor PID 1097613. Approved plan SHA 90e3dafb53bc1c8cc64a3074d55de17e54dbba51211de30ec82a22898861b027; independent review SHA e21fd968110c002fa6fe892279f064d5d7c5fdec95f6f73da9a33adc690d8d6a. The mutable campaign output is not part of this snapshot."
     }
   ],
   "coverage_backlog": [
