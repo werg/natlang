@@ -773,3 +773,47 @@ def test_lineage_handoff_takes_newest_code_and_operational_recipe_changes_only(t
         runner.lineage_handoff(updated, dict(plan, recipe=changed), frozen, package, plan_path)
     with pytest.raises(ValueError, match='inputs changed'):
         runner.lineage_handoff(updated, dict(plan, inputs={'x': '2'}), frozen, package, plan_path)
+
+
+def test_lineage_handoff_extends_an_unqualified_text_warmup_with_its_quantization_ramp_held(tmp_path):
+    """raw-recurrence-mellum-v12: a handoff may raise an unqualified mapped warm-up's steps when its quantization
+    update range stays (quantization_steps = the old steps), so the stage continues from its state at the stage-end
+    mixes; a moved ramp, a shorter stage or an extended qualified stage is refused."""
+    import json as _json
+
+    from natlang_neuralese.train import recipe as runner
+
+    out = tmp_path / 'run'
+    frozen = out / 'runtime' / 'natlang_neuralese'
+    frozen.mkdir(parents=True)
+    (frozen / 'a.py').write_text('x = 1\n')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'a.py').write_text('x = 2\n')
+
+    def recipe(**parameters):
+        return {'id': 'r', 'stages': [{'id': 'warm', 'kind': 'core_text_warmup', 'parameters': parameters}],
+                'quantization': {'stage_progress': {'warm': [0.0, 0.35]}}}
+    existing = {'recipe': recipe(steps=4096), 'recipe_sha256': 'lineage', 'inputs': {}, 'device': 'cuda',
+                'code': {'a.py': runner.sha(frozen / 'a.py')}}
+    plan_path = out / 'recipe-plan.json'
+    plan = {'recipe_sha256': 'v12', 'inputs': {}, 'device': 'cuda'}
+    for refused, match in ((recipe(steps=6144), 'moves its quantization ramp'),
+                           (recipe(steps=2048, quantization_steps=2048), 'only a mapped text warm-up'),
+                           (recipe(steps=6144, quantization_steps=4096, lr=2), 'more than operational')):
+        with pytest.raises(ValueError, match=match):
+            runner.lineage_handoff(existing, dict(plan, recipe=refused), frozen, package, plan_path)
+    extended = recipe(steps=6144, quantization_steps=4096)
+    updated = runner.lineage_handoff(existing, dict(plan, recipe=extended), frozen, package, plan_path)
+    assert updated['handoffs'][-1]['extended'] == {'warm': [4096, 6144]} and updated['recipe_sha256'] == 'lineage'
+    # The stage's quantization component keeps its update range, so the trainer's resume identity holds.
+    stage = extended['stages'][0]
+    spec = {'stage_progress': {'warm': [0.0, 0.35]}, 'points': []}
+    component = runner.stage_quantization({'quantization': spec}, stage, stage['parameters'], [])
+    assert component['stage'] == {'id': 'warm', 'progress': [0.0, 0.35], 'start': 0, 'end': 4096}
+    assert '--quantization-steps' not in runner.stage_parameter_args(
+        {k: v for k, v in stage['parameters'].items() if k not in runner.RUNNER_STAGE_PARAMETERS})
+    (out / 'warm-report.json').write_text('{}')
+    with pytest.raises(ValueError, match='already qualified'):
+        runner.lineage_handoff(_json.loads(_json.dumps(existing)), dict(plan, recipe=extended), frozen, package,
+                               plan_path)

@@ -32,7 +32,7 @@ HANDLERS = {
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates',
                           'input_map_kernel','input_map_rank','ar_feedback_fixup','channel_consistency_weight','qat_latent_lr',
                           'member_weight','member_tokens','member_eval_windows','member_mask_system','read_adapter',
-                          'optimizer_state','optimizer_added'},'result':'heads.pt'},
+                          'optimizer_state','optimizer_added','quantization_steps','report_column_fraction'},'result':'heads.pt'},
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
                             'parameters':set(),'result':'report.json'},
     'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads'},
@@ -583,6 +583,16 @@ def stage_quantization(recipe, stage, parameters, reports, init_mix=None):
     if stage['kind'] == 'core_text_warmup' and parameters.get('ar_feedback_fixup', False):
         start = next(r for r in reports if r['id'] in stage['requires'] and r['kind'] == 'core_text_warmup')['gate']['step']
     end = parameters.get('steps', 4096 if stage['kind'] == 'core_text_warmup' else 500)  # the trainers' defaults
+    if 'quantization_steps' in parameters:
+        # The update range the stage's progress span maps onto, when the stage runs longer (an extension, e.g.
+        # raw-recurrence-mellum-v12): updates past it hold the stage-end mixes, so extending a stage never moves its
+        # ramp back.
+        span = parameters['quantization_steps']
+        if parameters.get('ar_feedback_fixup', False):
+            raise ValueError('quantization_steps is not defined for an AR feedback fixup')
+        if type(span) is not int or not start < span <= end:
+            raise ValueError('quantization_steps must be an integer update count in (start, steps]')
+        end = span
     return stage_component(spec, stage['id'], start=start, end=end, init_mix=init_mix)
 
 
@@ -628,7 +638,52 @@ def write_json(path, value):
 
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
-OPERATIONAL_STAGE_PARAMETERS = frozenset({'moe_kernel', 'checkpoint_layers'})
+OPERATIONAL_STAGE_PARAMETERS = frozenset({'moe_kernel', 'checkpoint_layers', 'report_column_fraction'})
+# Stage parameters the runner consumes itself (never passed to a trainer).
+RUNNER_STAGE_PARAMETERS = frozenset({'quantization_steps'})
+
+
+def _stage_steps(recipe, stage):
+    """(steps, quantization update range) of a stage as declared (no AR fixup offset)."""
+    parameters = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
+    parameters.update(stage.get('parameters', {}))
+    steps = parameters.get('steps')
+    return steps, parameters.get('quantization_steps', steps)
+
+
+def stage_extensions(existing, recipe, out):
+    """The stages a handoff extends: ``steps`` raised on a stage that has no qualified report yet, its quantization
+    update range unchanged (``quantization_steps``), so the stage continues from its state with its ramp held at the
+    stage-end mixes. Anything else about steps (a shorter stage, an extended qualified stage, a moved ramp) is refused.
+    Returns {stage id: [old steps, new steps]}."""
+    old_stages = {stage['id']: stage for stage in existing.get('stages', [])}
+    extended = {}
+    for stage in recipe.get('stages', []):
+        old = old_stages.get(stage['id'])
+        if old is None:
+            continue
+        (old_steps, old_span), (new_steps, new_span) = _stage_steps(existing, old), _stage_steps(recipe, stage)
+        if old_steps == new_steps and old_span == new_span:
+            continue
+        if (stage.get('kind') != 'core_text_warmup' or stage.get('parameters', {}).get('ar_feedback_fixup', False)
+                or type(old_steps) is not int or type(new_steps) is not int or new_steps <= old_steps):
+            raise ValueError('handoff refused: only a mapped text warm-up may be extended (more steps): ' + stage['id'])
+        if old_span != new_span:
+            raise ValueError('handoff refused: extending ' + stage['id'] + ' moves its quantization ramp; '
+                             'set quantization_steps to the old steps (' + str(old_span) + ')')
+        if (Path(out) / (stage['id'] + '-report.json')).exists():
+            raise ValueError('handoff refused: ' + stage['id'] + ' already qualified; it cannot be extended')
+        extended[stage['id']] = [old_steps, new_steps]
+    return extended
+
+
+def _without_extensions(recipe, extended):
+    value = json.loads(json.dumps(recipe))
+    for stage in value.get('stages', []):
+        if stage['id'] in extended:
+            for key in ('steps', 'quantization_steps'):
+                stage.get('parameters', {}).pop(key, None)
+    return value
 
 
 def _without_operational(recipe):
@@ -646,17 +701,21 @@ def _without_operational(recipe):
     return value
 
 
-def lineage_handoff(existing, plan, frozen, package, plan_path):
+def lineage_handoff(existing, plan, frozen, package, plan_path, out=None):
     """Resume a lineage on the newest code and an operationally changed recipe (owner: jobs switch to the newest code
     at once). Inputs and device must be unchanged and the recipes equal apart from operational stage parameters, so
     the lineage's identity (``recipe_sha256``, which its stage reports carry) stays; the frozen runtime is replaced,
     the superseded one kept beside it, and the change appended to the plan's ``handoffs``. Each trainer then checks
-    its own resume identity and logs its code handoff."""
+    its own resume identity and logs its code handoff. A handoff may also extend an unqualified mapped warm-up
+    (``stage_extensions``); the extension is recorded under ``extended``."""
     for key in ('inputs', 'device', 'stage_inputs'):
         if existing.get(key) != plan.get(key):
             raise ValueError('handoff refused: ' + key + ' changed; use a new stage lineage')
-    if _without_operational(existing['recipe']) != _without_operational(plan['recipe']):
-        raise ValueError('handoff refused: the recipe changes more than operational stage parameters')
+    extended = stage_extensions(existing['recipe'], plan['recipe'], out if out is not None else plan_path.parent)
+    if (_without_operational(_without_extensions(existing['recipe'], extended)) !=
+            _without_operational(_without_extensions(plan['recipe'], extended))):
+        raise ValueError('handoff refused: the recipe changes more than operational stage parameters '
+                         'and stage extensions')
     old_code = existing['code']
     previous = frozen.parent.parent / ('runtime-superseded-' + time.strftime('%Y%m%dT%H%M%S'))
     frozen.parent.rename(previous)
@@ -667,6 +726,8 @@ def lineage_handoff(existing, plan, frozen, package, plan_path):
               'code_changed': sorted(k for k in old_code.keys() & new_code.keys() if old_code[k] != new_code[k]),
               'code_added': sorted(new_code.keys() - old_code.keys()),
               'code_removed': sorted(old_code.keys() - new_code.keys())}
+    if extended:
+        record['extended'] = extended
     updated = dict(existing, recipe=plan['recipe'], code=new_code,
                    handoffs=list(existing.get('handoffs', [])) + [record])
     write_json(plan_path, updated)
@@ -983,7 +1044,7 @@ def main(argv=None):
     if plan_path.exists():
         existing = json.loads(plan_path.read_text())
         if args.handoff:
-            plan = lineage_handoff(existing, plan, frozen, package, plan_path)
+            plan = lineage_handoff(existing, plan, frozen, package, plan_path, args.out)
         else:
             if (existing.get('recipe') == plan['recipe'] and existing.get('recipe_sha256') != plan['recipe_sha256'] and
                     'extends' in json.loads(args.recipe.read_text())):
@@ -1096,7 +1157,8 @@ def main(argv=None):
                 stage_parameters = effective_stage_parameters(stage,reports,recipe)
                 if 'text_data' in stage_inputs[stage['id']]:
                     stage_parameters = {key: value for key, value in stage_parameters.items() if key != 'text_data'}
-                command += stage_parameter_args(stage_parameters)
+                command += stage_parameter_args({key: value for key, value in stage_parameters.items()
+                                                 if key not in RUNNER_STAGE_PARAMETERS})
                 component = stage_quantization(recipe, stage, stage_parameters, reports, init_mix)
                 if component is not None:
                     command += ['--quantization', json.dumps(component, sort_keys=True, separators=(',', ':'))]

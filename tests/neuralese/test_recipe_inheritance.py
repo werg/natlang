@@ -302,7 +302,7 @@ def test_v6_line_declares_its_evaluation_and_checkpoint_points_in_steps():
     """Owner 2026-10-10: every write point is an evaluation point and the stage end is the last one (its gate)."""
     from natlang_neuralese.train.loop import check_declared_points
     from natlang_neuralese.train.recipe import resolve_recipe_data
-    for name in ('raw-recurrence-v6', 'raw-recurrence-mellum-v5', 'raw-recurrence-mellum-v6', 'raw-recurrence-v7', 'raw-recurrence-mellum-v7', 'raw-recurrence-v8', 'raw-recurrence-mellum-v8', 'raw-recurrence-mellum-v9', 'raw-recurrence-mellum-v10', 'raw-recurrence-mellum-v11'):
+    for name in ('raw-recurrence-v6', 'raw-recurrence-mellum-v5', 'raw-recurrence-mellum-v6', 'raw-recurrence-v7', 'raw-recurrence-mellum-v7', 'raw-recurrence-v8', 'raw-recurrence-mellum-v8', 'raw-recurrence-mellum-v9', 'raw-recurrence-mellum-v10', 'raw-recurrence-mellum-v11', 'raw-recurrence-mellum-v12'):
         path = RECIPES / f'{name}.json'
         if not path.exists():
             continue
@@ -330,3 +330,18 @@ def test_mellum_v11_is_an_operational_handoff_from_v10():
     v10 = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v10.json')
     v11 = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v11.json')
     assert v10 != v11 and _without_operational(v10) == _without_operational(v11)
+
+
+def test_mellum_v12_extends_core_text_warmup_with_its_quantization_range_held():
+    from natlang_neuralese.train.recipe import (_without_extensions, _without_operational, resolve_recipe_data,
+                                                stage_extensions)
+    v11 = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v11.json')
+    v12 = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v12.json')
+    warm = next(stage for stage in v12['stages'] if stage['id'] == 'core_text_warmup')
+    assert warm['parameters']['steps'] == 6144 and warm['parameters']['quantization_steps'] == 4096
+    assert v12['stage_parameter_defaults']['core_text_warmup']['report_column_fraction'] == 0.25
+    extended = stage_extensions(v11, v12, RECIPES / 'no-lineage')
+    assert extended == {'core_text_warmup': [4096, 6144]}
+    assert (_without_operational(_without_extensions(v11, extended)) ==
+            _without_operational(_without_extensions(v12, extended)))
+

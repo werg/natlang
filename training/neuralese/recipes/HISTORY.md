@@ -278,3 +278,15 @@ v11 itself sets `moe_kernel: grouped` for the text warm-up and the recurrence st
 two `torch._grouped_mm` calls over the expert-sorted routed pairs (maple/fused_moe.dense_grouped_experts) instead of
 the 64-way loop; same pairs, order and combine, BF16 accumulation order only (relative error < 1e-2 in output and
 gradients, tests/neuralese/test_dense_grouped_moe.py). Backbone-inherent: dense trainable MoE experts.
+
+## raw-recurrence-mellum-v12 (2026-10-11): core_text_warmup extended to 6,144 updates; cheaper report columns
+
+Lineage run-v9's core_text_warmup ended at 4,096 unqualified (report preserved as
+`run-v9/core_text_warmup/report-step4096-unqualified.json`): BF16 failed `pass-1-length-long-tail-last256` ce_delta
+0.1255 > 0.1, and BF16 and q4 both failed the behaviour gate (gate_pass 0.33 / 0.25 against 0.75 − 0.1, held KL
+0.92 / 0.92 against 0.25). v12 extends the stage to 6,144 updates. The quantization component keeps the 4,096-update
+range (`quantization_steps`), so q4 stays at λ 1 and ternary-experts at 0.125. The pass-1 last256 ce_delta fell
+0.042 per 1,000 updates over 2,560–4,096. The fit gives 0.115 at 4,096 with residual sd 0.036 on 8 held documents,
+so the mean reaches 0.05 near update 5,600; two consecutive passes need about that much margin. Report-only precision
+columns (gated points this stage does not require) run only at the decision that ends the stage, on a quarter of the
+column's held windows, gate probes and held rows (`report_column_fraction`, operational).

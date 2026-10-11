@@ -275,6 +275,14 @@ def test_gate_columns_evaluate_each_gated_point_at_deploy_precision_and_name_wha
     assert early['tern']['skipped'] and early['tern']['passed'] is None and [p for p, _ in seen] == ['q4']
     assert early['q4']['seconds'] >= 0
     assert 'tern' not in q.precision_verdict(run, early, True)['precisions_passed']
+    # ``points`` splits the deciding columns from the report-only ones (a trainer runs the latter only at the
+    # decision that ends the stage).
+    seen.clear()
+    run.mixes = lambda step: {'q4': 1.0, 'tern': 0.5}
+    run.required_points = lambda: ['q4']
+    deciding = q.gate_columns(run, evaluate, lambda report: report['ok'], step=10, points='required')
+    report_only = q.gate_columns(run, evaluate, lambda report: report['ok'], step=10, points='report')
+    assert list(deciding) == ['q4'] and list(report_only) == ['tern'] and [p for p, _ in seen] == ['q4', 'tern']
 
 
 def test_recipe_gate_refuses_a_stage_that_missed_a_required_precision():
@@ -402,7 +410,8 @@ def test_text_warmup_trains_every_planned_precision_and_reports_gate_columns(tmp
                       '--batch', '1', '--eval-batch', '1', '--held-documents', '1', '--eval-every', '2',
                       '--checkpoint-every', '2', '--optimizer', 'adamw', '--backbone-training', 'full',
                       '--projection-patience', '1', '--projection-min-evals', '1', '--backbone-ramp-evals', '1',
-                      '--pass-ramp-evals', '1', '--quantization', json.dumps(component)])
+                      '--pass-ramp-evals', '1', '--report-column-fraction', '0.5',
+                      '--quantization', json.dumps(component)])
     rows = [json.loads(line) for line in (out / 'train.jsonl').read_text().splitlines()]
     planned = [set(r['pass_metrics'][0]['precision']) for r in rows]
     assert planned[0] == {'bf16'}  # progress 0: every ramp at λ = 0
@@ -412,6 +421,8 @@ def test_text_warmup_trains_every_planned_precision_and_reports_gate_columns(tmp
     columns = report['quantization']['columns']
     assert set(columns) == {'q4', 'tern'} and all('alignment_gate_passed' in c for c in columns.values())
     assert report['quantization']['precisions_required'] == ['bf16', 'q4']
+    # The report-only column (tern, not required in this stage) ran at the stage end on the smaller probe.
+    assert columns['tern']['report_column_fraction'] == 0.5 and 'report_column_fraction' not in columns['q4']
     assert report['quantization']['mixes']['q4'] == 1.0
     assert all('seconds' in c for c in columns.values())
     evaluations = (out / 'eval.jsonl').read_text().splitlines()
@@ -580,3 +591,15 @@ def test_preservation_stream_is_zero_at_bf16_and_trains_the_quantized_model_towa
             optimizer.step()
         end = sum(float(preserve.loss(model, s)[0]) for s in range(4)) / 4
     assert start > 0.01 and end < start
+
+
+def test_deployed_cache_is_reentrant_so_a_whole_precision_column_quantizes_each_weight_once():
+    from natlang_neuralese.maple.generation_gate import deployed_cache
+    from natlang_neuralese.maple.ternary import QUANT_MIX
+    with deployed_cache():
+        outer = QUANT_MIX['cache']
+        outer['marker'] = 1
+        with deployed_cache():  # the behaviour gate's own block inside a column
+            assert QUANT_MIX['cache'] is outer
+        assert QUANT_MIX['cache'] is outer and outer['marker'] == 1
+    assert QUANT_MIX['cache'] is None

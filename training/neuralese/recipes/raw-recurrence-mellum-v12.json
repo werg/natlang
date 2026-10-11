@@ -1,0 +1,21 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "raw-recurrence-mellum-v12",
+ "extends": "raw-recurrence-mellum-v11",
+ "description": "raw-recurrence-mellum-v11 with core_text_warmup extended from 4,096 to 6,144 updates (its quantization ramp held at the 4,096-update range, so updates past 4,096 train at the stage-end mixes) and report-only precision columns on a quarter of the column probe. run-v9 reached 4,096 unqualified (BF16 pass-1 last256 ce_delta 0.1255 > 0.1; pass-1 trend -0.042 per 1,000 updates, fit 0.115 at 4,096, residual sd 0.036 on 8 held documents: mean 0.05 near update 5,600). Applied to the lineage by a --handoff stage extension (train/recipe.py stage_extensions). plans/mellum-port.md 'core_text_warmup at 4,096: unqualified'. History: recipes/HISTORY.md.",
+ "overrides": {
+  "stages": {
+   "core_text_warmup": {
+    "parameters": {
+     "steps": 6144,
+     "quantization_steps": 4096
+    }
+   }
+  },
+  "stage_parameter_defaults": {
+   "core_text_warmup": {
+    "report_column_fraction": 0.25
+   }
+  }
+ }
+}

@@ -463,10 +463,14 @@ class Behaviour:
         self.config, self.tokenizer, self.held, self.render = config, tokenizer, held, render
         self.eos = tokenizer.convert_tokens_to_ids('<|im_end|>')
 
-    def report(self, model):
+    def report(self, model, fraction=1.0):
+        """``fraction`` < 1 (a report-only column, ``gate_columns``): the first ``ceil(fraction · n)`` probes and held
+        rows, a smaller probe of the same report."""
         from ..maple.generation_gate import behaviour_report
-        return behaviour_report(model, self.tokenizer, self.probes, self.render, self.eos, self.held,
-                                self.config.get('held_rows', 48), self.config.get('prompt_weight', 0.25))
+        probes = self.probes[:max(1, math.ceil(fraction * len(self.probes)))]
+        rows = max(1, math.ceil(fraction * self.config.get('held_rows', 48)))
+        return behaviour_report(model, self.tokenizer, probes, self.render, self.eos, self.held,
+                                rows, self.config.get('prompt_weight', 0.25))
 
     def passed(self, report, bf16=None):
         """Against ``bf16`` (a live BF16 report) or the declared ``reference`` (the original BF16 model's measured
@@ -508,17 +512,21 @@ def multi_precision_backward(quantization, step, passes, refresh=None):
     return results, losses
 
 
-def gate_columns(quantization, evaluate, passed, step=None):
+def gate_columns(quantization, evaluate, passed, step=None, points='all'):
     """Evaluate each gated point at its deploy precision (λ = 1). ``evaluate()`` returns a report; ``passed(report)``
     applies the stage's thresholds. Returns the per-precision columns (each with its wall time) and the names that
     passed. Trainers call this only where a gate decision is made (owner 2026-10-10: sparse, cheap evaluations). With
     ``step``, a point that is not required in this stage and whose ramp has not started (λ = 0) is skipped: its deploy
-    column would measure what the stage is not training yet."""
+    column would measure what the stage is not training yet. ``points``: ``all``, ``required`` (the points this stage
+    must pass) or ``report`` (the others, which report progress but never decide; a trainer runs them only at the
+    decision that ends the stage)."""
     import time
     columns = {}
     mixes = quantization.mixes(step) if step is not None else {}
     required = set(quantization.required_points())
     for name in quantization.gated_points():
+        if points != 'all' and (name in required) != (points == 'required'):
+            continue
         if step is not None and name not in required and mixes.get(name, 0.0) <= 0.0:
             columns[name] = {'passed': None, 'skipped': 'ramp not started in this stage', 'report': {}}
             continue

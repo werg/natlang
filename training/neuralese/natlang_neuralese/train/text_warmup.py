@@ -367,7 +367,7 @@ def process_rss_bytes():
 # moe_kernel: the dense experts' loop or grouped GEMMs compute the same math (BF16 accumulation order only).
 RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','eval_minutes','device',
                                       'checkpoint_layers','cuda_reserved_cap_gb','optimizer_state','optimizer_added',
-                                      'moe_kernel'})
+                                      'moe_kernel','report_column_fraction'})
 
 
 def copy_restored_values(targets, values):
@@ -1308,11 +1308,15 @@ def main(argv=None):
                    help='reader-side Neuralese input adaptation (heads.NeuraleseReadAdapter), trained with the heads')
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
+    p.add_argument('--report-column-fraction',type=float,default=1.0,
+                   help='fraction of the column held windows, gate probes and held rows a report-only precision column '
+                        '(a gated point not required in this stage) evaluates; it runs only at the decision ending the stage')
     a=p.parse_args(argv)
     from ..maple.model import set_dense_moe_kernel
     set_dense_moe_kernel(a.moe_kernel)
     if a.ar_feedback_fixup and not a.continue_from:
         p.error('--ar-feedback-fixup requires a mapped --continue-from checkpoint')
+    if not 0.<a.report_column_fraction<=1.:p.error('--report-column-fraction must be in (0, 1]')
     if min(a.steps,a.tokens,a.prefix_tokens,a.batch,a.eval_batch,a.eval_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3 or a.checkpoint_every<0:
         p.error('positive bounds and at least three tokens required')
 
@@ -2213,19 +2217,30 @@ def main(argv=None):
         """The gate column of every gated precision point at its deploy precision (train/quantization.py), next to
         the BF16 report; the stage qualifies only when BF16 and every required point pass. Columns run only where a
         gate decision is made (``decide``: a qualification candidate or the stage end); elsewhere they are deferred.
-        ``quantization.gate.column_held_documents`` (recipe) evaluates columns on the first N held documents."""
+        ``quantization.gate.column_held_documents`` (recipe) evaluates columns on the first N held documents.
+
+        Cost (plans/mellum-port.md "Stage-end eval cost"): each column runs inside one deployed-weights cache, so every
+        weight is quantized once per column, not once per forward and decode step. The required columns decide; when
+        BF16 already failed a mid-stage candidate they are deferred. The report-only columns (gated points not
+        required in this stage) run only at the decision that ends the stage (its last step, or a qualification), on
+        ``--report-column-fraction`` of the held documents, gate probes and held rows."""
         if quant is None:return report
         from .quantization import gate_columns, precision_verdict
         if not decide:
             report['quantization']={**quant.describe(step),'columns':{},'precisions_qualified':None,
                                     'columns_deferred':'gate columns run only at gate decisions'}
             return report
+        from ..maple.generation_gate import deployed_cache
         column_documents=(quant.component.get('gate') or {}).get('column_held_documents')
-        def column():
+        held_count=len(held) if column_documents is None else min(int(column_documents),len(held))
+        def column(fraction=1.0):
             phase_memory_start()
-            column_report=evaluate(observe_schedule=False,record=False,documents=column_documents)
-            if behaviour is not None:column_report['behaviour']=behaviour.report(backbone.hf)
+            documents=column_documents if fraction>=1.0 else max(1,math.ceil(fraction*held_count))
+            with deployed_cache():
+                column_report=evaluate(observe_schedule=False,record=False,documents=documents)
+                if behaviour is not None:column_report['behaviour']=behaviour.report(backbone.hf,fraction=fraction)
             column_report['phase_memory']={'phase':'precision_column',**phase_memory()}
+            if fraction<1.0:column_report['report_column_fraction']=fraction
             return column_report
         def column_passed(column_report):
             return bool(column_report.get('alignment_gate_passed')) and (
@@ -2234,7 +2249,18 @@ def main(argv=None):
         if behaviour is not None:
             report['behaviour']=behaviour.report(backbone.hf)
             bf16_ok=bf16_ok and behaviour.passed(report['behaviour'])
-        columns=gate_columns(quant,column,column_passed,step)
+        final=step==a.steps
+        if not bf16_ok and not final:
+            report['quantization']={**quant.describe(step),'columns':{},'precisions_qualified':False,
+                                    'columns_deferred':'BF16 failed this candidate; precision columns not run'}
+            return report
+        columns=gate_columns(quant,column,column_passed,step,points='required')
+        if final or (bf16_ok and precision_verdict(quant,columns,bf16_ok)['precisions_qualified']):
+            columns.update(gate_columns(quant,lambda:column(a.report_column_fraction),column_passed,step,
+                                        points='report'))
+        else:
+            columns.update({name:{'passed':None,'skipped':'report column runs only at the decision ending the stage',
+                                  'report':{}} for name in quant.gated_points() if name not in quant.required_points()})
         summary={name:{'passed':column['passed'],**({'skipped':column['skipped']} if 'skipped' in column else {}),
                        **({'seconds':column['seconds']} if 'seconds' in column else {}),
                        **{k:v for k,v in column['report'].items() if k not in ('strata','cohort_strata','matched_history')}}

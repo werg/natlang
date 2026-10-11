@@ -22,7 +22,12 @@ from .ternary import QUANT_MIX
 @contextlib.contextmanager
 def deployed_cache():
     """Compute every ternary (ramped) weight once for the whole block: attention through torch's parametrization
-    cache, experts through DenseExperts' unbound cache. Costs one deployed copy of the weights while active."""
+    cache, experts through DenseExperts' unbound cache. Costs one deployed copy of the weights while active. Reentrant:
+    inside an active block (a whole precision column, train/text_warmup.py) it keeps the outer cache. Only for
+    no-grad forwards at one fixed precision point: the cached values are not refreshed when the point changes."""
+    if QUANT_MIX.get("cache") is not None:
+        yield
+        return
     QUANT_MIX["cache"] = {}
     try:
         with parametrize.cached():

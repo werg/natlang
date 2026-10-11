@@ -520,3 +520,90 @@ from v10 only in an operational parameter. The lineage's `recipe_sha256` is kept
   - Two things moved during the window. The q4 mix ramped from 0.47 to 0.80, and passes went from 1 to 2.
 - **Disk:** NVMe has 12 GB free beside the 49.6 GB checkpoint reserve. The step-2842 state was replaced in place by
   the later writes.
+
+## 2026-10-11 — core_text_warmup at 4,096: unqualified; extended in v12
+
+**Result.** run-v9's core_text_warmup reached its last step (4,096) at 06:46. The report says `qualified: false` and
+`consecutive_passes 0`. The recipe runner then refused the stage with "stage did not pass every required precision:
+bf16, q4". The report and eval log are preserved unchanged next to the stage as
+`report-step4096-unqualified.json`, `eval-step4096-unqualified.jsonl` and `step4096-unqualified.sha256`.
+`core_text_warmup-attempt.json` is the runner's record of the attempt. The 4,096 full state (`checkpoint.pt`, written
+06:55) is authoritative for resume.
+
+**Why each precision failed.** A column passes when its alignment gate passes *and* its behaviour gate passes
+(train/text_warmup.py `column_passed`; train/quantization.py `Behaviour.passed`). The behaviour gate requires:
+- gate_pass ≥ 0.75 − 0.1, against the reference measured on BF16 Mellum at conversion v3, step 0;
+- held KL to the BF16 teacher ≤ 0.25.
+
+| precision | alignment gate | gate_pass | held KL | passed |
+|---|---|---|---|---|
+| bf16 | failed: pass-1 last256 ce_delta 0.1255 > 0.1 (other 15 criteria pass) | 0.33 | 0.918 | no |
+| q4 (required) | passed (16/16) | 0.25 | 0.922 | no: behaviour gate |
+| ternary-experts (λ 0.125, not required here) | failed | 0.00 | 5.53 | no (report only) |
+
+So q4 did not fail on consecutive passes or because BF16 failed: its own behaviour gate failed. BF16 failed two
+gates.
+
+The binding failure is the behaviour gate, not ce_delta:
+- The q4 column's held KL (0.92) equals BF16's, so quantization is not the cause. The trained backbone has drifted
+  from BF16 Mellum's own chat/thinking/tool behaviour.
+- The preserve stream's training KL (weight 0.5) rose over the backbone phase. Mean per 256 updates: 0.53 (2,560),
+  0.60, 0.66, 0.73, 0.79, 0.82 (3,840).
+- Behaviour is measured only at gate decisions, so 4,096 is its only point.
+- An extension with the same objective is not expected to bring held KL from 0.92 to 0.25. Raising the preserve
+  weight, or changing the 0.25 / reference behaviour gate, is a recipe decision that is still open (owner rule: anchors
+  never cap learning).
+
+**Pass-1 ce_delta trend** (pass-1-length-long-tail-last256, the only failing alignment criterion at 4,096; 8 held
+documents):
+- Values at 2,560–4,096: 0.197, 0.152, 0.116, 0.204, 0.136, 0.099 (3,840: all 16 criteria passed, streak 1), 0.126.
+- Least-squares fit: −0.042 per 1,000 updates, 0.115 at 4,096, residual sd 0.036.
+- The mean reaches 0.07 near update 5,160 and 0.05 near 5,640. With sd 0.036, two consecutive passes need about the
+  latter: P(pass) ≈ 0.92 per eval, ≈ 0.84 for two in a row.
+
+**v12 (raw-recurrence-mellum-v12).**
+- core_text_warmup goes to **6,144** updates, at ~6–7 s/update ≈ 3.5–4 h more.
+- `quantization_steps: 4096` keeps the quantization ramp's update range. Updates past 4,096 train at the stage-end
+  mixes (q4 λ 1, ternary-experts 0.125), and the quantization component — part of the trainer's resume identity —
+  is unchanged.
+- Evaluation every 256 and checkpoints every 2,048 (6,144 is a declared point) as before.
+- Applied by a `--handoff` stage extension (train/recipe.py `stage_extensions`). It is allowed only for an unqualified
+  mapped warm-up whose steps rise and whose quantization range is unchanged, and it is recorded under `extended` in
+  `recipe-plan.json` "handoffs".
+
+**Stage-end eval cost.** The 4,096 decision took 65 min:
+- BF16 eval 48 s and BF16 behaviour ~190 s;
+- q4 column 784 s;
+- ternary-experts column 2,440 s.
+
+**Cause: every column forward re-quantized every weight.** The behaviour gate's greedy decode already ran inside
+`generation_gate.deployed_cache`. The column's alignment evaluation did not: its many no-grad forwards, including the
+autoregressive controls, which decode token by token, ran outside the cache.
+
+3-layer probe (`training/neuralese/scripts/bench_mellum_qat_column.py`, real Mellum layers, λ 1):
+
+| point | decode ms/token uncached | cached | 4k-token forward s uncached | cached |
+|---|---|---|---|---|
+| bf16 | 6.0 | 6.0 | 0.22 | 0.14 |
+| q4 | 100.6 | 6.0 | 0.23 | 0.18 |
+| ternary-experts | 359.5 | 5.9 | 0.49 | 0.13 |
+
+The 1 : 3.6 ratio of q4 to ternary decode cost matches the 784 s : 2,440 s columns.
+
+**Changes in the same push** (operational; no evaluation added; the required columns still gate):
+1. **Cache per column.** Each precision column runs inside one deployed-weights cache, so each weight is quantized
+   once per column. `deployed_cache` is now reentrant, so the gate's own block keeps the outer cache. The values are
+   unchanged: the cached weight is the same function of the same latent.
+   - Expected: a q4 or ternary-experts column costs about BF16's eval plus behaviour, ~4 min instead of 13 and 41.
+   - Memory: one deployed copy of the weights during a column.
+2. **Defer columns when BF16 already failed.** At a mid-stage candidate whose BF16 report fails (for example its
+   behaviour gate), the precision columns are not run. The verdict is already "not qualified".
+3. **Report-only columns run once, on a smaller probe.** A gated point this stage does not require (ternary-experts
+   here) runs only at the decision that ends the stage: the last step, or a qualifying decision. It uses
+   `report_column_fraction` (v12: 0.25) of the column's held windows, gate probes and held rows. The fraction is an
+   operational stage parameter and trainer option.
+
+**Expected decision cost:**
+- Final decision: ~4 min (BF16 behaviour) + ~4 min (q4) + ~1 min (ternary-experts at 0.25).
+- With cadence evals at ~50 s per 256 updates (~3%), the stage's eval share stays near 3–4%.
+- This is a forecast until the first decision under v12 is measured.
