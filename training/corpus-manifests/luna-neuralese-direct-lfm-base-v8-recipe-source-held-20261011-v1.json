@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-neuralese-direct-lfm-base-v8-recipe-source-held-20261011-v1",
+  "owner": "pop",
+  "path": "training/neuralese/recipes",
+  "files": [
+    {
+      "path": "luna-neuralese-direct-lfm-base-20261011-v8.json",
+      "bytes": 23062,
+      "sha256": "6cede93b8d68dc3aa6717b38fb6f598f90c6d0d3618b8e9f4be86bf480728abe"
+    }
+  ],
+  "bytes": 23062
+}
