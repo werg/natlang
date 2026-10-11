@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-pool-freeze-correction-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-google-pool-freeze-correction-v2",
+  "files": [
+    {
+      "path": "correction.json",
+      "bytes": 6684,
+      "sha256": "ed3a1dcd9769a5be04ce2b8526352d0c761758a81789cd9e510dd4d891ec5d6e"
+    },
+    {
+      "path": "correction.md",
+      "bytes": 1458,
+      "sha256": "0cbe08b9a5d4d9f42d94dd272a3a9fbc0ee7edfb1f59afeba8781f6c2a1da50b"
+    }
+  ],
+  "bytes": 8142
+}

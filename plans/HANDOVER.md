@@ -10665,3 +10665,15 @@ V33 quota waiter999609 queues 512 fresh original train rows / nine families, cas
 New provenance bug: V32 frozen manifest declares an older pre-budget-option runner hash while bundled runner actually supports2048. V33 pins actual bytes correctly. Preserve V31/V32 historical manifests and actual output artifacts; additive correction audit and shared freeze/validation helper are being implemented. Do not claim olddeclaredpin equals loadedbytes or rewrite sealed evidence. No evidence yet that requests used the wrong output budget.
 
 V31 full-S1 closure request02:07UTC pop-6848 was sent after main88704e739f publication and SSH verification. V64 seven-source closure requestpop-5ef1 also pending.
+
+
+### Pop 2026-10-11T02:10:40.418949+00:00 — next five-worker Luna queue
+
+V68 supervisor999994 waits on complete V67 accounting before starting five workers for57 V31 reference programs /407 original items. Approvedplan SHAfb5f18431e2ec6581d5bd785d12b05d4b155137bbea369f008b35244e06715a2. Root checked every artifact pin, all58 archived payloads, source/train/group/current62hold disjointness and unique queue indices. Frozen policy-at-approval copy avoids mutable policy pinning. Generation-only; fullS1 source closure and trace quality remain separate. Ten input files registered; live outputs excluded.
+
+
+### Pop 2026-10-11T02:11:20.764482+00:00 — shared Google freeze bug fixed
+
+Shared `scripts/freeze_decision_pool.py` now generates and verifies actual declared runner/import/model bytes, and provides a verified launch wrapper that pins the model pool. It isolates Python bytecode caches outside the frozen source bundle and rejects duplicate model-path arguments. Routine `.pyc` creation does not invalidate declared source identity. Coverage excludes the Python interpreter/OS and other undeclared environment inputs.
+
+Additive V31/V32 correction V2 binds the 22 historical bundle files archived in V1: both old frozen-runtime manifests declared pre-option runner418bb4..., actual runnerce64c6... supports2048. Their actual labels manifests pin ce64c6 and max_output_tokens2048 correctly. This is a provenance declaration bug, not evidence of wrong request budget. Old sealed/active data unchanged. V1 erroneous strict cache exclusion claim preserved and superseded by V2. Actual read-only V33 verification passed six listed files /ten models /four ignored caches. Future launches should use the shared freeze and run wrapper rather than manual runner copies.

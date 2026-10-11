@@ -28872,6 +28872,48 @@
       "training_admission": false,
       "admission": "held-inputs-no-generated-output",
       "notes": "512 fresh original train inputs ninefamilies, current62holds/priorreservations/sharedcriteria. Root exactsource equality and6frozenfilepins verified. Actual2048runner/modelpool immutable manifest; originalV32stale runnerdeclaredpin is separate correction pending. Sharedprojectquota waiter999609, noextra capacity bypass. Liveoutputs excluded."
+    },
+    {
+      "id": "luna-v68-v31-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v68-v31-runtimev15-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-approved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-current-policy-at-approval-v1.json",
+        "v31-input-provenance-v1.json",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "held-provider-generation-input-plan",
+      "training_admission": false,
+      "admission": "held-inputs-no-generated-output",
+      "notes": "Rootapprovedfiveworker57program407originaltrainitems successor afterV67completeaccounting. Actual58staticcomponentpayloads/reference/current62holds/sourceIDs/groups verified. RuntimeV15medium384requests60turns32768context1800resourcesec,fullS1pending. Liveoutputsexcluded; noextra simultaneousslots/newworld/admission."
+    },
+    {
+      "id": "google-pool-freeze-correction-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-google-pool-freeze-correction-v1",
+      "split": "provenance-evidence-only",
+      "source_class": "held-runtime-provenance-correction",
+      "training_admission": false,
+      "admission": "evidence-not-training-examples",
+      "notes": "V31/V32 declared old runner hash differs from actual bundled2048runner. Label manifests correctly pin actual schedulerce64c6 and2048. Exact22historical bundle files preserved; oldsealed/active folders untouched. V2supersedes onlyV1 strictpycache rejection: caches are documented runtimeauxiliary excludedfromdeclaredsourceidentity. No originalwire/transitiveenvironmentclosure claim."
+    },
+    {
+      "id": "google-pool-freeze-correction-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-google-pool-freeze-correction-v2",
+      "split": "provenance-evidence-only",
+      "source_class": "held-runtime-provenance-correction",
+      "training_admission": false,
+      "admission": "evidence-not-training-examples",
+      "notes": "V31/V32 declared old runner hash differs from actual bundled2048runner. Label manifests correctly pin actual schedulerce64c6 and2048. Exact22historical bundle files preserved; oldsealed/active folders untouched. V2supersedes onlyV1 strictpycache rejection: caches are documented runtimeauxiliary excludedfromdeclaredsourceidentity. No originalwire/transitiveenvironmentclosure claim."
     }
   ],
   "coverage_backlog": [
