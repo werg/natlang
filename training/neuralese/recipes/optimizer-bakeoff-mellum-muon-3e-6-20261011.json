@@ -3,13 +3,13 @@
  "id": "optimizer-bakeoff-mellum-muon-3e-6-20261011",
  "parity": "diagnostic",
  "extends": "neuralese-direct-mellum-v2",
- "description": "Optimizer bakeoff arm (plans/neuralese/OPTIMIZER_BAKEOFF_20261011.md): neuralese-direct-mellum-v2's schedule (2000 declared steps, so no QAT point is active yet) run to update 300 (stop_at), same data and seed as run v2c, no full state, latent weight drift against the base snapshot. MuonSR in Mellum2's SFT configuration at lr 3e-6 (the fallback when lr 1e-5 drifts past LionSR's run-v2c trajectory) (cubic5, wd 0.1).",
+ "description": "Optimizer bakeoff arm (plans/neuralese/OPTIMIZER_BAKEOFF_20261011.md): neuralese-direct-mellum-v2's schedule (2000 declared steps, so no QAT point is active yet) run to update 200 (stop_at; MuonSR costs ~18 s/update, so 200 updates take about as long as LionSR's 300 twice over), drift monitor every 50, same data and seed as run v2c, no full state, latent weight drift against the base snapshot. MuonSR in Mellum2's SFT configuration at lr 3e-6 (the fallback when lr 1e-5 drifts past LionSR's run-v2c trajectory) (cubic5, wd 0.1).",
  "overrides": {
   "stage_parameter_defaults": {
    "neuralese_direct": {
-    "stop_at": 300,
+    "stop_at": 200,
     "save_state": false,
-    "drift_every": 100,
+    "drift_every": 50,
     "weight_drift_base": "/home/werg/data/optimizer-bakeoff-20261011/mellum-base-latents",
     "latent_optimizer": "muonsr",
     "latent_lr": 3e-06,
