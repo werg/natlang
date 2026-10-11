@@ -32570,6 +32570,28 @@
       "independent_new_worlds": 0,
       "admission": "launch evidence only; no data admission",
       "notes": "Additive approval/supervisor-start snapshot for V90. Original prepared-only plan and mutable campaign status/journals are not replaced or included."
+    },
+    {
+      "id": "neuralese-native-e2e-binding-candidate-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "neuralese-native-e2e-binding-candidate-20261011-v1/README.md",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/binding-candidate.json",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/full-authenticated-context-review.json",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/full-candidate-closure-v1.json",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/full-binding-audit-v1.json",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/full-binding-audit-v1.md",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-records.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-pieces.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/recurrence-structural-audit-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/recurrence-authenticated-context-review-v3.json"
+      ],
+      "admission": "held binding feasibility and source closure evidence only; no data/action admission, no qualification, and no new independent-world credit",
+      "derived_from": [
+        "neuralese-v18-v19-selected17-full-recurrence-static-qualification-20261009-v1"
+      ],
+      "notes": "Full authenticated-context scan over the pinned cumulative native trajectory assembly. The candidate selection includes exact train/test endpoints of authenticated writer-to-reader bindings using the existing trajectories.py --handover written route. Ten legacy digest rows are held by the current validator. This packet is not a semantic source review or training approval; do not convert to ProgramReplay or infer admission from binding closure."
     }
   ],
   "coverage_backlog": [

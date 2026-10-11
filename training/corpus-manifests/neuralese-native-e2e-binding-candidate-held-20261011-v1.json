@@ -1,0 +1,61 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-e2e-binding-candidate-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-native-e2e-binding-candidate-20261011-v1/README.md",
+      "bytes": 904,
+      "sha256": "61f36858ff1ab0b1dc8f6f9bd70e64158a7e7f59c4791f7576251b6aa9896035"
+    },
+    {
+      "path": "neuralese-native-e2e-binding-candidate-20261011-v1/binding-candidate.json",
+      "bytes": 53308,
+      "sha256": "8d2052c89ef521d0487941a0f406d9051c25ef8b7cec7360d0f8685233486d4b"
+    },
+    {
+      "path": "neuralese-native-e2e-binding-candidate-20261011-v1/full-authenticated-context-review.json",
+      "bytes": 1400992,
+      "sha256": "8cb3f80f6976fb0ca2bcacf6f6257948bd211738a2a28e1f4c0b39dc827c200f"
+    },
+    {
+      "path": "neuralese-native-e2e-binding-candidate-20261011-v1/full-binding-audit-v1.json",
+      "bytes": 14585,
+      "sha256": "2f40f4533b9f3f91b48992b77ce7ee6d519c27d34f0f4d2264d149ed05a52b04"
+    },
+    {
+      "path": "neuralese-native-e2e-binding-candidate-20261011-v1/full-binding-audit-v1.md",
+      "bytes": 3101,
+      "sha256": "392d62e4c3742796e029901f5e368fe38cedbadd6b52d023fb4ae16692c85768"
+    },
+    {
+      "path": "neuralese-native-e2e-binding-candidate-20261011-v1/full-candidate-closure-v1.json",
+      "bytes": 2045363,
+      "sha256": "bf9e7c306b4e52b985bf6bea9bf47d6b07b3079a2bd07525c60c95297743d066"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/recurrence-structural-audit-v1.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-pieces.jsonl",
+      "bytes": 362979,
+      "sha256": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6",
+      "lines": 351
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-records.jsonl",
+      "bytes": 271336477,
+      "sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3",
+      "lines": 4961
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/recurrence-authenticated-context-review-v3.json",
+      "bytes": 1471868,
+      "sha256": "e298862083e79fb9f621b64fa0cfcbf414135cd430068d289f746c848a7a6d09"
+    }
+  ],
+  "bytes": 276694087
+}
