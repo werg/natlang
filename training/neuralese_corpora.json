@@ -28914,6 +28914,26 @@
       "training_admission": false,
       "admission": "evidence-not-training-examples",
       "notes": "V31/V32 declared old runner hash differs from actual bundled2048runner. Label manifests correctly pin actual schedulerce64c6 and2048. Exact22historical bundle files preserved; oldsealed/active folders untouched. V2supersedes onlyV1 strictpycache rejection: caches are documented runtimeauxiliary excludedfromdeclaredsourceidentity. No originalwire/transitiveenvironmentclosure claim."
+    },
+    {
+      "id": "luna-choice-confidence-v66-quality-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v66-folder-terminal-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-source-and-trajectory-quality-evidence",
+      "training_admission": false,
+      "admission": "quality-evidence-only",
+      "notes": "55complete/5exit0,400typedvalid382annotationmatches/18differences;41exactaccepted14mapmismatch.55intactmaps/files,391item-boundstate/326fullcontract visibility.73type mismatch and13ReferenceErrors recovered, no establishedsharedbug. PartialV65retry nowcomplete; no world/admission."
+    },
+    {
+      "id": "decision-visible-answerability-root-review-held-20261011-v13",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v13",
+      "split": "inherited-train-evidence",
+      "source_class": "held-source-and-trajectory-quality-evidence",
+      "training_admission": false,
+      "admission": "quality-evidence-only",
+      "notes": "Root exactoriginalsource reviewholds2missing-thread Newsgroups fragments forward,64total. Originalsource/gold/attempts unchanged, noautomaticsemanticnegative. DeclinedTREC SinnFeinhold: definition answer DESC supported. Frozenactive/queuedpreparedsources disjoint newholds."
     }
   ],
   "coverage_backlog": [

@@ -1,6 +1,6 @@
 {
   "schema": "natlang.decision-source-quality-holds/1",
-  "policy_id": "decision-visible-answerability-holds-v12",
+  "policy_id": "decision-visible-answerability-holds-v13",
   "status": "canonical_forward_source_filter",
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
@@ -744,10 +744,37 @@
         "source_row_sha256": "4e619e6c90f1fb20c97aa933d52f0dfc0ec9731930f6b2ff090a5598fc6fd4ee"
       },
       "decision_receipt_sha256": "f2cf9dc969a89d5fec133280151652e31de7bdb4973ef1ef117de01855eeb799"
+    },
+    {
+      "item_id": "dc-395df810cc01d13b417e",
+      "original_source_group": "g-af619e04780404bc23fad1da",
+      "split": "train",
+      "reason": "Visible post contains only a thread-dependent fragment with no subject/topic evidence that uniquely identifies one of the twenty newsgroups; prior-thread context is absent. Strict original destination label is not inferable from these inputs.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_sha256": "2b4d21ce2a3c8e81da045e8c088fb14afa8e2cc706ffe8685361595160063173",
+        "official_row_index": 14563,
+        "state": ">specific objections that don't sound frighteningly technical."
+      },
+      "decision_receipt_sha256": "5a0eb21e27efc75a9fbd679982e3c353b097e86b31b74bad3880330eda02e811"
+    },
+    {
+      "item_id": "dc-3fe7d009a95bd985703f",
+      "original_source_group": "g-1c62e29ed33ca3e9bc708834",
+      "split": "train",
+      "reason": "Visible post contains only a thread-dependent fragment with no subject/topic evidence that uniquely identifies one of the twenty newsgroups; prior-thread context is absent. Strict original destination label is not inferable from these inputs.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_sha256": "21eec5ab117685a69319d18bbf0f8ccacd188fe21a35cc8cdd85eef872114330",
+        "official_row_index": 14551,
+        "state": "I'd like this too... maybe you should post an answer key after a while? Nanci"
+      },
+      "decision_receipt_sha256": "5a0eb21e27efc75a9fbd679982e3c353b097e86b31b74bad3880330eda02e811"
     }
   ],
   "root_review": {
-    "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v12/root-review.json",
-    "sha256": "f2cf9dc969a89d5fec133280151652e31de7bdb4973ef1ef117de01855eeb799"
+    "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v13/review.json",
+    "sha256": "5a0eb21e27efc75a9fbd679982e3c353b097e86b31b74bad3880330eda02e811",
+    "scope": "Prospective exclusion of two root-reviewed thread-context-missing Newsgroups rows; prior62 retained, source/gold/attempts unchanged."
   }
 }
