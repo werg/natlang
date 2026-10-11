@@ -15,7 +15,11 @@ def readout_weight(module: nn.Module, source: torch.Tensor, dtype: torch.dtype) 
     name = '_frozen_readout_cast'
     if name not in module._buffers:
         module.register_buffer(name, None, persistent=False)
-    if (source.requires_grad or source.dtype == dtype or source.is_inference()
+    if source.dtype == dtype:
+        # Native-precision readouts alternate with FP32 recurrent states. They
+        # need no cast and must not evict the cast used by those other states.
+        return source
+    if (source.requires_grad or source.is_inference()
             or torch.is_inference_mode_enabled()):
         setattr(module, name, None)
         module._frozen_readout_key = None
