@@ -71,6 +71,34 @@ Classes:
 | memory_gb, graph_memory_gb, graph_headroom_gb, producer_batch_size, backward_policy, checkpoint_layers | defaults | 7.5, 6.9, 0.4, 1, auto, true | fit-only | per machine | — |
 | eval_every / checkpoint_every | 0 / 25 (trainer default) | 25 / 25 at launch, 200 / 200 on resume | accidental | 200 / 200, also the trainer defaults now | Cadence policy. The trainer's own defaults were inconsistent (`--checkpoint-every` 25, consumer `eval_every` 64). |
 
+### E2E acceptance (both lines; `line-parity.json` `stages.e2e.acceptance`)
+
+Pop asked for this (17:58): the token-readout criterion is shared line policy, not a per-run workaround.
+A checkpoint of the end-to-end stage is selected only if all of these hold on held data and the exact exported weights:
+
+1. **Token-readout regression.**
+   - Held crisp CE through the trained TokenChoiceProjection, minus held crisp CE through the raw head
+     (lm_head(norm(h))).
+   - Both are measured on the same weights, the same exact held rows (the saved CE selection: all held reader rows)
+     and the same crisp messages and targets.
+   - Evaluator: `eval.direct_token_readout`, held-consumer arm.
+   - The penalty must be at most **0.05 nats**, the same noise margin as the reader controls.
+   - Raw-head and TCP CE against the run's initial crisp CE are reported, which separates backbone drift from
+     readout drift.
+   - Evidence: Pop's native epoch at update 600 had TCP 2.094 against raw 1.270 (+0.823); at 687 it had 1.398
+     against 1.262 (+0.137). The backbone-only crisp CE improved while the readout regressed, so the criterion has
+     to measure the readout separately.
+2. **Paired reader, values against tokens.** These are the gate of NEURALESE_DIRECT_V1.md §4–5:
+   - consumer CE when reading the Neuralese block must be at most the CE when reading the gold crisp text (V ≤ T);
+   - V must beat the shuffled block and the zeroed block by 0.05 nats each;
+   - on exact-oracle records, V's success rate must be at least T's minus 0.02;
+   - greedy-T is reported only.
+3. The shared behaviour gate passes, the drift guard never stopped, and runtime is requalified on the exact final
+   weights.
+
+Pop's best225 (written 0.929 against shuffled 1.359) and final687 (1.446 against 1.609) are judged by this. Neither
+is selected until criterion 1 is measured on it.
+
 ### Cadence policy (both stages, both lines)
 
 - **Evaluation:** at the stage end, plus the cheap drift monitor at a cadence that keeps all evaluation near 3% of

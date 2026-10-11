@@ -25,6 +25,24 @@
      "lr": 0.0003, "heads_lr": 0.0003, "checkpoint_every": 200, "eval_every": 200, "seed": 20261011
     }
    }},
+   "acceptance": {
+    "description": "Shared E2E acceptance (both lines; plans/neuralese/LINE_PARITY.md 'E2E acceptance'). A checkpoint is selected only if every criterion holds on held data; each is measured on the line's exact exported weights.",
+    "token_readout_regression": {
+     "measure": "held crisp CE through the trained TokenChoiceProjection minus held crisp CE through the raw head (lm_head(norm(h))), same weights, same exact held rows (the saved CE selection, all held reader rows), same crisp messages and targets",
+     "evaluator": "natlang_neuralese.eval.direct_token_readout (held-consumer arm with --records/--pieces/--selection)",
+     "max_penalty_nats": 0.05,
+     "also_reported": "raw-head and TCP crisp CE against the run's initial crisp CE (backbone-only drift)"
+    },
+    "paired_reader": {
+     "measure": "each held consumer read twice on the same producer calls: V reads the producer's Neuralese block, T reads the gold crisp text; controls: shuffled and zeroed blocks",
+     "max_v_minus_t_ce_nats": 0.0,
+     "min_v_margin_over_shuffled_nats": 0.05,
+     "min_v_margin_over_zeroed_nats": 0.05,
+     "max_success_drop_vs_t_exact_oracle": 0.02,
+     "reported_only": "greedy-T (the model's own text) arm"
+    },
+    "also_required": ["shared behaviour gate passes (line's own base reference, response KL bound)", "no drift-guard stop", "runtime requalification on the exact final weights"]
+   },
    "lines": {
     "mellum": {"recipe": null, "pending": "the Mellum E2E launches from the qualified export of the next Mellum direct run (direct-stage recipe with parity {line: mellum, stage: e2e})"},
     "lfm": {"recipe": "luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v3"}
