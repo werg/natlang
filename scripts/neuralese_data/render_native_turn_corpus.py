@@ -301,7 +301,8 @@ def select(args, shard_dir: Path):
                     if reason == 'jeff_reserved_test_text' and row.get('split') == 'train':
                         reserved_groups.update(row.get('source_groups') or [])
                 elif needles is not None and row.get('split') == 'train' and (
-                        reserved_cache.setdefault(program_key(row), reserved_hit(row, needles))):
+                        reserved_cache[program_key(row)] if program_key(row) in reserved_cache
+                        else reserved_cache.setdefault(program_key(row), reserved_hit(row, needles))):
                     reason = 'jeff_reserved_test_text:' + reserved_cache[program_key(row)]
                     reserved_groups.update(row.get('source_groups') or [])
                 elif protected is not None:
