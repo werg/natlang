@@ -320,9 +320,13 @@ async function main() {
         const group = entries.slice(offset, offset + size);
         offset += size;
       const firstTask = group[0].task;
-    const contract = { kind: firstTask.kind, options: firstTask.labels, levels: firstTask.levels, labels: firstTask.labels,
-        criteria: firstTask.criteria, signature: jsonSha({ kind: firstTask.kind, labels: firstTask.labels,
-          criteria: firstTask.criteria, question: firstTask.instruction }) };
+      const ordinalTolerance = family === 'decision:review-satisfaction-estimate-v1' ?
+        { kind: 'ordinal-distance', levels: firstTask.labels, max_distance: 1, model_visible: false } : null;
+      const contractSignature = { kind: firstTask.kind, labels: firstTask.labels,
+        criteria: firstTask.criteria, question: firstTask.instruction,
+        ...(ordinalTolerance ? { oracle_tolerance: ordinalTolerance } : {}) };
+      const contract = { kind: firstTask.kind, options: firstTask.labels, levels: firstTask.levels, labels: firstTask.labels,
+        criteria: firstTask.criteria, ...(ordinalTolerance ? { ordinalTolerance } : {}), signature: jsonSha(contractSignature) };
       const scaffoldEntries = group.map(entry => ({ task: { ...entry.task, gold: entry.task.gold } }));
       const originalGroups = group.map(entry => entry.sourceRow.group);
       const record = folderDecisionScaffold({ contract, entries: scaffoldEntries, sourceSha,
