@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v73-failed-history-context-only-span-packet-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-failed-history-spans-v2",
+  "files": [
+    {
+      "path": "FILES.sha256.json",
+      "bytes": 482,
+      "sha256": "65eed222c0576509921d5ec0eb43b1987834dfd85682640041ee92c479baf4f5"
+    },
+    {
+      "path": "corrected-failed-history-row-bindings.json",
+      "bytes": 413633,
+      "sha256": "b4cf661af1eb47ca098f0d555b6c9524d13f7852e8dbf996f9edd6763892b221"
+    },
+    {
+      "path": "failed-history-context-only-candidate.jsonl",
+      "bytes": 9611211,
+      "sha256": "99704d015170934acbcffa7936d0b3aedc6eccd2fb4be7626095434e1d37b91d",
+      "lines": 82
+    },
+    {
+      "path": "review.json",
+      "bytes": 5441,
+      "sha256": "e532551038d6673a0c66f1d53ea248190d522f9978e665d1cf06050ef979492d"
+    },
+    {
+      "path": "review.md",
+      "bytes": 2060,
+      "sha256": "d14425208eb83d9820f3ca0b92fade908927685a015314e5c76f5c13cb7cd717"
+    }
+  ],
+  "bytes": 10032827
+}

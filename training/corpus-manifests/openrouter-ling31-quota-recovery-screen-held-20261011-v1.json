@@ -1,0 +1,51 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "openrouter-ling31-quota-recovery-screen-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261011-v1/provider-openrouter-ling31-free-source-prep-v1/quota-recovery-review-v1/ling-screen-4",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 2820,
+      "sha256": "775c1de34540c61d9a040762377cb4fc42625f617a3f6f0337c6419b8ba0f302",
+      "lines": 4
+    },
+    {
+      "path": "completion-receipt.json",
+      "bytes": 2049,
+      "sha256": "2b135cbbcbbf096d432ae304c44d1e388877e676ceaa829f2a98dfb18bfdf248"
+    },
+    {
+      "path": "labels.jsonl",
+      "bytes": 1029,
+      "sha256": "45d0f474fff8af2292bd5bbf9beffbf1b054737146a5cb011826e87ba2a30c7c",
+      "lines": 1
+    },
+    {
+      "path": "labels.jsonl.manifest.json",
+      "bytes": 908,
+      "sha256": "293cc4f4623b92f23c3db6d2a2a90cf0f13b9214aef5f3ca20a6dc4afab297fc"
+    },
+    {
+      "path": "launch-receipt.json",
+      "bytes": 3122,
+      "sha256": "a637481d27191a688e78eb2d6710d2b66b76f87c22977a2a1f1eb15db117c864"
+    },
+    {
+      "path": "plan.approved.json",
+      "bytes": 39121,
+      "sha256": "253a0ccf73ddd77103b989b5bdd71c661f5a48a1e7d12ddff7e7a7a1f5b25272"
+    },
+    {
+      "path": "root-authorization-v1.json",
+      "bytes": 761,
+      "sha256": "352a18c97f30fe72944694d85dd6f0575fbd6853003ec455812e17d58cb0db5f"
+    },
+    {
+      "path": "runner.log",
+      "bytes": 379,
+      "sha256": "d8b57c8820c693ad432d4405cac1c0c7d8f42a35b4e115e17a32babc86f34831"
+    }
+  ],
+  "bytes": 50189
+}
