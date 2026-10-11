@@ -72,3 +72,18 @@ Production recurrence optimization remains paused while the shared preservation
 path and applied-update diagnostics are developed. Alignment agreement against
 the current ordinary backbone alone is insufficient evidence of preserved task
 capability.
+
+### Canonical development checkout adoption
+
+Read-only SSH inspection at 08:19 UTC found DGX canonical HEAD 32262369 while its
+origin/main reference was f0fc39ee. Ten training-package files were modified;
+some already matched published main content. A comparison of the whole live
+package against that origin/main reference showed ten differing files, including
+three newer shared evaluation modules absent from the older checkout and pending
+changes in generation_gate, engine, recipe and text_warmup. This is an adoption
+and publication gap, not ten machine-private implementations. Coord pop-87a6
+asks the DGX owner to reconcile the canonical checkout safely before freezing
+another run. Pop does not alter DGX dirty work or launch DGX jobs.
+
+The container-launcher hashing ratchet and direct-stage fake-child output-dir
+regressions were corrected in b80bb66b42 (AST checks only).
