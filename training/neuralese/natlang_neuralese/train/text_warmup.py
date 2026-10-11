@@ -367,7 +367,8 @@ def process_rss_bytes():
 # moe_kernel: the dense experts' loop or grouped GEMMs compute the same math (BF16 accumulation order only).
 RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','eval_minutes','device',
                                       'checkpoint_layers','cuda_reserved_cap_gb','optimizer_state','optimizer_added',
-                                      'moe_kernel','report_column_fraction'})
+                                      'moe_kernel','report_column_fraction','drift_rows',
+                                      'drift_warn','drift_stop'})
 
 
 def copy_restored_values(targets, values):
@@ -1280,9 +1281,11 @@ def main(argv=None):
                    help='train the mapped-input consumer on a detached full-depth autoregressive history; '
                         'the gold targets stay fixed')
     p.add_argument('--input-map-kernel',type=int,default=4);p.add_argument('--input-map-rank',type=int,default=64)
-    p.add_argument('--latent-optimizer',choices=['muon','lionsr'],default='muon',
+    p.add_argument('--latent-optimizer',choices=['muon','lionsr','muonsr'],default='muon',
                    help='lionsr: the latent policy steps backbone weight matrices with LionSR (one BF16 momentum, '
-                        'stochastic rounding, --qat-latent-lr per row ternary scale; Mellum conversion v3)')
+                        'stochastic rounding, --qat-latent-lr per row ternary scale; Mellum conversion v3); muonsr: '
+                        'with Muon per matrix (each expert its own), one BF16 momentum and stochastic rounding, '
+                        '--qat-latent-lr on AdamW\'s scale')
     p.add_argument('--latent-step-in-backward',action=argparse.BooleanOptionalAction,default=False,
                    help='with --latent-optimizer lionsr: once the backbone trains, each update backpropagates its '
                         'objective terms (sequence passes, precision point, preserve stream) together, layer by layer '
@@ -1308,6 +1311,11 @@ def main(argv=None):
                    help='reader-side Neuralese input adaptation (heads.NeuraleseReadAdapter), trained with the heads')
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
+    p.add_argument('--drift-rows',type=int,default=16,
+                   help='held preserve rows of the behaviour-drift KL logged at every cadence evaluation (0: off)')
+    p.add_argument('--drift-warn',type=float,default=.06,help='behaviour-drift held KL that logs a warning (0: off)')
+    p.add_argument('--drift-stop',type=float,default=.1,
+                   help='behaviour-drift held KL that stops the run with its full state (0: off)')
     p.add_argument('--report-column-fraction',type=float,default=1.0,
                    help='fraction of the column held windows, gate probes and held rows a report-only precision column '
                         '(a gated point not required in this stage) evaluates; it runs only at the decision ending the stage')
@@ -1531,19 +1539,21 @@ def main(argv=None):
             print(json.dumps({'event':'qat_latent_groups','latents':len(latent_lrs),
                               'lr_min':min(latent_lrs.values(),default=None),'lr_max':max(latent_lrs.values(),default=None)}),flush=True)
         lion=[]
-        if a.latent_optimizer=='lionsr':
+        if a.latent_optimizer in ('lionsr','muonsr'):
             # The latent policy's memory-lean path (Mellum conversion v3): every backbone weight matrix steps under
             # LionSR - one BF16 momentum, stochastic-rounding writes (updates below BF16 resolution survive), per-row
             # step --qat-latent-lr x the row's ternary scale. Norms and heads stay on Muon/AdamW.
             if a.backbone_training!='latent' or not a.qat_latent_lr:
-                raise ValueError('--latent-optimizer lionsr needs --backbone-training latent and --qat-latent-lr')
+                raise ValueError('--latent-optimizer '+a.latent_optimizer+' needs --backbone-training latent and --qat-latent-lr')
             from ..maple.qat_convert import row_scale
-            lion=[(n,q,a.qat_latent_lr,row_scale(q)) for n,q in named if n.startswith('backbone.') and q.ndim>=2]
+            lion=[(n,q,a.qat_latent_lr,row_scale(q) if a.latent_optimizer=='lionsr' else None)
+                  for n,q in named if n.startswith('backbone.') and q.ndim>=2]
             latent_lrs={n:a.qat_latent_lr for n,*_ in lion}
-            print(json.dumps({'event':'latent_optimizer','optimizer':'lionsr','latents':len(lion),
+            print(json.dumps({'event':'latent_optimizer','optimizer':a.latent_optimizer,'latents':len(lion),
                               'elements':sum(q.numel() for _,q,*_ in lion),'lr_row_scale_units':a.qat_latent_lr}),flush=True)
         optimizer=PortMuonAdamW([(n,q) for n,q in named if n not in latent_lrs],lr=a.lr,
-                                vocab_size=backbone.embedding_weight.shape[0],latent=lion)
+                                vocab_size=backbone.embedding_weight.shape[0],latent=lion,
+                                latent_optimizer=a.latent_optimizer if lion else 'lionsr')
         for child in (optimizer.muon,optimizer.auxiliary):  # LionSR latents keep their own per-latent groups
             if child is None:continue
             original=dict(child.param_groups[0]); buckets={}
@@ -1560,8 +1570,8 @@ def main(argv=None):
           {'params':[q for n,q in named if n.startswith('heads.')],'lr':a.sketch_lr}],weight_decay=0.)
     in_backward=None  # the LionSR latents' in-backward stepper (--latent-step-in-backward)
     if a.latent_step_in_backward:
-        if a.optimizer!='muon' or a.latent_optimizer!='lionsr':
-            raise ValueError('--latent-step-in-backward needs --optimizer muon --latent-optimizer lionsr')
+        if a.optimizer!='muon' or a.latent_optimizer not in ('lionsr','muonsr'):
+            raise ValueError('--latent-step-in-backward needs --optimizer muon --latent-optimizer lionsr or muonsr')
         if a.member_weight:
             raise ValueError('--latent-step-in-backward does not combine the family term into its single backward yet')
         if quant is not None and quant.mode=='sum':
@@ -2211,6 +2221,12 @@ def main(argv=None):
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         if codes is not None:report['qat_codes']=codes.update()
         if not record:return report
+        if preserve is not None and a.drift_rows:
+            # The behaviour drift of the live BF16 backbone at every cadence evaluation (teacher-forced KL to BF16
+            # Mellum on the preserve stream's held rows; no generation): a backbone that drifts shows within one
+            # evaluation instead of at the next gate decision (plans/mellum-port.md "Behaviour gate bug hunt").
+            from ..maple.generation_gate import held_kl
+            report['behaviour_drift']=held_kl(backbone.hf,preserve.held,a.drift_rows,preserve.prompt_weight)
         log('eval.jsonl',report);last_report=report;return report
 
     def evaluate_precisions(report,decide=True):
@@ -2808,6 +2824,20 @@ def main(argv=None):
             streak=streak+1 if bf16_pass and precisions_ok is not False else 0
             report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
                           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
+            drift=(report.get('behaviour_drift') or {}).get('held_kl')
+            if drift is not None:
+                # The drift guard (plans/mellum-port.md "Behaviour gate bug hunt"): BF16 Mellum is 0.013 on these
+                # rows and any small weight change costs ~0.035-0.04 (routing flips); above --drift-stop the run
+                # stops with its full state instead of training on.
+                level=('stop' if a.drift_stop and drift>a.drift_stop else
+                       'warn' if a.drift_warn and drift>a.drift_warn else 'ok')
+                report['behaviour_drift']['guard']=level
+                if level!='ok':
+                    print(json.dumps({'event':'behaviour_drift_'+level,'step':step,'held_kl':drift,
+                                      'warn':a.drift_warn,'stop':a.drift_stop}),flush=True)
+                if level=='stop':
+                    report['stopped_by']='behaviour_drift'
+                    stop.request()
             (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
         # The stage end (the last step or a qualification) writes after the loop; this is a mid-stage checkpoint point.
         if (checkpoint_cadence.due(step) and step<a.steps

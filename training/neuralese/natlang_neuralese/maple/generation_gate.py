@@ -80,19 +80,27 @@ def behaviour_report(model, tokenizer, probes: list[dict], render, eos: int, hel
     prompt positions weighted ``prompt_weight``) and greedy agreement. Shared by conversion v3's verify_export, the
     quantization component's per-precision gate columns and its init gate (train/quantization.py): one
     implementation at whatever precision point is active."""
+    gate = run_gate(model, tokenizer, probes, render, eos, keep_text=True)
+    report = {"gate_pass": gate["gate_pass"], "gate_checks": gate["gate_checks"], "gate_kinds": gate["gate_kinds"],
+              "gate_results": gate["gate_results"]}
+    if held is not None:
+        report.update(held_kl(model, held, held_rows, prompt_weight))
+    return report
+
+
+def held_kl(model, held: dict, rows: int = 48, prompt_weight: float = 0.25) -> dict:
+    """Teacher-forced KL to the BF16 teacher's top-k on the first ``rows`` held records (``held_kl``, its prompt and
+    response parts, response CE and greedy agreement): the behaviour gate's drift measure, without generation. The
+    text warm-up also logs it at every cadence evaluation (``behaviour_drift``, with its guard)."""
     from .qat_convert import weighted_topk_kl
 
-    gate = run_gate(model, tokenizer, probes, render, eos)
-    report = {"gate_pass": gate["gate_pass"], "gate_checks": gate["gate_checks"], "gate_kinds": gate["gate_kinds"]}
-    if held is not None:
-        device = next(model.parameters()).device
-        sums: dict = {}
-        rows = range(min(held_rows, len(held["ids"])))
-        with torch.no_grad():
-            for i in rows:
-                scores = weighted_topk_kl(model, held["ids"][i][None].long().to(device), held["top_ids"][i],
-                                          held["top_logp"][i], held["prompt_len"][i], prompt_weight)
-                for key, value in scores.items():
-                    sums[key] = sums.get(key, 0.0) + float(value)
-        report.update({"held_" + k.replace("loss_", ""): v / max(len(rows), 1) for k, v in sums.items()})
-    return report
+    device = next(model.parameters()).device
+    sums: dict = {}
+    count = min(rows, len(held["ids"]))
+    with torch.no_grad():
+        for i in range(count):
+            scores = weighted_topk_kl(model, held["ids"][i][None].long().to(device), held["top_ids"][i],
+                                      held["top_logp"][i], held["prompt_len"][i], prompt_weight)
+            for key, value in scores.items():
+                sums[key] = sums.get(key, 0.0) + float(value)
+    return {"held_" + k.replace("loss_", ""): v / max(count, 1) for k, v in sums.items()}

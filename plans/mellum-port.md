@@ -619,3 +619,65 @@ The 1 : 3.6 ratio of q4 to ternary decode cost matches the 784 s : 2,440 s colum
 - Cadence evals cost ~50 s per 256 updates, about 4,000 s of training at the current mix (~1.2%).
 - One final decision of ~9 min is ~1.7% of the extension's ~9 h, so the eval share stays under ~3%.
 - This is a forecast until the first decision under v12 is measured.
+
+## 2026-10-11 — Behaviour gate bug hunt (owner: "retreat to what we know and diagnose")
+
+Data: `runs/mellum-foundation-qat-20261010/diagnostics/{behaviour,null}/`.
+Scripts: `training/neuralese/scripts/{diagnose_behaviour_gate,null_test_latent_optimizer,control_drift_sensitivity,control_gradient_check,control_gradient_check2,sft_positive_test}.py`.
+- v12 was stopped by SIGTERM at step 4266, with full state.
+- The 4096 state is kept as `checkpoint-step4096.pt` / `heads-step4096.pt` (hard links).
+- `best-checkpoint.pt` is the 4096 state, because 4096 was the best eval.
+
+**1. The gate harness is sane.**
+- Base BF16 Mellum through the exact gate path gives gate_pass 0.75 and held KL 0.011 (response 0.0002), the reference values.
+- Copying only the 308 backbone tensors of the 4096 state into plain Mellum reproduces the trainer's 4096 numbers exactly: gate 0.333, held KL 0.918, prompt KL 0.651.
+- So the drift is entirely in the backbone weights; the input map and heads play no part.
+
+**2. Generations at 4096.** The format survives: think tags, tool_call JSON and im_end are intact. The arithmetic is broken:
+- "254 − 72 = 255", "720 − 18 = 600 … 6000";
+- runs of digits such as "58 times 58 = 58000000…" and "929292…".
+
+**3. Static forensics.** ‖W₄₀₉₆ − W₀‖/‖W₀‖ against base:
+- attention q/k/v/o 0.109–0.115; experts 0.133 (max 0.21); router 0.102; norms ≈ 0;
+- flat across layers.
+
+The optimizer state maps 1:1: all 196 LionSR groups match by name, shape and row_scale, and every restore was exact. Stochastic rounding is unbiased in magnitude for both signs.
+
+**4. Null tests and controls** (base Mellum, preserve-only self-distillation, held KL on 16 rows).
+- **LionSR at the warm-up's lr 3e-4.** Held KL rises 0.013 → 0.48 in 10 steps at 0.37% ‖ΔW‖, and the training preserve KL rises with it.
+- **Equal-norm Gaussian noise.** 0.1–0.37% gives 0.035–0.040 (attention, experts and router alike); 11% gives 0.41.
+- **Gradient checks.** These pass, so the gradient is correct:
+  - The loss is deterministic, with and without grad and with and without layer checkpointing.
+  - Gradients agree across checkpointing on/off and the loop and grouped MoE kernels, to BF16 noise (1–4%).
+  - Away from the optimum (student perturbed by 11%, loss 0.112), one small step descends for every optimizer: SGD 1e-3 → 0.079, Lion 3e-5 → 0.043, MuonSR 7.5e-6 → 0.071.
+- **Near the base optimum the loss is not smooth.** A 1e-6 relative change of a router raises the loss by about 0.003 in both directions, likely top-k routing near-ties. That makes any small change cost a KL floor of about 0.035–0.04.
+- **Cause.** A sharp optimum combined with fixed-size updates. Lion moves every element by lr × row_scale ≈ 4e-4·RMS per step whatever the gradient. The update's sign follows a β₂ = 0.99 momentum, so even a noisy gradient keeps its sign for about 100 steps. Over the ~1,400 backbone updates since 2,816 that predicts √(1400·100)·3.6e-4 ≈ 13% relative change; 11% is observed.
+- **Same symptom on Pop's LFM V8 (pop-a2dc).** It uses Muon/AdamW without Lion or QAT and shows 14% weight drift and broken plain behaviour. The update budget (lr × steps), not Lion alone, was never sized against drift.
+
+Preserve-only sweep, 30 steps (KL at steps 10 / 20 / 30, then ‖ΔW‖ at 30 and backward+step time):
+
+| optimizer | lr | held KL | ‖ΔW‖ | s/update |
+|---|---|---|---|---|
+| LionSR | 3e-4 | 0.48 / 0.45 / 0.40 | 0.77% | ~3.5 |
+| LionSR | 3e-5 | 0.097 / 0.106 / 0.117 | 0.20% | 3.0 |
+| LionSR | 1e-5 | 0.068 / 0.057 / 0.061 | 0.11% | 3.0 |
+| MuonSR | 7.5e-6 | 0.096 / 0.094 / – | 0.15% (20) | ~19 |
+| MuonSR | 2.5e-6 | 0.041 / 0.045 / 0.048 | 0.10% | 18.7 |
+| MuonSR | 7.5e-7 | 0.037 / 0.036 / 0.036 | 0.05% | 18.7 |
+
+**Changes in this push:**
+- **`MuonSR`** (train/optim.py), the owner's first-candidate backbone optimizer. It uses LionSR's mechanics: one BF16 momentum, SR writes, stepping in backward.
+  - Newton–Schulz runs per matrix, batched over the expert stack, with match_rms_adamw scaling, so lr is on AdamW's scale.
+  - An expert with a zero gradient (unrouted in this update) is not stepped, though its momentum decays. Without this, NS would blow the momentum up to a full-size update. `idle_fraction` makes this threshold relative.
+  - In text_warmup it is `--latent-optimizer muonsr`, with the PortMuonAdamW state key "muonsr".
+  - NS costs about 16 s of a 19 s update. The cheapest option to try first is 3 iterations.
+- **`behaviour_drift`.** The text warm-up logs held KL to BF16 Mellum on 16 preserve-held rows at every cadence evaluation. It shares `generation_gate.held_kl` with the gate.
+- **Drift guard.** The thresholds are set against the routing-flip floor:
+  - `--drift-warn 0.06` logs a warning;
+  - `--drift-stop 0.1` stops the run with its full state.
+  - The guard and the drift metric are operational recipe parameters.
+- **Behaviour reports keep the gate's generations** (`gate_results` with texts).
+
+**Next** (results will be added here):
+- the SFT positive test (task gain against drift per optimizer and lr, with step time, extrapolated to 1,500+ updates);
+- the owner's token-input variants A (backbone frozen) and B (trainable).

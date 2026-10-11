@@ -10,6 +10,8 @@ its policy and is never resumed under another one.
 
 from __future__ import annotations
 
+import math
+
 import torch
 from torch import nn
 
@@ -32,10 +34,11 @@ def muon_eligible(name: str, parameter: torch.Tensor, vocab_size: int, embedding
 
 class PortMuonAdamW(torch.optim.Optimizer):
     def __init__(self, named_parameters, *, lr: float, vocab_size: int, embedding_ids=(), momentum: float = 0.95,
-                 ns_steps: int = 5, latent=()):
-        """``latent``: (name, parameter, lr, row_scale) of BF16 latents stepped by ``LionSR`` (one BF16 momentum,
-        stochastic rounding, per-row step ``lr x row_scale``): the memory-lean path of Mellum's conversion v3, for
-        the latent backbone policy. Their ``lr`` is in units of each row's ternary scale."""
+                 ns_steps: int = 5, latent=(), latent_optimizer: str = "lionsr"):
+        """``latent``: (name, parameter, lr, row_scale) of BF16 latents stepped in backward with one BF16 momentum and
+        stochastic-rounding writes, for the latent backbone policy. ``latent_optimizer``: ``lionsr`` (per-row step
+        ``lr x row_scale``, the memory-lean path of Mellum's conversion v3; ``lr`` in units of each row's ternary
+        scale) or ``muonsr`` (Muon per matrix, ``lr`` on AdamW's scale; row_scale unused)."""
         if not hasattr(torch.optim, "Muon"):
             raise RuntimeError("the muon policy needs a PyTorch build with torch.optim.Muon")
         embedding_ids = set(embedding_ids)
@@ -54,10 +57,20 @@ class PortMuonAdamW(torch.optim.Optimizer):
                 raise ValueError(f"duplicate trainable parameter {name}")
             seen.add(id(parameter))
             self.schema.append({"name": name, "shape": list(parameter.shape), "dtype": str(parameter.dtype),
-                                "optimizer": "lion"})
-        self.latent = (LionSR([{"params": [parameter], "lr": rate, "row_scale": scale, "qat_latent_lr": rate,
-                                "weight_decay": 0.0, "name": name} for name, parameter, rate, scale in latent],
-                              lr=latent[0][2], fused=True) if latent else None)
+                                "optimizer": "lion" if latent_optimizer == "lionsr" else latent_optimizer})
+        if latent_optimizer not in ("lionsr", "muonsr"):
+            raise ValueError(f"unknown latent optimizer {latent_optimizer!r}")
+        self.latent_key = "lion" if latent_optimizer == "lionsr" else "muonsr"
+        if not latent:
+            self.latent = None
+        elif latent_optimizer == "lionsr":
+            self.latent = LionSR([{"params": [parameter], "lr": rate, "row_scale": scale, "qat_latent_lr": rate,
+                                   "weight_decay": 0.0, "name": name} for name, parameter, rate, scale in latent],
+                                 lr=latent[0][2], fused=True)
+        else:
+            self.latent = MuonSR([{"params": [parameter], "lr": rate, "qat_latent_lr": rate, "weight_decay": 0.0,
+                                   "name": name} for name, parameter, rate, _ in latent], lr=latent[0][2],
+                                 momentum=momentum, ns_steps=ns_steps)
         if not muon:
             raise ValueError("the muon policy found no eligible hidden matrices")
         self.muon = torch.optim.Muon(muon, lr=lr, weight_decay=0.0, momentum=momentum, ns_steps=ns_steps,
@@ -100,7 +113,7 @@ class PortMuonAdamW(torch.optim.Optimizer):
         state = {"format": FORMAT, "schema": self.schema, "muon": self.muon.state_dict(),
                  "adamw": self.auxiliary.state_dict() if self.auxiliary else None}
         if self.latent is not None:
-            state["lion"] = self.latent.state_dict()
+            state[self.latent_key] = self.latent.state_dict()
         return state
 
     def load_state_dict(self, state_dict):
@@ -108,13 +121,13 @@ class PortMuonAdamW(torch.optim.Optimizer):
             raise ValueError("port optimiser checkpoint parameter names/shapes/dtypes/partition differ")
         if (state_dict.get("adamw") is None) != (self.auxiliary is None):
             raise ValueError("port optimiser checkpoint AdamW partition differs")
-        if (state_dict.get("lion") is None) != (self.latent is None):
-            raise ValueError("port optimiser checkpoint LionSR latent partition differs")
+        if (state_dict.get(getattr(self, "latent_key", "lion")) is None) != (self.latent is None):
+            raise ValueError("port optimiser checkpoint latent optimizer partition differs")
         self.muon.load_state_dict(state_dict["muon"])
         if self.auxiliary is not None:
             self.auxiliary.load_state_dict(state_dict["adamw"])
         if self.latent is not None:
-            self.latent.load_state_dict(state_dict["lion"])
+            self.latent.load_state_dict(state_dict[self.latent_key])
         # Child loads replace group dictionaries; reconnect the trainer's view of them.
         self.param_groups = self._groups()
 
@@ -270,6 +283,78 @@ class LionSR(torch.optim.Optimizer):
             else:
                 flat_p[start:end].copy_(value)
             flat_m[start:end].copy_(m.mul_(beta2).add_(g, alpha=1 - beta2))
+
+
+NS_COEFFICIENTS = (3.4445, -4.7750, 2.0315)  # torch.optim.Muon's quintic (Keller Jordan's Muon)
+
+
+def newton_schulz(update: torch.Tensor, steps: int = 5, eps: float = 1e-7) -> torch.Tensor:
+    """torch.optim.Muon's orthogonalization (5 quintic Newton-Schulz steps in BF16) over the last two dims, batched over
+    any leading dims, so each expert of a stacked [E, rows, cols] tensor is its own matrix."""
+    a, b, c = NS_COEFFICIENTS
+    x = update.bfloat16()
+    transposed = x.shape[-2] > x.shape[-1]
+    if transposed:
+        x = x.transpose(-2, -1)
+    x = x / (torch.linalg.vector_norm(x.float(), dim=(-2, -1), keepdim=True).to(x.dtype) + eps)
+    for _ in range(steps):
+        gram = x @ x.transpose(-2, -1)
+        x = a * x + (b * gram + c * gram @ gram) @ x
+    return x.transpose(-2, -1) if transposed else x
+
+
+class MuonSR(LionSR):
+    """Muon for BF16 latents with LionSR's mechanics (owner 2026-10-11: the shared default optimizer for the backbone):
+    one BF16 momentum, Nesterov, the update orthogonalized per matrix (``newton_schulz``; each expert of a stacked
+    expert tensor separately), scaled like the shared PortMuonAdamW (``match_rms_adamw``: 0.2·sqrt(max(rows, cols)),
+    so ``lr`` is on AdamW's scale), stochastic-rounding writes, stepping in backward (``step_in_backward``). A latent
+    with fewer than two dims has no matrix to orthogonalize and is refused.
+
+    Idle matrices of a stack: an expert routed no tokens in this update has a zero gradient, yet its decaying
+    momentum would still get a full-size orthogonal update (noise amplified on rarely routed experts). Such a matrix
+    (gradient norm at most ``idle_fraction`` of its running gradient norm; 0: exactly zero) is not stepped; its
+    momentum still decays."""
+
+    def __init__(self, params, lr: float, momentum: float = 0.95, weight_decay: float = 0.0, ns_steps: int = 5,
+                 idle_fraction: float = 0.0):
+        torch.optim.Optimizer.__init__(self, params, dict(lr=lr, momentum=momentum, weight_decay=weight_decay,
+                                                          ns_steps=ns_steps, idle_fraction=idle_fraction))
+        self.chunk, self.fused = None, False
+        self._hooks, self._gated, self._armed = [], False, None
+        for group in self.param_groups:
+            for p in group["params"]:
+                if p.ndim < 2:
+                    raise ValueError("MuonSR latents are matrices (or stacks of matrices)")
+
+    @torch.no_grad()
+    def _update(self, p, group):
+        state = self.state[p]
+        if "momentum" not in state:
+            state["momentum"] = torch.zeros_like(p, dtype=torch.bfloat16)
+        beta = group["momentum"]
+        g = p.grad.float()
+        active = None
+        if p.ndim > 2:  # a stack of matrices (experts): leave idle ones alone
+            norms = torch.linalg.vector_norm(g, dim=(-2, -1))
+            running = state.get("grad_norm")
+            threshold = group.get("idle_fraction", 0.0) * (running if running is not None else norms)
+            active = (norms > threshold).to(g.dtype).view(*norms.shape, 1, 1)
+            state["grad_norm"] = norms if running is None else torch.where(norms > 0, 0.9 * running + 0.1 * norms,
+                                                                             running)
+        m = state["momentum"].float().mul_(beta).add_(g)
+        state["momentum"].copy_(m)
+        direction = newton_schulz(g.add_(m, alpha=beta), group["ns_steps"])
+        if active is not None:
+            direction = direction * active.to(direction.dtype)
+        scale = 0.2 * math.sqrt(max(p.shape[-2], p.shape[-1]))
+        value = p.float()
+        if group["weight_decay"]:
+            value.mul_(1 - group["lr"] * group["weight_decay"])
+        value.add_(direction.float(), alpha=-group["lr"] * scale)
+        if p.dtype == torch.bfloat16:
+            stochastic_round_(p, value)
+        else:
+            p.copy_(value)
 
 
 class _InBackward:

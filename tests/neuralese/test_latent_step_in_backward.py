@@ -378,3 +378,86 @@ def test_lionsr_resume_drops_every_view_of_an_mmap_checkpoint(tmp_path):
     scale = fresh.param_groups[0]['row_scale']
     assert scale.untyped_storage().data_ptr() not in mapped  # an owned copy: the mapping can close
     assert torch.equal(scale, saved['lion']['param_groups'][0]['row_scale'])
+
+
+def test_muonsr_orthogonalizes_each_expert_and_never_moves_a_weight_on_a_zero_update():
+    """MuonSR (train/optim.py): Newton-Schulz per matrix, batched over a stacked expert dim; a zero gradient leaves the
+    BF16 latent bit-identical (stochastic rounding of an unchanged value is exact); a real gradient descends."""
+    import torch
+    from natlang_neuralese.train.optim import MuonSR, newton_schulz
+    torch.manual_seed(0)
+    stacked = torch.randn(3, 12, 20)
+    batched = newton_schulz(stacked)
+    for e in range(3):
+        assert torch.allclose(batched[e].float(), newton_schulz(stacked[e]).float(), atol=1e-2)
+    singular = torch.linalg.svdvals(batched.float())
+    assert singular.min() > 0.3 and singular.max() < 1.5  # Muon's approximate orthogonalization
+
+    weight = torch.nn.Parameter(torch.randn(3, 12, 20).bfloat16())
+    before = weight.detach().clone()
+    optimizer = MuonSR([{'params': [weight]}], lr=1e-3)
+    optimizer.step_in_backward(gated=True)
+    with optimizer.in_backward():
+        (weight.float() * 0.0).sum().backward()
+    assert torch.equal(weight.detach(), before)
+
+    target = torch.randn(3, 12, 20)
+    def loss():
+        return (weight.float() - target).square().sum()
+    start = float(loss())
+    for _ in range(5):
+        with optimizer.in_backward():
+            loss().backward()
+    assert float(loss()) < start
+
+
+def test_muonsr_leaves_an_unrouted_expert_alone_while_its_momentum_decays():
+    """An expert with a zero gradient this update (no routed tokens) is not stepped: Newton-Schulz would otherwise
+    blow its decaying momentum up to a full-size orthogonal update."""
+    import torch
+    from natlang_neuralese.train.optim import MuonSR
+    torch.manual_seed(0)
+    weight = torch.nn.Parameter(torch.randn(2, 8, 16).bfloat16())
+    optimizer = MuonSR([{'params': [weight]}], lr=1e-2)
+    optimizer.step_in_backward(gated=True)
+    with optimizer.in_backward():
+        (weight.float() * torch.randn(2, 8, 16)).sum().backward()  # both experts routed
+    before = weight.detach().clone()
+    mask = torch.tensor([1.0, 0.0]).view(2, 1, 1)
+    with optimizer.in_backward():
+        (weight.float() * torch.randn(2, 8, 16) * mask).sum().backward()  # expert 1 idle
+    assert not torch.equal(weight.detach()[0], before[0]) and torch.equal(weight.detach()[1], before[1])
+
+
+def test_port_optimizer_steps_latents_with_muonsr_and_round_trips_its_state():
+    import torch
+    from natlang_neuralese.train.optim import MuonSR, PortMuonAdamW
+    hidden = torch.nn.Parameter(torch.randn(8, 8))
+    latent = torch.nn.Parameter(torch.randn(2, 8, 16).bfloat16())
+    optimizer = PortMuonAdamW([('heads.x', hidden)], lr=1e-3, vocab_size=100,
+                              latent=[('backbone.experts', latent, 1e-3, None)], latent_optimizer='muonsr')
+    assert isinstance(optimizer.latent, MuonSR)
+    assert optimizer.schema[-1]['optimizer'] == 'muonsr'
+    state = optimizer.state_dict()
+    assert 'muonsr' in state and 'lion' not in state
+    optimizer.load_state_dict(state)
+
+
+def test_held_kl_is_zero_against_the_model_s_own_top_k():
+    """generation_gate.held_kl (the behaviour gate's held KL and the warm-up's behaviour_drift): a model scored against
+    its own top-k distribution has zero KL and full greedy agreement."""
+    import types
+    import torch
+    from natlang_neuralese.maple.generation_gate import held_kl
+    torch.manual_seed(0)
+    embed, head = torch.nn.Embedding(50, 16), torch.nn.Linear(16, 50, bias=False)
+    model = torch.nn.Module()
+    model.embed, model.lm_head = embed, head
+    model.model = lambda input_ids: types.SimpleNamespace(last_hidden_state=embed(input_ids))
+    ids = torch.randint(0, 50, (12,))
+    with torch.no_grad():
+        logp = torch.log_softmax(head(embed(ids[:-1])), -1)
+        top = logp.topk(50, -1)
+    held = {'ids': [ids], 'top_ids': [top.indices], 'top_logp': [top.values], 'prompt_len': [4]}
+    report = held_kl(model, held, rows=1)
+    assert abs(report['held_kl']) < 1e-5 and report['held_response_agreement'] == 1.0

@@ -32,7 +32,8 @@ HANDLERS = {
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates',
                           'input_map_kernel','input_map_rank','ar_feedback_fixup','channel_consistency_weight','qat_latent_lr',
                           'member_weight','member_tokens','member_eval_windows','member_mask_system','read_adapter',
-                          'optimizer_state','optimizer_added','quantization_steps','report_column_fraction'},'result':'heads.pt'},
+                          'optimizer_state','optimizer_added','quantization_steps','report_column_fraction',
+                          'drift_rows','drift_warn','drift_stop'},'result':'heads.pt'},
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
                             'parameters':set(),'result':'report.json'},
     'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads'},
@@ -678,7 +679,8 @@ def write_json(path, value):
 
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
-OPERATIONAL_STAGE_PARAMETERS = frozenset({'moe_kernel', 'checkpoint_layers', 'report_column_fraction'})
+OPERATIONAL_STAGE_PARAMETERS = frozenset({'moe_kernel', 'checkpoint_layers', 'report_column_fraction', 'drift_rows',
+                                          'drift_warn', 'drift_stop'})
 # Stage parameters the runner consumes itself (never passed to a trainer).
 RUNNER_STAGE_PARAMETERS = frozenset({'quantization_steps'})
 
