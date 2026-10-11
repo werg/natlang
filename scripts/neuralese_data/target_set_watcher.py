@@ -32,6 +32,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
+sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
+from natlang_neuralese.common.paths import root, resolve  # noqa: E402
 import target_set_manifest as tsm  # noqa: E402
 from register_corpora import register, registered_ids  # noqa: E402
 import register_native_turn_render as rntr  # noqa: E402
@@ -40,9 +42,9 @@ SET_DIR = tsm.SET_DIR
 JOBS = SET_DIR / 'jobs.json'
 STATE = SET_DIR / 'watcher-state.json'
 UNION_BASE = 'natlang-target-union-20261011'
-STAGING = Path('/home/werg/data/union-staging')
+STAGING = resolve('data_nvme', 'union-staging')
 LFM = ROOT / 'models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f'
-MELLUM = Path('/home/werg/data/models/mellum21-12b-a2.5b-thinking')
+MELLUM = resolve('models', 'mellum21-12b-a2.5b-thinking')
 
 
 def log(**kw):
@@ -120,7 +122,8 @@ def build_union(members: list[dict], rev: int, launches: int = 0) -> Path | str 
             for tok, rel in toks.items():
                 args += ['--member', f"{m['id']}:{rendering}:{tok}={staged(rel, rev)}"]
     out.mkdir(parents=True, exist_ok=True)
-    mounts = ['-v', f'{ROOT}:{ROOT}:ro', '-v', '/mnt/external:/mnt/external:ro', '-v', '/home/werg/data:/home/werg/data',
+    mounts = ['-v', f'{ROOT}:{ROOT}:ro', '-v', f'{root("data_hdd")}:{root("data_hdd")}:ro',
+              '-v', f'{root("data_nvme")}:{root("data_nvme")}',
               '-v', f'{out}:{out}']
     cmd = [sys.executable, str(ROOT / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '10',
            '--priority', 'low', '--resumable', '--wait', '86400', '--workdir', str(ROOT), '--',
