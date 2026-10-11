@@ -173,3 +173,30 @@ BF16 drift to Neuralese transport. Keep BF16; next compare actual paired crisp a
 Neuralese consumer/stopping tasks rather than require bitwise agreement or adopt
 full-backbone FP32. The accumulation flag remains unchanged because its control
 provided no improvement.
+
+## Practical paired consumer check and precision policy
+
+The exact V16 artifact's V8 paired check used eight math rows and an independent
+reader given only a generic instruction and the generated value block, without
+the original arithmetic question or gold answer. Crisp task accuracy was 2/8;
+Neuralese writer plus reader accuracy was also 2/8. Reading a crisp generated
+text block likewise passed 2/8, while reading the gold value block passed 8/8.
+All writers and readers stopped naturally, with no truncations. On the six wrong
+rows the reader preserved the writer's wrong value. This small set shows no
+observed task gap; it does not establish general task qualification.
+
+With identical prefix/block/suffix prefill call boundaries, gold `read_back`
+and direct gold embedding inputs produced exactly identical final logits on all
+eight rows. Earlier V7 comparator differences came from different prefill chunk
+boundaries. V8 report SHA:
+`1b7e2da4ed68cb92cb8df9bd496937edf6cd6530fa3da91ae8877cfcb1f53378`;
+rows SHA: `cd515d4259ea8c9610849c56645b0bd599248bd5c749e7af48029040e0e1792e`.
+
+The owner reiterated the preference for lower precision and avoiding recompute.
+Use BF16 with measured adaptive checkpointing for the next substantive run;
+forced checkpointing was temporary recovery. Ordinary BF16 shape rounding does
+not justify a blanket FP32 conversion. An official source-built causal-conv1d
+kernel is integrated in the shared loader, with the invalid Hub revision removed.
+It remains disabled pending same-input CUDA forward/backward/update fidelity and
+actual throughput qualification on Pop. Further precision reductions require a
+supported implementation and evidence of a real training throughput benefit.
