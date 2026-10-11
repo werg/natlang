@@ -32183,6 +32183,37 @@
       "independent_new_worlds": 0,
       "admission": "visibility diagnostic only; no data or trace admission",
       "notes": "Additive to V86 quality review. Exact same-invocation request joins confirm question/options/effective levels fields across all 147 items. Every task has empty levels and no item overrides; compiler scope diagnostics concern NL arity/capture, and one separate attempt lacked state. Saved request rendering is not original provider wire evidence."
+    },
+    {
+      "id": "luna-neuralese-direct-lfm-base-v8-response-drift-gradient-trace-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-lfm-base-20261011-v8",
+      "include": [
+        "direct-export-v2/manifest.json",
+        "ordinary-response-drift-v1/launch.json",
+        "ordinary-response-drift-v1/exit.json",
+        "ordinary-response-drift-v1/output.log",
+        "ordinary-response-drift-v1/run/**",
+        "ordinary-response-drift-v1/runtime/natlang_neuralese/**",
+        "direct-runtime-gradient-trace-v2/launch.json",
+        "direct-runtime-gradient-trace-v2/exit.json",
+        "direct-runtime-gradient-trace-v2/output.log",
+        "direct-runtime-gradient-trace-v2/run/**",
+        "direct-runtime-gradient-trace-v2/runtime/natlang_neuralese/**"
+      ],
+      "split": "held-runtime-and-response-drift-diagnostic",
+      "source_class": "direct-serving-response-drift-and-gradient-trace",
+      "training_admission": false,
+      "admission": "held-diagnostic-only-no-recertification-no-training-admission",
+      "runtime_plumbing_scope": "narrow-direct-runtime-and-autograd-diagnostic",
+      "neuralese_consumer_qualified": false,
+      "independent_new_worlds": 0,
+      "parent_registry_ids": [
+        "luna-neuralese-direct-lfm-base-v8-export-and-paired-behavior-held-20261011-v1",
+        "luna-neuralese-direct-lfm-base-v8-runtime-feedback-evidence-held-20261011-v1",
+        "luna-neuralese-direct-lfm-base-v8-full-checkpoint-held-20261011-v1"
+      ],
+      "notes": "Additive V8 evidence only. ordinary-response-drift-v1 is a complete 36-response response-KL assessment: response KL 0.013018139841026115, base gate 21/36, candidate 20/36, ordinary drift gate passed, Neuralese consumer qualification false. The original direct-stage report remains byte-identical (SHA d75849eb72e01c05957a395612243aeb70fd7744d1e37a3c2fb7a9fd423903d7) with its historical NaN held response KL/CE/agreement fields untouched; it is preserved in the separately registered full-checkpoint entry. The new report measures response KL from saved outputs and does not rerun generation or rewrite the original record. direct-runtime-gradient-trace-v2 checks writer/cache parity at lengths 8/16/32 with zero deltas and finite gradients, but records consumer-task and autonomous-stopping qualification false; down.weight consumer gradient grows from 46,480 / 52,627 at length 8 to 5.67e10 / 6.37e10 at length 32. These diagnostics do not recertify the historical gate, qualify task behavior, or grant training admission."
     }
   ],
   "coverage_backlog": [
