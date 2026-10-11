@@ -1,0 +1,6 @@
+{
+ "schema": "natlang.raw-key-protected-check/1",
+ "rows": 640,
+ "keys_checked": 2560,
+ "protected_id_hits": {}
+}
