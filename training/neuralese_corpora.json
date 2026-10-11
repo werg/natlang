@@ -33959,6 +33959,176 @@
         "luna-v43-prefix-646-runtimev18-static-held-20261011-v1"
       ],
       "notes": "Exact per-case/source/result provenance and source-label agreement review. SDK turn starts are distinct from physical network requests and billable usage; physical request and total billing counts are unavailable."
+    },
+    {
+      "id": "luna-v43-runtimev18-repeat14-approved-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-runtimev18-repeat14-inputs-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-generation-plan-no-admission",
+      "source_class": "approved-same-world-comparison-inputs",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "root-approved inputs and stable source provenance only; active journals, logs, results and mutable campaign status are excluded",
+      "derived_from": [
+        "luna-v43-prefix-646-runtimev18-approved-inputs-held-20261011-v1",
+        "luna-v43-runtimev18-closed-raw-held-20261011-v1",
+        "luna-v43-prefix-646-runtimev18-static-held-20261011-v1"
+      ],
+      "notes": "14 repeated source programs/111 items selected at original V43 indices [0,4,8,9,13,17,19,22,24,26,28,30,31,32], with seed base 43101. This repeats existing source worlds; independent_new_worlds=0. Plan and root approval bind five queues; launch observation is a time-bounded receipt only."
+    },
+    {
+      "id": "zero-arg-local-inputs-runtime-probe-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-zero-arg-inputs-probe-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-mechanism-probe-no-admission",
+      "source_class": "authored-runtime-mechanism-diagnostic",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "single authored zero-argument reference probe and V18/V19 result traces; no provider call, teacher trajectory, or training admission",
+      "notes": "V18 action ledger rejects the local const inputs eval although a subsequent scripted return makes the final expected map accepted. V19 eval succeeds. Preserve the action-level evidence; one case is not comparative model-quality evidence."
+    },
+    {
+      "id": "luna-v43-runtimev18-repeat14-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-runtimev18-repeat14-closed-raw-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-provider-generation-closed-no-admission",
+      "source_class": "provider-generation-raw-results",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "closed held generation evidence; same-world repeat only; output quality review is separate; no training, native trajectory, or recurrence admission",
+      "derived_from": [
+        "luna-v43-runtimev18-repeat14-approved-inputs-held-20261011-v1",
+        "luna-v43-runtimev18-closed-raw-held-20261011-v1"
+      ],
+      "notes": "14 repeated source programs/111 items, seed base 43101. All five worker queues terminal complete. Completion and valid outputs do not imply semantic correctness; see separate review."
+    },
+    {
+      "id": "luna-v43-runtimev18-repeat14-quality-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-runtimev18-repeat14-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-quality-review-no-admission",
+      "source_class": "provider-output-quality-review",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "read-only source/result/visibility and operational review; no training, native trajectory, or recurrence admission",
+      "derived_from": [
+        "luna-v43-runtimev18-repeat14-closed-raw-held-20261011-v1",
+        "luna-v43-runtimev18-repeat14-approved-inputs-held-20261011-v1"
+      ],
+      "notes": "Corrected audit distinguishes child-rendered request evidence, capture snapshots, and root request state. Physical network calls and total billable input/output tokens are unknown. Exact report hashes are inside the immutable review."
+    },
+    {
+      "id": "luna-v43-runtimev19-main34-approved-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-runtimev19-main34-inputs-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-generation-plan-no-admission",
+      "source_class": "approved-same-world-comparison-inputs",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "approved inputs and bounded launch observation only; active journals, logs, results and mutable campaign status are excluded",
+      "derived_from": [
+        "luna-v43-runtimev18-repeat14-approved-inputs-held-20261011-v1",
+        "luna-v43-runtimev18-repeat14-closed-raw-held-20261011-v1",
+        "luna-v43-prefix-646-runtimev18-static-held-20261011-v1"
+      ],
+      "notes": "V19 main34 uses the same 34 source program IDs with seeds 43001 plus original source index, paired against V18 main34. Five queues are approved and running; launch observation is cutoff-scoped. Independent new worlds=0."
+    },
+    {
+      "id": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/README.md",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/exit.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/launch.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/parent-proof.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/proof-exit.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/proof-launch.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/proof.log",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/recipe.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/stage-launch-intent.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/worker.log",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/direct-stage-plan.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/direct-stage-result.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/cuda-phase-timings.jsonl",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/eval-selection.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/eval.jsonl",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/host-phases.jsonl",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/memory-routing.jsonl",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/optimizer-restore.jsonl",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/recurrence-context-review.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/summary.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/train.jsonl",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/final-export/artifact/manifest.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/final-export/exit.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/final-export/launch.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/final-export/selection.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/final-export/worker.log",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/bf16/exit.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/bf16/launch.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/bf16/run/report.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/bf16/run/rows.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/bf16/worker.log",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/fp32/exit.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/fp32/launch.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/fp32/run/report.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/fp32/run/rows.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/fp32/worker.log",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/final/exit.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/final/launch.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/final/run/report.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/final/run/rows.jsonl",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/final/worker.log",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/step600/exit.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/step600/launch.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/step600/run/report.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/step600/run/rows.jsonl",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/step600/worker.log",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/source-map.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/artifact-v2/manifest.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/exit.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/export.py",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/launch.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/retry-exit-v2.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/retry-launch-v2.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/retry-worker-v2.log",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/source-parent-export/cpu-restore-receipt-v2.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/source-parent-export/cpu-restore-receipt.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/source-parent-export/manifest.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/worker.log",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v1/exit.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v1/launch.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v1/output.log",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v1/run/report.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v2/exit.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v2/launch.json",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v2/output.log",
+        "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v2/run/report.json"
+      ],
+      "split": "held-diagnostic-no-admission",
+      "source_class": "native-direct-training-and-serving-diagnostics",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "Closed native endpoint training and serving diagnostic evidence only. No data admission, model/runtime/task qualification, or promotion is implied. Checkpoints, tensor payloads, frozen runtime source trees, and kernel caches are intentionally excluded.",
+      "derived_from": [
+        "luna-neuralese-direct-lfm-base-20261011-v8"
+      ],
+      "notes": "687/687-update native epoch and associated launch/parent-proof/runtime-hash receipts, step-600/final serving export manifests without tensor payloads, raw-head versus trained TCP readout comparisons, and BF16/strict-FP32 synthetic forced-consumer diagnostics. See packet README and source-map for exact source locations and hashes. Operational recipe completion is not behavioral qualification."
     }
   ],
   "coverage_backlog": [

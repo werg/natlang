@@ -1,0 +1,347 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/README.md",
+      "bytes": 1094,
+      "sha256": "b2ddd9f460fd59ebe050c8b834a7dc89286eccae6ae8551550b6aac105a6c1af"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/exit.json",
+      "bytes": 68,
+      "sha256": "a6d0d56bdcf49f333aa509e258ed46272dba6130397f4e5c9f7c12a443011c5d"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/launch.json",
+      "bytes": 18334,
+      "sha256": "eaf40c98b6b2c6a670d19ba35342ebd9be1769353cbadc897242f1950ae86bd7"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/parent-proof.json",
+      "bytes": 1554,
+      "sha256": "fcb21e2510b2f3c8a6b9df4f3fc76f1c706ad9c03c7d30e940ec75a9d8821e93"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/proof-exit.json",
+      "bytes": 18,
+      "sha256": "df4d721d233a2334088d2d2e0110346ae9e509ff46bf0b379fbcfa85c715af4d"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/proof-launch.json",
+      "bytes": 1877,
+      "sha256": "fd2d08487256bc199d54399332eea75281d229b428b3b55c23bf6a68269825c3"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/proof.log",
+      "bytes": 407,
+      "sha256": "252a116c0161b0059f2e71826049f40d6cdb834436c9b67e72750137b762fba3"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/recipe.json",
+      "bytes": 19672,
+      "sha256": "aafb6a155c4a132ed9b9a4b1a004d661b782d9dcc1ce99bf7c66c96bfc8576c4"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/stage-launch-intent.json",
+      "bytes": 3822,
+      "sha256": "06b9b0000ccbf9c84febe4636c4af9d5d740e76f3c0efc6f7ddeec26f1099876"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/cadence-handoff-v3/worker.log",
+      "bytes": 1515259,
+      "sha256": "b4944d7373201102e08cf45d07f3d808bdf195f9c33d817afe16c0f71c20e62f"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/direct-stage-plan.json",
+      "bytes": 22669,
+      "sha256": "dec47a562830382c0c821a38dac111037ffddb36a0927dbc609479ca667a9e63"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/direct-stage-result.json",
+      "bytes": 2422,
+      "sha256": "9306c9aaa7a91b7394c0281f4f0d3903d8061b1fe7e06f4cb2304b6ede82588e"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/cuda-phase-timings.jsonl",
+      "bytes": 179684,
+      "sha256": "238a64b1b886dcac5b2966ab38faff8c4fdf8d2216d12dccd7e1c4c154a177ed",
+      "lines": 428
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/eval-selection.json",
+      "bytes": 372126,
+      "sha256": "8e49b41edd12a20b4fb8fdd25a763ee0c0c1d6f8f5ede5f86ba3b5fdb484de8d"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/eval.jsonl",
+      "bytes": 322368,
+      "sha256": "29327fba9cb4bc9ebc768d82b332292fda4ad46efa86a17f6993f4bf8e7240c0",
+      "lines": 2
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/host-phases.jsonl",
+      "bytes": 1821,
+      "sha256": "178a9aeb5e10ec65629a539684223f8b28165a4a5a35c83ccf464f3adea654e7",
+      "lines": 4
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/memory-routing.jsonl",
+      "bytes": 222976,
+      "sha256": "0e8c6176821ff3039f364d69a1d5d979bf0a50b7d5f0bb29b93dd90eef133bda",
+      "lines": 856
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/optimizer-restore.jsonl",
+      "bytes": 11160,
+      "sha256": "2e1bef5904790fba3d0ad9a3f6631a7b88e29ebd09b3f142a60ed1d0fc8255af",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/recurrence-context-review.json",
+      "bytes": 1360771,
+      "sha256": "0cb0c87a84a855e113b15ec8208b0436c108ad7616f550b84060dd2be8d1ccf3"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/summary.json",
+      "bytes": 915583,
+      "sha256": "a319b6152972e3fbb74b379190fadcf70d5a1730810fabac261d50fa747cf252"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/epoch-v3/native_e2e/train.jsonl",
+      "bytes": 736196,
+      "sha256": "e0d5d048b4e6aa402a7562d460871910e57c0441a33c3c23db60c7960408dc39",
+      "lines": 428
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/final-export/artifact/manifest.json",
+      "bytes": 37756,
+      "sha256": "ee3fa21f49c56b93f752dd0fcbcb1cfe62545d89c3a0a622bde4d7a9eb8f278f"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/final-export/exit.json",
+      "bytes": 17,
+      "sha256": "e89df0eae5ec7db81135aed16463968955c578bcc4f2ec43172eff351f080c17"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/final-export/launch.json",
+      "bytes": 2905,
+      "sha256": "33e462f84b36728aab044c666a01e7d1276ea3d8d1ec212d28a347fc5d25fc2f"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/final-export/selection.json",
+      "bytes": 189,
+      "sha256": "98b2aa5e4e6a5c3bb422b7558255bbea5e66f34c0b8097ea367e412b6e363956"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/final-export/worker.log",
+      "bytes": 78,
+      "sha256": "a4956460328f9f84f831401811293daaa5cecf544766ff91594e80b6e07200b6"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/bf16/exit.json",
+      "bytes": 17,
+      "sha256": "e89df0eae5ec7db81135aed16463968955c578bcc4f2ec43172eff351f080c17"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/bf16/launch.json",
+      "bytes": 18448,
+      "sha256": "20f9347d727ec42dbce284fec00e464ecbc6a979b193e16b198adbb1306d8a59"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/bf16/run/report.json",
+      "bytes": 106614,
+      "sha256": "98c9958f7889bcb47fba609649fc18875e6208769642974a673175def52e1346"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/bf16/run/rows.json",
+      "bytes": 99701,
+      "sha256": "3ed346438e151c22c32f62ab537a25bf9506be9460bb06dc9d70b2fd312b1319"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/bf16/worker.log",
+      "bytes": 1923,
+      "sha256": "395355c0abfa8c6cceaafcdf217cc8b09b86b1294de881f81c6bce88dd2e80f6"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/fp32/exit.json",
+      "bytes": 17,
+      "sha256": "e89df0eae5ec7db81135aed16463968955c578bcc4f2ec43172eff351f080c17"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/fp32/launch.json",
+      "bytes": 18475,
+      "sha256": "a58a7296f346d83b433cfcbdd3a6d3129210617c399e0caf72d9cbab23110318"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/fp32/run/report.json",
+      "bytes": 115197,
+      "sha256": "fc61a3c4077459ab65fbf1c14a62dfca5aa617c766ab0734a4f7e41c7b0a93fe"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/fp32/run/rows.json",
+      "bytes": 108280,
+      "sha256": "4c49fc0d7ed7b2e4bcfc57500561dbbe2167434902b3ba3ec1fe508da2a3d852"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/forced-sequence/fp32/worker.log",
+      "bytes": 1561,
+      "sha256": "15dceddf1d3e259a735880b1a4f520f2a01634e83ef7b35ced651192aacc83df"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/final/exit.json",
+      "bytes": 17,
+      "sha256": "e89df0eae5ec7db81135aed16463968955c578bcc4f2ec43172eff351f080c17"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/final/launch.json",
+      "bytes": 18943,
+      "sha256": "ab3ad9f7805d0447e4997fca4b6fbf9568ed1cea6f34f57c4f275507a93b1141"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/final/run/report.json",
+      "bytes": 3185,
+      "sha256": "0d19847e51fdefd96e0b10535037d460ad90d9d70c61e9aae3373463ddd11600"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/final/run/rows.jsonl",
+      "bytes": 5307,
+      "sha256": "0185b5f065973d4c1bc2d156b370d986d2c6c3487e1d9264dbb45c147fbb7d21",
+      "lines": 32
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/final/worker.log",
+      "bytes": 1416,
+      "sha256": "95f6e473f8a06dddce5ac416579da91d2cca88a534fa28605bafc50d8f8b0e7f"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/step600/exit.json",
+      "bytes": 17,
+      "sha256": "e89df0eae5ec7db81135aed16463968955c578bcc4f2ec43172eff351f080c17"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/step600/launch.json",
+      "bytes": 18898,
+      "sha256": "9714b559c99c45746a97df2a54d59b6ad355cc256e103cf09346f3105defcb5a"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/step600/run/report.json",
+      "bytes": 3184,
+      "sha256": "85b9c019655ff8a22cbff7ac96c39e369d1763b40fcbec8a7c405ac4598e7d84"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/step600/run/rows.jsonl",
+      "bytes": 5280,
+      "sha256": "2ddf26b8077ab978960532090204191c8e15e25d4737235d1bbd7134f9b9713e",
+      "lines": 32
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/readout/step600/worker.log",
+      "bytes": 1415,
+      "sha256": "22805975892066f12a2f0315a76f1c400e5d436518fb6c049483c250112e2c90"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/source-map.json",
+      "bytes": 20871,
+      "sha256": "499d98bf9736c3cbb1d70f192ac7200d01693756e9a45881a732740a6fbf26ca"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/artifact-v2/manifest.json",
+      "bytes": 37899,
+      "sha256": "c6fd23e4eee6db1cf8d394a0f76e3ee7bc15e64cdf0121b63504dcff64a5c9a7"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/exit.json",
+      "bytes": 17,
+      "sha256": "5cc319f54b05a38799195a491c303aa686eab7caccfdbbf1e8b8c07405cb7392"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/export.py",
+      "bytes": 900,
+      "sha256": "f64423962c12cbdc729ac5319485d294b0b49b88eddcd888315e0a05874895b9"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/launch.json",
+      "bytes": 2894,
+      "sha256": "eb9058e15ccb404452582a93a219a4b169af80500e567d796b078900a0b6ce65"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/retry-exit-v2.json",
+      "bytes": 17,
+      "sha256": "e89df0eae5ec7db81135aed16463968955c578bcc4f2ec43172eff351f080c17"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/retry-launch-v2.json",
+      "bytes": 2910,
+      "sha256": "4c6e1fa99ff0b19291e79b7bbda23c1804567035894be1ab5e299c3a0a3d71a9"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/retry-worker-v2.log",
+      "bytes": 78,
+      "sha256": "9e50472ddc582f36a62195dc8e8665b165467e9d258668b9e4041c466f748f84"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/source-parent-export/cpu-restore-receipt-v2.json",
+      "bytes": 454,
+      "sha256": "8317d366186c6bc3e9656d90897e299b842aef8c2a4693a1deab7527e2066848"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/source-parent-export/cpu-restore-receipt.json",
+      "bytes": 643,
+      "sha256": "c8e7998070474f35256d82dd419e824bbc08ffb348d99dafbadae19d92c93ed1"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/source-parent-export/manifest.json",
+      "bytes": 35011,
+      "sha256": "f3ff523b6b0d8b0e5bfd3a949a87feb4e91a1ca08c268e1cf0c57b9b106e230c"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/step600-export/worker.log",
+      "bytes": 369,
+      "sha256": "4475a071f0d9289bd356bd1f30dc918c687b0253cd0179758a2ff55b48b6689c"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v1/exit.json",
+      "bytes": 17,
+      "sha256": "5cc319f54b05a38799195a491c303aa686eab7caccfdbbf1e8b8c07405cb7392"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v1/launch.json",
+      "bytes": 17465,
+      "sha256": "91b077b4eb0b8138949d2cf6277d9bd40b30fe139191e04d09fdc0ea10909963"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v1/output.log",
+      "bytes": 1464,
+      "sha256": "c033b093d7aa1146e1ee21c1b2119e1c48cb98748cc7de5637f29a8e5bb58163"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v1/run/report.json",
+      "bytes": 725,
+      "sha256": "4dc4d294c4b1586f5fe1e09aa6f309fadeca81969f9f9a74ac83b5abaa7cd9f8"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v2/exit.json",
+      "bytes": 17,
+      "sha256": "e89df0eae5ec7db81135aed16463968955c578bcc4f2ec43172eff351f080c17"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v2/launch.json",
+      "bytes": 17504,
+      "sha256": "8b6d70cebe51799571dca227bd5139404c3eea06cbf2f99a39a4e0b2cb39fb6b"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v2/output.log",
+      "bytes": 1416,
+      "sha256": "f348c8add1911c1def22826da3941b38f6384f35a2a04402ae97736f22bb6b18"
+    },
+    {
+      "path": "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1/tcp-mechanism/v2/run/report.json",
+      "bytes": 778,
+      "sha256": "0b8bb9ef7d30db25aa0ee6d2b9f087d2a50da6c5c46ab71bffa92744f934906e"
+    }
+  ],
+  "bytes": 6420170
+}

@@ -11287,3 +11287,46 @@ No context reduction, frozen backbone or detached producer gradient was used.
   serialization succeeded with exact matching historical restore code. This does
   not qualify serving/runtime or transfer Mellum qualification to LFM. Pop's
   own selected native export/restore remains pending the epoch GPU window.
+
+### 18:04 UTC — native epoch complete, readout drift isolated, next GPU work
+
+- Native v3 finished687/687 actual updates, errors0, exit0. Exact final checkpoint
+  SHA fe9aa392de0c31bf2131a2cddd424d74e66c2a18c64f28feafdf89f6fdf1cf73.
+  Final softCE1.30580 vs initial1.72788. Runner completion is not semantic channel,
+  stopping, runtime or admission qualification. Preserve original and best225.
+- CPU shared direct exporter actually serialized600 and687.600 first attempt
+  rejected missing selection-receipt step; preserved failed output/log, additive
+  corrected step600 receipt/export `artifact-v2` succeeded. Final export is
+  `native-e2e-final-serving-diagnostic-v1/artifact`; no promotion implied.
+- Shared `eval.direct_token_readout` extended with exact held selection/source
+  SHA pins and existing crisp renderer/GradSession (820a1057), actually exercised
+  GPU on32 same rows.600 trainedTCP CE2.09370 / rawhead1.27042 (in-trainer TCP
+  2.08977, small precision/restore delta still needs diagnosis). Final687 trainedTCP
+  1.39824 / rawhead1.26161; initial crisp1.35804. TCP adds0.13663 at final; the
+  earlier large degradation was readout-dominated and transient. Paired reader
+  cohort differs: best225 written0.929/shuffled1.359 vs final1.446/1.609, so final
+  is not an automatic replacement. Pending best225 proof/export/runtime and a
+  shared low-head-LR comparison; communicate line-level decisions with DGX.
+- Nonlinear forced-sequence consumer diagnostics actually exercised BF16 and
+  strictFP32 (TF32 off). BF16 speed8.8–12.7x but payload3.3–3.8%rel, consumer CE
+  delta0.076–0.206 and worst gradient rel0.78–1.68: failed declared2%/0.01 bounds,
+  not adopted. StrictFP32 payload2–7e-6rel, worst gradients≤0.00035rel, CEdelta
+  ≤3.5e-5, speed6.2–30.6x: recurrence math matches; reduced-precision sequence/
+  decode kernels are the cause. Synthetic fixture, not task qualification.
+- Shared diagnostic optimizer recipes61d056e3 extend current LFM line/data/seed:
+ 8000-step schedule, stop300, full state; Lion3e-7 vs cubic5 Muon1e-5/wd0.1,
+  narrow matrices use shared AdamW.100-step KL points are finite diagnostic
+  measurements only; normal training remains low-overhead. Muon recipe inspected
+  successfully in pinned CPU container, now launching on GPU (session6321,
+  `pop-lfm-optimizer-muon-v1`) under
+  `/srv/storage/natlang-artifacts/optimizer-bakeoff-lfm-20261011-v1`.
+  Frozen shared package162modules and recipes. Lion matched arm next; no default
+  optimizer change yet. Native serving runtime/semantic checks remain pending.
+- Luna V18 main34 closed:241/256 exactsource labels,23/34 exactmaps,256 item-bound
+  child request visibility (47 also snapshots). Repeat14:102/111labels,6/14maps,
+  only10 exact child visibility/snapshots,101 unknown; top-level state substrings
+  do not prove child visibility. All raw/review/input receipts registered+DGX
+  verified, held. V19 exact pairedmain34 approved93dcdd4c…; five lanes launching,
+  then matchingrepeat14, to qualify zero-arg hidden inputs fix. Authored mechanism
+  probe confirms V18 local `const inputs` rejects, V19 succeeds; final acceptance
+  alone missed this difference. No tests run or training admissions changed.
