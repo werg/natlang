@@ -31303,6 +31303,35 @@
       "admission": "authorization-and-plan-review-only-not-data-admission",
       "independent_new_worlds": 0,
       "notes": "Root independently reviewed exact master rows, annotation bindings, disjointness, replay/capture and source pins, approved plan SHA 7174e4f635e38af7efa35a45187a4d1b18b15e7154617a4944618136aa3e9717 (prepared plan remains separately preserved), then launched supervisor PID 1096406. Campaign state/results are excluded."
+    },
+    {
+      "id": "google-choice-confidence-v40-independent-input-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v40-source",
+      "include": [
+        "root-review-input-v1/report.json",
+        "root-review-input-v1/decision_source_quality_holds.json"
+      ],
+      "split": "inherited-train-provider-input-review",
+      "source_class": "held-provider-input-independent-review",
+      "training_admission": false,
+      "admission": "input-audit-only-no-label-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root independent exact source/master/train/current-hold and frozen component review for V40. Report is immutable and identifies exact source rows, group/ID disjointness, quotas, and runtime pins. The copied policy binds preparation-time holds."
+    },
+    {
+      "id": "google-choice-confidence-v40-queued-launch-receipt-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v40-source",
+      "include": [
+        "root-queued-launch-v1/launch-receipt.json"
+      ],
+      "split": "inherited-train-generation-launch-evidence",
+      "source_class": "held-provider-queue-launch-receipt",
+      "training_admission": false,
+      "admission": "authorized-queue-launch-evidence-only-no-label-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root queued V40 process PID 1095755 behind active Google quota ownership with --wait-for-owner; no retry-state reset, paid fallback, provider result, or admission is asserted. Runner log and mutable label output are excluded."
     }
   ],
   "coverage_backlog": [

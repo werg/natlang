@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v40-independent-input-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v40-source",
+  "files": [
+    {
+      "path": "root-review-input-v1/decision_source_quality_holds.json",
+      "bytes": 61430,
+      "sha256": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994"
+    },
+    {
+      "path": "root-review-input-v1/report.json",
+      "bytes": 258940,
+      "sha256": "b948402c00b29a6c1ab7265744ba9735a1ee17f6e2511acd4986293e69e9dddc"
+    }
+  ],
+  "bytes": 320370
+}
