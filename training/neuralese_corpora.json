@@ -34217,6 +34217,36 @@
         "neuralese-native-e2e-lfm-v3-closed-evidence-held-20261011-v1"
       ],
       "notes": "V3 uses the exact best225 full-state checkpoint and original approved continuation parameters with parity=diagnostic and a fresh output/runtime path. Inputs, stage plan, frozen shared recipe launch metadata, root approval, source map, and both setup-failure attempts are pinned. Checkpoint weights, runtime source copies, and mutable V3 container log/receipt are excluded; terminal evidence will be a separate additive snapshot."
+    },
+    {
+      "id": "luna-v43-exact-map37-native-sft-926-20261011-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "v43-exact-map37-native-admitted-20261011-v1/FILES.sha256.json",
+        "v43-exact-map37-native-admitted-20261011-v1/README.md",
+        "v43-exact-map37-native-admitted-20261011-v1/candidate-provider-results.jsonl",
+        "v43-exact-map37-native-admitted-20261011-v1/decision-source-quality-holds.json",
+        "v43-exact-map37-native-admitted-20261011-v1/exact-map-review.json",
+        "v43-exact-map37-native-admitted-20261011-v1/excluded-materializer-targets.jsonl",
+        "v43-exact-map37-native-admitted-20261011-v1/native-adoption-binding-v1.json",
+        "v43-exact-map37-native-admitted-20261011-v1/native-decisions.jsonl",
+        "v43-exact-map37-native-admitted-20261011-v1/native-materialized-preview.jsonl",
+        "v43-exact-map37-native-admitted-20261011-v1/program-source-bindings.jsonl",
+        "v43-exact-map37-native-admitted-20261011-v1/proposed-native-turns.jsonl",
+        "v43-exact-map37-native-admitted-20261011-v1/review.json",
+        "v43-exact-map37-native-admitted-20261011-v1/root-adoption-v1.json",
+        "v43-exact-map37-native-admitted-20261011-v1/source-item-checks.jsonl",
+        "v43-exact-map37-native-admitted-20261011-v1/v17-quality-audit.json",
+        "v43-exact-map37-native-admitted-20261011-v1/v18-quality-review.json"
+      ],
+      "admission": "Root-adopted exact926 native SFT target rows from37 accepted exact-map programs; 59 rejected/error targets remain excluded and preserved; no recurrence, trace, runtime/model qualification, or active recipe change.",
+      "derived_from": [
+        "luna-v43-prefix-329-runtimev17-approved-launch-held-20261011-v1",
+        "luna-v43-runtimev18-closed-raw-held-20261011-v1",
+        "luna-v43-runtimev18-quality-review-held-20261011-v1"
+      ],
+      "notes": "Root adoption receipt runs/v43-exact-map37-native-admission-proposal-v2-20261011-v1/root-adoption-v1.json SHA-256 8869c488d7e083edd519214c01ba8303950767c249a293415013696d4e148345 approves exactly the 926 IDs. Native row bytes are copied unchanged from the shared materializer output and cross-checked against the root receipt and proposal row hashes. All 37 source programs and 274 train IDs/groups are retained; license metadata, including 8 programs marked unknown, is preserved without license-based omission. The source annotation agreement is inherited from the source-bound exact-map check, not an independent relabel. 65 approved turns retain 66 actual prior failed-action response references in context. This is native SFT only; do not infer trace/recurrence admission, task/label correctness beyond the adopted source review, or model/runtime qualification. Active training recipes remain unchanged."
     }
   ],
   "coverage_backlog": [

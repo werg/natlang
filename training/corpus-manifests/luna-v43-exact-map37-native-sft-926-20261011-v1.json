@@ -1,0 +1,96 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v43-exact-map37-native-sft-926-20261011-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/FILES.sha256.json",
+      "bytes": 2595,
+      "sha256": "be193638480b8ddad9bc960d8fc194581a05e8428793d1f6cabeb422e2bf5fd4"
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/README.md",
+      "bytes": 1026,
+      "sha256": "9d97f669ef17185123d48cb0e01a0b270768bd6949651e406aea1b0aeba6af82"
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/candidate-provider-results.jsonl",
+      "bytes": 79644843,
+      "sha256": "2bf4e9d34160582111171b11f8a968c0a58091b6540c4702cf5c6c1c5e1963e4",
+      "lines": 37
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/decision-source-quality-holds.json",
+      "bytes": 61430,
+      "sha256": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994"
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/exact-map-review.json",
+      "bytes": 94381,
+      "sha256": "70a62a588e84a94cfd02e27581744dfca60c02ef9b09d64bc998cffd0c4e3e9b"
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/excluded-materializer-targets.jsonl",
+      "bytes": 101328,
+      "sha256": "28a6a0b405f94130fe1b1fd88cbf7925886e15361889e117cf3e3736ead36da2",
+      "lines": 59
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/native-adoption-binding-v1.json",
+      "bytes": 2101,
+      "sha256": "0b42c7192da277917456843e8bf9d67d0b769e60589c1e522bb8fb8da6bb84f1"
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/native-decisions.jsonl",
+      "bytes": 134887492,
+      "sha256": "460a40bfa3f455be8ad5d1c2f0450a871f309370d46bbdfd755e3b93ebf250a0",
+      "lines": 926
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/native-materialized-preview.jsonl",
+      "bytes": 142643185,
+      "sha256": "df212058f149fe51f5f2addb519ba67ba241223bb5982e914cca47c9fc0f8706",
+      "lines": 985
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/program-source-bindings.jsonl",
+      "bytes": 71884,
+      "sha256": "86fc3ef15aa50ccfe5421ca201606832e9b8859f6d03575fbe1763e41aceb3f0",
+      "lines": 37
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/proposed-native-turns.jsonl",
+      "bytes": 1446607,
+      "sha256": "688a81b0521812a9ea99349859c59dcff7a68e20b51766bc3ad8843d1abb278a",
+      "lines": 926
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/review.json",
+      "bytes": 7009,
+      "sha256": "07e5a1d85ab6b73b919bba1a43623148b1178c1249d6cc019929b1e05b07803c"
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/root-adoption-v1.json",
+      "bytes": 58574,
+      "sha256": "8869c488d7e083edd519214c01ba8303950767c249a293415013696d4e148345"
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/source-item-checks.jsonl",
+      "bytes": 162898,
+      "sha256": "a8b72ee2cf0696ed5416c7eea3211b3703269305f2d32a319cd50675ac219264",
+      "lines": 274
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/v17-quality-audit.json",
+      "bytes": 318582,
+      "sha256": "a184b785f6bbf748849cb483e3c9c10706cf176572aa0ebe6bbdac29d7da84f2"
+    },
+    {
+      "path": "v43-exact-map37-native-admitted-20261011-v1/v18-quality-review.json",
+      "bytes": 1974072,
+      "sha256": "e2fa8c0ed814f01f2bf71f99290b7ff997d38c25c5313d9459f392fc9dec993a"
+    }
+  ],
+  "bytes": 361478007
+}
