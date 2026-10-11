@@ -1,0 +1,504 @@
+{
+ "datasets": [
+  {
+   "rank_value": 1,
+   "id": "native-sft-v13-r2",
+   "path": "data/neuralese/corpora/native-sft-v13-r2/teacher.jsonl (HDD /mnt/external)",
+   "origin": "teacher model gpt-6-luna (openai-codex via pi), natlang inline-curriculum programs (workflowevals, typesafe evalsafe, etc.), exact native-runtime oracle",
+   "format": "natlang.teacher_training_turn.native/1 (messages, tools, target, teacher_reasoning)",
+   "docs": 111301,
+   "split": "105,869 train / 5,432 test (group-resplit-r2), 17,922 source groups, 0 shared with the 4962 union",
+   "supervised_tokens_est": 12500000,
+   "admission_before": "existing-native-sft-approved-recipe-preserve-group-splits (no training_admission field); every row training_admission.approved=true, trace_admission exact oracle",
+   "last_use": "LFM2.5 crisp student full SFT 1 epoch (step13164, 2026-10-04); Maple N2a 200-step bootstrap via maple-sft-v13-r2; dropped at the reviewed-cohort restart (2026-10-05) and absent since direct restart",
+   "consumable_now": false,
+   "decision": "ADMIT (training_admission true). Review status: approved recipe v33, per-row exact-oracle admission. Splits kept.",
+   "required_conversion": "Render each turn with the current native chat renderer (full-prompt and program-header) for both tokenizers; run ts-host/scripts/migrate-neuralese-language.mjs (eager typing, explicit captures; runtime contract 19 -> current) or keep the old surface in history and flag; cross-corpus split closure against S1/harness/union.",
+   "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": 2,
+   "id": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2 (+ lfm25 v2 twin)",
+   "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-*-v2/text.jsonl",
+   "origin": "public SWE-rebench OpenHands trajectories (Qwen3-Coder-480B) normalized to the natlang pi harness and replayed",
+   "format": "rendered native chat text (token_ids, supervised_suffix_start), both tokenizers",
+   "docs": 3843,
+   "split": "2,969 train / 874 test, by repository, S1-consistent",
+   "supervised_tokens_est": 629543,
+   "admission_before": "training_admission true (owner, DECISIONS 2026-10-10)",
+   "last_use": "Pop LFM luna-ar-native-harness-* (cohort 0.25); never on Mellum (run-v9 text_data null); dropped at the direct restart without a stated reason",
+   "consumable_now": true,
+   "decision": "INCLUDE in the shared direct-stage set now (already admitted). Sample by document per cohort, not by window (69,670 windows at target 1024 would swamp the native cohort).",
+   "required_conversion": "none (program-header twin: optional; its system prompt is only 1,489 tokens)",
+   "owner_of_conversion": null
+  },
+  {
+   "rank_value": 3,
+   "id": "bgkit-knowledge-rationalized-20261007-v1",
+   "path": "runs/bgkit-knowledge-rationalized-20261007-v1/bgkit-knowledge.turns.jsonl",
+   "origin": "static reference demonstrations (bgkit / Schnitzeljagd / HotpotQA knowledge families) replayed through the native runtime + Qwen3.6 root rationales",
+   "format": "natlang.teacher_training_turn.native/1",
+   "docs": 77767,
+   "split": "77,767 train (4,440 cases, 7,854 groups); 0 groups shared with the union",
+   "supervised_tokens_est": 4200000,
+   "admission_before": "reference-demonstrations-verified-replay (no training_admission field); rows approved",
+   "last_use": "never trained",
+   "consumable_now": false,
+   "decision": "ADMIT train rows. Review status: verified replay, 4,440/4,440 cases admitted at build.",
+   "required_conversion": "render (both modes, both tokenizers); MANDATORY protected-overlap check vs protected-bgkit (HotpotQA/SQuAD/TriviaQA/NQ questions): hits go to test or are omitted; prompts predate the full-context view -> re-render from turns, not *.prompts.jsonl",
+   "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": 4,
+   "id": "static-lambda-rationalized-20261006-v2",
+   "path": "data/neuralese/corpora/static-lambda-rationalized-20261006-v2/{lambda-v3-s61,extras-s61}.turns.jsonl",
+   "origin": "static inline-lambda generator (dataset_workbench, translation/claims/contract desks, edit_stream, ...) + Qwen3.6 root rationales, verified replay",
+   "format": "natlang.teacher_training_turn.native/1",
+   "docs": 54753,
+   "split": "54,627 train / 126 test; 18,732 groups; 0 shared with the union",
+   "supervised_tokens_est": 5800000,
+   "admission_before": "reference-demonstrations-verified-replay; 2 cases held source_review_pending",
+   "last_use": "never trained",
+   "consumable_now": false,
+   "decision": "ADMIT (2 source-conflict cases stay held).",
+   "required_conversion": "render (both modes, both tokenizers); cross-corpus closure",
+   "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": 5,
+   "id": "s1-full-final-20261003",
+   "path": "data/neuralese/corpora/s1-full-final-20261003 (HDD)",
+   "origin": "bgkit + Schnitzeljagd task stores and public datasets (SWE/terminal/research continuations, QA, memory, SQL, reasoning gym, ...) converted by scripts/neuralese_data",
+   "format": "natlang.port-record/1 (writer instructions + sources -> Neuralese<Records>; consumer context + target)",
+   "docs": 1870591,
+   "split": "per record split / split_groups; protected bgkit benchmarks forced test",
+   "supervised_tokens_est": null,
+   "admission_before": "held-source-policy-and-split-review",
+   "last_use": "S3 pilots only (about 2,000 records per family); S3 full run never launched",
+   "consumable_now": false,
+   "decision": "ADMIT (licensing hold void under the 2026-10-10 all-licences rule; review status recorded). Defects listed separately (provenance aliases, 799 JeFF split conflicts).",
+   "required_conversion": "render each port record as a natlang call document (writer as an nl function over its sources; consumer turn with target) or as the E2E writer/consumer pair; per-family cap/weights; the 45 families x 25k subset = s3-subset-20261005",
+   "owner_of_conversion": "pop (renderer) / dgx (E2E consumption)"
+  },
+  {
+   "rank_value": 6,
+   "id": "nebius-swe-rebench-openhands-trajectories-20261009-v1",
+   "path": "registry path (2.08 GB parquet)",
+   "origin": "public: 67,074 OpenHands v0.54 trajectories by Qwen3-Coder-480B on SWE-rebench (32,161 resolved)",
+   "format": "OpenHands tool dialect trajectories",
+   "docs": 67074,
+   "split": "by repository (harness bench placement)",
+   "supervised_tokens_est": null,
+   "admission_before": "held-source-harness-bench-evidence-only",
+   "last_use": "3,843 normalized into the harness bench; 63k never normalized",
+   "consumable_now": false,
+   "decision": "ADMIT the resolved trajectories (32,161) for pi normalization; unresolved stay evidence.",
+   "required_conversion": "the existing harness-bench normalize+replay pipeline (plans/neuralese/HARNESS_BENCH.md) over the rest; repository placement as records-v4",
+   "owner_of_conversion": "dgx"
+  },
+  {
+   "rank_value": 7,
+   "id": "view-ask-20261010-v4",
+   "path": "data/neuralese/corpora/view-ask-20261010-v4",
+   "origin": "public datasets (BookSum, XSum, GovReport, Mind2Web, LogHub, CommonCrawl, code) with code-computed extraction/reconstruction + summaries",
+   "format": "natlang.port-record/1 (view/ask families) + view-stage records",
+   "docs": 160118,
+   "split": "closed by source group against S1 and harness",
+   "supervised_tokens_est": null,
+   "admission_before": "held-pending-view-stage-qualification",
+   "last_use": "never trained",
+   "consumable_now": false,
+   "decision": "ADMIT for text SFT as natlang view/ask calls (the view operator qualification gates the runtime operator, not data use).",
+   "required_conversion": "render as natlang calls (view/ask functions) in both modes",
+   "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": 8,
+   "id": "teacher-campaign-evidence-20261005",
+   "path": "data/neuralese/corpora/teacher-campaign-evidence-20261005 -> runs/dgx-legacy-imports",
+   "origin": "DGX Qwen3.6 teacher campaigns (pool1024 v3, current-train-refresh v9 alternates) on natlang programs",
+   "format": "campaign results + native-reference-rows bundles",
+   "docs": 703918,
+   "split": "inherited from campaign pools",
+   "supervised_tokens_est": null,
+   "admission_before": "provenance-and-repair-inputs-current-import-and-admission-required",
+   "last_use": "partly the source of v13 (teacher refresh); never directly",
+   "consumable_now": false,
+   "decision": "ADMIT accepted terminal results after dedup against native-sft-v13-r2 (alternates are repeats of the same pools).",
+   "required_conversion": "dedup by trajectory digest vs v13; import accepted rows as teacher turns; render",
+   "owner_of_conversion": "dgx"
+  },
+  {
+   "rank_value": 9,
+   "id": "s2-generated-20261004-v2",
+   "path": "data/neuralese/corpora/s2-generated-20261004-v2",
+   "origin": "S2 generation: crisp-skill self-improvement (BIRD/SQL/code/optimization), adversarial self-play, decision data (58,500 readout-distill cases), improvement steps",
+   "format": "mixed: task attempts/results, decision cases, prompts",
+   "docs": 211957,
+   "split": "per family",
+   "supervised_tokens_est": null,
+   "admission_before": "mixed-candidates-and-quarantined-attempts-use-paired-gates",
+   "last_use": "never on the Neuralese line",
+   "consumable_now": false,
+   "decision": "ADMIT accepted attempts and graded decision cases; quarantined/failed attempts excluded (concrete defect: failed outcome).",
+   "required_conversion": "select accepted attempts; convert to teacher turns or port records; render",
+   "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": 10,
+   "id": "free-provider admitted ordinary-text packets (v28 280, v29 20, v73 846, sourcebound16 36, luna-v64 nine 9)",
+   "path": "runs/free-provider-generation-20261009-v1/*",
+   "origin": "free-provider teachers (Luna/Gemini/...) on natlang decision programs",
+   "format": "rendered native chat text, LFM tokenizer only",
+   "docs": 1191,
+   "split": "train only (inherited)",
+   "supervised_tokens_est": 103720,
+   "admission_before": "training_admission true",
+   "last_use": "never trained on any line (registered \"GPU input unchanged\")",
+   "consumable_now": "LFM yes; Mellum needs twin",
+   "decision": "INCLUDE now on LFM; Mellum after the twin.",
+   "required_conversion": "Mellum tokenizer twin (scripts/neuralese_data/text_tokenizer_twin.py); V73 needs context_only_spans for 82 histories",
+   "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": 11,
+   "id": "static-lambda-expansion-20261005-v1",
+   "path": "registry path",
+   "origin": "static generator, exact constructed-world oracles, zero model calls",
+   "format": "native decisions",
+   "docs": 9137,
+   "split": "needs source/split closure",
+   "supervised_tokens_est": 650000,
+   "admission_before": "decision-filtered-static-native-requires-source-split-closure",
+   "last_use": "never",
+   "consumable_now": false,
+   "decision": "ADMIT the 9,137 approved decisions; 1,088 noisy dataset-label decisions stay held.",
+   "required_conversion": "source/split closure; render",
+   "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": 12,
+   "id": "clef-new-rationalized-20261006-v2",
+   "path": "data/neuralese/corpora/clef-new-rationalized-20261006-v2",
+   "origin": "Clef-flash labelled inline-lambda cases (routing, lead scoring, evidence, moderation), verified replay",
+   "format": "natlang.teacher_training_turn.native/1",
+   "docs": 2619,
+   "split": "train only, 806 groups",
+   "supervised_tokens_est": 240000,
+   "admission_before": "reference-demonstrations-verified-replay",
+   "last_use": "never",
+   "consumable_now": false,
+   "decision": "ADMIT.",
+   "required_conversion": "render",
+   "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": 13,
+   "id": "semantic-inline-curriculum-s72-teacher-20261007-v1",
+   "path": "runs/semantic-teacher-20261005/results.jsonl",
+   "origin": "Qwen3.6-35B-A3B teacher on semantic-s72 inline curriculum",
+   "format": "teacher results/traces",
+   "docs": 2772,
+   "split": "2,759 train / 13 test cases",
+   "supervised_tokens_est": null,
+   "admission_before": "raw-teacher-observations-only; native admission pending",
+   "last_use": "never",
+   "consumable_now": false,
+   "decision": "ADMIT the 2,184 grader-accepted rows minus the 38 leaked train cases (defect) ; 16 anli cases on hash-test sources stay held.",
+   "required_conversion": "native materialization of accepted traces; render",
+   "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": 14,
+   "id": "student-posttraining-turns-20261005",
+   "path": "data/neuralese/corpora/student-posttraining-turns-20261005",
+   "origin": "Oct 4-5 student post-training (online repair, search SFT, skill-use demonstrations, inventory controls)",
+   "format": "native turns (turns.jsonl) + replay mixes",
+   "docs": 18304,
+   "split": "inherited from v13",
+   "supervised_tokens_est": null,
+   "admission_before": "candidate-native-turns-unadmitted-review-before-use",
+   "last_use": "student post-training phases only",
+   "consumable_now": false,
+   "decision": "ADMIT the new turns files only; rendered.jsonl/ready.jsonl replay mixes are copies of v13 (not additional).",
+   "required_conversion": "render",
+   "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": 15,
+   "id": "clef-decision-lambda-pilot-20261005-v1 / static-inline-iterate-reference-pilot-20261005-v1",
+   "path": "registry paths",
+   "origin": "Clef live teacher / static references",
+   "format": "native decisions",
+   "docs": 143,
+   "split": "needs closure",
+   "supervised_tokens_est": null,
+   "admission_before": "decision-filtered; closure pending",
+   "last_use": "never",
+   "consumable_now": false,
+   "decision": "ADMIT approved decisions (85 + 58).",
+   "required_conversion": "closure; render",
+   "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": 16,
+   "id": "translation-sources-20261004 / source-episode-pools-20261005 / bgkit-exports-20261006-v1",
+   "path": "data/neuralese/corpora/*",
+   "origin": "NLLB (241,528 IRs), S2 episode pools, bgkit task stores",
+   "format": "generation sources (no trajectories)",
+   "docs": null,
+   "split": "source",
+   "supervised_tokens_est": 0,
+   "admission_before": "source-only",
+   "last_use": "generator inputs",
+   "consumable_now": false,
+   "decision": "GENERATION SOURCE: feed static generators / teacher campaigns (see next steps); not trajectories.",
+   "required_conversion": "generation",
+   "owner_of_conversion": "dgx"
+  },
+  {
+   "rank_value": null,
+   "id": "maple-sft-v13-r2",
+   "decision": "EXCLUDE as duplicate: Maple-tokenizer render of native-sft-v13-r2 (Maple retired); source admitted instead.",
+   "docs": 111232
+  },
+  {
+   "rank_value": null,
+   "id": "teacher-neuralese-v13-v8",
+   "decision": "EXCLUDE as superseded format: old soft-Neuralese conversion/3 (pieces/sketch era); the direct line reads tokens. Source admitted instead.",
+   "docs": 111301
+  },
+  {
+   "rank_value": null,
+   "id": "s3-subset-20261005",
+   "decision": "NOT ADDITIONAL: subset of S1 (569k train records, <=25k per family); usable as the first S1 slice.",
+   "docs": 585635
+  },
+  {
+   "rank_value": null,
+   "id": "maple-broad-mixed-v1-20261005",
+   "decision": "EXCLUDE: owner rule, breadth from natlang domains, no broad mixing; also lacks source pins.",
+   "docs": 6000
+  },
+  {
+   "rank_value": null,
+   "id": "mellum21-self-distill-v3-20261010",
+   "decision": "EXCLUDE from natlang SFT: owner dropped self-distillation (2026-10-11) and generality beyond natlang does not matter.",
+   "docs": 6536
+  },
+  {
+   "rank_value": null,
+   "id": "protected-bgkit-20261003",
+   "decision": "NEVER TRAIN: protected evaluation.",
+   "docs": null
+  },
+  {
+   "rank_value": null,
+   "id": "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1 (+ mellum21 twin)",
+   "decision": "IN USE (current direct v2 input); 4962 docs, 409 train trajectories, 250,020 supervised suffix train tokens (Mellum).",
+   "docs": 4962
+  },
+  {
+   "rank_value": null,
+   "id": "neuralese-foundation-text-input-4962-program-header-{lfm25,mellum21}-20261011-v1",
+   "decision": "NEW, admitted for the post-warm-up phase (this audit).",
+   "docs": 4962
+  },
+  {
+   "rank_value": 15,
+   "id": "pop-campaign-long-tail",
+   "families": {
+    "free-provider": 343,
+    "luna-semantic": 145,
+    "luna-v": 89,
+    "luna-choice": 78,
+    "google-choice": 53,
+    "luna-annotation": 23,
+    "neuralese-v": 69
+   },
+   "origin": "Luna/Gemini/Groq/OpenRouter/Z.ai free-provider teachers and Pop root reviews",
+   "format": "closed campaign results, reviews, held native candidates",
+   "docs": null,
+   "jsonl_lines_approx": 1400000,
+   "decision": "Pop sweeps closed campaigns: admit accepted/oracle-passed actions unless a concrete defect (owner maximize-data rule); register omissions.",
+   "owner_of_conversion": "pop"
+  }
+ ],
+ "defects": [
+  {
+   "id": "D1",
+   "dataset": "semantic-inline-curriculum-s72-teacher-20261007-v1",
+   "defect": "leak: train cases on reserved-test sources",
+   "rows": "38 cases (dataset_workbench 30, labeled_judgments 6, cross_source_folders 2); runs/semantic-teacher-20261005/s72-holds.jsonl",
+   "repair": "move to test or omit; admit the remaining accepted rows"
+  },
+  {
+   "id": "D2",
+   "dataset": "semantic-inline-curriculum-s72-teacher-20261007-v1",
+   "defect": "train cases on hash-test sources",
+   "rows": "16 anli_batch cases (s72-holds.jsonl)",
+   "repair": "source review; move to test or admit"
+  },
+  {
+   "id": "D3",
+   "dataset": "s1-full-final-20261003",
+   "defect": "split conflict: JeFF test texts vs content-hash partitions",
+   "rows": "799 normalized labeled-source records (training/source-split-reservations.json)",
+   "repair": "apply explicit test reservations (override hash split)"
+  },
+  {
+   "id": "D4",
+   "dataset": "s1-full-final-20261003",
+   "defect": "ambiguous provenance aliases",
+   "rows": "per S1 audit alias list",
+   "repair": "reconstruct pins (alias -> upstream id/revision); unresolvable rows to omissions"
+  },
+  {
+   "id": "D5",
+   "dataset": "static-lambda-expansion-20261005-v1",
+   "defect": "noisy dataset-label answers",
+   "rows": "1,088 held decisions",
+   "repair": "relabel via constructed-world oracle or teacher vote, else keep held"
+  },
+  {
+   "id": "D6",
+   "dataset": "static-lambda-rationalized-20261006-v2",
+   "defect": "source conflict under current rule",
+   "rows": "2 cases (lambda-v3-s61)",
+   "repair": "source review; keep held"
+  },
+  {
+   "id": "D7",
+   "dataset": "free-provider-v73-admitted-ordinary-text-846-20261011-v1",
+   "defect": "failed assistant turns not masked",
+   "rows": "82 histories",
+   "repair": "add context_only_spans"
+  },
+  {
+   "id": "D8",
+   "dataset": "free-provider packets v28/v29/v73/sourcebound16/luna-v64",
+   "defect": "format: LFM tokenizer only",
+   "rows": "1,191 docs",
+   "repair": "Mellum twin via scripts/neuralese_data/text_tokenizer_twin.py"
+  },
+  {
+   "id": "D9",
+   "dataset": "native-sft-v13-r2",
+   "defect": "format: teacher turns at runtime contract 19 (old language surface and system prompt)",
+   "rows": "111,301",
+   "repair": "render (native_gold_packet; full-prompt + program-header; LFM2.5 + Mellum2.1); migrate language surface (ts-host/scripts/migrate-neuralese-language.mjs); failures to omissions"
+  },
+  {
+   "id": "D10",
+   "dataset": "bgkit-knowledge-rationalized-20261007-v1",
+   "defect": "possible leak into protected-bgkit (HotpotQA/SQuAD/TriviaQA/NQ) - unverified",
+   "rows": "77,767 to check",
+   "repair": "cross_corpus closure vs protected-bgkit-20261003; hits to omissions; render from turns, not *.prompts.jsonl"
+  },
+  {
+   "id": "D11",
+   "dataset": "s2-generated-20261004-v2",
+   "defect": "quarantined/failed attempts mixed with candidates",
+   "rows": "per attempt status",
+   "repair": "keep accepted/grader-passed only; convert to teacher turns"
+  },
+  {
+   "id": "D12",
+   "dataset": "teacher-campaign-evidence-20261005",
+   "defect": "duplicates (alternate pools; overlap with v13)",
+   "rows": "~704k jsonl lines",
+   "repair": "dedup by trajectory digest vs v13; import accepted terminal results"
+  },
+  {
+   "id": "D13",
+   "dataset": "nebius-swe-rebench-openhands-trajectories-20261009-v1",
+   "defect": "format: OpenHands dialect",
+   "rows": "63,231 not normalized (32,161 resolved overall)",
+   "repair": "harness-bench normalize + replay (DGX)"
+  },
+  {
+   "id": "D14",
+   "dataset": "maple-broad-mixed-v1-20261005",
+   "defect": "missing source pins and split audit",
+   "rows": "6,000",
+   "repair": "not needed (excluded by owner rule)"
+  },
+  {
+   "id": "D15",
+   "dataset": "view-ask-20261010-v4",
+   "defect": "format: port records",
+   "rows": "160,118",
+   "repair": "render as natlang view/ask calls"
+  },
+  {
+   "id": "D16",
+   "dataset": "s1-full-final-20261003",
+   "defect": "format: port records",
+   "rows": "1,870,591",
+   "repair": "render as natlang call documents; start with the s3-subset slice"
+  }
+ ],
+ "budget": {
+  "cost_model_mellum_muonsr": "~17.4 s fixed per update + ~0.175 s per 1k forward tokens (LionSR: 4.8 s + 0.175 s/1k)",
+  "current": {
+   "mellum_target1024": {
+    "train_docs": 3258,
+    "train_trajectories": 409,
+    "train_windows": 6801,
+    "mean_supervised_positions_per_window": 507.8,
+    "mean_forward_tokens_per_window": 5564,
+    "span_positions_per_epoch": 3453648,
+    "suffix_tokens_train": 250020,
+    "suffix_tokens_test": 133994,
+    "planned_updates": 750,
+    "epochs_covered": 0.11,
+    "suffix_tokens_seen_est": 27600,
+    "trie_unique_train_tokens": 1953710,
+    "distinct_system_prompts_train": 234,
+    "distinct_system_tokens_train": 1127727
+   },
+   "lfm_target256": {
+    "train_windows": 16238,
+    "mean_supervised_positions_per_window": 202.9,
+    "mean_forward_tokens_per_window": 5569,
+    "span_positions_per_epoch": 3295190,
+    "suffix_tokens_train": 223339,
+    "planned_updates": 3000,
+    "epochs_covered": 0.18
+   }
+  },
+  "program_header": {
+   "mellum_target1024": {
+    "train_tokens": 4280804,
+    "train_windows": 5573,
+    "mean_forward_tokens_per_window": 1443,
+    "sum_longest_doc_per_trajectory_train": 937061,
+    "trie_unique_train_tokens": 1766027
+   },
+   "lfm_target256": {
+    "train_tokens": 4140723,
+    "train_windows": 14916,
+    "mean_forward_tokens_per_window": 1222
+   }
+  },
+  "proposal": {
+   "unit": "document-epochs over train decision targets (CohortDocumentSampler per cohort)",
+   "phase_W": "0.5 doc-epoch full-prompt union (1,629 decisions)",
+   "phase_P": "2 doc-epochs program-header twin (6,516 decision visits), then new cohorts at 1-2 epochs each",
+   "options": {
+    "a_current_trainer": "1,629 + 6,516 updates: ~8 h + ~32 h (Mellum)",
+    "b_length_bucketed_padded_batches_32k": "~330 + ~270 updates: ~4 h (Mellum); needs padded batches + lr retune",
+    "c_whole_trajectory_docs": "409 trajectories, 0.94M tokens/epoch, ~30 packed updates/epoch: <30 min for 2 epochs; needs trajectory renderer with reasoning on every assistant turn"
+   },
+   "lfm": "option a with document sampler: 6,516 updates ~2.4 h"
+  }
+ },
+ "next_generation_steps": [
+  "render admitted teacher-turn corpora (~255k decisions, ~23M target tokens; CPU)",
+  "normalize 32k resolved SWE-rebench trajectories via harness bench (DGX)",
+  "static generators at scale over NLLB/S2 pools/bgkit stores + Qwen3.6 rationales in the teacher window",
+  "S1 port records -> natlang call documents (45 families)",
+  "v13-style teacher campaigns on local Qwen3.6 and free providers; Clef (~800k tokens/day DGX) for labels on new source pools",
+  "three renders per set: full-prompt, program-header, whole-trajectory"
+ ]
+}

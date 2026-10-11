@@ -937,7 +937,12 @@
       "include": [
         "*.port-records.jsonl",
         "manifest.json"
-      ]
+      ],
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "schema audit passed; licensing hold void (owner 2026-10-10); provenance-alias and 799 JeFF split-reservation conflicts are defects (repair list)",
+      "required_conversion": "render port records as natlang call documents (or E2E writer/consumer pairs); apply training/source-split-reservations.json; per-family weights",
+      "consumable_by_direct_stage": false
     },
     {
       "id": "s3-subset-20261005",
@@ -950,7 +955,9 @@
       ],
       "derived_from": [
         "s1-full-final-20261003"
-      ]
+      ],
+      "training_admission": false,
+      "training_admission_reason": "audit 2026-10-11 (DATA_INVENTORY_20261011.md): subset of s1-full-final-20261003, not additional examples"
     },
     {
       "id": "teacher-neuralese-v13-v8",
@@ -964,7 +971,9 @@
       ],
       "derived_from": [
         "native-sft-v13-r2"
-      ]
+      ],
+      "training_admission": false,
+      "training_admission_reason": "audit 2026-10-11 (DATA_INVENTORY_20261011.md): superseded soft-Neuralese conversion/3 format; the direct line reads tokens; the source native-sft-v13-r2 is admitted instead"
     },
     {
       "id": "maple-sft-v13-r2",
@@ -978,7 +987,9 @@
       ],
       "derived_from": [
         "native-sft-v13-r2"
-      ]
+      ],
+      "training_admission": false,
+      "training_admission_reason": "audit 2026-10-11 (DATA_INVENTORY_20261011.md): duplicate render of native-sft-v13-r2 for the retired Maple tokenizer; the source is admitted instead"
     },
     {
       "id": "s2-generated-20261004",
@@ -1019,7 +1030,12 @@
       "admission": "existing-native-sft-approved-recipe-preserve-group-splits",
       "include": [
         "teacher.jsonl"
-      ]
+      ],
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "approved recipe v33; every row training_admission.approved (exact native-runtime oracle); 105,869 train / 5,432 test kept",
+      "required_conversion": "render with the current native chat renderer (full-prompt and program-header, LFM2.5 and Mellum2.1 tokenizers); language migration ts-host/scripts/migrate-neuralese-language.mjs; cross-corpus split closure",
+      "consumable_by_direct_stage": false
     },
     {
       "id": "maple-broad-mixed-v1-20261005",
@@ -1028,7 +1044,9 @@
       "include": [
         "mixed-v1.jsonl"
       ],
-      "admission": "broad-reference-mix-needs-source-pins-and-split-audit"
+      "admission": "broad-reference-mix-needs-source-pins-and-split-audit",
+      "training_admission": false,
+      "training_admission_reason": "audit 2026-10-11 (DATA_INVENTORY_20261011.md): owner rule: breadth comes from natlang domains, no broad mixing; also lacks source pins"
     },
     {
       "id": "student-sft-step13164",
@@ -1078,7 +1096,12 @@
         "pop-runtime-"
       ],
       "exclusion_reason": "Pinned runtime/dependency build caches are preserved in existing run archives on both hosts and through source commits; this snapshot selects case data, definitions, skill/tensor payloads, output/admission/rejection evidence, not duplicate build trees.",
-      "supersedes": "s2-generated-20261004"
+      "supersedes": "s2-generated-20261004",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "accepted attempts and graded decision cases only; quarantined/failed attempts excluded (concrete defect)",
+      "required_conversion": "select accepted; convert to teacher turns or port records; render",
+      "consumable_by_direct_stage": false
     },
     {
       "id": "teacher-campaign-evidence-20261005",
@@ -1107,7 +1130,12 @@
       ],
       "admission": "provenance-and-repair-inputs-current-import-and-admission-required",
       "exclusion_reason": "Only teacher campaign data/provenance selected; duplicate development checkouts, compiled runtime caches and model-download metadata are not training examples. All code HEADs are integrated in main; original pinned runtime evidence remains under runs.",
-      "coverage_audit": "training/audits/teacher-coverage-20261005.json"
+      "coverage_audit": "training/audits/teacher-coverage-20261005.json",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "closed DGX Qwen3.6 campaigns; accepted terminal results only",
+      "required_conversion": "dedup against native-sft-v13-r2 by trajectory digest; import accepted results as teacher turns; render",
+      "consumable_by_direct_stage": false
     },
     {
       "id": "local-recurrence-quality-v1-20261005",
@@ -1161,7 +1189,12 @@
       "note": "New native turns from the Oct 4-5 student post-training phases (online repair, search SFT, skill-use demonstrations, inventory controls, projection v5-v7, broad-reference review, chunk rewrite). The *-phase rendered.jsonl/ready.jsonl files are replay mixes over native-sft-v13-r2; the new examples are the turns/reference files. Data and evidence files only; trainer outputs, wandb, caches and code snapshots stay in the run archives.",
       "derived_from": [
         "native-sft-v13-r2"
-      ]
+      ],
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "new turns files only; rendered/ready replay mixes are copies of native-sft-v13-r2",
+      "required_conversion": "render",
+      "consumable_by_direct_stage": false
     },
     {
       "id": "source-episode-pools-20261005",
@@ -1237,7 +1270,12 @@
         "**/*.jsonl",
         "**/*.json"
       ],
-      "note": "1272 training cases, 10225 native decisions;9137 approved and1088 held. Includes authored action plans and exact constructed-world oracle answers; noisy dataset-label answers remain held. All traces executed through real runtime with zero model calls. Supersedes unregistered stock-note workbench run; reference/native files are representations of the same examples, not additive. Requires native-to-neuralese conversion and source/split closure before training."
+      "note": "1272 training cases, 10225 native decisions;9137 approved and1088 held. Includes authored action plans and exact constructed-world oracle answers; noisy dataset-label answers remain held. All traces executed through real runtime with zero model calls. Supersedes unregistered stock-note workbench run; reference/native files are representations of the same examples, not additive. Requires native-to-neuralese conversion and source/split closure before training.",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "9,137 approved decisions; 1,088 noisy dataset-label decisions stay held (label defect)",
+      "required_conversion": "source/split closure; render",
+      "consumable_by_direct_stage": false
     },
     {
       "id": "static-lambda-heldout-20261005-v1",
@@ -3586,7 +3624,12 @@
         "static-lambda-rationalized-20261006-v1"
       ],
       "supersedes": "static-lambda-rationalized-20261006-v1",
-      "note": "Rationale policy (owner 2026-10-06, DECISIONS.md): only root turns (planning, delegation, answer synthesis) carry teacher rationales; turns inside nl children act without reasoning (empty, trained as acting directly). Child rationales of v1 were written without the runtime's opening eval (captured variables) and are dropped. Same cases re-replayed: lambda-v3-s61 4,176/4,178 admitted (2 held source_review_pending by the current source-conflict rule), 44,443 decisions, 8,272 root rationales; extras-s61 1,659/1,659, 10,310 decisions, 3,318 root rationales."
+      "note": "Rationale policy (owner 2026-10-06, DECISIONS.md): only root turns (planning, delegation, answer synthesis) carry teacher rationales; turns inside nl children act without reasoning (empty, trained as acting directly). Child rationales of v1 were written without the runtime's opening eval (captured variables) and are dropped. Same cases re-replayed: lambda-v3-s61 4,176/4,178 admitted (2 held source_review_pending by the current source-conflict rule), 44,443 decisions, 8,272 root rationales; extras-s61 1,659/1,659, 10,310 decisions, 3,318 root rationales.",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "verified replay; 2 cases held source_review_pending stay held",
+      "required_conversion": "render; cross-corpus closure",
+      "consumable_by_direct_stage": false
     },
     {
       "id": "clef-new-rationalized-20261006-v2",
@@ -3601,7 +3644,12 @@
         "clef-new-rationalized-20261006-v1"
       ],
       "supersedes": "clef-new-rationalized-20261006-v1",
-      "note": "Rationale policy (owner 2026-10-06, DECISIONS.md): only root turns (planning, delegation, answer synthesis) carry teacher rationales; turns inside nl children act without reasoning (empty, trained as acting directly). Child rationales of v1 were written without the runtime's opening eval (captured variables) and are dropped. 403/403 admitted, 2,619 decisions, 806 root rationales, 1,813 child turns without reasoning."
+      "note": "Rationale policy (owner 2026-10-06, DECISIONS.md): only root turns (planning, delegation, answer synthesis) carry teacher rationales; turns inside nl children act without reasoning (empty, trained as acting directly). Child rationales of v1 were written without the runtime's opening eval (captured variables) and are dropped. 403/403 admitted, 2,619 decisions, 806 root rationales, 1,813 child turns without reasoning.",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "verified replay 403/403 cases",
+      "required_conversion": "render",
+      "consumable_by_direct_stage": false
     },
     {
       "id": "bgkit-knowledge-rationalized-20261007-v1",
@@ -3612,7 +3660,12 @@
         "*.jsonl",
         "*.log"
       ],
-      "note": "Rationale policy (owner 2026-10-06, DECISIONS.md): only root turns (planning, delegation, answer synthesis) carry teacher rationales; turns inside nl children act without reasoning (empty, trained as acting directly). Child rationales of v1 were written without the runtime's opening eval (captured variables) and are dropped. BGKit/Schnitzeljagd and HotpotQA knowledge families (knowledge_evidence 22,354 turns, people_chain 29,992, people_lookup 12,962, repo_answer 5,600, digest_desk 4,703, knowledge_research 2,156): 4,440/4,440 cases admitted, 77,767 decisions, 5,202 root rationales. HotpotQA CC-BY-SA-4.0. Files: *.ir, *.rows, *.turns, *.rationales, *.prompts (prompts predate the full-context view)."
+      "note": "Rationale policy (owner 2026-10-06, DECISIONS.md): only root turns (planning, delegation, answer synthesis) carry teacher rationales; turns inside nl children act without reasoning (empty, trained as acting directly). Child rationales of v1 were written without the runtime's opening eval (captured variables) and are dropped. BGKit/Schnitzeljagd and HotpotQA knowledge families (knowledge_evidence 22,354 turns, people_chain 29,992, people_lookup 12,962, repo_answer 5,600, digest_desk 4,703, knowledge_research 2,156): 4,440/4,440 cases admitted, 77,767 decisions, 5,202 root rationales. HotpotQA CC-BY-SA-4.0. Files: *.ir, *.rows, *.turns, *.rationales, *.prompts (prompts predate the full-context view).",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "verified replay 4,440/4,440 cases; rows approved; train only",
+      "required_conversion": "render; protected-overlap check against protected-bgkit (HotpotQA/SQuAD/TriviaQA/NQ) before use: hits go to test or are omitted",
+      "consumable_by_direct_stage": false
     },
     {
       "id": "luna-semantic-lambdas-v23-conversion-20261007",
@@ -4085,7 +4138,12 @@
         "s72-holds.jsonl"
       ],
       "derived_from": [],
-      "notes": "Qwen3.6-35B-A3B-NVFP4 teacher on data/teacher/inline-curriculum/semantic-s72.ir.jsonl (seed 972): 2772 terminal rows (2759 train/13 test cases): 2184 grader-accepted, 588 rejected. Holds: 38 train cases on reserved-test sources (dataset_workbench 30, labeled_judgments 6, cross_source_folders 2) excluded from train; 16 anli_batch train cases on hash-test sources pending source review. Per-job traces stay in the run directory (jobs/)."
+      "notes": "Qwen3.6-35B-A3B-NVFP4 teacher on data/teacher/inline-curriculum/semantic-s72.ir.jsonl (seed 972): 2772 terminal rows (2759 train/13 test cases): 2184 grader-accepted, 588 rejected. Holds: 38 train cases on reserved-test sources (dataset_workbench 30, labeled_judgments 6, cross_source_folders 2) excluded from train; 16 anli_batch train cases on hash-test sources pending source review. Per-job traces stay in the run directory (jobs/).",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "2,184 grader-accepted rows minus 38 train cases on reserved-test sources (leak defect, s72-holds.jsonl); 16 anli cases held",
+      "required_conversion": "native materialization of accepted traces; render",
+      "consumable_by_direct_stage": false
     },
     {
       "id": "neuralese-maple-native-gold-text-corpus-20261007-v3",
@@ -14021,12 +14079,16 @@
       "split": "source",
       "source_class": "public-teacher-agent-trajectories-with-executable-environments",
       "admission": "held-source-harness-bench-evidence-only",
-      "training_admission": false,
+      "training_admission": true,
       "corpus_publication_for_training": false,
       "derived_from": [],
       "license": "CC-BY-4.0 (dataset card); repositories' own licences per instance",
       "source_url": "https://huggingface.co/datasets/nebius/SWE-rebench-openhands-trajectories",
-      "notes": "67,074 OpenHands v0.54 trajectories by Qwen3-Coder-480B-A35B on SWE-rebench issues (1,823 Python repositories; 32,161 resolved per the card), downloaded 2026-10-09 as the first source of the harness bench (plans/neuralese/HARNESS_BENCH.md). Teacher tool dialect: OpenHands str_replace_editor / execute_bash / think / finish (tools.json). Evidence only: normalization to pi transcripts, environment replay and companion augmentation are separate derived corpora with their own admission decisions."
+      "notes": "67,074 OpenHands v0.54 trajectories by Qwen3-Coder-480B-A35B on SWE-rebench issues (1,823 Python repositories; 32,161 resolved per the card), downloaded 2026-10-09 as the first source of the harness bench (plans/neuralese/HARNESS_BENCH.md). Teacher tool dialect: OpenHands str_replace_editor / execute_bash / think / finish (tools.json). Evidence only: normalization to pi transcripts, environment replay and companion augmentation are separate derived corpora with their own admission decisions.",
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "public; 32,161 resolved of 67,074; 3,843 already normalized as the harness bench",
+      "required_conversion": "normalize resolved trajectories to pi transcripts and replay (harness-bench pipeline); repository placement as records-v4",
+      "consumable_by_direct_stage": false
     },
     {
       "id": "luna-criterion-evidence-carry-v4-held-diagnostic-20261009-v1",
@@ -21676,8 +21738,8 @@
       "split": "closed by source group and against published corpora (s1-full-final-20261003, harness-bench-swe-rebench-openhands-pi-records-20261010-v4; scripts/neuralese_data/cross_corpus.py): upstream splits kept; train-only sources carved 5/5 by group; protected bgkit benchmark hits forced to test; components touching a published split take it, unplaceable components and already-published examples dropped; SWE-rebench tool outputs take the harness bench's repository placements (S1's split where S1 places the repository, split_of otherwise)",
       "source_class": "public-dataset-questions-and-summaries-with-code-computed-extraction-and-reconstruction",
       "admission": "held-pending-view-stage-qualification",
-      "training_admission": false,
-      "training_admission_reason": "pending the view operator stage's qualification (raw-recurrence-v4 / raw-recurrence-mellum-v3 view_operator admitted:false: runtime qualification and the view gate). Licences are per-record provenance facts only (owner rule 2026-10-10); no record is held or omitted for its licence",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
       "corpus_publication_for_training": false,
       "supersedes": "view-ask-20261010-v3",
       "derived_from": [
@@ -21746,7 +21808,10 @@
         ],
         "view_stage_conversion": "natlang_neuralese.data.view_records@2 (view-stage/: train and test splits; records.jsonl sha256 a708dc970ac344d5795a7d4bf344e0ec1e9148bc54092c0a312aeb3789fecf45)"
       },
-      "notes": "172657 port records over 69034 sources; by split {\"train\": 144440, \"validation\": 12539, \"test\": 15678}; by task {\"compare\": 93796, \"consume\": 28167, \"reconstruct\": 50694}; v4 = v3's raw inputs and caps (--preset v4) with SWE-rebench tool-output splits taken from the harness bench's repository placements (harness_bench.records.placements over PLACED_BY: all 771 repositories placed by S1, none unplaceable; 62 moved train->test and 29 test->train against split_of), closed against S1 and harness-bench v4: swe_tool_outputs keeps 11,584 records (v3 9,374; closure drops 901, v3 3,111), 3,740 of them on harness-bench repositories, all in the harness bench's split (plans/neuralese/VIEW_CORPUS.md section 5.4). Targets as v3 (no teacher-generated targets). view-stage/ conversion: 160118 records."
+      "notes": "172657 port records over 69034 sources; by split {\"train\": 144440, \"validation\": 12539, \"test\": 15678}; by task {\"compare\": 93796, \"consume\": 28167, \"reconstruct\": 50694}; v4 = v3's raw inputs and caps (--preset v4) with SWE-rebench tool-output splits taken from the harness bench's repository placements (harness_bench.records.placements over PLACED_BY: all 771 repositories placed by S1, none unplaceable; 62 moved train->test and 29 test->train against split_of), closed against S1 and harness-bench v4: swe_tool_outputs keeps 11,584 records (v3 9,374; closure drops 901, v3 3,111), 3,740 of them on harness-bench repositories, all in the harness bench's split (plans/neuralese/VIEW_CORPUS.md section 5.4). Targets as v3 (no teacher-generated targets). view-stage/ conversion: 160118 records.",
+      "review_status": "split closed against S1 and harness; view operator stage unqualified (runtime gate, not a data defect); previous reason (2026-10-10): pending the view operator stage's qualification (raw-recurrence-v4 / raw-recurrence-mellum-v3 view_operator admitted:false: runtime qualification and the view gate). Licences are per-record provenance facts only (owner rule 2026-10-10); no record is held or omitted for its licence",
+      "required_conversion": "render as natlang view/ask call documents",
+      "consumable_by_direct_stage": false
     },
     {
       "id": "free-provider-zai45-sourcev5-procurement-closeout-held-20261010-v1",
