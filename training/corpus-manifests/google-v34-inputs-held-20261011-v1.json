@@ -1,0 +1,76 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-v34-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v34-source",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 449975,
+      "sha256": "6f7e28b41cc9d261c70942ef07ee340ca138edd63d45511610abbc40ecf53bdf",
+      "lines": 512
+    },
+    {
+      "path": "frozen-adapter-v1/frozen-runtime.json",
+      "bytes": 1251,
+      "sha256": "7f00d83f77d1e5e66b394e0813ff9497c7bffa4382c76fbfa3e710fd8f51b260"
+    },
+    {
+      "path": "frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/label_decision_cases.py",
+      "bytes": 29670,
+      "sha256": "adccf20446070bad4d1b3d4cb445ca18f4a28e76fc11657f2dd7f36c532b045b"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+      "bytes": 10739,
+      "sha256": "ce64c6c65e4c70d08d178970f0e581780db91cda56a83f86472c6c64e1c63ee5"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+      "bytes": 157,
+      "sha256": "8352a509d51ef0dc0be958bdd4492caa968933866b171360be39fda43217364f"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+      "bytes": 1755,
+      "sha256": "d4e71ae9211cd625ea5d74706f9e0d4cc7fbf59e731dd0cba34fddd04674e4d2"
+    },
+    {
+      "path": "launch-plan-v1.json",
+      "bytes": 238225,
+      "sha256": "a39e66f2db9d96e3827c06a6a06c0566d4cc5a3d4e251707b2de09595cfbc690"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 8195846,
+      "sha256": "0a245502d779daeb514736048e56ad8b66a502022e388784f0da5f54acbfe4c9",
+      "lines": 12095
+    },
+    {
+      "path": "root-launch-process-v1.json",
+      "bytes": 221,
+      "sha256": "0864dcea825305e0b96f044e17441ace5cd950a5ce21d44afd35b4d26e419c64"
+    },
+    {
+      "path": "root-source-launch-review-v1.json",
+      "bytes": 2276,
+      "sha256": "af5f9505ea0967324cb249a4e8b9dbcf2b30d2009587a7512524e6558ef42639"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 222162,
+      "sha256": "4d296416158af00e8a0c8881f2c986a0e4a9f225d3488bb17e5f6a9e755c3e1c"
+    }
+  ],
+  "bytes": 9155159
+}

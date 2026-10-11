@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import ts from 'typescript';
 import { signatureHasExactArgumentPath, signatureHasExactParameter, validateSoftStateEdge } from './soft-state-proof.mjs';
 import { materializeNativeRows, nativeRowDigest } from '../../dist/teacher/native-materializer.js';
 
@@ -23,6 +24,35 @@ const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(
   value && typeof value === 'object' ? `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
     .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
 
+/** Extract only a directly returned, non-interpolated string literal from a tiny eval body. */
+function directReturnedStringLiteral(code) {
+  if (typeof code !== 'string') return undefined;
+  // Eval bodies execute inside the runtime's function boundary; wrap the
+  // source for parsing so a top-level `return` has the same grammar context.
+  const source = ts.createSourceFile('typed-result-writer.ts', `function __writer__(){\n${code}\n}`,
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const wrapper = source.statements[0];
+  const statements = ts.isFunctionDeclaration(wrapper) ? wrapper.body?.statements : undefined;
+  if (source.parseDiagnostics.length !== 0 || source.statements.length !== 1 || !statements)
+    return undefined;
+  if (statements.length === 1 && ts.isReturnStatement(statements[0])) {
+    const expression = statements[0].expression;
+    if (expression && (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)))
+      return expression.text;
+    return undefined;
+  }
+  if (statements.length !== 2) return undefined;
+  const [declaration, returned] = statements;
+  if (!ts.isVariableStatement(declaration) || !(declaration.declarationList.flags & ts.NodeFlags.Const) ||
+      declaration.declarationList.declarations.length !== 1 || !ts.isReturnStatement(returned) ||
+      !returned.expression || !ts.isIdentifier(returned.expression)) return undefined;
+  const binding = declaration.declarationList.declarations[0];
+  if (!ts.isIdentifier(binding.name) || binding.name.text !== returned.expression.text || !binding.initializer ||
+      !(ts.isStringLiteral(binding.initializer) || ts.isNoSubstitutionTemplateLiteral(binding.initializer)))
+    return undefined;
+  return binding.initializer.text;
+}
+
 function readSingleJsonLine(bytes, label) {
   const lines = bytes.toString('utf8').split(/\r?\n/).filter(line => line.trim());
   if (lines.length !== 1) fail(`${label} must contain exactly one JSON record`);
@@ -41,7 +71,7 @@ function hostValue(result, callId) {
 
 /** Recover only the exact complete text body that the model action returned. */
 export function writerActionBody(row, expectedBodySha256, { allowStagedEvalCode = false,
-  allowPlainReturnResult = false } = {}) {
+  allowPlainReturnResult = false, allowEvalReturnedLiteral = false } = {}) {
   const calls = row?.target?.tool_calls ?? [];
   const bodies = [];
   for (const call of calls) {
@@ -66,12 +96,22 @@ export function writerActionBody(row, expectedBodySha256, { allowStagedEvalCode 
         // A typed value can be staged by a nonterminal eval and returned later.
         // The caller may accept that form only after independently validating
         // the exact eval-code block_write, typed host reference, and reader edge.
-        if ((args?.finish !== true && !allowStagedEvalCode) || typeof code !== 'string') continue;
-        const markers = [...code.matchAll(/<\|neuralese\|>([\s\S]*?)<\|\/neuralese\|>/g)];
-        if (markers.length !== 1) continue;
-        const body = markers[0][1];
-        if (typeof body === 'string' && sha256(Buffer.from(body, 'utf8')) === expectedBodySha256) bodies.push(body);
+        if (typeof code !== 'string') continue;
+        if (args?.finish === true || allowStagedEvalCode) {
+          const markers = [...code.matchAll(/<\|neuralese\|>([\s\S]*?)<\|\/neuralese\|>/g)];
+          if (markers.length === 1) {
+            const body = markers[0][1];
+            if (sha256(Buffer.from(body, 'utf8')) === expectedBodySha256) bodies.push(body);
+          }
+        }
       } catch { /* invalid source code is not a writer target */ }
+      if (allowEvalReturnedLiteral) {
+        try {
+          const args = JSON.parse(call.function.arguments);
+          const body = directReturnedStringLiteral(args?.code);
+          if (typeof body === 'string' && sha256(Buffer.from(body, 'utf8')) === expectedBodySha256) bodies.push(body);
+        } catch { /* invalid source code is not a writer target */ }
+      }
     }
   }
   return bodies.length === 1 ? bodies[0] : undefined;
@@ -84,7 +124,8 @@ function actionForCall(rows, callId, trajectoryId, sourceRowSha, role, edge, bod
   if (role === 'writer') {
     matches = matches.filter(row => writerActionBody(row, bodySha,
       { allowStagedEvalCode: edge?.marker_context === 'eval-code',
-        allowPlainReturnResult: edge?.marker_context === 'return-result' }) !== undefined);
+        allowPlainReturnResult: edge?.marker_context === 'return-result',
+        allowEvalReturnedLiteral: edge?.marker_context === 'return-result' }) !== undefined);
   } else {
     matches = matches.filter(row => {
       const opening = row.messages?.find(message => message.role === 'user')?.content;
@@ -106,7 +147,8 @@ function actionForCall(rows, callId, trajectoryId, sourceRowSha, role, edge, bod
 
 function markerBody(row, blockId, bodySha, markerContext) {
   const body = writerActionBody(row, bodySha, { allowStagedEvalCode: markerContext === 'eval-code',
-    allowPlainReturnResult: markerContext === 'return-result' });
+    allowPlainReturnResult: markerContext === 'return-result',
+    allowEvalReturnedLiteral: markerContext === 'return-result' });
   if (body === undefined) fail(`producer ${row.id} lacks one exact complete text Neuralese writer action`);
   if (!body.length && !blockId) fail(`empty producer marker for ${row.id}`);
   return body;
@@ -171,6 +213,30 @@ export function exactPlainReturnResultWitness(result, writerCallId, bodySha) {
       witnesses.push({ invocation_id: turn.invocation_id, raw_call_id: raw.id,
         body_sha256: bodySha, body_utf8_bytes: Buffer.byteLength(value, 'utf8'),
         evidence: 'same-invocation raw model return_result plain string; exact graph writer body digest' });
+    }
+  }
+  return witnesses.length === 1 ? witnesses[0] : undefined;
+}
+
+/** Prove a same-invocation eval returned an authored, non-interpolated literal body. */
+export function exactEvalReturnedLiteralWitness(result, writerCallId, bodySha) {
+  const witnesses = [];
+  for (const turn of result.trajectory ?? []) {
+    if (turn.invocation_id !== writerCallId) continue;
+    const rawCalls = turn.model_response?.raw_calls ?? [];
+    const normalizedCalls = turn.model_response?.calls ?? [];
+    for (const raw of rawCalls) {
+      if (raw?.type !== 'function' || raw.function?.name !== 'eval') continue;
+      let args;
+      try { args = JSON.parse(raw.function.arguments); } catch { continue; }
+      const body = directReturnedStringLiteral(args?.code);
+      if (typeof body !== 'string' || sha256(Buffer.from(body, 'utf8')) !== bodySha) continue;
+      const normalizedMatches = normalizedCalls.filter(call => Array.isArray(call) && call[0] === 'eval' &&
+        call[1]?.code === args.code);
+      if (normalizedMatches.length !== 1) continue;
+      witnesses.push({ invocation_id: turn.invocation_id, raw_call_id: raw.id,
+        body_sha256: bodySha, body_utf8_bytes: Buffer.byteLength(body, 'utf8'),
+        evidence: 'same-invocation raw model eval returning a direct string/template literal, optionally through a const binding; exact graph writer body digest' });
     }
   }
   return witnesses.length === 1 ? witnesses[0] : undefined;
@@ -277,6 +343,7 @@ export function validateSoftStateConversionEvidence({ resultPath, reviewPath, ac
     let writerAuthorship;
     if (write.marker_context === 'return-result') {
       writerAuthorship = exactPlainReturnResultWitness(result, writerCallId, write.text_body_sha256);
+      if (!writerAuthorship) writerAuthorship = exactEvalReturnedLiteralWitness(result, writerCallId, write.text_body_sha256);
       if (!writerAuthorship) providerMarkerOutput(result, writerCallId, write.text_body_sha256);
     }
     if (expansion.body_sha256 !== write.text_body_sha256)

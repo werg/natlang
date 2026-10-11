@@ -28934,6 +28934,41 @@
       "training_admission": false,
       "admission": "quality-evidence-only",
       "notes": "Root exactoriginalsource reviewholds2missing-thread Newsgroups fragments forward,64total. Originalsource/gold/attempts unchanged, noautomaticsemanticnegative. DeclinedTREC SinnFeinhold: definition answer DESC supported. Frozenactive/queuedpreparedsources disjoint newholds."
+    },
+    {
+      "id": "google-v34-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v34-source",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl",
+        "launch-plan-v1.json",
+        "root-source-launch-review-v1.json",
+        "root-launch-process-v1.json",
+        "frozen-adapter-v1/frozen-runtime.json",
+        "frozen-adapter-v1/models.json",
+        "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+        "frozen-adapter-v1/scripts/label_decision_cases.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "held-provider-generation-input-plan",
+      "training_admission": false,
+      "admission": "held-inputs-no-generated-output",
+      "notes": "512freshtraininputs ninefamilies/current64holds/priorreservations/sharedcriteria. Root checked exact512masterobjects/IDs/groups andsharedverifier6runtimefiles/tenmodels. Actualsharedverifiedrunwrapper1002378 waiting sharedowner/2048budget/4workers/2quota-group; cachesisolated. Liveoutputsexcluded."
+    },
+    {
+      "id": "typed-eval-literal-producer-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/typed-eval-literal-producer-review-20261011-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-real-model-producer-proof-evidence",
+      "training_admission": false,
+      "admission": "producer-proof-only-not-operator-approval",
+      "notes": "Actual shared AST witness extraction on PROV521pass2 modelreturned literal matches graphbody/typedpriorstate/sameinvocationrawcall. Sharedcodesealed; source/trace/operatoradmission unchanged. Full approvedsoftstateconversion not yetrun, no fabricatedtrainingmessage/newworld."
     }
   ],
   "coverage_backlog": [
