@@ -59,6 +59,7 @@ def parse(argv=None):
     p.add_argument('--source-corpus', action='append', required=True)
     p.add_argument('--kind', choices=['member', 'union'], default='member')
     p.add_argument('--notes', default='')
+    p.add_argument('--supersedes', action='append', default=[], help='registered ids this render replaces')
     p.add_argument('--no-publish', action='store_true')
     p.add_argument('--via-worktree', action='store_true',
                    help='register, publish, commit and push through register_corpora.py (private worktree off '
@@ -92,6 +93,8 @@ def make_entry(a) -> dict:
         **body,
         'notes': a.notes,
     }
+    if getattr(a, 'supersedes', None):
+        entry['supersedes'] = list(a.supersedes)
     return entry
 
 

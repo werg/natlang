@@ -24,6 +24,7 @@ import contextlib
 import hashlib
 import json
 import math
+import os
 import random
 import time
 from array import array
@@ -35,6 +36,14 @@ from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_
 from .checkpoint_policy import CheckpointPolicy
 
 SCHEMA = 'natlang.neuralese-direct/1'
+DIRECT_MEMORY_GEOMETRY_VERSION = 'direct-sft-window-v2:fp32-rmsnorm-casts'
+# This exact package computed the v2 FP32-RMSNorm geometry but its resume paths
+# mislabeled the stored estimator state as v1. Re-label only those checkpoints;
+# all other version mismatches reset calibration through AdaptiveGraphMemory.
+_V2_GEOMETRY_V1_LABEL_PACKAGE = {
+    'train/direct_sft.py': 'b3b38c788879ccde63c28cbc2f3b32144f890a33d6f538aa3a2a88979868a7b0',
+    'train/memory_estimator.py': '3b21423ac9c2a1231ee5cb5744e633bb280d12450e37f76b53455435f554cdb8',
+}
 from .optim import MUON_MIN_SIDE  # noqa: F401  (MuonSR latents: both matrix sides at least this)
 # Options added after runs had started, at their defaults, stay out of the resume identity (a run started before them
 # resumes; idle-expert skipping is a defect fix that applies to it from then on).
@@ -401,7 +410,26 @@ def main(argv=None):
         quant.stage['end'] = a.steps
     from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout, geometry_bytes
     from .memory_policy import effective_cuda_free_bytes
-    memory_estimator = AdaptiveGraphMemory(geometry_version='direct-sft-window-v2:fp32-rmsnorm-casts')
+    memory_estimator = AdaptiveGraphMemory(geometry_version=DIRECT_MEMORY_GEOMETRY_VERSION)
+
+    def restored_memory_estimator(state):
+        estimator_state = state.get('direct_memory_estimator')
+        identity_code = (state.get('identity') or {}).get('code') or {}
+        relabeled = (isinstance(estimator_state, dict) and
+                     estimator_state.get('geometry_version') == 'direct-sft-window-v1' and
+                     all(identity_code.get(name) == digest
+                         for name, digest in _V2_GEOMETRY_V1_LABEL_PACKAGE.items()))
+        if relabeled:
+            estimator_state = dict(estimator_state)
+            estimator_state['geometry_version'] = DIRECT_MEMORY_GEOMETRY_VERSION
+            estimator_state['reset_reason'] = None
+            print(json.dumps({'event': 'memory_estimator_geometry_relabel',
+                              'from': 'direct-sft-window-v1',
+                              'to': DIRECT_MEMORY_GEOMETRY_VERSION,
+                              'producer_code': _V2_GEOMETRY_V1_LABEL_PACKAGE,
+                              'reason': 'pinned producer used v2 FP32-RMSNorm geometry; resume label alone was stale'}),
+                  flush=True)
+        return AdaptiveGraphMemory(estimator_state, geometry_version=DIRECT_MEMORY_GEOMETRY_VERSION)
     budget = {'epochs': a.epochs, 'updates': a.steps, 'batch_tokens': a.batch_tokens,
               'train_windows': len(train_windows), 'target_windows': len(targets),
               'documents': sum(len(d) for d in sampler.documents.values()),
@@ -510,6 +538,8 @@ def main(argv=None):
         if not torch.is_grad_enabled():
             mixture_error = relative_mse(mixture, target, weights)
             nearest = (2 * (value.float() @ table.t()) - table.square().sum(-1)).argmax(-1)
+            # These are same-evaluation comparisons: the delta is learned projection MSE minus the
+            # contemporaneous soft-mixture MSE, not change from an earlier training step.
             metrics.update(value_mixture_relative_mse=float(mixture_error),
                            value_relative_mse_delta=float(value_error - mixture_error),
                            value_nearest_accuracy=float(((nearest == span) & valid).sum() / real))
@@ -551,8 +581,7 @@ def main(argv=None):
         monitor.restore(state)  # the update of the guard's last gate and its response KL
         if spike is not None:
             spike.load_state_dict(state.get('grad_spike_clip'))
-        memory_estimator = AdaptiveGraphMemory(state.get('direct_memory_estimator'),
-                                               geometry_version='direct-sft-window-v1')
+        memory_estimator = restored_memory_estimator(state)
         restore_training_rng_state(state['rng'], a.device)
         print(json.dumps({'event': 'resumed', 'step': step, 'code_changed': sorted(
             k for k in code if state['identity']['code'].get(k) != code[k])}), flush=True)
@@ -611,8 +640,7 @@ def main(argv=None):
         optimizer.load_state_dict(state['optimizer'])
         own_host_tensors(optimizer)
         optimizer.param_groups = optimizer._groups()
-        memory_estimator = AdaptiveGraphMemory(state.get('direct_memory_estimator'),
-                                               geometry_version='direct-sft-window-v1')
+        memory_estimator = restored_memory_estimator(state)
         if spike is not None:
             spike.load_state_dict(state.get('grad_spike_clip'))
         print(json.dumps({'event': 'continued', 'from': str(a.continue_from), 'predecessor_step': state['step']}),
@@ -747,6 +775,8 @@ def main(argv=None):
     direct_trainables = head_named + backbone_named
     cuda_active = torch.cuda.is_available() and str(a.device).startswith('cuda')
 
+    cache_released = []
+
     def execution_plan(batch):
         """Pick sequential accumulation and the least checkpointing that fits live device memory."""
         if a.window_execution == 'auto':
@@ -761,10 +791,22 @@ def main(argv=None):
         floor = _warmup_update_floor_bytes(direct_trainables, optimizer, bootstrap=False, in_backward=mode == "packed")  # packed: the latents step in backward
         if cuda_active:
             free, total = torch.cuda.mem_get_info(a.device)
-            available = effective_cuda_free_bytes(int(free), int(total), int(torch.cuda.memory_reserved(a.device)),
-                                                  int(torch.cuda.memory_allocated(a.device)))
+            allocator_backend = torch.cuda.get_allocator_backend()
+            allocator_reserved = int(torch.cuda.memory_reserved(a.device))
+            allocator_allocated = int(torch.cuda.memory_allocated(a.device))
+            inactive_split = None
+            if allocator_backend == 'native':
+                stats = torch.cuda.memory_stats(a.device)
+                value = stats.get('inactive_split_bytes.all.current')
+                inactive_split = int(value) if value is not None else None
+            available = effective_cuda_free_bytes(int(free), int(total), allocator_reserved,
+                                                  allocator_allocated,
+                                                  inactive_split_bytes=inactive_split)
         else:
+            free = total = allocator_reserved = allocator_allocated = None
             available = None
+            allocator_backend = None
+            inactive_split = None
 
         def estimate(checkpointed):
             layout = backbone_memory_layout(backbone, checkpointed=checkpointed)
@@ -773,19 +815,51 @@ def main(argv=None):
                                      vocab_size=int(backbone.embedding_weight.shape[0]))
             kind = f'direct-sft-{mode}-checkpointed-{int(checkpointed)}'
             predicted_activation = memory_estimator.predict(kind, context, target, one_raw) * rows
-            return one_raw * rows, predicted_activation
+            calibration = memory_estimator.calibration_info(kind, context, target)
+            return one_raw * rows, predicted_activation, calibration
 
         if a.checkpoint_layers is not None:
             checkpointed = bool(a.checkpoint_layers)
-            raw, predicted = estimate(checkpointed)
+            raw, predicted, calibration = estimate(checkpointed)
         else:
             checkpointed = available is None
-            raw, predicted = estimate(checkpointed)
+            raw, predicted, calibration = estimate(checkpointed)
             if cuda_active and predicted + floor > available:
                 checkpointed = not checkpointed
-                raw, predicted = estimate(checkpointed)
+                raw, predicted, calibration = estimate(checkpointed)
         incremental = predicted + floor
         fits = available is None or incremental <= available
+        if not fits and cuda_active and not cache_released:
+            # On unified memory (DGX GB10) CUDA allocations only use MemFree: stale page cache of read-once
+            # checkpoints and corpora hides reusable memory. Drop it once (the ledger's shared release) and re-measure.
+            import os
+            import subprocess
+            cache_released.append(True)
+            ledger = Path(os.environ.get('NATLANG_REPO', path_root('repo'))) / 'scripts' / 'memory_ledger.py'
+            output = ''
+            if ledger.is_file():
+                released = subprocess.run(['python3', str(ledger), 'release-cache'], capture_output=True, text=True)
+                output = released.stdout[-400:]
+            # This process's own reads (model weights, heads, data) are the bulk of the cache it meets; drop them
+            # directly too, so a busy or stuck shared release never leaves them pinned.
+            sources = {Path(p).resolve().parent for p in (a.heads, a.text_data, a.records, a.pieces) if p}
+            name = getattr(backbone.hf.config, '_name_or_path', None)
+            if name and Path(name).exists():
+                sources.add(Path(name).resolve())
+            advised = 0
+            for source in sources:
+                for path in source.rglob('*'):
+                    try:
+                        if path.is_file() and path.stat().st_size >= 64 << 20:
+                            handle = os.open(path, os.O_RDONLY)
+                            os.posix_fadvise(handle, 0, 0, os.POSIX_FADV_DONTNEED)
+                            os.close(handle)
+                            advised += path.stat().st_size
+                    except OSError:
+                        continue
+            print(json.dumps({'event': 'page_cache_released', 'ledger': output,
+                              'own_files_advised_gb': advised / 2 ** 30}), flush=True)
+            return execution_plan(batch)
         if not fits:
             raise MemoryError('neuralese_direct estimated update exceeds reusable CUDA memory: '
                               f'{incremental} bytes required, {available} available; no forward was started')
@@ -794,7 +868,16 @@ def main(argv=None):
                 'target_tokens': target, 'activation_geometry_bytes': raw,
                 'predicted_activation_bytes': predicted, 'gradient_optimizer_floor_bytes': floor,
                 'estimated_incremental_peak_bytes': incremental, 'reusable_cuda_bytes': available,
+                'device_free_bytes': int(free) if free is not None else None,
+                'device_total_bytes': int(total) if total is not None else None,
+                'allocator_backend': allocator_backend,
+                'allocator_reserved_bytes': allocator_reserved,
+                'allocator_allocated_bytes': allocator_allocated,
+                'allocator_inactive_split_bytes': inactive_split,
+                'cuda_allocator_config': os.environ.get('PYTORCH_CUDA_ALLOC_CONF'),
                 'estimator_margin': memory_estimator.margin, 'estimator_geometry': memory_estimator.geometry_version,
+                'activation_calibration_sample_count': calibration['sample_count'],
+                'activation_calibration_source_bins': calibration['source_bins'],
                 'activation_layout': {key: value for key, value in layout.items()
                                       if key in ('width', 'layers', 'intermediate', 'kv_width', 'dtype_bytes',
                                                  'fp32_norm_saved_bytes_per_token',

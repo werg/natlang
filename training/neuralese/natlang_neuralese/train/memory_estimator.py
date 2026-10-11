@@ -101,7 +101,30 @@ class AdaptiveGraphMemory:
         return f'{kind}:{int(math.log2(max(1, context)))}:{int(math.log2(max(1, length)))}'
 
     def calibration(self, kind, context, length):
-        samples = self.samples.get(self.key(kind, context, length), [])
+        exact_key = self.key(kind, context, length)
+        samples = self.samples.get(exact_key, [])
+        # Direct SFT's readout geometry is capped at 128 target tokens. For
+        # longer targets, all target bins at or above 128 therefore have the
+        # same logits workspace. Reuse observations only inside the same
+        # packed/sequential and checkpoint family and context bin. The raw
+        # geometry already scales with context and includes the capped logits.
+        # Short targets retain their exact target bin because their logits
+        # workspace still varies with target length.
+        if len(samples) < 3 and kind.startswith('direct-sft-') and length >= 128:
+            context_bin = int(math.log2(max(1, context)))
+            family_prefix = f'{kind}:{context_bin}:'
+            pooled = []
+            for key, values in self.samples.items():
+                if not key.startswith(family_prefix):
+                    continue
+                try:
+                    target_bin = int(key.rsplit(':', 1)[1])
+                except (IndexError, ValueError):
+                    continue
+                if target_bin >= 7:
+                    pooled.extend(values)
+            if len(pooled) >= 3:
+                samples = pooled
         # Batch geometry already includes the row count. Reuse only current
         # writer-only measurements, with identical policy and geometry bins.
         # Old observations included released auxiliary tapes and are excluded.
@@ -113,6 +136,22 @@ class AdaptiveGraphMemory:
             if siblings:
                 samples = samples + [ratio for values in siblings for ratio in values]
         return samples
+
+    def calibration_info(self, kind, context, length):
+        """Return the evidence selected for a prediction, including its bins."""
+        exact_key = self.key(kind, context, length)
+        samples = self.calibration(kind, context, length)
+        source_bins = [exact_key]
+        if (kind.startswith('direct-sft-') and length >= 128 and
+                len(self.samples.get(exact_key, [])) < 3 and len(samples) >= 3):
+            context_bin = int(math.log2(max(1, context)))
+            family_prefix = f'{kind}:{context_bin}:'
+            source_bins = sorted(
+                key for key, values in self.samples.items()
+                if key.startswith(family_prefix) and
+                key.rsplit(':', 1)[-1].isdigit() and
+                int(key.rsplit(':', 1)[-1]) >= 7 and values)
+        return {'sample_count': len(samples), 'source_bins': source_bins}
 
     def predict(self, kind, context, length, raw_bytes):
         samples = self.calibration(kind, context, length)

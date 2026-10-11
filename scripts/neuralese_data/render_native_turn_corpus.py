@@ -22,7 +22,8 @@ Mellum2.1, the same documents in the same order):
 The target turn carries the teacher's reasoning (``teacher_reasoning``) unless the source marks it untrained
 (``teacher_reasoning_trained: false``) or it is empty; history turns carry theirs as recorded.
 
-Selection (each exclusion is an omission with its reason): ``training_admission.approved`` must be true; rows of
+Selection: a row whose split is validation, valid, val or dev is rendered as test (held; source_split keeps the name;
+counted as split_mapped:NAME->test). Each exclusion is an omission with its reason: ``training_admission.approved`` must be true; rows of
 programs named in ``--exclude-programs`` are dropped (held cases, leak defects); with ``--protected`` a program whose
 IR or messages contain a protected benchmark question (normalised hash of any string, or of any sentence-like line)
 or a protected id is dropped; ``--held-text`` files (rendered text of other corpora) supply held source groups, and a
@@ -54,6 +55,9 @@ sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
 
 SCHEMA = 'natlang.native-turn-render/1'
 RENDERINGS = ('full', 'program-header', 'whole-trajectory')
+# Upstream held-out split names rendered as test (recorded as selection counts split_mapped:<name>->test and as each
+# row's source_split). Any other split other than train/test stays an omission with its reason.
+HELD_SPLIT_ALIASES = ('validation', 'valid', 'val', 'dev')
 _G: dict = {}
 
 
@@ -263,6 +267,15 @@ def registered_source_pieces(sources):
 def select(args, shard_dir: Path):
     """Stream the sources; write selected raw lines to trajectory shards; return omissions and blocked chains."""
     exclude = {}
+    include = None
+    if args.include_ids:  # restrict to these decisions (ids or source_record_ids of rendered text rows)
+        include = set()
+        for path in args.include_ids:
+            for line in open(path, 'rb'):
+                if line.strip():
+                    item = json.loads(line)
+                    include.add(item.get('id'))
+                    include.update(item.get('source_record_ids') or [])
     for path in args.exclude_programs or []:
         for line in path.read_text().splitlines():
             if line.strip():
@@ -290,7 +303,24 @@ def select(args, shard_dir: Path):
                 row = json.loads(line)
                 rid = row.get('id')
                 counts['source_rows'] += 1
+                if row.get('split') in HELD_SPLIT_ALIASES:
+                    # Held-out under another name (upstream validation/dev): the students' loaders know train and
+                    # test only, so it is rendered as test (held, decontaminated against train) and the original
+                    # name is kept on the row; never dropped.
+                    counts[f"split_mapped:{row['split']}->test"] += 1
+                    row['source_split'], row['split'] = row['split'], 'test'
+                    line = json.dumps(row, ensure_ascii=False).encode()
                 reason = None
+                if include is not None and rid not in include:
+                    counts['not_in_include_set'] += 1  # outside this render's scope: no omission, no chain block
+                    continue
+                if include is not None and args.include_admits and not (
+                        row.get('training_admission') or {}).get('approved'):
+                    # Admitted by the text set it was rendered for (its root receipt), recorded per row.
+                    row['training_admission'] = {**(row.get('training_admission') or {}), 'approved': True,
+                                                 'admitted_through_include_set': [str(x) for x in args.include_ids]}
+                    line = json.dumps(row, ensure_ascii=False).encode()
+                    counts['approved_through_include_set'] += 1
                 if row.get('version') != 'natlang.teacher_training_turn.native/1':
                     reason = 'not_a_native_teacher_turn'
                 elif rid in seen_ids:
@@ -712,6 +742,10 @@ def main(argv=None):
     p.add_argument('--pieces', type=Path, nargs='*', default=[], help='jsonl {name, text}: soft prompt pieces')
     p.add_argument('--registry-admits-reason', default='',
                    help='rows held only for a reason starting with this text are admitted by the registry entry')
+    p.add_argument('--include-ids', type=Path, nargs='*', default=[],
+                   help='jsonl rows with id / source_record_ids: render only these decisions')
+    p.add_argument('--include-admits', action='store_true',
+                   help='included rows count as approved (their admitted text set is the admission)')
     p.add_argument('--train-only', action='store_true', help='leave held rows out entirely (their held set lives elsewhere)')
     p.add_argument('--decision-exclude-ids', type=Path, nargs='*', default=[],
                    help='jsonl {id}: decisions already rendered elsewhere; used only inside whole trajectories')
