@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS compilations (id TEXT PRIMARY KEY, definition_key TEX
   parent_id TEXT, created_at TEXT NOT NULL, status TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS compilations_key ON compilations(definition_key, status);
 CREATE TABLE IF NOT EXISTS compilation_files (compilation_id TEXT NOT NULL, path TEXT NOT NULL, hash TEXT NOT NULL, PRIMARY KEY (compilation_id, path));
+CREATE INDEX IF NOT EXISTS compilation_files_hash ON compilation_files(hash);
 CREATE TABLE IF NOT EXISTS cases (hash TEXT NOT NULL, compilation_id TEXT NOT NULL, position INTEGER NOT NULL, tier TEXT NOT NULL,
   served INTEGER NOT NULL DEFAULT 0, handed_off INTEGER NOT NULL DEFAULT 0, compared INTEGER NOT NULL DEFAULT 0,
   worse INTEGER NOT NULL DEFAULT 0, better INTEGER NOT NULL DEFAULT 0, audited INTEGER NOT NULL DEFAULT 0,
@@ -196,31 +197,38 @@ export class CallStore {
 
   /** Store one call record. `blobs` holds the text of every complete value the record references (by hash). */
   record(record: CallRecord, blobs: ReadonlyMap<string, string>, events?: string): void {
-    const kinds = new Map<string, string>();
-    for (const [hash, text] of blobs) { this.putBlob(text, hash); kinds.set(hash, 'value'); }
-    let eventsHash: string | null = null;
-    if (events !== undefined) {
-      eventsHash = this.putBlob(events);
-      record = { ...record, events: { complete: true, hash: eventsHash, bytes: byteLength(events) } };
-    }
-    const recordHash = this.putBlob(JSON.stringify(record));
-    const definition = record.definition;
-    this.db.prepare(`INSERT OR REPLACE INTO calls (call_id, parent_call_id, parent_action_index, task_id, program_id, build_hash,
-      program_root, definition_id, definition_name, definition_source, definition_key, interface_hash, site, executor, model_id, case_hash,
-      outcome, started_at, ended_at, wall_ms, tokens_in, tokens_out, model_requests, evals, approach_hash, audit_of, record_hash, events_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-      record.call_id, record.parent_call_id, record.parent_action_index, record.task_id, record.program_id, record.build_hash,
-      record.program_root, definition.id, definition.name, definition.source, definition.key, definition.interface, definition.site,
-      record.executor.kind, record.executor.model_id, record.executor.case_hash ?? null, record.outcome, record.started_at, record.ended_at,
-      record.cost.wall_ms, record.cost.tokens_in, record.cost.tokens_out, record.cost.model_requests, record.cost.evals,
-      record.approach.hash, record.audit_of ?? null, recordHash, eventsHash);
-    const link = this.db.prepare('INSERT OR IGNORE INTO call_blobs (call_id, hash, kind) VALUES (?, ?, ?)');
-    link.run(record.call_id, recordHash, 'record');
-    if (eventsHash) link.run(record.call_id, eventsHash, 'events');
-    const referenced = [...Object.values(record.inputs), ...Object.values(record.captures), record.output,
-      ...record.capture_writes.map(write => write.after), ...record.effects.flatMap(effect => [effect.args, effect.result]),
-      ...(record.folder?.changes.map(change => change.after) ?? [])].flatMap(refHashes);
-    for (const hash of new Set(referenced)) if (blobs.has(hash) || kinds.has(hash)) link.run(record.call_id, hash, 'value');
+    // Publish blobs, the record and its links together: another writer's eviction
+    // must never collect a value between insertion and linking. Acquire the write
+    // lock before doing any reads, avoiding SQLite read-to-write upgrades.
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const kinds = new Map<string, string>();
+      for (const [hash, text] of blobs) { this.putBlob(text, hash); kinds.set(hash, 'value'); }
+      let eventsHash: string | null = null;
+      if (events !== undefined) {
+        eventsHash = this.putBlob(events);
+        record = { ...record, events: { complete: true, hash: eventsHash, bytes: byteLength(events) } };
+      }
+      const recordHash = this.putBlob(JSON.stringify(record));
+      const definition = record.definition;
+      this.db.prepare(`INSERT OR REPLACE INTO calls (call_id, parent_call_id, parent_action_index, task_id, program_id, build_hash,
+        program_root, definition_id, definition_name, definition_source, definition_key, interface_hash, site, executor, model_id, case_hash,
+        outcome, started_at, ended_at, wall_ms, tokens_in, tokens_out, model_requests, evals, approach_hash, audit_of, record_hash, events_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        record.call_id, record.parent_call_id, record.parent_action_index, record.task_id, record.program_id, record.build_hash,
+        record.program_root, definition.id, definition.name, definition.source, definition.key, definition.interface, definition.site,
+        record.executor.kind, record.executor.model_id, record.executor.case_hash ?? null, record.outcome, record.started_at, record.ended_at,
+        record.cost.wall_ms, record.cost.tokens_in, record.cost.tokens_out, record.cost.model_requests, record.cost.evals,
+        record.approach.hash, record.audit_of ?? null, recordHash, eventsHash);
+      const link = this.db.prepare('INSERT OR IGNORE INTO call_blobs (call_id, hash, kind) VALUES (?, ?, ?)');
+      link.run(record.call_id, recordHash, 'record');
+      if (eventsHash) link.run(record.call_id, eventsHash, 'events');
+      const referenced = [definition.instructions, ...Object.values(record.inputs), ...Object.values(record.captures), record.output,
+        ...record.capture_writes.map(write => write.after), ...record.effects.flatMap(effect => [effect.args, effect.result]),
+        ...(record.folder?.changes.map(change => change.after) ?? [])].flatMap(refHashes);
+      for (const hash of new Set(referenced)) if (blobs.has(hash) || kinds.has(hash)) link.run(record.call_id, hash, 'value');
+      this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
     if (++this.writes % 200 === 0) this.evict();
   }
 
@@ -351,7 +359,8 @@ export class CallStore {
     const target = Math.floor(maxBytes * 0.9);
     const unpinned = `pinned = 0 AND call_id NOT IN (SELECT call_id FROM case_calls)`;
     let total = before;
-    // Eviction's target is a soft bound; a small batch caps overshoot while avoiding a global orphan scan per row.
+    // Batch the write lock and candidate query, but stop after each released row
+    // reaches the target. Collect only affected hashes, avoiding global scans.
     const chunkSize = 64;
     const inWriteBatch = <T>(body: () => T): T => {
       this.db.exec('BEGIN IMMEDIATE');
@@ -364,17 +373,30 @@ export class CallStore {
         throw error;
       }
     };
+    // Sweep pre-existing unlinked blobs once, rather than scanning the whole
+    // store after every evicted row. Record publication holds the same write lock.
+    total -= inWriteBatch(() => {
+      const rows = this.db.prepare(`SELECT hash FROM blobs WHERE
+        NOT EXISTS (SELECT 1 FROM call_blobs WHERE call_blobs.hash = blobs.hash)
+        AND NOT EXISTS (SELECT 1 FROM compilation_files WHERE compilation_files.hash = blobs.hash) LIMIT 10000`)
+        .all() as { hash: string }[];
+      return this.collectHashes(rows.map(row => row.hash));
+    });
     while (total > target) {
       const batch = inWriteBatch(() => {
         const rows = this.db.prepare(`SELECT call_id FROM calls WHERE events_hash IS NOT NULL AND ${unpinned}
           ORDER BY started_at ASC LIMIT ?`).all(chunkSize) as { call_id: string }[];
         if (!rows.length) return { count: 0, freed: 0 };
+        let freed = 0;
         for (const row of rows) {
+          if (total - freed <= target) break;
+          const hashes = this.db.prepare("SELECT hash FROM call_blobs WHERE call_id = ? AND kind = 'events'")
+            .all(row.call_id) as { hash: string }[];
           this.db.prepare('UPDATE calls SET events_hash = NULL WHERE call_id = ?').run(row.call_id);
           this.db.prepare("DELETE FROM call_blobs WHERE call_id = ? AND kind = 'events'").run(row.call_id);
+          freed += this.collectHashes(hashes.map(item => item.hash));
         }
-        // Collect once per small batch, rather than rescanning the global blob tables for every row.
-        return { count: rows.length, freed: this.collect() };
+        return { count: rows.length, freed };
       });
       if (!batch.count) break;
       total -= batch.freed;
@@ -384,25 +406,34 @@ export class CallStore {
         const rows = this.db.prepare(`SELECT call_id FROM calls WHERE ${unpinned} ORDER BY started_at ASC LIMIT ?`)
           .all(chunkSize) as { call_id: string }[];
         if (!rows.length) return { count: 0, freed: 0 };
-        const ids = rows.map(row => row.call_id), placeholders = ids.map(() => '?').join(', ');
-        this.db.prepare(`DELETE FROM calls WHERE call_id IN (${placeholders})`).run(...ids);
-        this.db.prepare(`DELETE FROM call_blobs WHERE call_id IN (${placeholders})`).run(...ids);
-        return { count: rows.length, freed: this.collect() };
+        let freed = 0;
+        for (const row of rows) {
+          if (total - freed <= target) break;
+          const hashes = this.db.prepare('SELECT hash FROM call_blobs WHERE call_id = ?').all(row.call_id) as { hash: string }[];
+          this.db.prepare('DELETE FROM calls WHERE call_id = ?').run(row.call_id);
+          this.db.prepare('DELETE FROM call_blobs WHERE call_id = ?').run(row.call_id);
+          freed += this.collectHashes(hashes.map(item => item.hash));
+        }
+        return { count: rows.length, freed };
       });
       if (!batch.count) break;
       total -= batch.freed;
     }
     return before - this.totalBytes();
   }
-  /** Delete blobs nothing references; returns their bytes. */
-  private collect(): number {
-    const orphans = this.db.prepare(`SELECT hash, bytes FROM blobs WHERE hash NOT IN (SELECT hash FROM call_blobs)
-      AND hash NOT IN (SELECT hash FROM compilation_files) LIMIT 10000`).all() as { hash: string; bytes: number }[];
+  /** Delete affected blobs only when no call or compilation still references them. */
+  private collectHashes(hashes: readonly string[]): number {
+    const orphan = this.db.prepare(`SELECT hash, bytes FROM blobs WHERE hash = ?
+      AND NOT EXISTS (SELECT 1 FROM call_blobs WHERE call_blobs.hash = blobs.hash)
+      AND NOT EXISTS (SELECT 1 FROM compilation_files WHERE compilation_files.hash = blobs.hash)`);
+    const remove = this.db.prepare('DELETE FROM blobs WHERE hash = ?');
     let freed = 0;
-    for (const { hash, bytes } of orphans) {
+    for (const hash of new Set(hashes)) {
+      const row = orphan.get(hash) as { hash: string; bytes: number } | undefined;
+      if (!row) continue;
       this.medium.deleteBlob(hash);
-      this.db.prepare('DELETE FROM blobs WHERE hash = ?').run(hash);
-      freed += bytes;
+      remove.run(hash);
+      freed += row.bytes;
     }
     return freed;
   }

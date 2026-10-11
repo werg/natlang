@@ -204,6 +204,8 @@ for (const variant of variants) {
     store.evict(0);
     assert.deepEqual(store.calls({ limit: 100 }).map(row => row.call_id).sort(), ['e/0', 'e/1']);
     assert.ok(store.value(store.call('e/0').output), 'a pinned call keeps its values');
+    assert.equal(store.value(store.call('e/0').definition.instructions), 'Look up the price.',
+      'a pinned call keeps its replay instructions');
     assert.ok(store.value(store.call('e/1').inputs.pad), 'so does a case-linked one');
   });
 
@@ -216,6 +218,17 @@ for (const variant of variants) {
     assert.ok(remaining.length > 0 && remaining.length < 400, `${remaining.length} calls remain`);
     assert.equal(remaining[0], 'b/399', 'the newest call survives');
     assert.ok(!remaining.includes('b/000'), 'the oldest call was evicted');
+  });
+
+  scenario('eviction collects unlinked blobs without deleting referenced values', ({ store }) => {
+    store.writeSettings({ minFreeBytes: 0 });
+    put(store, 'orphan/kept');
+    const retained = store.totalBytes();
+    store.putBlob('unlinked'.repeat(1000));
+    store.evict(Math.ceil(retained / 0.9));
+    assert.equal(store.totalBytes(), retained);
+    assert.equal(store.call('orphan/kept').call_id, 'orphan/kept');
+    assert.equal(store.value(store.call('orphan/kept').definition.instructions), 'Look up the price.');
   });
 
   scenario('free space lowers the bound', ({ store }) => {
