@@ -88,7 +88,7 @@ def main() -> int:
         'notes': ("D13 (plans/neuralese/DATA_INVENTORY_20261011.md): every resolved SWE-rebench OpenHands trajectory after "
                   "parquet row 1000 (v4 is rows 0-999), normalized to pi transcripts, replayed in pi's tools and turned "
                   "into native records (8 sampled targets per trajectory, the v4 default). Additive to v4: no trajectory in "
-                  "common. Built on the HDD (/mnt/external); text twins on NVMe."),
+                  "common. Built on the external HDD; text twins on NVMe."),
     })
     for name, (twin_id, policy, line) in TWINS.items():
         receipt = json.loads((args.twin_root / name / 'receipt.json').read_text())
