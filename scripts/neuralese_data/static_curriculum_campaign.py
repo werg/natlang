@@ -51,6 +51,20 @@ STAGED = Path.home() / 'data/staged-inputs/sdkb'
 for var, name in (('NATLANG_CITANCES', 'tasks-citance-recall-20260928'), ('NATLANG_SYNTH_PEOPLE', 'tasks-synth-people-r4-20260928')):
     if (STAGED / name / '.staged').exists():
         os.environ.setdefault(var, str(STAGED / name))
+PART_DECISIONS = 12000  # decisions per render part (disk peak ~9 GB a part)
+DISK_MIN_GB = int(os.environ.get('NATLANG_DISK_MIN_GB', '100'))
+
+
+def wait_for_disk(path: Path) -> None:
+    """Pause while the NVMe has less than DISK_MIN_GB free (same rule as scripts/disk_guard.sh)."""
+    said = False
+    while shutil.disk_usage(path).free < DISK_MIN_GB * 2**30:
+        if not said:
+            print(json.dumps({'disk_guard': 'pausing', 'free_gb': shutil.disk_usage(path).free // 2**30}), flush=True)
+            said = True
+        time.sleep(120)
+
+
 STRIDE = 4  # largest family weight: a family indexes round(shapes * weight) items from start
 # Families that cannot run here today, with the reason (recorded in config.json and the registry note).
 EXCLUDED = {
@@ -136,6 +150,7 @@ def shard(root: Path, cfg: dict, seed: int, family: str) -> dict:
     done = out / f'{family}.done.json'
     if done.exists():
         return load(done)
+    wait_for_disk(root)
     out.mkdir(parents=True, exist_ok=True)
     work = out / f'.{family}.work'
     shutil.rmtree(work, ignore_errors=True)
@@ -288,28 +303,78 @@ def render(root: Path, name: str, cpus: int, budget_gb: int, docker_gb: int) -> 
         time.sleep(60)
     if (out / 'receipt.json').exists():
         return
-    plain = root / 'batches' / f'.{name}.turns.jsonl'
-    subprocess.run(['zstd', '-dq', '--long=27', '-f', str(root / 'batches' / name / 'turns.jsonl.zst'), '-o', str(plain)],
-                   check=True)
-    unit = f'static-render-{name}-{int(time.time()) % 100000}'
+    # Rendered in parts of about PART_DECISIONS decisions cut at program boundaries: a part's decompressed input and
+    # the renderer's working copy are ~0.37 MB a decision each, so a whole batch at once peaked near 70 GB (2026-10-12).
+    source = root / 'batches' / name / 'turns.jsonl.zst'
+    cuts_path = out / 'parts.json'
+    if not cuts_path.exists():
+        out.mkdir(parents=True, exist_ok=True)
+        cuts, n, last = [0], 0, None
+        for line in zlines(source):
+            program = json.loads(line)['source_ref']['program_ir_id']
+            if n - cuts[-1] >= PART_DECISIONS and program != last:
+                cuts.append(n)
+            last, n = program, n + 1
+        save(cuts_path, {'cuts': cuts + [n], 'part_decisions': PART_DECISIONS})
+    cuts = load(cuts_path)['cuts']
+    receipts = []
+    for k, (start, stop) in enumerate(zip(cuts, cuts[1:])):
+        part = out / 'parts' / f'p{k:02d}'
+        if not (part / 'receipt.json').exists():
+            render_part(root, name, k, start, stop, part, cpus, budget_gb, docker_gb)
+        receipts.append(load(part / 'receipt.json'))
+    save(out / 'receipt.json', merge_receipts(receipts, cuts))
+
+
+def render_part(root: Path, name: str, k: int, start: int, stop: int, part: Path, cpus: int, budget_gb: int,
+                docker_gb: int) -> None:
+    wait_for_disk(root)
+    part.parent.mkdir(parents=True, exist_ok=True)
+    plain = root / 'batches' / f'.{name}.p{k:02d}.turns.jsonl'
+    with open(plain, 'wb') as f:
+        for i, line in enumerate(zlines(root / 'batches' / name / 'turns.jsonl.zst')):
+            if i >= stop:
+                break
+            if i >= start:
+                f.write(line)
+    unit = f'static-render-{name}-p{k:02d}-{int(time.time()) % 100000}'
     corpus_id = f"{root.name}-{name}"
     cmd = ['python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', str(budget_gb),
            '--priority', 'low', '--resumable',
            '--wait', '86400', '--workdir', str(REPO), '--', 'env', f'MEM={docker_gb}g', f'CPUS={cpus}',
-           'nice', '-n', '10', 'scripts/neuralese_data/render_native_turn_corpus.sh', str(out), '--corpus-id', corpus_id,
-           '--source', str(plain), '--workers', str(cpus), '--shards', '64', '--full-sample', '0.05', '--protected', str(REPO / PROTECTED),
+           'nice', '-n', '10', 'scripts/neuralese_data/render_native_turn_corpus.sh', str(part), '--corpus-id', corpus_id,
+           '--source', str(plain), '--workers', str(cpus), '--shards', '32', '--full-sample', '0.05', '--protected', str(REPO / PROTECTED),
            '--reserved', str(REPO / 'training/source-split-reservations.json'),
            '--held-text', *[str(REPO / p) for p in HELD_TEXT]]
-    subprocess.run(cmd, check=True)
-    # The ledger unit runs asynchronously: wait for it to finish.
-    while subprocess.run(['systemctl', '--user', 'is-active', '-q', f'{unit}.service']).returncode == 0:
-        time.sleep(30)
-    plain.unlink(missing_ok=True)
-    if not (out / 'receipt.json').exists():
-        raise RuntimeError(f'render of {name} failed; see journalctl --user -u {unit}')
+    try:
+        subprocess.run(cmd, check=True)
+        # The ledger unit runs asynchronously: wait for it to finish.
+        while subprocess.run(['systemctl', '--user', 'is-active', '-q', f'{unit}.service']).returncode == 0:
+            time.sleep(30)
+    finally:
+        plain.unlink(missing_ok=True)
+    if not (part / 'receipt.json').exists():
+        raise RuntimeError(f'render of {name} part {k} failed; see journalctl --user -u {unit}')
     # The full rendering is the 5% warm-up sample (--full-sample, shared rule); it is still stored compressed (~50x).
-    for path in sorted((out / 'full').glob('*/*.jsonl')):
+    for path in sorted((part / 'full').glob('*/*.jsonl')):
         subprocess.run(['zstd', '-q', '-3', '--long=27', '-T4', '--rm', '-f', str(path)], check=True)
+
+
+def merge_receipts(receipts: list[dict], cuts: list[int]) -> dict:
+    """One batch-level receipt over its parts: per-rendering documents and per-split counts summed, maxima kept."""
+    renders: dict = {}
+    for receipt in receipts:
+        for key, info in receipt['renders'].items():
+            agg = renders.setdefault(key, {'documents': 0, 'by_split': {}, 'max_document_tokens': 0, 'files': []})
+            agg['documents'] += info.get('documents', 0)
+            agg['max_document_tokens'] = max(agg['max_document_tokens'], info.get('max_document_tokens', 0))
+            for split, counts in info.get('by_split', {}).items():
+                into = agg['by_split'].setdefault(split, {})
+                for field, value in counts.items():
+                    into[field] = into.get(field, 0) + value
+    return {'schema': 'natlang.static-curriculum-render-parts/1', 'parts': len(receipts), 'cuts': cuts,
+            'renders': renders,
+            'note': 'parts render independently: exact-duplicate removal and internal group-overlap checks are per part'}
 
 
 def teacher_serving() -> bool:
@@ -487,9 +552,7 @@ def run(args) -> None:
         print(json.dumps({'batch': b, 'cases': stats['cases'], 'decisions': stats['decisions'],
                           'duplicates': stats['duplicate_cases'], 'generate_seconds': round(time.time() - started)}),
               flush=True)
-        free = shutil.disk_usage(root).free / 2**30
-        if free < args.min_free_gb:
-            sys.exit(f'stopping: {free:.0f} GiB free < {args.min_free_gb}')
+        wait_for_disk(root)  # pause (not exit) while the NVMe is short; resumes when space is back
         b += 1
 
 
@@ -569,7 +632,10 @@ def registry_entries(root: Path, name: str) -> list[dict]:
                for mode in ('full', 'program-header', 'whole-trajectory')}
     render = {
         'id': f'{base}-render', 'owner': 'dgx', 'path': f'{rel}/renders/{name}',
-        'include': ['receipt.json', '*.jsonl', '*.json', '*/*/text-data.jsonl', '*/*/text-data.jsonl.zst',
+        'include': ['receipt.json', 'parts.json', 'parts/*/receipt.json', 'parts/*/*.jsonl',
+                    'parts/*/*/*/text-data.jsonl', 'parts/*/*/*/text-data.jsonl.zst', 'parts/*/*/*/omissions.jsonl',
+                    'parts/*/*/*/omissions.jsonl.zst', 'parts/*/render-omissions/*/omissions.jsonl',
+                    '*.jsonl', '*.json', '*/*/text-data.jsonl', '*/*/text-data.jsonl.zst',
                     '*/*/omissions.jsonl', '*/*/omissions.jsonl.zst', 'render-omissions/*/omissions.jsonl'],
         'source_class': 'rendered-natlang-native-teacher-turn-text',
         'split': 'per document, inherited from the source rows; protected bgkit benchmark overlaps and explicit test '
