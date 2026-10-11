@@ -46,7 +46,7 @@ HANDLERS = {
                           'drift_rows','drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop'},'result':'heads.pt'},
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
                             'parameters':set(),'result':'report.json'},
-    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads'},
+    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads','direct_artifact_manifest'},
                                 'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'backbone_lr', 'backbone_training', 'max_tokens',
                                                'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
                                                'write_depth', 'tokens_per_vector', 'heads_lr', 'distill',
@@ -65,7 +65,7 @@ HANDLERS = {
                                                'view', 'view_window', 'context_weight', 'feedback_weight',
                                                'context_coverage', 'cohort_weights', 'qualification_cohort',
                                                'stop_pg', 'purpose_contrast', 'purpose_margin', 'view_tokens_per_vector',
-                                               'optimizer_state', 'optimizer_added'},
+                                               'optimizer_state', 'optimizer_added', 'direct_base_snapshot'},
                                 'result': 'checkpoint.pt'},
     # The view operator gate (eval/view_gate.py; TRAINING_RECIPE.md "The view operator stage") on the exact weights of
     # the view stage it requires (that stage's recurrence checkpoint).
@@ -267,6 +267,11 @@ def stage_input_args(resolved, kind):
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces'):
         if role in resolved and role in supported:
             args += ['--' + role.replace('_', '-'), resolved[role]['path']]
+    if 'direct_artifact_manifest' in resolved and 'direct_artifact_manifest' in supported:
+        manifest = Path(resolved['direct_artifact_manifest']['path'])
+        if manifest.name != 'manifest.json':
+            raise ValueError('direct_artifact_manifest must bind the artifact manifest.json file')
+        args += ['--direct-artifact', str(manifest.parent)]
     return args
 
 
@@ -510,9 +515,12 @@ def load_recipe(path):
                                     if s['id'] in required and s['kind'] == 'text_warmup_runtime']
             if not runtime_dependencies:
                 raise ValueError('recurrence training requires an adapted warm-up runtime gate')
-            if 'heads' not in stage.get('inputs', {}) and not any(
+            stage_inputs = stage.get('inputs', {})
+            if 'heads' in stage_inputs and 'direct_artifact_manifest' in stage_inputs:
+                raise ValueError('recurrence stage must choose exactly one of heads or direct_artifact_manifest')
+            if not ({'heads', 'direct_artifact_manifest'} & set(stage_inputs)) and not any(
                     s['id'] in required and s['kind'] == 'core_text_warmup' for s in recipe['stages']):
-                raise ValueError('recurrence requires a core warm-up predecessor or exact stage heads binding')
+                raise ValueError('recurrence requires a core warm-up predecessor, exact stage heads, or direct artifact manifest')
         if kind == 'view_operator_gate' and not any(
                 s['id'] in required and s['kind'] == 'raw_recurrence_training' for s in recipe['stages']):
             raise ValueError('the view operator gate requires the view stage (a raw_recurrence_training stage) it measures')
@@ -593,8 +601,12 @@ def validate_direct_stage_recipe(recipe):
         runtime_reports = [item for item in evidence if item['role'] == 'adapted_runtime']
         if len(runtime_reports) != 1:
             raise ValueError('direct recurrence requires exactly one pinned adapted_runtime lineage report')
-        if 'heads' not in inputs:
-            raise ValueError('direct recurrence requires the exact heads input bound by adapted_runtime')
+        has_heads = 'heads' in inputs
+        has_direct_artifact = 'direct_artifact_manifest' in inputs
+        if has_heads == has_direct_artifact:
+            raise ValueError('direct recurrence requires exactly one of heads or direct_artifact_manifest')
+        if has_direct_artifact and Path(inputs['direct_artifact_manifest']['path']).name != 'manifest.json':
+            raise ValueError('direct_artifact_manifest must bind the artifact manifest.json file')
     outputs = recipe.get('outputs')
     if not isinstance(outputs, dict) or not isinstance(outputs.get('directory'), str):
         raise ValueError('direct stage requires a declared output directory')
@@ -613,18 +625,25 @@ def verify_direct_stage_lineage_gates(stage, inputs, lineage_evidence):
     reports = [item for item in lineage_evidence if item['role'] == 'adapted_runtime']
     if len(reports) != 1:
         raise ValueError('direct recurrence requires exactly one pinned adapted_runtime lineage report')
-    heads_sha = inputs.get('heads', {}).get('sha256')
-    if not heads_sha:
-        raise ValueError('direct recurrence requires an exact heads input')
     item = reports[0]
     try:
         report = json.loads(Path(item['path']).read_text())
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError('adapted_runtime lineage evidence is not a readable JSON report') from exc
-    if (not isinstance(report, dict) or
-            report.get('schema') != 'natlang.latent-sketch-diagnostic/1'):
+    if not isinstance(report, dict):
+        raise ValueError('adapted_runtime lineage report has an unsupported schema')
+    if 'direct_artifact_manifest' in inputs:
+        manifest_sha = inputs['direct_artifact_manifest']['sha256']
+        if (report.get('schema') != 'natlang.neuralese-direct-runtime-qualification/1' or
+                report.get('runtime_qualified') is not True or
+                report.get('artifact_manifest_sha256') != manifest_sha):
+            raise ValueError('adapted_runtime report does not qualify the exact direct artifact manifest')
+        return [{'role': 'adapted_runtime', 'report_sha256': item['sha256'],
+                 'direct_artifact_manifest_sha256': manifest_sha, 'runtime_qualified': True}]
+    if report.get('schema') != 'natlang.latent-sketch-diagnostic/1':
         raise ValueError('adapted_runtime lineage report has an unsupported schema')
     require_gate(report, 'text_warmup_runtime')
+    heads_sha = inputs['heads']['sha256']
     if report.get('parent_sha256') != heads_sha:
         raise ValueError('adapted_runtime lineage report belongs to different heads weights')
     if report.get('weights_unmodified') is not True or report.get('retained_trained_heads') is not True:
@@ -947,9 +966,9 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     # handlers that reject an existing --out directory before creating it.
     stage_output = output / stage['id']
     handler = HANDLERS[stage['kind']]
-    if 'heads' not in inputs:
-        raise ValueError('direct stage requires an exact heads input')
-    command = [sys.executable, '-m', handler['module'], '--heads', inputs['heads']['path']]
+    command = [sys.executable, '-m', handler['module']]
+    if 'heads' in inputs:
+        command += ['--heads', inputs['heads']['path']]
     command += stage_input_args(inputs, stage['kind'])
     command += ['--out', str(stage_output), '--device', device]
     parameters = dict(recipe['parameters'])
@@ -1202,7 +1221,9 @@ def main(argv=None):
                         'heads' not in stage_inputs[stage['id']]):
                     continuation_checkpoint, stage_heads = mapped_fixup_continuation(stage,reports)
                     continuation_checkpoint = str(continuation_checkpoint)
-                if kind in ('core_text_warmup','text_warmup_runtime','raw_recurrence_training'):
+                direct_artifact_stage = (kind == 'raw_recurrence_training' and
+                                         'direct_artifact_manifest' in stage_inputs[stage['id']])
+                if kind in ('core_text_warmup','text_warmup_runtime','raw_recurrence_training') and not direct_artifact_stage:
                     has_exact_stage_heads = 'heads' in stage_inputs[stage['id']]
                     if has_exact_stage_heads:
                         stage_heads = stage_inputs[stage['id']]['heads']['path']
@@ -1216,8 +1237,10 @@ def main(argv=None):
                         predecessor_kind = 'core_text_warmup'
                         predecessor=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']==predecessor_kind)
                         stage_heads=predecessor['artifact']
-                command = [sys.executable, '-m', HANDLERS[kind]['module'], '--heads',
-                           str(stage_heads)] + stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
+                command = [sys.executable, '-m', HANDLERS[kind]['module']]
+                if not direct_artifact_stage:
+                    command += ['--heads', str(stage_heads)]
+                command += stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
                            str(output if kind == 'token_identity' else directory), '--device', args.device]
                 if continuation_checkpoint:
                     command += ['--continue-from', continuation_checkpoint]
