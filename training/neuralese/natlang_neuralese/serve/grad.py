@@ -362,6 +362,10 @@ class GradSession:
             from ..write import Opened
             if producer.get('temperature'):
                 raise ValueError('direct Neuralese replay has no stochastic payload distribution')
+            if producer.get('length_hint') is not None:
+                # An externally fixed length was not a sampled stopping choice.
+                # Producer rewriting still carries its consumer gradient.
+                return top.sum() * 0.0
             opened = Opened(block_start, state, backbone.logits(top[:, None])[:, -1], top)
             writer = write_direct(backbone, direct, opened, max(1, length), self.engine.stop_ids, length=max(1, length))
             terms = [torch.nn.functional.logsigmoid(logit if index == length - 1 and not block.truncated else -logit)
