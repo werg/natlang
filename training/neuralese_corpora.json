@@ -37950,6 +37950,194 @@
       "page_size": "see runtime-page.json: tool-output page of the rebuilt ts-host at 65,536 tokens (28,672 characters) and its build commit",
       "runtime_cutover": "Runtime cutover 2026-10-12 (coordinator): ts-host dist rebuilt with 8267b177 (tool-output page = an eighth of the context budget instead of a fixed 2,000 characters); one corpus version = one page size, recorded in runtime-page.json and in every shard summary (runtime). Holds exactly the S3 shards not replayed in v1 (same IR shards, numbering shared; SKIP_DONE_IN); v1 + v2 together are the whole S3 conversion, disjoint by shard.",
       "continues": "port-record-calls-s3-20261011-v1"
+    },
+    {
+      "id": "natlang-native-turns-campaign-uncovered-render-20261011-v1",
+      "owner": "dgx",
+      "path": "runs/natlang-native-turns-campaign-uncovered-render-20261011-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: teacher-campaign-evidence-20261005; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "teacher-campaign-evidence-20261005"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "a5530aaf7eed81803daa52e755806204e596bc179b698915b941f1300bc09ec1",
+            "documents": 1445,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1445,
+                "supervised_tokens": 273231,
+                "tokens": 10979266,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 14194,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "b26471c8b326588a475a4371a28c151fce035cc3959dedfa05065481d9485b22",
+            "documents": 1445,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1445,
+                "supervised_tokens": 356085,
+                "tokens": 11684122,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 15044,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "2bd7619eb4f89dcdd2d85059f04228996ecdd135ea998b9cfb9db212cdd3764d",
+            "documents": 28396,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 28396,
+                "supervised_tokens": 5535232,
+                "tokens": 94535274,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 13114,
+            "merge_omissions": {
+              "exact_duplicate_document": 6
+            }
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "1816958d3d2dfbd9cd6e46a34256daea3393082e2cfc8c85628991c0ec7914fc",
+            "documents": 28396,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 28396,
+                "supervised_tokens": 7162431,
+                "tokens": 105784849,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 12777,
+            "merge_omissions": {
+              "exact_duplicate_document": 6
+            }
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "9308bb5de3e7d0a40aa41fd34f39c2540b8e14ce101abb4fd5396a5a8a0ca40d",
+            "documents": 9259,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 7549109,
+                "documents": 9259,
+                "opening_tokens": 3874429,
+                "supervised_tokens": 3674680,
+                "tokens": 27094610,
+                "tool_tokens": 14106142
+              }
+            },
+            "max_document_tokens": 12223,
+            "merge_omissions": {
+              "exact_duplicate_document": 4
+            }
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "33cdf5a490720871ed9df1b33c3528082eb63a14b25df70928e0879e96013639",
+            "documents": 9259,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 9792773,
+                "documents": 9259,
+                "opening_tokens": 3793411,
+                "supervised_tokens": 5999362,
+                "tokens": 30930453,
+                "tool_tokens": 14928812
+              }
+            },
+            "max_document_tokens": 12119,
+            "merge_omissions": {
+              "exact_duplicate_document": 4
+            }
+          }
+        }
+      },
+      "selection": {
+        "omitted:not_approved": 2031,
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 28403,
+        "selected:train": 28403,
+        "source_rows": 30434
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 26957,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 26957
+      },
+      "program_header_parity": {
+        "equal": 56804,
+        "retokenization_checked": 54580
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "bc309126562db69b77f73d5ff0764371182d5223646977a1fc190c9ffc7156c9",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "2bb383731743309117be7b5a92534ce9661fc38635dfc9fd5001e0412e6406ce",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "16f5941d4a6ddc876ace120949281ca25aebee5c40581d079a6862490ccfac9c",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/natlang-native-turns-campaign-uncovered-render-20261011-v1/receipt.json",
+        "sources": {
+          "runs/teacher-campaign-evidence-uncovered-turns-20261011-v1/turns.jsonl": {
+            "bytes": 3045421795,
+            "sha256": "1caec7480f299b93da018833193a1a0c26a96ef59fd465f6fcb8a8d726cded1c"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": "Teacher-campaign evidence turns not covered by earlier imports (runs/teacher-campaign-evidence-uncovered-turns-20261011-v1, 30,434 turns materialized by materialize-native-teacher.mjs)."
     }
   ],
   "coverage_backlog": [
