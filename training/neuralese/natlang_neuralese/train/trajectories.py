@@ -721,6 +721,9 @@ def main(argv=None):
                              "engine from this shared direct export (train/direct_export.load_direct_artifact); written "
                              "values are then written by the direct writer (serve/direct_write.write_direct) through the "
                              "NeuraleseProjection (and the TokenChoiceProjection when exported), which train at --heads-lr")
+    parser.add_argument("--direct-parent-proof", default=None,
+                        help="explicit immutable stage-plan/launch proof for resuming a legacy direct recurrence checkpoint "
+                             "that predates its embedded direct-parent binding")
     parser.add_argument("--direct-base-snapshot", default=None, help="the base snapshot the direct export binds")
     parser.add_argument("--base", default=None)
     parser.add_argument("--bank", default=None, help="system-prompt bank to initialise current pieces from")
@@ -950,7 +953,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'eval_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'eval_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size', 'direct_parent_proof', 'direct_artifact'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -960,16 +963,55 @@ def main(argv=None):
     from ..common.artifact_paths import artifact_refs
     # Each input bound to its role once, at launch, for every loader of the checkpoints written below.
     input_roles = artifact_refs(vars(args), identity['files'], ('base', 'heads', 'records', 'pieces', 'bank', 'soft_init'))
+    direct_parent = None
+    if args.direct_artifact:
+        from .direct_export import direct_parent_binding
+        direct_parent = direct_parent_binding(args.direct_artifact)
     resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False) if checkpoint_path.exists() else None
     new_continuation = resumed is None and bool(args.continue_from)
+    def resume_identity_for_saved_parent(state):
+        current = dict(identity)
+        options = dict(identity.get('options') or {})
+        saved_options = ((state or {}).get('identity') or {}).get('options') or {}
+        # Older recurrence checkpoints put this directory in options. The
+        # exact manifest is now checked by direct_parent_binding, so keep the
+        # old identity shape only for its compatibility comparison.
+        if 'direct_artifact' in saved_options and args.direct_artifact:
+            options['direct_artifact'] = saved_options['direct_artifact']
+        current['options'] = options
+        return current
     if resumed is not None:
-        changed_code = validate_resume(resumed, identity, defaults=option_defaults)
+        changed_code = validate_resume(resumed, resume_identity_for_saved_parent(resumed), defaults=option_defaults)
         if changed_code:
             print(json.dumps({'event': 'resumed_on_new_code', 'changed_modules': len(changed_code),
                               'modules': [Path(m).name for m in changed_code][:20]}), flush=True)
     elif args.continue_from:
         resumed = torch.load(args.continue_from, map_location='cpu', weights_only=False)
-        validate_continuation(resumed, identity, allowed_changes=args.curriculum_change, defaults=option_defaults)
+        validate_continuation(resumed, resume_identity_for_saved_parent(resumed),
+                              allowed_changes=args.curriculum_change, defaults=option_defaults)
+    direct_parent_migration_proof = None
+    if resumed is not None and args.direct_artifact:
+        from .direct_export import verify_direct_parent_binding, verify_recurrence_parent_proof
+        if direct_parent is None:
+            raise ValueError('direct recurrence resume has no currently declared parent artifact')
+        saved_parent = resumed.get('direct_parent_binding')
+        if saved_parent is not None:
+            verify_direct_parent_binding(saved_parent, direct_parent)
+        else:
+            if not args.direct_parent_proof:
+                raise ValueError('legacy direct recurrence checkpoint needs an explicit pinned --direct-parent-proof')
+            proof_path = Path(args.direct_parent_proof).resolve(strict=True)
+            proof = json.loads(proof_path.read_text())
+            checkpoint_source = Path(args.continue_from).resolve(strict=True) if args.continue_from else checkpoint_path.resolve(strict=True)
+            proof_sha = digest_file(checkpoint_source)
+            verified = verify_recurrence_parent_proof(
+                proof, checkpoint_path=checkpoint_source, checkpoint_sha256=proof_sha,
+                current_parent=direct_parent, checkpoint_identity=resumed.get('identity') or {})
+            direct_parent_migration_proof = {
+                'path': str(proof_path), 'sha256': digest_file(proof_path),
+                'document': proof, 'verified_relationship': verified}
+    elif args.direct_parent_proof:
+        raise ValueError('--direct-parent-proof is only valid when resuming a legacy direct recurrence checkpoint')
     if args.content_residual_initialization == 'fresh-zero':
         if not args.continue_from or args.content_transport != 'learned-residual':
             raise ValueError('fresh-zero residual requires an explicit learned-residual continuation')
@@ -985,6 +1027,8 @@ def main(argv=None):
     if args.direct_artifact:
         from .direct_export import load_direct_artifact
         direct = load_direct_artifact(args.direct_artifact, base_snapshot=args.direct_base_snapshot, device=args.device)
+        if direct_parent is None or direct.manifest != direct_parent['manifest']:
+            raise ValueError('loaded direct artifact differs from the parent manifest pinned for this recurrence run')
         engine = direct.engine
         if direct.token_choice_projection is None:
             # Direct SFT deliberately has no TCP. The end-to-end stage enables
@@ -2220,6 +2264,9 @@ def main(argv=None):
             'artifact_refs': input_roles,
             'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used), 'best_evaluation': best_evaluation, 'best_evaluation_history': best_history,
             'params': {k: v.detach().cpu() for k, v in params.items()}, 'texts': texts,
+            **({'direct_parent_binding': direct_parent} if direct_parent is not None else {}),
+            **({'direct_parent_migration_proof': direct_parent_migration_proof}
+               if direct_parent_migration_proof is not None else {}),
             'control_rows': backbone.control_rows.detach().cpu(),
             **({'control_head_rows': backbone.control_head_rows.detach().cpu()} if not getattr(backbone, 'tied', True) else {}),
             'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
