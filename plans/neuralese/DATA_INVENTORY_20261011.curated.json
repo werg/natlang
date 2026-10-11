@@ -684,11 +684,14 @@
     "specialization": 15
    },
    "new_train_source_ids_missing_from_union": 0,
-   "target_coverage_audit_scope": "415 alias-only V16 rows with exact tokenizer-decoded loss-span proof; no target-level claim for remaining source rows",
-   "existing_union_loss_span_covered_train_decisions": 415,
-   "existing_union_train_documents_covering_those_targets": 198,
-   "incremental_union_tokens": 0,
-   "coverage_audit": "plans/neuralese/LUNA_V16_415_UNION_SUPERVISION_AUDIT_20261011.json"
+   "target_coverage_audit_scope": "V16 parent source: all 3,178 train rows had exact prompt prefix and exact action target in same existing union train loss span; V17 portable-context source is a distinct snapshot and its prompt/action coverage remains unaudited.",
+   "existing_union_loss_span_covered_train_decisions": 3178,
+   "existing_union_train_documents_covering_those_targets": "Not counted across all rows; 198 documents were verified for the 415-row alias-only subset.",
+   "incremental_union_tokens": "No incremental V16 action-target tokens; whole-document token delta not established.",
+   "coverage_audit": "plans/neuralese/LUNA_V16_415_UNION_SUPERVISION_AUDIT_20261011.json",
+   "existing_union_exact_prompt_prefixes": 3178,
+   "existing_union_exact_prompt_action_pairs": 3178,
+   "distinct_v16_prompt_action_pairs": 2763
   },
   "excluded": {
    "test_or_heldout_splits": "luna 2035 test, judge 307 heldout, operator 834 test, harness 874 test",
