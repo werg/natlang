@@ -58,6 +58,43 @@ Evidence:
 5. **Start from the base models.** BF16 Mellum and base LFM. There is no warm-up stage and no projection-first
    phase: the backbone and P train from update 1.
 
+## Data and labels
+
+- **Inputs:** the admitted native records and pieces (`gold_text_rows`), split by source group, as before.
+- **Failed assistant context is never a positive target** (Pop, 2026-10-11).
+  - Some assistant turns are answered by a runtime failure. Three forms count, as ts-host/src/native/runtime.ts
+    words them (`text_supervision.FAILED_TOOL_FEEDBACK`):
+    - a rejected action (`rejected\ncode: …`);
+    - a diagnostic that discarded the eval ("Nothing else from this eval was kept");
+    - a return value refused as the result (", so it is not the result").
+  - Such turns are masked (`text_supervision.failed_assistant_mask`, applied through
+    `balanced_position_weights(exclude=...)`). They stay in the context, but carry zero weight in both halves of the
+    supervision.
+  - A window made only of failed turns contributes no update.
+  - In the assembled v3 records the forms occur 153, 349 and 859 times among 10,916 tool responses (some responses
+    match more than one form).
+  - Turns that were later corrected without a runtime failure cannot be told apart from the data. A producer
+    therefore declares them: a text row's `context_only_spans` (token coordinates `[begin, end)` in its
+    `token_ids`) are masked the same way. Example: excluded bad assistant targets kept in retained histories.
+    Pop's V73 derivative needs this for 82 histories.
+
+## Monitors (both backbones, no preservation loss)
+
+- **Drift:** `generation_gate.held_kl` on `drift_rows` held rows at every cadence eval, reported as response KL,
+  prompt KL and agreement. The reference comes from one of two sources:
+  - the quantization component's `preserve.teacher` artifact, used as held data only (Mellum); or
+  - **`monitor.data`**: chat prompts whose base-model answers and top-k are captured in-run before the first
+    update (`generation_gate.capture_reference`, kept as `monitor-reference.pt`). This is the shared capture path
+    for a lineage without a teacher artifact (LFM). It works on any backbone (`greedy_any`).
+- **Guard (owner, 2026-10-11):**
+  - Response KL above `drift_warn` (0.05), or agreement below 0.97, is a warning. At that eval the behaviour gate
+    (24 probes, texts kept) runs, and the stage stops when the gate falls below its reference minus
+    `max_gate_drop`.
+  - Response KL above `drift_stop` (0.5) stops at once.
+  - The gate runs only while drift is past warn, which keeps the eval share in budget.
+- **Behaviour gate:** `quantization.gate`, or `monitor.gate` without a quantization component. Its greedy decode is
+  the Maple port's, so on other backbones the gate is reported unavailable and drift still runs.
+
 ## Carried over
 
 - **Windows include the system prompt** (audit 1): `--tokens 8192 --target-tokens 1024`, or the length of the
@@ -67,8 +104,7 @@ Evidence:
     sweep decides the optimizer and lr).
   - Routers are not on any sign or matrix optimizer (audit 6). They use AdamW at the backbone lr, like the norms.
   - The projections use the shared Muon/AdamW (PortMuonAdamW) at the head lr.
-- **Monitors:** behaviour_drift on response KL and agreement, with its guard, at every cadence eval. The behaviour
-  gate (texts kept) runs at the end. The teacher's held rows are data for measurement only.
+- **Monitors:** see "Monitors" above.
 - **QAT stays woven in.** The quantization component's precision points are sampled per update exactly as before,
   and are trained on the **same SFT targets**.
   - **FLAG for the owner:** with self-distillation out, there is no BF16 KL teacher for the quantized points.
@@ -130,7 +166,7 @@ recipe thresholds.
    - Token prediction, including the stop token `<|im_end|>`, is the unchanged base readout: frozen final norm +
      lm_head on h.
    - The TokenChoiceProjection is absent in this stage (recipe `token_choice_projection: null`). When declared
-     (the end-to-end Neuralese stage), the readout becomes norm(lm_head(TokenChoiceProjection(h))), identity at its
+     (the end-to-end Neuralese stage), the readout becomes lm_head(norm(TokenChoiceProjection(h))), identity at its
      first step.
    - The NeuraleseProjection reads h and the base readout's distribution at the same position (for its mixture).
      It never feeds the token readout.

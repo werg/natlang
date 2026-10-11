@@ -22,6 +22,16 @@ from .output_embedding_projection import sha
 
 
 HANDLERS = {
+    # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
+    # NeuraleseProjection; the TokenChoiceProjection is declared per stage (off in v1).
+    'neuralese_direct': {'module':'natlang_neuralese.train.direct_sft', 'required_inputs':{'records','pieces'},
+                         'optional_inputs':{'text_data'},
+                         'parameters':{'steps','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
+                           'checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
+                           'latent_optimizer','latent_lr','head_lr','neuralese_weight','projection_blocks',
+                           'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows',
+                           'drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop','drift_gate','gate_held_rows','monitor',
+                           'seed'},'result':'report.json'},
     'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads','student_checkpoint'},
                         'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','target_tokens','cutoff',
                           'cohort_weights','qualification_cohort','context_weight','feedback_weight',
@@ -660,6 +670,9 @@ def require_gate(report, kind):
             raise ValueError('raw recurrence training stage incomplete or errored')
     elif kind=='core_text_warmup':
         if report.get('qualified') is not True:raise ValueError('text warm-up alignment goal not met')
+    elif kind=='neuralese_direct':
+        if report.get('qualified') is not True:
+            raise ValueError('Neuralese direct stage not qualified (held CE below base, no drift stop, behaviour gate)')
     elif kind=='text_warmup_runtime':
         if report.get('runtime_qualified') is not True or report.get('output_reference_qualified') is not True:
             raise ValueError('adapted warm-up runtime/output reference gate failed')
@@ -863,6 +876,8 @@ def stage_parameter_args(parameters):
             continue
         if isinstance(value, bool):
             command += ['--' + ('' if value else 'no-') + key.replace('_', '-')]
+        elif isinstance(value, dict):  # a declared JSON component (e.g. neuralese_direct's monitor)
+            command += ['--' + key.replace('_', '-'), json.dumps(value, sort_keys=True, separators=(',', ':'))]
         else:
             command += ['--' + key.replace('_', '-'), str(value)]
     return command
@@ -1225,7 +1240,7 @@ def main(argv=None):
                     gate = json.loads((directory / ('runtime-report.json' if kind=='raw_runtime_qualification' else 'report.json')).read_text())
                 elif kind=='verified_heads_handoff':
                     gate=json.loads((directory/'report.json').read_text())
-                elif kind=='core_text_warmup':
+                elif kind in ('core_text_warmup','neuralese_direct'):
                     gate=json.loads((directory/'report.json').read_text())
                 elif kind == 'view_operator_gate':
                     gate = json.loads(output.read_text())

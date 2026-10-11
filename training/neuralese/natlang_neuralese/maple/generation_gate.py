@@ -104,3 +104,44 @@ def held_kl(model, held: dict, rows: int = 48, prompt_weight: float = 0.25) -> d
             for key, value in scores.items():
                 sums[key] = sums.get(key, 0.0) + float(value)
     return {"held_" + k.replace("loss_", ""): v / max(count, 1) for k, v in sums.items()}
+
+
+@torch.no_grad()
+def capture_reference(model, tokenizer, prompts: list[dict], render, eos: int, *, max_new: int = 256, k: int = 64,
+                      max_tokens: int = 4096) -> dict:
+    """A drift-monitor reference captured from ``model`` itself (the base model, before any update), in the teacher
+    shards' format (``ids``, ``top_ids``, ``top_logp``, ``prompt_len``): each prompt rendered, answered greedily, and
+    the model's own top-``k`` log-probabilities at every position. ``held_kl`` against it measures how far a later
+    model has moved from this one: the monitor path of a lineage without a registered teacher artifact (no
+    preservation loss reads it)."""
+    device = next(model.parameters()).device
+    reference = {"ids": [], "top_ids": [], "top_logp": [], "prompt_len": []}
+    for prompt in prompts:
+        ids = render(tokenizer, prompt)
+        ids = (ids + greedy_any(model, ids, max_new, eos))[:max_tokens]
+        sequence = torch.tensor([ids], device=device)
+        hidden = model.model(input_ids=sequence).last_hidden_state[0, :-1]
+        top_ids, top_logp = [], []
+        for start in range(0, hidden.shape[0], 512):
+            logp = torch.log_softmax(model.lm_head(hidden[start:start + 512]).float(), -1)
+            values, indices = logp.topk(k, -1)
+            top_ids.append(indices.to(torch.int32).cpu())
+            top_logp.append(values.to(torch.float16).cpu())
+        reference["ids"].append(torch.tensor(ids, dtype=torch.int32))
+        reference["top_ids"].append(torch.cat(top_ids))
+        reference["top_logp"].append(torch.cat(top_logp))
+        reference["prompt_len"].append(min(len(render(tokenizer, prompt)), len(ids)))
+    return reference
+
+
+@torch.no_grad()
+def greedy_any(model, ids: list[int], max_new: int, eos: int) -> list[int]:
+    """Greedy continuation on any backbone: the Maple port's KV-cache path (``greedy``) for a Maple-family model, the
+    Hugging Face ``generate`` otherwise (LFM, Qwen)."""
+    from .model import MapleForCausalLM
+    if isinstance(model, MapleForCausalLM):
+        return greedy(model, ids, max_new, eos)
+    device = next(model.parameters()).device
+    out = model.generate(torch.tensor([ids], device=device), max_new_tokens=max_new, do_sample=False,
+                         eos_token_id=eos, pad_token_id=eos)
+    return out[0, len(ids):].tolist()

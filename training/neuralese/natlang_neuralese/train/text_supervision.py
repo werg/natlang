@@ -6,6 +6,8 @@ does not admit a source. Assistant reasoning has the same weight as replies.
 from __future__ import annotations
 
 import math
+import re
+from array import array
 
 ROLE_CODES = ('other', 'system', 'user', 'tool', 'assistant_reasoning', 'assistant_reply')
 TEXT_POSITION_WEIGHT_POLICY = {
@@ -18,13 +20,56 @@ TEXT_POSITION_WEIGHT_POLICY = {
 }
 
 
+# The runtime's forms for an eval that failed (ts-host/src/native/runtime.ts): a rejected action, a diagnostic that
+# discarded the eval ("Nothing else from this eval was kept"), a return value refused as the result. An assistant
+# turn answered by one of them is failed context: never a positive target.
+FAILED_TOOL_FEEDBACK = (re.compile(r'\Arejected\b'), re.compile(r'Nothing else from this eval was kept'),
+                        re.compile(r', so it is not the result'))
+
+
+def failed_assistant_mask(ids, labels, decode):
+    """Per-token 1 on assistant turns (reasoning and reply) whose following tool response(s) are a runtime failure
+    (``FAILED_TOOL_FEEDBACK``), else 0; ``ids`` and ``labels`` (``chat_roles`` codes) are aligned, ``decode`` maps token
+    IDs to text. Masked turns stay in the context; ``balanced_position_weights(exclude=...)`` takes them out of every
+    loss."""
+    assistant = {ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply')}
+    tool, other = ROLE_CODES.index('tool'), ROLE_CODES.index('other')
+    mask = array('B', bytes(len(labels)))
+    index, length = 0, len(labels)
+    while index < length:
+        if labels[index] not in assistant:
+            index += 1
+            continue
+        start = index
+        while index < length and labels[index] in assistant:
+            index += 1
+        end, probe, failed = index, index, False
+        while probe < length and labels[probe] in (tool, other):  # every tool response before the next turn
+            if labels[probe] == other:
+                probe += 1
+                continue
+            run = probe
+            while probe < length and labels[probe] == tool:
+                probe += 1
+            text = decode(list(ids[run:probe]))
+            body = text.split('<tool_response>', 1)[-1].lstrip()
+            if any(pattern.search(body) for pattern in FAILED_TOOL_FEEDBACK):
+                failed = True
+        if failed:
+            for position in range(start, end):
+                mask[position] = 1
+    return mask
+
+
 def balanced_position_weights(span, suffix_starts, *, roles=None,
-                              context_weight=1., feedback_weight=.25):
+                              context_weight=1., feedback_weight=.25, exclude=None):
     """Half context, half observed suffix; normalize each document separately.
 
 Tool feedback is reduced only inside the context term. Neither assistant
 reasoning nor the observed target suffix is reduced. Missing role metadata is
-ordinary text, not an inferred tool observation.
+ordinary text, not an inferred tool observation. ``exclude`` (bool, aligned)
+positions carry no weight at all (failed assistant turns); a window whose
+positions are all excluded has weight 0 everywhere.
 """
     import torch
     if len(suffix_starts) != span.shape[0]:
@@ -38,18 +83,24 @@ ordinary text, not an inferred tool observation.
         if roles.shape != span.shape:
             raise ValueError('role labels must align with supervised positions')
         importance = torch.where(roles == ROLE_CODES.index('tool'), feedback_weight, importance)
+    if exclude is not None:
+        if exclude.shape != span.shape:
+            raise ValueError('excluded positions must align with supervised positions')
+        importance = torch.where(exclude, 0., importance)
     # A tool-only window with zero feedback weight has no useful supervision.
     # Keep a small positive declared weight instead of silently dropping it.
-    if (importance.sum(1) <= 0).any():
+    if exclude is None and (importance.sum(1) <= 0).any():
         raise ValueError('a complete window has zero context supervision; use positive feedback weight')
-    context = importance * span.shape[1] / importance.sum(1, keepdim=True)
+    context = importance * span.shape[1] / importance.sum(1, keepdim=True).clamp_min(1e-12)
     starts = torch.tensor([span.shape[1] if start is None else start for start in suffix_starts],
                           device=span.device)
     mask = torch.arange(span.shape[1], device=span.device)[None] >= starts[:, None]
+    if exclude is not None:
+        mask = mask & ~exclude
     counts = mask.sum(1, keepdim=True)
     weighted = (.5 * context_weight * context + .5 * mask.float() * span.shape[1] / counts.clamp_min(1))
     weighted = torch.where(counts > 0, weighted, context)
-    return weighted * span.shape[1] / weighted.sum(1, keepdim=True)
+    return weighted * span.shape[1] / weighted.sum(1, keepdim=True).clamp_min(1e-12)
 
 
 class CohortDocumentSampler:
