@@ -112,7 +112,7 @@ separate incremental/full-sequence runtime transport difference.
 
 ## Sustained BF16 continuation and memory-policy correction
 
-The full-source continuation is running through the shared declared V14 recipe
+The full-source continuation completed 627 updates through the shared declared V14 recipe
 with BF16 backbone parameters, FP32 floating buffers and activation checkpointing.
 At update 100, held CE improved from 3.57669 to 3.45925; response KL was 0.02170,
 response agreement 0.99688 and the behavior guard remained clear. Value relative
@@ -129,11 +129,17 @@ layers, width 1024, six attention layers and FFN width 4608. The earlier offline
 4101-token first-window reconstruction was not verified against execution and
 is superseded: V14's first recorded plan had 6807 context tokens.
 
-V14 currently forces checkpointing to keep useful training running. Removing it
-remains the preferred route where the complete update fits; the shorter matched
-comparison above establishes a speed opportunity, not a blanket fit guarantee.
-The refreshed V3 program-header corpus is locally manifest-verified and can be
-considered at a checkpoint boundary after checking exact target/group identity.
+V14 stopped cleanly at 627 updates. Held CE at 600 was 3.29795, while value
+relative MSE was about 0.241; improved text loss does not qualify the value channel.
+The corrected V3 header corpus preserves every supervised target and source group.
+Its next phase ran 143 updates before a forward OOM at 5375 context tokens.
+Uncheckpointed short windows took about 0.14 seconds/update; the automatic policy
+checkpointed a larger window. The failing plan credited fragmented reserved memory
+as reusable, leaving only about 58 MB of estimated headroom. Shared memory accounting
+now subtracts measured native inactive split bytes from that cache credit and logs
+allocator statistics. Continue in BF16 with selective checkpointing; these results
+do not justify either full-backbone FP32 or blanket checkpointing. No checkpoint
+preserved those 143 updates, so restart from the retained step-627 parent.
 
 Continuation now declares hash-bound predecessor identity and monitor-reference
 sidecars explicitly. Moving checkpoint files or resolving symlinks must not
