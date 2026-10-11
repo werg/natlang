@@ -31747,6 +31747,57 @@
       "notes": "Root-approved V83 plan SHA 092b43be6574762fb36aaa138c3eac7f99b87b373b7fc703ac90cffb467a2c4e; independent review SHA 4b4ef7acddd6c33f42db05f477340c8a36a365b4942b18c0c26f7805e9dc3807; sealed supervisor receipt SHA b23b59c6cfa649480b5f874ab79c4cb54a9f1867d313045c77f10aa4fa6a81ea. Excludes mutable launch status, journals and output."
     },
     {
+      "id": "google-v41-prefix-v8-static-decision-labels-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v8-current-criteria",
+      "include": [
+        "prefix-input/**/*",
+        "prefix-snapshot-receipt.json",
+        "prepare-prefix.py",
+        "selection/**/*",
+        "static/**/*"
+      ],
+      "split": "inherited-train-held-static-label-adapter",
+      "source_class": "held-static-decision-label-adapter-from-immutable-provider-prefix",
+      "training_admission": false,
+      "admission": "static-reference-and-source-binding-only-quality-review-pending",
+      "independent_new_worlds": 0,
+      "notes": "Immutable V41 complete-line prefix snapshot: 792 rows, 3,110,226 bytes, prefix SHA 417e49880b205f3003d6ae73cc39ef14efe22648badcaa554bf9e55d99b45b1f. Seven authored cases from 37 accepted typed labels; seven of seven scripted reference replays passed. Cases SHA 659779a3371e2c759c78d56a9ac55d6c16eacdc507d3d970116b866f850fbdc6 and replay SHA 137aec1e88edc670501b5add721bcbf74e45c7391d4449a3c76e9d3de3ec1591. Provider-label disagreements and source-quality review remain held; static references are not teacher trajectories."
+    },
+    {
+      "id": "luna-choice-confidence-v84-v41-prefix-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v84-v41-prefix-runtimev17-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "source-review/**/*",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-reviewed-generation-inputs",
+      "source_class": "held-prepared-luna-generation-queues",
+      "training_admission": false,
+      "admission": "root-reviewed-queue-inputs-only-no-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Seven program/37 item V84 queues from the immutable V41 prefix-v8 static source; authored references and item bindings passed at preparation. Runtime v17; five lanes bind the actual V83 predecessor queues. Mutable journals, results, campaign status, and quota state are excluded."
+    },
+    {
+      "id": "luna-choice-confidence-v84-root-approval-and-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v84-v41-prefix-runtimev17-v1",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-independent-review-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "split": "held-generation-approval-and-launch-evidence",
+      "source_class": "held-campaign-approval-review-and-supervisor-receipt",
+      "training_admission": false,
+      "admission": "authorization-and-launch-lineage-only-no-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root-approved V84 plan SHA 6f9a67558bc10a25b5cefe5957b15a4a400a17d53525498af00e22af0c2a035e; independent review SHA 3a2cfe5c8155a2c8fe78516b34714ac8de4c8d0642beb6cb19d125b327d89b4e; sealed supervisor receipt SHA 38e09c0c7c3a33de214f79b61668560b86c1f34adf2cdb1c93c72f50df05ce25. Excludes mutable campaign status, journals and outputs."
+    },
+    {
       "id": "luna-direct-v3-drift-review-held-20261011-v1",
       "owner": "pop",
       "path": "runs/luna-neuralese-direct-v3-drift-review-20261011-v1",

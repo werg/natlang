@@ -1,0 +1,59 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v84-v41-prefix-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v84-v41-prefix-runtimev17-v1",
+  "files": [
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 9904,
+      "sha256": "9cbaf7c40a874af81d8268f259afff3925764cf68d900e3d3368e1482b52ecf4"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 8249,
+      "sha256": "fbab8b55a4e4c2c117ea7b27b1f11ebd329814f541c867c66c206ee14bc424bf"
+    },
+    {
+      "path": "source-review/decision_source_quality_holds.json",
+      "bytes": 61430,
+      "sha256": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994"
+    },
+    {
+      "path": "source-review/prepare_luna_folder_campaign.py",
+      "bytes": 28136,
+      "sha256": "30b41714cafc8d4a6c7b5bb4ba00a4993204654dbb6344c830336385aa69f918"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 1908,
+      "sha256": "b765137d3aed8afa9bd31b7a7c13699f9acc8615dcf72236b329eef0c2b1dca2",
+      "lines": 2
+    },
+    {
+      "path": "worker-02/queue.jsonl",
+      "bytes": 1908,
+      "sha256": "fb5fb286aa7cb19361aa125134d7fe379ee0e1a6a50ddf3c3724a41ee0be4885",
+      "lines": 2
+    },
+    {
+      "path": "worker-03/queue.jsonl",
+      "bytes": 954,
+      "sha256": "a5520a358d77fda81d5f1a044851123b46a4c0e92287ec869df308d5672d257e",
+      "lines": 1
+    },
+    {
+      "path": "worker-04/queue.jsonl",
+      "bytes": 954,
+      "sha256": "421f3481565fc4631589c40bc96ec392c806e4542a879150ce41075f6a970045",
+      "lines": 1
+    },
+    {
+      "path": "worker-05/queue.jsonl",
+      "bytes": 954,
+      "sha256": "ced1915a85773fe21c3fb66d0d2d7f6c2562b554d5da6eb4315ac38845222a9f",
+      "lines": 1
+    }
+  ],
+  "bytes": 114397
+}
