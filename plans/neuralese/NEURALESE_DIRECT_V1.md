@@ -402,3 +402,17 @@ Measured: consumer task success (exact verifiers where the task has them) and co
 **LFM** (Pop): base LiquidAI/LFM2.5-350M at revision 9e6c6ccf, Transformers 5.19, on an 8 GB GPU.
 - The context budget is set in `neuralese-direct-lfm-v1` overrides: `tokens`, `target_tokens`, `batch`.
 - Example: `tokens` covering the longest system prompt plus 256 targets, at batch 1.
+
+### Native crisp readout drift diagnostic (2026-10-11)
+
+Periodic native crisp CE uses the trained TCP, so its increase alone cannot
+separate backbone drift from readout drift. Extend the existing TCP evaluator
+with a held-consumer arm using the exact saved CE selection. Decomposition:
+selection and source SHA validation are crisp exact mechanisms; rendering uses
+`trajectories.crisp_messages/render`, and scoring uses the existing `GradSession`
+with trained TCP versus raw readout. No alternative trainer, renderer or channel
+implementation. Both arms receive identical crisp messages/targets; writer/soft
+CE from the native epoch remains separate evidence. This additive diagnostic
+runs after a stable serving export and does not add periodic training evaluations
+or grant semantic/runtime qualification. Ordinary and crisp retention remain
+requirements before selecting a changed native checkpoint.
