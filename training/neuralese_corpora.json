@@ -29358,6 +29358,22 @@
         "review.json",
         "review.md"
       ]
+    },
+    {
+      "id": "google-choice-confidence-v34-source-closure-pop-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v34-source-closure-v2",
+      "split": "inherited-train-source-closure-input",
+      "source_class": "source-closure-evidence",
+      "training_admission": false,
+      "admission": "pop-harness-closure-only-full-s1-pending-dgx",
+      "notes": "Exact 419-row source bindings for 55 V34 static programs plus current V15 disjointness, exact execution-component checks, shared Pop harness/protected closure. Full S1 is not run on Pop; packet is prepared for DGX owner review. Does not adjudicate source truth or admit data.",
+      "include": [
+        "closure-packet-v1.json",
+        "README.md",
+        "closure-input-v1/**/*",
+        "pop-harness4-v1/**/*"
+      ]
     }
   ],
   "coverage_backlog": [
