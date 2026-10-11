@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v35-closed-label-output-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v35-source",
+  "files": [
+    {
+      "path": "labels.jsonl",
+      "bytes": 603516,
+      "sha256": "9118d7437709bcc2a4308552dd955d6080a0875db723a52f7e72412581d1b734",
+      "lines": 512
+    },
+    {
+      "path": "labels.jsonl.attempts.jsonl",
+      "bytes": 533490,
+      "sha256": "ace27078cd71b19e8cd48ccce46e1dfc17b279b3801d6d2cd78f1452856c673e",
+      "lines": 548
+    },
+    {
+      "path": "labels.jsonl.manifest.json",
+      "bytes": 2549,
+      "sha256": "9e810388f5b57d6c8c818a6a3914f97decc8f218ca0119fe00172183ff57faa1"
+    },
+    {
+      "path": "pool.log",
+      "bytes": 37027,
+      "sha256": "ba30827a00632540cd8a24c71b698dbf19a1929378efe05076c5d9297a625068"
+    },
+    {
+      "path": "root-launch-process-v1.json",
+      "bytes": 221,
+      "sha256": "0b14eabea0a6bf8605b44db9de5a71e1714a540d22d5d62173d87a0c09d4179a"
+    }
+  ],
+  "bytes": 1176803
+}

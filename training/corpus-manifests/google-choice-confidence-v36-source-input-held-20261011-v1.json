@@ -1,0 +1,72 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v36-source-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v36-source",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 485640,
+      "sha256": "1918587a698d769a18f5b06aecf1bd0194eafee99c3eb78e6b6a900ac361d0ac",
+      "lines": 512
+    },
+    {
+      "path": "frozen-adapter-v1/frozen-runtime.json",
+      "bytes": 1251,
+      "sha256": "cef7a64a3d8399a30016d5d3e32e1542737f3575a69801a2890a696bfa43421b"
+    },
+    {
+      "path": "frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/label_decision_cases.py",
+      "bytes": 29796,
+      "sha256": "00d00cae8162d36d7c528ef463289b6eb1730f746b4fd2c84243fb70d38e725d"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+      "bytes": 10739,
+      "sha256": "ce64c6c65e4c70d08d178970f0e581780db91cda56a83f86472c6c64e1c63ee5"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+      "bytes": 157,
+      "sha256": "8352a509d51ef0dc0be958bdd4492caa968933866b171360be39fda43217364f"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+      "bytes": 1755,
+      "sha256": "d4e71ae9211cd625ea5d74706f9e0d4cc7fbf59e731dd0cba34fddd04674e4d2"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 9453667,
+      "sha256": "533c8fb70bf34e4b54a1f7533db38e316660235beb2074db7371a53e03e12c42",
+      "lines": 13642
+    },
+    {
+      "path": "preparation-support/annotation-reservation-v22-verified.jsonl",
+      "bytes": 696287,
+      "sha256": "de3127ec9ab033f7d3e563279275e0c6e5f774b205887c01d4620b89af154841",
+      "lines": 640
+    },
+    {
+      "path": "root-source-preparation-review-v1.json",
+      "bytes": 4488,
+      "sha256": "95651aa34032bd8fa01eef829f31dcefa93c718b338b71ee9098f5e6bb693e36"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 208392,
+      "sha256": "d33958087a86cdc7d5c5c1fb52bed5d69f7a97f99c78013bba050de79950816d"
+    }
+  ],
+  "bytes": 10895054
+}
