@@ -31553,6 +31553,49 @@
       "admission": "approval-and-review-evidence-only-no-provider-output-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Stable independent prelaunch validation and owner-approved immutable plan for V81. Mutable campaign launcher status, journals, logs, and result files are intentionally outside this receipt."
+    },
+    {
+      "id": "luna-direct-clean-base-first-attempt-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-failed-initialization-attempt",
+      "source_class": "failed-clean-base-initialization-diagnostic",
+      "training_admission": false,
+      "admission": "failed-initialization-evidence-only-no-training-or-foundation-qualification",
+      "independent_new_worlds": 0,
+      "notes": "Preserves the first clean-base preparation attempt, including its partial/untrained artifact, failure receipt, probe output and preparation code. This attempt failed before a valid initialization receipt; it is retained for failure diagnosis and is not a model qualification or training example."
+    },
+    {
+      "id": "luna-direct-base-behavior-gate-failure-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-base-behavior-20261011-v1",
+      "include": [
+        "capture_base_gate.py",
+        "failure.json"
+      ],
+      "split": "held-failed-base-behavior-capture",
+      "source_class": "failed-untrained-base-behavior-gate-capture",
+      "training_admission": false,
+      "admission": "capture-failure-diagnostic-only-no-model-or-training-qualification",
+      "independent_new_worlds": 0,
+      "notes": "Preserves the failed initial base behavior-gate capture attempt. It contains only the capture script and failure receipt; no task result or training admission is inferred."
+    },
+    {
+      "id": "luna-choice-confidence-v81-supervisor-launch-receipt-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v81-v41-prefix-runtimev17-v1",
+      "include": [
+        "root-supervisor-launch-v1.json"
+      ],
+      "split": "held-generation-launch-evidence",
+      "source_class": "held-provider-campaign-supervisor-launch-receipt",
+      "training_admission": false,
+      "admission": "launch-lineage-only-no-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Owner-sealed receipt records the V81 supervisor and five worker PID launch snapshot, bound to the approved plan and independent review. It is separate from the immutable source/queue input snapshot and excludes mutable output journals."
     }
   ],
   "coverage_backlog": [

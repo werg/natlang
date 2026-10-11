@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-direct-clean-base-first-attempt-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v1",
+  "files": [
+    {
+      "path": "artifact/clean-base-untrained-heads.pt",
+      "bytes": 294840565,
+      "sha256": "4cdaa2f6efdfa1c2792ad2b0cdf0cd350cdf95318a552d0d86246539d95ac837"
+    },
+    {
+      "path": "failed-attempt.json",
+      "bytes": 625,
+      "sha256": "37dc43f54f3151dd6daeabc20494b0bc7ebed0d6d7fc687eb72c7a7590a985ef"
+    },
+    {
+      "path": "monitor/probes.jsonl",
+      "bytes": 290679,
+      "sha256": "0bce5275646cd95ae36374f41769602995c8587c871275653b26c1cf260c3d52",
+      "lines": 48
+    },
+    {
+      "path": "partial-artifact.sha256",
+      "bytes": 189,
+      "sha256": "8b0d801e78cf9c4e256fb3f9da9fdebdef2f0e35ca7937467e7f723f79ac9594"
+    },
+    {
+      "path": "prepare_clean_base_heads.py",
+      "bytes": 5920,
+      "sha256": "14ca530f77b865312d77d40b6a0d35fd28249711f3138b39567d9529b69665c3"
+    }
+  ],
+  "bytes": 295137978
+}

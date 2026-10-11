@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v81-supervisor-launch-receipt-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v81-v41-prefix-runtimev17-v1",
+  "files": [
+    {
+      "path": "root-supervisor-launch-v1.json",
+      "bytes": 8573,
+      "sha256": "981d3a527240ab4319ae5bd44156e9e4190649b2195e7e0320a6f4eae4de2bd8"
+    }
+  ],
+  "bytes": 8573
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-direct-base-behavior-gate-failure-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-base-behavior-20261011-v1",
+  "files": [
+    {
+      "path": "capture_base_gate.py",
+      "bytes": 1308,
+      "sha256": "d4ea68051ad3c03452b7c8ebde3cddcb683859227a684b4bb6da58a812d0bbd8"
+    },
+    {
+      "path": "failure.json",
+      "bytes": 246,
+      "sha256": "0588a464a9285840a794ca918efc4385d3a30ec8c882303de06527b4bc7b944a"
+    }
+  ],
+  "bytes": 1554
+}
