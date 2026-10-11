@@ -29640,6 +29640,79 @@
       "admission": "prepared-only-root-review-required",
       "independent_new_worlds": 0,
       "notes": "Current five-lane V73 input plan from V35 static cases and frozen runtime V16. Pins current shared reviewed-lane starter and exact predecessor mapping: V72 lanes 01/03/04/05 from original launch plus lane 02 supplement process over the original lane-02 queue. Each source PID/queue hash/runtime pin is bound; journal SHAs in preparation evidence are explicitly time-of-observation because active predecessor journals can append. Current 74 held-source item/group inventory has zero overlap with the selected 55 programs. Existing V72 incomplete model_request_budget is preserved as an incomplete predecessor, no quality-success inference. Plan root_approved=false; root must review starter/scheduler behavior before launch. No training admission."
+    },
+    {
+      "id": "free-provider-luna-v71-v33-v15-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v71-v33-runtimev15-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-actual-provider-observations",
+      "source_class": "closed-provider-generation-raw-held",
+      "training_admission": false,
+      "admission": "closed-raw-held-quality-review-only-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Closed V71 actual provider output and all original partials/errors/journals/logs preserved exactly. Root audit v4 reports 58 parent result rows (40 accepted, 18 rejected) plus one infrastructure-incomplete index16; no claim that parent acceptance alone establishes semantic/source quality or admission. V71 index16 transport attempt is preserved here; its separate fresh recovery is published independently. No new independent-world credit."
+    },
+    {
+      "id": "free-provider-luna-v71-v33-v15-terminal-audit-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v71-folder-terminal-v4",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-review-only",
+      "source_class": "closed-provider-quality-audit-held",
+      "training_admission": false,
+      "admission": "held-audit-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Immutable V71 terminal audit v4, including exact campaign inventory and infrastructure-incomplete index16 evidence. Parent outcomes, source annotation disagreements, full-input visibility, and scope events are reported separately. No semantic or training admission."
+    },
+    {
+      "id": "free-provider-luna-v71-index16-transport-recovery-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v71-index16-transport-recovery-prepared-v2",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-related-recovery",
+      "source_class": "single-case-provider-transport-recovery-held",
+      "training_admission": false,
+      "admission": "closed-recovery-observation-held-no-new-world-credit-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "One fresh, bounded retry of V71 original source index16 after its preserved transport failure. Same source/gold/group and frozen V15 runtime; fresh attempt lineage. Terminal accepted=true, files 10/10, zero scope failures. This is a related recovery observation, not independent-world credit and not training admission. Original attempt remains in the V71 raw snapshot."
+    },
+    {
+      "id": "free-provider-luna-v71-index16-recovery-source-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v71-index16-retry-source-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-recovery-source",
+      "source_class": "single-case-recovery-source-subset-held",
+      "training_admission": false,
+      "admission": "source-lineage-only-no-independent-world-credit",
+      "independent_new_worlds": 0,
+      "notes": "Exact original V71 source index16 and authored reference subset, with recovery-lineage pins to the preserved original transport failure. Source identity, group, split, prompt, and gold are unchanged; this subset is held and is not a new source world or admission."
+    },
+    {
+      "id": "free-provider-luna-v72-lane02-supplement-launch-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v72-lane02-supplement-prepared-v2",
+      "include": [
+        "reviewed-plan-v1.json",
+        "supplement-review-v1.json",
+        "root-approved-plan-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "split": "inherited-train-launch-evidence",
+      "source_class": "separate-lane-supplement-launch-binding-held",
+      "training_admission": false,
+      "admission": "active-launch-receipt-only-no-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Immutable approval and launch receipts for V72 lane 02 supplement over the original V72 worker-02 queue. Pins the completed V71 index16 recovery predecessor (PID 1032812) and actual supplement worker PID 1033871. Mutable original worker-02 journal/log/results and changing campaign status are excluded until lane closure. This is execution provenance only, not output quality or admission."
     }
   ],
   "coverage_backlog": [

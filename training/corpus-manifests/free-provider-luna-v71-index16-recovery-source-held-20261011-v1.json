@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v71-index16-recovery-source-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v71-index16-retry-source-v1",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 35677,
+      "sha256": "8d2c388e6efcf8efd9cdf5a87200e7e12abbeb0f3aea477db731199874d7a7ce",
+      "lines": 1
+    },
+    {
+      "path": "recovery-lineage.json",
+      "bytes": 6585,
+      "sha256": "f556f9ac17d05c4ecf8234b4e570ab79070f0a4f426061934b682d83f87de40a"
+    },
+    {
+      "path": "replay.results.jsonl",
+      "bytes": 558867,
+      "sha256": "0d75179fc6c9844e19988fabc00af6156af5a3a690a4eb6983e5a585e36de159",
+      "lines": 1
+    }
+  ],
+  "bytes": 601129
+}

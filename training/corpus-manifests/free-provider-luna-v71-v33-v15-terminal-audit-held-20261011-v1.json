@@ -1,0 +1,72 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v71-v33-v15-terminal-audit-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v71-folder-terminal-v4",
+  "files": [
+    {
+      "path": "campaign-file-inventory.jsonl",
+      "bytes": 86140,
+      "sha256": "1a9539fb1e39de2e8ccea53863044d965515dcb6740e34d9323ef29abfa65cb1",
+      "lines": 317
+    },
+    {
+      "path": "infrastructure-incomplete-case.json",
+      "bytes": 8804,
+      "sha256": "3e8ba497b5d63c2e14ec3697d15f60ce08dc66ec31d8ba7485c00f48992e6c30"
+    },
+    {
+      "path": "item-child-visibility.jsonl",
+      "bytes": 140551,
+      "sha256": "85a59bf719682f6373e74d3b6cec8b3bb000d588923c8069318ff69dd4ab86ed",
+      "lines": 371
+    },
+    {
+      "path": "output-consistency.jsonl",
+      "bytes": 28586,
+      "sha256": "0864433536995fa59a6455302f230c7bf985c93f1b1558c8a2f47f0c45367fd0",
+      "lines": 58
+    },
+    {
+      "path": "program-results.jsonl",
+      "bytes": 195055,
+      "sha256": "ac079db1f371375df64e3caf724fb3ef639f3086587bcbb5d049c24dc216bdad",
+      "lines": 58
+    },
+    {
+      "path": "queue-journal-case-pins.jsonl",
+      "bytes": 15712,
+      "sha256": "f9087fd0f6b666f528b6477bc548e6f0bde6ed394b88a48b4c05ee9380db6e20",
+      "lines": 58
+    },
+    {
+      "path": "result-files.jsonl",
+      "bytes": 15712,
+      "sha256": "f9087fd0f6b666f528b6477bc548e6f0bde6ed394b88a48b4c05ee9380db6e20",
+      "lines": 58
+    },
+    {
+      "path": "review.json",
+      "bytes": 19034,
+      "sha256": "0708171da53b7701f0a1dc3501193ae487ea60b193169b23f17d530ec0c894cd"
+    },
+    {
+      "path": "review.md",
+      "bytes": 1460,
+      "sha256": "50862a805a51993fc9b662bd1c2a712e947c7a091fc0b48794e302a298bb7100"
+    },
+    {
+      "path": "source-annotation-disagreement-candidates.jsonl",
+      "bytes": 24068,
+      "sha256": "129d45909a29f658d5d5ce03c7106d1b037f4eb623ddfe4783bfcab5eba3de4d",
+      "lines": 28
+    },
+    {
+      "path": "tool-error-events.jsonl",
+      "bytes": 14053,
+      "sha256": "16fd7193fef9fa7ddd05eec275d4340084d98a8448d4901f38cadafdb5246e88",
+      "lines": 29
+    }
+  ],
+  "bytes": 549175
+}
