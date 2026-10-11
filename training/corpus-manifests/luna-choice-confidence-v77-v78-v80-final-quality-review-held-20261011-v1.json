@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v77-v78-v80-final-quality-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v77-v78-v80-final-v4",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 7015181,
+      "sha256": "cbd1a6ae1655170185d6d9a34170f6a5eabb7950082d22b252ce7efddf975060"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 3455,
+      "sha256": "9248b88d542b652e890ecb566a1c7dc1c61ad3e1ca1c7e34df46d1c9810c61d8"
+    }
+  ],
+  "bytes": 7018636
+}
