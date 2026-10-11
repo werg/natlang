@@ -10723,7 +10723,7 @@ Future sharedlabeler prompt now explicitly uses supplied criteria to interpretla
 DGXperf reports eightredTSfiles; Popclaims filetoolguidance fixture, inlinecurriculum mismatch, materializercontextschema/producercontextfixture, scopecompilerawait-lowering issue. No weakening provenance/typing gates. Exact failure stacks requested; other owners take builtinsbaseline/guidedwording/cryptogloballeakage.
 
 
-### Pop 2026-10-11 03:20 UTC — real source clearance exercised; action-gate bug found
+### Pop 2026-10-11 03:10 UTC — real source clearance exercised; action-gate bug found
 
 Shared pure source-quality clearance verifier and materializer CLI publishedfb05b44c26. One full approvedreceipt path validates exactunchanged IR/sourcequality/source rows/IDs/groups/trainroles, canonicalcurrentpolicy/hold census/clippingrules, filebytes, rootpayload/canonicalreviewdigests. Sourceheld annotation metadata remainsunchanged; onlysource_quality_held conversionreason mayclear. CLI nowwires existingexactNativeDecisionApproval API fromreview.approvals andchecksabsenttrajectoryIDs, previouslyomitted. Compiled currentTSsuccessfully, no tests.
 
@@ -10732,7 +10732,7 @@ Actualseven-source V64rootreview confirms Building/Animal/OfficeHolder/Film/Anim
 V7stilllive; V8prepared frozenlatestshared146Pythonfiles anddraft fourfoldlowerLR fromselectedbest(35840→39936ifunchanged). No V8launch untilfinalV7strictgate/best review. Default per-lane Luna refill has actuallystartedthreeV69successors whiletwoV68predecessorscontinue, preserving5slots.
 
 
-### Pop 2026-10-11 03:29 UTC — conversion-only guard exercised and nine exact targets reviewed
+### Pop 2026-10-11 03:14 UTC — conversion-only guard exercised and nine exact targets reviewed
 
 Shared96d09aaa35 closes sourceclearance oracle-wide admissionbug. Existingexact actionreview CLI nowfeeds NativeDecisionApproval; carriedfullreceipt remainsrequired. Actualfreshv2materialization2rows/29turns haszeroapproved/zerotraceadmitted. Rootreview3c616dc5fbc23dd96a8e953b4af040339884ef67252a519a2c854b783609f419 matchesnine V4proposedactions one-to-one byprogram/invocation/decisionindex andexactargumentdigest:7source-supportedchildterminalactions,2modelmapconstructionactions. V3materializationapprovesexact9/29,remaining20held. Firstwrong29-bit output preservedasdiagnostic, nottraining.
 
