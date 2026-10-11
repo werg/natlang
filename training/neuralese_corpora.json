@@ -32014,6 +32014,21 @@
       "admission": "approval and launch provenance only; campaign outputs require separate audit; no training admission",
       "independent_new_worlds": 0,
       "notes": "Separate immutable approval/launch receipt snapshot for V86. Root-approved plan SHA 0033cece33c049e6b305bb30b771507446a5440623728bb1b7f382c001ac94b5; root-independent review SHA 52f9780f8ca788a2359035858a54aa57a16ee13c6bd80e325c10eac953bea419; supervisor launch receipt SHA 027a3d3d966d1ee061cf49777dc2bdd818d8863f2e0b4fb177d499ec565bfef1. Input snapshot is registered separately as luna-choice-confidence-v86-v41-prefix-runtimev17-input-held-20261011-v1. No results, journals, or mutable campaign-launch state included."
+    },
+    {
+      "id": "luna-choice-folder-v81-v85-rejection-sweep-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v81-v85-rejection-sweep-v1",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "held-posthoc-quality-review",
+      "source_class": "held-authored-folder-choice-rejection-audit",
+      "training_admission": false,
+      "admission": "post-hoc inherited-label comparison and scope diagnostic only; no relabeling, admission, or independent semantic certification",
+      "independent_new_worlds": 0,
+      "notes": "Joins all 65 result rows from closed campaigns V81–V85 to their exact static source program IDs and pinned source cases. 55 accepted program results, 10 rejected programs; 456 expected label slots across 456 distinct inherited source IDs/groups; 11 exact output/source-label disagreements; 33 scope-failure events. Mismatches are not independently adjudicated. Preserves per-result hashes and worker journals."
     }
   ],
   "coverage_backlog": [
