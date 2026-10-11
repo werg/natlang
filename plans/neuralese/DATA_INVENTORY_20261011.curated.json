@@ -338,6 +338,84 @@
    "jsonl_lines_approx": 1400000,
    "decision": "Pop sweeps closed campaigns: admit accepted/oracle-passed actions unless a concrete defect (owner maximize-data rule); register omissions.",
    "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": null,
+   "id": "luna-v17-v9-portable-context-view-20261010-v1",
+   "path": "runs/luna-v17-actual-quality-proposal-20261010-v9-portable-context-view-v1/assembled-v3/native-records.jsonl",
+   "origin": "Luna teacher + Clef reference, exact-oracle native records",
+   "format": "natlang.teacher_training_turn.native/1",
+   "docs": 3207,
+   "supervised_tokens_est": 582000,
+   "consumable_now": false,
+   "decision": "ADMIT (held-recovery 2026-10-11): 3207 train rows (2035 test excluded); 415 train decisions are absent from the 4962 union text and are new",
+   "required_conversion": "whole-trajectory render or native_gold_packet",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "refine-judge-exact-20261009-v1",
+   "path": "data/neuralese/corpora/refine-judge-exact-20261009-v1/judge-rows.jsonl",
+   "origin": "crisp-checker labels, no model",
+   "format": "natlang.decision-prompt/1",
+   "docs": 1020,
+   "supervised_tokens_est": 3000,
+   "consumable_now": false,
+   "decision": "ADMIT 1020 train rows; heldout-predicate/family (307) stay out",
+   "required_conversion": "render as judge calls",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "refine-author-static-20261009-v1",
+   "path": "data/neuralese/corpora/refine-author-static-20261009-v1/examples.jsonl",
+   "origin": "applications working tree + git history",
+   "format": "natlang.refine-author/1",
+   "docs": 28,
+   "supervised_tokens_est": 197000,
+   "consumable_now": false,
+   "decision": "ADMIT all 28 pairs",
+   "required_conversion": "authoring-example render",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "neuralese-operator-cases-20261009-v1",
+   "path": "runs/neuralese-operator-cases-20261009-v1/cases.jsonl",
+   "origin": "derived from v7 gold text, code-computed targets",
+   "format": "natlang.operator-case/1",
+   "docs": 1166,
+   "supervised_tokens_est": 74000,
+   "consumable_now": false,
+   "decision": "ADMIT 1166 train spans; 834 test excluded",
+   "required_conversion": "S5 operator objective",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "natlang-specialization-cases-declines-20261009-v1",
+   "path": "data/neuralese/corpora/natlang-specialization-cases-declines-20261009-v1/",
+   "origin": "DGX call store export",
+   "format": "compiled cases + declines",
+   "docs": 15,
+   "supervised_tokens_est": null,
+   "consumable_now": false,
+   "decision": "ADMIT",
+   "required_conversion": "render recorded calls as call programs",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
+   "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/records.jsonl",
+   "origin": "SWE-rebench via pi harness",
+   "format": "natlang.teacher_training_turn.native/1",
+   "docs": 2969,
+   "supervised_tokens_est": null,
+   "consumable_now": false,
+   "decision": "ADMIT (records of the already admitted text twins)",
+   "required_conversion": "none beyond text twins",
+   "owner_of_conversion": "dgx-render"
   }
  ],
  "defects": [
@@ -584,5 +662,33 @@
    "origin": "public",
    "action": "not natlang-native; sources for harness-bench-style normalization (SWE/agent trajectories) under the breadth-via-natlang rule; register a snapshot when a converter consumes one"
   }
- ]
+ ],
+ "held_recovery_20261011": {
+  "method": "file-level comparison of every registry manifest file (165,526 files) by path and size between DGX and Pop (ssh pop-os)",
+  "registry_entries": 1377,
+  "entries_with_dgx_unique_files": 60,
+  "dgx_unique_bytes_nonadmitted_entries": 91200000000.0,
+  "dgx_unique_breakdown_gb": {
+   "model_and_training_state_pop_offloaded_not_candidates": 60.8,
+   "superseded_or_duplicate_training_shaped_delete_candidates": 20.8,
+   "generation_source_or_index_kept": 7.9,
+   "live_training_shaped_admitted_or_covered": 1.8
+  },
+  "delete_candidates": "runs/DELETE-CANDIDATES-HELD-20261011.txt (20.78 GB)",
+  "recovered": {
+   "rows_train": {
+    "luna-v17-v9-portable-context-view": 3207,
+    "refine-judge-exact": 1020,
+    "refine-author-static": 28,
+    "operator-cases": 1166,
+    "specialization": 15
+   },
+   "new_to_union_train_decisions": 415
+  },
+  "excluded": {
+   "test_or_heldout_splits": "luna 2035 test, judge 307 heldout, operator 834 test, harness 874 test",
+   "defects": "harness v1: 9 records with timeout-notice",
+   "jeff_leaks": 0
+  }
+ }
 }

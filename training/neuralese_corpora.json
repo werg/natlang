@@ -1334,18 +1334,6 @@
       "note": "First pilot retained for diagnosis only. One optimistic patch oracle subsequently corrected; superseded source fixture aliases.6/16programs and102native decisions are NOT admitted here; do not add to revised pilot counts."
     },
     {
-      "id": "local-recurrence-writer-control-v1-20261005",
-      "owner": "pop",
-      "path": "runs/neuralese-local-recurrence-20261005/writer-control-v1",
-      "admission": "model-diagnostic-checkpoint-not-training-examples",
-      "include": [
-        "*.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "note": "Completed512-step frozen-backbone350M writer/control diagnostic,lrsoft=0; sharedcontrol parameters learn. Full optimizer/RNG checkpoint plus heads,softparams and evaluation/routing logs. Heldown CE1.0488815 vs shuffled1.1318592,24heldrecords; memory-stresscohort, not independent broad task quality. Warm-start source for joint-learning-v2, which resets optimizer for new learning stage. Do not count checkpoints/logs as corpus examples."
-    },
-    {
       "id": "clef-rich-source-20261005-v1",
       "owner": "pop",
       "path": "runs",
@@ -1452,71 +1440,6 @@
       "notes": "Conversion5recovers319writers/319edges. Ambiguous equal values remain exact; no invented edges. Historical v1 stays held."
     },
     {
-      "id": "local-recurrence-execution-baseline-20261005-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-local-recurrence-20261005",
-      "admission": "heldout-model-evaluation-and-deployment-artifacts-not-training-examples",
-      "include": [
-        "task-eval-inputs/deployment-step256/*",
-        "conditional-task-eval-step256-gpu-v1/*",
-        "whole-skill-eval-step256-v1/**",
-        "whole-extraction-eval-step256-v1/**"
-      ],
-      "include_root_prefixes": [
-        "task-eval-inputs",
-        "conditional-task-eval-step256-gpu-v1",
-        "whole-skill-eval-step256-v1",
-        "whole-extraction-eval-step256-v1"
-      ],
-      "derived_from": [
-        "clef-rich-reviewed-cohort-20261005-v1"
-      ],
-      "notes": "Pinned step256:0/4conditional returns in each arm,0/8whole tasks. Typed return structure and interpreter policy failures; not model qualification. Export carries parent frozen adapters."
-    },
-    {
-      "id": "local-recurrence-joint512-state-20261005-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-local-recurrence-20261005",
-      "admission": "superseded-training-stage-resumable-state-not-new-examples",
-      "include_root_prefixes": [
-        "joint-learning-v2",
-        "mixed-policy-v1-setup"
-      ],
-      "include": [
-        "joint-learning-v2/*.pt",
-        "joint-learning-v2/*.json",
-        "joint-learning-v2/*.jsonl",
-        "mixed-policy-v1-setup/deployment/*",
-        "mixed-policy-v1-setup/lineage.json",
-        "mixed-policy-v1-setup/launch.sh"
-      ],
-      "notes": "Old stage gracefully stopped after step540 log; last optimizer/RNG checkpoint and best512 preserved. Mixed stage warm-starts best512 with fresh optimizer; code is a69a03f9 via Git, frozen implementation reconstructed from that revision. No active mutable outputs included."
-    },
-    {
-      "id": "local-recurrence-mixed128-execution-20261005-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-local-recurrence-20261005",
-      "admission": "heldout-model-evaluation-and-resumable-checkpoint-not-training-examples",
-      "include_root_prefixes": [
-        "task-eval-inputs",
-        "conditional-task-eval-mixed128",
-        "whole-skill-eval-mixed128",
-        "whole-extraction-eval-mixed128"
-      ],
-      "include": [
-        "task-eval-inputs/best-mixed128.pt",
-        "task-eval-inputs/deployment-mixed128/*",
-        "conditional-task-eval-mixed128-v1/*",
-        "conditional-task-eval-mixed128-v2/*",
-        "whole-skill-eval-mixed128-v1/**",
-        "whole-extraction-eval-mixed128-v1/**"
-      ],
-      "derived_from": [
-        "clef-rich-reviewed-cohort-20261005-v1"
-      ],
-      "notes": "Corrected token-boundary conditional test: crisp4/4; written/shuffled/zero/removed0/4. Old forced-prefix test retained as biased diagnostic. Autonomous skills0/4 extraction1/4. Full step128 optimizer/RNG checkpoint inode pinned separately from active run."
-    },
-    {
       "id": "local-neuralese-foundation-20261005-v1",
       "owner": "pop",
       "path": "runs/neuralese-foundation-evidence-20261005-v1",
@@ -1569,58 +1492,6 @@
       ]
     },
     {
-      "id": "local-raw-foundation-20261005-v3",
-      "owner": "pop",
-      "path": "runs/neuralese-shared-raw-foundation-20261005-v3",
-      "admission": "qualified-token-foundation-and-runtime-controls-not-training-examples",
-      "include": [
-        "**/*"
-      ],
-      "derived_from": [
-        "local-recurrence-mixed128-execution-20261005-v1",
-        "clef-rich-reviewed-cohort-20261005-v1"
-      ],
-      "notes": "Compact shared three-stage recipe complete. Runtime report qualifies fixed-length transport/replay, not learned stopping/compression. New constructor graph fix changes no reference bytes; current serving loader required for multi-backward training."
-    },
-    {
-      "id": "local-raw-recurrence-20261005-paused-v1",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "failed-staging-diagnostics-and-full-resumable-state-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261005-v1"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261005-v1/**",
-        "neuralese-raw-recurrence-20261005-v1-runtime/**"
-      ],
-      "derived_from": [
-        "local-raw-foundation-20261005-v3"
-      ],
-      "notes": "Immutable step75 full optimizer/RNG state after staged graph failure. Current fixed v2 explicitly continues from this source, no fresh optimizer. Frozen source via read-only canonical-path container bind."
-    },
-    {
-      "id": "local-raw-recurrence-20261005-paused-v2",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "failed-numerical-replay-diagnostics-and-full-resumable-state-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261005-v2",
-        "neuralese-raw-task-eval-20261005-v1"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261005-v2/**",
-        "neuralese-raw-recurrence-20261005-v2-runtime/**",
-        "neuralese-raw-task-eval-20261005-v1/**",
-        "neuralese-raw-task-eval-20261005-v1-input/**"
-      ],
-      "derived_from": [
-        "local-raw-recurrence-20261005-paused-v1",
-        "local-raw-foundation-20261005-v3"
-      ],
-      "notes": "Immutable finite full step400 state before staged replay NaN failure. Conditional typed task probe encoded4/4 vs generated written0/4; neither is full autonomous task success. v3 warmup retains full optimizer/RNG with explicit curriculum changes."
-    },
-    {
       "id": "local-raw-typed-runtime-proof-20261005-v4",
       "owner": "pop",
       "path": "runs/neuralese-raw-typed-runtime-proof-20261005-v4",
@@ -1634,78 +1505,6 @@
       "notes": "Production structured write matches ordinary native-value causal prefix exactly; opaque placeholder restored correctly. Eight encode/transport controls and finite nonzero input gradient pass. CPU proof does not qualify trained recurrence weights, stopping, or semantic correctness."
     },
     {
-      "id": "local-raw-writer-warmup-20261005-paused-v4",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "warmup-recovery-and-performance-diagnostics-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261005-v3",
-        "neuralese-raw-recurrence-20261005-v4",
-        "neuralese-recurrence-cpu-profile-20261005"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261005-v3/**",
-        "neuralese-raw-recurrence-20261005-v3-runtime/**",
-        "neuralese-raw-recurrence-20261005-v3-launch.json",
-        "neuralese-raw-recurrence-20261005-v3-startup-error.txt",
-        "neuralese-raw-recurrence-20261005-v4/**",
-        "neuralese-raw-recurrence-20261005-v4-launch.json",
-        "neuralese-recurrence-cpu-profile-20261005.json"
-      ],
-      "derived_from": [
-        "local-raw-recurrence-20261005-paused-v2"
-      ],
-      "notes": "v3 failed at backward OOM406; v4 expandable allocator7.35GiB passes9/11-producer chains then clean signal saves full step481. Same frozen v3 package binds canonical code path. v5 consumes full state with narrow checkpoint fields and FP64 clipping.40-second sampled CPU profile retained, not a complete-run utilization measurement."
-    },
-    {
-      "id": "local-raw-writer-warmup-20261005-paused-v5",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "full-resumable-state-and-failed-quality-diagnostics-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261005-v5",
-        "neuralese-raw-task-eval-20261005-v2",
-        "neuralese-raw-initial-prompt-probe-20261005-v2",
-        "neuralese-raw-typed-reader-probe-20261005-v2",
-        "neuralese-raw-gpu-source-probe-20261005-v2"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261005-v5/**",
-        "neuralese-raw-recurrence-20261005-v5-runtime/**",
-        "neuralese-raw-recurrence-20261005-v5-launch.json",
-        "neuralese-raw-task-eval-20261005-v2/**",
-        "neuralese-raw-task-eval-20261005-v2-input/**",
-        "neuralese-raw-initial-prompt-probe-20261005-v2/**",
-        "neuralese-raw-typed-reader-probe-20261005-v2/**",
-        "neuralese-raw-gpu-source-probe-20261005-v2/**"
-      ],
-      "derived_from": [
-        "local-raw-writer-warmup-20261005-paused-v4"
-      ],
-      "notes": "Closed v5 full Muon optimizer/RNG checkpoint, CE best step512 and frozen v5 source. Conditional step450 CPU and matched GPU bf16 controls crisp4/4 encoded0/4; not autonomous task success. Initial prompt intervention has no effect on source-control arms; do not interpret as an instruction drift experiment. Active v6 and live transport probe excluded."
-    },
-    {
-      "id": "local-raw-writer-diagnostics-20261005-v6",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "full-resumable-state-and-explicit-weight-interventions-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261005-v6",
-        "neuralese-raw-transport-probe-20261005-v2",
-        "neuralese-raw-content-identity-probe-20261005-v2"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261005-v6/**",
-        "neuralese-raw-recurrence-20261005-v6-launch.json",
-        "neuralese-raw-transport-probe-20261005-v2/**",
-        "neuralese-raw-content-identity-probe-20261005-v2/**"
-      ],
-      "derived_from": [
-        "local-raw-writer-warmup-20261005-paused-v5"
-      ],
-      "notes": "Closed v6 complete Muon/RNG step640 state; bound frozen v5 source is in parent corpus. Diagnostics use immutable parent step450 state: embedded and transparent4/4; encoded0/4; explicitly zero content residual4/4, not unmodified-weight success. Diagnostic functionality on shared commit3820f59d. Active v7 and live sources excluded."
-    },
-    {
       "id": "static-lambda-rationalized-20261006-v1",
       "owner": "dgx",
       "path": "data/neuralese/corpora/static-lambda-rationalized-20261006-v1",
@@ -1715,185 +1514,6 @@
         "*.log"
       ],
       "note": "Static inline-lambda reference demonstrations replayed through the native runtime with Qwen3.6-written first-person rationales per scripted turn. lambda-v3-s61: 4,178 de-hinted cases (dataset_workbench 958, translation_desk 500, claims_desk 480, contract_desk 480 (sliced contract reads), workbench_* 632, relational_policy_inline 120, inline_multi_capture 120, folio_batch 62, other inline families), 44,454 decisions. extras-s61: edit_stream 1,200 + Clef-flash-distilled 459 (routing, lead scoring, evidence, moderation), 10,310 decisions. Grounded children (9768b9dc), fixed value renderer (560500808a), per-sibling rationale keys. ~5% of rationales contain hedging phrases (regex audit). Files: *.ir (cases), *.rows (trajectories), *.turns (native training turns), *.rationales, *.prompts."
-    },
-    {
-      "id": "local-raw-recurrence-recovery-20261006-v10",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "full-state-and-resource-failure-diagnostics-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261005-v7",
-        "neuralese-raw-recurrence-20261006-v8",
-        "neuralese-raw-recurrence-20261006-v9",
-        "neuralese-raw-recurrence-20261006-v10"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261005-v7/**",
-        "neuralese-raw-recurrence-20261005-v7-runtime/**",
-        "neuralese-raw-recurrence-20261005-v7-launch.json",
-        "neuralese-raw-recurrence-20261006-v8/**",
-        "neuralese-raw-recurrence-20261006-v8-runtime/**",
-        "neuralese-raw-recurrence-20261006-v8-launch.json",
-        "neuralese-raw-recurrence-20261006-v9/**",
-        "neuralese-raw-recurrence-20261006-v9-runtime/**",
-        "neuralese-raw-recurrence-20261006-v9-launch.json",
-        "neuralese-raw-recurrence-20261006-v10/**",
-        "neuralese-raw-recurrence-20261006-v10-runtime/**",
-        "neuralese-raw-recurrence-20261006-v10-launch.json"
-      ],
-      "derived_from": [
-        "local-raw-writer-diagnostics-20261005-v6"
-      ],
-      "notes": "v7 OOM759 saved750; v8 startup guard failure; v9 offload OOM753; v10 detached GPU saved views completes13-producer759/778/797,6.34GiB GPU and2GiB live CPU,~57.6GiB copy traffic. v10 clean signal full801 optimizer/RNG state. Small wrapper and storage tests also pass oldv9: not an isolated failure reproduction. Active v11 excludes all artifacts here."
-    },
-    {
-      "id": "local-raw-prefix-memory-20261006-v11",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "full-state-and-memory-diagnostics-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261006-v11"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261006-v11/**",
-        "neuralese-raw-recurrence-20261006-v11-runtime/**",
-        "neuralese-raw-recurrence-20261006-v11-launch.json"
-      ],
-      "derived_from": [
-        "local-raw-recurrence-recovery-20261006-v10"
-      ],
-      "notes": "Frozen24c2fc3f full optimizer/RNG continuation from801, SIGTERM exit0. Thirteen-producer816 replay0,1.58GiB peak,CPUoffload0,96.862s; not a controlled throughput comparison or semantic qualification. Activev12 excluded."
-    },
-    {
-      "id": "local-raw-utilization-20261006-v12",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "full-state-and-utilization-diagnostics-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261006-v12"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261006-v12/**",
-        "neuralese-raw-recurrence-20261006-v12-runtime/**",
-        "neuralese-raw-recurrence-20261006-v12-launch.json"
-      ],
-      "derived_from": [
-        "local-raw-prefix-memory-20261006-v11"
-      ],
-      "notes": "Frozenbadf28b3 fulloptimizer/RNG continuation, SIGTERM exit0 full897. Shared-prefix memory geometry and guarded frozenzero correction. Graph-budget joint895 fallsback safely; staged895/896/897 replay0,CPUoffload0. No semanticqualification. v13 excluded."
-    },
-    {
-      "id": "local-raw-checkpoint-policy-20261006-v14",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "full-state-and-checkpoint-policy-diagnostics-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261006-v13",
-        "neuralese-raw-recurrence-20261006-v14"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261006-v13/**",
-        "neuralese-raw-recurrence-20261006-v13-runtime/**",
-        "neuralese-raw-recurrence-20261006-v13-launch.json",
-        "neuralese-raw-recurrence-20261006-v14/**",
-        "neuralese-raw-recurrence-20261006-v14-runtime/**",
-        "neuralese-raw-recurrence-20261006-v14-launch.json"
-      ],
-      "derived_from": [
-        "local-raw-utilization-20261006-v12"
-      ],
-      "notes": "v13 frozen78d76ec6 full1050 SIGTERM exit0; v14 frozen0b4b0a9b full1071 SIGTERM exit0. v13 all-layer checkpoint staged13/15/17 producer chains memory1.58GiB and~97/127/159s. Globalattentiononly v14 selective13/15 fit4.12GiB~83/108s,replay0,CPUoffload0, but forced extra smallchains tostage. Different cases not controlledspeedcomparison. Both preserveweights/optimizer/RNG. Semanticgates notpassed; v15 stagedonlypolicy active and excluded."
-    },
-    {
-      "id": "local-raw-replay-policy-failure-20261006-v15",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "failed-replay-diagnostics-and-last-full-state-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261006-v15"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261006-v15/**",
-        "neuralese-raw-recurrence-20261006-v15-runtime/**",
-        "neuralese-raw-recurrence-20261006-v15-launch.json"
-      ],
-      "derived_from": [
-        "local-raw-checkpoint-policy-20261006-v14"
-      ],
-      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076\u20131092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
-    },
-    {
-      "id": "local-raw-content-identity-diagnostics-20261007-v16",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "conditional-semantic-diagnostics-and-closed-full-state-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261006-v16",
-        "neuralese-raw-semantic-probe-20261007-v16",
-        "neuralese-raw-semantic-identity-probe-20261007-v16"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261006-v16/**",
-        "neuralese-raw-recurrence-20261006-v16-runtime/**",
-        "neuralese-raw-recurrence-20261006-v16-launch.json",
-        "neuralese-raw-semantic-probe-20261007-v16/**",
-        "neuralese-raw-semantic-identity-probe-20261007-v16/**"
-      ],
-      "derived_from": [
-        "local-raw-replay-policy-failure-20261006-v15"
-      ],
-      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076\u20131093; its failing iteration1093 was attempted update1094."
-    },
-    {
-      "id": "local-raw-native-length-diagnostics-20261006-v17",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "failed-semantic-probes-native-length-audit-and-closed-full-state-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261007-v17",
-        "neuralese-native-writer-length-audit-20261006-v1"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261007-v17/**",
-        "neuralese-raw-recurrence-20261007-v17-runtime/**",
-        "neuralese-raw-recurrence-20261007-v17-launch.json",
-        "neuralese-native-writer-length-audit-20261006-v1/**"
-      ],
-      "derived_from": [
-        "local-raw-content-identity-diagnostics-20261007-v16"
-      ],
-      "notes": "Raw content identity curriculum retained full state; zero errors/replay mismatch but written probe deteriorated by1664 (CE1.6889 vs shuffled1.5941). Native template audit finds all670 compactJSON supervised lengths too short, up to18tokens; largestnative163. Cleancheckpoint precedes v18 native-value sizing curriculum. Conditional/raw source identity does not grant generated writer or autonomous admission. Activev18 excluded."
-    },
-    {
-      "id": "local-raw-writer-free-diagnostics-20261006-v18",
-      "owner": "pop",
-      "path": "runs",
-      "admission": "failed-free-writer-diagnostics-and-closed-full-state-not-training-examples",
-      "include_root_prefixes": [
-        "neuralese-raw-recurrence-20261006-v18",
-        "neuralese-raw-writer-eval-20261006-v18",
-        "neuralese-raw-crisp-writer-eval-20261006-v18",
-        "neuralese-raw-restored-writer-eval-20261006-v16",
-        "neuralese-native-writer-boundary-audit-20261006-v1"
-      ],
-      "include": [
-        "neuralese-raw-recurrence-20261006-v18/**",
-        "neuralese-raw-recurrence-20261006-v18-runtime/**",
-        "neuralese-raw-recurrence-20261006-v18-launch.json",
-        "neuralese-raw-writer-eval-20261006-v18/**",
-        "neuralese-raw-writer-eval-20261006-v18-runtime/**",
-        "neuralese-raw-writer-eval-20261006-v18-launch.json",
-        "neuralese-raw-crisp-writer-eval-20261006-v18/**",
-        "neuralese-raw-crisp-writer-eval-20261006-v18-launch.json",
-        "neuralese-raw-restored-writer-eval-20261006-v16/**",
-        "neuralese-raw-restored-writer-eval-20261006-v16-launch.json",
-        "neuralese-native-writer-boundary-audit-20261006-v1/**"
-      ],
-      "derived_from": [
-        "local-raw-native-length-diagnostics-20261006-v17",
-        "local-raw-content-identity-diagnostics-20261007-v16"
-      ],
-      "notes": "V18 completed2048 with zeroerrors/replay mismatch but failed semantic probes. V18 conditional crisp2/4 encoded2/4 written0/4; crisp writer instructions0/4 andall21writerscap512. Restored v16 identity controls crisp4/4 encoded4/4 written0/4. Exact raw token traces separate transport fidelity from wrong value generation/stopping. All670 native gold prefix tokenization differs from forced writer prefix. Activev19 prefix/boundary repair excludes mutable artifacts; no training admission."
     },
     {
       "id": "clef-pop-restart-evidence-20261006-v1",
@@ -2412,22 +2032,6 @@
       "notes": "Four scripted CPU inline calls pass for string/number/boolean/record after fixing TypeScript {} conversion. Before: unknown! inferred strict portable {}. After: unknown open value, since IR lacks non-nullish top type. Original exhausted partial full scope still not reproduced."
     },
     {
-      "id": "local-recurrence-auto-wide-state-20261005-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-local-recurrence-20261005",
-      "admission": "historical-experiment-state-only; not qualified training examples or channel certificates",
-      "include": [
-        "*.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "include_root_prefixes": [
-        "auto-wide-v1",
-        "auto-wide-v2"
-      ],
-      "notes": "Closed earlier auto-wide experiments, preserve optimizer checkpoints/heads/params/metrics in exact DGX mirror before evicting only the two inactive local checkpoint.pt files to recover local disk headroom. Other local artifacts retained. Explicit remote availability; restore via sync_training_corpora.py restore before reuse. Active V28 does not reference either checkpoint."
-    },
-    {
       "id": "luna-semantic-lambda-refill-task-source-20261006-v7",
       "owner": "pop",
       "path": "runs/luna-semantic-lambdas-refill-20261006-v7",
@@ -2889,60 +2493,6 @@
       "admission": "verified-no-hint-constructed-train-fixture-tasks-source-and-trajectory-review-pending"
     },
     {
-      "id": "neuralese-latent-sketch-diagnostic-20261006-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v1",
-      "include": [
-        "*.json",
-        "*.jsonl"
-      ],
-      "admission": "implementation-diagnostic-only-not-task-or-runtime-qualified-not-training-data"
-    },
-    {
-      "id": "neuralese-latent-sketch-diagnostic-20261006-v2",
-      "owner": "pop",
-      "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v2",
-      "include": [
-        "*.json",
-        "*.jsonl",
-        "*.pt"
-      ],
-      "admission": "retained-numerical-control-or-failed-diagnostic-not-training-data"
-    },
-    {
-      "id": "neuralese-latent-sketch-diagnostic-20261006-v3",
-      "owner": "pop",
-      "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v3",
-      "include": [
-        "*.json",
-        "*.jsonl",
-        "*.pt"
-      ],
-      "admission": "retained-numerical-control-or-failed-diagnostic-not-training-data"
-    },
-    {
-      "id": "neuralese-latent-sketch-diagnostic-20261006-v4",
-      "owner": "pop",
-      "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v4",
-      "include": [
-        "*.json",
-        "*.jsonl",
-        "*.pt"
-      ],
-      "admission": "retained-numerical-control-or-failed-diagnostic-not-training-data"
-    },
-    {
-      "id": "neuralese-latent-sketch-diagnostic-20261006-v5",
-      "owner": "pop",
-      "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v5",
-      "include": [
-        "*.json",
-        "*.jsonl",
-        "*.pt"
-      ],
-      "admission": "initial-channel-runtime-proof-only-not-task-training-data"
-    },
-    {
       "id": "luna-semantic-lambda-refill-task-source-20261006-v13",
       "owner": "pop",
       "path": "runs/luna-semantic-lambdas-refill-20261006-v13",
@@ -2951,18 +2501,6 @@
         "*.jsonl"
       ],
       "admission": "verified-constructed-train-fixtures-and-explicit-provider-retry-task-source-trajectory-review-pending"
-    },
-    {
-      "id": "neuralese-latent-sketch-consumer-20261006-v1-paused",
-      "owner": "pop",
-      "path": "runs/neuralese-latent-sketch-consumer-20261006-v1-paused",
-      "include": [
-        "*.json",
-        "*.jsonl",
-        "*.log",
-        "*.pt"
-      ],
-      "admission": "safely-paused-experiment-evidence-pending-owner-architecture-model-correction-not-training-data"
     },
     {
       "id": "luna-semantic-lambda-teacher-20261006-v12",
@@ -2981,17 +2519,6 @@
       "admission": "closed-current-policy-candidates-source-quality-split-review-pending",
       "derived_from": [
         "luna-semantic-lambda-refill-task-source-20261006-v12"
-      ]
-    },
-    {
-      "id": "neuralese-latent-sketch-v2-diagnostic-20261006-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-latent-sketch-v2-diagnostic-20261006-v1",
-      "admission": "initialized-v2-runtime-proof-not-task-training-data",
-      "include": [
-        "*.json",
-        "*.jsonl",
-        "*.pt"
       ]
     },
     {
@@ -3062,20 +2589,6 @@
         "*.json",
         "*.jsonl",
         "*.log"
-      ],
-      "exclude_dirs": [
-        "runtime",
-        "vendor"
-      ]
-    },
-    {
-      "id": "neuralese-sketch-target-scale-20261006-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-sketch-target-scale-20261006-v1",
-      "admission": "gradient-routing-controls-and-retained-failed-GC-numerical-diagnostics-not-task-quality-or-training-data",
-      "include": [
-        "*.json",
-        "*.py"
       ],
       "exclude_dirs": [
         "runtime",
@@ -3226,7 +2739,7 @@
       "owner": "pop",
       "path": "runs/luna-semantic-lambdas-refill-20261006-v17",
       "admission": "current-native-reference-verified-source-only; no-teacher-admission",
-      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6\u20139 unchanged."
+      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6–9 unchanged."
     },
     {
       "id": "luna-semantic-lambdas-source-v18-20261006",
@@ -3725,71 +3238,6 @@
       "notes": "All8exactexports,7accepted/1rejected. Fourtrain/fourtest wholeworld splits; corrected library/museum/archive remain held/test replacements. Six transient FileHandle scope failures across4worlds; museum omits2positives but includes scopefailure, held from model-negative/DPO attribution pending runtime investigation. Final typed results and captured observations preserved. Candidate conversions/graph admission separate; no admission from reference replay or export success."
     },
     {
-      "id": "neuralese-gold-text-foundation-v1-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-gold-text-warmup-20261006-v1",
-      "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
-      "include": [
-        "checkpoint.pt",
-        "heads.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "notes": "Legacy free-history narrow text diagnostic, clean1027; not qualified. Preserve full resumability/failed gate evidence; copies are not additional examples. Active V6 consumes V5 parent; no inherited foundation certificate."
-    },
-    {
-      "id": "neuralese-gold-text-foundation-v2-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-gold-text-warmup-20261006-v2",
-      "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
-      "include": [
-        "checkpoint.pt",
-        "heads.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "notes": "Broad text/markers baseline at1027; OOM before first new update, failed-memory; not qualified. Preserve full resumability/failed gate evidence; copies are not additional examples. Active V6 consumes V5 parent; no inherited foundation certificate."
-    },
-    {
-      "id": "neuralese-gold-text-foundation-v3-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-gold-text-warmup-20261006-v3",
-      "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
-      "include": [
-        "checkpoint.pt",
-        "heads.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "notes": "Broad text checkpoint1092; conditional history bug, clean stop; not qualified. Preserve full resumability/failed gate evidence; copies are not additional examples. Active V6 consumes V5 parent; no inherited foundation certificate."
-    },
-    {
-      "id": "neuralese-gold-text-foundation-v4-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-gold-text-warmup-20261007-v4",
-      "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
-      "include": [
-        "checkpoint.pt",
-        "heads.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "notes": "Corrected gold-history local-stage checkpoint1170, conditional gates failedshorttail; not qualified. Preserve full resumability/failed gate evidence; copies are not additional examples. Active V6 consumes V5 parent; no inherited foundation certificate."
-    },
-    {
-      "id": "neuralese-gold-text-foundation-v5-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-gold-text-warmup-20261007-v5",
-      "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
-      "include": [
-        "checkpoint.pt",
-        "heads.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "notes": "Both separate projections plateau bootstrap, checkpoint1920; full optimizer/RNG/plateau state, clean exit; not qualified. Preserve full resumability/failed gate evidence; copies are not additional examples. Active V6 consumes V5 parent; no inherited foundation certificate."
-    },
-    {
       "id": "luna-semantic-reducers-source-v24r4r1c-20261007",
       "owner": "pop",
       "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v4r1c",
@@ -3882,21 +3330,6 @@
       "derived_from": []
     },
     {
-      "id": "neuralese-gold-text-foundation-v6-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-gold-text-warmup-20261007-v6",
-      "admission": "closed-resumable-fullstate-step2868-diagnostic;failedalignment;nottrainingdata-or-qualifiedchannel",
-      "include": [
-        "checkpoint.pt",
-        "heads.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "derived_from": [
-        "neuralese-gold-text-foundation-v5-closed-20261007"
-      ]
-    },
-    {
       "id": "luna-semantic-v25-recovery-accounting-20261007",
       "owner": "pop",
       "path": "runs/luna-semantic-v25-recovery-accounting-20261007",
@@ -3982,21 +3415,6 @@
       "admission": "reviewed-source-only;32freshworlds;16train16test;actualteachergeneration-and-corpusadmission-pending;revision6-contracts-and-true-recursion",
       "derived_from": [
         "luna-semantic-reducers-source-v25r1-20261007"
-      ]
-    },
-    {
-      "id": "neuralese-gold-text-foundation-v7-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-gold-text-warmup-20261007-v7",
-      "admission": "closed-fullstate-step3456;text-alignment-qualified-two-held-gates;not-task-or-autonomous-generation-qualification",
-      "include": [
-        "checkpoint.pt",
-        "heads.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "derived_from": [
-        "neuralese-gold-text-foundation-v6-closed-20261007"
       ]
     },
     {
@@ -4137,7 +3555,9 @@
       "derived_from": [
         "neuralese-reviewed-restart-cohort-20261007-v8"
       ],
-      "notes": "Maple twin of neuralese-native-gold-text-corpus-20261007-v6 (same V8 native-records SHA adf7dde1, renderer natlang.native_gold_chat/2), Maple tokenizer. 3735 documents (2427 train/1308 held), 0 omitted; median 4191, max 13811 tokens. Supersedes Maple packet v2."
+      "notes": "Maple twin of neuralese-native-gold-text-corpus-20261007-v6 (same V8 native-records SHA adf7dde1, renderer natlang.native_gold_chat/2), Maple tokenizer. 3735 documents (2427 train/1308 held), 0 omitted; median 4191, max 13811 tokens. Supersedes Maple packet v2.",
+      "training_admission": false,
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: Maple-tokenizer twin; all ids are a subset of the 4962 union that Mellum/LFM already train on (checked by id); Maple backbone retired. No unique rows."
     },
     {
       "id": "neuralese-maple-native-gold-text-corpus-20261007-v2",
@@ -4153,7 +3573,9 @@
       "derived_from": [
         "neuralese-reviewed-restart-cohort-20261007-v7"
       ],
-      "notes": "Maple twin of neuralese-native-gold-text-corpus-20261007-v5: same V7 native records/pieces and shared renderer (natlang.native_gold_chat/2), Maple tokenizer. 2961 documents (2042 train/919 held), 0 omitted; median 4181, max 12580 tokens. Supersedes the v1 Maple packet (v5 cohort)."
+      "notes": "Maple twin of neuralese-native-gold-text-corpus-20261007-v5: same V7 native records/pieces and shared renderer (natlang.native_gold_chat/2), Maple tokenizer. 2961 documents (2042 train/919 held), 0 omitted; median 4181, max 12580 tokens. Supersedes the v1 Maple packet (v5 cohort).",
+      "training_admission": false,
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: Maple-tokenizer twin; all ids are a subset of the 4962 union that Mellum/LFM already train on (checked by id); Maple backbone retired. No unique rows."
     },
     {
       "id": "neuralese-maple-native-gold-text-corpus-20261007-v1",
@@ -4169,23 +3591,9 @@
       "derived_from": [
         "neuralese-reviewed-restart-cohort-20261007-v5"
       ],
-      "notes": "Same v5 cohort and shared renderer (build_neuralese_text_packet.py) as neuralese-native-gold-text-corpus-20261007-v2, rendered with the Maple tokenizer/Qwen chat template (empty think blocks, <tool_call> JSON). 1677 train/580 held documents, 0 omitted; median 4174, max 8268 tokens."
-    },
-    {
-      "id": "neuralese-gold-text-foundation-v8-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-gold-text-warmup-20261007-v8",
-      "admission": "closed-fullstate-step3840;long-window-alignment-FAILED;not-task-or-autonomous-generation-qualification",
-      "include": [
-        "checkpoint.pt",
-        "heads.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "derived_from": [
-        "neuralese-gold-text-foundation-v7-closed-20261007"
-      ],
-      "notes": "3pass final held CEdelta.22287; preserve failed length qualification, no gate relaxed."
+      "notes": "Same v5 cohort and shared renderer (build_neuralese_text_packet.py) as neuralese-native-gold-text-corpus-20261007-v2, rendered with the Maple tokenizer/Qwen chat template (empty think blocks, <tool_call> JSON). 1677 train/580 held documents, 0 omitted; median 4174, max 8268 tokens.",
+      "training_admission": false,
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: Maple-tokenizer twin; all ids are a subset of the 4962 union that Mellum/LFM already train on (checked by id); Maple backbone retired. No unique rows."
     },
     {
       "id": "neuralese-text-runtime-qualification-20261007-v2",
@@ -4229,22 +3637,6 @@
       "derived_from": [
         "luna-semantic-reducers-source-v27r1-20261007"
       ]
-    },
-    {
-      "id": "neuralese-gold-text-foundation-v9-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-gold-text-warmup-20261007-v9",
-      "admission": "closed-emergency-fullstate-step3899;long-window-foundation-unqualified",
-      "include": [
-        "checkpoint.pt",
-        "heads.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "derived_from": [
-        "neuralese-gold-text-foundation-v8-closed-20261007"
-      ],
-      "notes": "Operator checkpoints JSON-formatcontinuation for explicitnative-chatcorpuscoursecorrection; preserve fullweights/Muon/RNG/phase intoV10, reset newcorpus referenceandqualification."
     },
     {
       "id": "luna-semantic-v28r1-gold-audit-20261007",
@@ -4338,40 +3730,6 @@
         "neuralese-native-gold-text-corpus-20261007-v2"
       ],
       "notes": "Exact same 2257 native documents/IDs as v2, with native prefix-divergence assistant suffix coordinates for shared balanced warmup supervision. 1677 train/580 held; 0 omitted. Not additional independent examples; no qualification granted."
-    },
-    {
-      "id": "neuralese-native-text-foundation-v10r2-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-warmup-20261007-v10r2",
-      "admission": "closed-emergency-fullstate;foundation-unqualified",
-      "include": [
-        "checkpoint.pt",
-        "heads.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "derived_from": [
-        "neuralese-gold-text-foundation-v9-closed-20261007",
-        "neuralese-native-gold-text-corpus-20261007-v2"
-      ],
-      "notes": "Full weights/Muon/RNG/phase preserved; native whole-window-only gate insufficient. Continuation parent for V11 strengthened full-history final256 probes. No qualification granted."
-    },
-    {
-      "id": "neuralese-native-text-foundation-v11-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-warmup-20261007-v11",
-      "admission": "closed-emergency-fullstate-step4275;strong-final256-foundation-gate-failed",
-      "include": [
-        "checkpoint.pt",
-        "heads.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "derived_from": [
-        "neuralese-native-text-foundation-v10r2-closed-20261007",
-        "neuralese-native-gold-text-corpus-20261007-v2"
-      ],
-      "notes": "Strengthened full-history final256 gate: at4275 complete-window CE gap0.278 vs tail2.237/agreement0.768. No qualification. Full model/Muon/RNG/phase preserved into V12 balanced observed suffix training."
     },
     {
       "id": "neuralese-reviewed-restart-cohort-20261007-v6-candidate",
@@ -4519,18 +3877,6 @@
       ],
       "admission": "ordinary native gold-text foundation only; no runtime qualification",
       "notes": "2512 exact LFM-native documents/1800train712held from3257 admitted records. 745 exactsame-split documents deduplicated with allIDs/groups retained, zero omitted. Actual assistant suffix boundary metadata; source splits immutable. Maple must independently render its own tokenizer/template using shared builder."
-    },
-    {
-      "id": "neuralese-native-text-foundation-v12-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-warmup-20261007-v12",
-      "include": [
-        "*.pt",
-        "*.json",
-        "*.jsonl"
-      ],
-      "admission": "closed unqualified foundation state; not training examples",
-      "notes": "Graceful full Muon/model/RNG/schedule checkpoint to continue V13 on reviewed original native V6/V4 packet. Balanced whole-history/actual-assistant losses; held complete/final256 gates still failed. Frozen runtime0d63182a; foundation certificate absent and autonomous stopping/runtime not qualified."
     },
     {
       "id": "luna-semantic-v30-recovery-decision-audit-20261007-v1",
@@ -4777,16 +4123,6 @@
       "notes": "Originalcandidate review/hashmanifest andexacttargetapprovals/holds preservebuildprovenance. Largeoriginal/convertednative materializations reproduciblefromregisteredV31raw+auds; admittedrecords retainedinfinalV7, no duplicateindependentdatacount."
     },
     {
-      "id": "neuralese-native-text-foundation-v13-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-warmup-20261007-v13",
-      "include": [
-        "**"
-      ],
-      "admission": "closed unqualified text foundation lineage; not runtime/task-qualified",
-      "notes": "GracefulSIGTERM4970/exit0; latestfullMuonscheduleoptimizerRNGcontinuesV14, heldgatebest4864 separatelySHA-bound. NativeV6/packetV4, narrowoldheldset (do not compare directly to fairV14). KeepactiveV14parent locally untilhandoff."
-    },
-    {
       "id": "luna-semantic-v32-final-decision-audit-20261007-v4",
       "owner": "pop",
       "path": "runs/luna-v32-decision-quality-audit-20261007-final-closed-v4",
@@ -4915,16 +4251,6 @@
       ],
       "admission": "raw teacher evidence pending per-action quality review",
       "notes": "24freshV13worlds23accepted1rejected; actualdecisionqualityauditpending. Parentacceptance alone not admission."
-    },
-    {
-      "id": "neuralese-native-text-foundation-v14-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-warmup-20261007-v14",
-      "include": [
-        "**"
-      ],
-      "admission": "unqualified failed foundation lineage; checkpoint recovery and diagnostics only",
-      "notes": "BackwardCUDAOOMafter5029 completedupdates; fullstate4992lastsaved,37updateslost. Latestbestweightsretained; V15exact4992continuation. Failurepreserved; code fixespreventlossbeforeoptimizerstep, not safe claimingpartialoptimizerfailure."
     },
     {
       "id": "neuralese-successor-v13r2-prepared-20261007",
@@ -5077,16 +4403,6 @@
       "notes": "Two parent outcomes accepted for raw review: same-world recovery/format variants from existing V14 wetland and V13 sewing source groups, both test split. Preserve source groups/splits; zero new independent worlds. Parent outcome does not admit child decisions; no cross-prompt DPO."
     },
     {
-      "id": "neuralese-native-text-foundation-v15-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-warmup-20261007-v15",
-      "include": [
-        "**"
-      ],
-      "admission": "unqualified failed foundation lineage; full-state recovery and diagnostics only",
-      "notes": "ENOSPC after optimizer committed5491; recoverable full Muon/RNG checkpoint5376,115 completed updates unsaved. V16 continues5376; malformed log and failure evidence retained."
-    },
-    {
       "id": "luna-semantic-v40-raw-20261007",
       "owner": "pop",
       "path": "runs/luna-semantic-v40-campaign-20261007",
@@ -5125,16 +4441,6 @@
       ],
       "admission": "generation-source-only; twelve nested same-world depth2 variants root-reviewed; no static/native/recurrence training admission; twelve unchanged iterative controls held for wording limitations",
       "notes": "24 retained worlds/groups/splits/gold, 17 specialist-role realism repairs, 12 nested instruction variants; zero new independent worlds or cross-prompt DPO pairs. Source proof is scripted runtime evidence, not teacher data. root-generation-review.json binds approved indices and exact source SHA."
-    },
-    {
-      "id": "neuralese-native-text-foundation-v16-v18-closed-20261007",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-warmup-closeouts-20261007-v1",
-      "include": [
-        "**"
-      ],
-      "admission": "closed full-state backup and failure evidence only; foundation/runtime/stopping gates unqualified; no inherited training admission",
-      "notes": "V16 signal latest5656/best5504; V17noexecprestep5657safe5656; V18densemaskOOMprestep5670safe5669. FullMuon/RNG/schedule/emergency replay state retained; parentSHA chain verified through activeV19. Source hardlinks preserve immutableclosedstates without modifying activeparentpermissions. V16Dockeroutputtailcaveat explicit. Inactive12 .pt files and their source hardlinks offloaded from Pop after fresh local/manifest/DGX SHA-size checks; canonical DGX full backup retained. Pop diagnostic/runtime files and immutable manifest stay; restore via sync_training_corpora.py restore before weight reuse. Receipt: runs/neuralese-inactive-weight-offload-20261007-v1/receipt.json. Active V19/V20/V21 weights retained."
     },
     {
       "id": "neuralese-reviewed-restart-cohort-20261007-v9",
@@ -5284,16 +4590,6 @@
       ],
       "admission": "Unadmitted superseded renderer attempt96omissions, preserve failure evidence; V8r2 fixes exact attested inlinebody rendering",
       "notes": "Immutable evidence only; no extra independent examples; preserve source groups, splits, original gold and holds."
-    },
-    {
-      "id": "neuralese-v19-preservation-20261007-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-v19-preservation-20261007-v1",
-      "include": [
-        "**/*"
-      ],
-      "admission": "Closed V19 full optimizer/model/runtime provenance backup step6090; unqualified foundation, V20parent retained, no training corpus admission",
-      "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
     },
     {
       "id": "luna-semantic-v44-closed-raw-snapshot-20261007-v2",
@@ -5755,7 +5051,7 @@
         "**/*"
       ],
       "admission": "root-approved-generation-only-source-proof-no-teacher-or-training-admission",
-      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row\u2019s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
+      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row’s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
       "derived_from": [
         "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
         "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
@@ -5855,7 +5151,9 @@
         "neuralese-reviewed-restart-cohort-20261007-v13-final",
         "neuralese-native-gold-text-v11-r2-20261007-v1"
       ],
-      "notes": "Maple twin of neuralese-native-gold-text-v11-r2-20261007-v1: same V13-final proposed-cumulative native records (25050d29) and pieces (65f5517c), renderer files exactly as V11's receipt (git 9ae301a5: build 44e24319, text_corpus 33b43b03, chat b19a1a4e), Maple tokenizer e90b9305. 4270 documents (2686 train/1584 held), 0 omitted; median 4211, max 13811 tokens (121 > 8192). Inherits V11's root admission scope (ordinary gold text only) and its open V7 context-binding caveat. Supersedes Maple packet v3."
+      "notes": "Maple twin of neuralese-native-gold-text-v11-r2-20261007-v1: same V13-final proposed-cumulative native records (25050d29) and pieces (65f5517c), renderer files exactly as V11's receipt (git 9ae301a5: build 44e24319, text_corpus 33b43b03, chat b19a1a4e), Maple tokenizer e90b9305. 4270 documents (2686 train/1584 held), 0 omitted; median 4211, max 13811 tokens (121 > 8192). Inherits V11's root admission scope (ordinary gold text only) and its open V7 context-binding caveat. Supersedes Maple packet v3.",
+      "training_admission": false,
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: Maple-tokenizer twin; all ids are a subset of the 4962 union that Mellum/LFM already train on (checked by id); Maple backbone retired. No unique rows."
     },
     {
       "id": "neuralese-reviewed-restart-cohort-20261007-v14-final",
@@ -5950,7 +5248,7 @@
         "**/*"
       ],
       "admission": "closed-audit-only-explicitly-held-no-training-admission-no-DPO",
-      "notes": "Immutable closed snapshots and action-level audit for V57/V59/V61/V63/V64. 60 queue slots finished: 59 exact native result exports (33 parent whole-world accepted, 26 rejected) and one V57 whole-case request-budget exhaustion with partial evidence and no native row. Repeated seeds cover existing reviewed source groups only; 0 new independent worlds. V63/V64 rejection review finds seven explicit model omissions/value-copy failures, with no source confounds; no local actions approved. Parent acceptance does not confer action admission. Includes exact raw campaign copies, queue/journal/export/trace evidence, source/runtime pins, and V57 supervisor recovery; V57 plan\u2019s missing runtime frozen-manifest SHA is recorded as a gap.",
+      "notes": "Immutable closed snapshots and action-level audit for V57/V59/V61/V63/V64. 60 queue slots finished: 59 exact native result exports (33 parent whole-world accepted, 26 rejected) and one V57 whole-case request-budget exhaustion with partial evidence and no native row. Repeated seeds cover existing reviewed source groups only; 0 new independent worlds. V63/V64 rejection review finds seven explicit model omissions/value-copy failures, with no source confounds; no local actions approved. Parent acceptance does not confer action admission. Includes exact raw campaign copies, queue/journal/export/trace evidence, source/runtime pins, and V57 supervisor recovery; V57 plan’s missing runtime frozen-manifest SHA is recorded as a gap.",
       "derived_from": [
         "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
         "neuralese-v16-caption-role-clarification-publication-20261007-v1",
@@ -5985,7 +5283,7 @@
         "neuralese-successor-v14-v10r3-generation-only-20261007-v1",
         "luna-semantic-v65-v67-closed-audit-20261007-v1"
       ],
-      "notes": "Corrected same-world V14 source packet for the Westmere district-name boundary. Source SHA 235924d4a61224f797c7c0329a19fd7a84cd95d96df2454178de3ea14b725e95; only the meeting-notice phrase was clarified, preserving all 24 IDs, golds, groups, and splits. Root generation review SHA 76f04918f0a466407ef2fedf5161ef414122cd6c7136f765dd495e0986113a62 and frozen V69 proof SHA 83b9f86b9070490a3fe6116f02d10d34e63a0342a8721a41b656603b80f8d011 are included. Scripted CPU proof: 24 cases, 216 decisions, 84 reads; 0 model/provider calls. V68\u2019s original case-14 output and original V10r3 bundle remain unchanged and held for source ambiguity. Generation-only; no teacher, trace, or training admission."
+      "notes": "Corrected same-world V14 source packet for the Westmere district-name boundary. Source SHA 235924d4a61224f797c7c0329a19fd7a84cd95d96df2454178de3ea14b725e95; only the meeting-notice phrase was clarified, preserving all 24 IDs, golds, groups, and splits. Root generation review SHA 76f04918f0a466407ef2fedf5161ef414122cd6c7136f765dd495e0986113a62 and frozen V69 proof SHA 83b9f86b9070490a3fe6116f02d10d34e63a0342a8721a41b656603b80f8d011 are included. Scripted CPU proof: 24 cases, 216 decisions, 84 reads; 0 model/provider calls. V68’s original case-14 output and original V10r3 bundle remain unchanged and held for source ambiguity. Generation-only; no teacher, trace, or training admission."
     },
     {
       "id": "neuralese-semantic-iterate-v15-lineage-20261007-v1",
@@ -5995,7 +5293,7 @@
         "**/*"
       ],
       "admission": "source-generation-approved-v8; teacher-observation-trace-and-training-held",
-      "notes": "Immutable V1\u2013V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
+      "notes": "Immutable V1–V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
     },
     {
       "id": "neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1",
@@ -6008,7 +5306,7 @@
       "derived_from": [
         "neuralese-semantic-iterate-v15-lineage-20261007-v1"
       ],
-      "notes": "Held publication bundle for V15 soft-state source V10, SHA 4a8f95f6ba6703437651c6c827b4042d89f536ab59cb2b7cc9496ed8199b7084. Includes V1\u2013V10 variants, failed and passing scripted proofs, runtime feasibility probe, builder, V8 source lineage, and independent/root review evidence. V10 keeps 12 worlds/groups/splits/gold; 2 documented input clarifications. Latest CPU proof passes 12/12 with 48 source reads and 60 actual Neuralese writer-to-reader edges. Zero model/provider calls and zero teacher trajectories; scripted runtime success is not semantic truth or training admission."
+      "notes": "Held publication bundle for V15 soft-state source V10, SHA 4a8f95f6ba6703437651c6c827b4042d89f536ab59cb2b7cc9496ed8199b7084. Includes V1–V10 variants, failed and passing scripted proofs, runtime feasibility probe, builder, V8 source lineage, and independent/root review evidence. V10 keeps 12 worlds/groups/splits/gold; 2 documented input clarifications. Latest CPU proof passes 12/12 with 48 source reads and 60 actual Neuralese writer-to-reader edges. Zero model/provider calls and zero teacher trajectories; scripted runtime success is not semantic truth or training admission."
     },
     {
       "id": "luna-semantic-v68-v71-closed-action-audit-20261007-v1",
@@ -6018,7 +5316,7 @@
         "**/*"
       ],
       "admission": "closed-actual-campaign-audit-only-held-no-native-action-approval-no-training-admission-no-DPO",
-      "notes": "Immutable 1453-file V68\u2013V71 raw and audit snapshot. Four campaigns repeat 24 V14 fact worlds (12 train/12 test), not new independent worlds. 89 exports: 84 accepted parents, 5 rejected; 961 materialized actions remain held. This publication grants no action, recurrence, DPO, or training admission."
+      "notes": "Immutable 1453-file V68–V71 raw and audit snapshot. Four campaigns repeat 24 V14 fact worlds (12 train/12 test), not new independent worlds. 89 exports: 84 accepted parents, 5 rejected; 961 materialized actions remain held. This publication grants no action, recurrence, DPO, or training admission."
     },
     {
       "id": "neuralese-reviewed-restart-cohort-20261007-v15-final",
@@ -6649,7 +5947,9 @@
       "derived_from": [
         "neuralese-native-gold-text-v16-v5-20261007"
       ],
-      "notes": "Maple twin of V16 gold text (neuralese-native-gold-text-v16-v5-20261007): full render of runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1 proposed-cumulative-native-records + native-pieces with the V16 renderer files (chat e263a479, text_corpus 4980390d), Maple tokenizer e90b9305. 4438 documents (2763 train/1675 held), 0 omitted; identical document IDs and splits to V16. Inherits V16's ordinary-gold-text admission scope. Supersedes Maple packet v4."
+      "notes": "Maple twin of V16 gold text (neuralese-native-gold-text-v16-v5-20261007): full render of runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1 proposed-cumulative-native-records + native-pieces with the V16 renderer files (chat e263a479, text_corpus 4980390d), Maple tokenizer e90b9305. 4438 documents (2763 train/1675 held), 0 omitted; identical document IDs and splits to V16. Inherits V16's ordinary-gold-text admission scope. Supersedes Maple packet v4.",
+      "training_admission": false,
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: Maple-tokenizer twin; all ids are a subset of the 4962 union that Mellum/LFM already train on (checked by id); Maple backbone retired. No unique rows."
     },
     {
       "id": "luna-semantic-v97-campaign-20261008",
@@ -6800,7 +6100,7 @@
       "include": [
         "**/*"
       ],
-      "notes": "Closed corrected-source campaign: Luna accepted indices0\u20135,7\u201311;6 request-budget partial lacks full execution graph and remains held. Bunny accepted15,16,20,23; transport timeouts/started-abandoned/unstarted cases retained and not model negatives. Recovery is separately reviewed; no automatic parent acceptance to action admission."
+      "notes": "Closed corrected-source campaign: Luna accepted indices0–5,7–11;6 request-budget partial lacks full execution graph and remains held. Bunny accepted15,16,20,23; transport timeouts/started-abandoned/unstarted cases retained and not model negatives. Recovery is separately reviewed; no automatic parent acceptance to action admission."
     },
     {
       "id": "luna-v17-recovery-runtime-20261008-a2a53630",
@@ -6886,16 +6186,6 @@
         "**/*"
       ],
       "notes": "Closed two cross-teacher attempts6/13 after actual provider READY recovery; both correct values/files, prior Luna failures retained separately. Same source/world/split, no new worlds, official bridge cap2 and unchanged request ceilings."
-    },
-    {
-      "id": "neuralese-native-text-warmup-v21-closed-20261008",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-warmup-20261007-v21",
-      "admission": "closed-unqualified-training-state;not-training-data-or-channel-certificate",
-      "include": [
-        "**/*"
-      ],
-      "notes": "Closed 16384-update lineage; exact final checkpoint and heads paired at16384, best complete state13824. Model/Muon optimizer/RNG/schedule and failed held gates preserved. No runtime transport/stopping qualification; source of V22 best-state continuation."
     },
     {
       "id": "neuralese-projected-history-v21-final-20261008",
@@ -7533,7 +6823,13 @@
         "converter": "scripts/neuralese_data/digest_to_view.py@1",
         "requested_by": "pop (coord 2026-10-10T02:18 reply re dgx-085e)"
       },
-      "notes": "The registered digest->view conversion (DECISIONS.md 2026-10-09, one summarizer family) of the source corpus's assembled-v3 records, which the trajectory trainer refuses while they carry digest parts. native-records.jsonl (5,242 records, 16 digest parts in 16 records) with native-pieces.jsonl, recurrence-records.jsonl (4,961 records, 16 digest parts in 16 records) with recurrence-pieces.jsonl, and delta-native-records.jsonl (26 records, none) converted; no prompt:digest piece existed (0 renamed); proposal-manifest.json and recurrence-audit.json copied byte for byte; conversion-<part>.json record input/output SHA-256 and counts. No digest part remains; 32 view parts. Not converted (unchanged in the source corpus, still with their own forms): context-bound-delta/, inputs/, review/, text-proposal-26-v3/ (text, no record parts). Admission is the source's, unchanged; the source corpus stays as published. No recipe pinned assembled-v3 at conversion time."
+      "notes": "The registered digest->view conversion (DECISIONS.md 2026-10-09, one summarizer family) of the source corpus's assembled-v3 records, which the trajectory trainer refuses while they carry digest parts. native-records.jsonl (5,242 records, 16 digest parts in 16 records) with native-pieces.jsonl, recurrence-records.jsonl (4,961 records, 16 digest parts in 16 records) with recurrence-pieces.jsonl, and delta-native-records.jsonl (26 records, none) converted; no prompt:digest piece existed (0 renamed); proposal-manifest.json and recurrence-audit.json copied byte for byte; conversion-<part>.json record input/output SHA-256 and counts. No digest part remains; 32 view parts. Not converted (unchanged in the source corpus, still with their own forms): context-bound-delta/, inputs/, review/, text-proposal-26-v3/ (text, no record parts). Admission is the source's, unchanged; the source corpus stays as published. No recipe pinned assembled-v3 at conversion time.",
+      "training_admission": true,
+      "review_status": "2026-10-11 dgx-held-recovery: held-by-label only (root-admitted exact-oracle native records, \"not runtime-qualified\"); admitted. Train rows 3207 of 5242 (test 2035 stay out). 2792 train rows are decisions already in the 4962 union; 415 train decisions (413 curriculum_decision_extract_chain from 58 trajectories already in the union, 1 reducers, 1 source_worlds_v12) are absent from the union text and recovered here. JeFF reserved-text scan: 0 hits. Supervised estimate ~582k tokens (target+reasoning, chars/4) of which ~55k are the 415 recovered rows.",
+      "consumable_by_direct_stage": false,
+      "required_conversion": "render with native_gold_packet in both modes/tokenizers, or as whole trajectories (every assistant turn supervised); recurrence-records.jsonl (4961) is the recurrence-lineage twin",
+      "recovered_rows_train": 415,
+      "train_rows": 3207
     },
     {
       "id": "neuralese-v9-root-review-20261008-v1",
@@ -7691,19 +6987,6 @@
         "neuralese-semantic-iterate-reducers-v25-v1-static-generation-packet-20261008"
       ],
       "notes": "Closed raw V25 Luna campaign for all 16 reviewed source IDs. Preserves result and trace files, slot logs/journals, claim ledger, and launch binding. Run-level parent outcomes: 14 accepted, 2 rejected (TREE-710 and FISH-730 file/answer checks), no infrastructure error sidecars, and one recovered intermediate scope failure on BURS-761. This is a held raw observation snapshot; no action, DPO, or training admission is granted."
-    },
-    {
-      "id": "local-recurrence-step256-fullstate-preservation-20261008",
-      "owner": "pop",
-      "path": "runs/neuralese-local-recurrence-20261005/task-eval-inputs",
-      "admission": "historical-unqualified-model-checkpoint-not-training-examples",
-      "include": [
-        "best-step256.pt"
-      ],
-      "derived_from": [
-        "local-recurrence-execution-baseline-20261005-v1"
-      ],
-      "notes": "Closed historical step256 full checkpoint preserved in an immutable DGX mirror before recoverable Pop eviction. Exact associated evaluation/deployment artifacts are already registered separately. Active V22 uses its own full-state checkpoint and does not read this file. This file grants neither training admission nor neuralese channel qualification; restore from this manifest before reuse."
     },
     {
       "id": "neuralese-semantic-iterate-reducers-v26-v2-static-source-reference-packet-20261008",
@@ -8179,7 +7462,9 @@
         "luna-v17-v9-portable-context-proposal-20261008",
         "neuralese-maple-native-gold-text-corpus-20261008-v6"
       ],
-      "notes": "Maple twin of V9 gold text (luna-v17-v9-portable-context-proposal-20261008 text-proposal-26-v3): Maple packet v6 (V17 twin) as byte prefix + the same 26-record V9 delta (assembled-v3 delta-native-records, context-bound-delta pieces, text-source-selection-26) through build_neuralese_gold_text_delta.py --twin-of-text (V17 text-prefix-receipt v2), V9's exact renderer snapshot (commit 4a66b7eb: text_corpus d07812c5, chat e263a479), Maple tokenizer e90b9305. 4496 docs (2792 train/1704 held), 0 omitted; identical IDs/splits/source groups/source records to V9; same 29 hash-bound reader contexts and 7 capture augmentations. Inherits V9 root admission scope (runs/neuralese-v9-root-review-20261008-v1). Supersedes Maple packet v6."
+      "notes": "Maple twin of V9 gold text (luna-v17-v9-portable-context-proposal-20261008 text-proposal-26-v3): Maple packet v6 (V17 twin) as byte prefix + the same 26-record V9 delta (assembled-v3 delta-native-records, context-bound-delta pieces, text-source-selection-26) through build_neuralese_gold_text_delta.py --twin-of-text (V17 text-prefix-receipt v2), V9's exact renderer snapshot (commit 4a66b7eb: text_corpus d07812c5, chat e263a479), Maple tokenizer e90b9305. 4496 docs (2792 train/1704 held), 0 omitted; identical IDs/splits/source groups/source records to V9; same 29 hash-bound reader contexts and 7 capture augmentations. Inherits V9 root admission scope (runs/neuralese-v9-root-review-20261008-v1). Supersedes Maple packet v6.",
+      "training_admission": false,
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: Maple-tokenizer twin; all ids are a subset of the 4962 union that Mellum/LFM already train on (checked by id); Maple backbone retired. No unique rows."
     },
     {
       "id": "neuralese-v24-v9-three-action-native-text-20261008-v2",
@@ -8252,83 +7537,6 @@
       ]
     },
     {
-      "id": "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1",
-      "owner": "pop",
-      "path": "runs",
-      "include_root_prefixes": [
-        "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1",
-        "neuralese-native-text-warmup-20261008-v22",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v1",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v2",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v3",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4"
-      ],
-      "include": [
-        "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1/**",
-        "neuralese-native-text-warmup-20261008-v22/checkpoint.pt",
-        "neuralese-native-text-warmup-20261008-v22/train.jsonl",
-        "neuralese-native-text-warmup-20261008-v22/eval.jsonl",
-        "neuralese-native-text-warmup-20261008-v22/plan.json",
-        "neuralese-native-text-warmup-20261008-v22/baseline.json",
-        "neuralese-native-text-warmup-20261008-v22/report.json",
-        "neuralese-native-text-warmup-20261008-v22/heads-export-status.json",
-        "neuralese-native-text-warmup-20261008-v22/code-handoffs.jsonl",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v1/**",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v2/**",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v3/**",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/handoff-plan.json",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/root-handoff-review.json",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/eval-launch.json",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/eval-launch.prepared.json",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/train-launch.json",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/train-launch.prepared.json",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/recipe.json",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/runtime/manifest.json",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/runtime/natlang_neuralese/**",
-        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/eval-v22-v17-masked/**"
-      ],
-      "admission": "closed-unqualified-full-state-and-masked-eval-diagnostic; no-training-examples-or-channel-qualification",
-      "notes": "Root-confirmed V22 graceful full-state checkpoint at step 17739 is authoritative and contains model, full MuonAdamW optimizer, Python/Torch/CUDA RNG, and schedule state. The paired serving heads are stale at step 16768 and intentionally excluded. Preserves closed V22 logs, exact-weight masked V17 eval-only diagnostics, the V4 immutable Python runtime/recipe/launch receipts, and superseded preparation snapshots V1-V3 unchanged. The next V9+3 continuation has launched; its live output directory/checkpoint/logs are deliberately excluded. The startup image-banner parse failure and metadata-only retry are recorded with no model or optimizer update. Alignment gates failed; this corpus does not qualify the model or admit training data.",
-      "derived_from": [
-        "neuralese-native-text-warmup-v21-closed-20261008",
-        "neuralese-v24-v9-three-action-native-text-20261008-v2"
-      ]
-    },
-    {
-      "id": "neuralese-native-text-warmup-v20-closed-storage-20261008",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-warmup-20261007-v20",
-      "include": [
-        "**/*"
-      ],
-      "admission": "incomplete-closed-run-evidence-two-full-state-checkpoints-missing-unresolved; no-training-admission",
-      "notes": "Historical full V20 expected snapshot. The immutable manifest lists 11 files, but Pop and DGX currently lack checkpoint.pt (1232273218 bytes, SHA256 3f2d271ac07c70fbfa54953958e7e436c9fe567c0f5cad81758339502e4cb13e) and best-checkpoint.pt (1232271554 bytes, SHA256 6e70dd3c2009130c8f56f78ae6b0407b57cd7000aa9b2ca060eae13652e167fc). Exact-path DGX SSH verification and exact-size copy searches found no copies; do not claim this full snapshot is mirrored or recoverable. Its original manifest remains unchanged as the expected-byte record. Surviving files are published separately under neuralese-native-text-warmup-v20-surviving-artifacts-20261008. V20 full-state optimizer recovery is unresolved; no training admission or channel qualification.",
-      "derived_from": [
-        "neuralese-v19-preservation-20261007-v1"
-      ]
-    },
-    {
-      "id": "neuralese-native-text-warmup-v20-surviving-artifacts-20261008",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-warmup-20261007-v20",
-      "include": [
-        "baseline.json",
-        "best-checkpoint.json",
-        "best-heads.pt",
-        "eval.jsonl",
-        "heads.pt",
-        "plan.json",
-        "report.json",
-        "root-boundary-checkpoint.json",
-        "train.jsonl"
-      ],
-      "admission": "surviving-closed-run-diagnostics-and-heads-only; full-state-checkpoints-missing; no-training-admission",
-      "notes": "Separate exact snapshot of the nine V20 artifacts that remain. Does not satisfy the original 11-file full-state manifest; the two missing full-state optimizer checkpoints are explicitly preserved as omissions in the original manifest and incident record. Heads are not a substitute for optimizer/full-state recovery. No model/channel qualification or training-data admission.",
-      "derived_from": [
-        "neuralese-native-text-warmup-v20-closed-storage-20261008"
-      ]
-    },
-    {
       "id": "neuralese-v20-checkpoint-eviction-incident-20261008-v1",
       "owner": "pop",
       "path": "runs/neuralese-v20-checkpoint-eviction-incident-20261008-v1",
@@ -8370,7 +7578,7 @@
       "derived_from": [
         "s1-question-collection-v8-luna-campaign-20261008-v1"
       ],
-      "notes": "Corrected V8 independent review of closed indices 0\u201314 with nested execution graph/action ledgers, actual nL type signatures and transport provenance. Case19 and other rows are excluded pending closure; later successor required. V1 is preserved but explicitly superseded. No raw outcome changes or training admission."
+      "notes": "Corrected V8 independent review of closed indices 0–14 with nested execution graph/action ledgers, actual nL type signatures and transport provenance. Case19 and other rows are excluded pending closure; later successor required. V1 is preserved but explicitly superseded. No raw outcome changes or training admission."
     },
     {
       "id": "s1-question-collection-v8-quality-review-20261008-v3",
@@ -8906,39 +8114,6 @@
       "notes": "Immutable V18 Luna launch packet for the root-approved 32-variant generation campaign over 128 existing S1 train records. Includes exact approved plan, authorization, launch binding, initial claims and five runner starts, and launch-time authority snapshot. Live results and mutable worker evidence will be published after closure; no semantic, trace, DPO, or training admission."
     },
     {
-      "id": "neuralese-lfm-stage4-8-closed-handoff-20261008-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-warmup-lfm-stage4-8-20261008-v4",
-      "include": [
-        "**/*"
-      ],
-      "admission": "closed-unqualified-training-state;not-training-data-or-channel-certificate",
-      "derived_from": [
-        "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1",
-        "neuralese-v24-v9-three-action-native-text-20261008-v2"
-      ],
-      "notes": "Gracefully closed at19998 with complete model/heads/Muon/AdamW/RNG/schedule. Exact final checkpoint195a8befc78aef2b35db8704eecda33b856ea73faa5fe4c9ee2ea76b02c70916 is active input-map successor parent and remains local. Frozen runtime, failed gates, best-state and exact diagnostic provenance retained; no qualification inherited."
-    },
-    {
-      "id": "neuralese-lfm-input-map-launch-preparation-20261008-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
-      "include": [
-        "recipe.json",
-        "parent-handoff.json",
-        "train-launch.prepared.json",
-        "train-launch.approved.json",
-        "train-launch.json",
-        "runtime/**/*"
-      ],
-      "admission": "immutable-execution-provenance;not-training-data-or-channel-certificate",
-      "derived_from": [
-        "neuralese-lfm-stage4-8-closed-handoff-20261008-v1",
-        "neuralese-v24-v9-three-action-native-text-20261008-v2"
-      ],
-      "notes": "Shared corrected causal input-map warmup: fullprojection goldembedding supervision retained; map self-consistency target separate; frozen109Pythonfiles, launch from19998weights/RNG and explicit fresh optimizer for changed trainables. Active train-continuation excluded from immutable manifest; publish only when sealed. Mapped text alignment is not autoregressive/runtime/function qualification."
-    },
-    {
       "id": "verified-reasoning-pools-v18-luna-closed-20261008-v1",
       "owner": "pop",
       "path": "runs/verified-reasoning-pools-20261008-v18-answer-key-v2",
@@ -8953,53 +8128,6 @@
         "verified-reasoning-pools-v18-luna-launch-20261008-v1"
       ],
       "notes": "Complete immutable raw V18 Luna campaign and closeout summary: 32 claims, 31 parent result rows, 26 accepted, 5 rejected, and one zero-row transport failure. Failed actions and scope failures remain in traces. Parent acceptance is generation grading only; no semantic, quality, trace, DPO, or training admission."
-    },
-    {
-      "id": "neuralese-lfm-input-map-completed-state-20261008-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
-      "include": [
-        "train-continuation/**/*",
-        "training-closure.json"
-      ],
-      "admission": "completed-training-state; not-training-data-task-or-autonomous-stopping-certificate",
-      "derived_from": [
-        "neuralese-lfm-input-map-launch-preparation-20261008-v1"
-      ],
-      "notes": "Initial publication glob omitted direct train-continuation files; closure receipt only (one file). No complete-state credit. Superseded by v2; preserved explicit omission."
-    },
-    {
-      "id": "neuralese-lfm-input-map-completed-state-20261008-v2",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
-      "include": [
-        "train-continuation/*",
-        "train-continuation/**/*",
-        "training-closure.json"
-      ],
-      "admission": "completed-training-state; not-training-data-task-or-autonomous-stopping-certificate",
-      "derived_from": [
-        "neuralese-lfm-input-map-launch-preparation-20261008-v1",
-        "neuralese-lfm-input-map-completed-state-20261008-v1"
-      ],
-      "notes": "Complete20992 optimizer/RNG/head state, metrics and text-alignment gate receipts. V2 fixes direct-file inclusion omission of V1. Runtime diagnostics separate; frozen b4e2e84e is not retroactively updated by bootstrap fix."
-    },
-    {
-      "id": "neuralese-lfm-input-map-qualified-runtime-ar-review-20261008-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
-      "include": [
-        "runtime-qualified-probe-v1/*",
-        "runtime-wide-probe-v1/*",
-        "runtime-probe-launch.json",
-        "runtime-wide-launch.json",
-        "held-ar-probe-v1/*"
-      ],
-      "admission": "exact-weight-runtime-and-AR-diagnostic-evidence-only; not-training-data-task-or-stopping-certificate",
-      "derived_from": [
-        "neuralese-lfm-input-map-completed-state-20261008-v2"
-      ],
-      "notes": "Trained-head exact replay/wire/input adjoints at lengths8/32/128/512 pass; broader16 held AR512 windows expose5 channel-drift spans versus crisp-exact reference.11 share crisp first divergence. No post-divergence gold-CE task failure claim. Scratch inspect filename import failure and corrected drift probe preserved."
     },
     {
       "id": "verified-reasoning-pools-v19-answer-key-v2-20261008-v1",
@@ -9067,40 +8195,6 @@
       ],
       "notes": "Immutable launch-time packet for root-approved five-slot Luna storage-recovery campaign. Captures approved exact plan, authorization, immutable review-time authority snapshot, initial dispatcher launch receipt, and claim ledger. Live campaign results will be published as a separate closure snapshot after completion. This packet grants no result or data admission.",
       "owner": "pop"
-    },
-    {
-      "id": "neuralese-v22-retired-heads-best-state-20261008-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-warmup-20261008-v22",
-      "include": [
-        "heads.pt",
-        "best-heads.pt",
-        "best-checkpoint.pt",
-        "best-checkpoint.json",
-        "heads-export-status.json"
-      ],
-      "admission": "retired-closed-weights-and-best-state-only; not-training-data-or-channel-certificate",
-      "derived_from": [
-        "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1"
-      ],
-      "notes": "Remaining closed V22 head/best-state artifacts were omitted by prior handoff publication. Register explicitly before verified offload. Active refinement resumes20992map and has no V22 live reference."
-    },
-    {
-      "id": "neuralese-lfm-input-map-refinement-launch-20261008-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-input-map-lfm-refinement-20261008-v2",
-      "include": [
-        "recipe.json",
-        "train-launch.prepared.json",
-        "train-launch.json",
-        "runtime/*",
-        "runtime/**/*"
-      ],
-      "admission": "immutable-active-execution-provenance-only; no-training-data-or-channel-certificate",
-      "derived_from": [
-        "neuralese-lfm-input-map-completed-state-20261008-v2"
-      ],
-      "notes": "Frozen e3198f93 Python package and declared tighter-check refinement launch, exact20992 optimizer/RNG resume. Live outputs deliberately excluded; no inherited AR/runtime/task/stopping qualification."
     },
     {
       "id": "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1",
@@ -9199,29 +8293,6 @@
       "notes": "Canonical full native/text output files at the exact paths named by the root action45 integration admission are included so they are immediately available on DGX without reconstruction. The compact action45 proposal entry separately provides nonduplicative delta/provenance. Full facets contain 5,290 native rows and 4,544 text documents; the exact45 new action/text delta is covered by root admission. V24 native/text prefixes and V9 recurrence/pieces remain byte exact. Two visible-context holds are excluded. No recurrence additions, runtime/trajectory/foundation qualification, or active training-input change."
     },
     {
-      "id": "neuralese-lfm-input-map-refinement-22272-closed-20261008-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-input-map-lfm-refinement-20261008-v2",
-      "include": [
-        "closure.json",
-        "recipe.json",
-        "train-launch.json",
-        "train-launch.prepared.json",
-        "train-continuation/*",
-        "runtime-wide-launch.json",
-        "runtime-wide-probe-v1/*",
-        "held-ar-probe-v1/*",
-        "runtime/**/*",
-        "runtime/*"
-      ],
-      "admission": "closed-step22272-text-alignment-refinement-and-frozen-diagnostics; no-active-training-admission-or-input-change",
-      "derived_from": [
-        "neuralese-lfm-input-map-completed-state-20261008-v2",
-        "neuralese-lfm-input-map-refinement-launch-20261008-v1"
-      ],
-      "notes": "Closed continuation at step 22272 with full optimizer/RNG checkpoint, current and best heads/checkpoints, baseline, train/eval logs, plan/report, closure, frozen launch provenance, frozen runtime snapshot and exact held AR/runtime-wide diagnostics. Root closure states text alignment only qualified and task-stopping/runtime qualification false. These files are archival diagnostics and not the separate new active action45 resume. Keep the full checkpoint and heads local on Pop; sync provides a verified DGX copy only and does not offload or alter local files."
-    },
-    {
       "id": "neuralese-lfm-input-map-action45-refinement-recipe-20261008-v1",
       "owner": "pop",
       "path": "training/neuralese/recipes",
@@ -9233,23 +8304,6 @@
         "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1"
       ],
       "notes": "Immutable recipe used by the separately registered action45 refinement launch. Recipe SHA256 265711c532e7123b1e1e93fb4b72caa7aa5804e57a5936caf8a6544b97813cf5. The source code identity is runtime source commit e3198f93d07f63ce54eb0bb08b665cf39aa15829; launch declaration commit d7585f582680377b679a75fd8ea3ca34e439193f. Recipe/provenance only; active run outputs are excluded."
-    },
-    {
-      "id": "neuralese-lfm-input-map-action45-refinement-launch-20261008-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-input-map-lfm-action45-refinement-20261008-v1",
-      "include": [
-        "train-launch.json",
-        "train-launch.prepared.json"
-      ],
-      "admission": "immutable-active-launch-provenance-only;mutable-outputs-excluded",
-      "derived_from": [
-        "neuralese-lfm-input-map-action45-refinement-recipe-20261008-v1",
-        "neuralese-lfm-input-map-refinement-22272-closed-20261008-v1",
-        "neuralese-v24-v9-three-action-action45-full-facets-20261008-v1",
-        "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1"
-      ],
-      "notes": "Frozen train-launch.json and prepared launch receipt only. Launch binds recipe SHA 265711c532e7123b1e1e93fb4b72caa7aa5804e57a5936caf8a6544b97813cf5; declaration commit d7585f582680377b679a75fd8ea3ca34e439193f; runtime source commit e3198f93d07f63ce54eb0bb08b665cf39aa15829; frozen runtime manifest SHA 633c9806baed55a12a1591766e2df15eefc537bd1093406107da6ea47e929f50; parent checkpoint SHA 9d56437d775bf88bb4c156e129a73f43b60f914fb05bcb28fcf590340000aa8f at step22272. Inputs bind the separately registered exact45 full facets/root admission and closed parent/runtime diagnostics. Mutable active run outputs and checkpoints are explicitly excluded; this record does not alter or snapshot them."
     },
     {
       "id": "verified-reasoning-pools-v19-luna-v3-v5-paired-closeout-20261008-v1",
@@ -9317,7 +8371,7 @@
         "verified-reasoning-pools-v19-answer-key-v2-20261008-v1",
         "opencode-ling-sdk-collector-integration-closeout-20261008-v1"
       ],
-      "notes": "Exact approved source index 0 Ling CLI smoke, origin-only server amendment, effective OpenCode config, action-MCP/CLI/collector raw evidence and empty collector result are pinned. The official CLI emitted one finished step (16,111 total tokens), one bridge tool-use event and one execution_plan candidate, then a scheduled retry event reported \u2018Upstream request failed: Endpoint is unavailable.\u2019 The collector exited 2 with no result row; this is one request observation and does not establish general model availability. Captured isolated CLI caches and generated dependency source trees are preserved locally but excluded from transfer; output includes exact generated package.json/package-lock.json, with versions/integrities and omitted path sizes/counts in the outcome receipt. No rerun, paid fallback, or training admission."
+      "notes": "Exact approved source index 0 Ling CLI smoke, origin-only server amendment, effective OpenCode config, action-MCP/CLI/collector raw evidence and empty collector result are pinned. The official CLI emitted one finished step (16,111 total tokens), one bridge tool-use event and one execution_plan candidate, then a scheduled retry event reported ‘Upstream request failed: Endpoint is unavailable.’ The collector exited 2 with no result row; this is one request observation and does not establish general model availability. Captured isolated CLI caches and generated dependency source trees are preserved locally but excluded from transfer; output includes exact generated package.json/package-lock.json, with versions/integrities and omitted path sizes/counts in the outcome receipt. No rerun, paid fallback, or training admission."
     },
     {
       "id": "verified-reasoning-pools-v20-source-and-closed-luna-20261008-v1",
@@ -9544,7 +8598,7 @@
         ".git"
       ],
       "admission": "held generation/source evidence only; no training admission",
-      "notes": "Held duplicate source proposal: all96 records overlapped previous V11\u2013V17 source cases. No generation, fresh-world credit, or training admission."
+      "notes": "Held duplicate source proposal: all96 records overlapped previous V11–V17 source cases. No generation, fresh-world credit, or training admission."
     },
     {
       "id": "verified-reasoning-pools-v19-closed-raw-v2-v5-20261008-v1",
@@ -13341,7 +12395,7 @@
       "derived_from": [
         "neuralese-semantic-iterate-v17-guided-source-v7-20261008"
       ],
-      "notes": "Separate held record for rejected pre-correction V8 source SHA 5df1922d\u2026; model-visible initial decision.json exposed gold. Retains exact rejected source/proposal/review and disposition. Deliberately omits all scripted runtime-proof directories; no provider campaign launched, generation count zero, never admitted.",
+      "notes": "Separate held record for rejected pre-correction V8 source SHA 5df1922d…; model-visible initial decision.json exposed gold. Retains exact rejected source/proposal/review and disposition. Deliberately omits all scripted runtime-proof directories; no provider campaign launched, generation count zero, never admitted.",
       "include_root_prefixes": [
         "semantic-lambda-topology-v17-v8-review-v1",
         "neuralese-v17-v8-publication-20261008-v1"
@@ -18011,31 +17065,6 @@
       "notes": "Compact selected-file evidence and delta only; no cumulative base copy. Text rows are an exact serving-boundary rendering with tokenizer e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008. Renderer/tokenizer code closure is referenced by the previously published text-serving-boundary-refresh corpus. Runtime snapshot-v3 is included for native materializer replay. Root composition adoption binds totals 5701 native (3666 train/2035 test), 4897 text (3193 train/1704 test), and 5004 recurrence records (3115 train/1889 test); this addition contributes 0 recurrence records. Includes locator map v2 for exact current-stream paths and registered parent stream reuse; live process/workdir locators are explicitly excluded."
     },
     {
-      "id": "neuralese-foundation-text-4880-sketch-run-held-artifacts-20261009-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-foundation-text-4880-continuation-20261009-v1/held-artifact-only-publication-proposal-v1",
-      "include": [
-        "baseline.json",
-        "best-checkpoint.json",
-        "best-checkpoint.pt",
-        "best-heads.pt",
-        "checkpoint.pt",
-        "direct-stage-plan.json",
-        "direct-stage-result.json",
-        "disposition.json",
-        "eval.jsonl",
-        "heads-export-status.json",
-        "launch-intent.json",
-        "mount-preflight-receipt-v2.json",
-        "parent-final-checkpoint-inspection.json",
-        "plan.json",
-        "preflight-root-review-v1.json",
-        "report.json",
-        "train.jsonl"
-      ],
-      "admission": "artifact-only-diagnostic-no-training-no-qualification"
-    },
-    {
       "id": "natlang-specialization-cases-declines-20261009-v1",
       "owner": "dgx",
       "path": "data/neuralese/corpora/natlang-specialization-cases-declines-20261009-v1",
@@ -18048,11 +17077,14 @@
       "split": "source",
       "source_class": "specializer-compiled-cases-and-declines-from-recorded-calls",
       "admission": "held-crisp-versus-natural-language-evidence-only",
-      "training_admission": false,
+      "training_admission": true,
       "corpus_publication_for_training": false,
       "derived_from": [],
       "license": "internal: recorded runs of this repository's programs on DGX",
-      "notes": "Exported 2026-10-09 by natlang compilations export-corpus (ts-host/src/calls/corpus.ts) from the DGX call store: 7 compiled cases (examples/specialization support, pi scheduler pass/step, harness boundary) with the recorded calls each was checked on and the judge's verdicts, and 8 declines with reasons (semantic, unstable, no-clusters, budget) and sample calls. Evidence of which parts of natural-language functions are crisp, for the harness bench and the Neuralese student; inputs may contain conversation text from pi runs. Admission for any training use is a separate decision."
+      "notes": "Exported 2026-10-09 by natlang compilations export-corpus (ts-host/src/calls/corpus.ts) from the DGX call store: 7 compiled cases (examples/specialization support, pi scheduler pass/step, harness boundary) with the recorded calls each was checked on and the judge's verdicts, and 8 declines with reasons (semantic, unstable, no-clusters, budget) and sample calls. Evidence of which parts of natural-language functions are crisp, for the harness bench and the Neuralese student; inputs may contain conversation text from pi runs. Admission for any training use is a separate decision.",
+      "review_status": "2026-10-11 dgx-held-recovery: evidence label only; 7 compiled cases with recorded calls and judge verdicts plus 8 declines with reasons. Recorded natlang calls: admitted as natlang-call data. JeFF scan 0 hits.",
+      "consumable_by_direct_stage": false,
+      "required_conversion": "render recorded calls as call programs; findings.jsonl is empty"
     },
     {
       "id": "luna-semantic-iterate-six-successes-22-native-19-text-20261009-v1",
@@ -18112,41 +17144,6 @@
       ],
       "description": "Root-adopted 22 sampled action rows and 19 target-bound ordinary text rows from the multi-source six-successes review (source families V21, V22, V24, and V25). Includes exact source/admission/replay/visibility and text omission provenance. No authored controller, whole trajectory, recurrence, runtime, or new-world admission.",
       "admission": "Root adopted 22 ordinary sampled native actions (19 nested sampled-child and 3 sampled top-level) plus 19 target-bound ordinary text documents. Two visibility holds and three text-context omissions remain explicit. No authored-controller actions, whole-trajectory, recurrence, runtime, or new-world admission; active training inputs unchanged."
-    },
-    {
-      "id": "neuralese-map-v5-ar-state-evidence-20261009-v1",
-      "owner": "pop",
-      "path": "runs/neuralese-map-v5-ar-state-evidence-20261009-v1/payload-v1",
-      "admission": "artifact-only-checkpoint-and-preflight-restore-evidence-no-training-or-qualification",
-      "include": [
-        "mapped_v5/direct-stage-launch-intent.json",
-        "mapped_v5/direct-stage-run/direct-stage-plan.json",
-        "mapped_v5/direct-stage-run/direct-stage-result.json",
-        "mapped_v5/direct-stage-run/map_text_refresh/baseline.json",
-        "mapped_v5/direct-stage-run/map_text_refresh/best-checkpoint.json",
-        "mapped_v5/direct-stage-run/map_text_refresh/best-checkpoint.pt",
-        "mapped_v5/direct-stage-run/map_text_refresh/best-heads.pt",
-        "mapped_v5/direct-stage-run/map_text_refresh/checkpoint.pt",
-        "mapped_v5/direct-stage-run/map_text_refresh/eval.jsonl",
-        "mapped_v5/direct-stage-run/map_text_refresh/heads-export-status.json",
-        "mapped_v5/direct-stage-run/map_text_refresh/plan.json",
-        "mapped_v5/direct-stage-run/map_text_refresh/report.json",
-        "mapped_v5/direct-stage-run/map_text_refresh/train.jsonl",
-        "ar_v1/direct-stage-launch-intent-v2.json",
-        "ar_v1/frozen-runtime-9182c74d-v2/runtime-snapshot-manifest-v1.json",
-        "ar_v1/frozen-source-step23936-v1/freeze-receipt-v1.json",
-        "ar_v1/schedule-handoff-v1/cpu-restore-validation-v1.json",
-        "ar_v1/schedule-handoff-v1/focused-pytest-v1.txt",
-        "ar_v2/direct-stage-launch-intent-v3.json",
-        "ar_v2/frozen-runtime-cf582398-v1/runtime-snapshot-manifest-v1.json",
-        "ar_v2/launch-preflight-v3.json",
-        "ar_v2/preflight-receipt-v3.json",
-        "ar_v2/root-launch-receipt-v1.json",
-        "ar_v2/schedule-handoff-v1/cpu-restore-validation-v1.json",
-        "ar_v2/schedule-handoff-v1/focused-pytest-v1.txt"
-      ],
-      "notes": "Closed mapped-v5 step24843 checkpoint and step23936 immutable best pair, plus failed-v1 and preflight/restore-v2 receipts. AR v2 mutable logs/checkpoints excluded. heads_current=false for step24843. Payload files are leaf symlink aliases in real group directories; transfer materializes bytes with --copy-links. No source payload duplication on Pop. Registry publication records immutable files only. The mapped v5 checkpoint at24843 has no paired current heads (heads_current=false; heads step23936). Best23936 full checkpoint/head pair is preserved, with strict gate failed; .99 remains advisory. AR v1 failed before updates. AR v2 preflight/restore receipts and launch-start receipt are not completed training or qualification evidence. No training admission.",
-      "status": "published-artifact-evidence-only"
     },
     {
       "id": "luna-v17-conjunctive-eligibility-50-native-46-actor-text-20261009-v1",
@@ -18318,175 +17315,6 @@
       "admission": "Root per-action native and text composition adoption is hash-bound in the allowlist. 50train native/46train text additions; active training inputs unchanged."
     },
     {
-      "id": "neuralese-ar-final24960-diagnostic-artifacts-20261009-v2",
-      "owner": "pop",
-      "path": "runs/neuralese-ar-matched-final24960-evidence-20261009-v2/payload-v1",
-      "admission": "artifact-only-diagnostic-checkpoint-and-evaluation-evidence-no-training-admission",
-      "include": [
-        "artifact-locator-map-v1.json",
-        "evaluator-runtime/frozen-code-inventory.json",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/__init__.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/data/__init__.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/data/context_refs.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/data/fixtures.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/data/records.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/data/render.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/data/shortcuts.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/data/stream.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/data/text_corpus.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/devices.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/digest.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/__init__.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/bench.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/cache_diagnostics.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/ffn_dispatch.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/foundation.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/harness.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/inference.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/latent_sketch.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/local_stage.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/mtp_draft_probe.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/projected_history.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/raw_port_handoff.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/raw_writer_trace.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/recurrence_autoregressive_history.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/recurrence_runtime.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/residual_transition.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/scheduler_throughput.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/sketch_cutoff_probe.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/stopping_diagnostics.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/text_warmup_runtime.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/eval/trajectory_execution.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/export/__init__.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/export/__main__.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/export/adapters.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/export/gguf.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/harness_bench/__init__.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/harness_bench/openhands.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/laws.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/__init__.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/export_member.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/family.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/foundation_heads.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/fused_moe.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/gate_diagnostic.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/maple_port.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/model.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/nested_train.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/qat_convert.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/routing.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/student.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/maple/ternary.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/model/__init__.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/model/capacity.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/model/causal_feedback.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/model/dialect.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/model/heads.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/model/hf_port.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/model/input_map.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/model/isolated_sequence.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/model/lfm2_port.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/model/projections.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/model/tiny_adapters.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/nz.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/prompt_bank.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/read.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/__init__.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/__main__.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/batch.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/chat.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/crossing.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/engine.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/grad.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/guidance.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/http.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/recurrence_checkpoint.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/store.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/token_cache.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/serve/vllm_rollout.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/shared_space.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/__init__.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/adapters.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/backbone_policy.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/bootstrap_data.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/causal_bootstrap.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/checkpoint_safety.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/decision.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/delta_e2e.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/delta_projection.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/execution.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/export_trajectory.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/exposure_curriculum.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/exposure_data.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/foundation_schedule.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/inline_instructions.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/joint.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/joint_kd.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/losses.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/memory.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/memory_estimator.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/memory_policy.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/optim.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/output_embedding_projection.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/port_handoff.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/projection.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/projection_anchor.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/projection_e2e.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/recipe.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/recurrence.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/sketch_defaults.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/sketch_handoff.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/staging.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/text_warmup.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/trajectories.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/trajectory_probe.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/trajectory_state.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/train/verified_heads_handoff.py",
-        "evaluator-runtime/frozen-code/training/neuralese/natlang_neuralese/write.py",
-        "heads-equivalence/compare_heads.py",
-        "heads-equivalence/comparison.json",
-        "heads-equivalence/stdout.json",
-        "matched-evaluation-final24960/report.json",
-        "matched-evaluation-final24960/root-launch-final24960-v1.json",
-        "matched-evaluation-source23936/report.json",
-        "matched-evaluation-source23936/root-launch-receipt-v2.json",
-        "matched-evaluation/root-course-review-v1.json",
-        "recipes/luna-ar-feedback-fixup-4880-best23936-20261009-v2.json",
-        "recipes/luna-map-text-4880-from-qualified-22272-20261009-v4.json",
-        "short-prose/failed-attempt-v1/receipt.json",
-        "short-prose/results/final24960-v2-report.json",
-        "short-prose/results/source23936-v2-report.json",
-        "short-prose/root-launch-v2.json",
-        "short-prose/selectors/final24960-v1.json",
-        "short-prose/selectors/final24960-v2.json",
-        "short-prose/selectors/source23936-v1.json",
-        "short-prose/selectors/source23936-v2.json",
-        "short-prose/validation/validation-receipt-v1.json",
-        "short-prose/validation/verify_short_prose_selection.py",
-        "source-pair-final24960/freeze-receipt-v1.json",
-        "source-pair-final24960/paired-checkpoint-manifest-v1.json",
-        "source-pair-final24960/source-index-v1.json",
-        "source-recipes/source-recipe-final24960-v1.json",
-        "source-recipes/source-recipe-v5.json",
-        "source-recipes/window-selection-final24960-v1.json",
-        "source-recipes/window-selection-v5.json",
-        "training-run/autoregressive_text_fixup/baseline.json",
-        "training-run/autoregressive_text_fixup/best-checkpoint.json",
-        "training-run/autoregressive_text_fixup/checkpoint.pt",
-        "training-run/autoregressive_text_fixup/eval.jsonl",
-        "training-run/autoregressive_text_fixup/heads-export-status.json",
-        "training-run/autoregressive_text_fixup/heads.pt",
-        "training-run/autoregressive_text_fixup/plan.json",
-        "training-run/autoregressive_text_fixup/report.json",
-        "training-run/autoregressive_text_fixup/train.jsonl",
-        "training-run/direct-stage-plan.json",
-        "training-run/direct-stage-result.json"
-      ],
-      "notes": "Closed AR-feedback final step24960 checkpoint, current heads and diagnostic reports. Alignment gate failed; foundation/runtime/task qualification false. No new training examples or training input files are included.",
-      "artifact_locator_map": "artifact-locator-map-v1.json",
-      "status": "published-artifact-evidence-only"
-    },
-    {
       "id": "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1",
       "owner": "pop",
       "path": "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1",
@@ -18560,7 +17388,10 @@
           "max_document_tokens": 13297
         }
       },
-      "notes": "Mellum2.1-12B-A2.5B-Thinking tokenizer twin of neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1 (sha256 30ef44f4...) built 2026-10-11 on DGX so the Mellum line trains on the same documents as the LFM line. All seven source streams were rendered by the same tokenizer-dependent step, native_gold_packet, whose code (and serve/chat.py d3b5911d) is identical in every Oct-9 renderer snapshot; the twin uses the 4793-view snapshot (commit d7b9dd92). Method: each source row's (messages, target, tools) is recovered from its LFM token IDs (structural template tokens vs escaped content), every history assistant turn's reasoning_content is restored from the source native record (the LFM template shows only the last history turn's reasoning; the record is matched on that shown reasoning and the assistant-turn count, exactly one candidate each), then re-rendered with the LFM tokenizer through the pinned renderer: all 4962 rows reproduce text, token_ids and supervised_suffix_start byte for byte; then rendered with the Mellum tokenizer and chat template. 4962 documents (3258 train / 1704 test), 0 omitted; id, split, source_groups, source_record_ids and attestation lists equal per row in order (twin-identity-check.json); 5733 source records, train/test source-group intersection 0. 26,803,819 tokens (train 17,626,600 / test 9,177,219), supervised suffix 384,014; document length mean 5402, median 4531, p90 8085, max 17066. Supervised tokens whose preceding context exceeds 7168 tokens: 26.5% (962 documents); exceeding 31744: 0. History reasoning restored in 2921 documents (5627 turns); the Mellum template renders history reasoning only after the last user query, so 42 documents show fewer think blocks than history assistant turns (turns before the last user query, or empty reasoning). Targets carry no reasoning and no empty think block (the renderer's Mellum generation prompt does not open one). Shared loader load_text_rows with the Mellum tokenizer (current code, CPU, ledger unit twin-mellum4962-validate2) passed: loader-validation-v1.json. Same admission scope as the source; no new example admission or qualification."
+      "notes": "Mellum2.1-12B-A2.5B-Thinking tokenizer twin of neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1 (sha256 30ef44f4...) built 2026-10-11 on DGX so the Mellum line trains on the same documents as the LFM line. All seven source streams were rendered by the same tokenizer-dependent step, native_gold_packet, whose code (and serve/chat.py d3b5911d) is identical in every Oct-9 renderer snapshot; the twin uses the 4793-view snapshot (commit d7b9dd92). Method: each source row's (messages, target, tools) is recovered from its LFM token IDs (structural template tokens vs escaped content), every history assistant turn's reasoning_content is restored from the source native record (the LFM template shows only the last history turn's reasoning; the record is matched on that shown reasoning and the assistant-turn count, exactly one candidate each), then re-rendered with the LFM tokenizer through the pinned renderer: all 4962 rows reproduce text, token_ids and supervised_suffix_start byte for byte; then rendered with the Mellum tokenizer and chat template. 4962 documents (3258 train / 1704 test), 0 omitted; id, split, source_groups, source_record_ids and attestation lists equal per row in order (twin-identity-check.json); 5733 source records, train/test source-group intersection 0. 26,803,819 tokens (train 17,626,600 / test 9,177,219), supervised suffix 384,014; document length mean 5402, median 4531, p90 8085, max 17066. Supervised tokens whose preceding context exceeds 7168 tokens: 26.5% (962 documents); exceeding 31744: 0. History reasoning restored in 2921 documents (5627 turns); the Mellum template renders history reasoning only after the last user query, so 42 documents show fewer think blocks than history assistant turns (turns before the last user query, or empty reasoning). Targets carry no reasoning and no empty think block (the renderer's Mellum generation prompt does not open one). Shared loader load_text_rows with the Mellum tokenizer (current code, CPU, ledger unit twin-mellum4962-validate2) passed: loader-validation-v1.json. Same admission scope as the source; no new example admission or qualification.",
+      "training_admission": true,
+      "review_status": "2026-10-11 dgx-held-recovery: tokenizer twin of the admitted union; status label was empty. Same ids/splits as the union (4962 docs; 3258 train / 1704 held); held docs stay held.",
+      "consumable_by_direct_stage": true
     },
     {
       "id": "nebius-swe-rebench-tasks-20261009-v1",
@@ -18580,7 +17411,8 @@
       "derived_from": [],
       "license": "CC-BY-4.0 (dataset card); repositories' own licences per instance (license_name)",
       "source_url": "https://huggingface.co/datasets/nebius/SWE-rebench",
-      "notes": "SWE-rebench task records (instance_id, repo, base_commit, environment_setup_commit, problem statement, gold and test patches, FAIL_TO_PASS/PASS_TO_PASS, docker image names), downloaded 2026-10-09. The harness bench joins them to nebius-swe-rebench-openhands-trajectories-20261009-v1 by instance_id to rebuild each step's workspace statically from the base commit and the teacher's recorded edits (plans/neuralese/HARNESS_BENCH.md). Gold and test patches are hindsight-only: never shown to a companion or written into a record's prefix."
+      "notes": "SWE-rebench task records (instance_id, repo, base_commit, environment_setup_commit, problem statement, gold and test patches, FAIL_TO_PASS/PASS_TO_PASS, docker image names), downloaded 2026-10-09. The harness bench joins them to nebius-swe-rebench-openhands-trajectories-20261009-v1 by instance_id to rebuild each step's workspace statically from the base commit and the teacher's recorded edits (plans/neuralese/HARNESS_BENCH.md). Gold and test patches are hindsight-only: never shown to a companion or written into a record's prefix.",
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: generation source (task parquet) for the harness bench; training rows are the trajectories and the harness bench records."
     },
     {
       "id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v1",
@@ -18616,13 +17448,14 @@
         "criteria": "harness-bench-criteria/2",
         "working_copy": "/home/werg/data/harness-bench/build-20261009-1000"
       },
-      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v2 (2026-10-10): 6 of its records carry OpenHands' bash soft-timeout notice (\"no new output after 30 seconds ... send keys ... use the timeout parameter in execute_bash\") in a pi bash result, which pi never shows; v2 replays with that notice as the divergence point. Kept for provenance; do not use. Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md \u00a72) built 2026-10-09/10 by harness_bench_build.sh at code commit 744bdd4f (applications/pi/bench/replay.ts, training/neuralese/natlang_neuralese/harness_bench/*): 492 resolved trajectories prepared, 489 replayed in pi-durable's tools over their base commits (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,538 of 22,722 steps verified. Divergences: task_tracker 113, execute_bash interactive input 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, str_replace_editor other 1. 3,852 records (3,740 train / 112 test), 20,359 digest parts; only steps before a divergence are kept. Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,852 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. prepared.jsonl and replayed.jsonl carry the normalized transcripts and the replay verification; gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v2 (2026-10-10): 6 of its records carry OpenHands' bash soft-timeout notice (\"no new output after 30 seconds ... send keys ... use the timeout parameter in execute_bash\") in a pi bash result, which pi never shows; v2 replays with that notice as the divergence point. Kept for provenance; do not use. Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md §2) built 2026-10-09/10 by harness_bench_build.sh at code commit 744bdd4f (applications/pi/bench/replay.ts, training/neuralese/natlang_neuralese/harness_bench/*): 492 resolved trajectories prepared, 489 replayed in pi-durable's tools over their base commits (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,538 of 22,722 steps verified. Divergences: task_tracker 113, execute_bash interactive input 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, str_replace_editor other 1. 3,852 records (3,740 train / 112 test), 20,359 digest parts; only steps before a divergence are kept. Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,852 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. prepared.jsonl and replayed.jsonl carry the normalized transcripts and the replay verification; gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md §7 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
       "required_conversion": {
         "reason": "built with natlang.harness-bench-conversion/1: tool-output parts have type 'digest' and the piece is prompt:digest; DECISIONS.md 2026-10-09 (one summarizer family) renamed them to 'view' and prompt:view (view's body), by rewrite. train.trajectories refuses 'digest' parts before any model work.",
         "conversion": "scripts/neuralese_data/digest_to_view.py --source <this corpus> --out <new corpus dir> --copy summary.json surface.json prepared.jsonl replayed.jsonl replay.log",
         "output": "a new corpus id with its own manifest (this corpus stays as published); admission is decided for the new id",
         "status": "not needed (superseded by -v2)"
-      }
+      },
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: superseded by v2..v4: same trajectories; v1 additionally carries 9 records with the OpenHands bash timeout notice (concrete defect). No unique rows."
     },
     {
       "id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v2",
@@ -18658,7 +17491,7 @@
         "criteria": "harness-bench-criteria/2",
         "working_copy": "/home/werg/data/harness-bench/build-20261010-1000"
       },
-      "notes": "SUPERSEDED for training use by harness-bench-swe-rebench-openhands-pi-records-20261010-v3 (2026-10-10, the registered digest\u2192view conversion; this corpus stays as published and the trainer refuses its digest parts). Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md \u00a72), supersedes harness-bench-swe-rebench-openhands-pi-records-20261010-v1. Built 2026-10-10 by harness_bench_build.sh at code commit b4543ebd: same surface.json and prepared.jsonl as v1 (copied, byte-identical), replay and records re-run with the fix that an OpenHands bash timeout notice ('[The command has no new output after N seconds. ... send keys (\"C-c\", \"C-z\", \"C-d\") ... or use the timeout parameter in execute_bash for future commands.]', or its 'timed out after N seconds' form) is a divergence point: pi's bash waits for the command, so pi would never show that notice; replay stops before that step and records keep only the verified prefix. 492 resolved trajectories prepared, 489 replayed (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,468 of 22,652 steps verified. Divergences: task_tracker 112, bash soft timeout (OpenHands-only interaction) 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, execute_bash interactive input 1, str_replace_editor other 1. 3,843 records (3,731 train / 112 test), 20,302 digest parts; no record contains the soft-timeout notice (v1: 6). Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,843 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. Gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
+      "notes": "SUPERSEDED for training use by harness-bench-swe-rebench-openhands-pi-records-20261010-v3 (2026-10-10, the registered digest→view conversion; this corpus stays as published and the trainer refuses its digest parts). Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md §2), supersedes harness-bench-swe-rebench-openhands-pi-records-20261010-v1. Built 2026-10-10 by harness_bench_build.sh at code commit b4543ebd: same surface.json and prepared.jsonl as v1 (copied, byte-identical), replay and records re-run with the fix that an OpenHands bash timeout notice ('[The command has no new output after N seconds. ... send keys (\"C-c\", \"C-z\", \"C-d\") ... or use the timeout parameter in execute_bash for future commands.]', or its 'timed out after N seconds' form) is a divergence point: pi's bash waits for the command, so pi would never show that notice; replay stops before that step and records keep only the verified prefix. 492 resolved trajectories prepared, 489 replayed (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,468 of 22,652 steps verified. Divergences: task_tracker 112, bash soft timeout (OpenHands-only interaction) 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, execute_bash interactive input 1, str_replace_editor other 1. 3,843 records (3,731 train / 112 test), 20,302 digest parts; no record contains the soft-timeout notice (v1: 6). Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,843 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. Gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md §7 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
       "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v1",
       "required_conversion": {
         "reason": "built with natlang.harness-bench-conversion/1: tool-output parts have type 'digest' and the piece is prompt:digest; DECISIONS.md 2026-10-09 (one summarizer family) renamed them to 'view' and prompt:view (view's body), by rewrite. train.trajectories refuses 'digest' parts before any model work.",
@@ -18709,9 +17542,10 @@
           "working_copy": "/home/werg/data/harness-bench/build-20261010-1000"
         }
       },
-      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v4 (2026-10-10): its split_of(repo, 5) splits disagree with S1's for 53 of its 321 repositories (cross-corpus closure); v4 follows S1. Kept for provenance and for lineages already pinned to it. Harness-bench native records of harness-bench-swe-rebench-openhands-pi-records-20261010-v2 after the registered view rename (DECISIONS.md 2026-10-09, one summarizer family; HARNESS_BENCH.md \u00a73), converted 2026-10-10 by scripts/neuralese_data/digest_to_view.py@1: every 'digest' part is a 'view' part (name view:<sha12>, note '  // view of the ...'), the piece prompt:digest is prompt:view with view's body (natlang_neuralese.view.INSTRUCTIONS), neuralese_conversion.version natlang.harness-bench-conversion/2 with sites.view, views_in_trajectory, provenance view_chars, and each record carries view_rename (converter, from_version natlang.harness-bench-conversion/1, digest_parts). 3,843 records (3,731 train / 112 test), 20,302 view parts in 3,670 records, 1 piece renamed; summary.json, surface.json, prepared.jsonl, replayed.jsonl and replay.log copied byte for byte. conversion.json records input and output SHA-256 and the counts. Validated 2026-10-10 with the trajectory trainer's record loading (train.trajectories reject_digest_part on every part, no prompt:digest piece, authenticated_recurrence_context_view, crisp_messages rendering; no model load): all 3,843 records load and render, none held, no digest part remains, every receipt hash verifies. Per-record admission unchanged from v2 (harness-bench-criteria/2). Corpus-level training admission is held as for v2: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (data/neuralese/corpora is a symlink there; a finished, held corpus is not latency-critical). 2026-10-10: text twins rendered with the fixed renderer (harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1, -text-mellum21-12b-20261010-v1) and the harness_bench cohort declared, held, in raw-recurrence-v3 / raw-recurrence-mellum-v2.",
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v4 (2026-10-10): its split_of(repo, 5) splits disagree with S1's for 53 of its 321 repositories (cross-corpus closure); v4 follows S1. Kept for provenance and for lineages already pinned to it. Harness-bench native records of harness-bench-swe-rebench-openhands-pi-records-20261010-v2 after the registered view rename (DECISIONS.md 2026-10-09, one summarizer family; HARNESS_BENCH.md §3), converted 2026-10-10 by scripts/neuralese_data/digest_to_view.py@1: every 'digest' part is a 'view' part (name view:<sha12>, note '  // view of the ...'), the piece prompt:digest is prompt:view with view's body (natlang_neuralese.view.INSTRUCTIONS), neuralese_conversion.version natlang.harness-bench-conversion/2 with sites.view, views_in_trajectory, provenance view_chars, and each record carries view_rename (converter, from_version natlang.harness-bench-conversion/1, digest_parts). 3,843 records (3,731 train / 112 test), 20,302 view parts in 3,670 records, 1 piece renamed; summary.json, surface.json, prepared.jsonl, replayed.jsonl and replay.log copied byte for byte. conversion.json records input and output SHA-256 and the counts. Validated 2026-10-10 with the trajectory trainer's record loading (train.trajectories reject_digest_part on every part, no prompt:digest piece, authenticated_recurrence_context_view, crisp_messages rendering; no model load): all 3,843 records load and render, none held, no digest part remains, every receipt hash verifies. Per-record admission unchanged from v2 (harness-bench-criteria/2). Corpus-level training admission is held as for v2: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md §7 step 2). Stored on /mnt/external with the other corpora (data/neuralese/corpora is a symlink there; a finished, held corpus is not latency-critical). 2026-10-10: text twins rendered with the fixed renderer (harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1, -text-mellum21-12b-20261010-v1) and the harness_bench cohort declared, held, in raw-recurrence-v3 / raw-recurrence-mellum-v2.",
       "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v2",
-      "superseded_by": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+      "superseded_by": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: superseded by v4: identical records except split (53 repositories disagree with S1). No unique rows."
     },
     {
       "id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
@@ -18729,7 +17563,7 @@
       "split": "by repository, following the published cross-corpus closure: a repository S1 already places keeps S1's split (cross_corpus.place over the repository's component through cross-corpus-index-s1-full-final-20261003-v1), others by split_of(repo, 5); source groups repository and instance",
       "source_class": "teacher-agent-trajectories-normalized-to-pi-and-replayed-in-pi-tools",
       "admission": "admitted-by-owner-pending-recurrence-support (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'): read directly only by the recurrence stage, which stays held until each student's runtime qualification and the view gate, and until written views run on these records (raw-recurrence-v3 cohorts.harness_bench.recurrence.status); its LFM text twin is admitted",
-      "training_admission": false,
+      "training_admission": true,
       "corpus_publication_for_training": false,
       "derived_from": [
         "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
@@ -18770,8 +17604,11 @@
           }
         }
       },
-      "notes": "Harness-bench native records rebuilt 2026-10-10 from harness-bench-swe-rebench-openhands-pi-records-20261010-v3's replay outputs by the records stage at 621de060, which writes view parts directly (no digest_to_view step). Only the splits changed: harness-bench v3 split by split_of(repo, 5) while S1 (s1-full-final-20261003, repo: and swe-instance: groups) holds every one of these 321 repositories, 53 of them in the other split, so the view corpus v2 closure dropped 2,826 tool-output records (VIEW_CORPUS.md \u00a74.1). Now all 321 repositories take S1's split (275 train / 46 test; moved from split_of: {\"test->train\": 8, \"train->test\": 45}; none unplaceable). 3843 records (2969 train / 874 test; v3: 3,731 / 112), 20302 view parts; every record equals its v3 record except split, provenance.split_placement (new: rule, touched corpora) and the absent view_rename (v3's converter receipt); pieces.jsonl byte-identical. Per-record admission unchanged (harness-bench-criteria/2, all approved). Admission as v3's (recurrence held). Cross-corpus index: cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1.",
-      "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
+      "notes": "Harness-bench native records rebuilt 2026-10-10 from harness-bench-swe-rebench-openhands-pi-records-20261010-v3's replay outputs by the records stage at 621de060, which writes view parts directly (no digest_to_view step). Only the splits changed: harness-bench v3 split by split_of(repo, 5) while S1 (s1-full-final-20261003, repo: and swe-instance: groups) holds every one of these 321 repositories, 53 of them in the other split, so the view corpus v2 closure dropped 2,826 tool-output records (VIEW_CORPUS.md §4.1). Now all 321 repositories take S1's split (275 train / 46 test; moved from split_of: {\"test->train\": 8, \"train->test\": 45}; none unplaceable). 3843 records (2969 train / 874 test; v3: 3,731 / 112), 20302 view parts; every record equals its v3 record except split, provenance.split_placement (new: rule, touched corpora) and the absent view_rename (v3's converter receipt); pieces.jsonl byte-identical. Per-record admission unchanged (harness-bench-criteria/2, all approved). Admission as v3's (recurrence held). Cross-corpus index: cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1.",
+      "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
+      "review_status": "2026-10-11 dgx-held-recovery: owner-admitted 2026-10-10 harness bench records (v4 = S1-consistent splits, 2969 train / 874 test records); label said pending recurrence support, which is not a reason to exclude. JeFF scan done.",
+      "consumable_by_direct_stage": false,
+      "required_conversion": "whole-trajectory or decision-text render (text twins v2 already admitted for LFM and Mellum)"
     },
     {
       "id": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1",
@@ -18833,7 +17670,7 @@
           "tokens": 72442697
         }
       },
-      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Training admission kept for lineages that already assembled it (e.g. neuralese-native-harness-text-mix-lfm25-8805-20261010-v1); new recipes pin v2. LFM2.5-350M tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 74,552,953 tokens (72,442,697 train / 2,110,256 test), of which 791,583 (1.1%) are the supervised assistant suffix; max document 102,005 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md \u00a76/\u00a77). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Training admission kept for lineages that already assembled it (e.g. neuralese-native-harness-text-mix-lfm25-8805-20261010-v1); new recipes pin v2. LFM2.5-350M tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 74,552,953 tokens (72,442,697 train / 2,110,256 test), of which 791,583 (1.1%) are the supervised assistant suffix; max document 102,005 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md §6/§7). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
       "superseded_by": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2"
     },
     {
@@ -18968,8 +17805,9 @@
           "tokens": 92621371
         }
       },
-      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Mellum2.1-12B-A2.5B-Thinking tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 95,410,999 tokens (92,621,371 train / 2,789,628 test), of which 821,583 (0.9%) are the supervised assistant suffix; max document 105,093 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md \u00a76/\u00a77). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
-      "superseded_by": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2"
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Mellum2.1-12B-A2.5B-Thinking tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 95,410,999 tokens (92,621,371 train / 2,789,628 test), of which 821,583 (0.9%) are the supervised assistant suffix; max document 105,093 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md §6/§7). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
+      "superseded_by": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2",
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: superseded by text v2 (renders records v4); v1 renders v3 splits."
     },
     {
       "id": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2",
@@ -20260,12 +19098,16 @@
       "split": "by-predicate",
       "source_class": "refinement-predicate-judge-exact-crisp-labels",
       "admission": "held-pending-review-refine-judge-exact-labels",
-      "training_admission": false,
+      "training_admission": true,
       "corpus_publication_for_training": false,
       "derived_from": [],
       "license": "internal: generated by scripts/refine_data (no external data)",
       "split_rule": "refine-judge-split/1: a whitespace-normalised predicate text goes to bucket int(sha256('refine-judge-split/1|' + text)[:8], 16) % 10; buckets 0 and 1 are held out (split heldout-predicate, role heldout), so every row of a predicate has one split. Families clock-time, ipv4, multiple-of and sorted-list are held out whole (heldout-family). Everything else is train. The same rule splits the near-miss, mined and calibration sources.",
-      "notes": "refine-judge source (c), plans/REFINEMENT_DATA.md: 1327 natlang.decision-prompt/1 rows (value, predicate) -> P(true) over options true/false, 93 predicates (length, format, enumeration, numeric range, list shape; 6 are the applications' real DECOMPOSITION.md predicates), labelled exactly by the crisp checker of each predicate, no model involved. Prompts mirror decisionJudge byte for byte (parity-tested). Rows by split: train 1020, heldout-predicate 186, heldout-family 121. Held: admission needs the decision in plans/REFINEMENT_DATA.md (judge quality on the near-miss and calibration sets first); exact predicates are also cheap to check in plain code (skills/natlang-authoring/references/refinements.md), so this corpus teaches the judge format and calibration at the extremes, not the hard cases. The near-miss, mined and calibration sources are produced later in the teacher window and get their own ids."
+      "notes": "refine-judge source (c), plans/REFINEMENT_DATA.md: 1327 natlang.decision-prompt/1 rows (value, predicate) -> P(true) over options true/false, 93 predicates (length, format, enumeration, numeric range, list shape; 6 are the applications' real DECOMPOSITION.md predicates), labelled exactly by the crisp checker of each predicate, no model involved. Prompts mirror decisionJudge byte for byte (parity-tested). Rows by split: train 1020, heldout-predicate 186, heldout-family 121. Held: admission needs the decision in plans/REFINEMENT_DATA.md (judge quality on the near-miss and calibration sets first); exact predicates are also cheap to check in plain code (skills/natlang-authoring/references/refinements.md), so this corpus teaches the judge format and calibration at the extremes, not the hard cases. The near-miss, mined and calibration sources are produced later in the teacher window and get their own ids.",
+      "review_status": "2026-10-11 dgx-held-recovery: held-pending-review label only; exact crisp labels, no model involved. Admitted: 1020 train rows (93 predicates by-predicate split). heldout-predicate (186) and heldout-family (121) rows are held-out eval splits and stay out. JeFF scan 0 hits. ~138k context tokens, ~3k supervised label tokens.",
+      "consumable_by_direct_stage": false,
+      "required_conversion": "render natlang.decision-prompt/1 rows as judge calls (messages are the byte-parity decisionJudge prompts)",
+      "train_rows": 1020
     },
     {
       "id": "refine-author-static-20261009-v1",
@@ -20279,11 +19121,15 @@
       "split": "none",
       "source_class": "refinement-authoring-examples-from-application-sources-and-git-history",
       "admission": "held-pending-review-refine-author-static",
-      "training_admission": false,
+      "training_admission": true,
       "corpus_publication_for_training": false,
       "derived_from": [],
       "license": "internal: applications of this repository",
-      "notes": "refine-author, plans/REFINEMENT_DATA.md: 28 before/after pairs (natlang.refine-author/1): a .nl function and types.ts whose instructions carry a guard sentence versus the same function with the property moved into an Is<T, \"predicate\"> type. 24 from the working tree of applications/{workflow,scheduling,build,migration,wiki,games} and 4 from git history where the guard was already removed (logs/assess.nl at 68cb32f5^, wiki/reconcile.nl at b8d422e2^, build/choose.nl at 75323731^, migration/propose.nl at da2b6519^). Predicates and base types come from the DECOMPOSITION.md tables; anchors are applications/refine-data/authoring.json. Omissions: omissions.jsonl is empty (every registry entry resolved); 92 of the 117 harvested predicates have no example yet (listed by id in manifest.json report.uncovered_predicate_ids), because their constraints are not stated as a guard sentence in any instruction, or need the compiler lowering that is pending. Not compiled as whole projects: refined types are parsed with the runtime type parser only (ts-host/scripts/refine-data/check-author.mjs). No train/held-out split: hold out by app. Held pending review of the edited instructions and a decision on use for the teacher, improver and specializer writer."
+      "notes": "refine-author, plans/REFINEMENT_DATA.md: 28 before/after pairs (natlang.refine-author/1): a .nl function and types.ts whose instructions carry a guard sentence versus the same function with the property moved into an Is<T, \"predicate\"> type. 24 from the working tree of applications/{workflow,scheduling,build,migration,wiki,games} and 4 from git history where the guard was already removed (logs/assess.nl at 68cb32f5^, wiki/reconcile.nl at b8d422e2^, build/choose.nl at 75323731^, migration/propose.nl at da2b6519^). Predicates and base types come from the DECOMPOSITION.md tables; anchors are applications/refine-data/authoring.json. Omissions: omissions.jsonl is empty (every registry entry resolved); 92 of the 117 harvested predicates have no example yet (listed by id in manifest.json report.uncovered_predicate_ids), because their constraints are not stated as a guard sentence in any instruction, or need the compiler lowering that is pending. Not compiled as whole projects: refined types are parsed with the runtime type parser only (ts-host/scripts/refine-data/check-author.mjs). No train/held-out split: hold out by app. Held pending review of the edited instructions and a decision on use for the teacher, improver and specializer writer.",
+      "review_status": "2026-10-11 dgx-held-recovery: held-pending-review label only; 28 before/after authoring pairs verified by the type parser; admitted whole (no split: hold out by app if an eval is wanted). ~197k tokens. JeFF scan 0 hits.",
+      "consumable_by_direct_stage": false,
+      "required_conversion": "render as authoring examples: input function with guard sentence, output refined function + types.ts",
+      "train_rows": 28
     },
     {
       "id": "luna-v22-targeted-counterfactual-five-held-trajectories-20261009-v1",
@@ -20773,7 +19619,7 @@
       ],
       "license": "Inherited authored source identities/license in referenced V22 source artifact",
       "independent_new_worlds": 0,
-      "notes": "Additional now-closed NVIDIA/Gemini3.5Lite source1\u20134 plus Kilo source0. Completes byte availability for independent reviewed10-row NVIDIA/Gemini comparison; Kilo wrong-output case preserved. Model done is not oracle pass. Do not mutate first closed corpus manifest; preserve all partial/error/success artifacts; native replay and source-quality admission pending."
+      "notes": "Additional now-closed NVIDIA/Gemini3.5Lite source1–4 plus Kilo source0. Completes byte availability for independent reviewed10-row NVIDIA/Gemini comparison; Kilo wrong-output case preserved. Model done is not oracle pass. Do not mutate first closed corpus manifest; preserve all partial/error/success artifacts; native replay and source-quality admission pending."
     },
     {
       "id": "free-provider-google-lite-and-new-free-screens-held-20261009-v1",
@@ -20846,13 +19692,17 @@
       "split": "per-row (source record split)",
       "source_class": "derived-operator-cases-with-code-computed-targets",
       "admission": "s5-operator-training-source;exact-code-targets;not-task-admission",
-      "training_admission": false,
+      "training_admission": true,
       "corpus_publication_for_training": false,
       "derived_from": [
         "neuralese-maple-native-gold-text-corpus-20261008-v7"
       ],
       "license": "internal: derived from the registered v7 gold text corpus",
-      "notes": "natlang_neuralese.data.operator_cases (b94a2d49): 2000 spans (1166 train / 834 test by source record) from chat turns of the v7 corpus, system prompt and spans repeated in >2 records excluded; each with a partner span and a map transform (upper, first_word, last_word, word_count, reverse_words, initials) whose result is computed in code."
+      "notes": "natlang_neuralese.data.operator_cases (b94a2d49): 2000 spans (1166 train / 834 test by source record) from chat turns of the v7 corpus, system prompt and spans repeated in >2 records excluded; each with a partner span and a map transform (upper, first_word, last_word, word_count, reverse_words, initials) whose result is computed in code.",
+      "review_status": "2026-10-11 dgx-held-recovery: label said not-task-admission; the cases are code-computed exact targets. Admitted: 1166 train spans (834 test spans stay out). ~74k tokens. JeFF scan 0 hits.",
+      "consumable_by_direct_stage": false,
+      "required_conversion": "operator-objective cases (S5), not text SFT; replay records are backbone-specific smoke and stay excluded",
+      "train_rows": 1166
     },
     {
       "id": "neuralese-s5-operator-replay-records-20261009-v1",
@@ -20876,7 +19726,8 @@
         "neuralese-operator-cases-20261009-v1"
       ],
       "license": "internal",
-      "notes": "natlang.replay-record/1 (a78372fc): 216 records (144 train from 24 cases, 72 held from 12 cases), 0 failures; programs read(v), read(map(v,f)), read(split(zip(a,b))[i]), laws combineIdentity and splitZip, collected on the reference server with LFM2.5-350M + runs/neuralese-s3-pilot-20261005-v4 heads and the text-init standard library in the same directory. Blocks are only meaningful for that backbone and those heads."
+      "notes": "natlang.replay-record/1 (a78372fc): 216 records (144 train from 24 cases, 72 held from 12 cases), 0 failures; programs read(v), read(map(v,f)), read(split(zip(a,b))[i]), laws combineIdentity and splitZip, collected on the reference server with LFM2.5-350M + runs/neuralese-s3-pilot-20261005-v4 heads and the text-init standard library in the same directory. Blocks are only meaningful for that backbone and those heads.",
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: backbone-specific smoke replay (LFM2.5 pilot v4 heads); regenerate from neuralese-operator-cases-20261009-v1 for a new backbone."
     },
     {
       "id": "free-provider-google-lite-robotics-closed-held-20261009-v1",
@@ -21020,7 +19871,7 @@
       ],
       "license": "Inherited exact source licenses, preserved per compatible batch",
       "independent_new_worlds": 0,
-      "notes": "131 strict source-consistent labels\u219223 authored collection IR cases (8 choice/14 binary/1 ordinal) at batch-size8. All23 actual scripted references accepted with visible captures and kind-specific runtime output instructions;308 held native turns. Binary probability source questions kept verbatim, typed output explicitly p>=0.5\u2192boolean; choice/ordinal select exact source label, no probability envelope. Zero provider calls/teacher scaffold claims/new worlds/admission. Fully replayed static reference is not source-quality approval or learned-channel qualification. All125 rejected label rows preserved. V1 derivative superseded, not combined as additional worlds. Superseded by v3 shared ordinal source-mapping correction. Earlier snapshots remain held historical evidence, never mixed as additional worlds.",
+      "notes": "131 strict source-consistent labels→23 authored collection IR cases (8 choice/14 binary/1 ordinal) at batch-size8. All23 actual scripted references accepted with visible captures and kind-specific runtime output instructions;308 held native turns. Binary probability source questions kept verbatim, typed output explicitly p>=0.5→boolean; choice/ordinal select exact source label, no probability envelope. Zero provider calls/teacher scaffold claims/new worlds/admission. Fully replayed static reference is not source-quality approval or learned-channel qualification. All125 rejected label rows preserved. V1 derivative superseded, not combined as additional worlds. Superseded by v3 shared ordinal source-mapping correction. Earlier snapshots remain held historical evidence, never mixed as additional worlds.",
       "superseded_by": "free-provider-static-decision-inline-lambdas-held-20261010-v3"
     },
     {
@@ -21324,7 +20175,7 @@
       "source_class": "public-dataset-questions-and-summaries-with-code-computed-extraction-and-reconstruction",
       "admission": "superseded-by-view-ask-20261010-v2;held",
       "training_admission": false,
-      "training_admission_reason": "superseded; was pending view-stage qualification (TRAINING_RECIPE.md). Licences are provenance facts only (owner rule 2026-10-10)",
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: superseded by view-ask-20261010-v4 (same inputs, closure against S1 and harness v4); rows dropped by the later closure were split leaks. No unique rows.",
       "corpus_publication_for_training": false,
       "derived_from": [
         "view-sources-20261009-v1",
@@ -21542,7 +20393,7 @@
       "source_class": "public-dataset-questions-and-summaries-with-code-computed-extraction-and-reconstruction",
       "admission": "superseded-by-view-ask-20261010-v3;held-pending-view-stage-qualification",
       "training_admission": false,
-      "training_admission_reason": "superseded by view-ask-20261010-v3; pending the view operator stage's qualification (raw-recurrence-v4 / raw-recurrence-mellum-v3, declared held). Licences are per-record provenance facts only (owner rule 2026-10-10)",
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: superseded by view-ask-20261010-v4 (same inputs, closure against S1 and harness v4); rows dropped by the later closure were split leaks. No unique rows.",
       "corpus_publication_for_training": false,
       "supersedes": "view-ask-slice-20261010-v1",
       "derived_from": [
@@ -21618,7 +20469,7 @@
       "source_class": "public-dataset-questions-and-summaries-with-code-computed-extraction-and-reconstruction",
       "admission": "superseded-by-view-ask-20261010-v4;held-pending-view-stage-qualification",
       "training_admission": false,
-      "training_admission_reason": "superseded by view-ask-20261010-v4; pending the view operator stage's qualification (raw-recurrence-v4 / raw-recurrence-mellum-v3 view_operator admitted:false: runtime qualification and the view gate). Licences are per-record provenance facts only (owner rule 2026-10-10); no record is held or omitted for its licence",
+      "training_admission_reason": "2026-10-11 dgx-held-recovery: superseded by view-ask-20261010-v4 (same inputs, closure against S1 and harness v4); rows dropped by the later closure were split leaks. No unique rows.",
       "corpus_publication_for_training": false,
       "supersedes": "view-ask-20261010-v2",
       "derived_from": [
@@ -22058,69 +20909,6 @@
       "admission": "diagnostic evidence only; no generated trajectory admission",
       "independent_new_worlds": 0,
       "notes": "ZAI research index2 actually lost raw evidence in pass4 by returning final decision JSON; final parser defaulted to no_action. Runtime capture was intact. Apparent trace hash mismatch is false: canonical root-only events match recorded hash; raw sidecar includes child events. Correction supplement supersedes only that diagnostic claim, old review bytes retained. Native tool schema metadata fixed centrally for future runtime, not rewritten."
-    },
-    {
-      "id": "luna-ar-native-harness-29466-full-state-closeout-held-20261010-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-8805-final28793-20261010-v1/closed-output-v1",
-      "include": [
-        "**/*"
-      ],
-      "split": "model-checkpoint-not-data",
-      "source_class": "closed-full-optimizer-checkpoint-and-failed-channel-evidence",
-      "training_admission": false,
-      "admission": "excluded-clean-lineage-ancestor-harness-split-overlap",
-      "independent_new_worlds": 0,
-      "notes": "Stopped at29466 by SIGTERM with complete model/optimizer/RNG checkpoint. Immutable closed source for new matching-history-reference continuation; no inherited qualification. Best and current checkpoint retained with reports. Alias roots exact closed /srv output; storage transfer preserves bytes before inactive best checkpoint offload. Later749cf77c harnessS1splitcorrection: mixedexposure disqualifiescleanancestor andheldevalcredit. Preserveevidence."
-    },
-    {
-      "id": "luna-ar-prefix-inactive-full-state-closeout-held-20261010-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-feedback-prefix-4962-best23936-20261009-v1/closed-output-v1",
-      "include": [
-        "**/*"
-      ],
-      "split": "model-checkpoint-not-data",
-      "source_class": "inactive-complete-optimizer-state",
-      "training_admission": false,
-      "admission": "archival/restore evidence only; no channel qualification inherited",
-      "independent_new_worlds": 0,
-      "notes": "Inactive prefix AR experiment complete full state retained by exact manifests. Pop active29466 matching-history lineage references other immutable source checkpoint/heads; these inactive large files are eligible for verified offload to canonical DGX artifact storage."
-    },
-    {
-      "id": "luna-ar-gateref-29466-exact-source-heads-held-20261010-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-gateref-29466-20261010-v1/exact-source-export-v1",
-      "include": [
-        "source-heads.pt",
-        "source-heads.json"
-      ],
-      "split": "model-checkpoint-not-data",
-      "source_class": "exact-full-state-heads-export",
-      "training_admission": false,
-      "admission": "unqualified heads export; exact handoff state only",
-      "notes": "Shared export_from_checkpoint reconstructed from immutable full29466 checkpoint. Export heads_current true, same exact step; v2 live continuation input. No certificate inherited."
-    },
-    {
-      "id": "luna-ar-gateref-29466-frozen-launches-held-20261010-v1",
-      "owner": "pop",
-      "path": "runs",
-      "include": [
-        "luna-ar-native-harness-gateref-29466-20261010-v1/frozen-package-v1/**/*.py",
-        "luna-ar-native-harness-gateref-29466-20261010-v1/root-launch-receipt-v1.json",
-        "luna-ar-native-harness-gateref-29466-20261010-v1/startup-handoff-superseded-v1.json",
-        "luna-ar-native-harness-gateref-29466-20261010-v2/frozen-package-v1/**/*.py",
-        "luna-ar-native-harness-gateref-29466-20261010-v2/root-launch-receipt-v1.json"
-      ],
-      "split": "execution-provenance-not-training-data",
-      "source_class": "immutable-declared-runtime-and-launch-evidence",
-      "training_admission": false,
-      "admission": "execution provenance only; ongoing logs/checkpoints excluded",
-      "notes": "Both original superseded startup and active corrected frozen package preserved with inventories/receipts. Source code synchronization uses Git; these frozen evidence bytes document exact historical execution only.",
-      "include_root_prefixes": [
-        "luna-ar-native-harness-gateref-29466-20261010-v1",
-        "luna-ar-native-harness-gateref-29466-20261010-v2"
-      ]
     },
     {
       "id": "free-provider-google-pool-v5-queued-inputs-held-20261010-v1",
@@ -22749,19 +21537,6 @@
       "notes": "313 native turns,17 failed-action targets excluded,15 duplicate rendered documents removed,281 held ordinary-text documents with zero document omissions. Captured expanded context and exact raw-action normalization adapters; no learned channel, recurrence edge, stopping, runtime qualification or training admission. Separate exact V28 DGX global closure receipt; root review pending."
     },
     {
-      "id": "luna-ar-native-harness-gateref-v2-30515-closeout-held-20261010-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-gateref-29466-20261010-v2/closed-output-v1",
-      "include": [
-        "**/*"
-      ],
-      "split": "inherited-train-held-qualification",
-      "source_class": "neuralese-foundation-checkpoint-failed-gate-evidence",
-      "training_admission": false,
-      "admission": "excluded-clean-lineage-ancestor-harness-split-overlap",
-      "notes": "ClosedV2 cleanSIGTERM30515. Best29696 used byV4; completeoptimizerstate, same-history gate failed, no qualification certificate. Preserve heldprobes and failedrepresentation drift. Later749cf77c harnessS1splitcorrection: mixedexposure disqualifiescleanancestor andheldevalcredit. Preserveevidence."
-    },
-    {
       "id": "free-provider-luna-v32-source-ambiguity-review-held-20261010-v1",
       "owner": "pop",
       "path": "runs/luna-semantic-iterate-refill-20261010-v1/review-v2",
@@ -23025,19 +21800,6 @@
       "training_admission": false,
       "admission": "dispatch-evidence-live-output-excluded",
       "notes": "5workers6/6/6/6/5singlecases from29reviewedsourceindices; frozenV10 dependencyoverlay/providerimportpreflight, max5nativeLuna total. Targetoutputsnotadmitted."
-    },
-    {
-      "id": "luna-ar-native-harness-v4-29968-split-contaminated-closeout-held-20261010-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-gentle-29696-20261010-v4/closed-output-v1",
-      "include": [
-        "**/*"
-      ],
-      "split": "legacy-split-inconsistent-evidence-only",
-      "source_class": "neuralese-checkpoint-split-contaminated-failed-gate-evidence",
-      "training_admission": false,
-      "admission": "excluded-clean-lineage-ancestor-harness-split-overlap",
-      "notes": "CleanSIGTERM29968/fulloptimizer preserved. Mixed harnessv1 disagreed with S1 held repository placement53/321groups; mixedV1/V2/V4 all excluded cleanlineage. No held eval credit/foundation certificate. Restart native-only28793 with harnessv2; independent S1 closure not newly certified."
     },
     {
       "id": "free-provider-v29-visible-input-native-text-v2-held-20261010-v1",
@@ -23594,23 +22356,6 @@
       "split": "evidence-only-inherited-source",
       "source_class": "supplemental-immutable-runtime-source-and-quality-evidence",
       "source_snapshot": "neuralese-workflowevals-folder-iterate-v27-source-review-launch-20261008-v1",
-      "supplemental_worklist_sha256": "7e1c822ad1e8457f8967573b8fb52eb55113059f4abcbe541bb3e99fabe12298"
-    },
-    {
-      "admission": "supplemental-immutable-evidence-only",
-      "id": "neuralese-lfm-input-map-launch-preparation-20261008-v1-glob-supplement-20261010-v1",
-      "include": [
-        "runtime/manifest.json"
-      ],
-      "native_admission": false,
-      "notes": "Root approved current exact durable bytes for supplemental publication only; no claim these existed at original publication. Original source manifests unchanged, no independent examples or training/native/trace admission. Source neuralese-lfm-input-map-launch-preparation-20261008-v1; exact audited files, dynamic/ambiguous artifacts excluded.",
-      "owner": "pop",
-      "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
-      "trace_admission": false,
-      "training_admission": false,
-      "split": "evidence-only-inherited-source",
-      "source_class": "supplemental-immutable-runtime-source-and-quality-evidence",
-      "source_snapshot": "neuralese-lfm-input-map-launch-preparation-20261008-v1",
       "supplemental_worklist_sha256": "7e1c822ad1e8457f8967573b8fb52eb55113059f4abcbe541bb3e99fabe12298"
     },
     {
@@ -26169,23 +24914,6 @@
       "notes": "Supplemental immutable packet produced after initial quality snapshot; original manifest remains unchanged. Exact packet SHA8c2040464d91383c1560db083778035ba43f712d59ef3f90d16a7d9b5ff24842. DGX full S1/harness4 closure retained47/47."
     },
     {
-      "id": "luna-ar-native-harness-v6-refine-frozen-inputs-held-20261010-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-refine-31744-20261010-v6",
-      "include": [
-        "root-launch-receipt-v1.json",
-        "frozen-package-v1/**/*.py"
-      ],
-      "exclude_dirs": [
-        "__pycache__"
-      ],
-      "split": "model-checkpoint-and-execution-evidence-not-training-data",
-      "source_class": "clean-lineage-full-state-and-frozen-runtime",
-      "training_admission": false,
-      "admission": "unqualified; exact resume and diagnostic evidence only",
-      "notes": "New shared-core frozen code continuation fromV5best31744,2048updates. BackboneLR2e-6/projections3e-4, doubled full/sketch embedding weights; native strictgatesunchanged. No new admission."
-    },
-    {
       "id": "free-provider-luna-v49-repaired-train-reviewed-inputs-held-20261010-v1",
       "owner": "pop",
       "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-repaired-train-iterative-trace-v49-runtimev14-v1",
@@ -26650,7 +25378,7 @@
       "source_class": "iterative-guidance-trajectories-inputs",
       "training_admission": false,
       "admission": "held-source-native-quality-review",
-      "notes": "Fifteen V35 V5 train worlds indices 0\u201314, original V4 golds/facts/groups unchanged; corrected shared current-status note guidance. SCHED-543 index15 already recovered separately. Three workers beside at most two remaining V53 workers, total at most five. Repeated original worlds, no independent-world credit. Input-only while active."
+      "notes": "Fifteen V35 V5 train worlds indices 0–14, original V4 golds/facts/groups unchanged; corrected shared current-status note guidance. SCHED-543 index15 already recovered separately. Three workers beside at most two remaining V53 workers, total at most five. Repeated original worlds, no independent-world credit. Input-only while active."
     },
     {
       "id": "free-provider-google-v20-closed-raw-held-20261010-v1",
@@ -27054,24 +25782,6 @@
       "notes": "SAFE-512 unchanged original source recovery accepted, all6files exact, genuine four-pass typed iterateOn and final Draft. Previous V54 correct return/missing file preserved separately, not silently repaired or automatic DPO admission. Audit6686b074a856e8eb6c96339547d37c446fb1174a9c79cecadc18d3f0d15d1579; no new source-world credit."
     },
     {
-      "id": "luna-ar-native-harness-v7-continuation-frozen-inputs-held-20261010-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-continue-33792-20261010-v7",
-      "exclude_dirs": [
-        "__pycache__"
-      ],
-      "split": "inherited-train-evidence",
-      "source_class": "source-bound-native-quality-evidence",
-      "training_admission": false,
-      "admission": "held-unqualified-alignment-or-source-quality-evidence",
-      "notes": "Exact V6 final complete state continued into V7; fixed admitted cohorts and unchanged objective/rates/gates; eval1024. Code inventory and inputs pinned in shared recipe. Active logs/outputs excluded.",
-      "include": [
-        "frozen-package-v1/**/*",
-        "root-launch-receipt-v1.json",
-        "direct-stage-launch-v1.json"
-      ]
-    },
-    {
       "id": "free-provider-luna-v59-iterative-coverage-inputs-held-20261010-v1",
       "owner": "pop",
       "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-iterative-modality-recovery-v59-runtimev15-v1",
@@ -27239,16 +25949,6 @@
         "launch-receipt-v1.json",
         "frozen-adapter-v1/**/*"
       ]
-    },
-    {
-      "id": "luna-ar-native-harness-alignment-v6-diagnostic-correction-held-20261010-v1",
-      "owner": "pop",
-      "path": "runs/luna-ar-native-harness-alignment-v6-diagnostic-correction-held-20261010-v1",
-      "split": "inherited-train-diagnostic-evidence",
-      "source_class": "training-alignment-diagnostic",
-      "training_admission": false,
-      "admission": "held-diagnostic-with-correction",
-      "notes": "Read-only V5/V6 alignment diagnosis. correction.json supersedes the original diagnostic target-drift interpretation without altering the historical diagnostic. Model weights were not loaded; no code/jobs/tests changed; no training examples or admission."
     },
     {
       "id": "free-provider-luna-v21-filtered-v4-launch-inputs-held-20261010-v1",
@@ -29133,7 +27833,7 @@
       "source_class": "held-generation-quality-and-source-closure",
       "training_admission": false,
       "admission": "held-pending-explicit-quality-and-source-review",
-      "notes": "Actual2native rows\u219229turns. Preservedfirstwrongapprovalbitsdiagnostic; correctedall29held then9exactreviewedactions only,20held. Selectednative9candidate,neuralese9held7unsupportedinterpolation/0childresult conversions. No blanketcorpus/operatoradmission."
+      "notes": "Actual2native rows→29turns. Preservedfirstwrongapprovalbitsdiagnostic; correctedall29held then9exactreviewedactions only,20held. Selectednative9candidate,neuralese9held7unsupportedinterpolation/0childresult conversions. No blanketcorpus/operatoradmission."
     },
     {
       "id": "luna-v64-seven-source-original-inputs-held-20261011-v1",
@@ -29634,7 +28334,7 @@
       "training_admission": false,
       "admission": "prepared-only-root-review-required",
       "independent_new_worlds": 0,
-      "notes": "Prepared five per-lane V73 queues from V35 static reference cases (55 programs/395 source items) on frozen runtime V16. Binds actual V72 worker lanes 1,3,4,5 plus the separate lane-02 supplement (PID 1033871) to V73 workers 1\u20135; each queue SHA and PID is pinned. V71 index16 retry is recorded as completed prerequisite, not substituted as V72 output. Some V72 predecessors were active/incomplete at preparation; the reviewed starter waits on exact PIDs and blocks any lane whose own queue is not terminally covered. All data held, no launch and no admission."
+      "notes": "Prepared five per-lane V73 queues from V35 static reference cases (55 programs/395 source items) on frozen runtime V16. Binds actual V72 worker lanes 1,3,4,5 plus the separate lane-02 supplement (PID 1033871) to V73 workers 1–5; each queue SHA and PID is pinned. V71 index16 retry is recorded as completed prerequisite, not substituted as V72 output. Some V72 predecessors were active/incomplete at preparation; the reviewed starter waits on exact PIDs and blocks any lane whose own queue is not terminally covered. All data held, no launch and no admission."
     },
     {
       "id": "luna-choice-confidence-v73-v35-runtimev16-input-plan-held-20261011-v2",
@@ -30400,7 +29100,7 @@
       "training_admission": false,
       "admission": "root-approved-generation-input-only-no-output-or-training-admission",
       "independent_new_worlds": 0,
-      "notes": "V75 v4 preparation-only input snapshot on runtime V17, 54 static programs / 390 source items, five exact worker queues. It binds the current 79-hold policy snapshot SHA c8eab8b4... and exact completed preparer snapshot SHA 6c1ff89f...; later canonical policy or code changes do not invalidate the prepared source identity. Predecessors are explicitly numbered logical lanes 1\u20135 with exact queue hashes and V16 runtime manifest pins in the reviewed/root-approved plans. Root supervisor 1052262 has started lane 2 and waits on other predecessor lanes; live campaign status/journals/results/logs excluded."
+      "notes": "V75 v4 preparation-only input snapshot on runtime V17, 54 static programs / 390 source items, five exact worker queues. It binds the current 79-hold policy snapshot SHA c8eab8b4... and exact completed preparer snapshot SHA 6c1ff89f...; later canonical policy or code changes do not invalidate the prepared source identity. Predecessors are explicitly numbered logical lanes 1–5 with exact queue hashes and V16 runtime manifest pins in the reviewed/root-approved plans. Root supervisor 1052262 has started lane 2 and waits on other predecessor lanes; live campaign status/journals/results/logs excluded."
     },
     {
       "id": "luna-choice-confidence-v75-v36-runtimev17-v4-root-approval-launch-held-20261011-v1",
@@ -31214,7 +29914,7 @@
       "training_admission": false,
       "admission": "static-reference-and-future-generation-source-only-no-provider-call-admission",
       "independent_new_worlds": 0,
-      "notes": "Immutable V41 append-only prefix snapshot at 356 label rows. The selected remainder excludes V78\u2019s 187-row prefix and V78/V79 already-selected items/groups. Static adapter used 132 completed label rows to produce 16 programs/102 labels/zero replay failures; combined V80 source has 5 criteria-fixed CLINC programs plus 16 remainder programs, 139 unique inherited-train items/groups. Raw labels, source master cases/manifest, adapter rejections, held native scaffold, component archive, replay evidence, and combined input provenance are included."
+      "notes": "Immutable V41 append-only prefix snapshot at 356 label rows. The selected remainder excludes V78’s 187-row prefix and V78/V79 already-selected items/groups. Static adapter used 132 completed label rows to produce 16 programs/102 labels/zero replay failures; combined V80 source has 5 criteria-fixed CLINC programs plus 16 remainder programs, 139 unique inherited-train items/groups. Raw labels, source master cases/manifest, adapter rejections, held native scaffold, component archive, replay evidence, and combined input provenance are included."
     },
     {
       "id": "luna-choice-confidence-v80-v41-prefix-input-held-20261011-v1",
@@ -31449,42 +30149,6 @@
       "notes": "Owner-sealed receipt records the V81 supervisor and five worker PID launch snapshot, bound to the approved plan and independent review. It is separate from the immutable source/queue input snapshot and excludes mutable output journals."
     },
     {
-      "id": "luna-direct-lfm-base-v1-launch-failure-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-neuralese-direct-lfm-base-20261011-v1",
-      "include": [
-        "direct-stage-run.container-launch.json",
-        "direct-stage-run.container-launch.log"
-      ],
-      "split": "held-failed-training-launch",
-      "source_class": "failed-direct-v1-training-launch-diagnostic",
-      "training_admission": false,
-      "admission": "launch-failure-diagnostic-only-no-training-or-qualification",
-      "independent_new_worlds": 0,
-      "notes": "Preserves the failed V1 container launch receipt and log. No training output or qualification is inferred."
-    },
-    {
-      "id": "luna-direct-lfm-base-v2-startup-failure-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/luna-neuralese-direct-lfm-base-20261011-v2",
-      "include": [
-        "direct-stage-run.container-launch.json",
-        "direct-stage-run.container-launch.log",
-        "direct-stage-run.recipe-launch.json",
-        "direct-stage-run/direct-stage-plan.json",
-        "direct-stage-run/direct-stage-result.json",
-        "direct-stage-run/direct_sft/eval.jsonl",
-        "direct-stage-run/direct_sft/identity-check.json",
-        "direct-stage-run/direct_sft/monitor-reference.pt"
-      ],
-      "split": "held-failed-training-startup",
-      "source_class": "failed-direct-v2-training-startup-diagnostic",
-      "training_admission": false,
-      "admission": "startup-failure-diagnostic-only-no-training-or-qualification",
-      "independent_new_worlds": 0,
-      "notes": "Preserves V2 launch/planning, failure, initial eval/identity and monitor-reference evidence. The run did not produce a trained checkpoint; these bytes are diagnostic only."
-    },
-    {
       "id": "google-choice-confidence-v41-prefix-static-v5-held-20261011-v1",
       "owner": "pop",
       "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v5-current-criteria",
@@ -31496,7 +30160,7 @@
       "training_admission": false,
       "admission": "strict-source-label-static-reference-only-no-provider-output-or-training-admission",
       "independent_new_worlds": 0,
-      "notes": "Atomic 703-row newline-terminated prefix of live V41 JSON-object labels, with exact parent source cases/frozen model manifest. The selection records excluded prior V77\u2013V81 IDs/groups; 254 remaining labels entered the shared adapter, yielding 148 exact-label accepted cases across 20 programs and 1,899 retained rejection rows; all 20 authored reference replays passed. The run is still held; replay/schema validity is not oracle or training admission."
+      "notes": "Atomic 703-row newline-terminated prefix of live V41 JSON-object labels, with exact parent source cases/frozen model manifest. The selection records excluded prior V77–V81 IDs/groups; 254 remaining labels entered the shared adapter, yielding 148 exact-label accepted cases across 20 programs and 1,899 retained rejection rows; all 20 authored reference replays passed. The run is still held; replay/schema validity is not oracle or training admission."
     },
     {
       "id": "luna-choice-confidence-v82-v41-prefix-input-held-20261011-v1",
@@ -31543,7 +30207,7 @@
       "training_admission": false,
       "admission": "strict-source-label-static-reference-only-no-provider-output-or-training-admission",
       "independent_new_worlds": 0,
-      "notes": "Fresh 749-row append-only V41 prefix snapshot with exact V41 source cases/provider manifest, prior-selection exclusions V77\u2013V82, 38 accepted source labels over six programs, all six authored reference replays passed. All label disagreements and rejection records remain preserved. This is held source/static-reference evidence, not teacher trajectories or training admission."
+      "notes": "Fresh 749-row append-only V41 prefix snapshot with exact V41 source cases/provider manifest, prior-selection exclusions V77–V82, 38 accepted source labels over six programs, all six authored reference replays passed. All label disagreements and rejection records remain preserved. This is held source/static-reference evidence, not teacher trajectories or training admission."
     },
     {
       "id": "luna-choice-confidence-v83-v41-prefix-input-held-20261011-v1",
@@ -31860,7 +30524,7 @@
       "training_admission": false,
       "admission": "post-hoc inherited-label comparison and scope diagnostic only; no relabeling, admission, or independent semantic certification",
       "independent_new_worlds": 0,
-      "notes": "Joins all 65 result rows from closed campaigns V81\u2013V85 to their exact static source program IDs and pinned source cases. 55 accepted program results, 10 rejected programs; 456 expected label slots across 456 distinct inherited source IDs/groups; 11 exact output/source-label disagreements; 33 scope-failure events. Mismatches are not independently adjudicated. Preserves per-result hashes and worker journals."
+      "notes": "Joins all 65 result rows from closed campaigns V81–V85 to their exact static source program IDs and pinned source cases. 55 accepted program results, 10 rejected programs; 456 expected label slots across 456 distinct inherited source IDs/groups; 11 exact output/source-label disagreements; 33 scope-failure events. Mismatches are not independently adjudicated. Preserves per-result hashes and worker journals."
     },
     {
       "id": "free-provider-v73-admitted-ordinary-text-846-20261011-v1",
@@ -32380,7 +31044,7 @@
       "recurrence_admission": false,
       "independent_new_worlds": 0,
       "admission": "prepared-only; root_approved=false; no provider calls or launch",
-      "notes": "V90 proposes 52 programs/402 original source items from the separately held V40 static adapter, with five fresh queues of 10\u201311 programs each. Exact V40 source IDs/groups had zero overlap with current 79 item/group holds and the 5,005 prior Luna queue IDs/groups observed during preparation. Chains each lane to V89; V17 runtime. Root review and launch authorization required."
+      "notes": "V90 proposes 52 programs/402 original source items from the separately held V40 static adapter, with five fresh queues of 10–11 programs each. Exact V40 source IDs/groups had zero overlap with current 79 item/group holds and the 5,005 prior Luna queue IDs/groups observed during preparation. Chains each lane to V89; V17 runtime. Root review and launch authorization required."
     },
     {
       "id": "luna-choice-confidence-v90-approved-launch-held-20261011-v1",
@@ -34248,7 +32912,7 @@
       "derived_from": [
         "luna-v43-exact-map37-native-sft-926-20261011-v1"
       ],
-      "notes": "Existing converter output for the 926 already-admitted native SFT rows. Converts 20 compiler-attested model-authored inline instruction writers with 34 distinct reads (35 read appearances); 20/20 sidecars pass the scoped Python validator. Child-result conversion remains zero: 895 producer-missing, 164 host-result-only. Supersedes the preliminary v1 readiness report\u2019s zero-inline-conversion interpretation; it does not add independent source credit or change native-SFT admission. Reciprocal writer/read, source quality, split, and recurrence review remain pending. Exact input and converter pins are in review.json."
+      "notes": "Existing converter output for the 926 already-admitted native SFT rows. Converts 20 compiler-attested model-authored inline instruction writers with 34 distinct reads (35 read appearances); 20/20 sidecars pass the scoped Python validator. Child-result conversion remains zero: 895 producer-missing, 164 host-result-only. Supersedes the preliminary v1 readiness report’s zero-inline-conversion interpretation; it does not add independent source credit or change native-SFT admission. Reciprocal writer/read, source quality, split, and recurrence review remain pending. Exact input and converter pins are in review.json."
     },
     {
       "id": "semantic-inline-curriculum-s72-teacher-turns-20261007-v1",
@@ -35465,7 +34129,7 @@
     "free-provider-mixed-labels-and-diagnostics-held-20261009-v1: currentIR conversion and source/quality gates pending; retain failures and success-pair candidates. Corrected reviewv2 artifacts supersede v1 summaries; active GeminiLite batches excluded until immutable closeout.",
     "free-provider-v22-native-results-and-partials-held-20261009-v1: source/quality/native replay admission pending. Restore exact frozen runtime artifacts if needed; manifests alone are not runtime qualification. Keep API partials separate from semantic failure/success preference pairs.",
     "free-provider-google-pool-v1-closed-held-20261009-v1 has an explicit currentIR derivative free-provider-static-decision-inline-lambdas-held-20261010-v1 for131 strict source-consistent labels/36 authored controller cases. Remaining125 labels stay rejected with reasons. Static reference/data quality admission remains pending; no automatic train promotion and no new-world credit. Other provider cohorts still require explicit conversion.",
-    "free-provider-static-decision-inline-lambdas-held-20261010-v2 supersedes v1: all23 authored IR cases replayed, kind-specific probability\u2192crisp instructions qualified for runtime/capture shape only. Source/static-reference-quality admission still required.308native turns are held authored references, not teacher-generated traces, and are excluded from target training until reviewed.",
+    "free-provider-static-decision-inline-lambdas-held-20261010-v2 supersedes v1: all23 authored IR cases replayed, kind-specific probability→crisp instructions qualified for runtime/capture shape only. Source/static-reference-quality admission still required.308native turns are held authored references, not teacher-generated traces, and are excluded from target training until reviewed.",
     "free-provider-zai45-first3-native-and-partial-held-20261010-v1: rawtwoaccepted andoneincomplete remainheld; thirdscopebehaviorcorrect, sharednote prompt clarification+freshsource derivative/recoverypending. Resource-limit partial is not a DPO semanticnegative. Source quality review still blocks new data admission.",
     "luna-v22-current-pass-pending-facts-source-held-20261010-v1: prompt-only derivative, original source gold/group/file scopes unchanged, actual recovery PID777319 is running separately and must receive immutable closeout/review. No retroactive migration of old teacher traces, no new worlds or source admission.",
     "Silent 1500-character source-state clipping affects historical decision corpora: BoardgameQA, HelpSteer, Newsgroups, Yelp, BoolQ and PubMedQA. Preserve original rows and raw outcomes. Historical rows lacking immutable upstream source revisions/source_refs cannot be safely backfilled from current dataset versions; register as unresolved full-evidence conversion, exclude evidence-insufficient cases explicitly. Fresh builds retain full source text; downstream context eligibility skips oversized inputs with reasons, never silently truncates. Corrected input derivatives keep original source groups and receive no independent-world credit."
