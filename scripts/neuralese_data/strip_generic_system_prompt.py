@@ -66,6 +66,11 @@ def program_header(content: str):
     """(kept paragraphs, prose chars, tool-section chars)."""
     cut = min((content.find(m) for m in TOOL_SECTION_MARKERS if m in content), default=len(content))
     prose, tools = content[:cut], content[cut:]
+    # LFM2.5's template joins the system message and its tool list with one '\n' (`+ "\n" + "List of tools: "`):
+    # that newline is template structure, not part of the last prose paragraph. Keeping it made the header's last
+    # paragraph differ from the message-level program-header rendering (serving form).
+    if tools.startswith('List of tools: ') and prose.endswith('\n'):
+        prose = prose[:-1]
     return program_header_paragraphs(prose), len(prose), len(tools)
 
 

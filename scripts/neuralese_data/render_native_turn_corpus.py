@@ -102,6 +102,35 @@ def protected_hits(row: dict, protected: dict) -> list[str]:
     return hits
 
 
+def reserved_needles(path: Path) -> list[tuple[str, str]]:
+    """Explicit test reservations (training/source-split-reservations.json): (source id, needle) with the audit's
+    rule (plans/neuralese/JEFF_RESERVATION_OVERLAP_20261011.json): the reserved task's state text normalized as the
+    reservation file declares, first 60 characters; states shorter than 40 characters are skipped."""
+    reservations = json.loads(path.read_text())
+    wanted = {sid for r in reservations['records'] for sid in r.get('source_ids') or []}
+    source = ROOT / reservations['source']['path']
+    needles = []
+    for line in source.read_text().splitlines():
+        task = json.loads(line)
+        if task.get('id') in wanted and isinstance(task.get('state'), str):
+            text = reserved_normalize(task['state'])
+            if len(text) >= 40:
+                needles.append((task['id'], text[:60]))
+    return needles
+
+
+def reserved_normalize(text: str) -> str:
+    return re.sub(r'\s+', ' ', text.replace('\\', ' ')).strip()
+
+
+def reserved_hit(row: dict, needles) -> str | None:
+    haystack = reserved_normalize(' '.join(_strings(row.get('task'), [])))
+    for sid, needle in needles:
+        if needle in haystack:
+            return sid
+    return None
+
+
 def program_key(row: dict) -> str:
     return (row.get('source_ref') or {}).get('program_ir_id') or row.get('program_id') or ''
 
@@ -113,11 +142,14 @@ def chain_key(row: dict) -> str:
 
 def select(args, shard_dir: Path):
     """Stream the sources; write selected raw lines to trajectory shards; return omissions and blocked chains."""
-    exclude = set()
-    if args.exclude_programs:
-        for line in args.exclude_programs.read_text().splitlines():
+    exclude = {}
+    for path in args.exclude_programs or []:
+        for line in path.read_text().splitlines():
             if line.strip():
-                exclude.add(json.loads(line)['id'])
+                item = json.loads(line)
+                exclude.setdefault(item['id'], item.get('reason_code') or 'held_case_excluded')
+    needles = reserved_needles(args.reserved) if args.reserved else None
+    reserved_cache, reserved_groups = {}, set()
     protected = json.loads(args.protected.read_text()) if args.protected else None
     shard_files = [open(shard_dir / f'{i:04d}.jsonl', 'wb') for i in range(args.shards)]
     omissions, counts = [], Counter()
@@ -145,8 +177,16 @@ def select(args, shard_dir: Path):
                 elif not (isinstance(row.get('training_admission'), dict)
                           and row['training_admission'].get('approved') is True):
                     reason = 'not_approved:' + str((row.get('training_admission') or {}).get('reason') or 'approved=false')[:80]
-                elif {program_key(row), row.get('program_id'), *(row.get('source_program_ids') or [])} & exclude:
-                    reason = 'held_case_excluded'
+                elif {program_key(row), row.get('program_id'), *(row.get('source_program_ids') or [])} & exclude.keys():
+                    hit = sorted({program_key(row), row.get('program_id'), *(row.get('source_program_ids') or [])}
+                                 & exclude.keys())[0]
+                    reason = exclude[hit]
+                    if reason == 'jeff_reserved_test_text' and row.get('split') == 'train':
+                        reserved_groups.update(row.get('source_groups') or [])
+                elif needles is not None and row.get('split') == 'train' and (
+                        reserved_cache.setdefault(program_key(row), reserved_hit(row, needles))):
+                    reason = 'jeff_reserved_test_text:' + reserved_cache[program_key(row)]
+                    reserved_groups.update(row.get('source_groups') or [])
                 elif protected is not None:
                     key = program_key(row)
                     if key not in protected_cache:
@@ -169,7 +209,9 @@ def select(args, shard_dir: Path):
                 shard_files[shard].write(line.rstrip(b'\n') + b'\n')
     for f in shard_files:
         f.close()
-    return omissions, counts, blocked, protected_cache, test_groups
+    counts['reserved_programs_hit'] = sum(bool(v) for v in reserved_cache.values())
+    counts['reserved_groups'] = len(reserved_groups)
+    return omissions, counts, blocked, protected_cache, test_groups, reserved_groups
 
 
 # ---------------------------------------------------------------- rendering (workers)
@@ -455,7 +497,9 @@ def main(argv=None):
     p.add_argument('--source', type=Path, nargs='+', required=True)
     p.add_argument('--tokenizer', action='append', required=True, help='NAME=DIR')
     p.add_argument('--out-dir', type=Path, required=True)
-    p.add_argument('--exclude-programs', type=Path)
+    p.add_argument('--exclude-programs', type=Path, nargs='*', default=[],
+                   help='jsonl rows {id, reason_code?}: programs whose rows are dropped')
+    p.add_argument('--reserved', type=Path, help='explicit test reservations (training/source-split-reservations.json)')
     p.add_argument('--protected', type=Path)
     p.add_argument('--held-text', type=Path, nargs='*', default=[])
     p.add_argument('--workers', type=int, default=8)
@@ -471,9 +515,11 @@ def main(argv=None):
     t0 = time.time()
     shard_dir = out / 'work' / 'selected'
     shard_dir.mkdir(parents=True, exist_ok=True)
-    omissions, counts, blocked, protected_cache, test_groups = select(a, shard_dir)
+    omissions, counts, blocked, protected_cache, test_groups, reserved_groups = select(a, shard_dir)
     held_external = held_groups_from(a.held_text)
-    held_groups = test_groups | held_external
+    # Train decisions sharing a source group with a reserved-test hit go with it (whole source groups, every split's
+    # program of that group): they are decontaminated exactly like held groups.
+    held_groups = test_groups | held_external | reserved_groups
     print(json.dumps({'selection': counts, 'internal_held_groups': len(test_groups),
                       'external_held_groups': len(held_external), 'seconds': round(time.time() - t0)}), flush=True)
     shards = sorted(f.stem for f in shard_dir.glob('*.jsonl'))
@@ -510,8 +556,9 @@ def main(argv=None):
     receipt = {
         'schema': SCHEMA, 'corpus_id': a.corpus_id,
         'sources': {str(s): {'sha256': file_sha(s), 'bytes': s.stat().st_size} for s in a.source},
-        'exclude_programs': ({'path': str(a.exclude_programs), 'sha256': file_sha(a.exclude_programs)}
-                             if a.exclude_programs else None),
+        'exclude_programs': [{'path': str(e), 'sha256': file_sha(e)} for e in a.exclude_programs],
+        'reserved': ({'path': str(a.reserved), 'sha256': file_sha(a.reserved)} if a.reserved else None),
+        'reserved_groups': len(reserved_groups),
         'protected': ({'path': str(a.protected), 'sha256': file_sha(a.protected),
                        'programs_checked': len(protected_cache),
                        'programs_hit': sum(bool(v) for v in protected_cache.values())} if a.protected else None),

@@ -36,7 +36,7 @@ def member_entry(a, receipt):
                   'wrapper': 'scripts/neuralese_data/render_native_turn_corpus.sh',
                   'container': 'natlang-neuralese:26.09', 'renderer_code': receipt['renderer_code'],
                   'receipt': f'{a.path}/receipt.json', 'sources': receipt['sources'],
-                  'exclude_programs': receipt['exclude_programs'], 'protected': receipt['protected'],
+                  'exclude_programs': receipt['exclude_programs'], 'reserved': receipt.get('reserved'), 'protected': receipt['protected'],
                   'held_text': receipt['held_text']},
     }
 
