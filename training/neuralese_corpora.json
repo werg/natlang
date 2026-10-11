@@ -28847,6 +28847,31 @@
       "training_admission": false,
       "admission": "held-pending-action-level-review",
       "notes": "64iterative updates reviewed/60exact bodies/3narrow semantic-action candidates,8placeholderseed exclusions,3no-decision instruction conflicts,4missing exactbodies. Wholetrajectory/finalmap notapproved solely fromgoldmatch; no independentworlds."
+    },
+    {
+      "id": "google-v33-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v33-source",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl",
+        "launch-plan-v1.json",
+        "root-source-launch-review-v1.json",
+        "root-launch-process-v1.json",
+        "frozen-adapter-v1/frozen-runtime.json",
+        "frozen-adapter-v1/models.json",
+        "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+        "frozen-adapter-v1/scripts/label_decision_cases.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "held-provider-generation-input-plan",
+      "training_admission": false,
+      "admission": "held-inputs-no-generated-output",
+      "notes": "512 fresh original train inputs ninefamilies, current62holds/priorreservations/sharedcriteria. Root exactsource equality and6frozenfilepins verified. Actual2048runner/modelpool immutable manifest; originalV32stale runnerdeclaredpin is separate correction pending. Sharedprojectquota waiter999609, noextra capacity bypass. Liveoutputs excluded."
     }
   ],
   "coverage_backlog": [

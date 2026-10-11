@@ -10656,3 +10656,12 @@ V66 completed all55 cases with five workers exiting zero; the formerly terminate
 V35 review distinguishes graph/typed proof from meaningful improvement. All16 parents passed the oracle, but only three intermediate actions are currently proposed with both semantic and same-invocation body evidence: SAFE-510 pass1, SCHED-540 pass2, SCHED-543 pass3. Eight seed placeholders are excluded; three notes conflict with a no-decision instruction; four update bodies unavailable. No blanket485-turn admission. Next source/prompt/oracle design should reward evidence accumulation and use of prior notes, distinguish provisional conclusions from committed decisions, and prevent trivial gold-map completion from masquerading as iterative improvement. Historical source/gold unchanged; no new unnecessary delegation/read requirements.
 
 V64 seven-source quality/closure packet61c7e3fa... is published3a82b44895 and SSH verified. DGX full-S1 request02:02UTC pop-5ef1 pending. Historical source-quality held marker remains valid until an explicit reviewed derivative is issued; failed zero-turn materialization retained.
+
+
+### Pop 2026-10-11T02:08:06.093235+00:00 — Google quota continuity and freeze bug
+
+V33 quota waiter999609 queues 512 fresh original train rows / nine families, caseSHA5f13fc66be47997db2f1e5e72776ed5fc7c3d669b2641412f86c83a5b717303f. Root independently checked all512 original objects (only declared derived criteria may differ), train/uniquegroups, current62holds and V31/V32 disjointness, and allsix frozen file bytes/sizes. Same ten-model pool, two quota-group inflight, fourworkers, maxoutput2048/sharedowner pacing. Input-only snapshot excludes live outputs.
+
+New provenance bug: V32 frozen manifest declares an older pre-budget-option runner hash while bundled runner actually supports2048. V33 pins actual bytes correctly. Preserve V31/V32 historical manifests and actual output artifacts; additive correction audit and shared freeze/validation helper are being implemented. Do not claim olddeclaredpin equals loadedbytes or rewrite sealed evidence. No evidence yet that requests used the wrong output budget.
+
+V31 full-S1 closure request02:07UTC pop-6848 was sent after main88704e739f publication and SSH verification. V64 seven-source closure requestpop-5ef1 also pending.
