@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { scriptedModel, browserTest as test } from './support/natlang.mjs';
+import { scriptedModel, browserTest as test, browserBundleSkip } from './support/natlang.mjs';
 import { modelTurnsSoFar } from '../dist/native/agent.js';
 import { readFile } from 'node:fs/promises';
 import { simulateInventory } from '../studio/apps/worlds.mjs';
@@ -31,7 +31,8 @@ function cellHost(executed=[]){const values=new Map();return {
  cell:async(cell,deps)=>{executed.push(cell.id);const value=cell.id==='numbers'?[2,3,5,7,11]:deps.numbers.reduce((a,b)=>a+b,0);const id='value-'+values.size;values.set(id,value);return {id,preview:JSON.stringify(value)};}
 };}
 const sourceFor = spec => loadProgram(spec, path => readFile(new URL('../studio/' + path.replace('./', ''), import.meta.url), 'utf8'));
-const { natlangApplication } = await (async () => { await api(); return import('../studio/shared/natlang-app.mjs'); })();
+// Without a browser bundle every test here skips (browserTest); do not load it at module level either.
+const { natlangApplication } = browserBundleSkip ? {} : await (async () => { await api(); return import('../studio/shared/natlang-app.mjs'); })();
 for (const spec of apps)
     test(`${spec.project} ${spec.id}: real natlang source, typed operation and view`, async () => {
         const event = { id: 'event-1', kind: spec.smoke.action, value: JSON.stringify(spec.smoke) };
