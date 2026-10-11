@@ -694,6 +694,7 @@ test('provider-expanded configured function and producer blocks become source-bo
   const makeReceipt = (id, type, body, origin) => ({
     schema: origin === 'same-run-producer' ? 'natlang.provider-expanded-read-context/3' :
       'natlang.provider-expanded-read-context/1', origin, invocation_id: invocation,
+    ...(origin === 'same-run-producer' ? { parent_invocation_id: null } : {}),
     source_row_sha256: '1'.repeat(64), trace_sha256: '2'.repeat(64),
     transport_provenance_sha256: '3'.repeat(64), raw_request_sha256: '4'.repeat(64),
     rendered_request_sha256: '5'.repeat(64), learned_vectors: false,
