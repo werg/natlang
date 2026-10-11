@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-annotation-folder-v65-predecessor-disposition-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-annotation-folder-v65-runtimev15-v1",
+  "files": [
+    {
+      "path": "root-approved-plan-v2.json",
+      "bytes": 9847,
+      "sha256": "18ec201fa01289c19c0e3471a9df2b4d596eabdf0ec10a471d08e37063714b9d"
+    },
+    {
+      "path": "root-predecessor-disposition-v1.json",
+      "bytes": 2798,
+      "sha256": "34e50f72e1406438332e1ef93b0219669f7c25f984d6ad5404ccc835e227debb"
+    },
+    {
+      "path": "supervisor.log",
+      "bytes": 369,
+      "sha256": "1c8f345f0414cd636b57092207442c576a7ef88775ef41130c9df37fb745c8c6"
+    }
+  ],
+  "bytes": 13014
+}
