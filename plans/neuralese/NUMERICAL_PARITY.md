@@ -144,3 +144,22 @@ preserved those 143 updates, so restart from the retained step-627 parent.
 Continuation now declares hash-bound predecessor identity and monitor-reference
 sidecars explicitly. Moving checkpoint files or resolving symlinks must not
 change qualification provenance or silently reset the original drift reference.
+
+## Exact trained V16 artifact: transport versus execution parity
+
+The terminal V16 checkpoint is `d02969e6e8f62a34a833a0de8db3cce82b298b9b08e9a377965168edbf96599f`.
+Its shared direct-runtime diagnostic at lengths 8/32/102 passed finite payloads,
+cache/readback, exact producer replay and producer/input gradient replay; consumer
+gradients reach the actual trained projection. Report SHA:
+`6cffe8734a68f6610685cb89a650cbf3cf9b1a7a8f901a0cbedd2b8e296fbe53`.
+This mechanism result does not qualify consumer task quality or autonomous stopping.
+
+The separate BF16 forced-sequence versus incremental diagnostic still disagrees:
+payload relative L2 is 0.0255/0.0486/0.0378 and downstream logits relative L2 is
+0.0870/0.1986/0.1081 at those lengths. Combined gradients also differ substantially.
+That diagnostic uses a synthetic token-choice projection only for its downstream
+consumer; its CE and speedup are mechanism measurements, not trained-agent scores.
+Report SHA: `cb866582337300a97bc2f265f11c2edbc50164f51e2904839a9f8a87c19e345f`.
+Next: fresh independent restores for each mode and first-divergent-operator tracing.
+Keep BF16 and target any precision intervention to the responsible operation;
+standalone transport replay success does not resolve full/incremental equivalence.
