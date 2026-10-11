@@ -32772,6 +32772,20 @@
         "neuralese-native-e2e-binding-candidate-held-20261011-v1"
       ],
       "notes": "Contains the six-row direct smoke input, a selector diagnosis, and a byte-preserving 1,243-endpoint subset (687 train, 556 test) of the previously reviewed full authenticated closure. Inline writer sites in these rows are authenticated by validated neuralese_code sidecars. The reciprocal shuffled-donor selector returns zero for parser-coverage and factual disjoint-donor reasons documented in the selector review. This snapshot is held; do not infer admission or qualification."
+    },
+    {
+      "id": "neuralese-native-e2e-selector-review-supplement-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "neuralese-native-e2e-binding-candidate-20261011-v1/direct-e2e-smoke-selector-review-v2.json",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/direct-e2e-smoke-selector-review-v2.md"
+      ],
+      "admission": "held diagnostic supplement only; no training admission, no qualification, and no independent-world credit",
+      "derived_from": [
+        "neuralese-native-e2e-smoke-cohort-held-20261011-v1"
+      ],
+      "notes": "Corrects the selector design diagnosis without mutating the v1 published snapshot: the sidecar parser gap is proven; independently, exact function-body IDs and disjoint factual groups remain required and are not satisfied by the six-row sample. No selector checks are relaxed."
     }
   ],
   "coverage_backlog": [

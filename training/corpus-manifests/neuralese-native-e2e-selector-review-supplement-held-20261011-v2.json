@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-e2e-selector-review-supplement-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-native-e2e-binding-candidate-20261011-v1/direct-e2e-smoke-selector-review-v2.json",
+      "bytes": 21958,
+      "sha256": "1f95514f16dff91cab2ed63864de734f76cf7f95399e8d069b96c557c572ec52"
+    },
+    {
+      "path": "neuralese-native-e2e-binding-candidate-20261011-v1/direct-e2e-smoke-selector-review-v2.md",
+      "bytes": 4080,
+      "sha256": "8a4759993ca6819217a05b265e9e1930b3d472243a5c6950ec939a757a508352"
+    }
+  ],
+  "bytes": 26038
+}
