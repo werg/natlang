@@ -24,8 +24,10 @@ from .output_embedding_projection import sha
 HANDLERS = {
     # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
     # NeuraleseProjection; the TokenChoiceProjection is declared per stage (off in v1).
-    'neuralese_direct': {'module':'natlang_neuralese.train.direct_sft', 'required_inputs':{'records','pieces'},
-                         'optional_inputs':{'text_data','heads'},
+    # Its data is either prepared text (text_data, the shared declared input of neuralese-direct-v2) or records and
+    # pieces rendered by gold_text_rows: missing_stage_inputs() states that alternative.
+    'neuralese_direct': {'module':'natlang_neuralese.train.direct_sft', 'required_inputs':set(),
+                         'optional_inputs':{'records','pieces','text_data','heads'},
                          'parameters':{'steps','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
                            'checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
                            'latent_optimizer','latent_lr','head_lr','neuralese_weight','projection_blocks',
@@ -190,13 +192,21 @@ def validate_input_bindings(recipe):
             raise ValueError('stage inputs must map input roles to named bindings')
         kind = stage['kind']
         allowed = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
-        if not set(selected) <= allowed or not HANDLERS[kind]['required_inputs'] <= set(selected):
+        if not set(selected) <= allowed or missing_stage_inputs(kind, selected):
             raise ValueError('stage input roles do not satisfy handler contract: ' + stage['id'])
         if any(not isinstance(name, str) or name not in catalog for name in selected.values()):
             raise ValueError('stage refers to an unknown named input binding')
         referenced.update(selected.values())
     if set(catalog) - referenced:
         raise ValueError('unused named input binding(s): ' + ', '.join(sorted(set(catalog) - referenced)))
+
+
+def missing_stage_inputs(kind, roles):
+    """Required input roles a stage of ``kind`` lacks, given the roles it has."""
+    missing = HANDLERS[kind]['required_inputs'] - set(roles)
+    if kind == 'neuralese_direct' and 'text_data' not in roles and 'records' not in roles:
+        missing = missing | {'text_data or records'}
+    return missing
 
 
 def parse_input_binding_overrides(values):
@@ -229,7 +239,7 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
             if path is not None and role in supported:
                 resolved = Path(path).resolve()
                 result[role] = {'binding': None, 'path': str(resolved), 'sha256': sha(resolved)}
-        missing = HANDLERS[stage['kind']]['required_inputs'] - set(result)
+        missing = missing_stage_inputs(stage['kind'], result)
         if missing:
             raise ValueError('missing required stage input(s): ' + ', '.join(sorted(missing)))
         return result
@@ -570,7 +580,7 @@ def validate_direct_stage_recipe(recipe):
     if not isinstance(inputs, dict):
         raise ValueError('direct stage requires pinned input bindings')
     roles = set(inputs)
-    if not handler['required_inputs'] <= roles or not roles <= handler['required_inputs'] | handler['optional_inputs']:
+    if missing_stage_inputs(stage['kind'], roles) or not roles <= handler['required_inputs'] | handler['optional_inputs']:
         raise ValueError('direct stage input roles do not satisfy the shared handler contract')
     for role, binding in inputs.items():
         if (not isinstance(binding, dict) or set(binding) != {'path', 'sha256'} or
@@ -942,6 +952,10 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     previous = None
     if output.exists():
         previous = json.loads((output / 'direct-stage-plan.json').read_text())
+    elif recipe['stage']['kind'] == 'neuralese_direct' or 'direct_artifact_manifest' in recipe['inputs']:
+        # A fresh launch of a line's direct or end-to-end stage is checked against the shared base (LINE_PARITY.md).
+        from .line_parity import check_declared_stage
+        check_declared_stage(recipe)
     metadata_path = Path(launch_metadata).resolve()
     if metadata_path.exists() or output == metadata_path or output in metadata_path.parents:
         raise ValueError('direct-stage launch metadata must be a fresh external path')
@@ -1159,6 +1173,11 @@ def main(argv=None):
     if args.inspect:
         print(json.dumps(recipe, indent=2))
         return
+    if (args.records or args.pieces or args.text_data) and all(
+            'inputs' in stage for stage in recipe['stages'] if stage.get('admitted') is not False):
+        # Line parity (plans/neuralese/LINE_PARITY.md): a recipe that declares its data is the only source of it.
+        parser.error('this recipe declares its data inputs, so --records/--pieces/--text-data cannot replace them; '
+                     'relocate a declared file with --input-binding NAME=PATH (its sha256 must match)')
     args.out = args.out.resolve()
     args.heads = args.heads.resolve()
     overrides = parse_input_binding_overrides(args.input_binding)

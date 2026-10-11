@@ -13,7 +13,7 @@ RETIRED_SKETCH_DEFAULTS = {
     "writer_length_policy": "native-value", "stop_supervision": "gold-native-boundary", "writer_text_weight": 1.0,
     "crisp_weight": 1.0, "distill": 0.25, "optimizer": "muon", "rank": 16, "lr": 1e-4, "lora_lr": 2e-5,
     "heads_lr": 3e-5, "max_tokens": 65536, "steps": 2200, "batch": 1, "backward_policy": "auto",
-    "checkpoint_layers": True, "ffn_chunk_tokens": 1024, "token_cache_mib": 32, "eval_every": 64}
+    "checkpoint_layers": True, "ffn_chunk_tokens": 1024, "token_cache_mib": 32, "eval_every": 200}
 
 
 def test_a_bare_trajectory_trainer_selects_the_same_defaults_as_before(capsys):

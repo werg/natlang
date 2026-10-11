@@ -110,7 +110,7 @@ CONSUMER_TRAINING_DEFAULTS = {
     "checkpoint_layers": True,
     "ffn_chunk_tokens": 1024,
     "token_cache_mib": 32,
-    "eval_every": 64,
+    "eval_every": 200,  # shared cadence (plans/neuralese/LINE_PARITY.md): evaluation near 3% of wall time
 }
 
 
@@ -828,9 +828,10 @@ def main(argv=None):
     parser.add_argument('--optimizer', choices=['adamw', 'muon'], default='adamw')
     from .optim_restore import add_optimizer_restore_arguments
     add_optimizer_restore_arguments(parser)
-    parser.add_argument('--checkpoint-every', type=int, default=25,
+    parser.add_argument('--checkpoint-every', type=int, default=200,
                         help='full-state points: every N updates, a multiple of --eval-every when that is set (the end '
-                             'and stops also write the full state)')
+                             'and stops also write the full state); the shared cadence (LINE_PARITY.md): no more '
+                             'frequent full states than the storage policy needs')
     parser.add_argument('--eval-every', type=int, default=0,
                         help='evaluation points: held-out soft and written-vs-shuffled probes every N updates; 0: none '
                              'between the initial reference and the final report (the stage end, its gate)')

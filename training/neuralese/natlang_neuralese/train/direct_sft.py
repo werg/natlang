@@ -40,9 +40,9 @@ OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'drift_every
 
 def parse(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    for name in ('heads', 'records', 'out'):
+    for name in ('heads', 'out'):
         p.add_argument('--' + name, type=Path, required=True)
-    for name in ('pieces', 'text-data'):
+    for name in ('records', 'pieces', 'text-data'):  # the data: prepared --text-data, or --records (+ --pieces)
         p.add_argument('--' + name, type=Path)
     p.add_argument('--device', default='cuda')
     p.add_argument('--steps', type=int, default=1000)
@@ -112,6 +112,8 @@ def parse(argv=None):
         p.error('positive bounds required')
     if a.checkpoint_every < 0 or a.neuralese_weight < 0:
         p.error('invalid checkpoint cadence or Neuralese weight')
+    if a.text_data is None and a.records is None:
+        p.error('give the stage its data: --text-data, or --records with --pieces')
     return a
 
 

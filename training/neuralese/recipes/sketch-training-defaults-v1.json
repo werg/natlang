@@ -34,7 +34,7 @@
     "checkpoint_layers": true,
     "ffn_chunk_tokens": 1024,
     "token_cache_mib": 32,
-    "eval_every": 64
+    "eval_every": 200
   },
   "qualification": "Requires certified runtime-qualified heads; defaults do not grant consumer, stop, or serving qualification.",
   "resource_policy": {

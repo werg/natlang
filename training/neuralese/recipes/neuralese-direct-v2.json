@@ -1,0 +1,49 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-direct-v2",
+ "extends": "neuralese-direct-v1",
+ "description": "Unified shared base of Neuralese direct v1 for both lines (line parity, owner 2026-10-11; plans/neuralese/LINE_PARITY.md). Same stage as neuralese-direct-v1 with: (1) the data declared here, the root-adopted 4962-document text union (3258 train / 1704 held; a strict superset of the V9 set with the same held documents), which the CLI cannot substitute; a line whose tokenizer differs binds its registered tokenizer twin (same documents, ids, splits and source groups); (2) a shared context capacity of tokens 32768 (capacity 32768 - target_tokens, so every document of the union keeps its whole preceding context); target_tokens is a per-line memory knob and steps x target_tokens x batch (2,048,000 supervised positions) stays equal across lines; (3) one monitor for both lines: Pop's 48 clean-base probes (12 each plain exact math, tool, open answer, natlang test turn) as the in-run captured drift reference and as the behaviour gate's probes, each line declaring its own measured base gate_pass; (4) the shared cadence policy: eval and full-state checkpoints at the stage end (plus the checkpoint at half way and the final/emergency saves), the drift monitor and gate-at-warn at a cadence keeping evaluation near 3% of wall time, set per line from measured seconds (fit-only).",
+ "overrides": {
+  "input_bindings": {
+   "direct_text": {
+    "path": "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl",
+    "sha256": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+   }
+  },
+  "stages": {
+   "direct_sft": {
+    "inputs": {
+     "text_data": "direct_text"
+    },
+    "parameters": {
+     "steps": 2000
+    }
+   }
+  },
+  "stage_parameter_defaults": {
+   "neuralese_direct": {
+    "tokens": 32768,
+    "target_tokens": 1024,
+    "eval_every": 2000,
+    "checkpoint_every": 1000,
+    "drift_every": 500,
+    "drift_gate_every": 1500,
+    "monitor": {
+     "data": {
+      "path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v2/monitor/probes.jsonl",
+      "sha256": "0bce5275646cd95ae36374f41769602995c8587c871275653b26c1cf260c3d52"
+     },
+     "gate": {
+      "probes": {
+       "path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v2/monitor/probes.jsonl",
+       "sha256": "0bce5275646cd95ae36374f41769602995c8587c871275653b26c1cf260c3d52"
+      },
+      "held_rows": 48,
+      "prompt_weight": 0.25,
+      "max_gate_drop": 0.1
+     }
+    }
+   }
+  }
+ }
+}

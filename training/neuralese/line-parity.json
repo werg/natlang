@@ -1,0 +1,77 @@
+{
+ "schema": "natlang.neuralese-line-parity/1",
+ "description": "Line parity of the Neuralese stages (owner 2026-10-11: the Mellum line on DGX and the LFM line on Pop use the same recipe, data and code; settings may differ only to fit, or where the backbone requires it, each declared with its reason). natlang_neuralese.train.line_parity checks it in scripts/check-main.sh --quick; plans/neuralese/LINE_PARITY.md holds the audit. stages.<stage>.lines.<line>.recipe names the recipe of the line's NEXT launch; a direct-stage recipe that declares \"parity\": {\"line\", \"stage\"} is checked the same way, and the direct-stage runner refuses a fresh neuralese_direct or direct-artifact recurrence launch without a parity declaration.",
+ "stages": {
+  "direct": {
+   "base": {"recipe": "neuralese-direct-v2"},
+   "lines": {
+    "mellum": {"recipe": null, "pending": "neuralese-direct-mellum-v3 binds the Mellum tokenizer twin of the 4962 union (being built) and the measured Mellum base gate on the 48 probes (after v2c releases the GPU)"},
+    "lfm": {"recipe": "neuralese-direct-lfm-v2"}
+   }
+  },
+  "e2e": {
+   "base": {"config": {
+    "kind": "raw_recurrence_training",
+    "inputs": {
+     "records": {"path": "runs/neuralese-native-e2e-binding-candidate-20261011-v1/full-authenticated-1243-cohort-v1.jsonl", "sha256": "35a52f34de92f226bb68e34c2a28cd11dc51afcc56ccb685b7852b62b8cb549a"},
+     "pieces": {"path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-pieces.jsonl", "sha256": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6"}
+    },
+    "parameters": {
+     "steps": 687, "batch": 1, "train": 687, "eval": 32, "max_tokens": 32768, "max_write_vectors": 2048,
+     "handover": "written", "write_depth": 1, "tokens_per_vector": 1.0, "writer_supervision": "native-value",
+     "writer_length_policy": "native-value", "stop_supervision": "generated-length", "distill": 0.0,
+     "writer_text_weight": 1.0, "context_weight": 1.0, "feedback_weight": 0.25, "backbone_training": "latent",
+     "optimizer": "muon", "latent_optimizer": "lionsr", "qat_latent_lr": 3e-06, "backbone_lr": 7.5e-06,
+     "lr": 0.0003, "heads_lr": 0.0003, "checkpoint_every": 200, "eval_every": 200, "seed": 20261011
+    }
+   }},
+   "lines": {
+    "mellum": {"recipe": null, "pending": "the Mellum E2E launches from the qualified export of the next Mellum direct run (direct-stage recipe with parity {line: mellum, stage: e2e})"},
+    "lfm": {"recipe": null, "pending": "Pop's next E2E launch declares parity {line: lfm, stage: e2e}; the running endpoint epoch v2 predates this file"}
+   }
+  }
+ },
+ "lineage_keys": {
+  "direct": ["inputs.heads"],
+  "e2e": ["inputs.heads", "inputs.direct_artifact_manifest", "inputs.continue_from", "inputs.direct_parent_proof",
+          "parameters.direct_base_snapshot", "parameters.curriculum_change", "parameters.optimizer_state",
+          "parameters.optimizer_added"]
+ },
+ "allowed_differences": [
+  {"stage": "direct", "lines": ["mellum"], "key": "inputs.text_data", "kind": "backbone-inherent", "check": "tokenizer_twin",
+   "reason": "the same 4962 documents rendered with Mellum's tokenizer and chat template (prepared text carries token ids)"},
+  {"stage": "direct", "lines": ["mellum"], "key": "parameters.moe_kernel", "kind": "backbone-inherent",
+   "reason": "Mellum's dense trainable MoE experts run as two grouped GEMMs; LFM2.5-350M has no experts"},
+  {"stage": "direct", "lines": ["mellum"], "key": "quantization", "kind": "backbone-inherent",
+   "reason": "Mellum's QAT component (precision points per module family, owner rule: QAT in every stage); LFM has no component declared yet, a known gap, not a choice"},
+  {"stage": "direct", "lines": ["mellum", "lfm"], "key": "parameters.monitor.gate.reference", "kind": "backbone-inherent",
+   "reason": "each backbone's own measured base gate_pass on the shared 48 probes"},
+  {"stage": "direct", "lines": ["lfm"], "key": "parameters.target_tokens", "kind": "fit-only",
+   "reason": "supervised positions per window that fit Pop's 8 GB GPU at the shared 32768-token context (Mellum 1024)"},
+  {"stage": "direct", "lines": ["lfm"], "key": "parameters.steps", "kind": "fit-only",
+   "reason": "follows target_tokens so that steps x target_tokens x batch (derived.supervised_positions) stays equal"},
+  {"stage": "direct", "lines": ["lfm"], "key": "parameters.eval_every", "kind": "fit-only",
+   "reason": "cadence scaled with steps; set from measured seconds to keep evaluation near 3% of wall time"},
+  {"stage": "direct", "lines": ["lfm"], "key": "parameters.checkpoint_every", "kind": "fit-only",
+   "reason": "cadence scaled with steps (half way and end, plus final and emergency saves; no more-frequent checkpoints)"},
+  {"stage": "direct", "lines": ["lfm"], "key": "parameters.drift_every", "kind": "fit-only",
+   "reason": "cadence scaled with steps; set from measured seconds to keep evaluation near 3% of wall time"},
+  {"stage": "direct", "lines": ["lfm"], "key": "parameters.drift_gate_every", "kind": "fit-only",
+   "reason": "cadence scaled with steps; set from measured seconds to keep evaluation near 3% of wall time"},
+  {"stage": "direct", "lines": ["lfm"], "key": "parameters.backbone_lr", "kind": "backbone-inherent",
+   "reason": "LFM2.5-350M drifts at the shared 7.5e-6 (V6 drift-stopped at update 260, gate 16/48 vs base 26/48); 7.5e-7 finished (V8 gate 22/48, response KL 0.018); Mellum passes at 7.5e-6"},
+  {"stage": "direct", "lines": ["lfm"], "key": "parameters.latent_lr", "kind": "backbone-inherent",
+   "reason": "as backbone_lr: LionSR 3e-7 on LFM (V8) against the shared 3e-6 that Mellum passes at (run-v1 qualified, v2 gate 0.79 at update 1300)"},
+  {"stage": "e2e", "lines": ["lfm"], "key": "parameters.backbone_lr", "kind": "backbone-inherent",
+   "reason": "the direct stage's evidence-backed LFM rate, 7.5e-7"},
+  {"stage": "e2e", "lines": ["lfm"], "key": "parameters.qat_latent_lr", "kind": "backbone-inherent",
+   "reason": "the direct stage's evidence-backed LFM latent rate, 3e-7"},
+  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.memory_gb", "kind": "fit-only", "reason": "the machine's CUDA envelope (Pop 7.5 of 8 GB)"},
+  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.graph_memory_gb", "kind": "fit-only", "reason": "the machine's graph staging envelope"},
+  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.graph_headroom_gb", "kind": "fit-only", "reason": "the machine's graph staging headroom"},
+  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.producer_batch_size", "kind": "fit-only", "reason": "producer replay group size that fits the machine"},
+  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.backward_policy", "kind": "fit-only", "reason": "memory staging of the backward pass; the math is the same"},
+  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.checkpoint_layers", "kind": "fit-only", "reason": "activation checkpointing trades memory for time; the math is the same"},
+  {"stage": "e2e", "lines": ["mellum"], "key": "parameters.moe_kernel", "kind": "backbone-inherent", "reason": "Mellum's grouped expert GEMMs"}
+ ]
+}

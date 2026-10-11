@@ -7,6 +7,10 @@ Evidence:
 - plans/mellum-port.md "Behaviour gate bug hunt";
 - plans/neuralese/WARMUP_AUDIT_20261011.md.
 
+Line parity (owner, 2026-10-11): both lines run from the shared bases `recipes/neuralese-direct-v2.json` (data:
+the 4962-document union; context 32768; the 48-probe monitor; cadence) and `line-parity.json`'s E2E base. Every
+difference is declared and checked; the audit is in plans/neuralese/LINE_PARITY.md.
+
 ## What the stage does
 
 1. **Plain target SFT.** Whole-trajectory CE on the native records' supervised spans, with the existing
