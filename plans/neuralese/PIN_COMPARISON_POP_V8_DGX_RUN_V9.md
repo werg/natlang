@@ -87,3 +87,13 @@ another run. Pop does not alter DGX dirty work or launch DGX jobs.
 
 The container-launcher hashing ratchet and direct-stage fake-child output-dir
 regressions were corrected in b80bb66b42 (AST checks only).
+
+## Superseding owner decision (08:26 UTC)
+
+Coord dgx-8f98 supersedes the preservation follow-up above. Both lines will restart
+from base models with one shared identity-initialized multilayer causal-convolution
+projection, ordinary token-embedding inputs, and direct target SFT. The input-map,
+double-pass and preservation proposal is dropped. DGX owns the shared module and
+recipe; Pop will use that implementation for LFM. Exact semantics and fresh
+identity/runtime qualification are still pending. The historical comparison and
+old failed behavior evidence remain relevant diagnostics, not active run settings.
