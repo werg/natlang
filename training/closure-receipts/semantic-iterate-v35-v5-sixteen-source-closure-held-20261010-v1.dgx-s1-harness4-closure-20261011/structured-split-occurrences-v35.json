@@ -1,0 +1,1570 @@
+{
+ "method": "json objects with a \"split\" field and a source_groups/source_ids/split_group/group field naming the key; exact, no text windows",
+ "files_parsed": 175,
+ "keys": {
+  "v35:experimental-plan-revision:domain": {
+   "runs/quality-review-v38-targeted-recovery-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v47-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v45-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-iterative-modality-recovery-v59-runtimev15-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-targeted-quality-recovery-v38-runtimev12-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-repaired-train-iterative-trace-v49-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v47-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1": [
+    "train"
+   ]
+  },
+  "v35:EXPT-530:world": {
+   "runs/quality-review-v38-targeted-recovery-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v47-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-iterative-modality-recovery-v59-runtimev15-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-targeted-quality-recovery-v38-runtimev12-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v47-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:EXPT-532:world": {
+   "runs/quality-review-v38-targeted-recovery-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v45-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-targeted-quality-recovery-v38-runtimev12-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:SCHED-540:world": {
+   "runs/quality-review-v38-targeted-recovery-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v42-sched540-case12-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-targeted-quality-recovery-v38-runtimev12-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sched540-recovery-v42-runtimev13-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ]
+  },
+  "v35:resource-window-scheduling:domain": {
+   "runs/quality-review-v38-targeted-recovery-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v47-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v42-sched540-case12-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v45-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v49-sched543-guidance-recovery-v52-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-targeted-quality-recovery-v38-runtimev12-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sched540-recovery-v42-runtimev13-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-repaired-train-iterative-trace-v49-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v47-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1": [
+    "train"
+   ]
+  },
+  "v35:COMP-552:world": {
+   "runs/quality-review-v38-targeted-recovery-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-targeted-quality-recovery-v38-runtimev12-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:compliance-document-revision:domain": {
+   "runs/quality-review-v38-targeted-recovery-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-targeted-quality-recovery-v38-runtimev12-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:safety-corrective-action:domain": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v47-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v45-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-safe512-file-write-recovery-v57-runtimev15-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v47-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:SAFE-510:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v47-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v47-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:SAFE-511:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v45-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:SAFE-512:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-safe512-file-write-recovery-v57-runtimev15-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:SAFE-513:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ]
+  },
+  "v35:PROV-520:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v47-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v47-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:provenance-reconciliation:domain": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v47-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v45-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-iterative-modality-recovery-v59-runtimev15-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v47-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:PROV-521:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v45-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-iterative-modality-recovery-v59-runtimev15-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:PROV-522:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-iterative-modality-recovery-v59-runtimev15-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ]
+  },
+  "v35:PROV-523:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:EXPT-531:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-repaired-train-iterative-trace-v49-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ]
+  },
+  "v35:EXPT-533:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-repaired-train-iterative-trace-v49-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:SCHED-541:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v47-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-repaired-train-iterative-trace-v49-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v47-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:SCHED-542:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/v54-sched543-train-audit-v1": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v45-four-train-iterative-quality-audit-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1": [
+    "train"
+   ]
+  },
+  "v35:SCHED-543:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "train"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-v49-sched543-guidance-recovery-v52-runtimev14-v1": [
+    "train"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "train"
+   ]
+  },
+  "v35:COMP-550:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:COMP-551:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:COMP-553:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:IR-560:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v36-and-v35repair-runtimev12-v2": [
+    "test"
+   ]
+  },
+  "v35:incident-response-mitigation:domain": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v36-and-v35repair-runtimev12-v2": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:IR-561:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:IR-562:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:IR-563:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:evidence-claim-triage:domain": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:TRIAGE-570:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:TRIAGE-571:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:TRIAGE-572:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:TRIAGE-573:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:maintenance-work-order:domain": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:MAINT-580:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:MAINT-581:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "train"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:MAINT-582:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  },
+  "v35:MAINT-583:world": {
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance": [
+    "test"
+   ],
+   "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3": [
+    "test"
+   ],
+   "runs/quality-review-v36-luna-v35-v11-final-20261010-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1": [
+    "test"
+   ],
+   "runs/free-provider-generation-20261009-v1/provider-luna-sourcev35-thirtytwo-runtimev11-v1": [
+    "test"
+   ]
+  }
+ },
+ "conflicts": [
+  {
+   "key": "v35:EXPT-532:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "test"
+   ]
+  },
+  {
+   "key": "v35:SAFE-512:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "test"
+   ]
+  },
+  {
+   "key": "v35:SAFE-513:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "test"
+   ]
+  },
+  {
+   "key": "v35:PROV-522:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "test"
+   ]
+  },
+  {
+   "key": "v35:PROV-523:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "test"
+   ]
+  },
+  {
+   "key": "v35:EXPT-533:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "test"
+   ]
+  },
+  {
+   "key": "v35:SCHED-542:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "test"
+   ]
+  },
+  {
+   "key": "v35:SCHED-543:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "test"
+   ]
+  },
+  {
+   "key": "v35:COMP-550:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "train"
+   ],
+   "note": "test key recorded as train"
+  },
+  {
+   "key": "v35:COMP-551:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "train"
+   ],
+   "note": "test key recorded as train"
+  },
+  {
+   "key": "v35:IR-560:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "train"
+   ],
+   "note": "test key recorded as train"
+  },
+  {
+   "key": "v35:IR-561:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "train"
+   ],
+   "note": "test key recorded as train"
+  },
+  {
+   "key": "v35:TRIAGE-570:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "train"
+   ],
+   "note": "test key recorded as train"
+  },
+  {
+   "key": "v35:TRIAGE-571:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "train"
+   ],
+   "note": "test key recorded as train"
+  },
+  {
+   "key": "v35:MAINT-580:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "train"
+   ],
+   "note": "test key recorded as train"
+  },
+  {
+   "key": "v35:MAINT-581:world",
+   "artifact": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+   "record_splits": [
+    "train"
+   ],
+   "note": "test key recorded as train"
+  }
+ ]
+}

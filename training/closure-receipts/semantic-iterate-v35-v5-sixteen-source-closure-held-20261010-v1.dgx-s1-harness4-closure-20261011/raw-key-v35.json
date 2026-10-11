@@ -1,0 +1,10 @@
+{
+ "direct_keys": 36,
+ "alias_variants": 55,
+ "s1_direct_hits": {},
+ "s1_alias_hits": {},
+ "harness4_direct_hits": {},
+ "harness4_alias_hits": {},
+ "protected_hits": {},
+ "short_aliases_skipped_note": "aliases are suffixes after each \":\"; e.g. \"world\", \"domain\" style suffixes are checked too"
+}

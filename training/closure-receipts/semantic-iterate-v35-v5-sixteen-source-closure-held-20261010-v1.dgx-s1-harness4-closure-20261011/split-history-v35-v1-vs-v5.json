@@ -1,0 +1,182 @@
+{
+ "v1_file": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1/source.cases.jsonl",
+ "v5_file": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance/source.cases.jsonl",
+ "changed_keys": {
+  "v35:COMP-550:world": {
+   "v1": [
+    "train"
+   ],
+   "v5": [
+    "test"
+   ]
+  },
+  "v35:COMP-551:world": {
+   "v1": [
+    "train"
+   ],
+   "v5": [
+    "test"
+   ]
+  },
+  "v35:EXPT-532:world": {
+   "v1": [
+    "test"
+   ],
+   "v5": [
+    "train"
+   ]
+  },
+  "v35:EXPT-533:world": {
+   "v1": [
+    "test"
+   ],
+   "v5": [
+    "train"
+   ]
+  },
+  "v35:IR-560:world": {
+   "v1": [
+    "train"
+   ],
+   "v5": [
+    "test"
+   ]
+  },
+  "v35:IR-561:world": {
+   "v1": [
+    "train"
+   ],
+   "v5": [
+    "test"
+   ]
+  },
+  "v35:MAINT-580:world": {
+   "v1": [
+    "train"
+   ],
+   "v5": [
+    "test"
+   ]
+  },
+  "v35:MAINT-581:world": {
+   "v1": [
+    "train"
+   ],
+   "v5": [
+    "test"
+   ]
+  },
+  "v35:PROV-522:world": {
+   "v1": [
+    "test"
+   ],
+   "v5": [
+    "train"
+   ]
+  },
+  "v35:PROV-523:world": {
+   "v1": [
+    "test"
+   ],
+   "v5": [
+    "train"
+   ]
+  },
+  "v35:SAFE-512:world": {
+   "v1": [
+    "test"
+   ],
+   "v5": [
+    "train"
+   ]
+  },
+  "v35:SAFE-513:world": {
+   "v1": [
+    "test"
+   ],
+   "v5": [
+    "train"
+   ]
+  },
+  "v35:SCHED-542:world": {
+   "v1": [
+    "test"
+   ],
+   "v5": [
+    "train"
+   ]
+  },
+  "v35:SCHED-543:world": {
+   "v1": [
+    "test"
+   ],
+   "v5": [
+    "train"
+   ]
+  },
+  "v35:TRIAGE-570:world": {
+   "v1": [
+    "train"
+   ],
+   "v5": [
+    "test"
+   ]
+  },
+  "v35:TRIAGE-571:world": {
+   "v1": [
+    "train"
+   ],
+   "v5": [
+    "test"
+   ]
+  },
+  "v35:compliance-document-revision:domain": {
+   "v1": null,
+   "v5": [
+    "test"
+   ]
+  },
+  "v35:evidence-claim-triage:domain": {
+   "v1": null,
+   "v5": [
+    "test"
+   ]
+  },
+  "v35:experimental-plan-revision:domain": {
+   "v1": null,
+   "v5": [
+    "train"
+   ]
+  },
+  "v35:incident-response-mitigation:domain": {
+   "v1": null,
+   "v5": [
+    "test"
+   ]
+  },
+  "v35:maintenance-work-order:domain": {
+   "v1": null,
+   "v5": [
+    "test"
+   ]
+  },
+  "v35:provenance-reconciliation:domain": {
+   "v1": null,
+   "v5": [
+    "train"
+   ]
+  },
+  "v35:resource-window-scheduling:domain": {
+   "v1": null,
+   "v5": [
+    "train"
+   ]
+  },
+  "v35:safety-corrective-action:domain": {
+   "v1": null,
+   "v5": [
+    "train"
+   ]
+  }
+ }
+}

@@ -1,0 +1,46 @@
+"""Exact split per V35 world/domain key: walk JSON objects that carry a "split" and a group/id field naming the key."""
+import json, subprocess, sys, collections, os
+T = '/home/werg/.claude/jobs/9c849f00/tmp'
+acct = json.load(open(f'{T}/v35-out/overlap-world-accounting-v35.json'))
+keys = list(acct['occurrence_scan']['keys'])
+arts = sorted({a for v in acct['occurrence_scan']['keys'].values() for a in v})
+nf = f'{T}/v35-needles.txt'
+files = subprocess.run(['/home/werg/.local/bin/rg', '-L', '-l', '-F', '-f', nf, '--no-messages', '-g', '*.json', '-g', '*.jsonl'] + arts,
+                       capture_output=True, text=True, cwd='/home/werg/natlang').stdout.split()
+ks = set(keys)
+found = collections.defaultdict(lambda: collections.defaultdict(set))
+def walk(o, art):
+    if isinstance(o, dict):
+        sp = o.get('split')
+        if isinstance(sp, str):
+            named = set()
+            for f in ('source_groups', 'source_ids', 'split_group', 'split_groups', 'group', 'groups'):
+                v = o.get(f)
+                named |= ({v} if isinstance(v, str) else set(v) if isinstance(v, list) else set()) & ks
+            for k in named: found[k][art].add(sp)
+        for v in o.values(): walk(v, art)
+    elif isinstance(o, list):
+        for v in o: walk(v, art)
+for f in files:
+    art = f if not f.startswith('runs/free-provider') else f
+    art = '/'.join(f.split('/')[:3]) if f.startswith('runs/free-provider') else '/'.join(f.split('/')[:2])
+    try:
+        if f.endswith('.jsonl'):
+            for l in open('/home/werg/natlang/' + f, errors='replace'):
+                if l.strip():
+                    try: walk(json.loads(l), art)
+                    except ValueError: pass
+        else: walk(json.load(open('/home/werg/natlang/' + f, errors='replace')), art)
+    except (ValueError, OSError): pass
+split = acct['split_32']
+sel = set(split['selected_worlds'] + split['selected_domains']); test = set(split['test_worlds'] + split['test_domains'])
+conf = []
+for k, arts_ in found.items():
+    for a, s in arts_.items():
+        if k in sel and s - {'train'}: conf.append({'key': k, 'artifact': a, 'record_splits': sorted(s)})
+        if k in test and 'train' in s: conf.append({'key': k, 'artifact': a, 'record_splits': sorted(s), 'note': 'test key recorded as train'})
+out = {'method': 'json objects with a "split" field and a source_groups/source_ids/split_group/group field naming the key; exact, no text windows',
+       'files_parsed': len(files), 'keys': {k: {a: sorted(s) for a, s in v.items()} for k, v in found.items()}, 'conflicts': conf}
+json.dump(out, open(f'{T}/v35-out/structured-split-occurrences-v35.json', 'w'), indent=1)
+c = collections.Counter((x['artifact'], x.get('note', 'selected key recorded as non-train')) for x in conf)
+print(len(files), len(conf)); [print(n, k) for k, n in c.items()]

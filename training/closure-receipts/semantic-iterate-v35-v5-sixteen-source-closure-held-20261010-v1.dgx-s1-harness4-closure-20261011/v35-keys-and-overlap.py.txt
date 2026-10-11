@@ -1,0 +1,92 @@
+"""V35: direct raw-key + alias checks against S1/harness-v4 groups and protected ids, the 32-source train/test split,
+and a registry-wide world/domain occurrence scan."""
+import json, os, re, subprocess, sys, collections, hashlib
+W, P, O = sys.argv[1], sys.argv[2], sys.argv[3]
+rows = lambda f: [json.loads(l) for l in open(f) if l.strip()]
+sel = rows(f'{P}/inputs/source-selected-16.cases.jsonl'); orig = rows(f'{P}/inputs/source-original-v5.cases.jsonl')
+def keys(r):
+    ks = set(r.get('source_groups') or []) | set(r.get('source_ids') or []) | {r.get('split_group'), r['id']}
+    ks.discard(None)
+    return ks
+def variants(k):   # direct key plus un-prefixed alias forms
+    out = {k}
+    parts = k.split(':')
+    for i in range(1, len(parts)):
+        out.add(':'.join(parts[i:]))
+    return out
+if os.path.exists(f'{O}/raw-key-v35.json'):
+    raw = json.load(open(f'{O}/raw-key-v35.json'))   # already computed; skip loading the S1 group table
+else:
+    S1 = json.load(open(f'{W}/data/neuralese/corpora/cross-corpus-index-s1-full-final-20261003-v1/groups.json'))
+    H4 = json.load(open(f'{W}/data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1/groups.json'))
+    PR = json.load(open(f'{P}/inputs/protected-bgkit.json'))['ids']
+    direct = sorted({k for r in sel for k in keys(r)}); allv = sorted({v for k in direct for v in variants(k)})
+    raw = {'direct_keys': len(direct), 'alias_variants': len(allv) - len(direct),
+           's1_direct_hits': {k: S1[k] for k in direct if k in S1}, 's1_alias_hits': {k: S1[k] for k in allv if k in S1 and k not in direct},
+           'harness4_direct_hits': {k: H4[k] for k in direct if k in H4}, 'harness4_alias_hits': {k: H4[k] for k in allv if k in H4 and k not in direct},
+           'protected_hits': {k: PR[k] for k in allv if k in PR}, 'short_aliases_skipped_note': 'aliases are suffixes after each ":"; e.g. "world", "domain" style suffixes are checked too'}
+    json.dump(raw, open(f'{O}/raw-key-v35.json', 'w'), indent=1)
+# 32-source explicit split
+tr = [r for r in orig if r['split'] == 'train']; te = [r for r in orig if r['split'] == 'test']
+trk = {k for r in tr for k in keys(r) if k != r['id']}; tek = {k for r in te for k in keys(r) if k != r['id']}
+selids = {r['id'] for r in sel}; origtr = {r['id'] for r in tr}
+worlds = lambda rs: sorted({k for r in rs for k in keys(r) if k.endswith(':world')})
+doms = lambda rs: sorted({k for r in rs for k in keys(r) if k.endswith(':domain')})
+split = {'original_rows': len(orig), 'train_rows': len(tr), 'test_rows': len(te), 'selected_rows': len(sel),
+         'selected_subset_of_original_train': selids <= origtr, 'selected_rows_identical_to_original': sum(1 for r in sel if r in tr),
+         'train_test_shared_group_keys': sorted(trk & tek),
+         'train_worlds': worlds(tr), 'test_worlds': worlds(te), 'train_domains': doms(tr), 'test_domains': doms(te),
+         'selected_worlds': worlds(sel), 'selected_domains': doms(sel)}
+# registry-wide occurrence scan of the selected and test world/domain keys
+reg = json.load(open(f'{W}/training/neuralese_corpora.json'))['corpora']
+paths = sorted({(e['path'] if e['path'].startswith('/') else '/home/werg/natlang/' + e['path']) for e in reg if e.get('path')})
+paths = [p for p in paths if os.path.exists(p)]
+needles = sorted(set(split['selected_worlds'] + split['selected_domains'] + split['test_worlds'] + split['test_domains']))
+nf = f'{O}/../v35-needles.txt'; open(nf, 'w').write('\n'.join(needles) + '\n')
+# V35 keys did not exist before 2026-10-09: content-scan only json/jsonl files modified since then; count the rest.
+CUTOFF = '2026-10-09'
+recent, older = [], {}
+for pth in paths:
+    out = subprocess.run(['find', '-L', pth, '-type', 'f', '(', '-name', '*.json', '-o', '-name', '*.jsonl', ')', '-printf', '%TY-%Tm-%Td %s %p\\n'],
+                         capture_output=True, text=True).stdout.splitlines()
+    for line in out:
+        day, size, fp = line.split(' ', 2)
+        if day >= CUTOFF: recent.append(fp)
+        else:
+            o = older.setdefault(os.path.relpath(pth, '/home/werg/natlang'), [0, 0]); o[0] += 1; o[1] += int(size)
+recent = sorted(set(recent))
+files = []
+for i in range(0, len(recent), 500):
+    files += subprocess.run(['/home/werg/.local/bin/rg', '-l', '-F', '-f', nf, '--no-messages'] + recent[i:i + 500],
+                            capture_output=True, text=True).stdout.split()
+files = sorted(set(files))
+pat = re.compile('|'.join(re.escape(n) for n in needles))
+occ = collections.defaultdict(lambda: collections.defaultdict(set))
+for f in files:
+    art = os.path.relpath(f, '/home/werg/natlang')
+    art = '/'.join(art.split('/')[:3]) if art.startswith('runs/free-provider') else '/'.join(art.split('/')[:2])
+    try: fh = open(f, errors='replace')
+    except OSError: continue
+    for chunk in (fh if f.endswith('.jsonl') else [fh.read()]):
+        for m in pat.finditer(chunk):
+            win = chunk[max(0, m.start() - 600): m.end() + 600]
+            occ[m.group(0)][art] |= set(re.findall(r'"(?:split|source_split)"\s*:\s*"([^"]+)"', win)) or {'(no split field nearby)'}
+scan = {'registry_paths_scanned': len(paths), 'content_scanned_files_modified_since': CUTOFF, 'content_scanned_files': len(recent),
+        'skipped_older_files_by_path': {k: {'files': v[0], 'bytes': v[1]} for k, v in sorted(older.items())},
+        'skipped_reason': 'V35 world/domain keys were created on 2026-10-10; json/jsonl files last modified before 2026-10-09 cannot contain them',
+        'files_with_hits': len(files),
+        'keys': {k: {a: sorted(s) for a, s in occ.get(k, {}).items()} for k in needles}}
+conf = []
+for k in split['selected_worlds'] + split['selected_domains']:
+    for a, s in scan['keys'][k].items():
+        bad = [x for x in s if x not in ('train', '(no split field nearby)')]
+        if bad: conf.append({'key': k, 'artifact': a, 'splits': bad})
+for k in split['test_worlds'] + split['test_domains']:
+    for a, s in scan['keys'][k].items():
+        if 'train' in s: conf.append({'key': k, 'artifact': a, 'splits': s, 'note': 'test key seen with train split'})
+scan['conflicts'] = conf
+acct = {'schema': 'natlang.v35-overlap-world-accounting/1', 'split_32': split, 'occurrence_scan': scan}
+json.dump(acct, open(f'{O}/overlap-world-accounting-v35.json', 'w'), indent=1)
+print(json.dumps({'raw': {k: (len(v) if isinstance(v, dict) else v) for k, v in raw.items()},
+                  'split': {k: (len(v) if isinstance(v, list) and k not in ('train_test_shared_group_keys',) else v) for k, v in split.items()},
+                  'scan': {'paths': len(paths), 'files': len(files), 'conflicts': len(conf)}}, indent=1))
