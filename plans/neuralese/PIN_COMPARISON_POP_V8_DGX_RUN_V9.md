@@ -97,3 +97,20 @@ double-pass and preservation proposal is dropped. DGX owns the shared module and
 recipe; Pop will use that implementation for LFM. Exact semantics and fresh
 identity/runtime qualification are still pending. The historical comparison and
 old failed behavior evidence remain relevant diagnostics, not active run settings.
+
+## Live package cohesion check (09:27 UTC)
+
+Read-only SHA-256 comparison against the canonical DGX working tree, with Pop at
+54843abc and DGX HEAD still 32262369, found 149 Python modules on Pop and 147 on
+DGX. Of these, 143 were identical; four differed (`serve/__init__.py`,
+`serve/chat.py`, `serve/engine.py`, `train/adapters.py`). Two published evaluators
+were present only on Pop (`eval/plain_behavior.py`, `eval/plain_weight_drift.py`);
+there were no DGX-only Python modules. This is distinct from the historical
+142-of-146 comparison above. The shared trainer is identical in this live check;
+the remaining differences concern serving/restoration and evaluation adoption.
+
+DGX retains uncommitted work, so its old HEAD alone does not describe its actual
+implementation. Coord pop-dc2b asks its owner to reconcile published changes
+safely before freezing another run. Pop does not overwrite that working tree.
+The new direct-v1 trainer and projection were not yet present in either inspected
+working tree; implementation remains assigned to DGX, for both models to consume.
