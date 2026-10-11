@@ -5,9 +5,10 @@
 distil the prompt into the weights after a warm-up); the system paragraphs that declare a property of THIS call
 are kept verbatim as a short system turn, the program header. A call with none of them has no system turn.
 
-``PROGRAM_SPECIFIC_HEADS`` is the interim scope table until ts-host exports ``promptPieces()`` with a ``scope``
-field (decomposition step 1); ``scripts/neuralese_data/strip_generic_system_prompt.py`` uses the same table on
-rendered text, and the two are checked against each other byte for byte.
+The scope table is ts-host's ``promptPieces()`` with its ``scope`` field plus the historical texts of every piece
+(recorded corpora carry earlier runtime prompts), exported to ``training/prompt-pieces/pieces.json``; the algorithm
+is a port of ts-host ``renderSystemPrompt`` (parity: tests/neuralese/test_prompt_rendering_parity.py).
+``PROGRAM_SPECIFIC_HEADS`` was the interim paragraph-head table (kept for reference; no longer used).
 """
 from __future__ import annotations
 
@@ -30,8 +31,22 @@ def program_header_paragraphs(prose: str) -> list[str]:
     return [p for p in prose.split('\n\n') if p.startswith(PROGRAM_SPECIFIC_HEADS)]
 
 
-def apply_prompt_rendering(messages, tools, prompt_rendering: str = "full"):
-    """``(messages, tools)`` for ``prompt_rendering``. ``full`` returns them unchanged."""
+_PIECES = None
+
+
+def default_pieces() -> list:
+    """The shared scope table: ts-host promptPieces() plus the historical bank (training/prompt-pieces/pieces.json,
+    exported by ts-host/scripts/export-prompt-pieces.mjs --history)."""
+    global _PIECES
+    if _PIECES is None:
+        from pathlib import Path
+        _PIECES = load_pieces(Path(__file__).resolve().parents[4] / 'training' / 'prompt-pieces' / 'pieces.json')
+    return _PIECES
+
+
+def apply_prompt_rendering(messages, tools, prompt_rendering: str = "full", pieces=None):
+    """``(messages, tools)`` for ``prompt_rendering``. ``full`` returns them unchanged; ``program-header`` renders the
+    system message with ts-host's renderSystemPrompt algorithm (render_system_prompt) and passes no tool schemas."""
     if prompt_rendering not in PROMPT_RENDERINGS:
         raise ValueError(f"unknown prompt_rendering {prompt_rendering!r} (declared: {PROMPT_RENDERINGS})")
     if prompt_rendering == "full":
@@ -41,8 +56,8 @@ def apply_prompt_rendering(messages, tools, prompt_rendering: str = "full"):
         content = out[0].get("content")
         if not isinstance(content, str):
             raise ValueError("program-header rendering needs a plain-text system message")
-        kept = program_header_paragraphs(content)
-        out = ([{**out[0], "content": "\n\n".join(kept)}] if kept else []) + out[1:]
+        header = render_system_prompt(content, prompt_rendering, default_pieces() if pieces is None else pieces)
+        out = ([{**out[0], "content": header}] if header else []) + out[1:]
     if any(isinstance(m, dict) and m.get("role") == "system" for m in out[1:]):
         raise ValueError("program-header rendering found a system message after the first turn")
     return out, None

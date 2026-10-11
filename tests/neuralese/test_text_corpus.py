@@ -737,11 +737,11 @@ def test_text_provider_read_coalesces_only_duplicate_views_of_same_authenticated
 
 
 def test_program_header_rendering_keeps_only_program_specific_system_paragraphs():
-    from natlang_neuralese.data.prompt_rendering import apply_prompt_rendering
+    from natlang_neuralese.data.prompt_rendering import apply_prompt_rendering, default_pieces, render_system_prompt
 
-    system = ("You are running one call of a natural-language function.\n\n"
-              "This call is at the fifth and final layer of ad hoc natural-language calls.\n\n"
-              "Use eval for exact computation.")
+    pieces = {p['id']: p['text'] for p in default_pieces() if not p.get('historical')}
+    notice = pieces['depth-limit-notice']
+    system = pieces['interpreter'] + '\n\n' + notice + '\n\nA program-specific addendum stays.'
     tools = [{"type": "function", "function": {"name": "eval"}}]
     base = {"split": "train", "source_groups": ["g-train"], "training_admission": {"approved": True},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": "Question"}],
@@ -753,11 +753,14 @@ def test_program_header_rendering_keeps_only_program_specific_system_paragraphs(
                                                        prompt_rendering="program-header")
     assert not omissions
     assert "prompt_rendering" not in receipt_full and receipt_ph["prompt_rendering"] == "program-header"
-    assert "Use eval" in rows_full[0]["text"]
-    assert rows_ph[0]["text"] == ("<|system|>This call is at the fifth and final layer of ad hoc natural-language "
-                                  "calls.<|end|><|user|>Question<|end|><|assistant|>Answer<|end|>")
-    # Without a program-specific paragraph there is no system turn, and tool schemas are never passed.
-    messages, schemas = apply_prompt_rendering([{"role": "system", "content": "Generic."},
+    assert pieces['interpreter'][:200] in rows_full[0]["text"]
+    # Generic runtime prose goes; the program declaration and unmatched program text stay verbatim (renderSystemPrompt).
+    header = render_system_prompt(system, "program-header", default_pieces())
+    assert notice in header and header.endswith("A program-specific addendum stays.")
+    assert "Use eval for exact computation" not in header
+    assert rows_ph[0]["text"] == "<|system|>" + header + "<|end|><|user|>Question<|end|><|assistant|>Answer<|end|>"
+    # Without program-specific text there is no system turn, and tool schemas are never passed.
+    messages, schemas = apply_prompt_rendering([{"role": "system", "content": pieces['approach']},
                                                 {"role": "user", "content": "Q"}], tools, "program-header")
     assert messages == [{"role": "user", "content": "Q"}] and schemas is None
     assert apply_prompt_rendering(base["messages"], tools, "full") == (base["messages"], tools)

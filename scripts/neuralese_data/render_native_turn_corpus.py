@@ -805,6 +805,7 @@ def main(argv=None):
             Path(__file__).resolve(), ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py',
             ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py',
             ROOT / 'training/neuralese/natlang_neuralese/data/prompt_rendering.py',
+            ROOT / 'training/prompt-pieces/pieces.json',
             ROOT / 'training/neuralese/natlang_neuralese/serve/chat.py')},
         'selection': dict(counts),
         'render_omissions': dict(render_omissions),

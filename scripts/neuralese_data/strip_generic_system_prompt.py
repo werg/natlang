@@ -10,9 +10,10 @@ nesting layer, Neuralese parameter/result declarations, the edit_code capability
 system turn, the "program header". No new model-facing text is introduced: kept paragraphs are byte-identical
 to the source; a document with none of them has no system turn at all.
 
-Per row: the system turn's content is split into its prose paragraphs and its tool section (``List of tools:``
-on LFM2.5, ``# Tools`` on the Qwen-style Mellum template); prose paragraphs whose head matches
-PROGRAM_SPECIFIC_HEADS are kept, everything else is dropped. Token IDs from the first non-system turn on are the
+Per row: the system turn's content is split into its prose and its tool section (``List of tools:`` on LFM2.5,
+``# Tools`` on the Qwen-style Mellum template, each with the template's separator); the prose is rendered with the
+shared program-header algorithm (ts-host renderSystemPrompt, ported in natlang_neuralese/data/prompt_rendering.py,
+over training/prompt-pieces/pieces.json incl. historical piece texts) and the tool section is dropped. Token IDs from the first non-system turn on are the
 source row's own IDs; the header is spliced in at token level. Where the source text re-tokenizes exactly to its
 IDs, the script proves the splice equals re-tokenizing the new text (rows rendered with escaped special spellings
 cannot be re-tokenized from text, so the splice is their only correct form). It then shifts ``supervised_suffix_start`` (and any ``context_only_spans``) by the removed length. A row
@@ -37,7 +38,8 @@ TURN_END = '<|im_end|>'
 TOOL_SECTION_MARKERS = ('List of tools: ', '# Tools\n')
 # The scope table is shared with the renderer's prompt_rendering argument (one implementation per concept).
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
-from natlang_neuralese.data.prompt_rendering import PROGRAM_SPECIFIC_HEADS, program_header_paragraphs  # noqa: E402
+from natlang_neuralese.data.prompt_rendering import default_pieces, render_system_prompt  # noqa: E402
+PROGRAM_SPECIFIC_HEADS = ()  # superseded by the shared piece table (training/prompt-pieces/pieces.json)
 
 
 def file_sha(path: Path) -> str:
@@ -74,7 +76,8 @@ def program_header(content: str):
     # Mellum2.1's (Qwen-style) template writes the system message, then '\n\n', then '# Tools': the same rule.
     if tools.startswith('# Tools\n') and prose.endswith('\n\n'):
         prose = prose[:-2]
-    return program_header_paragraphs(prose), len(prose), len(tools)
+    header = render_system_prompt(prose, 'program-header', default_pieces())
+    return ([header] if header else []), len(prose), len(tools)
 
 
 def strip_row(row: dict, tok, im_start: int, im_end: int):
@@ -177,7 +180,7 @@ def main(argv=None):
         handle.close()
     receipt = {'schema': SCHEMA, 'source_text': {'path': str(a.source_text), 'sha256': file_sha(a.source_text)},
                'tokenizer': str(a.tokenizer), 'tokenizer_sha256': tokenizer_sha,
-               'program_specific_heads': list(PROGRAM_SPECIFIC_HEADS), 'totals': totals,
+               'prompt_pieces': {'path': 'training/prompt-pieces/pieces.json', 'sha256': file_sha(Path(__file__).resolve().parents[2] / 'training' / 'prompt-pieces' / 'pieces.json')}, 'totals': totals,
                'outputs': {name: file_sha(a.out_dir / name)
                            for name in ('text-data.jsonl', 'row-stats.jsonl', 'omissions.jsonl')}}
     (a.out_dir / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')

@@ -26,7 +26,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
-from natlang_neuralese.data.prompt_rendering import program_header_paragraphs  # noqa: E402
+from natlang_neuralese.data.prompt_rendering import default_pieces, render_system_prompt  # noqa: E402
 
 SYSTEM_OPEN, TURN_END = '<|im_start|>system\n', '<|im_end|>'
 TOOL_SECTION_MARKERS = ('List of tools: ', '# Tools\n')
@@ -77,8 +77,8 @@ def check(path: Path, sample: int, current: set, rng: random.Random):
                    and not all(q.strip() in current for q in p.split('\n') if q.strip())]
         if mode == 'program-header':
             stats['header_documents'] += 1
-            stats['header_equals_scope_table'] += ([q.strip() for q in program_header_paragraphs(prose) if q.strip()]
-                                                   == [q.strip() for q in paragraphs])
+            stats['header_equals_scope_table'] += (render_system_prompt(prose, 'program-header', default_pieces())
+                                                   == prose.strip())
         stats['all_paragraphs_current'] += not missing
         stats['paragraphs'] += len(paragraphs)
         stats['paragraphs_not_current'] += len(missing)
