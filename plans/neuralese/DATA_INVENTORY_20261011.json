@@ -4,14 +4,14 @@
  "doc": "plans/neuralese/DATA_INVENTORY_20261011.md",
  "registry_counts_by_class": {
   "held-or-evidence": {
-   "corpora": 1171,
-   "bytes": 122798049054,
-   "jsonl_lines": 4399140
+   "corpora": 1164,
+   "bytes": 121184397121,
+   "jsonl_lines": 4370188
   },
   "training-admitted": {
-   "corpora": 37,
-   "bytes": 128807367890,
-   "jsonl_lines": 3880411
+   "corpora": 44,
+   "bytes": 130421019823,
+   "jsonl_lines": 3909363
   },
   "protected-evaluation": {
    "corpora": 2,
@@ -395,6 +395,84 @@
    "jsonl_lines_approx": 1400000,
    "decision": "Pop sweeps closed campaigns: admit accepted/oracle-passed actions unless a concrete defect (owner maximize-data rule); register omissions.",
    "owner_of_conversion": "pop"
+  },
+  {
+   "rank_value": null,
+   "id": "luna-v17-v9-portable-context-view-20261010-v1",
+   "path": "runs/luna-v17-actual-quality-proposal-20261010-v9-portable-context-view-v1/assembled-v3/native-records.jsonl",
+   "origin": "Luna teacher + Clef reference, exact-oracle native records",
+   "format": "natlang.teacher_training_turn.native/1",
+   "docs": 3207,
+   "supervised_tokens_est": 582000,
+   "consumable_now": false,
+   "decision": "ADMIT (held-recovery 2026-10-11): 3207 train rows (2035 test excluded); 415 train decisions are absent from the 4962 union text and are new",
+   "required_conversion": "whole-trajectory render or native_gold_packet",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "refine-judge-exact-20261009-v1",
+   "path": "data/neuralese/corpora/refine-judge-exact-20261009-v1/judge-rows.jsonl",
+   "origin": "crisp-checker labels, no model",
+   "format": "natlang.decision-prompt/1",
+   "docs": 1020,
+   "supervised_tokens_est": 3000,
+   "consumable_now": false,
+   "decision": "ADMIT 1020 train rows; heldout-predicate/family (307) stay out",
+   "required_conversion": "render as judge calls",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "refine-author-static-20261009-v1",
+   "path": "data/neuralese/corpora/refine-author-static-20261009-v1/examples.jsonl",
+   "origin": "applications working tree + git history",
+   "format": "natlang.refine-author/1",
+   "docs": 28,
+   "supervised_tokens_est": 197000,
+   "consumable_now": false,
+   "decision": "ADMIT all 28 pairs",
+   "required_conversion": "authoring-example render",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "neuralese-operator-cases-20261009-v1",
+   "path": "runs/neuralese-operator-cases-20261009-v1/cases.jsonl",
+   "origin": "derived from v7 gold text, code-computed targets",
+   "format": "natlang.operator-case/1",
+   "docs": 1166,
+   "supervised_tokens_est": 74000,
+   "consumable_now": false,
+   "decision": "ADMIT 1166 train spans; 834 test excluded",
+   "required_conversion": "S5 operator objective",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "natlang-specialization-cases-declines-20261009-v1",
+   "path": "data/neuralese/corpora/natlang-specialization-cases-declines-20261009-v1/",
+   "origin": "DGX call store export",
+   "format": "compiled cases + declines",
+   "docs": 15,
+   "supervised_tokens_est": null,
+   "consumable_now": false,
+   "decision": "ADMIT",
+   "required_conversion": "render recorded calls as call programs",
+   "owner_of_conversion": "dgx-render"
+  },
+  {
+   "rank_value": null,
+   "id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
+   "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/records.jsonl",
+   "origin": "SWE-rebench via pi harness",
+   "format": "natlang.teacher_training_turn.native/1",
+   "docs": 2969,
+   "supervised_tokens_est": null,
+   "consumable_now": false,
+   "decision": "ADMIT (records of the already admitted text twins)",
+   "required_conversion": "none beyond text twins",
+   "owner_of_conversion": "dgx-render"
   }
  ],
  "defects": [
@@ -642,6 +720,34 @@
    "action": "not natlang-native; sources for harness-bench-style normalization (SWE/agent trajectories) under the breadth-via-natlang rule; register a snapshot when a converter consumes one"
   }
  ],
+ "held_recovery_20261011": {
+  "method": "file-level comparison of every registry manifest file (165,526 files) by path and size between DGX and Pop (ssh pop-os)",
+  "registry_entries": 1377,
+  "entries_with_dgx_unique_files": 60,
+  "dgx_unique_bytes_nonadmitted_entries": 91200000000.0,
+  "dgx_unique_breakdown_gb": {
+   "model_and_training_state_pop_offloaded_not_candidates": 60.8,
+   "superseded_or_duplicate_training_shaped_delete_candidates": 20.8,
+   "generation_source_or_index_kept": 7.9,
+   "live_training_shaped_admitted_or_covered": 1.8
+  },
+  "delete_candidates": "runs/DELETE-CANDIDATES-HELD-20261011.txt (20.78 GB)",
+  "recovered": {
+   "rows_train": {
+    "luna-v17-v9-portable-context-view": 3207,
+    "refine-judge-exact": 1020,
+    "refine-author-static": 28,
+    "operator-cases": 1166,
+    "specialization": 15
+   },
+   "new_to_union_train_decisions": 415
+  },
+  "excluded": {
+   "test_or_heldout_splits": "luna 2035 test, judge 307 heldout, operator 834 test, harness 874 test",
+   "defects": "harness v1: 9 records with timeout-notice",
+   "jeff_leaks": 0
+  }
+ },
  "registry": [
   {
    "id": "luna-authored-root-microgrid-31-native-25-text-20261009-v3",
@@ -9343,7 +9449,7 @@
    "bytes": 171850102,
    "jsonl_lines": 7470,
    "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
-   "training_admission": null,
+   "training_admission": false,
    "derived_from": [
     "neuralese-reviewed-restart-cohort-20261007-v8"
    ],
@@ -9385,7 +9491,7 @@
    "bytes": 132440834,
    "jsonl_lines": 5922,
    "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
-   "training_admission": null,
+   "training_admission": false,
    "derived_from": [
     "neuralese-reviewed-restart-cohort-20261007-v7"
    ],
@@ -9427,7 +9533,7 @@
    "bytes": 95032746,
    "jsonl_lines": 4514,
    "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
-   "training_admission": null,
+   "training_admission": false,
    "derived_from": [
     "neuralese-reviewed-restart-cohort-20261007-v5"
    ],
@@ -15744,7 +15850,7 @@
    "bytes": 200819382,
    "jsonl_lines": 8540,
    "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
-   "training_admission": null,
+   "training_admission": false,
    "derived_from": [
     "neuralese-reviewed-restart-cohort-20261007-v13-final",
     "neuralese-native-gold-text-v11-r2-20261007-v1"
@@ -19348,7 +19454,7 @@
    "bytes": 211156506,
    "jsonl_lines": 8876,
    "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
-   "training_admission": null,
+   "training_admission": false,
    "derived_from": [
     "neuralese-native-gold-text-v16-v5-20261007"
    ],
@@ -21469,7 +21575,7 @@
    "id": "luna-v17-v9-portable-context-view-20261010-v1",
    "owner": "dgx",
    "path": "runs/luna-v17-actual-quality-proposal-20261010-v9-portable-context-view-v1",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "data_shape": {
     "class": "unclassified",
     "member_counts": {
@@ -21501,11 +21607,11 @@
    "bytes": 596269947,
    "jsonl_lines": 10739,
    "admission": "root-admitted-exact-source-grounded-native-sft-closed-recurrence-and-derived-gold-text;not-runtime-qualified",
-   "training_admission": null,
+   "training_admission": true,
    "derived_from": [
     "luna-v17-v9-portable-context-proposal-20261008"
    ],
-   "audit_2026_10_11": null
+   "audit_2026_10_11": "ADMIT (held-recovery 2026-10-11): 3207 train rows (2035 test excluded); 415 train decisions are absent from the 4962 union text and are new"
   },
   {
    "id": "neuralese-v9-root-review-20261008-v1",
@@ -23298,7 +23404,7 @@
    "bytes": 215962051,
    "jsonl_lines": 9018,
    "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
-   "training_admission": null,
+   "training_admission": false,
    "derived_from": [
     "luna-v17-v9-portable-context-proposal-20261008",
     "neuralese-maple-native-gold-text-corpus-20261008-v6"
@@ -27513,7 +27619,7 @@
    "id": "natlang-specialization-cases-declines-20261009-v1",
    "owner": "dgx",
    "path": "data/neuralese/corpora/natlang-specialization-cases-declines-20261009-v1",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "data_shape": {
     "class": "unclassified",
     "member_counts": {
@@ -27545,9 +27651,9 @@
    "bytes": 846679,
    "jsonl_lines": 15,
    "admission": "held-crisp-versus-natural-language-evidence-only",
-   "training_admission": false,
+   "training_admission": true,
    "derived_from": [],
-   "audit_2026_10_11": null
+   "audit_2026_10_11": "ADMIT"
   },
   {
    "id": "luna-semantic-iterate-six-successes-22-native-19-text-20261009-v1",
@@ -27706,7 +27812,7 @@
    "id": "neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1",
    "owner": "dgx",
    "path": "runs/neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "data_shape": {
     "class": "unclassified",
     "member_counts": {
@@ -27730,7 +27836,7 @@
    "bytes": 248354985,
    "jsonl_lines": 9924,
    "admission": "tokenizer-twin-of-root-adopted-text-composition-training-input-no-new-example-admission (inherits the admission of neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1)",
-   "training_admission": null,
+   "training_admission": true,
    "derived_from": [
     "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1"
    ],
@@ -27911,7 +28017,7 @@
    "id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
    "owner": "dgx",
    "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "data_shape": {
     "class": "unclassified",
     "member_counts": {
@@ -27944,11 +28050,11 @@
    "bytes": 764745375,
    "jsonl_lines": 4826,
    "admission": "admitted-by-owner-pending-recurrence-support (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'): read directly only by the recurrence stage, which stays held until each student's runtime qualification and the view gate, and until written views run on these records (raw-recurrence-v3 cohorts.harness_bench.recurrence.status); its LFM text twin is admitted",
-   "training_admission": false,
+   "training_admission": true,
    "derived_from": [
     "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
    ],
-   "audit_2026_10_11": null
+   "audit_2026_10_11": "ADMIT (records of the already admitted text twins)"
   },
   {
    "id": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1",
@@ -28179,7 +28285,7 @@
    "id": "refine-judge-exact-20261009-v1",
    "owner": "dgx",
    "path": "data/neuralese/corpora/refine-judge-exact-20261009-v1",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "data_shape": {
     "class": "unclassified",
     "member_counts": {
@@ -28203,15 +28309,15 @@
    "bytes": 1403943,
    "jsonl_lines": 1420,
    "admission": "held-pending-review-refine-judge-exact-labels",
-   "training_admission": false,
+   "training_admission": true,
    "derived_from": [],
-   "audit_2026_10_11": null
+   "audit_2026_10_11": "ADMIT 1020 train rows; heldout-predicate/family (307) stay out"
   },
   {
    "id": "refine-author-static-20261009-v1",
    "owner": "dgx",
    "path": "data/neuralese/corpora/refine-author-static-20261009-v1",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "data_shape": {
     "class": "unclassified",
     "member_counts": {
@@ -28235,9 +28341,9 @@
    "bytes": 790965,
    "jsonl_lines": 28,
    "admission": "held-pending-review-refine-author-static",
-   "training_admission": false,
+   "training_admission": true,
    "derived_from": [],
-   "audit_2026_10_11": null
+   "audit_2026_10_11": "ADMIT all 28 pairs"
   },
   {
    "id": "luna-v22-targeted-counterfactual-five-held-trajectories-20261009-v1",
@@ -28653,7 +28759,7 @@
    "id": "neuralese-operator-cases-20261009-v1",
    "owner": "dgx",
    "path": "runs/neuralese-operator-cases-20261009-v1",
-   "class": "held-or-evidence",
+   "class": "training-admitted",
    "data_shape": {
     "class": "unclassified",
     "member_counts": {
@@ -28675,11 +28781,11 @@
    "bytes": 1240039,
    "jsonl_lines": 2000,
    "admission": "s5-operator-training-source;exact-code-targets;not-task-admission",
-   "training_admission": false,
+   "training_admission": true,
    "derived_from": [
     "neuralese-maple-native-gold-text-corpus-20261008-v7"
    ],
-   "audit_2026_10_11": null
+   "audit_2026_10_11": "ADMIT 1166 train spans; 834 test excluded"
   },
   {
    "id": "neuralese-s5-operator-replay-records-20261009-v1",

@@ -280,3 +280,26 @@ directories, mostly copies or intermediates. Full list in the JSON key `unregist
 `training/neuralese_data_ledger.json` remains the full source ledger for bgkit and Schnitzeljagd: 241 excluded,
 55 migrated into S1, 22 queued (e.g. `web_sds_v3` adapter missing, `natlang:v13-corpus` migration,
 `bgkit:teacher` runs, retired Python sources). Its 22 queued items are the next conversion backlog after section F.
+
+## H. Held-data recovery on DGX (2026-10-11, owner: "held data seems like a cesspit")
+
+Method: every file of all 1,377 registry manifests (165,526 files) compared by path and size between DGX and Pop. Sixty entries have
+files that exist on DGX and not on Pop; 91.2 GB of them sit in entries without `training_admission: true`.
+
+| Class | Size | Action |
+| --- | --- | --- |
+| Model and training state that Pop offloaded to DGX (`pop-inactive-model-*`, bonsai teacher, failed bootstrap, action45 exports, Maple GGUF) | 60.8 GB | Only copy. Not delete candidates; listed in a separate block for Pop to decide |
+| Superseded or duplicate training-shaped data | 20.8 GB | Delete candidates in `runs/DELETE-CANDIDATES-HELD-20261011.txt`: harness records v1-v3 and Mellum text v1 (3.0), view-ask v2/v3/slice (6.5), Maple gold twins (1.0, subset of the union), v28 intermediates (0.45), luna-v17 proposals/previews (1.6), soft v13 conversion (8.1), S5 smoke replay (0.03) |
+| Generation sources and indexes | 7.9 GB | Kept: view-sources v1-v3, cross-corpus index, SWE-rebench tasks |
+| Live training-shaped, admitted here | 1.8 GB | below |
+
+Recovered (all set to `training_admission: true` with `review_status`; JeFF reserved-text scan found 0 hits in each):
+- `luna-v17-v9-portable-context-view-20261010-v1`: label was "root-admitted" with no flag. 3,207 train native records (~582k target+reasoning tokens, chars/4). 2,792 are decisions already in the 4962 union. **415 train decisions are not in the union text** (413 `curriculum_decision_extract_chain` from 58 trajectories whose other decisions are in the union; ~55k tokens). The 2,035 test records stay out.
+- `refine-judge-exact-20261009-v1`: 1,020 train rows of exact predicate labels; 307 held-out predicate/family rows stay out.
+- `refine-author-static-20261009-v1`: 28 authoring pairs (~197k tokens).
+- `neuralese-operator-cases-20261009-v1`: 1,166 train spans (834 test stay out); S5 objective cases.
+- `natlang-specialization-cases-declines-20261009-v1`: 7 compiled cases and 8 declines of recorded calls.
+- `harness-bench-...-records-20261010-v4` (2,969 train records) and `neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1`: owner-admitted or inherited, only the flag was missing.
+
+Excluded with reasons: harness records v1 (9 records with the OpenHands timeout-notice defect; v2-v4 carry the rest); every other superseded set has no unique rows (checked by id for the Maple twins against the union; by supersession chain and closure notes for harness v1-v3, view-ask v2/v3).
+Entries missing files on both machines (checkpoint state of Pop's closed lineages, e.g. `neuralese-map-v5-ar-state-evidence`, 25 files) are listed by the comparison; they are model state, not data.
