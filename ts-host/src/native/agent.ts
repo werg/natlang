@@ -12,7 +12,10 @@ import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileTo
 import { canGenerateNl } from '../runtime/context.js';
 import { adoptImportedBlocks } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
-import { SHOWN_CHARS, SCOPE_VALUE_CHARS, note as cutNote } from './cutoff.js';
+import { SHOWN_CHARS, SCOPE_VALUE_CHARS, shownCharsFor, note as cutNote } from './cutoff.js';
+
+/** Scope and input values show at least SCOPE_VALUE_CHARS, and never less than a tool output of the call may. */
+const scopeValueChars = (session: NativeSession) => Math.max(SCOPE_VALUE_CHARS, session.pages.budget);
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
@@ -96,7 +99,7 @@ export function inputsListing(session: NativeSession, views: Readonly<Record<str
     const value = Object.hasOwn(lam.args, field.name) ? lam.args[field.name]! : undefined;
     // A large value written as a view (the builtin view's Neuralese instance) shows the view; the variable holds the value itself.
     const shown = views[field.name] ? neuraleseSentinel(views[field.name]!) + viewNote(field.name) :
-      renderValue(value, { root, holder: field.name, budget: SCOPE_VALUE_CHARS,
+      renderValue(value, { root, holder: field.name, budget: scopeValueChars(session),
         liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted });
     const opening = value instanceof FileHandle && value.folder === root ? (() => {
       const stat = root!.listFiles().find(entry => entry.path === value.path);
@@ -446,7 +449,7 @@ export class NativeToolAgent {
     for (const field of lam.type.params.fields) {
       if (!Object.hasOwn(lam.args, field.name)) continue;
       const value = lam.args[field.name]!;
-      if (!renderValue(value, { root, holder: field.name, budget: SCOPE_VALUE_CHARS,
+      if (!renderValue(value, { root, holder: field.name, budget: scopeValueChars(session),
         liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted }).includes('<<cut off:')) continue;
       let text: string | undefined;
       try { text = JSON.stringify(value); } catch { text = undefined; }
@@ -781,7 +784,7 @@ export class NativeToolAgent {
     const declared = (keyword: string, name: string, type: string, value: Value, note = ''): string => {
       // Host types print as their tag; only a class-like tag (FileHandle, Map) is a usable TypeScript type.
       const shown = /^[a-z]+$/.test(type) && !['string', 'number', 'boolean', 'null'].includes(type) ? 'unknown' : type;
-      const expression = scopeExpression(value, root, name, SCOPE_VALUE_CHARS,
+      const expression = scopeExpression(value, root, name, scopeValueChars(session),
         { nodes: 0, depth: 0, untrusted: session.runtime.untrusted });
       names.push(name);
       return expression === undefined ?
@@ -912,6 +915,9 @@ export class NativeToolAgent {
   async run(session: NativeSession): Promise<string | void> {
     // Blocks of `.nz` files loaded without a store (compiled imports, companion folders) join this runtime's store.
     if (this.options.neuralese?.store) await adoptImportedBlocks(this.options.neuralese.store);
+    // The context budget sizes compaction and, from the start (the opening's reads included), the tool-output page.
+    const budget = this.options.contextTokens === undefined ? await defaultContextBudget(this.driver) : this.options.contextTokens;
+    session.pages.budget = shownCharsFor(budget);
     // Fixed for the whole call, so the server can reuse its prompt cache across turns.
     let adaptedSystem: string | undefined;
     const systemPrompt = () => {
@@ -954,7 +960,6 @@ export class NativeToolAgent {
     const decided = await this.decisionReadout(session, messages);
     if (decided !== false) return decided;
     const openingLength = messages.length;
-    const budget = this.options.contextTokens === undefined ? await defaultContextBudget(this.driver) : this.options.contextTokens;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.
     let tokensPerChar = 1 / 3.5;
     const requestChars = (tools: unknown[]) => JSON.stringify(renderPromptMessages(messages, this.options.promptRendering)).length +
