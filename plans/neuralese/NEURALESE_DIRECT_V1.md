@@ -320,6 +320,14 @@ Measured: consumer task success (exact verifiers where the task has them) and co
   parameters as in trajectories.
 - **Losses.** Each record's target CE through the written blocks, plus the producers' own target CE (whole
   trajectory); no self-distillation (`--distill 0`).
+- **Stopping is not trained here** (Pop, pop-55c5). Writes have a fixed length, sized from the crisp text, so a
+  consumer's CE does not train the TokenChoiceProjection's discrete stop decisions. `autonomous_stopping_qualified`
+  stays false. Feedback-state stop training and qualification are a tracked follow-up: teacher end-decision CE on
+  the actual writer states, or stop laws.
+- **T arms.** Gold-T is the teacher-oracle upper reference. Greedy-T, the model's own text, is the runtime baseline.
+  Both are reported, and the gate is against gold-T.
+- **Implementation:** `trajectories --direct-artifact` (c2eea5b2). Work split: Pop runs the LFM E2E smoke on its
+  native binding candidate, and DGX does the shared stage code and the Mellum E2E on direct-mellum-v2's export.
 - **Owner-level questions:** none outstanding.
 
 ## Exact semantics (answers to Pop, pop-f7c5 / pop-b359)
