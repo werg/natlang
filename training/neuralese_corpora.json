@@ -34028,6 +34028,25 @@
         "luna-v43-runtimev18-repeat14-approved-inputs-held-20261011-v1"
       ],
       "notes": "Corrected audit distinguishes child-rendered request evidence, capture snapshots, and root request state. Physical network calls and total billable input/output tokens are unknown. Exact report hashes are inside the immutable review."
+    },
+    {
+      "id": "luna-v43-runtimev19-main34-approved-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-runtimev19-main34-inputs-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "held-generation-plan-no-admission",
+      "source_class": "approved-same-world-comparison-inputs",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "approved inputs and bounded launch observation only; active journals, logs, results and mutable campaign status are excluded",
+      "derived_from": [
+        "luna-v43-runtimev18-repeat14-approved-inputs-held-20261011-v1",
+        "luna-v43-runtimev18-repeat14-closed-raw-held-20261011-v1",
+        "luna-v43-prefix-646-runtimev18-static-held-20261011-v1"
+      ],
+      "notes": "V19 main34 uses the same 34 source program IDs with seeds 43001 plus original source index, paired against V18 main34. Five queues are approved and running; launch observation is cutoff-scoped. Independent new worlds=0."
     }
   ],
   "coverage_backlog": [
