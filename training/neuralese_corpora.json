@@ -33793,6 +33793,25 @@
         "google-v43-choice-confidence-prefix-329-static-held-20261011-v1"
       ],
       "notes": "Five-worker V17 Luna plan created by the shared preparation tool from 31 exact static source cases; reviewed-plan has root_approved=false. Do not launch without owner review and current disjointness/resource checks."
+    },
+    {
+      "id": "luna-v43-prefix-329-runtimev17-approved-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-launch-evidence-v1",
+      "include": [
+        "approved-plan-v1.json",
+        "root-independent-approval-v1.json",
+        "campaign-launch.json",
+        "snapshot.json"
+      ],
+      "split": "held-generation-launch-evidence-no-admission",
+      "source_class": "provider-generation-approval-and-launch-receipt",
+      "training_admission": false,
+      "admission": "launch provenance only; generated outputs remain active and held",
+      "derived_from": [
+        "luna-v43-prefix-329-runtimev17-prepared-held-20261011-v1"
+      ],
+      "notes": "Additive snapshot of the root-approved plan, independent approval and observed five-worker campaign-launch receipt at 2026-10-11T16:19:28Z. Active journals, logs and results are deliberately excluded. Approved plan SHA 3128917280a5c94670d680292e35c1521d7a1650838d80ae8cacc6b822458792; no training or trace admission."
     }
   ],
   "coverage_backlog": [
