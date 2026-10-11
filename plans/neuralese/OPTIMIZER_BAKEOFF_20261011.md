@@ -97,3 +97,15 @@ for normal full runs. Full state is retained for resumability. No arm launched
 while the current native epoch owns Pop GPU. Next window first checks native
 crisp/raw-vs-TCP quality and serving restore, then executes the finite comparison.
 No additional trainer implementation and no optimizer default change yet.
+
+### LFM first arm (18:10 UTC)
+
+Requested cubic5 Muon1e-5 stopped at100 on hard response-KL bound:0.53572
+(bound0.5), responseagreement0.73070. Held subsetCE1.50535 vs base5.88885;
+100 updates took133.9s (reported training loop wall, startup excluded), peak2.923GiB.
+Checkpoint/negative results preserved under Pop optimizer artifact root; not
+qualified and not a completed300-update comparison. Matched Lion3e-7 is running.
+A declared gentle Muon5e-7 arm is prepared, based on earlier LFM V4 update20
+KL0.01213 evidence before its owner-requested optimizer switch. Same data/seed/
+schedule/guards; no quality bound relaxed. Requested Muon and Lion rates use
+optimizer-specific units; failed high rate alone does not rank optimizer families.
