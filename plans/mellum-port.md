@@ -709,3 +709,8 @@ and the behaviour gate is 0.75. The drift columns are on the 16 held rows.
 - Variant A was skipped by the owner decision for Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md).
   Direct-v1 smokes and the full run are recorded there.
 
+### Neuralese direct v1 run-v1 (2026-10-11)
+
+run-v1 completed 1000 updates. It is unqualified on the value gate and on the behaviour gate's held_kl, and trained no
+attention (bug, fixed in a8972488). Details: plans/neuralese/NEURALESE_DIRECT_V1.md "run-v1 on Mellum".
+

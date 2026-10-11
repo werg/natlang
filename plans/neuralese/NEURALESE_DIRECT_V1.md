@@ -160,8 +160,44 @@ Costs: an eval with the gate takes about 190 s, and the final behaviour gate abo
 within about 40 updates at LionSR 3e-6. This matches the SFT positive test (plans/mellum-port.md), so the run relies on
 the gate at warn and the final gate, not on the KL warn level.
 
-The full run is `natlang-neuralese-direct-mellum-122234` (code 5db8fcd0, claim 72 GB, out
-`runs/neuralese-direct-mellum-20261011/run-v1`).
+## run-v1 on Mellum (2026-10-11): complete, unqualified
+
+Run: unit `natlang-neuralese-direct-mellum-122234`, code 5db8fcd0, claim 72 GB, output
+`runs/neuralese-direct-mellum-20261011/run-v1`. It ran 1000 updates in 7342 s. Updates took 5 s in BF16, rising to
+about 6.5–8.7 s once the q4 point ramped in after step ~430.
+
+The step-0 identity check passed. With the stage-end cadence, the eval at 1000 was the only one after step 0, and the
+drift guard never ran in between. `drift_every` (7c6eea80) fixes that for later lineages.
+
+| metric | step 0 | step 1000 |
+|---|---|---|
+| held CE | 2.224 | 0.379 (gold acc 0.65 → 0.91) |
+| agreement with base predictions | 1.0 | 0.68 |
+| value rel-MSE / mixture rel-MSE | 1.619 / 1.619 | 0.0888 / 0.0885 (delta +0.0003) |
+| response KL / prompt KL / agreement | 0.0003 / 0.045 / 1.0 | 0.307 / 0.938 / 0.863 (warn) |
+| behaviour gate | 0.75 (base) | 0.75: plain 0.83, thinking 0.67, natlang 0.50, tool 1.0; held_kl 0.68 |
+
+The report is preserved as is: `qualified` false. Two things failed:
+- `value_qualified`: delta +0.0003 against margin 0.05.
+- The behaviour gate's own `max_held_kl` of 0.25 (held_kl 0.68), so `passed` is false, although the gate pass rate
+  equals base and is above the guard floor of 0.65.
+
+Coordinator's reading of the value result, now with the owner: SFT made the next-token prediction confident (gold
+accuracy 0.91). The soft-token mixture then nearly equals E[gold next], so a value objective that reconstructs the next
+token's embedding saturates and cannot show value beyond the token. The gate is unchanged pending that decision.
+
+Gate texts. All 6 failed probes are in eval.jsonl:
+- 2 thinking probes and 1 plain arithmetic probe ran past the token budget (`end`).
+- 3 natlang probes answered with a direct `<tool_call>` and no `<think>` (`think`). The model took this from the
+  native records' assistant turns.
+
+Bug found afterwards: run-v1 never trained the attention projections. The precision points were installed before
+the latent policy chose trainables, so the parametrized q/k/v/o names missed the suffix list (latents 56 = 28 x
+experts gate_up/down). What trained were the experts, routers, norms and the NeuraleseProjection. Fixed in a8972488,
+with a test.
+
+Storage: the 44 GB full state was written twice at step 1000 (best, then the due point), which split the hard link.
+The two files were byte-identical and are re-linked. Fixed in 32314556.
 
 ## Exact semantics (answers to Pop, pop-f7c5 / pop-b359)
 
