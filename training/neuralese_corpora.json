@@ -32592,6 +32592,33 @@
         "neuralese-v18-v19-selected17-full-recurrence-static-qualification-20261009-v1"
       ],
       "notes": "Full authenticated-context scan over the pinned cumulative native trajectory assembly. The candidate selection includes exact train/test endpoints of authenticated writer-to-reader bindings using the existing trajectories.py --handover written route. Ten legacy digest rows are held by the current validator. This packet is not a semantic source review or training approval; do not convert to ProgramReplay or infer admission from binding closure."
+    },
+    {
+      "id": "luna-neuralese-direct-lfm-base-v8-tcp-stream-mechanism-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-lfm-base-20261011-v8",
+      "include": [
+        "direct-export-v2/manifest.json",
+        "tcp-stream-mechanism-v1/launch.json",
+        "tcp-stream-mechanism-v1/exit.json",
+        "tcp-stream-mechanism-v1/output.log",
+        "tcp-stream-mechanism-v1/run/**",
+        "tcp-stream-mechanism-v1/runtime/natlang_neuralese/**"
+      ],
+      "split": "held-synthetic-tcp-stream-mechanism-diagnostic",
+      "source_class": "synthetic-token-choice-guidance-rollback-and-multiturn-segmentation-diagnostic",
+      "training_admission": false,
+      "admission": "held-synthetic-mechanism-only-no-trained-tcp-certificate-no-training-admission",
+      "neuralese_consumer_qualified": false,
+      "runtime_qualified": false,
+      "independent_new_worlds": 0,
+      "parent_registry_ids": [
+        "luna-neuralese-direct-lfm-base-v8-tcp-mechanism-held-20261011-v1",
+        "luna-neuralese-direct-lfm-base-v8-export-and-paired-behavior-held-20261011-v1",
+        "luna-neuralese-direct-lfm-base-v8-runtime-feedback-evidence-held-20261011-v1",
+        "luna-neuralese-direct-lfm-base-v8-full-checkpoint-held-20261011-v1"
+      ],
+      "notes": "Held exact-run and frozen-package evidence for the synthetic TCP stream extension, launched from shared commit 68ea1f35e28e34febeffd83b705d9001e5448726 with uncommitted_runtime_changes=false. The deterministic synthetic TCP tensor-state identity is ad78f387d1ef14a7bd436726181ca046ba7791f9038bda72a7725ffbd4d17f79; saved state file SHA is 1d837a96492c7a06da7189ceee111c9a51b9dbf51077e85e52c9f283f2d93eb6. Multi-turn weighted context scoring matched sequence readout on 42 targets over four target segments (max delta 0). Actual Engine syntax-guidance rollback restored/replayed five tokens; token-history and next-logit replay deltas were both 0. The exact direct artifact runtime report still has runtime_qualified=false; these synthetic checks do not establish trained TCP behavior, consumer/task qualification, end-to-end gates, or training admission."
     }
   ],
   "coverage_backlog": [

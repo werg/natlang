@@ -38,12 +38,24 @@ ordinary targets, returned payloads, guidance snapshots, and decision-option
 forks. The exporter restores TCP using its declared configuration and strict
 state dictionary. Both projections remain distinct and the value mixture is base.
 
-The synthetic nonidentity TCP GPU mechanism passed (Pop V8 underlying artifact,
-lengths8/16): scheduler payload delta0, producer replay gradient delta0, public
-input gradient delta0, decision score delta0, and exact cached readback. This is
-not a trained TCP artifact certificate. Float32-highest controlled readout
-comparison passed with logitdelta2.57e-5/gradientdelta1.91e-6; the default-precision
-initial failure (.00351logitdelta) remains preserved. Production precision has not
-been changed. Exact trained TCP export/load qualification, guidance rollback
-coverage, multi-turn context segmentation comparison, and held consumer/task
-improvement remain required follow-up.
+The synthetic nonidentity TCP GPU mechanism passed on the Pop V8 underlying
+artifact (lengths 8 and 16): scheduler payload, producer replay gradient, public
+input gradient, decision score, and cached readback deltas were all zero. The
+higher-precision readout comparison passed (maximum incremental logits delta
+2.57e-5; history-gradient delta 1.91e-6). The default-precision first attempt
+failed with a 0.00351 incremental-logit delta and remains preserved; production
+precision was not changed.
+
+A further held synthetic TCP stream diagnostic used deterministic synthetic
+state `ad78f387d1ef14a7bd436726181ca046ba7791f9038bda72a7725ffbd4d17f79`.
+The multi-turn `GradSession._context_logp` path matched the full-sequence causal
+readout on 42 weighted targets across four target segments (maximum log-probability
+delta 0). A real Engine syntax-guidance rejection restored and replayed five
+reply tokens; restored token history and next logits matched a fresh prompt plus
+kept-prefix replay exactly (both deltas 0). This covers only the exercised
+synthetic mechanism branches. `runtime_qualified` remains false, and the
+synthetic state is not a trained TCP artifact or certificate.
+
+Still required are a trained TCP artifact/export-load path, the owner-defined
+end-to-end task and behavior gates, and consumer improvement. Synthetic mechanism
+success does not qualify those items or grant training admission.
