@@ -472,13 +472,16 @@ def tokenizer_fingerprint(tokenizer) -> str:
                             "tokenizer_backend": json.loads(tokenizer.backend_tokenizer.to_str())}).encode("utf-8"))
 
 
-def _native_gold_render(tokenizer, turns, tools):
+def _native_gold_render(tokenizer, turns, tools, *, empty_thought=True):
     """Use the serving renderer; content markers remain ordinary content tokens."""
     from ..serve.chat import bind_history_reasoning, render_messages, render_with_empty_thought, split_escaped
     bind_history_reasoning(tokenizer)
+    def apply_template(turns, schemas):
+        return tokenizer.apply_chat_template(
+            turns, tools=schemas or None, tokenize=False, add_generation_prompt=False)
     def template(turns, schemas):
-        return render_with_empty_thought(lambda m: tokenizer.apply_chat_template(
-            m, tools=schemas or None, tokenize=False, add_generation_prompt=False), turns)
+        return (render_with_empty_thought(lambda m: apply_template(m, schemas), turns)
+                if empty_thought else apply_template(turns, schemas))
     rendered = render_messages(turns, tools, template,
                                specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"))
     if rendered.blocks:
@@ -1483,6 +1486,64 @@ def native_gold_packet(tokenizer, messages, target, tools):
     if boundary >= len(ids):
         raise ValueError("gold assistant target adds no native token suffix")
     return "".join(text), ids, boundary
+
+
+def native_gold_packet_context_only_messages(tokenizer, messages, target, tools, message_indices):
+    """Render a gold packet and locate exact historical-message spans in its native token IDs.
+
+    ``message_indices`` names complete messages in ``messages`` whose tokens remain visible as history but must not
+    receive target loss. Boundaries are derived through the same serving renderer and tokenizer as the packet; each
+    rendered history prefix must be an exact token prefix of the final serving prompt. A template whose rendering
+    changes earlier tokenization is rejected rather than approximated with text offsets or longest-common-prefix.
+
+    The returned spans are sorted, disjoint ``[begin, end)`` offsets in the packet's unframed ``token_ids``. Callers
+    remain responsible for binding each index to the exact source evidence that justifies context-only treatment.
+    """
+    indices = list(message_indices)
+    if (any(type(index) is not int or index < 0 or index >= len(messages) for index in indices)
+            or len(indices) != len(set(indices))):
+        raise ValueError("context-only message indices must be unique in-range integers")
+    indices.sort()
+    text, token_ids, suffix_start = native_gold_packet(tokenizer, messages, target, tools)
+    prompt_ids = token_ids[:suffix_start]
+    spans = []
+    last_assistant = max((i for i, message in enumerate(messages)
+                          if isinstance(message, Mapping) and message.get("role") == "assistant"), default=-1)
+
+    def render_prompt_prefix(end):
+        # LFM2's declared last_turn_only chat template makes reasoning visibility depend on later assistant turns.
+        # Re-rendering a shorter prefix naively would promote an earlier turn to "last" and give it different tokens.
+        # Mirror only the known last-turn history projection, then require exact token-prefix equality below.
+        prefix = copy.deepcopy(messages[:end])
+        if getattr(tokenizer, "natlang_history_reasoning", {}).get("policy") == "last_turn_only":
+            for i, message in enumerate(prefix):
+                if not isinstance(message, Mapping) or message.get("role") != "assistant" or i == last_assistant:
+                    continue
+                for key in ("thinking", "reasoning", "reasoning_content"):
+                    message.pop(key, None)
+                content = message.get("content")
+                if isinstance(content, str) and "</think>" in content:
+                    message["content"] = content.split("</think>")[-1].strip()
+        return _native_gold_render(tokenizer, prefix, tools, empty_thought=False)[1]
+
+    for index in indices:
+        if not isinstance(messages[index], Mapping) or messages[index].get("role") != "assistant":
+            raise ValueError(f"context-only history index {index} is not an assistant message")
+        before_ids = render_prompt_prefix(index)
+        through_ids = render_prompt_prefix(index + 1)
+        before_matches = len(before_ids) <= len(prompt_ids) and prompt_ids[:len(before_ids)] == before_ids
+        through_matches = len(through_ids) <= len(prompt_ids) and prompt_ids[:len(through_ids)] == through_ids
+        if not (before_matches and through_matches):
+            raise ValueError(f"context-only history index {index} does not preserve exact serving token boundaries "
+                             f"(before={before_matches}, through={through_matches}, "
+                             f"prefix_lengths={len(before_ids)}/{len(through_ids)}, prompt={len(prompt_ids)})")
+        begin, end = len(before_ids), len(through_ids)
+        if begin >= end:
+            raise ValueError(f"context-only history index {index} renders no tokens")
+        if spans and begin < spans[-1][1]:
+            raise ValueError("context-only history message spans overlap")
+        spans.append([begin, end])
+    return text, token_ids, suffix_start, spans
 
 
 def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer,
