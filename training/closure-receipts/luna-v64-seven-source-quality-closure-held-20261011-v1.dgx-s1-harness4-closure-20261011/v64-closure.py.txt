@@ -1,0 +1,78 @@
+"""V64 seven DBpedia source rows + 2 programs: rebuild rows from the pinned master snapshot, then group / exact-text /
+question / example / near-duplicate lookups against S1 full-final and harness v4, and protected question/id checks."""
+import hashlib, json, sys
+sys.path.insert(0, 'scripts')
+from neuralese_data.cross_corpus import Index, NAMES
+from neuralese_data.cross_corpus_registry import resolve
+from neuralese_data.finalize import _sketch, _digest
+from neuralese_data.records import text_hash
+PK = 'runs/free-provider-generation-20261009-v1/quality-review-v64-source-quality-closure-packet-v1/packet.json'
+MASTER = '/home/werg/natlang/runs/dgx-development-generated/decision-data-20261004/decision-v1/decision-cases.jsonl'
+PROT = 'data/neuralese/corpora/protected-bgkit-20261003/bgkit-benchmarks.protected.json'
+H = lambda b: hashlib.sha256(b).hexdigest()
+pk = json.load(open(PK)); sb = pk['source_bindings']
+assert H(open(MASTER, 'rb').read()) == sb['master_source']['sha256']
+lines = open(MASTER, 'rb').read().split(b'\n')
+rows, rowchk = [], []
+for c in sb['exact_row_checks']:
+    raw = lines[c['row_index']]
+    ok = H(raw) == c['declared_sha256']
+    r = json.loads(raw); rowchk.append({'id': c['id'], 'row_index': c['row_index'], 'raw_sha256_ok': ok, 'id_ok': r['id'] == c['id'], 'group': r.get('group'), 'split': r.get('split'), 'source': r.get('source'), 'license': r.get('license')})
+    assert ok and r['id'] == c['id']
+    rows.append(r)
+progs = pk['programs']['native_static_programs']
+prot = json.load(open(PROT)); psha = H(open(PROT, 'rb').read())
+sp = lambda a, b: sorted({NAMES[a], NAMES[b]})
+out = {r['id']: {'group': r.get('group'), 'split': r.get('split'), 'indexes': {},
+                 'protected': {'question_hash_hits': [n for n, t in (('state', r.get('state') or ''), ('question', r.get('question') or '')) if t and text_hash(t) in prot['question_hashes']],
+                               'id_hits': [k for k in (r['id'], r.get('group')) if k and k in prot['ids']]}} for r in rows}
+pout = {p['program_id']: {'source_ids': p['source_ids'], 'source_groups': p['source_groups'], 'indexes': {}} for p in progs}
+meta = []
+for rid in ('cross-corpus-index-s1-full-final-20261003-v1', 'cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1'):
+    d, _ = resolve(rid); ix = Index(d); sk = {}
+    for r in rows:
+        st, qu, ans = r.get('state') or '', r.get('question') or '', str(r.get('answer'))
+        texts = {'state': st, 'question': qu, 'state+question': st + '\n' + qu, 'state+question (blank line)': st + '\n\n' + qu}
+        src, bg = {}, {}
+        for n, t in texts.items():
+            if not t.strip(): continue
+            v = ix.source_value(_digest(t))
+            if v is not None: (bg if v & 16 else src)[n] = sp(v & 3, (v >> 2) & 3)
+        q = {}
+        for ct, tt in ((st + '\n\n' + qu, ans), (qu, ans), (st, ans)):
+            v = ix.question(ct, tt)
+            if v is not None: q[ct[:40]] = sp(*v)
+        ex = ix.example([st], qu, ans)
+        keys = [r['id'], r.get('group'), f"{r.get('source')}:{r['id']}"]
+        out[r['id']]['indexes'][rid] = {'group_hits': {k: NAMES[ix.groups[k]] for k in keys if k and k in ix.groups},
+                                        'exact_source_hits': src, 'background_source_hits': bg, 'question_hits': q,
+                                        'example_hit': None if ex is None else NAMES[ex], 'near_duplicates_jaccard_ge_0.8': []}
+        s = _sketch(st) if st else None
+        if s is not None: sk[r['id']] = s
+    for k, lst in (ix.near(sk) if len(ix.sketch_keys) else {}).items():
+        out[k]['indexes'][rid]['near_duplicates_jaccard_ge_0.8'] = [{'published_splits': sp(a, b), 'jaccard': j} for a, b, j in lst]
+    for p in progs:
+        ks = [p['program_id']] + p['source_ids'] + p['source_groups']
+        pout[p['program_id']]['indexes'][rid] = {k: NAMES[ix.groups[k]] for k in ks if k in ix.groups}
+    meta.append({'registry_id': rid, 'corpus_id': ix.corpus_id, 'records': ix.meta.get('records'), 'groups': len(ix.groups), 'sketches': int(len(ix.sketch_keys)),
+                 'manifest_sha256': H(open('training/corpus-manifests/' + rid + '.json', 'rb').read())})
+    del ix
+touched = lambda v: bool(v['group_hits'] or v['exact_source_hits'] or v['question_hits'] or v['example_hit'] or v['near_duplicates_jaccard_ge_0.8'])
+for o in out.values():
+    o['verdict'] = 'reject' if (o['protected']['question_hash_hits'] or o['protected']['id_hits'] or any(touched(v) for v in o['indexes'].values())) else 'closed'
+for o in pout.values():
+    o['verdict'] = 'reject' if any(o['indexes'].values()) else 'closed'
+code = {f: H(open(f, 'rb').read()) for f in ('scripts/neuralese_data/cross_corpus.py', 'scripts/neuralese_data/splits.py', 'scripts/neuralese_data/finalize.py', 'scripts/neuralese_data/records.py', 'scripts/neuralese_data/cross_corpus_registry.py')}
+rec = {'schema': 'natlang.v64-seven-source-full-s1-closure/1', 'request': '2026-10-11T02:02:54.358409Z-pop-5ef1',
+       'packet': {'path': PK, 'sha256': H(open(PK, 'rb').read())}, 'master_source': sb['master_source'], 'row_checks': rowchk,
+       'protected': {'path': PROT, 'sha256': psha}, 'indexes': meta, 'code_sha256': code,
+       'method': ('Rows rebuilt from the pinned master snapshot by row index and raw-row SHA-256. Per row: split-group lookup of id, group and '
+                  'source:id; exact normalized-text digests of state, question and state+question (background sources listed separately); '
+                  'question/example digests with the answer as target (best-effort); MinHash near-duplicates of the state (Jaccard >= 0.8); '
+                  'protected question hashes of state/question and ids. Programs: program id, source ids and groups against both indexes. '
+                  'Same lookups were positive-controlled on published S1 records in the static16 receipt.'),
+       'rows': out, 'programs': pout,
+       'verdict': 'closed' if all(o['verdict'] == 'closed' for o in list(out.values()) + list(pout.values())) else 'reject',
+       'admission': 'evidence only; held; no source-quality eligibility, trace or training admission'}
+json.dump(rec, open(sys.argv[1], 'w'), indent=1)
+print(rec['verdict'], [(o['verdict'], o['split'], o['group']) for o in out.values()], [o['verdict'] for o in pout.values()], rowchk[0])

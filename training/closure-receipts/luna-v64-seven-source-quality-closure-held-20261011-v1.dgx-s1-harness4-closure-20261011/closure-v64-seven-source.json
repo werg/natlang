@@ -1,0 +1,353 @@
+{
+ "schema": "natlang.v64-seven-source-full-s1-closure/1",
+ "request": "2026-10-11T02:02:54.358409Z-pop-5ef1",
+ "packet": {
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-source-quality-closure-packet-v1/packet.json",
+  "sha256": "61c7e3fa35ce3eabf2d7d21287ad409e1124372899712f6c8b40651f810b6e82"
+ },
+ "master_source": {
+  "path": "/home/werg/natlang/runs/dgx-development-generated/decision-data-20261004/decision-v1/decision-cases.jsonl",
+  "bytes": 54864414,
+  "sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097"
+ },
+ "row_checks": [
+  {
+   "id": "dc-05471eeab2c8a8d049e2",
+   "row_index": 7259,
+   "raw_sha256_ok": true,
+   "id_ok": true,
+   "group": "g-86228b65a5e004bdce4bf1b7",
+   "split": "train",
+   "source": "fancyzhx/dbpedia_14",
+   "license": "[\"cc-by-sa-3.0\"]"
+  },
+  {
+   "id": "dc-0612bd71ef64fdcf74ba",
+   "row_index": 7270,
+   "raw_sha256_ok": true,
+   "id_ok": true,
+   "group": "g-b24d84cb48e843251bcf5a27",
+   "split": "train",
+   "source": "fancyzhx/dbpedia_14",
+   "license": "[\"cc-by-sa-3.0\"]"
+  },
+  {
+   "id": "dc-061cea299cc4c8b42b42",
+   "row_index": 7268,
+   "raw_sha256_ok": true,
+   "id_ok": true,
+   "group": "g-d3987fbb176e26d15d9ffc9c",
+   "split": "train",
+   "source": "fancyzhx/dbpedia_14",
+   "license": "[\"cc-by-sa-3.0\"]"
+  },
+  {
+   "id": "dc-06c0c50d3f120d58efb4",
+   "row_index": 7278,
+   "raw_sha256_ok": true,
+   "id_ok": true,
+   "group": "g-afe9a29f8bd4536aab11731d",
+   "split": "train",
+   "source": "fancyzhx/dbpedia_14",
+   "license": "[\"cc-by-sa-3.0\"]"
+  },
+  {
+   "id": "dc-231c876016f76bcd2693",
+   "row_index": 7232,
+   "raw_sha256_ok": true,
+   "id_ok": true,
+   "group": "g-a70f984b0a82f859003588f4",
+   "split": "train",
+   "source": "fancyzhx/dbpedia_14",
+   "license": "[\"cc-by-sa-3.0\"]"
+  },
+  {
+   "id": "dc-232d5a9337cb05a854cf",
+   "row_index": 7248,
+   "raw_sha256_ok": true,
+   "id_ok": true,
+   "group": "g-48c0a72773975ccb41171463",
+   "split": "train",
+   "source": "fancyzhx/dbpedia_14",
+   "license": "[\"cc-by-sa-3.0\"]"
+  },
+  {
+   "id": "dc-23c1471ac68d2c257eff",
+   "row_index": 7255,
+   "raw_sha256_ok": true,
+   "id_ok": true,
+   "group": "g-3bc47341ad9b704646f74765",
+   "split": "train",
+   "source": "fancyzhx/dbpedia_14",
+   "license": "[\"cc-by-sa-3.0\"]"
+  }
+ ],
+ "protected": {
+  "path": "data/neuralese/corpora/protected-bgkit-20261003/bgkit-benchmarks.protected.json",
+  "sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf"
+ },
+ "indexes": [
+  {
+   "registry_id": "cross-corpus-index-s1-full-final-20261003-v1",
+   "corpus_id": "s1-full-final-20261003",
+   "records": 1870591,
+   "groups": 985434,
+   "sketches": 4734547,
+   "manifest_sha256": "914893de2e0ce260e4000ca7609e51f8997b66e8d15a845064d812bc68c7514e"
+  },
+  {
+   "registry_id": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+   "corpus_id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
+   "records": 3843,
+   "groups": 769,
+   "sketches": 0,
+   "manifest_sha256": "18bf74c8c2b599e19af99a46ede0553b0b9c91d574b6f0aaaea9498b4a8f0f1b"
+  }
+ ],
+ "code_sha256": {
+  "scripts/neuralese_data/cross_corpus.py": "48355471e7f3ae47f73bff9c8aeb181fd6ed0d5da15622e7fae03c1cdf972c3c",
+  "scripts/neuralese_data/splits.py": "decd51e38bda7352c4772cc334ac67a2f56aebf3a5c02634840c8f2a62c826c1",
+  "scripts/neuralese_data/finalize.py": "cc8a6d47899667b35082c7577f789bab20d2bcf82e5f8653471a6bd88929ea23",
+  "scripts/neuralese_data/records.py": "178980fabb9aedaa5984148a44320178ff5b5456b9ab74bdd9342e27800028be",
+  "scripts/neuralese_data/cross_corpus_registry.py": "2e670984080d73ae17938bc48740edee225c7aaada09e2a57d8ac16d06983d07"
+ },
+ "method": "Rows rebuilt from the pinned master snapshot by row index and raw-row SHA-256. Per row: split-group lookup of id, group and source:id; exact normalized-text digests of state, question and state+question (background sources listed separately); question/example digests with the answer as target (best-effort); MinHash near-duplicates of the state (Jaccard >= 0.8); protected question hashes of state/question and ids. Programs: program id, source ids and groups against both indexes. Same lookups were positive-controlled on published S1 records in the static16 receipt.",
+ "rows": {
+  "dc-05471eeab2c8a8d049e2": {
+   "group": "g-86228b65a5e004bdce4bf1b7",
+   "split": "train",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "protected": {
+    "question_hash_hits": [],
+    "id_hits": []
+   },
+   "verdict": "closed",
+   "split_field": "role"
+  },
+  "dc-0612bd71ef64fdcf74ba": {
+   "group": "g-b24d84cb48e843251bcf5a27",
+   "split": "train",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "protected": {
+    "question_hash_hits": [],
+    "id_hits": []
+   },
+   "verdict": "closed",
+   "split_field": "role"
+  },
+  "dc-061cea299cc4c8b42b42": {
+   "group": "g-d3987fbb176e26d15d9ffc9c",
+   "split": "train",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "protected": {
+    "question_hash_hits": [],
+    "id_hits": []
+   },
+   "verdict": "closed",
+   "split_field": "role"
+  },
+  "dc-06c0c50d3f120d58efb4": {
+   "group": "g-afe9a29f8bd4536aab11731d",
+   "split": "train",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "protected": {
+    "question_hash_hits": [],
+    "id_hits": []
+   },
+   "verdict": "closed",
+   "split_field": "role"
+  },
+  "dc-231c876016f76bcd2693": {
+   "group": "g-a70f984b0a82f859003588f4",
+   "split": "train",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "protected": {
+    "question_hash_hits": [],
+    "id_hits": []
+   },
+   "verdict": "closed",
+   "split_field": "role"
+  },
+  "dc-232d5a9337cb05a854cf": {
+   "group": "g-48c0a72773975ccb41171463",
+   "split": "train",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "protected": {
+    "question_hash_hits": [],
+    "id_hits": []
+   },
+   "verdict": "closed",
+   "split_field": "role"
+  },
+  "dc-23c1471ac68d2c257eff": {
+   "group": "g-3bc47341ad9b704646f74765",
+   "split": "train",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "protected": {
+    "question_hash_hits": [],
+    "id_hits": []
+   },
+   "verdict": "closed",
+   "split_field": "role"
+  }
+ },
+ "programs": {
+  "inline-curriculum:annotation_decision_folders_decision_dbpedia:source_cc11a4d7be6b_1941de432bc0757c1cbf92c2:strict-top-label-v2-ordinal-source-mapping": {
+   "source_ids": [
+    "dc-05471eeab2c8a8d049e2",
+    "dc-231c876016f76bcd2693",
+    "dc-232d5a9337cb05a854cf",
+    "dc-23c1471ac68d2c257eff"
+   ],
+   "source_groups": [
+    "g-3bc47341ad9b704646f74765",
+    "g-48c0a72773975ccb41171463",
+    "g-86228b65a5e004bdce4bf1b7",
+    "g-a70f984b0a82f859003588f4"
+   ],
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {},
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {}
+   },
+   "verdict": "closed"
+  },
+  "inline-curriculum:annotation_decision_folders_decision_dbpedia:source_cc11a4d7be6b_b1deadefd96e930dd50045da:strict-top-label-v2-ordinal-source-mapping": {
+   "source_ids": [
+    "dc-0612bd71ef64fdcf74ba",
+    "dc-061cea299cc4c8b42b42",
+    "dc-06c0c50d3f120d58efb4"
+   ],
+   "source_groups": [
+    "g-afe9a29f8bd4536aab11731d",
+    "g-b24d84cb48e843251bcf5a27",
+    "g-d3987fbb176e26d15d9ffc9c"
+   ],
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {},
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1": {}
+   },
+   "verdict": "closed"
+  }
+ },
+ "verdict": "closed",
+ "admission": "evidence only; held; no source-quality eligibility, trace or training admission"
+}
