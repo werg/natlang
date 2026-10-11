@@ -36006,14 +36006,6 @@
       "required_conversion": "render full, program-header, and whole-trajectory twins for both tokenizers",
       "consumable_by_direct_stage": false,
       "notes": "136 targets across 30 source trajectories, including 78 recovered exact source-oracle actions. The two impossible schedule cases include only their final failure reports as targets; the failing eval and intermediate semantic answer occur only in their captured messages. Teacher reasoning remains untrained. Training admission does not qualify recurrence or runtime behavior."
-    },
-    {
-      "id": "new",
-      "owner": "dgx",
-      "path": "data/corpora/new",
-      "include": [
-        "*.jsonl"
-      ]
     }
   ],
   "coverage_backlog": [
