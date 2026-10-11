@@ -78,3 +78,34 @@ optimization is per-window gradient accumulation with the original packed-batch
 normalization and one optimizer update, if the windows are independent. Partial
 checkpointing is another option. Neither change may alter the supervision or
 silently turn every window into a separate optimizer step.
+
+## BF16 window accumulation: speed improvement under qualification
+
+A second matched update uses the corrected V2 program-header corpus: nine
+windows, 411 target tokens and 1,394 supervised positions, with a 16,384-token
+packing budget. Each condition starts from the same weights and seed and makes
+one optimizer update with the same global loss denominators.
+
+| Execution | Activation checkpointing | Update time | Peak allocated VRAM |
+| --- | --- | --- | --- |
+| Packed batch | on | 3.015 s | 3.073 GiB |
+| Layer-staged windows | on | 2.967 s | 2.502 GiB |
+| Sequential window backward, accumulated gradients | off | 2.244 s | 3.602 GiB |
+
+Sequential backward retains the gradient buffers, releases each window's
+activation graph before the next window, and uses the existing optimizer once
+after accumulation. It is about 26% faster in this one-update measurement. The
+layer-staged alternative retains layer graphs until its coordinated backward;
+its lower measured peak does not imply that all activations are released between
+windows.
+
+The sequential and layer-staged conditions have the same reported forward loss
+(4.235538), CE (4.720232) and value error (0.554313). The packed condition has a
+slightly different loss (4.234075), since padding/batch shape changes low-precision
+operations. Updated parameter comparisons also include stochastic rounding and
+backward scheduling effects; they are not exact-gradient equality proofs.
+
+Evidence is in the active V8 artifact's `window-gradacc-v31/` recipes, logs and
+checkpoints. Sustained speed, gradient/update correctness and larger-window
+memory policy remain under qualification. This does not resolve or qualify the
+separate incremental/full-sequence runtime transport difference.
