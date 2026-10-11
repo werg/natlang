@@ -29,12 +29,16 @@ def _compare(left, right):
             'finite': bool(torch.isfinite(left).all() and torch.isfinite(right).all())}
 
 
-def diagnose(artifact, base_snapshot, out, lengths, device='cuda'):
+def diagnose(artifact, base_snapshot, out, lengths, device='cuda', float32_reference=False):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=False)
     model = load_direct_artifact(artifact, base_snapshot=base_snapshot, device=device)
     engine = model.engine
     backbone, projection = engine.backbone, model.neuralese_projection
+    if float32_reference:
+        # Diagnostic only: distinguish reduced-precision sequence/decode kernel
+        # differences from positional or convolution-state mistakes.
+        backbone.float()
     tcp = getattr(engine, 'token_choice_projection', None)
     synthetic_identity_tcp = tcp is None
     if tcp is None:
@@ -116,6 +120,7 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda'):
     report = {'schema': 'natlang.direct-forced-sequence-parity/1',
               'artifact_manifest_sha256': sha256_file_hex(Path(artifact) / 'manifest.json'),
               'synthetic_identity_tcp': synthetic_identity_tcp,
+              'float32_reference': float32_reference,
               'rows': rows, 'task_qualified': False, 'autonomous_stopping_qualified': False,
               'scope': 'Known-token sequence versus incremental shared writer; explicit output/cache/all exercised parameter and prefix adjoint deltas. No weight updates or automatic tolerance relaxation.'}
     (out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
@@ -129,8 +134,9 @@ def main():
     parser.add_argument('--out', required=True)
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--lengths', nargs='+', type=int, default=[8, 32, 102])
+    parser.add_argument('--float32-reference', action='store_true')
     args = parser.parse_args()
-    diagnose(args.artifact, args.base_snapshot, args.out, args.lengths, args.device)
+    diagnose(args.artifact, args.base_snapshot, args.out, args.lengths, args.device, args.float32_reference)
 
 
 if __name__ == '__main__':
