@@ -220,12 +220,32 @@ def normalize(row: dict[str, Any], mapping: str = 'pi', workspace: str | None = 
                       cwd=cwd, messages=messages, lossy=lossy, patch=str(row.get('model_patch') or ''), views=views)
 
 
-def rows(path: str, columns: Iterable[str] | None = None) -> Iterator[dict[str, Any]]:
-    """The parquet file's rows, one row group at a time."""
+def rows(path: str, columns: Iterable[str] | None = None, skip: int = 0) -> Iterator[dict[str, Any]]:
+    """The parquet file's rows, one row group at a time. Row groups that end before row `skip` are not read; the
+    first row yielded is then row `rows_start(path, skip)`, not row 0."""
     import pyarrow.parquet as pq
     source = pq.ParquetFile(path)
+    start = 0
     for group in range(source.metadata.num_row_groups):
+        size = source.metadata.row_group(group).num_rows
+        if start + size <= skip:
+            start += size
+            continue
+        start += size
         yield from source.read_row_group(group, columns=list(columns) if columns else None).to_pylist()
+
+
+def rows_start(path: str, skip: int) -> int:
+    """The number of the first row `rows(path, skip=skip)` yields."""
+    import pyarrow.parquet as pq
+    meta = pq.ParquetFile(path).metadata
+    start = 0
+    for group in range(meta.num_row_groups):
+        size = meta.row_group(group).num_rows
+        if start + size > skip:
+            return start
+        start += size
+    return start
 
 
 def main(argv: list[str] | None = None) -> int:

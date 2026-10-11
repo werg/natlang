@@ -5,7 +5,7 @@
 # cloning one repository into the shared bare-clone cache, and so a finished shard can be registered while the rest run.
 # Usage: harness_bench_bulk.sh OUT [SHARDS=24] [PARALLEL=6] [OFFSET=1000]   (run it under scripts/memory_ledger.py run)
 # OFFSET 1000: v4 is the first 1000 parquet rows (492 resolved). Resumable: every stage's output is written under a
-# temporary name and renamed when complete; replay keeps what replayed.jsonl holds and appends the rest.
+# temporary name and renamed when complete (prepare per parquet row group); replay keeps what replayed.jsonl holds and appends the rest.
 set -eu
 OUT=$1; SHARDS=${2:-24}; PARALLEL=${3:-6}; OFFSET=${4:-1000}
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
@@ -19,26 +19,37 @@ if [ ! -e "$OUT/surface.json" ]; then
   mv "$OUT/surface.json.tmp" "$OUT/surface.json"
 fi
 cd "$ROOT/training/neuralese"
-if [ ! -e "$OUT/prepared.jsonl" ]; then
-  "$PY" -m natlang_neuralese.harness_bench.prepare --trajectories "$CORPORA/nebius-swe-rebench-openhands-trajectories-20261009-v1/trajectories.parquet" \
-    --tasks "$CORPORA/nebius-swe-rebench-tasks-20261009-v1" --workspace "$WORKSPACE" --resolved-only \
-    --offset "$OFFSET" --out "$OUT/prepared.jsonl.tmp" > "$OUT/prepare.summary.json"
-  mv "$OUT/prepared.jsonl.tmp" "$OUT/prepared.jsonl"
-fi
+# Prepare one parquet row group (4096 rows) at a time, so a preempted run resumes at the next unfinished group.
+TOTAL=$("$PY" -c "import pyarrow.parquet as pq,sys; print(pq.ParquetFile(sys.argv[1]).metadata.num_rows)" "$CORPORA/nebius-swe-rebench-openhands-trajectories-20261009-v1/trajectories.parquet")
+mkdir -p "$OUT/prepared"
+START=$OFFSET
+while [ "$START" -lt "$TOTAL" ]; do
+  END=$(( (START / 4096 + 1) * 4096 ))
+  PART="$OUT/prepared/$(printf %06d "$START").jsonl"
+  if [ ! -e "$PART" ]; then
+    nice -n 10 "$PY" -m natlang_neuralese.harness_bench.prepare --trajectories "$CORPORA/nebius-swe-rebench-openhands-trajectories-20261009-v1/trajectories.parquet" \
+      --tasks "$CORPORA/nebius-swe-rebench-tasks-20261009-v1" --workspace "$WORKSPACE" --resolved-only \
+      --offset "$START" --limit $((END - START)) --out "$PART.tmp" > "$PART.summary.json"
+    mv "$PART.tmp" "$PART"
+  fi
+  START=$END
+done
 if [ ! -e "$OUT/shards/.split" ]; then
-  "$PY" - "$OUT/prepared.jsonl" "$OUT/shards" "$SHARDS" <<'EOF'
+  "$PY" - "$OUT/prepared" "$OUT/shards" "$SHARDS" <<'EOF'
 import hashlib, json, sys
 from pathlib import Path
 src, out, n = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3])
+parts = sorted(src.glob('*.jsonl'))
 handles = []
 for i in range(n):
     (out / f'{i:02d}').mkdir(parents=True, exist_ok=True)
     handles.append(open(out / f'{i:02d}' / 'prepared.jsonl', 'w'))
-with open(src) as lines:
-    for line in lines:
-        if line.strip():
-            repo = json.loads(line)['repo']
-            handles[int(hashlib.sha256(repo.encode()).hexdigest(), 16) % n].write(line)
+for part in parts:
+    with open(part) as lines:
+        for line in lines:
+            if line.strip():
+                repo = json.loads(line)['repo']
+                handles[int(hashlib.sha256(repo.encode()).hexdigest(), 16) % n].write(line)
 for h in handles:
     h.close()
 EOF
