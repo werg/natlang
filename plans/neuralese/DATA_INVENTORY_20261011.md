@@ -61,6 +61,7 @@ Yes. Nothing *inside* the native lineage was lost: every gold-text document of e
 6. **S1 (1.87M records) and S2.**
    - S1 was used only in S3 pilots (~2k records per family); the S3 full run never launched.
    - Its remaining hold was licensing and provenance; licensing is void since 2026-10-10.
+   - Correction (2026-10-11): the 799 JeFF split conflicts are not in S1. They are leaks of reserved test texts into the labeled-source inline curricula (D3).
    - S2 generated families never reached the Neuralese line.
 7. **63k of the 67k public SWE-rebench trajectories** were downloaded as the harness bench source, but only 3,843 were
    normalized.
@@ -146,11 +147,11 @@ Pop owns these repairs (coordinator, 2026-10-11). Each is also in the JSON under
 | --- | --- | --- | --- | --- |
 | D1 | `semantic-inline-curriculum-s72-teacher-20261007-v1` | Leak: train cases on reserved-test sources | 38 cases (dataset_workbench 30, labeled_judgments 6, cross_source_folders 2), listed in `runs/semantic-teacher-20261005/s72-holds.jsonl` | Move to test or omit; admit the other accepted rows |
 | D2 | same | Train cases on hash-test sources | 16 anli_batch cases (`s72-holds.jsonl`) | Source review, then move to test or admit |
-| D3 | `s1-full-final-20261003` | Split conflict: JeFF test texts against content-hash partitions | 799 normalized labeled-source records (`training/source-split-reservations.json`) | Apply the explicit test reservations (they override the hash split); re-split those records to test |
-| D4 | `s1-full-final-20261003` | Ambiguous provenance aliases | per coverage backlog (alias list in the S1 audit) | Reconstruct the pins: map each alias to one upstream id/revision; drop only unresolvable rows, to omissions |
+| D3 | **Corrected 2026-10-11: not S1.** Labeled-source inline-curriculum corpora | Leak: JeFF reserved test texts (ag_news, sst2, emotion, sms_spam; `training/source-split-reservations.json`) inside train rows | Exact-text audit (`JEFF_RESERVATION_OVERLAP_20261011.json`, row ids per corpus): static-lambda-rationalized-v2 lambda-v3-s61 70 texts / 132 train rows; extras-s61 2 / 2; clef-new-v2 2 / 3; semantic-s72 IR 39 / 59 (the s72 turns inherit these); native-sft-v13-r2 ≥37 / 215 (lower bound); union 0; bgkit-knowledge 0 | Move the affected programs (whole trajectories and source groups) to test, or omit them |
+| D4 | `s1-full-final-20261003` | Ambiguous provenance aliases. **Overstated:** no alias list exists. The only record is a backlog sentence (`coverage_backlog`, `neuralese_dataset_coverage.json`) | unknown | DGX derives it: group S1 lineage by (store, upstream, upstream_id) and flag ids that map to more than one revision or store. Until then this is not a known defect |
 | D5 | `static-lambda-expansion-20261005-v1` | Noisy dataset-label answers (label quality) | 1,088 held decisions | Relabel with constructed-world oracle or a teacher vote; else keep held |
 | D6 | `static-lambda-rationalized-20261006-v2` | Source conflict (current rule) | 2 cases (lambda-v3-s61) | Source review; keep held until resolved |
-| D7 | `free-provider-v73-admitted-ordinary-text-846-20261011-v1` | Assistant turns answered by failures not masked | 82 histories | **Resolved:** admitted packet already has145 `context_only_spans`,25,517 masked tokens on82 histories (Pop recounted); preserve in twins |
+| D7 | `free-provider-v73-admitted-ordinary-text-846-20261011-v1` | Failed assistant turns not masked | 82 histories, 145 spans, 25,517 tokens | **Resolved by Pop** (coord pop-22b5). Every twin (Mellum, program-header) must carry `context_only_spans` shifted to its own token coordinates |
 | D8 | free-provider packets v28/v29/v73/sb16/v64 | Format: LFM tokenizer only | 1,191 docs | Mellum twin with `scripts/neuralese_data/text_tokenizer_twin.py` |
 | D9 | `native-sft-v13-r2` | Format: teacher turns at runtime contract 19 (old language surface, old system prompt) | 111,301 | Render with `native_gold_packet` in both modes and both tokenizers. Migrate the language surface with `ts-host/scripts/migrate-neuralese-language.mjs` where the eval code uses removed API; rows that fail migration go to omissions |
 | D10 | `bgkit-knowledge-rationalized-20261007-v1` | Possible leak into protected bgkit benchmarks (HotpotQA, SQuAD, TriviaQA, NQ questions) — unverified | 77,767 (check all) | `scripts/neuralese_data/cross_corpus.py` closure against `protected-bgkit-20261003`; hits to omissions. `*.prompts.jsonl` predate the full-context view: render from `*.turns.jsonl` |

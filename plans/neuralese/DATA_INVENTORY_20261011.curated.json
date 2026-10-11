@@ -357,17 +357,17 @@
   },
   {
    "id": "D3",
-   "dataset": "s1-full-final-20261003",
-   "defect": "split conflict: JeFF test texts vs content-hash partitions",
-   "rows": "799 normalized labeled-source records (training/source-split-reservations.json)",
-   "repair": "apply explicit test reservations (override hash split)"
+   "dataset": "labeled-source inline-curriculum corpora (NOT s1-full-final: corrected 2026-10-11)",
+   "defect": "leak: JeFF reserved test texts (ag_news/sst2/emotion/sms_spam) inside train rows",
+   "rows": "see plans/neuralese/JEFF_RESERVATION_OVERLAP_20261011.json: static-lambda-rationalized-v2 lambda-v3-s61 70 texts/132 train rows, extras-s61 2/2, clef-new-v2 2/3, semantic-s72 IR 39/59 (s72 turns inherit), native-sft-v13-r2 >=37/215; union 0; bgkit-knowledge 0",
+   "repair": "move affected programs (whole trajectories/source groups) to test or omit them; never train on a reserved test text"
   },
   {
    "id": "D4",
    "dataset": "s1-full-final-20261003",
    "defect": "ambiguous provenance aliases",
-   "rows": "per S1 audit alias list",
-   "repair": "reconstruct pins (alias -> upstream id/revision); unresolvable rows to omissions"
+   "rows": "no alias list exists in the repo: the only record is the coverage_backlog sentence \"S1 source-policy, ambiguous provenance aliases and protected split closure remain separate\" (training/neuralese_corpora.json) and neuralese_dataset_coverage.json; inventory overstated it as a listed defect",
+   "repair": "DGX to derive: group S1 lineage (store, upstream, upstream_id) and flag ids mapping to >1 upstream revision/store; until then not a known defect"
   },
   {
    "id": "D5",
@@ -388,7 +388,7 @@
    "dataset": "free-provider-v73-admitted-ordinary-text-846-20261011-v1",
    "defect": "failed assistant turns not masked",
    "rows": "82 histories",
-   "repair": "Already present: 145 context_only_spans masking25,517 history tokens on82 of846 rows; preserve masks in tokenizer/header twins",
+   "repair": "resolved by Pop (coord pop-22b5): 82 histories, 145 spans, 25,517 tokens; every twin (Mellum, program-header) must carry context_only_spans shifted to its token coordinates",
    "status": "resolved-in-existing-admitted-packet",
    "verified_artifact": "runs/free-provider-generation-20261009-v1/quality-review-v73-ordinary-text-admission-v1/text.jsonl"
   },
