@@ -499,7 +499,8 @@ def main(argv=None):
                      (gate is None or gate['passed']))
     identity_file = a.out / 'identity-check.json'
     final.update(identity_check=json.loads(identity_file.read_text()) if identity_file.is_file() else None)
-    final.update(status='complete' if finished else 'checkpointed_on_signal', steps=step, best=best,
+    status = 'complete' if finished else ('checkpointed_on_drift_guard' if drift_stopped else 'checkpointed_on_signal')
+    final.update(status=status, completed=finished, steps=step, best=best,
                  behaviour_gate=gate, drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
                  value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta')},
                  seconds=time.time() - started, scope='Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md)')

@@ -996,7 +996,10 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
                {'schema': 'natlang.neuralese-direct-stage-result/1', 'recipe_id': recipe['id'],
                 'stage_id': stage['id'], 'process_exit_code': result.returncode,
                 'interrupted': signal_forwarder.stopped[0],
-                'completed': result.returncode == 0 and not signal_forwarder.stopped[0], 'qualified': qualified,
+                'process_finished': True,
+                'completed': result.returncode == 0 and not signal_forwarder.stopped[0] and
+                    (stage['kind'] != 'neuralese_direct' or bool(report and report.get('completed', False))),
+                'qualified': qualified,
                 'gate_scope': recipe['lineage'].get('qualification_scope'),
                 'report': report, 'outputs': outputs})
     if signal_forwarder.stopped[0]:
