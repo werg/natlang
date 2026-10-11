@@ -2,7 +2,7 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-mellum-v3",
  "extends": "neuralese-direct-v2",
- "description": "neuralese-direct-v2 (the unified base: 4962-document union, context 32768, shared 48-probe monitor, shared cadence) on BF16 Mellum2.1 with raw-token-v1 heads (maple.foundation_heads --profile raw-token-v1). Every difference from the base is declared in training/neuralese/line-parity.json (plans/neuralese/LINE_PARITY.md). Backbone-inherent: the data binds the registered Mellum tokenizer twin of the union (neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1 for the full-prompt warm-up and neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v1 for direct_sft: same ids, splits, source groups and records); grouped MoE kernel; Mellum's quantization component (from neuralese-direct-mellum-v1, gate taken over by the shared monitor); the measured base gate_pass on the 48 probes. Supersedes neuralese-direct-mellum-v2 (V9 data, 8192 context, 24-probe gate). History: recipes/HISTORY.md. latent_lr 1e-5 (MuonSR; the optimizer bakeoff of 2026-10-11: gate equal to base at update 100, learning per wall-clock hour at or above LionSR 3e-6). Budget (2026-10-11 rework): 0.5 + 2 epochs over the target-bearing windows at batch_tokens 32768 (the base's value): 333 + 346 packed updates on the current twins. QAT ramps over direct_sft only (the warm-up trains at BF16).",
+ "description": "neuralese-direct-v2 (the unified base: 4962-document union, context 32768, shared 48-probe monitor, shared cadence) on BF16 Mellum2.1 with raw-token-v1 heads (maple.foundation_heads --profile raw-token-v1). Every difference from the base is declared in training/neuralese/line-parity.json (plans/neuralese/LINE_PARITY.md). Backbone-inherent: the data binds the registered Mellum tokenizer twin of the union (neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1 for the full-prompt warm-up and neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v1 for direct_sft: same ids, splits, source groups and records); grouped MoE kernel; Mellum's quantization component (from neuralese-direct-mellum-v1, gate taken over by the shared monitor); the measured base gate_pass on the 48 probes. Supersedes neuralese-direct-mellum-v2 (V9 data, 8192 context, 24-probe gate). History: recipes/HISTORY.md. latent_lr 1e-5 (MuonSR; the optimizer bakeoff of 2026-10-11: gate equal to base at update 100, learning per wall-clock hour at or above LionSR 3e-6). Budget (2026-10-11 rework): 0.5 + 2 epochs over the target-bearing windows at batch_tokens 32768 (the base's value): 333 + 346 packed updates on the current twins. QAT ramps over direct_sft only (the warm-up trains at BF16). window_execution packed (fit-only): one right-padded forward per update with the latents stepping in backward (no backbone gradient buffer); the sequential accumulation default needs full latent gradient buffers (refused at 48.8 GB against 18 GB reusable in the 2026-10-12 smoke).",
  "overrides": {
   "input_bindings": {
    "direct_text": {
@@ -26,7 +26,8 @@
       }
      }
     },
-    "latent_lr": 1e-05
+    "latent_lr": 1e-05,
+    "window_execution": "packed"
    }
   },
   "quantization": {

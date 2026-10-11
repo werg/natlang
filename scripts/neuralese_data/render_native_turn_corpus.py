@@ -7,6 +7,8 @@ Mellum2.1, the same documents in the same order):
 
 1. ``full``: one document per approved decision, the serving prompt with the recorded system prompt and tool
    schemas, then the target reply (``native_gold_packet``; loss from ``supervised_suffix_start``). Warm-up phase.
+   Kept only for the warm-up sample (``--full-sample``, default 5% of programs, stratified by family; shared rule,
+   coordinator 2026-10-11): the generic prompt is dropped after warm-up, so the rest of a corpus never needs it.
 2. ``program-header``: the same decisions rendered with ``prompt_rendering='program-header'`` (generic runtime
    prose, tool docs and the return_result schema dropped; program-specific paragraphs kept verbatim). Every row is
    also derived from its full row by ``strip_generic_system_prompt.strip_row`` (its byte and token-exactness checks)
@@ -34,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import math
 import json
 import os
 import re
@@ -270,6 +273,7 @@ def select(args, shard_dir: Path):
     protected = json.loads(args.protected.read_text()) if args.protected else None
     shard_files = [open(shard_dir / f'{i:04d}.jsonl', 'wb') for i in range(args.shards)]
     omissions, counts = [], Counter()
+    strata = defaultdict(set)  # family -> selected programs (for the full-rendering warm-up sample)
     blocked = {}  # chain -> fewest messages of an unselected decision in it
     protected_cache = {}
     seen_ids = set()
@@ -335,13 +339,27 @@ def select(args, shard_dir: Path):
                     test_groups.update(g for g in row.get('source_groups') or [] if isinstance(g, str))
                 counts['selected'] += 1
                 counts['selected:' + str(row.get('split'))] += 1
+                strata[str(row.get('family') or row.get('task_family') or '')].add(program_key(row))
                 shard = int(sha(str(row.get('teacher_trajectory_id') or chain_key(row)).encode())[:8], 16) % args.shards
                 shard_files[shard].write(line.rstrip(b'\n') + b'\n')
     for f in shard_files:
         f.close()
     counts['reserved_programs_hit'] = sum(bool(v) for v in reserved_cache.values())
     counts['reserved_groups'] = len(reserved_groups)
-    return omissions, counts, blocked, protected_cache, test_groups, reserved_groups
+    return omissions, counts, blocked, protected_cache, test_groups, reserved_groups, full_sample(strata, args.full_sample)
+
+
+def full_sample(strata: dict, fraction: float) -> list[str] | None:
+    """Programs whose decisions get the full rendering (warm-up share; shared rule, coordinator 2026-10-11): per family,
+    the ceil(fraction * n) programs with the smallest sha256(program id): deterministic, stratified, at least one per
+    family. None means every program (fraction >= 1)."""
+    if fraction >= 1:
+        return None
+    chosen = []
+    for programs in strata.values():
+        ranked = sorted(programs, key=lambda key: sha(key.encode()))
+        chosen += ranked[:max(1, math.ceil(fraction * len(ranked)))] if fraction > 0 else []
+    return sorted(chosen)
 
 
 # ---------------------------------------------------------------- rendering (workers)
@@ -399,7 +417,11 @@ def whole_trajectory_records(records: list[dict], blocked: dict) -> list[tuple[d
 
 
 def render_shard(job):
-    shard_path, out_dir, tok_name, blocked, corpus, held_groups, decision_exclude, header_as_full = job
+    (shard_path, out_dir, tok_name, blocked, corpus, held_groups, decision_exclude, header_as_full, full_programs,
+     renderings) = job
+    # Per-decision renderings are rendered only when one of them is requested; the program-header parity check needs
+    # both, so with program-header requested the full rendering is rendered too (and kept per --full-sample).
+    per_decision = {'full', 'program-header'} & set(renderings)
     # header_as_full: the corpus's system prompt is its program's own prompt (no generic runtime prose), so the
     # program-header rendering is the full rendering.
     from natlang_neuralese.data.text_corpus import (authenticated_context_writer_sources,
@@ -436,7 +458,7 @@ def render_shard(job):
     # rendered again as decision documents; they still complete their whole trajectories.
     decision_records = [r for r in records if r['id'] not in decision_exclude]
     result['decision_excluded'] = len(records) - len(decision_records)
-    for mode in (('full',) if header_as_full else ('full', 'program-header')):
+    for mode in (('full',) if header_as_full else ('full', 'program-header')) if per_decision else ():
         if not decision_records:
             rows[mode] = []
             continue
@@ -451,15 +473,15 @@ def render_shard(job):
                                                              'documents', 'omitted_records',
                                                              'duplicate_same_split_documents_deduplicated',
                                                              'excluded_train_exact_held_complete_documents')}
-    if header_as_full:
+    if header_as_full and per_decision:
         rows['program-header'] = [dict(row, prompt_rendering='program-header', system_prompt_mode='program-own')
                                   for row in rows['full']]
     # Program-header parity: the renderer's rows must equal the strip script's derivation from the full rows.
     im_start, im_end = tok.convert_tokens_to_ids('<|im_start|>'), tok.convert_tokens_to_ids('<|im_end|>')
-    by_id = {row['id']: row for row in rows['program-header']}
+    by_id = {row['id']: row for row in rows.get('program-header', [])}
     parity = Counter()
     kept_ph = []
-    for full in ([] if header_as_full else rows['full']):
+    for full in ([] if header_as_full or not per_decision else rows['full']):
         ph = by_id.get(full['id'])
         if ph is None:
             parity['program_header_missing'] += 1
@@ -496,9 +518,16 @@ def render_shard(job):
         parity['equal'] += 1
         ph['system_prompt_mode'] = stripped['system_prompt_mode']
         kept_ph.append(ph)
-    if not header_as_full:
+    if not header_as_full and per_decision:
         rows['program-header'] = kept_ph
     result['parity'] = dict(parity)
+    # The full rendering is rendered for every decision (the program-header parity check needs it) but kept only for
+    # the warm-up sample of programs; program-header and whole-trajectory cover everything.
+    if full_programs is not None and per_decision:
+        program_of = {r['id']: program_key(r) for r in decision_records}
+        before = len(rows['full'])
+        rows['full'] = [row for row in rows['full'] if program_of.get(row['id']) in full_programs]
+        result['full_outside_warmup_sample'] = before - len(rows['full'])
     # Whole trajectory.
     fingerprint = tokenizer_fingerprint(tok)
     source_hashes, writer_sources = authenticated_context_writer_sources(records)
@@ -529,6 +558,8 @@ def render_shard(job):
                    'corpus': corpus, 'prompt_rendering': 'program-header', 'supervision': 'whole-trajectory',
                    **({'system_prompt_mode': 'program-own'} if header_as_full else {})})
     rows['whole-trajectory'] = wt
+    for mode in [m for m in rows if m not in renderings]:  # rendered only for the parity check
+        del rows[mode]
     for mode, rs in rows.items():
         path = Path(out_dir) / mode / tok_name / f'{stem}.jsonl'
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -691,6 +722,12 @@ def main(argv=None):
     p.add_argument('--shards', type=int, default=64)
     p.add_argument('--limit', type=int)
     p.add_argument('--keep-work', action='store_true', help='keep the per-shard work files after the merge')
+    p.add_argument('--renderings', nargs='+', choices=RENDERINGS, default=list(RENDERINGS),
+                   help='renderings to produce (e.g. whole-trajectory alone for long agent trajectories, where one '
+                        'document per decision repeats the context)')
+    p.add_argument('--full-sample', type=float, default=0.05,
+                   help='fraction of programs (stratified by family) that also get the full rendering, the warm-up '
+                        'share; 1.0 renders full for every program (the old behaviour)')
     a = p.parse_args(argv)
     tokenizers = dict(item.split('=', 1) for item in a.tokenizer)
     pieces, piece_bindings = registered_source_pieces(a.source)
@@ -719,15 +756,20 @@ def main(argv=None):
         state = json.loads(state_path.read_text())
         omissions, counts, blocked = state['omissions'], Counter(state['counts']), state['blocked']
         protected_cache, test_groups, reserved_groups = state['protected'], set(state['test_groups']), set(state['reserved_groups'])
+        # A selection made before --full-sample existed rendered (and keeps rendering) full for every program.
+        full_programs = state.get('full_sample_programs')
+        if 'full_sample_programs' not in state:
+            a.full_sample = 1.0
         print(json.dumps({'resumed_selection': True}), flush=True)
     else:
         shutil.rmtree(out / 'work', ignore_errors=True)
         shard_dir.mkdir(parents=True, exist_ok=True)
-        omissions, counts, blocked, protected_cache, test_groups, reserved_groups = select(a, shard_dir)
+        omissions, counts, blocked, protected_cache, test_groups, reserved_groups, full_programs = select(a, shard_dir)
         tmp = state_path.with_suffix('.tmp')
         tmp.write_text(json.dumps({'omissions': omissions, 'counts': counts, 'blocked': blocked,
                                    'protected': protected_cache, 'test_groups': sorted(test_groups),
-                                   'reserved_groups': sorted(reserved_groups)}))
+                                   'reserved_groups': sorted(reserved_groups),
+                                   'full_sample_programs': full_programs}))
         os.replace(tmp, state_path)
     held_external = held_groups_from(a.held_text)
     # Train decisions sharing a source group with a reserved-test hit go with it (whole source groups, every split's
@@ -739,8 +781,9 @@ def main(argv=None):
     decision_exclude = set()
     for path in a.decision_exclude_ids:
         decision_exclude.update(json.loads(line)['id'] for line in path.read_text().splitlines() if line.strip())
+    full_set = None if full_programs is None else set(full_programs)
     jobs = [(str(shard_dir / f'{s}.jsonl'), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
-             a.program_header_as_full)
+             a.program_header_as_full, full_set, tuple(a.renderings))
             for s in shards for name in tokenizers]
     results = []
     pending = []
@@ -760,7 +803,7 @@ def main(argv=None):
                                   'seconds': round(time.time() - t0)}), flush=True)
     _init(tokenizers, pieces)
     renders = {}
-    for mode in RENDERINGS:
+    for mode in a.renderings:
         for name in tokenizers:
             renders[f'{mode}/{name}'] = merge(out, mode, name, shards, held_external,
                                               role_counter(_G['tok'][name]))
@@ -771,6 +814,7 @@ def main(argv=None):
         parity.update(res.get('parity') or {})
         render_omissions[f"{res['tokenizer']}/all/decontaminated"] += res.get('decontaminated', 0)
         render_omissions[f"{res['tokenizer']}/decision/already_rendered_elsewhere"] += res.get('decision_excluded', 0)
+        render_omissions[f"{res['tokenizer']}/full/outside_warmup_sample"] += res.get('full_outside_warmup_sample', 0)
     for name in tokenizers:
         for f in sorted((out / 'work' / 'omissions' / name).glob('*.jsonl')):
             for line in f.read_text().splitlines():
@@ -808,6 +852,11 @@ def main(argv=None):
             ROOT / 'training/prompt-pieces/pieces.json',
             ROOT / 'training/neuralese/natlang_neuralese/serve/chat.py')},
         'selection': dict(counts),
+        'renderings': list(a.renderings),
+        'full_sample': {'fraction': a.full_sample, 'programs': None if full_programs is None else len(full_programs),
+                        'rule': 'full rendering only for a warm-up sample: per family the ceil(fraction*n) programs with '
+                                'the smallest sha256(program id), at least one per family; program-header and '
+                                'whole-trajectory cover every program (shared rule, coordinator 2026-10-11)'},
         'render_omissions': dict(render_omissions),
         'program_header_parity': dict(parity),
         'renders': renders,

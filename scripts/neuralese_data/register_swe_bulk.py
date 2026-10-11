@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Register the bulk harness-bench SWE-rebench corpus (D13) and its two text twins, publish their manifests, commit
-only the registry and those manifests, and brief Pop. Run by swe_bulk_followup.sh when the twins are assembled.
+"""Register the bulk harness-bench SWE-rebench corpus (D13) and its two text twins: entries and manifests are committed
+and pushed by register_corpora.py from a private worktree off origin/main (never the shared checkout's registry).
+Run by swe_bulk_followup.sh when the twins are assembled.
 
-  register_swe_bulk.py --bulk BULK_OUT --twin-root TWIN_ROOT [--no-commit]
+  register_swe_bulk.py --bulk BULK_OUT --twin-root TWIN_ROOT
 """
 from __future__ import annotations
 
@@ -14,9 +15,12 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'scripts/neuralese_data'))
+from register_corpora import link as data_link, register  # noqa: E402
 RECORDS_ID = 'harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1'
-TWINS = {'lfm25': ('harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-bulk-20261011-v1', 'last_turn_only', 'LFM'),
-         'mellum21': ('harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-bulk-20261011-v1', 'keep', 'Mellum')}
+# Whole-trajectory twins (coordinator 2026-10-11): one document per trajectory chain, not one per decision.
+TWINS = {'lfm25': ('harness-bench-swe-rebench-openhands-pi-wholetraj-lfm25-350m-bulk-20261011-v1', 'last_turn_only', 'LFM'),
+         'mellum21': ('harness-bench-swe-rebench-openhands-pi-wholetraj-mellum21-12b-bulk-20261011-v1', 'keep', 'Mellum')}
 ADMISSION_REASON = ("owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, "
                     "protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason "
                     "to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)")
@@ -28,9 +32,7 @@ def git(*args: str) -> str:
 
 def link(name: str, target: Path) -> str:
     rel = f'data/neuralese/corpora/{name}'
-    path = ROOT / rel
-    if not path.is_symlink():
-        os.symlink(target, path)
+    data_link(rel, target)
     return rel
 
 
@@ -38,7 +40,6 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--bulk', type=Path, required=True)
     parser.add_argument('--twin-root', type=Path, required=True)
-    parser.add_argument('--no-commit', action='store_true')
     args = parser.parse_args()
     shards = sorted(p for p in (args.bulk / 'shards').iterdir() if p.is_dir())
     summaries = [json.loads((s / 'summary.json').read_text()) for s in shards]
@@ -58,11 +59,6 @@ def main() -> int:
     prepared = [json.loads(p.read_text()) for p in sorted((args.bulk / 'prepared').glob('*.summary.json'))]
     prep = {k: sum(p.get(k, 0) for p in prepared) for k in ('seen', 'written', 'no_task', 'unresolved_skipped')}
     commit = git('rev-parse', 'HEAD').strip()
-    registry_path = ROOT / 'training/neuralese_corpora.json'
-    # Another session's uncommitted registry edits must not ride along in this commit.
-    foreign = bool(git('status', '--porcelain', '--', 'training/neuralese_corpora.json').strip())
-    registry = json.loads(registry_path.read_text())
-    known = {c['id'] for c in registry['corpora']}
     entries = []
     rel = link(RECORDS_ID, args.bulk)
     entries.append({
@@ -95,38 +91,30 @@ def main() -> int:
         rel_t = link(twin_id, args.twin_root / name)
         entries.append({
             'id': twin_id, 'owner': 'dgx', 'path': rel_t,
-            'include': ['text.jsonl', 'receipt.json', 'shards/*/receipt.json', 'shards/*/provenance.jsonl', 'shards/*/omissions.jsonl'],
+            'include': ['text.jsonl', 'receipt.json', 'shards/*/receipt.json', 'shards/*/omissions.jsonl',
+                        'shards/*/render-omissions.jsonl'],
             'split': 'inherited from the source records (by repository; source groups repository and instance)',
-            'source_class': 'derived-native-chat-gold-text-twin-of-harness-bench-records',
-            'admission': f'admitted-harness_bench-cohort-text-stages, as the v4 twin ({line} line text stages beside the native text); test documents are a reported stratum, never qualification evidence',
+            'source_class': 'rendered-whole-trajectory-text-of-harness-bench-records',
+            'admission': f'admitted-harness_bench-cohort-text-stages ({line} line); whole-trajectory documents: every assistant turn of a trajectory supervised, tool output at the shared feedback weight; test documents are a reported stratum, never qualification evidence',
             'training_admission': True, 'training_admission_reason': ADMISSION_REASON,
             'corpus_publication_for_training': False, 'derived_from': [RECORDS_ID],
             'license': "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
-            'build': {'script': 'scripts/neuralese_data/swe_bulk_twins.py (scripts/build_neuralese_text_packet.py per shard, concatenated)',
-                      'code_commit': commit, 'renderer': 'natlang_neuralese.data.text_corpus.gold_text_rows',
+            'build': {'script': 'scripts/neuralese_data/swe_bulk_twins.py (render_native_turn_corpus.py --renderings '
+                                'whole-trajectory --program-header-as-full per shard, concatenated)',
+                      'code_commit': commit, 'renderer': 'scripts/neuralese_data/render_native_turn_corpus.py whole-trajectory',
                       'renderer_code': receipt['renderer_code'], 'tokenizer': receipt['tokenizer'],
                       'history_reasoning_policy': policy, 'text_jsonl_sha256': receipt['text_jsonl_sha256']},
             'tokens': receipt['tokens'],
-            'notes': f"Text twin of {RECORDS_ID}, same renderer and history-reasoning policy as the v4 twin; per-shard receipts under shards/.",
+            'notes': (f"Whole-trajectory text of {RECORDS_ID} (the system prompt is the pi harness's own, kept whole with its "
+                      "tool schemas). Chosen over v4's one document per decision, which repeats each trajectory's context "
+                      "per target: on 120 v4 trajectories (940 decisions) all 940 decisions are covered, and Mellum train "
+                      "text is 4.06M tokens with 817k supervised assistant tokens against 17.1M / 145k per decision. "
+                      "Per-shard receipts under shards/."),
         })
-    added = [e for e in entries if e['id'] not in known]
-    registry['corpora'].extend(added)
-    registry_path.write_text(json.dumps(registry, indent=2, ensure_ascii=False) + '\n')
-    for e in entries:
-        subprocess.run([sys.executable, str(ROOT / 'scripts/sync_training_corpora.py'), 'publish', '--machine', 'dgx', '--id', e['id']],
-                       cwd=ROOT, check=True)
-    print(json.dumps({'registered': [e['id'] for e in added], 'counts': total,
+    added = register(entries, f'Register bulk SWE-rebench harness-bench records and text twins (D13): '
+                              f'{total["trajectories"]} trajectories, {total["records"]} records')
+    print(json.dumps({'registered': added, 'counts': total,
                       'tokens': {e['id']: e.get('tokens') for e in entries[1:]}}, indent=1))
-    if args.no_commit:
-        return 0
-    paths = ['training/neuralese_corpora.json'] + [f'training/corpus-manifests/{e["id"]}.json' for e in entries]
-    if foreign or git('diff', '--cached', '--name-only').strip():
-        print('registry or index holds another session\'s changes; registered but left uncommitted', file=sys.stderr)
-        return 2
-    git('add', '--', *paths)
-    git('commit', '-q', '-m', f'Register bulk SWE-rebench harness-bench records and text twins (D13): {total["trajectories"]} trajectories, {total["records"]} records\n\n'
-        'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n'
-        'Claude-Session: https://claude.ai/code/session_01Q53kXkxDK2onzJmxGfyHnP', '--', *paths)
     return 0
 
 

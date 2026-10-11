@@ -60,8 +60,10 @@ EXCLUDED = {
     'anli_batch': 'source_review_pending (current source-conflict rule holds these sources)',
     'folio_batch': 'source_review_pending (current source-conflict rule holds these sources)',
     'folio_entailment': 'source_review_pending (current source-conflict rule holds these sources)',
-    'textworld_iterate': 'reference actions diverge on some games (iteration diverged); reported as a bug candidate',
 }
+# Fixed 2026-10-12 (the object_missing reference now declares its one expected divergent-stop failure); the running
+# s7k campaign keeps its fixed config without it, the next campaign includes it. Same day: folder_extract long CUAD
+# clauses and kqapro dangling relations no longer drop cases, so newer batches lose fewer cases.
 # Case-id sources of corpora this campaign must not repeat.
 EXISTING_IR = [
     'data/neuralese/corpora/static-lambda-rationalized-20261006-v2/lambda-v3-s61.ir.jsonl',
@@ -259,7 +261,7 @@ def render(root: Path, name: str, cpus: int, budget_gb: int, docker_gb: int) -> 
            '--priority', 'low', '--resumable',
            '--wait', '86400', '--workdir', str(REPO), '--', 'env', f'MEM={docker_gb}g', f'CPUS={cpus}',
            'nice', '-n', '10', 'scripts/neuralese_data/render_native_turn_corpus.sh', str(out), '--corpus-id', corpus_id,
-           '--source', str(plain), '--workers', str(cpus), '--shards', '64', '--protected', str(REPO / PROTECTED),
+           '--source', str(plain), '--workers', str(cpus), '--shards', '64', '--full-sample', '0.05', '--protected', str(REPO / PROTECTED),
            '--reserved', str(REPO / 'training/source-split-reservations.json'),
            '--held-text', *[str(REPO / p) for p in HELD_TEXT]]
     subprocess.run(cmd, check=True)
@@ -269,8 +271,7 @@ def render(root: Path, name: str, cpus: int, budget_gb: int, docker_gb: int) -> 
     plain.unlink(missing_ok=True)
     if not (out / 'receipt.json').exists():
         raise RuntimeError(f'render of {name} failed; see journalctl --user -u {unit}')
-    # Disk: the full rendering (warm-up share, generic system prompt) is ~70% of the bytes and the warm-up already has
-    # the union; keep it, compressed (~50x), so it is restorable without a re-render. Trainers read the other two.
+    # The full rendering is the 5% warm-up sample (--full-sample, shared rule); it is still stored compressed (~50x).
     for path in sorted((out / 'full').glob('*/*.jsonl')):
         subprocess.run(['zstd', '-q', '-3', '--long=27', '-T4', '--rm', '-f', str(path)], check=True)
 
@@ -459,7 +460,11 @@ def render_loop(args) -> None:
         names = sorted(p.parent.name for p in (root / 'batches').glob('[brt]*/batch.json'))
         todo = [n for n in names if not (root / 'renders' / n / 'receipt.json').exists()]
         if not todo:
-            time.sleep(120)
+            try:  # a registration that failed after its render is retried while idle
+                register(args)
+            except (subprocess.CalledProcessError, OSError, ValueError, RuntimeError) as error:
+                print(json.dumps({'register_error': str(error)}), flush=True)
+            time.sleep(600)
             continue
         name = todo[0]
         for attempt in range(4):
@@ -474,7 +479,7 @@ def render_loop(args) -> None:
         print(json.dumps({'batch': name, 'rendered': True}), flush=True)
         try:
             register(args)
-        except (subprocess.CalledProcessError, OSError, ValueError) as error:  # retried after the next render
+        except (subprocess.CalledProcessError, OSError, ValueError, RuntimeError) as error:  # retried after the next render
             print(json.dumps({'register_error': str(error)}), flush=True)
 
 
@@ -526,7 +531,8 @@ def registry_entries(root: Path, name: str) -> list[dict]:
         'split': 'per document, inherited from the source rows; protected bgkit benchmark overlaps and explicit test '
                  'reservations dropped; train documents sharing a source group with held text (4962 union, harness '
                  'bench) dropped',
-        'admission': f'renders of {base}: full (zstd --long=27, warm-up share), program-header, whole-trajectory; '
+        'admission': f'renders of {base}: full only for the 5% warm-up sample of programs (stratified by family; '
+                     'zstd --long=27), program-header and whole-trajectory for all; '
                      'LFM2.5 and Mellum2.1 twins; no new example admission',
         'training_admission': True,
         'training_admission_reason': 'owner 2026-10-11: maximize data; renders of a training-admitted corpus',
@@ -538,31 +544,18 @@ def registry_entries(root: Path, name: str) -> list[dict]:
 
 
 def register(args) -> None:
-    """Register every rendered batch not yet in the registry, publish its manifests and push (stages only these
-    paths). Skips while another session has uncommitted registry edits, so it never publishes their work."""
+    """Register every rendered batch not yet on origin/main: entries and manifests are committed and pushed by
+    register_corpora.py from a private worktree off origin/main, so other sessions' uncommitted registry edits in the
+    shared checkout never ride along and nothing waits for a hand commit."""
+    sys.path.insert(0, str(REPO / 'scripts/neuralese_data'))
+    from register_corpora import register as register_entries, registered_ids
     root = Path(args.root)
-    if subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--', str(REGISTRY)], cwd=REPO).returncode:
-        print('registry has uncommitted edits by another session; skipping this round', flush=True)
-        return
-    subprocess.run(['python3', 'scripts/git_publish.py', '--sync-only'], cwd=REPO, capture_output=True)
-    registry = json.loads(REGISTRY.read_text())
-    known = {c['id'] for c in registry['corpora']}
+    known = registered_ids()
     names = sorted(p.parent.name for p in (root / 'renders').glob('*/receipt.json')
                    if (root / 'batches' / p.parent.name / 'batch.json').exists())
     new = [e for n in names for e in registry_entries(root, n) if e['id'] not in known]
-    if not new:
-        return
-    registry['corpora'].extend(new)
-    REGISTRY.write_text(json.dumps(registry, indent=2, ensure_ascii=False) + '\n')
-    for entry in new:
-        subprocess.run(['python3', 'scripts/sync_training_corpora.py', 'publish', '--machine', 'dgx', '--id', entry['id']],
-                       cwd=REPO, check=True)
-    paths = [str(REGISTRY.relative_to(REPO))] + [f'training/corpus-manifests/{e["id"]}.json' for e in new]
-    ids = ', '.join(e['id'] for e in new)
-    subprocess.run(['python3', 'scripts/git_publish.py', '-m', f'Register static curriculum batches: {ids}',
-                    '-m', 'Generated by static_curriculum_campaign.py (owner 2026-10-11: large training dataset).',
-                    *paths], cwd=REPO, check=True)
-    print(json.dumps({'registered': [e['id'] for e in new]}), flush=True)
+    if new:
+        register_entries(new, 'Register static curriculum batches: ' + ', '.join(e['id'] for e in new))
 
 
 def status(args) -> None:

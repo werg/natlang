@@ -76,6 +76,8 @@
    "reason": "each backbone's own measured base gate_pass on the shared 48 probes"},
   {"stage": "direct", "lines": ["lfm"], "key": "parameters.target_tokens", "kind": "fit-only",
    "reason": "supervised positions per window that fit Pop's 8 GB GPU at the shared 32768-token context (Mellum 1024)"},
+  {"stage": "direct", "lines": ["mellum"], "key": "parameters.window_execution", "kind": "fit-only",
+   "reason": "Mellum packs each update into one right-padded forward so its latents step in backward with no gradient buffer (sequential accumulation needs ~24 GB of latent gradients; the math is the same token mean)"},
   {"stage": "direct", "lines": ["lfm"], "key": "parameters.batch_tokens", "kind": "fit-only",
    "reason": "forward tokens packed per update that fit Pop's 8 GB GPU (Mellum 32768); the budget is epochs (derived.supervision), so the packing changes the update count, not the supervision"},
   {"stage": "direct", "lines": ["lfm"], "key": "parameters.eval_every", "kind": "fit-only",

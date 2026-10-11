@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Text twins of the bulk harness-bench records (training/neuralese/scripts/harness_bench_bulk.sh), per tokenizer.
 
-Each finished records shard (a set of whole repositories, so its train/test split is the whole corpus's) is rendered
-by the shared packet builder (scripts/build_neuralese_text_packet.py: gold_text_rows, the backbone's declared history
-reasoning) into TWIN_ROOT/<name>/shards/NN; its text is appended to TWIN_ROOT/<name>/text.jsonl in shard order once
-every shard is rendered, and the per-shard receipts are summed into receipt.json. Resumable: a shard with a receipt
-is done; a partial shard directory is removed and rendered again.
+Whole-trajectory documents (coordinator 2026-10-11): one document per maximal decision chain of a trajectory, every
+assistant turn supervised (tool output at the shared feedback weight), instead of one document per decision, which
+repeats the whole context for each of a trajectory's ~8 targets (~4.8B Mellum tokens for ~1% supervised). Each
+finished records shard (a set of whole repositories, so its split is the whole corpus's) is rendered by the shared
+renderer (scripts/neuralese_data/render_native_turn_corpus.py --renderings whole-trajectory, both tokenizers in one
+pass) into TWIN_ROOT/render/NN; once every shard is rendered, each tokenizer's text is concatenated in shard order into
+TWIN_ROOT/<name>/text.jsonl and the per-shard receipts are summed into TWIN_ROOT/<name>/receipt.json. Resumable: a
+shard with a receipt is done; an unfinished one resumes from the renderer's own work dir.
 
   swe_bulk_twins.py --bulk BULK_OUT --twin-root DIR --tokenizer lfm25=SNAPSHOT --tokenizer mellum21=SNAPSHOT [--parallel 2]
      [--wait]   (keep polling until the records run has finished every shard)
@@ -24,6 +27,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PY = ROOT / '.venv-neuralese/bin/python'
+# The records' system prompt is the pi harness's own prompt, not natlang's generic runtime prose: keep it whole.
+HEADER = ['--program-header-as-full']
 
 
 def file_sha(path: Path) -> str:
@@ -34,19 +39,21 @@ def file_sha(path: Path) -> str:
     return h.hexdigest()
 
 
-def render(shard: Path, name: str, tokenizer: str, root: Path) -> str:
-    out = root / name / 'shards' / shard.name
+def render(shard: Path, tokenizers: dict, root: Path, workers: int) -> str:
+    out = root / 'render' / shard.name
     if (out / 'receipt.json').exists():
-        return f'{name}/{shard.name} kept'
-    if out.exists():
-        shutil.rmtree(out)
+        return f'{shard.name} kept'
     out.parent.mkdir(parents=True, exist_ok=True)
-    log = root / name / 'shards' / f'{shard.name}.log'
-    with open(log, 'w') as handle:
-        code = subprocess.call(['nice', '-n', '10', str(PY), str(ROOT / 'scripts/build_neuralese_text_packet.py'),
-                                '--records', str(shard / 'records.jsonl'), '--pieces', str(shard / 'pieces.jsonl'),
-                                '--tokenizer', tokenizer, '--out', str(out)], stdout=handle, stderr=subprocess.STDOUT)
-    return f'{name}/{shard.name} exit {code}'
+    log = root / 'render' / f'{shard.name}.log'
+    cmd = ['nice', '-n', '10', str(PY), str(ROOT / 'scripts/neuralese_data/render_native_turn_corpus.py'),
+           '--corpus-id', f'swe-rebench-bulk-{shard.name}', '--source', str(shard / 'records.jsonl'),
+           '--pieces', str(shard / 'pieces.jsonl'), '--out-dir', str(out), '--renderings', 'whole-trajectory',
+           '--full-sample', '0', '--workers', str(workers), '--shards', '16', *HEADER]
+    for name, path in tokenizers.items():
+        cmd += ['--tokenizer', f'{name}={path}']
+    with open(log, 'a') as handle:
+        code = subprocess.call(cmd, stdout=handle, stderr=subprocess.STDOUT)
+    return f'{shard.name} exit {code}'
 
 
 def assemble(root: Path, name: str, shards: list[Path]) -> None:
@@ -56,30 +63,37 @@ def assemble(root: Path, name: str, shards: list[Path]) -> None:
     totals: dict = {}
     parts = []
     tmp = target / 'text.jsonl.tmp'
+    target.mkdir(parents=True, exist_ok=True)
     with open(tmp, 'wb') as dst:
         for shard in shards:
-            part = target / 'shards' / shard.name
+            part = root / 'render' / shard.name
             receipt = json.loads((part / 'receipt.json').read_text())
-            with open(part / 'text.jsonl', 'rb') as src:
+            render = receipt['renders'][f'whole-trajectory/{name}']
+            with open(part / 'whole-trajectory' / name / 'text-data.jsonl', 'rb') as src:
                 shutil.copyfileobj(src, dst, 1 << 24)
-            for split, counts in receipt['tokens'].items():
-                into = totals.setdefault(split, {'documents': 0, 'tokens': 0, 'suffix_tokens': 0, 'max_document_tokens': 0})
-                for key in ('documents', 'tokens', 'suffix_tokens'):
-                    into[key] += counts[key]
-                into['max_document_tokens'] = max(into['max_document_tokens'], counts['max_document_tokens'])
+            for split, counts in render['by_split'].items():
+                into = totals.setdefault(split, {})
+                for key, value in counts.items():
+                    into[key] = into.get(key, 0) + value
+            totals.setdefault('max_document_tokens', 0)
+            totals['max_document_tokens'] = max(totals['max_document_tokens'], render['max_document_tokens'])
+            keep = target / 'shards' / shard.name
+            keep.mkdir(parents=True, exist_ok=True)
+            shutil.copy(part / 'receipt.json', keep / 'receipt.json')
+            shutil.copy(part / 'whole-trajectory' / name / 'omissions.jsonl', keep / 'omissions.jsonl')
+            shutil.copy(part / 'render-omissions' / name / 'omissions.jsonl', keep / 'render-omissions.jsonl')
             parts.append({'shard': shard.name, 'receipt_sha256': file_sha(part / 'receipt.json'),
-                          'text_jsonl_sha256': receipt['text_jsonl_sha256'], 'source_files': receipt['source_files'],
-                          'omitted_records': receipt.get('omitted_records'), 'tokens': receipt['tokens']})
+                          'text_data_sha256': render['text_data_sha256'], 'tokens': render['by_split'],
+                          'merge_omissions': render['merge_omissions'], 'selection': receipt['selection']})
     tmp.rename(target / 'text.jsonl')
-    first = json.loads((target / 'shards' / shards[0].name / 'receipt.json').read_text())
-    summary = {'schema': 'natlang.harness-bench-bulk-twin/1', 'builder': 'scripts/build_neuralese_text_packet.py per shard',
-               'renderer_code': first['renderer_code'], 'tokenizer': first['tokenizer'],
-               'history_reasoning': first.get('history_reasoning'), 'rendering': first.get('rendering'),
+    first = json.loads((root / 'render' / shards[0].name / 'receipt.json').read_text())
+    summary = {'schema': 'natlang.harness-bench-bulk-twin/2',
+               'builder': 'scripts/neuralese_data/render_native_turn_corpus.py --renderings whole-trajectory per shard',
+               'rendering': 'whole-trajectory', 'renderer_code': first['renderer_code'],
+               'tokenizer': first['tokenizers'][name], 'whole_trajectory': first['whole_trajectory'],
                'text_jsonl_sha256': file_sha(target / 'text.jsonl'), 'tokens': totals, 'shards': parts,
                'concatenation': 'shard order 00..NN; each shard is a set of whole repositories'}
     (target / 'receipt.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
-    for shard in shards:  # the text lives once, in text.jsonl; each shard keeps receipt, provenance and omissions
-        (target / 'shards' / shard.name / 'text.jsonl').unlink()
     print(json.dumps({name: totals}), flush=True)
 
 
@@ -88,21 +102,20 @@ def main() -> int:
     parser.add_argument('--bulk', type=Path, required=True)
     parser.add_argument('--twin-root', type=Path, required=True)
     parser.add_argument('--tokenizer', action='append', required=True, help='NAME=SNAPSHOT')
-    parser.add_argument('--parallel', type=int, default=2)
+    parser.add_argument('--parallel', type=int, default=2, help='shards rendered at once')
+    parser.add_argument('--workers', type=int, default=3, help='renderer worker processes per shard')
     parser.add_argument('--wait', action='store_true')
     args = parser.parse_args()
     tokenizers = dict(item.split('=', 1) for item in args.tokenizer)
     shards = sorted(p for p in (args.bulk / 'shards').iterdir() if p.is_dir())
     while True:
         ready = [s for s in shards if (s / 'summary.json').exists()]
-        todo = [(s, n, t) for s in ready for n, t in tokenizers.items()
-                if not (args.twin_root / n / 'shards' / s.name / 'receipt.json').exists()]
+        todo = [s for s in ready if not (args.twin_root / 'render' / s.name / 'receipt.json').exists()]
         with ThreadPoolExecutor(args.parallel) as pool:
-            for line in pool.map(lambda job: render(job[0], job[1], job[2], args.twin_root), todo):
+            for line in pool.map(lambda shard: render(shard, tokenizers, args.twin_root, args.workers), todo):
                 print(line, flush=True)
         if len(ready) == len(shards):
-            failed = [(s.name, n) for s in shards for n in tokenizers
-                      if not (args.twin_root / n / 'shards' / s.name / 'receipt.json').exists()]
+            failed = [s.name for s in shards if not (args.twin_root / 'render' / s.name / 'receipt.json').exists()]
             if failed:
                 print(json.dumps({'failed': failed}), flush=True)
                 return 1

@@ -566,12 +566,15 @@ def main(argv=None):
             raise ValueError('--continue-from is not a neuralese_direct full state')
         previous_identity = state.get('identity') or {}
         previous_inputs = previous_identity.get('inputs') or {}
-        if previous_inputs.get(str(a.heads.resolve())) != inputs[str(a.heads.resolve())]:
+        if inputs[str(a.heads)] not in previous_inputs.values():
             raise ValueError('--continue-from was trained from different base heads')
         previous_options = previous_identity.get('options') or {}
         current_options = identity['options']
+        # A later phase of one lineage changes its data, its budget and its precision schedule (recipe stages:
+        # full-prompt warm-up, then program-header direct_sft with the QAT ramp); everything else must match.
+        phase_keys = {'text_data', 'records', 'pieces', 'epochs', 'quantization'}
         changed_objective = sorted(key for key in set(previous_options) & set(current_options)
-                                   if previous_options[key] != current_options[key])
+                                   if key not in phase_keys and previous_options[key] != current_options[key])
         if changed_objective:
             raise ValueError('--continue-from training options differ: ' + ', '.join(changed_objective))
         # Full direct checkpoints keep optimizer-schema names in their canonical ``backbone.*`` form.

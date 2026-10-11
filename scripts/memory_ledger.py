@@ -446,6 +446,10 @@ def launch(spec):
                '-p', f'OOMPolicy={spec["oom_policy"]}',
                '--working-directory', os.path.abspath(spec['workdir']),
                '-E', f'NATLANG_CUDA_MEMORY_GB={round(budget / GIB, 1)}', '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
+    # The user manager's PATH lacks ~/.local/bin, so units got /usr/bin/node v18 (no crypto.randomUUID; ts-host scripts
+    # need Node >= 22) while shells get v24 (2026-10-11). Units see the shell's toolchain (scripts/natlang_env.sh).
+    if not any(env.startswith('PATH=') for env in spec['env']):
+        command += ['-E', f"PATH={os.path.expanduser('~/.local/bin')}:{os.environ.get('PATH', '/usr/bin:/bin')}"]
     for env in spec['env']:
         command += ['-E', env]
     # A stopped unit takes its container with it (an orphaned one held 36 GB outside the ledger): the one its command

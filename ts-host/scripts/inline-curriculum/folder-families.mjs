@@ -306,10 +306,11 @@ export function folderExtract(seed, index, split = 'train') {
     const match = row.answer ? content.indexOf(row.answer) : -1;
     const line = match >= 0 ? content.slice(0, match).split('\n').length : 1;
     // CUAD contracts sometimes put thousands of characters on one line. A line-range read can be truncated by the
-    // tool display before the annotated span; a short second view makes the span itself observable to the child.
+    // tool display before the annotated span; a short second view makes the span itself observable to the child. The
+    // view covers the whole span: a cap (800 chars) cut long clauses, so their quote was never observed (2026-10-11).
     const spanView = match < 0 ? [] : [evalCall(
       `console.log((await folder.file(${JSON.stringify(`${row.fileId}.md`)}).readText())` +
-      `.slice(${Math.max(0, match - 80)}, ${match + Math.min(row.answer.length + 80, 800)}));`)];
+      `.slice(${Math.max(0, match - 80)}, ${match + row.answer.length + 80}));`)];
     return { match: row.fileId,
       calls: [['read_file', { path: `${row.fileId}.md`, start_line: Math.max(1, line - 1), end_line: line + 2 }],
         ...spanView,
