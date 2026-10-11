@@ -100,7 +100,9 @@ def validate_spec(spec, stages=None):
     gate = spec.get('gate')
     if gate is not None:
         if (not isinstance(gate, dict) or set(gate) - {'probes', 'held_rows', 'prompt_weight', 'max_gate_drop',
-                                                       'max_held_kl', 'held_kl_bound', 'reference', 'column_held_documents'}
+                                                       'max_held_kl', 'held_kl_bound', 'reference', 'column_held_documents',
+                                                       'output_convention'}
+                or gate.get('output_convention', 'maple') not in ('maple', 'lfm')
                 or gate.get('held_kl_bound', 'combined') not in ('combined', 'response')
                 or not isinstance(gate.get('reference', {}), dict) or set(gate.get('reference', {})) - {'gate_pass', 'source', 'gate_signal'}
                 or gate.get('reference', {}).get('gate_signal') not in {None, 'ordinary_competence'}
@@ -110,7 +112,8 @@ def validate_spec(spec, stages=None):
                 or type(gate.get('held_rows', 48)) is not int
                 or type(gate.get('column_held_documents', 1)) is not int or gate.get('column_held_documents', 1) < 1):
             raise ValueError('quantization.gate is {probes: {path, sha256}, held_rows, prompt_weight, max_gate_drop, '
-                             'max_held_kl, held_kl_bound (combined|response), column_held_documents}')
+                             'max_held_kl, held_kl_bound (combined|response), column_held_documents, '
+                             'output_convention (maple|lfm)}')
         if 'max_held_kl' in gate and preserve is None:
             raise ValueError('quantization.gate.max_held_kl needs the preserve teacher (its held records)')
     points = spec.get('points')
@@ -462,6 +465,9 @@ class Behaviour:
         if sha256_file_hex(path) != config['probes']['sha256']:
             raise ValueError('gate probes changed since the recipe pinned them: ' + str(path))
         self.probes = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        if 'output_convention' in config:
+            # The backbone's chat/tool-call convention (line parity: one probe set, each line its own parser).
+            self.probes = [{**probe, 'output_convention': config['output_convention']} for probe in self.probes]
         self.config, self.tokenizer, self.held, self.render = config, tokenizer, held, render
         self.eos = tokenizer.convert_tokens_to_ids('<|im_end|>')
 

@@ -49,7 +49,8 @@ Classes:
 | eval_every / checkpoint_every | 2000 / 1000 (+ drift every 100) | 20 / 100 | accidental | cadence policy below | Owner: no super-frequent evals or saves (25% wall overhead on Pop). |
 | drift reference | quantization `preserve.teacher` held rows (Mellum teacher v3) | in-run capture on `monitor.data` (48 probes) | accidental | in-run capture on the shared 48 probes | One mechanism that works on any backbone, so the reference is the actual base model's answers. |
 | behaviour gate probes | 24 (6 each plain, thinking, tool, natlang), quantization.gate | 48 (12 each plain exact math, tool, open answer, natlang test turn), monitor.gate | accidental | the 48 probes for both | Twice the probes (less noise), exact final-answer checks, real native test turns. Mellum's 6 thinking probes leave the shared gate (a known coverage loss; a shared thinking probe set can be added for both lines). |
-| gate reference gate_pass | 0.75 (18/24) | 0.5417 (26/48) | backbone-inherent | each line measures its base on the 48 probes | It is a measurement of the base model. Mellum's is scheduled once v2c releases the GPU. |
+| gate reference gate_pass | 0.75 (18/24) | 0.5417 (26/48) | backbone-inherent | each line measures its base on the 48 probes | It is a measurement of the base model. Mellum base: 28/48 = 0.583 (plain math 10/12, tool 12/12, natlang test turns 5/12, open answers 1/12, which run past the 256-token budget). |
+| gate output convention | (24-probe set: maple) | lfm (declared per probe) | backbone-inherent | gate-level `output_convention` (new shared key); Mellum `maple` | Under the probes' LFM parser, Mellum's well-formed `<tool_call>{json}` calls scored 0/12. That was a checker bug, not behaviour. |
 | gate KL bound | 0.25, response (`held_kl_bound`), overridden by `gate_response_kl` 0.5 | 0.5, combined | accidental (code age) | shared `gate_response_kl` 0.5 on response positions | The accepted direct-v1 rule is response-only (58e901f6, b1cd6632). |
 | moe_kernel | grouped | n/a | backbone-inherent | Mellum only | Dense MoE experts as grouped GEMMs. |
 | quantization component | raw-recurrence-mellum-v11 points | none | backbone-inherent + declared gap | Mellum keeps it; LFM's is a known gap | The owner's QAT rule applies to LFM once a component is declared. |
@@ -85,9 +86,11 @@ Classes:
 
 ### Not yet shared
 
-- The Mellum direct line's next recipe, `neuralese-direct-mellum-v3`, waits for two inputs:
-  - the registered Mellum tokenizer twin of the 4962 union (being built);
-  - Mellum's measured base gate on the 48 probes.
-  Until then `line-parity.json` marks it pending.
+- The Mellum direct line's next recipe is `neuralese-direct-mellum-v3`. It binds the registered Mellum tokenizer twin
+  (`neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1`, sha 7fe4e055…; per-row ids, splits, groups and
+  records equal) and Mellum's measured base gate. Its QAT component has no preserve stream and no gate of its own:
+  drift reference and gate are the shared monitor.
+- Twin caveat: Mellum's template shows every earlier turn's reasoning (2921 documents, 5627 turns), which LFM's
+  template drops, so Mellum has 384k supervised tokens against LFM's 344k. This is template-inherent.
 - LFM E2E: Pop's running endpoint epoch v3 (`luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v3`) already matches the E2E base up to the declared differences and is the LFM line's checked E2E recipe. Later E2E launches on both lines declare `parity {line, stage: e2e}`.
 - The running Mellum v2c finishes as is. It is recorded as trained on the V9 set (4480 documents) with 8192/1024.

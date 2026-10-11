@@ -5,7 +5,7 @@
   "direct": {
    "base": {"recipe": "neuralese-direct-v2"},
    "lines": {
-    "mellum": {"recipe": null, "pending": "neuralese-direct-mellum-v3 binds the Mellum tokenizer twin of the 4962 union (being built) and the measured Mellum base gate on the 48 probes (after v2c releases the GPU)"},
+    "mellum": {"recipe": "neuralese-direct-mellum-v3"},
     "lfm": {"recipe": "neuralese-direct-lfm-v2"}
    }
   },
@@ -44,6 +44,8 @@
    "reason": "Mellum's dense trainable MoE experts run as two grouped GEMMs; LFM2.5-350M has no experts"},
   {"stage": "direct", "lines": ["mellum"], "key": "quantization", "kind": "backbone-inherent",
    "reason": "Mellum's QAT component (precision points per module family, owner rule: QAT in every stage); LFM has no component declared yet, a known gap, not a choice"},
+  {"stage": "direct", "lines": ["mellum"], "key": "parameters.monitor.gate.output_convention", "kind": "backbone-inherent",
+   "reason": "Mellum's chat/tool-call convention (<tool_call>{json}); the shared probes default to LFM's pythonic calls"},
   {"stage": "direct", "lines": ["mellum", "lfm"], "key": "parameters.monitor.gate.reference", "kind": "backbone-inherent",
    "reason": "each backbone's own measured base gate_pass on the shared 48 probes"},
   {"stage": "direct", "lines": ["lfm"], "key": "parameters.target_tokens", "kind": "fit-only",

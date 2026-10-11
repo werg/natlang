@@ -1,0 +1,120 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-direct-mellum-v3",
+ "extends": "neuralese-direct-v2",
+ "description": "neuralese-direct-v2 (the unified base: 4962-document union, context 32768, shared 48-probe monitor, shared cadence) on BF16 Mellum2.1 with raw-token-v1 heads (maple.foundation_heads --profile raw-token-v1). Every difference from the base is declared in training/neuralese/line-parity.json (plans/neuralese/LINE_PARITY.md). Backbone-inherent: the data binds the registered Mellum tokenizer twin of the union (neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1: same ids, splits, source groups and records); grouped MoE kernel; Mellum's quantization component (from neuralese-direct-mellum-v1, gate taken over by the shared monitor); the measured base gate_pass on the 48 probes. Supersedes neuralese-direct-mellum-v2 (V9 data, 8192 context, 24-probe gate). History: recipes/HISTORY.md.",
+ "overrides": {
+  "input_bindings": {
+   "direct_text": {
+    "path": "runs/neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1/text-data.jsonl",
+    "sha256": "7fe4e0557a546c2127adf617439d4a0db5b8435a1a68db2cdfa37ac5d511477d"
+   }
+  },
+  "stage_parameter_defaults": {
+   "neuralese_direct": {
+    "moe_kernel": "grouped",
+    "monitor": {
+     "gate": {
+      "output_convention": "maple",
+      "reference": {
+       "gate_pass": 0.5833333333333334,
+       "source": "BF16 Mellum2.1 (raw-token-v1 heads) on the 48 shared probes, 28/48 with the maple tool-call convention (runs/neuralese-direct-line-parity-20261011/mellum-base-gate-48.json texts, rescored mellum-base-gate-48-maple.json; plain math 10/12, tool 12/12, natlang test turn 5/12, open answer 1/12: answers run past the 256-token budget)"
+      }
+     }
+    }
+   }
+  },
+  "quantization": {
+   "schema": "natlang.neuralese-quantization/1",
+   "description": "raw-recurrence-mellum-v11's precision points woven into the direct stage (owner rule: QAT in every stage), trained on the same SFT targets with no BF16 KL teacher (flagged, NEURALESE_DIRECT_V1.md). No preserve stream and no own gate: drift reference and behaviour gate are the shared monitor (in-run capture on the 48 probes), as on the LFM line.",
+   "loss": {
+    "mode": "sample",
+    "bf16_weight": 1.0,
+    "seed": 0
+   },
+   "stage_progress": {
+    "direct_sft": [
+     0.0,
+     0.35
+    ]
+   },
+   "points": [
+    {
+     "name": "q4",
+     "gate": "required",
+     "weight": 0.5,
+     "ramp": {
+      "start": 0.15,
+      "end": 0.3
+     },
+     "modules": {
+      "experts": {
+       "format": "int4",
+       "group": 32
+      },
+      "mlp": {
+       "format": "int4",
+       "group": 32
+      },
+      "attention": {
+       "format": "int4",
+       "group": 32
+      },
+      "conv": {
+       "format": "int4",
+       "group": 32
+      }
+     }
+    },
+    {
+     "name": "ternary-experts",
+     "gate": "required",
+     "weight": 1.0,
+     "ramp": {
+      "start": 0.3,
+      "end": 0.7
+     },
+     "modules": {
+      "experts": {
+       "format": "ternary"
+      },
+      "mlp": {
+       "format": "ternary"
+      },
+      "attention": {
+       "format": "int4",
+       "group": 32
+      },
+      "conv": {
+       "format": "int4",
+       "group": 32
+      }
+     }
+    },
+    {
+     "name": "ternary",
+     "gate": "report",
+     "weight": 0.5,
+     "ramp": {
+      "start": 0.55,
+      "end": 0.95
+     },
+     "modules": {
+      "experts": {
+       "format": "ternary"
+      },
+      "mlp": {
+       "format": "ternary"
+      },
+      "attention": {
+       "format": "ternary"
+      },
+      "conv": {
+       "format": "ternary"
+      }
+     }
+    }
+   ]
+  }
+ }
+}
