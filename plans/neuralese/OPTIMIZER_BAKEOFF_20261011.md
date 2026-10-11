@@ -184,3 +184,20 @@ Run length (coordinator, 2026-10-11): the shared supervision budget is 768,000 p
   0.58, response KL 0.038 against 0.032. **Not harmless: off in both bases.** Mellum2's 1.0 assumes its own loss scale
   (large-batch mean); ours is a batch-1 256-token window. Open question for the coordinator: the E2E stage's
   non-in-backward path already clips everything exactly at 1.0, which is likewise always on at these norms.
+
+### Spike-only clip (coordinator decision, 2026-10-11 late)
+
+- `grad_spike_clip` replaces `latent_grad_clip` (one implementation, `train/optim.py SpikeClip`, both stages): an
+  update is clipped only when its global norm exceeds 5x the running median of the last 64 updates' norms (no clip in
+  the first 8 updates); the threshold comes from earlier updates only, so the exact clip of the other trainables and
+  the in-backward latents use the same one. In-backward latents use the norm accumulated so far in the update (a lower
+  bound of the global norm) rather than the previous update's norm: the previous norm would clip the normal update
+  after each spike and miss the spike itself, while the lower bound never clips a non-spike update and clips the
+  rest of a spike once it shows (by a factor at least the exact one). Every update logs `threshold`, `global_norm`,
+  `latent_norm`, `exact_coefficient`, `latent_applied_norm` and `latent_exact_norm`.
+- On in both bases (direct `neuralese-direct-v2`, line-parity E2E base) at 5.0. `latent_step_in_backward` is therefore
+  math-neutral on every non-spike update. With `grad_spike_clip` 0, trajectories keeps its earlier fixed clip at 1.0.
+- The "latent received a second gradient" limit of `--latent-step-in-backward` in trajectories: the isolated-sequence
+  pass (`model/isolated_sequence.py`) and the batched decode step (`serve/batch.py step_rows`) ran their layers outside
+  the layer staging, so a latent got a gradient in the losses' backward and again in the per-layer calls. Both now join
+  the tape (`layer_staging.tape_for_grad`); the error names the latent if another such path appears.

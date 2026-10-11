@@ -37,7 +37,7 @@ from .optim import MUON_MIN_SIDE  # noqa: F401  (MuonSR latents: both matrix sid
 # Options added after runs had started, at their defaults, stay out of the resume identity (a run started before them
 # resumes; idle-expert skipping is a defect fix that applies to it from then on).
 LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_beta2_half_life_tokens': 4e6,
-                  'latent_ns': 'quintic', 'latent_weight_decay': 0.0, 'latent_grad_clip': 0.0,
+                  'latent_ns': 'quintic', 'latent_weight_decay': 0.0, 'grad_spike_clip': 0.0,
                   'epochs': None, 'batch_tokens': 0, 'continue_from': None}
 OPERATIONAL = frozenset({'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
@@ -85,11 +85,11 @@ def parse(argv=None):
                    help="muonsr: the Newton-Schulz variant (cubic5: arXiv:2606.00371, a third fewer matmuls)")
     p.add_argument('--latent-weight-decay', type=float, default=0.0,
                    help='decoupled weight decay of the latents (Mellum2 SFT: 0.1 with Muon)')
-    p.add_argument('--latent-grad-clip', type=float, default=0.0,
-                   help='global gradient-norm clip (Mellum2 SFT: 1.0, arXiv:2605.31268): the latents step in backward '
-                        'before the global norm is known, so each is scaled by min(1, clip / the previous update\'s '
-                        'global norm) (train/optim.py); the other trainables are clipped exactly; every update logs '
-                        'both factors (grad_clip in train.jsonl). 0: off')
+    p.add_argument('--grad-spike-clip', type=float, default=0.0,
+                   help='spike-only global gradient clip (train/optim.py SpikeClip): an update whose global norm exceeds '
+                        'this many times the running median of recent norms is clipped to that threshold (the latents, '
+                        'stepping in backward, by the lower bound of the norm so far); every update logs the applied '
+                        'and the exact latent norm (grad_clip in train.jsonl). 0: off')
     p.add_argument('--stop-at', type=int, default=0,
                    help='operational: end the stage at this update (eval, gate and report as at the end) while the '
                         'schedules (QAT ramps) follow --steps: a prefix of the declared run; 0: --steps')
@@ -325,10 +325,12 @@ def main(argv=None):
                                        'lr': a.backbone_lr})
     optimizer.param_groups = optimizer._groups()
     in_backward = optimizer.latent
-    in_backward.step_in_backward(gated=True, clip=a.latent_grad_clip)
+    from .optim import SpikeClip
+    spike = SpikeClip(a.grad_spike_clip) if a.grad_spike_clip else None
+    in_backward.step_in_backward(gated=True, spike=spike)
     other_trainables = [q for _, q in head_named + other_backbone]
     print(json.dumps({'event': 'trainables', 'latent_optimizer': a.latent_optimizer, 'latents': len(latent),
-                      'latent_grad_clip': a.latent_grad_clip,
+                      'grad_spike_clip': a.grad_spike_clip,
                       'latent_options': {k: list(v) if isinstance(v, tuple) else v for k, v in latent_options.items()},
                       'adamw_or_muon_backbone': [n for n, _ in other_backbone][:4] + ['...'],
                       'projections': {k: sum(q.numel() for q in m.parameters()) for k, m in projections.items()}}),
@@ -510,8 +512,8 @@ def main(argv=None):
         optimizer.param_groups = optimizer._groups()
         step, best, base_eval, history = state['step'], state.get('best'), state['base_eval'], state['history']
         monitor.restore(state)  # the update of the guard's last gate and its response KL
-        if in_backward.clip:
-            in_backward.global_norm_estimate = state.get('latent_global_norm_estimate')
+        if spike is not None:
+            spike.load_state_dict(state.get('grad_spike_clip'))
         restore_training_rng_state(state['rng'], a.device)
         print(json.dumps({'event': 'resumed', 'step': step, 'code_changed': sorted(
             k for k in code if state['identity']['code'].get(k) != code[k])}), flush=True)
@@ -532,8 +534,8 @@ def main(argv=None):
         optimizer.load_state_dict(state['optimizer'])
         own_host_tensors(optimizer)
         optimizer.param_groups = optimizer._groups()
-        if in_backward.clip:
-            in_backward.global_norm_estimate = state.get('latent_global_norm_estimate')
+        if spike is not None:
+            spike.load_state_dict(state.get('grad_spike_clip'))
         print(json.dumps({'event': 'continued', 'from': str(a.continue_from), 'predecessor_step': state['step']}),
               flush=True)
         del state
@@ -546,7 +548,7 @@ def main(argv=None):
                 **{key: module.state_dict() for key, module in projections.items()},
                 'optimizer': optimizer.state_dict(), 'rng': capture_training_rng_state(a.device),
                 'best': best, 'base_eval': base_eval, 'history': history, **monitor.state(),
-                'latent_global_norm_estimate': in_backward.global_norm_estimate}
+                'grad_spike_clip': spike.state_dict() if spike is not None else None}
 
     def log(name, value):
         with (a.out / name).open('a') as handle:
@@ -674,14 +676,16 @@ def main(argv=None):
                         raise RuntimeError('nonfinite neuralese_direct loss')
                     loss.backward()
                 latent_norm = armed.norm()
-        # The global gradient norm: the latents' (stepped in backward, clipped by the estimate) with the others'
-        # (clipped exactly here when --latent-grad-clip is set).
-        if a.latent_grad_clip:
-            global_norm = clip_finite_gradients(other_trainables, a.latent_grad_clip, consumed_norm=latent_norm)
+        # The global gradient norm: the latents' (stepped in backward, spike-clipped by the norm so far) with the
+        # others' (spike-clipped exactly here with --grad-spike-clip).
+        if spike is not None:
+            global_norm = clip_finite_gradients(other_trainables, consumed_norm=latent_norm, spike=spike)
         else:
             global_norm = torch.linalg.vector_norm(torch.stack([gradient_norm(other_trainables).to(latent_norm.device),
                                                                 latent_norm.double()]))
         grad_clip = armed.clip_record(global_norm)
+        if spike is not None:
+            spike.observe(grad_clip['global_norm'])
         optimizer.step()  # routers, norms and projections (the latents stepped in backward)
         optimizer.zero_grad(set_to_none=True)
         step = step_index + 1

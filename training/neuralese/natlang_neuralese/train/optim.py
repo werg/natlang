@@ -243,15 +243,17 @@ class LionSR(torch.optim.Optimizer):
                 if p.grad is not None:
                     self._update(p, group)
 
-    def step_in_backward(self, *, gated: bool = False, clip: float = 0.0):
+    def step_in_backward(self, *, gated: bool = False, spike=None):
         """Update each parameter as soon as its gradient is complete and free that gradient (each parameter must
         be used once per backward): the full-latent conversion then never holds a gradient copy of the model.
 
-        ``clip`` (with ``gated``): global gradient-norm clipping at this value for latents that step before the
-        global norm is known (Mellum2's SFT clips at 1.0, arXiv:2605.31268). Inside ``in_backward()`` each latent's
-        gradient is scaled by ``min(1, clip / G_est)``, ``G_est`` being the previous update's exact global norm
-        (``_InBackward.clip_record``); the first update after construction (no estimate) is not clipped. The norm
-        accumulated in ``squared_norm`` is always the unclipped one. 0: off.
+        ``spike`` (a ``SpikeClip``, with ``gated``): the stage's spike-only global clip for latents that step before
+        the global norm is known. Inside ``in_backward()`` the norm accumulated so far in this update is a lower
+        bound of the global norm; once it passes the clip's threshold (a multiple of the running median of recent
+        global norms), each further latent's gradient is scaled by ``threshold / that bound``. An update whose global
+        norm stays under the threshold (every non-spike update) is therefore never clipped, as with exact clipping;
+        on a spike, latents stepped before the bound crossed the threshold step unclipped and the later ones get a
+        factor at least the exact one. ``squared_norm`` is always the unclipped norm.
 
         ``gated``: the hooks act only inside ``with optimizer.in_backward():`` (one update's single backward); any
         other backward accumulates ``.grad`` as usual for ``step()``. A trainer whose update runs several objective
@@ -263,7 +265,7 @@ class LionSR(torch.optim.Optimizer):
         if self._hooks:
             raise RuntimeError("LionSR step-in-backward hooks are already registered")
         self._gated = gated
-        self.clip, self.global_norm_estimate = float(clip or 0.0), None
+        self.spike = spike
         for index, group in enumerate(self.param_groups):
             for p in group["params"]:
                 def hook(param, index=index):
@@ -272,16 +274,21 @@ class LionSR(torch.optim.Optimizer):
                         return
                     if armed is not None:
                         if id(param) in armed.stepped:
-                            raise RuntimeError("a LionSR latent received a second gradient in one in-backward update; "
-                                               "run the update's objectives as one backward")
+                            name = self.param_groups[index].get("name", "?")
+                            raise RuntimeError(f"latent {name} received a second gradient in one in-backward update: "
+                                               "a forward ran its layer outside the layer staging "
+                                               "(model/layer_staging.py tape_for_grad)")
                         # No host sync per latent: the trainer checks the total after the backward. Each tensor's
                         # norm reduces in FP32 (FP64 is ~9x slower on the GB10: ~1 s per Mellum update), the
                         # update's total accumulates in FP64.
-                        armed.squared_norm = (armed.squared_norm.to(param.device) + torch.linalg.vector_norm(
-                            param.grad, dtype=torch.float32).double().square())
+                        squared = torch.linalg.vector_norm(param.grad, dtype=torch.float32).double().square()
+                        armed.squared_norm = armed.squared_norm.to(param.device) + squared
                         armed.stepped.add(id(param))
-                        if armed.coefficient < 1.0:  # clipped by the estimate (after the unclipped norm above)
-                            param.grad.mul_(armed.coefficient)
+                        if armed.threshold is not None:  # spike clip by the lower bound of the global norm so far
+                            factor = (armed.threshold / armed.squared_norm.sqrt().clamp_min(1e-30)).clamp(max=1.0)
+                            param.grad.mul_(factor.to(param.grad.dtype))
+                            squared = squared * factor.square()
+                        armed.applied_squared = armed.applied_squared.to(param.device) + squared
                     self._update(param, self.param_groups[index])
                     param.grad = None
                 self._hooks.append(p.register_post_accumulate_grad_hook(hook))
@@ -531,10 +538,11 @@ def latent_block_rows(name: str, parameter: torch.Tensor, head_dim: int | None) 
 class _InBackward:
     def __init__(self, optimizer):
         self.optimizer, self.stepped, self.squared_norm = optimizer, set(), torch.zeros((), dtype=torch.float64)
-        clip, estimate = getattr(optimizer, "clip", 0.0), getattr(optimizer, "global_norm_estimate", None)
-        self.estimate = estimate
-        # The in-backward clip factor of this update: min(1, clip / G_est), G_est the previous update's global norm.
-        self.coefficient = min(1.0, clip / (estimate + 1e-6)) if clip and estimate is not None else 1.0
+        spike = getattr(optimizer, "spike", None)
+        # The spike clip's threshold for this update (from earlier updates' norms only), the same one the trainer's
+        # exact clip of the other trainables uses (``SpikeClip.coefficient`` before ``observe``).
+        self.threshold = spike.threshold() if spike is not None else None
+        self.applied_squared = torch.zeros((), dtype=torch.float64)
 
     def __enter__(self):
         if self.optimizer._armed is not None:
@@ -555,20 +563,57 @@ class _InBackward:
 
     def clip_record(self, global_norm) -> dict:
         """After the update's backward: ``global_norm`` is the update's exact, unclipped global gradient norm (these
-        latents' ``norm()`` together with every other trainable's). It becomes the next update's estimate. Returns
-        the record that measures the deviation from true clipping: the factor the latents got (``latent_coefficient``,
-        from ``estimate``) against the factor true clipping would have applied (``exact_coefficient``)."""
-        clip, total = getattr(self.optimizer, "clip", 0.0), float(global_norm)
-        exact = min(1.0, clip / (total + 1e-6)) if clip else 1.0
-        if math.isfinite(total):
-            self.optimizer.global_norm_estimate = total
-        return {"clip": clip, "global_norm": total, "latent_norm": float(self.squared_norm.sqrt()),
-                "estimate": self.estimate, "latent_coefficient": self.coefficient, "exact_coefficient": exact}
+        latents' ``norm()`` with every other trainable's). The record measures the deviation from exact clipping:
+        the latents' norm as applied (``latent_applied_norm``) against exact clipping's (``latent_exact_norm``)."""
+        total, latent = float(global_norm), float(self.squared_norm.sqrt())
+        exact = 1.0 if self.threshold is None or not total > self.threshold else self.threshold / total
+        return {"threshold": self.threshold, "global_norm": total, "latent_norm": latent,
+                "exact_coefficient": exact, "latent_applied_norm": float(self.applied_squared.sqrt()),
+                "latent_exact_norm": latent * exact}
 
     @property
     def started(self) -> bool:
         """Whether any latent stepped: after that the live weights are mid-update and must not be checkpointed."""
         return bool(self.stepped)
+
+
+class SpikeClip:
+    """Spike-only global gradient clipping, shared by the direct and the end-to-end stage (coordinator decision
+    2026-10-11): a fixed clip of 1.0 (Mellum2's SFT value) is active on every update at our gradient norms (17-915
+    for batch-1 windows) and measured harmful, so an update is clipped only when its global norm exceeds ``factor``
+    times the running median of the last ``WINDOW`` updates' global norms (none before ``WARMUP`` norms). The
+    threshold comes from earlier updates only, so the exact clip (``coefficient``) and the in-backward latents'
+    clip (``LionSR.step_in_backward(spike=...)``) use the same one. Its history is run state (``state_dict``)."""
+
+    WINDOW, WARMUP = 64, 8
+
+    def __init__(self, factor: float):
+        if not factor > 1:
+            raise ValueError("the spike clip factor is a multiple of the median norm above 1")
+        self.factor, self.history = float(factor), []
+
+    def threshold(self):
+        if len(self.history) < self.WARMUP:
+            return None
+        ordered = sorted(self.history)
+        middle = len(ordered) // 2
+        median = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+        return self.factor * median
+
+    def coefficient(self, norm: float) -> float:
+        threshold = self.threshold()
+        return 1.0 if threshold is None or not norm > threshold else threshold / norm
+
+    def observe(self, norm: float) -> None:
+        if math.isfinite(norm):
+            self.history = (self.history + [float(norm)])[-self.WINDOW:]
+
+    def state_dict(self) -> dict:
+        return {"factor": self.factor, "history": list(self.history)}
+
+    def load_state_dict(self, state) -> None:
+        if state:
+            self.history = [float(x) for x in state.get("history", [])][-self.WINDOW:]
 
 
 MUON_MIN_SIDE = 16  # MuonSR latents: both matrix sides at least this (smaller ones: AdamW)

@@ -109,8 +109,12 @@ def isolated_sequence(backbone, fixed, replacements, cache, *, cutoff):
     cos, sin = backbone._rope(fixed, positions)
     from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb
 
+    from .layer_staging import tape_for_grad
+    tape = tape_for_grad()  # an in-backward update steps each layer once, so this pass joins the layer staging
     for index, layer in enumerate(backbone.layers):
         attention = backbone.is_attention(index)
+        if tape is not None:
+            history, branch = tape.enter(index, history), tape.enter(index, branch)
         previous = states[index]
         fields = (() if previous is None else previous.fields() if attention else (previous.window,))
 
@@ -184,6 +188,8 @@ def isolated_sequence(backbone, fixed, replacements, cache, *, cutoff):
         else:
             result = run_one(history, branch, *fields)
         history, branch, *updated = result
+        if tape is not None:
+            history, branch = tape.exit(index, history), tape.exit(index, branch)
         states[index] = AttentionState.from_fields(updated) if attention else ConvState(updated[0])
         lengths[index] = start + steps
         if index + 1 == cutoff:

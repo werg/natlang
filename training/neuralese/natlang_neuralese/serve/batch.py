@@ -45,8 +45,12 @@ def step_rows(backbone: PortBackbone, h: torch.Tensor, caches: list[PortCache], 
     positions = torch.tensor(starts, device=h.device).unsqueeze(1)
     cos, sin = backbone._rope(h, positions)
     static = not torch.is_grad_enabled()
+    from ..model.layer_staging import tape_for_grad
+    tape = tape_for_grad()  # an in-backward update steps each layer once, so this step joins the layer staging
     for i in layers:
         layer = backbone.layers[i]
+        if tape is not None:
+            h = tape.enter(i, h)
         x = layer.operator_norm(h)
         if backbone.is_attention(i):
             attn = layer.self_attn
@@ -80,6 +84,8 @@ def step_rows(backbone: PortBackbone, h: torch.Tensor, caches: list[PortCache], 
             for row in range(rows):
                 states[row][i] = ConvState(tail[row:row + 1])
         h = h + layer.feed_forward(layer.ffn_norm(h))
+        if tape is not None:
+            h = tape.exit(i, h)
         for row in range(rows):
             lengths[row][i] = starts[row] + 1
     return h, [PortCache(tuple(s), tuple(ls)) for s, ls in zip(states, lengths)]

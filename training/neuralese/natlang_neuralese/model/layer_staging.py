@@ -97,6 +97,14 @@ def active() -> LayerStaging | None:
     return _ACTIVE[0] if _ACTIVE else None
 
 
+def tape_for_grad() -> LayerStaging | None:
+    """The active tape when this forward builds a graph (else None): a layer loop outside ``run_layers`` (the
+    isolated-sequence pass, the batched decode step) wraps each layer's input in ``enter`` and its output in ``exit``,
+    so that its layers' weights get their gradient in the same per-layer engine call as every other stream's."""
+    tape = active()
+    return tape if tape is not None and torch.is_grad_enabled() else None
+
+
 def staged_layers(run_layers):
     """Decorate a port's ``run_layers(h, layers, cache, ..., _checkpoint_layer=False)``: under ``LayerStaging`` with
     gradients enabled, run each layer on its own leaves (checkpointing, chunking and caches unchanged)."""

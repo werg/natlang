@@ -689,11 +689,13 @@ def main(argv=None):
                         help="muonsr: the Newton-Schulz variant (cubic5: arXiv:2606.00371, a third fewer matmuls)")
     parser.add_argument("--latent-weight-decay", type=float, default=0.0,
                         help="muonsr: decoupled weight decay of the latents (Mellum2 SFT: 0.1 with Muon)")
-    parser.add_argument("--latent-grad-clip", type=float, default=0.0,
-                        help="with --latent-step-in-backward: the in-backward latents are clipped like the stage's "
-                             "other gradients (global norm 1.0, Mellum2 SFT), each scaled by min(1, clip / the previous "
-                             "update's global norm) because it steps before the global norm is known (train/optim.py); "
-                             "every update logs both factors (latent_grad_clip in train.jsonl). 0 or 1.0")
+    parser.add_argument("--grad-spike-clip", type=float, default=0.0,
+                        help="spike-only global gradient clip (train/optim.py SpikeClip, as in the direct stage): an "
+                             "update whose global norm exceeds this many times the running median of recent norms is "
+                             "clipped to that threshold; in-backward latents by the lower bound of the norm so far, so "
+                             "--latent-step-in-backward is math-neutral except inside a spike. Every update logs the "
+                             "applied and exact latent norm (grad_clip in train.jsonl). 0: the earlier fixed clip at a "
+                             "global norm of 1.0 (in-backward latents unclipped)")
     parser.add_argument("--moe-kernel", choices=["loop", "grouped"], default="loop",
                         help="dense (BF16, trainable) MoE experts on CUDA: loop = one matmul pair per expert (reference); grouped = two grouped GEMMs over the expert-sorted routed tokens (maple/fused_moe.dense_grouped_experts; BF16 accumulation-order differences only)")
     parser.add_argument("--latent-step-in-backward", action=argparse.BooleanOptionalAction, default=False,
@@ -702,7 +704,7 @@ def main(argv=None):
                              "(model/layer_staging.py), and every LionSR latent steps as its layer completes and frees "
                              "its gradient, so no backbone gradient buffer exists; needs batch 1 and the joint backward "
                              "policy, and is refused when a stream reads a deeper layer of another at its input. The "
-                             "global norm counts the latents; they are clipped only with --latent-grad-clip")
+                             "global norm counts the latents; they are clipped only with --grad-spike-clip")
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--projection-anchor-weight", type=float, default=1.0,
                         help="gold-aligned auxiliary relative-MSE anchor for full content and shallow feedback projections against detached raw next-token embeddings; set 0 only for an explicit diagnostic ablation")
@@ -722,7 +724,7 @@ def main(argv=None):
     parser.add_argument("--content-transport", choices=["learned-residual", "raw-identity", "top-state"], default="learned-residual", help="explicit raw identity warm-up or learned content residual")
     parser.add_argument("--content-residual-initialization", choices=["preserve", "fresh-zero"], default="preserve",
                         help="explicit raw-to-learned transition: zero previously bypassed residual and only its optimizer slots")
-    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps", "sketch_gradient", "member_weight", "member_tokens", "member_eval", "member_mask_system", "member_full_weight", "heads_lr", "qat_latent_lr", "projection_anchor_weight", "projection_anchor_backbone_scale", "projection_anchor_decay_steps", "read_adapter", "latent_optimizer", "latent_lr", "latent_ns", "latent_weight_decay", "latent_grad_clip"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
+    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps", "sketch_gradient", "member_weight", "member_tokens", "member_eval", "member_mask_system", "member_full_weight", "heads_lr", "qat_latent_lr", "projection_anchor_weight", "projection_anchor_backbone_scale", "projection_anchor_decay_steps", "read_adapter", "latent_optimizer", "latent_lr", "latent_ns", "latent_weight_decay", "grad_spike_clip"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
     parser.add_argument('--max-write-vectors', type=int, default=None,
                         help='explicit port payload bound, distinct from prompt context; constant-stop capacity can extend without changing weights/moments')
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
@@ -1839,8 +1841,8 @@ def main(argv=None):
         print(json.dumps({'event': 'latent_optimizer', 'optimizer': 'muonsr', 'latents': len(lion),
                           'elements': sum(q.numel() for _, q, *_ in lion), 'lr': args.latent_lr,
                           'latent_options': latent_options}), flush=True)
-    if args.latent_grad_clip not in (0.0, 1.0):
-        raise ValueError('--latent-grad-clip is 0 or 1.0: the stage clips its other gradients at a global norm of 1.0')
+    from .optim import SpikeClip
+    spike = SpikeClip(args.grad_spike_clip) if args.grad_spike_clip else None
     if args.latent_step_in_backward:
         if not lion:
             raise ValueError('--latent-step-in-backward needs --latent-optimizer lionsr or muonsr')
@@ -1864,7 +1866,7 @@ def main(argv=None):
     in_backward = None
     if args.latent_step_in_backward:
         in_backward = optimizer.latent
-        in_backward.step_in_backward(gated=True, clip=args.latent_grad_clip)
+        in_backward.step_in_backward(gated=True, spike=spike)
         print(json.dumps({'event': 'latent_step_in_backward', 'latents': len(lion),
                           'gradient_buffer_bytes_avoided': sum(q.numel() * q.element_size() for _, q, *_ in lion)}),
               flush=True)
@@ -1908,8 +1910,8 @@ def main(argv=None):
             learning_rates=({name: args.heads_lr for name, _ in head_named}
                             if new_continuation and 'heads_lr' in args.curriculum_change else None))
         record_restore_report(restore_report, out, source=args.continue_from or 'resume')
-        if in_backward is not None and in_backward.clip:
-            in_backward.global_norm_estimate = resumed.get('latent_global_norm_estimate')
+        if spike is not None:
+            spike.load_state_dict(resumed.get('grad_spike_clip'))
         init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
     if new_continuation and args.content_residual_initialization == 'fresh-zero':
         from .trajectory_state import initialize_content_residual
@@ -2350,7 +2352,7 @@ def main(argv=None):
             'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
             'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
             **(direct_projection_state() if direct is not None else {}),
-            **({'latent_global_norm_estimate': in_backward.global_norm_estimate} if in_backward is not None else {}),
+            **({'grad_spike_clip': spike.state_dict()} if spike is not None else {}),
             **({'drift_monitor': drift_monitor.state(), 'drift_stopped_at': drift_stopped_at}
                if drift_monitor is not None else {}),
             'optimizer_param_names': optimizer_param_names(optimizer, optimizer_named),
@@ -2644,8 +2646,9 @@ def main(argv=None):
                 direct_update['projection_gradient_norms'] = {
                     key: float(gradient_norm(group)) for key, group in projection_groups.items()}
             try:
+                spike_threshold = spike.threshold() if spike is not None else None  # earlier updates' norms only
                 global_grad_norm = clip_finite_gradients(
-                    trainables, 1.0, consumed_norm=consumed if armed is not None else None)
+                    trainables, 1.0, consumed_norm=consumed if armed is not None else None, spike=spike)
             except RuntimeError as error:
                 if str(error) == 'nonfinite recurrence gradients before optimizer update':
                     invalid = []
@@ -2666,8 +2669,14 @@ def main(argv=None):
                 raise
             direct_update['global_gradient_norm'] = float(global_grad_norm)
             if armed is not None:
-                # The in-backward latents' clip factor (from the previous update's global norm) against true clipping.
-                direct_update['latent_grad_clip'] = armed.clip_record(global_grad_norm)
+                # The in-backward latents' clip as applied against exact clipping (train/optim.py SpikeClip).
+                direct_update['grad_clip'] = armed.clip_record(global_grad_norm)
+            elif spike is not None:
+                total = float(global_grad_norm)
+                direct_update['grad_clip'] = {'threshold': spike_threshold, 'global_norm': total,
+                                              'exact_coefficient': spike.coefficient(total)}
+            if spike is not None:
+                spike.observe(float(global_grad_norm))
             if quant is not None:
                 quant.set_active('bf16', 0.0)  # evaluations and checkpoints after the update see BF16
             commit_optimizer_step(optimizer)

@@ -1,4 +1,4 @@
-"""The in-backward latent gradient clip (train/optim.py), the shared latent split used by the direct and the end-to-end
+"""The spike-only gradient clip, exact and in backward (train/optim.py), the layer staging of every layer loop, the shared latent split used by the direct and the end-to-end
 stage, the E2E stage's MuonSR optimizer and its resume refusal (train/trajectory_state.py), and the shared drift
 monitor's guard (train/drift_monitor.py), on small CPU tensors."""
 import argparse
@@ -8,65 +8,127 @@ import pytest
 import torch
 from torch import nn
 
-from natlang_neuralese.train.optim import (MuonSR, PortMuonAdamW, latent_entries, latent_options, latent_split)
+from natlang_neuralese.train.optim import (MuonSR, PortMuonAdamW, SpikeClip, latent_entries, latent_options,
+                                           latent_split)
 
 
-def _muonsr(weight, clip):
-    optimizer = MuonSR([{'params': [weight], 'lr': 1e-2}], lr=1e-2)
-    optimizer.step_in_backward(gated=True, clip=clip)
+def _muonsr(weights, spike):
+    optimizer = MuonSR([{'params': [w], 'lr': 1e-2, 'name': f'w{i}'} for i, w in enumerate(weights)], lr=1e-2)
+    optimizer.step_in_backward(gated=True, spike=spike)
     return optimizer
 
 
-def _update(optimizer, weight, grad):
+def _update(optimizer, weights, grads, seen=None):
+    if seen is not None:
+        original = optimizer._update
+
+        def spy(p, group):
+            seen[group['name']] = p.grad.detach().clone()
+            return original(p, group)
+        optimizer._update = spy
     with optimizer.in_backward() as armed:
-        (weight * grad).sum().backward()
+        sum((w * g).sum() for w, g in zip(weights, grads)).backward()
     return armed
 
 
-def test_the_first_update_is_unclipped_and_later_ones_use_the_previous_global_norm():
+def test_spike_clip_threshold_is_a_multiple_of_the_running_median_after_warmup():
+    spike = SpikeClip(5.0)
+    for norm in [10.0] * (SpikeClip.WARMUP - 1):
+        spike.observe(norm)
+    assert spike.threshold() is None and spike.coefficient(1e6) == 1.0
+    spike.observe(1000.0)  # a spike enters the history; the median ignores it
+    assert spike.threshold() == pytest.approx(50.0)
+    assert spike.coefficient(40.0) == 1.0 and spike.coefficient(100.0) == pytest.approx(0.5)
+    for _ in range(2 * SpikeClip.WINDOW):
+        spike.observe(2.0)
+    assert len(spike.history) == SpikeClip.WINDOW and spike.threshold() == pytest.approx(10.0)
+    again = SpikeClip(5.0)
+    again.load_state_dict(spike.state_dict())
+    assert again.threshold() == spike.threshold()
+    with pytest.raises(ValueError):
+        SpikeClip(1.0)
+
+
+def test_exact_clip_clips_only_a_spike():
+    from natlang_neuralese.train.trajectory_state import clip_finite_gradients
+    spike = SpikeClip(5.0)
+    for _ in range(SpikeClip.WARMUP):
+        spike.observe(1.0)
+    q = nn.Parameter(torch.zeros(4))
+    q.grad = torch.full((4,), 1.0)  # norm 2: no spike
+    assert float(clip_finite_gradients([q], spike=spike)) == pytest.approx(2.0) and torch.equal(q.grad, torch.ones(4))
+    q.grad = torch.full((4,), 10.0)  # norm 20 > 5: clipped to 5
+    clip_finite_gradients([q], spike=spike)
+    assert float(q.grad.norm()) == pytest.approx(5.0, rel=1e-5)
+
+
+def test_in_backward_spike_clip_leaves_normal_updates_and_clips_latents_after_the_bound_crosses():
     torch.manual_seed(0)
-    weight = nn.Parameter(torch.randn(8, 8))
-    optimizer = _muonsr(weight, clip=1.0)
-    grad = torch.randn(8, 8) * 3
-    armed = _update(optimizer, weight, grad)
-    assert armed.coefficient == 1.0 and armed.estimate is None
-    # The accumulated norm is the unclipped one.
-    assert math.isclose(float(armed.norm()), float(grad.norm()), rel_tol=1e-5)
-    record = armed.clip_record(float(armed.norm()) * 2)  # with other trainables, the global norm is larger
-    assert record['latent_coefficient'] == 1.0
-    assert math.isclose(record['exact_coefficient'], 1.0 / (2 * float(grad.norm())), rel_tol=1e-4)
-    assert optimizer.global_norm_estimate == pytest.approx(2 * float(grad.norm()))
-    # The next update's latents are scaled by min(1, clip / previous global norm) before they step.
+    weights = [nn.Parameter(torch.randn(8, 8)) for _ in range(3)]
+    spike = SpikeClip(5.0)
+    optimizer = _muonsr(weights, spike)
+    armed = _update(optimizer, weights, [torch.randn(8, 8) for _ in weights])
+    assert armed.threshold is None  # warm-up: never clipped
+    for _ in range(SpikeClip.WARMUP):
+        spike.observe(10.0)
+    seen = {}
+    normal = [torch.randn(8, 8) for _ in weights]  # norm ~14 < 50
+    armed = _update(optimizer, weights, normal, seen)
+    record = armed.clip_record(armed.norm())
+    assert record['exact_coefficient'] == 1.0 and record['latent_applied_norm'] == pytest.approx(record['latent_norm'])
+    for i, g in enumerate(normal):
+        assert torch.allclose(seen[f'w{i}'], g)
+    seen.clear()
+    big = [torch.randn(8, 8) * 20 for _ in weights]  # each ~160: the bound crosses 50 at the first latent
+    armed = _update(optimizer, weights, big, seen)
+    record = armed.clip_record(armed.norm())
+    assert record['exact_coefficient'] < 1.0
+    # Every latent clipped by threshold / the norm so far (>= the exact factor): applied lies between exact and raw.
+    assert record['latent_exact_norm'] <= record['latent_applied_norm'] < record['latent_norm']
+    assert all(float(seen[k].norm()) < float(g.norm()) for k, g in zip(sorted(seen), big))
+    assert math.isclose(float(armed.norm()), float(torch.stack([g.norm() for g in big]).norm()), rel_tol=1e-5)
+
+
+def test_isolated_sequence_and_batched_step_join_the_layer_staging_so_each_latent_steps_once():
+    """Formerly 'a latent received a second gradient': these passes ran their layers outside the tape."""
+    from natlang_neuralese.model.layer_staging import LayerStaging
+    from natlang_neuralese.model.lfm2_port import PortCache
+    from natlang_neuralese.serve.batch import step_rows
+    from test_isolated_sequence import tiny_lfm
+    import copy
+
+    def losses(backbone):
+        torch.manual_seed(3)
+        prefix, fixed, replacements = (torch.randn(1, n, 32) for n in (3, 4, 4))
+        cache = PortCache.empty(backbone.num_layers)
+        _, cache = backbone.run_layers(prefix, range(backbone.num_layers), cache)
+        out = backbone.isolated_sequence(fixed, replacements, cache, cutoff=2)
+        stepped, _ = step_rows(backbone, torch.randn(2, 1, 32), [PortCache.empty(backbone.num_layers)] * 2,
+                               range(backbone.num_layers))
+        return out['final'].square().mean() + out['history_shallow'].tanh().sum() * .1 + stepped.square().mean()
+
+    backbone = tiny_lfm()
+    reference = copy.deepcopy(backbone)
+    named = [(n, q) for n, q in backbone.hf.named_parameters() if n.startswith('model.layers.') and q.ndim >= 2]
+    for _, q in named:
+        q.requires_grad_(True)
+    for n, q in reference.hf.named_parameters():
+        q.requires_grad_(n.startswith('model.layers.') and q.ndim >= 2)
+    losses(reference).backward()
+    expected = {n: q.grad.clone() for n, q in reference.hf.named_parameters() if q.grad is not None}
+    optimizer = MuonSR([{'params': [q], 'lr': 0.0, 'name': n} for n, q in named if min(q.shape[-2:]) > 1], lr=0.0)
+    optimizer.step_in_backward(gated=True)
     seen = {}
     original = optimizer._update
-
-    def spy(p, group):
-        seen['grad'] = p.grad.detach().clone()
-        return original(p, group)
-    optimizer._update = spy
-    second = torch.randn(8, 8)
-    armed = _update(optimizer, weight, second)
-    factor = 1.0 / (2 * float(grad.norm()) + 1e-6)
-    assert armed.coefficient == pytest.approx(factor)
-    assert torch.allclose(seen['grad'], second * factor, atol=1e-6)
-    assert math.isclose(float(armed.norm()), float(second.norm()), rel_tol=1e-5)  # still the unclipped norm
-
-
-def test_no_clip_leaves_gradients_and_records_factor_one():
-    weight = nn.Parameter(torch.randn(8, 8))
-    optimizer = _muonsr(weight, clip=0.0)
-    armed = _update(optimizer, weight, torch.randn(8, 8) * 100)
-    record = armed.clip_record(armed.norm())
-    assert record['latent_coefficient'] == 1.0 and record['exact_coefficient'] == 1.0 and record['clip'] == 0.0
-    armed = _update(optimizer, weight, torch.randn(8, 8) * 100)
-    assert armed.coefficient == 1.0
-
-
-def test_a_small_previous_norm_does_not_scale_up():
-    weight = nn.Parameter(torch.randn(8, 8))
-    optimizer = _muonsr(weight, clip=1.0)
-    _update(optimizer, weight, torch.randn(8, 8)).clip_record(0.25)
-    assert _update(optimizer, weight, torch.randn(8, 8)).coefficient == 1.0
+    optimizer._update = lambda p, group: (seen.__setitem__(group['name'], p.grad.detach().clone()), original(p, group))
+    with LayerStaging() as tape:
+        total = losses(backbone)
+        with optimizer.in_backward():
+            total.backward()
+            tape.backward()
+    assert seen and set(seen) <= set(expected)
+    for name, grad in seen.items():
+        torch.testing.assert_close(grad, expected[name], rtol=1e-4, atol=1e-6, msg=name)
 
 
 def test_latent_split_keeps_routers_vectors_and_narrow_matrices_out_of_muonsr():

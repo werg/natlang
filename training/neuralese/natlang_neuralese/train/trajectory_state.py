@@ -23,16 +23,19 @@ def gradient_norm(parameters):
 
 
 @torch.no_grad()
-def clip_finite_gradients(parameters, maximum=1., consumed_norm=None):
+def clip_finite_gradients(parameters, maximum=1., consumed_norm=None, spike=None):
     """Clip to a global norm. ``consumed_norm``: the norm of gradients already applied inside the backward (LionSR
-    in-backward latents); it counts toward the global norm, but only the remaining gradients are scaled."""
+    in-backward latents); it counts toward the global norm, but only the remaining gradients are scaled. ``spike``
+    (``optim.SpikeClip``): clip only a spike (above its threshold from earlier updates) instead of at ``maximum``;
+    the caller then ``observe``s the returned norm."""
     parameters = list(parameters)
     norm = gradient_norm(parameters)
     if consumed_norm is not None:
         norm = torch.linalg.vector_norm(torch.stack([norm.to(consumed_norm.device), consumed_norm.double()]))
     if not torch.isfinite(norm):
         raise RuntimeError("nonfinite recurrence gradients before optimizer update")
-    coefficient = (maximum / (norm + 1e-6)).clamp(max=1.)
+    coefficient = ((maximum / (norm + 1e-6)).clamp(max=1.) if spike is None
+                   else torch.tensor(spike.coefficient(float(norm)), dtype=torch.float64))
     for parameter in parameters:
         if parameter.grad is not None:
             parameter.grad.mul_(coefficient.to(device=parameter.grad.device))
@@ -376,7 +379,7 @@ def validate_continuation(state, identity, *, allowed_changes=(), defaults=None)
     original_options = dict((state.get('identity', {}).get('options') or {}))
     old = _with_defaults(state.get('identity', {}), {k: v for k, v in (defaults or {}).items() if k in keys})
     allowed = set(allowed_changes)
-    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient', 'member_weight', 'member_tokens', 'member_eval', 'member_mask_system', 'member_full_weight', 'heads_lr', 'qat_latent_lr', 'projection_anchor_weight', 'projection_anchor_backbone_scale', 'projection_anchor_decay_steps', 'read_adapter', 'latent_optimizer', 'latent_lr', 'latent_ns', 'latent_weight_decay', 'latent_grad_clip'}:
+    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient', 'member_weight', 'member_tokens', 'member_eval', 'member_mask_system', 'member_full_weight', 'heads_lr', 'qat_latent_lr', 'projection_anchor_weight', 'projection_anchor_backbone_scale', 'projection_anchor_decay_steps', 'read_adapter', 'latent_optimizer', 'latent_lr', 'latent_ns', 'latent_weight_decay', 'grad_spike_clip'}:
         raise ValueError('unsupported continuation curriculum changes')
     previous, current = dict(old.get('options', {})), dict(identity.get('options', {}))
     previous.pop('eval_every', None)
