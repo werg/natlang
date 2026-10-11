@@ -89,5 +89,5 @@ Classes:
   - the registered Mellum tokenizer twin of the 4962 union (being built);
   - Mellum's measured base gate on the 48 probes.
   Until then `line-parity.json` marks it pending.
-- Both lines' next E2E launches declare `parity {line, stage: e2e}`. Pop's running endpoint epoch v2 predates this.
+- LFM E2E: Pop's running endpoint epoch v3 (`luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v3`) already matches the E2E base up to the declared differences and is the LFM line's checked E2E recipe. Later E2E launches on both lines declare `parity {line, stage: e2e}`.
 - The running Mellum v2c finishes as is. It is recorded as trained on the V9 set (4480 documents) with 8192/1024.

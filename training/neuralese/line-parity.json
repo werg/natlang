@@ -27,7 +27,7 @@
    }},
    "lines": {
     "mellum": {"recipe": null, "pending": "the Mellum E2E launches from the qualified export of the next Mellum direct run (direct-stage recipe with parity {line: mellum, stage: e2e})"},
-    "lfm": {"recipe": null, "pending": "Pop's next E2E launch declares parity {line: lfm, stage: e2e}; the running endpoint epoch v2 predates this file"}
+    "lfm": {"recipe": "luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v3"}
    }
   }
  },
