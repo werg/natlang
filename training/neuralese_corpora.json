@@ -30408,6 +30408,25 @@
       "admission": "held-coverage-accounting-no-comparative-ranking-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "V36 coverage supplement: ten models configured, two actually received requests, eight had zero attempts. 512 HTTP 200 label rows and 33 failed attempts are pinned. Request allocation is not a comparative quality ranking; no admission change."
+    },
+    {
+      "id": "google-choice-confidence-v38-source-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v38-source",
+      "include": [
+        "cases.jsonl",
+        "omissions.jsonl",
+        "source-manifest.json",
+        "root-source-preparation-review-v1.json",
+        "source-review-v1/**/*",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "inherited-train-input",
+      "source_class": "held-provider-generation-inputs",
+      "training_admission": false,
+      "admission": "prepared-input-only-root-review-and-launch-pending-no-label-admission",
+      "independent_new_worlds": 0,
+      "notes": "V38 prepared-only fresh source: 512 inherited-train exact master rows, 128 each from DBpedia, LanguageID, Newsgroups and Yahoo Topic; source and omissions are pinned. The prior scan includes V37 exact case SHA and all available provider/annotation reservations. Frozen ten-model free pool is copied from V37; no labels or provider requests are included. The source-preparation manifest pins canonical policy V16 (75 holds); a separate owner-reviewed V17 receipt with four prospective holds is pinned in source-review-v1 and has zero ID/group overlap with selected V38. Root review/launch remain pending; no training admission."
     }
   ],
   "coverage_backlog": [
