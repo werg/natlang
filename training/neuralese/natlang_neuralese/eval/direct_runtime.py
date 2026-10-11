@@ -237,10 +237,11 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda', token_choice_
         logits = engine.token_logits(states, segments).float()
         loss = torch.nn.functional.cross_entropy(logits.reshape(-1, logits.shape[-1]), targets.reshape(-1))
         loss.backward()
-        gradients = {name: float(p.grad.float().norm()) for name, p in projection.named_parameters() if p.grad is not None}
-        feedback_gradients = [float(vector.grad.float().norm()) if vector.grad is not None else None
+        gradients = {name: float(torch.linalg.vector_norm(p.grad, dtype=torch.float64))
+                     for name, p in projection.named_parameters() if p.grad is not None}
+        feedback_gradients = [float(torch.linalg.vector_norm(vector.grad, dtype=torch.float64)) if vector.grad is not None else None
                               for vector in written.payloads]
-        state_gradients = [float(state.grad.float().norm()) if state.grad is not None else None
+        state_gradients = [float(torch.linalg.vector_norm(state.grad, dtype=torch.float64)) if state.grad is not None else None
                            for state in written.states]
         finite = bool(gradients) and all(torch.isfinite(p.grad).all().item() for p in projection.parameters() if p.grad is not None)
         row = {'length': length, 'scheduler_writer_delta': serving_delta, 'cache_readback_delta': cache_delta,
