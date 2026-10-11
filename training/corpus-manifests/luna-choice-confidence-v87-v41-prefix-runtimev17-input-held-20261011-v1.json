@@ -1,0 +1,64 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v87-v41-prefix-runtimev17-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v87-v41-prefix-runtimev17-v1",
+  "files": [
+    {
+      "path": "prepared-inputs.json",
+      "bytes": 6035,
+      "sha256": "9bb9ac60de806ce2692e58052f2578bc1f9cea20cd9950dee9a77326af741b33"
+    },
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 9890,
+      "sha256": "87ecb2c3e3905cef454458c27471490134da2c4942b6d0dd410abd6db7ba1074"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 29269,
+      "sha256": "8c70e4e49c7065b2b4295357d2a58746648a1733533d641d0b4e7990b8a101ad"
+    },
+    {
+      "path": "source-review/decision_source_quality_holds.json",
+      "bytes": 61430,
+      "sha256": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994"
+    },
+    {
+      "path": "source-review/prepare_luna_folder_campaign.py",
+      "bytes": 28136,
+      "sha256": "30b41714cafc8d4a6c7b5bb4ba00a4993204654dbb6344c830336385aa69f918"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 10457,
+      "sha256": "cec42c790230c2d19ded885e2c0f03b857b605756144baaa632e6ccdf34c059b",
+      "lines": 11
+    },
+    {
+      "path": "worker-02/queue.jsonl",
+      "bytes": 9506,
+      "sha256": "6af7778da86e6d4ab29f3893c7af77f3910d3732fd0144202cf8b70e218d2d1b",
+      "lines": 10
+    },
+    {
+      "path": "worker-03/queue.jsonl",
+      "bytes": 9506,
+      "sha256": "b1b936a76af6bbef3ae36c8c5e4757668af4b912edbba88f111dbf3d0e677b21",
+      "lines": 10
+    },
+    {
+      "path": "worker-04/queue.jsonl",
+      "bytes": 9506,
+      "sha256": "db3eb5d39c6994f56d815ebbd3bfdc7a8ba2d2f95c6663e629f143451a1d03b0",
+      "lines": 10
+    },
+    {
+      "path": "worker-05/queue.jsonl",
+      "bytes": 9506,
+      "sha256": "20c077d42f766ee77d78cf1edcf4844f49de21fee417fd5ff256341a2e81a3d1",
+      "lines": 10
+    }
+  ],
+  "bytes": 183241
+}

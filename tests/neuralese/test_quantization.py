@@ -458,6 +458,10 @@ def test_tiny_mellum_latent_policy_trains_toward_its_deploy_precisions_and_resto
     component['loss']['mode'] = 'sum'
     run = q.Quantization(component)
     assert run.install(model, layer_count=4) == {'attention': 16, 'experts': 4}
+    # Installed before the policy (neuralese_direct's order): the parametrized attention latents stay selected,
+    # under their plain names, as the same parameters.
+    again = dict(configure_backbone_training(backbone, 'latent'))
+    assert set(again) == names and all(again[n] is p for n, p in named if n in again)
     torch.manual_seed(0)
     ids = torch.randint(0, 128, (2, 24))
 
@@ -544,6 +548,11 @@ def test_behaviour_gate_compares_with_the_declared_bf16_reference(tmp_path):
     assert not gate.passed({'gate_pass': 0.6, 'held_kl': 0.2})
     assert not gate.passed({'gate_pass': 0.9, 'held_kl': 0.3})
     assert gate.passed({'gate_pass': 0.5, 'held_kl': 0.0}, {'gate_pass': 0.55})  # a live BF16 report instead
+    # held_kl_bound "response" (direct lineages): the KL bound reads the response positions only.
+    response = q.Behaviour({**config, 'held_kl_bound': 'response'}, SimpleNamespace(convert_tokens_to_ids=lambda t: 7))
+    assert response.passed({'gate_pass': 0.75, 'held_kl': 0.68, 'held_response_kl': 0.246})
+    assert not response.passed({'gate_pass': 0.75, 'held_kl': 0.1, 'held_response_kl': 0.3})
+    assert not gate.passed({'gate_pass': 0.75, 'held_kl': 0.68, 'held_response_kl': 0.246})
     probes.write_text('{}\n')
     with pytest.raises(ValueError, match='probes changed'):
         q.Behaviour(config, SimpleNamespace(convert_tokens_to_ids=lambda token: 7))

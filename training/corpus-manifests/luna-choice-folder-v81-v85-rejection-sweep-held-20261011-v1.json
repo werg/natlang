@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-folder-v81-v85-rejection-sweep-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v81-v85-rejection-sweep-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 46218,
+      "sha256": "6b98715e13fab24fee2570a4de117b8dbadb93ffb24afe752aa164ea4ef22e43"
+    },
+    {
+      "path": "review.md",
+      "bytes": 8086,
+      "sha256": "23dd7ce476983a986bb5ec8c7a4d134a7a85789a3081be174793bab7d261ee25"
+    }
+  ],
+  "bytes": 54304
+}

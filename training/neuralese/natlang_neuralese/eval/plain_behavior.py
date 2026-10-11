@@ -24,7 +24,7 @@ import torch
 
 from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex
 from ..serve.chat import normalize_tool_call_arguments
-from .generation_checks import check, summarize
+from .generation_checks import check, summarize, output_budget
 
 
 def _execution_components():
@@ -74,6 +74,12 @@ def _load_model(checkpoint: Path | None, *, device: str, base: str | None):
         model, tokenizer = load_backbone(base=base, dtype=dtype, device=device)
         return model, tokenizer
     dtype = torch.float32 if device == "cpu" else torch.bfloat16
+    if checkpoint.is_dir():
+        from ..train.direct_export import load_direct_artifact
+        if base is None:
+            raise ValueError("direct serving artifacts require the exact explicit local base snapshot")
+        restored = load_direct_artifact(checkpoint, base_snapshot=base, device=device, dtype=dtype)
+        return restored.engine.backbone.hf, restored.engine.tokenizer
     # Both the older recurrence checkpoint and current full-head exports pass
     # through the shared strict checkpoint loader. Decoding below bypasses its
     # Neuralese Engine.generate path and calls the restored HF backbone directly.
@@ -114,10 +120,11 @@ def _run_role(role: str, checkpoint: Path | None, probes: list[dict], *, device:
         if encoded.ndim == 1:
             encoded = encoded[None, :]
         prompt_len = int(encoded.shape[-1])
+        budget = output_budget(probe, ordinary=max_new_tokens, thinking=max_new_tokens)
         with torch.inference_mode():
             generated = model.generate(
                 input_ids=encoded.to(device_obj), do_sample=False, num_beams=1,
-                max_new_tokens=max_new_tokens, use_cache=True,
+                max_new_tokens=budget, use_cache=True,
                 eos_token_id=sorted(end_ids), pad_token_id=(tokenizer.pad_token_id
                                                             if tokenizer.pad_token_id is not None else min(end_ids)))
         output_ids = generated[0, prompt_len:].detach().cpu().tolist()
@@ -138,6 +145,9 @@ def _run_role(role: str, checkpoint: Path | None, probes: list[dict], *, device:
                         "stop_token_ids": sorted(end_ids),
                         "prompt_tokens": prompt_len, "completion_tokens": len(output_ids),
                         "completion_token_ids": output_ids, "completion_text": text,
+                        "max_new_tokens": budget,
+                        "budget_exhausted": len(output_ids) == budget and (not output_ids or output_ids[-1] not in end_ids),
+                        **({"signal": probe["signal"]} if "signal" in probe else {}),
                         "checks": checks, "pass": all(checks.values())})
         _append_jsonl(journal, {"event": "probe_completed", "role": role, "result": results[-1]})
         progress["completed"] += 1

@@ -100,15 +100,17 @@ def validate_spec(spec, stages=None):
     gate = spec.get('gate')
     if gate is not None:
         if (not isinstance(gate, dict) or set(gate) - {'probes', 'held_rows', 'prompt_weight', 'max_gate_drop',
-                                                       'max_held_kl', 'reference', 'column_held_documents'}
-                or not isinstance(gate.get('reference', {}), dict) or set(gate.get('reference', {})) - {'gate_pass', 'source'}
+                                                       'max_held_kl', 'held_kl_bound', 'reference', 'column_held_documents'}
+                or gate.get('held_kl_bound', 'combined') not in ('combined', 'response')
+                or not isinstance(gate.get('reference', {}), dict) or set(gate.get('reference', {})) - {'gate_pass', 'source', 'gate_signal'}
+                or gate.get('reference', {}).get('gate_signal') not in {None, 'ordinary_competence'}
                 or not isinstance(gate.get('probes'), dict) or set(gate['probes']) != {'path', 'sha256'}
                 or not all(_number(gate.get(k, 0)) and gate.get(k, 0) >= 0
                            for k in ('max_gate_drop', 'max_held_kl', 'prompt_weight'))
                 or type(gate.get('held_rows', 48)) is not int
                 or type(gate.get('column_held_documents', 1)) is not int or gate.get('column_held_documents', 1) < 1):
             raise ValueError('quantization.gate is {probes: {path, sha256}, held_rows, prompt_weight, max_gate_drop, '
-                             'max_held_kl, column_held_documents}')
+                             'max_held_kl, held_kl_bound (combined|response), column_held_documents}')
         if 'max_held_kl' in gate and preserve is None:
             raise ValueError('quantization.gate.max_held_kl needs the preserve teacher (its held records)')
     points = spec.get('points')
@@ -476,9 +478,16 @@ class Behaviour:
         """Against ``bf16`` (a live BF16 report) or the declared ``reference`` (the original BF16 model's measured
         generation pass rate, e.g. 0.75 at conversion v3's step 0), so a stage's own BF16 column is gated too."""
         bf16 = bf16 or self.config['reference']
+        if report.get('gate_signal') != bf16.get('gate_signal'):
+            raise ValueError('behaviour gate and reference use different signals; recapture the paired base reference')
         ok = report['gate_pass'] >= bf16['gate_pass'] - self.config.get('max_gate_drop', 0.0) - 1e-9
         if 'max_held_kl' in self.config:
-            ok = ok and report.get('held_kl', math.inf) <= self.config['max_held_kl']
+            # held_kl_bound "response" (direct lineages, owner/coordinator 2026-10-11): the bound reads the response
+            # positions' KL, as the drift guard does; whole-trajectory SFT moves prompt KL by design (report-only).
+            key = 'held_response_kl' if self.config.get('held_kl_bound', 'combined') == 'response' else 'held_kl'
+            ok = ok and report.get(key, math.inf) <= self.config['max_held_kl']
+        if report.get('held_coverage', {}).get('response_complete') is False:
+            ok = False
         return bool(ok)
 
 

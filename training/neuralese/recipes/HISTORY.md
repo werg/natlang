@@ -334,3 +334,32 @@ plans/neuralese/WARMUP_AUDIT_20261011.md.
   hard-links it as `best-checkpoint.pt`.
 - The behaviour gate is no longer restricted to Maple. `run_gate` decodes through the shared `greedy_any` (Pop
   178a6160), so LFM gets the same gate.
+
+## neuralese-direct-v1 drift monitor cadence (2026-10-11, after run-v1's launch)
+
+`drift_every` is an operational stage parameter, set to 100 in the shared recipe. Between evals, the drift monitor
+runs every 100 updates and logs to `drift.jsonl`. It computes held KL on the 16 drift rows, applies its guard, and runs
+the behaviour gate at a warn. A guard stop stops the stage with its full state, and qualification counts stops from
+both logs. Before this, the guard ran only inside evals; at the stage-end eval cadence (d5dc7342) it never saw
+run-v1. Cost: one held-KL pass over 16 rows per check, plus about 3.5 min when a warn runs the gate.
+
+## neuralese-direct-v1 qualification: value report-only (owner decision 2026-10-11)
+
+The Neuralese value requirement moves to the end-to-end stage, measured as consumers reading values against consumers
+reading tokens, on task success and loss. Direct SFT qualification is now the step-0 identity check, held CE below
+base, no drift stop and the behaviour gate. `value_margin` stays as a report-only threshold for `value_qualified`.
+Pop's LFM recipes that declare it are unaffected.
+
+## neuralese-direct-mellum-v2 (2026-10-11): the forward Mellum direct lineage
+
+The coordinator's decisions under the owner's "keep moving forward" rule. Changes relative to v1:
+- The clean anchor is raw-token-v1 heads at the full stack, with final stop source and no stop position. They are
+  built by `maple.foundation_heads --profile raw-token-v1`, and the direct serving path (DirectWriter, Pop's Maple
+  export adapter) opens them. v1's legacy-rms-v1 anchor cannot be served directly.
+- Attention latents train, through the a8972488 fix.
+- `drift_every` is 100.
+- Behaviour gate `held_kl_bound: response`: `max_held_kl` 0.25 bounds the response-position KL, as the guard does.
+  Prompt KL stays report-only. The gate field is new; it defaults to combined for older lineages.
+- 2000 steps. Eval at the end only, full state at 1000 and 2000.
+
+run-v1 stays as evidence only: attention untrained, legacy anchor.

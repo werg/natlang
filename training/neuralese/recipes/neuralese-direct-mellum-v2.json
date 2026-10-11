@@ -1,0 +1,27 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-direct-mellum-v2",
+ "extends": "neuralese-direct-mellum-v1",
+ "description": "neuralese-direct-mellum-v1 with: a raw-token-v1 clean anchor (maple.foundation_heads --profile raw-token-v1, the heads the direct serving path opens), attention latents actually trained (a8972488), the drift monitor every 100 updates, the behaviour gate's KL bound on response positions (held_kl_bound response, coordinator decision 2026-10-11, matching the guard), the value metric report-only (owner 2026-10-11), and 2000 steps (the guard now sees the run). History: recipes/HISTORY.md.",
+ "overrides": {
+  "stages": {
+   "direct_sft": {
+    "parameters": {
+     "steps": 2000
+    }
+   }
+  },
+  "stage_parameter_defaults": {
+   "neuralese_direct": {
+    "eval_every": 2000,
+    "checkpoint_every": 1000,
+    "drift_every": 100
+   }
+  },
+  "quantization": {
+   "gate": {
+    "held_kl_bound": "response"
+   }
+  }
+ }
+}

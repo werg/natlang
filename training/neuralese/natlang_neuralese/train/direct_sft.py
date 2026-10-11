@@ -32,7 +32,7 @@ from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_
 from .checkpoint_policy import CheckpointPolicy
 
 SCHEMA = 'natlang.neuralese-direct/1'
-OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
+OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows'})
 
@@ -75,6 +75,9 @@ def parse(argv=None):
                    '{"gate": <quantization.gate schema>, "data": {"path", "sha256"}}; "data" is JSONL of chat '
                    'prompts whose base-model answers and top-k are captured at step 0 as the drift reference')
     p.add_argument('--drift-rows', type=int, default=16)
+    p.add_argument('--drift-every', type=int, default=0,
+                   help='also run the drift monitor (held KL on --drift-rows, its guard and the gate at a warn) every '
+                        'this many updates between evals, logged to drift.jsonl; 0: only at evals')
     # The drift guard (owner 2026-10-11): response KL or agreement past warn runs the behaviour gate at that eval and
     # stops when the gate falls below its reference minus max_gate_drop; response KL past --drift-stop stops at once.
     p.add_argument('--drift-warn', type=float, default=.05)
@@ -88,8 +91,8 @@ def parse(argv=None):
                    help='write the full training state (weights, optimizer); smokes pass --no-save-state and keep '
                         'only their logs and report')
     p.add_argument('--value-margin', type=float, default=0.0,
-                   help='qualification needs the final held value_relative_mse_delta (NeuraleseProjection minus the '
-                        'soft-token mixture) below minus this margin: the Neuralese value must be useful')
+                   help='report-only: value_qualified says whether the final held value_relative_mse_delta is below '
+                        'minus this margin (the value requirement is the end-to-end stage\'s, owner 2026-10-11)')
     p.add_argument('--seed', type=int, default=0)
     a = p.parse_args(argv)
     if min(a.steps, a.tokens, a.target_tokens, a.batch, a.eval_batch, a.eval_every, a.held_documents) < 1:
@@ -398,22 +401,29 @@ def main(argv=None):
             report.update(base_ce=base_eval['ce'], ce_delta=report['ce'] - base_eval['ce'],
                           base_agreement=sum(agree) / len(agree))
             if gate_held is not None and a.drift_rows:
-                drift = held_kl(backbone.hf, gate_held, a.drift_rows, 0.25)
-                drift['guard'] = behaviour_drift_level(drift, a)
-                if drift['guard'] == 'warn' and a.drift_gate and behaviour is not None:
-                    gate = gate_by_step[step] = gate_report()
-                    floor = behaviour.config['reference']['gate_pass'] - behaviour.config.get('max_gate_drop', 0.0)
-                    drift['gate_at_warn'] = {k: gate[k] for k in ('gate_pass', 'gate_checks', 'gate_kinds',
-                                                                  'gate_results')}
-                    drift['gate_floor'] = floor
-                    if gate['gate_pass'] < floor - 1e-9:
-                        drift['guard'] = 'stop'
-                        drift['stop_reason'] = 'behaviour gate below its reference minus max_gate_drop'
-                elif drift['guard'] == 'stop':
-                    drift['stop_reason'] = 'response KL or agreement past the hard stop'
-                report['behaviour_drift'] = drift
+                report['behaviour_drift'] = drift_check()
         log('eval.jsonl', report)
         return report
+
+    def drift_check():
+        """The drift monitor: held KL on --drift-rows, its guard level, and at a warn the behaviour gate (stop below
+        its reference minus max_gate_drop)."""
+        with torch.no_grad(), contextlib.ExitStack() as scope:
+            if quant is not None:
+                scope.enter_context(quant.context('bf16', 0.0))
+            drift = held_kl(backbone.hf, gate_held, a.drift_rows, 0.25)
+        drift['guard'] = behaviour_drift_level(drift, a)
+        if drift['guard'] == 'warn' and a.drift_gate and behaviour is not None:
+            gate = gate_by_step[step] = gate_report()
+            floor = behaviour.config['reference']['gate_pass'] - behaviour.config.get('max_gate_drop', 0.0)
+            drift['gate_at_warn'] = {k: gate[k] for k in ('gate_pass', 'gate_checks', 'gate_kinds', 'gate_results')}
+            drift['gate_floor'] = floor
+            if gate['gate_pass'] < floor - 1e-9:
+                drift['guard'] = 'stop'
+                drift['stop_reason'] = 'behaviour gate below its reference minus max_gate_drop'
+        elif drift['guard'] == 'stop':
+            drift['stop_reason'] = 'response KL or agreement past the hard stop'
+        return drift
 
     def gate_report():
         if behaviour is None:
@@ -485,24 +495,34 @@ def main(argv=None):
                 policy.save(full_state(), metric=report['ce'])
                 saved_step = step
             (a.out / 'report.json').write_text(json.dumps({**report, 'status': 'running'}, indent=2) + '\n')
-        if policy.due(step) or stop.requested:
-            policy.save(full_state())
+        elif a.drift_every and step % a.drift_every == 0 and gate_held is not None and a.drift_rows:
+            drift = drift_check()
+            log('drift.jsonl', {'step': step, 'behaviour_drift': drift})
+            if drift['guard'] == 'stop':
+                print(json.dumps({'event': 'behaviour_drift_stop', 'step': step}), flush=True)
+                stop.request()
+        if (policy.due(step) or stop.requested) and saved_step != step:  # never a second write of one step:
+            policy.save(full_state())  # it would replace the slot and break best-checkpoint.pt's hard link
             saved_step = step
     finished = step >= a.steps
     gate = (gate_by_step.get(step) or gate_report()) if finished else None
     final = json.loads((a.out / 'report.json').read_text()) if (a.out / 'report.json').exists() else {}
     drift_stopped = any((json.loads(line).get('behaviour_drift') or {}).get('guard') == 'stop'
-                        for line in (a.out / 'eval.jsonl').open())
+                        for name in ('eval.jsonl', 'drift.jsonl') if (a.out / name).is_file()
+                        for line in (a.out / name).open())
     value_delta = final.get('value_relative_mse_delta', math.inf)
     value_qualified = math.isfinite(value_delta) and value_delta < -a.value_margin
-    qualified = bool(finished and final.get('ce_delta', 0.0) < 0 and value_qualified and not drift_stopped and
+    # Owner 2026-10-11: the Neuralese value requirement belongs to the end-to-end stage (consumers reading values
+    # against consumers reading tokens); here the value metric and its margin are report-only.
+    qualified = bool(finished and final.get('ce_delta', 0.0) < 0 and not drift_stopped and
                      (gate is None or gate['passed']))
     identity_file = a.out / 'identity-check.json'
     final.update(identity_check=json.loads(identity_file.read_text()) if identity_file.is_file() else None)
     status = 'complete' if finished else ('checkpointed_on_drift_guard' if drift_stopped else 'checkpointed_on_signal')
     final.update(status=status, completed=finished, steps=step, best=best,
                  behaviour_gate=gate, drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
-                 value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta')},
+                 value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta'),
+                             'report_only': True, 'moved_to': 'end-to-end stage (owner 2026-10-11)'},
                  seconds=time.time() - started, scope='Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md)')
     if saved_step != step:
         policy.save(full_state())

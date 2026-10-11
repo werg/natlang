@@ -31964,6 +31964,225 @@
       "admission": "root review pending; input and queue preparation only; no provider calls, outputs, or training admission",
       "independent_new_worlds": 0,
       "notes": "Prepared five-worker V86 plan from 20 static authored programs/147 exact labels. Plan SHA d87fc16fe43402adfbb4d5d45621e24b79d625adbedbb429749d4559ec92de63; root_approved=false at preparation. V17 runtime; five actual V85 predecessor lanes. Root must independently validate final predecessor journal/accounting and approve before launch. Prior-source-disjointness review records zero ID/group overlaps with selected V77-V85 rows."
+    },
+    {
+      "id": "luna-neuralese-direct-lfm-base-v8-full-checkpoint-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-lfm-base-20261011-v8-full-checkpoint-held-20261011-v1",
+      "include": [
+        "direct-stage-run.container-launch.json",
+        "direct-stage-run.container-launch.log",
+        "direct-stage-run.recipe-launch.json",
+        "direct-stage-run/direct-stage-plan.json",
+        "direct-stage-run/direct-stage-result.json",
+        "direct-stage-run/direct_sft/**/*",
+        "launcher-runtime/natlang_neuralese/**/*"
+      ],
+      "split": "held-neuralese-direct-training-state-and-evaluation",
+      "source_class": "held-complete-direct-sft-checkpoint-report-runtime-and-launch-evidence",
+      "training_admission": false,
+      "admission": "completed training-stage checkpoint and report evidence only; semantic runtime, task behavior and downstream lineage remain unqualified; no new training admission",
+      "independent_new_worlds": 0,
+      "notes": "V8 run completed step 1000 with report status complete, training-stage qualified=true/value_qualified=true and behavior-drift guard ok. This is not semantic runtime or task-quality qualification. Includes exact checkpoint/best checkpoint, train/eval/report/identity/checkpoint policy, full stage plan/result, launch receipts/log and the 151-module frozen launcher runtime. Excludes kernel-cache artifacts and duplicate direct-stage-run/runtime copy. Checkpoint.pt and best-checkpoint.pt are byte-identical (SHA 1768c700444da52ac9d031288174a1c600adfad8f213f63bca302622e7ee935b). Final report SHA d75849eb72e01c05957a395612243aeb70fd7744d1e37a3c2fb7a9fd423903d7; direct-stage result SHA 7a8a178fccb7c63e96cddfaf81bc8e510ee372ecdd35db1c4bccef69c29eedd5. Prior V4/V6/V7 diagnostic entries remain separately preserved."
+    },
+    {
+      "id": "luna-neuralese-direct-lfm-base-v8-recipe-source-held-20261011-v1",
+      "owner": "pop",
+      "path": "training/neuralese/recipes",
+      "include": [
+        "luna-neuralese-direct-lfm-base-20261011-v8.json"
+      ],
+      "split": "held-recipe-identity",
+      "source_class": "held-exact-direct-sft-recipe-source",
+      "training_admission": false,
+      "admission": "recipe identity only; no training or runtime qualification",
+      "independent_new_worlds": 0,
+      "notes": "Exact recipe referenced by V8 recipe-launch and direct-stage plan. SHA 6cede93b8d68dc3aa6717b38fb6f598f90c6d0d3618b8e9f4be86bf480728abe. Its checkpoint/result evidence is registered separately in luna-neuralese-direct-lfm-base-v8-full-checkpoint-held-20261011-v1."
+    },
+    {
+      "id": "luna-choice-confidence-v86-root-approval-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v86-v41-prefix-runtimev17-v1",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-independent-review-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "split": "held-provider-generation-approval-and-launch-evidence",
+      "source_class": "held-root-approval-and-supervisor-launch-receipts",
+      "training_admission": false,
+      "admission": "approval and launch provenance only; campaign outputs require separate audit; no training admission",
+      "independent_new_worlds": 0,
+      "notes": "Separate immutable approval/launch receipt snapshot for V86. Root-approved plan SHA 0033cece33c049e6b305bb30b771507446a5440623728bb1b7f382c001ac94b5; root-independent review SHA 52f9780f8ca788a2359035858a54aa57a16ee13c6bd80e325c10eac953bea419; supervisor launch receipt SHA 027a3d3d966d1ee061cf49777dc2bdd818d8863f2e0b4fb177d499ec565bfef1. Input snapshot is registered separately as luna-choice-confidence-v86-v41-prefix-runtimev17-input-held-20261011-v1. No results, journals, or mutable campaign-launch state included."
+    },
+    {
+      "id": "luna-choice-folder-v81-v85-rejection-sweep-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v81-v85-rejection-sweep-v1",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "held-posthoc-quality-review",
+      "source_class": "held-authored-folder-choice-rejection-audit",
+      "training_admission": false,
+      "admission": "post-hoc inherited-label comparison and scope diagnostic only; no relabeling, admission, or independent semantic certification",
+      "independent_new_worlds": 0,
+      "notes": "Joins all 65 result rows from closed campaigns V81\u2013V85 to their exact static source program IDs and pinned source cases. 55 accepted program results, 10 rejected programs; 456 expected label slots across 456 distinct inherited source IDs/groups; 11 exact output/source-label disagreements; 33 scope-failure events. Mismatches are not independently adjudicated. Preserves per-result hashes and worker journals."
+    },
+    {
+      "id": "free-provider-v73-admitted-ordinary-text-846-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-ordinary-text-admission-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-only-no-evaluation-credit",
+      "source_class": "root-approved-v73-ordinary-text-only-rendered-candidate-rows",
+      "training_admission": true,
+      "admission": "ordinary-text-sft-only-inherited-labels",
+      "native_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "notes": "Root authorized exact846 V73 V4 rendered text rows for ordinary-text SFT only. Per-row exact V2/V3/V4 ancestry bindings; source closure inherited from 909-row parent covers302 original IDs/groups, zero current source-hold hits. 63 failed target rows excluded/unscored; 145 context-only spans/25517 tokens on82 rows remain target-masked. No independent annotation truth/evaluation credit, native trace/action, recurrence, whole-trajectory, writer or DPO-negative admission. Not added to active GPU inputs."
+    },
+    {
+      "id": "luna-neuralese-direct-lfm-base-v8-export-and-paired-behavior-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-lfm-base-20261011-v8",
+      "include": [
+        "direct-export-v2/manifest.json",
+        "direct-export-v2/direct-tensors.pt",
+        "direct-export-v2/cpu-restore-receipt-v2.json",
+        "paired-plain-behavior-v1/**"
+      ],
+      "split": "held-evaluation-and-runtime-pending",
+      "source_class": "exact-direct-serving-export-and-paired-ordinary-generation-diagnostic",
+      "training_admission": false,
+      "admission": "held-runtime-pending-and-descriptive-behavior-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Immutable V8 direct checkpoint export-v2 and its CPU restore receipt, plus paired 48-probe ordinary HF behavior run and additive probe-path mutation/offline regrade receipt. The paired run is descriptive; it showed no improvement in exact-math 4/12, tool checks 7/12 to 5/12, open answers 10/12 to 11/12; it is not a runtime or task qualification. Export manifest remains direct-writer-pending. Runtime qualification evidence is registered separately and is not included here. No training admission."
+    },
+    {
+      "id": "luna-neuralese-direct-lfm-base-v8-runtime-feedback-evidence-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-neuralese-direct-lfm-base-20261011-v8",
+      "include": [
+        "direct-export-v2/manifest.json",
+        "direct-runtime-qualification-v1/**",
+        "direct-feedback-diagnostic-v1/**",
+        "status-supplement-v1/**"
+      ],
+      "split": "held-runtime-and-behavior-diagnostic",
+      "source_class": "direct-serving-runtime-replay-and-feedback-diagnostic",
+      "training_admission": false,
+      "admission": "evidence-only-no-training-or-task-admission",
+      "runtime_plumbing_status": "pass-limited-to-explicit-8-and-32-token-replay-contract",
+      "consumer_task_qualification": false,
+      "autonomous_stopping_qualification": false,
+      "independent_new_worlds": 0,
+      "parent_registry_id": "luna-neuralese-direct-lfm-base-v8-export-and-paired-behavior-held-20261011-v1",
+      "notes": "Additive V8 status receipt plus complete frozen runtime qualification and feedback-diagnostic trees. The stored direct-SFT report remains unchanged and reports qualified=true at step 1000; the current owner decision makes value-relative MSE report-only for direct SFT and evaluates value use in end-to-end consumers, with no rewritten report or newly issued certificate. Runtime report passes only its 8/32-token writer/cache/wire/replay-gradient checks; it explicitly fails consumer_task_qualified and autonomous_stopping_qualified. Feedback diagnostic task_qualified=false. These are held diagnostics, not training admission or general task qualification."
+    },
+    {
+      "id": "luna-choice-confidence-v86-v41-prefix-runtimev17-results-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v86-v41-prefix-runtimev17-v1",
+      "include": [
+        "campaign-launch.json",
+        "worker-*/case-*/results.jsonl",
+        "worker-*/case-*/results.jsonl.manifest.json",
+        "worker-*/case-*/jobs/*.trace.jsonl",
+        "worker-*/journal.jsonl",
+        "worker-*/worker.log"
+      ],
+      "split": "inherited-train-held-generation-evidence",
+      "source_class": "closed-provider-generated-native-results-and-traces",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "closed generation evidence only; no training, trace, recurrence, DPO, or new-world admission",
+      "notes": "Closed V86 actual output snapshot. Exact 20 source program rows / 147 items, 434 saved provider turns. Full post-hoc quality audit is registered separately. campaign-launch was terminal finished at snapshot; no live worker artifacts. Input/source/runtime and approval receipts are registered separately."
+    },
+    {
+      "id": "luna-choice-confidence-v86-quality-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v86-choice-confidence-final-v1",
+      "include": [
+        "audit.json",
+        "audit.md",
+        "FILES.sha256.json"
+      ],
+      "split": "held-quality-review",
+      "source_class": "bounded-independent-closed-output-audit",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "quality review only; inherited source-label agreement is not independent truth or admission",
+      "notes": "20 programs / 147 source items, 142 exact inherited-label agreements; five full item disagreements bound by exact source lines. Saved rendered request/capture evidence is not claimed as original wire bytes. Failed intermediate actions and compiler scope failures are counted but are not converted into standalone negatives. Audit JSON, Markdown and file manifest hashes are recorded inside audit packet."
+    },
+    {
+      "id": "luna-choice-confidence-v87-v41-prefix-runtimev17-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v87-v41-prefix-runtimev17-v1",
+      "include": [
+        "prepared-inputs.json",
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "prior-source-disjointness-review-v1.json",
+        "source-review/**/*",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-reviewed-generation-inputs",
+      "source_class": "held-luna-provider-generation-inputs",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "root-reviewed generation inputs and queues; this snapshot excludes mutable campaign launch, journals, logs and results",
+      "notes": "Fresh V87 input snapshot: 51 static programs / 404 original source items, exact disjointness against 1,734 prior source IDs/groups, all static replays passed. Source/root review and queue pins are in prepared-inputs; runtime V17. Active worker outputs are deliberately not included."
+    },
+    {
+      "id": "luna-choice-confidence-v87-root-approval-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v87-v41-prefix-runtimev17-v1",
+      "include": [
+        "reviewed-plan-root-approved-v1.json",
+        "root-owner-approval-v1.json",
+        "root-disjointness-verified-v1.json"
+      ],
+      "split": "held-provider-generation-approval-evidence",
+      "source_class": "held-root-approved-generation-plan-and-source-disjointness",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "approval provenance only; not a result, quality, or training admission",
+      "notes": "Separate immutable V87 root approval snapshot. Approved plan SHA 2804cc7ee26040dafb08074717d29cc86831016f2dc4488c1afb09860a211040; owner approval and disjointness review bind 404 exact source rows and all 51 authored replays. The campaign is running from five worker lanes. A separate immutable root supervisor launch receipt file was not present at snapshot time, so active campaign-launch/journal files are not represented here."
+    },
+    {
+      "id": "luna-choice-confidence-v86-question-level-scope-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v86-question-level-visibility-supplement-v1",
+      "include": [
+        "supplement.json",
+        "supplement.md",
+        "FILES.sha256.json"
+      ],
+      "split": "held-quality-review-supplement",
+      "source_class": "invocation-bound-question-options-and-levels-visibility-audit",
+      "training_admission": false,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "visibility diagnostic only; no data or trace admission",
+      "notes": "Additive to V86 quality review. Exact same-invocation request joins confirm question/options/effective levels fields across all 147 items. Every task has empty levels and no item overrides; compiler scope diagnostics concern NL arity/capture, and one separate attempt lacked state. Saved request rendering is not original provider wire evidence."
     }
   ],
   "coverage_backlog": [
