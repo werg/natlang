@@ -758,7 +758,7 @@ def main(argv=None):
         context = max(len(window['ids']) - 1 for window in batch)
         target = max(len(window['ids']) - window['prefix'] for window in batch)
         rows = 1 if mode == 'sequential' else len(batch)
-        floor = _warmup_update_floor_bytes(direct_trainables, optimizer, bootstrap=False, in_backward=False)
+        floor = _warmup_update_floor_bytes(direct_trainables, optimizer, bootstrap=False, in_backward=mode == "packed")  # packed: the latents step in backward
         if cuda_active:
             free, total = torch.cuda.mem_get_info(a.device)
             available = effective_cuda_free_bytes(int(free), int(total), int(torch.cuda.memory_reserved(a.device)),
