@@ -687,3 +687,25 @@ Preserve-only sweep, 30 steps (KL at steps 10 / 20 / 30, then ‖ΔW‖ at 30 an
 **Next** (results will be added here):
 - the SFT positive test (task gain against drift per optimizer and lr, with step time, extrapolated to 1,500+ updates);
 - the owner's token-input variants A (backbone frozen) and B (trainable).
+
+### SFT positive test results (2026-10-11)
+
+The task is an admitted exact-scored one (`diagnostics/sft_task`: 291 train, 156 test). Base task accuracy is 0.737
+and the behaviour gate is 0.75. The drift columns are on the 16 held rows.
+
+| LionSR lr | step | task acc | response KL | prompt KL | agreement | gate | s/update |
+|---|---|---|---|---|---|---|---|
+| 3e-6 | 50 / 100 / 200 | 0.904 / 0.936 / 0.929 | 0.025 / 0.051 / 0.091 | 0.26 / 0.40 / 0.60 | 0.961 / 0.941 / 0.925 | 0.917 at 200 | 4.1 |
+| 1e-5 | 50 / 100 / 200 | 0.942 / 0.962 / 0.974 | 0.087 / 0.162 / 0.290 | 0.59 / 0.89 / 1.34 | 0.926 / 0.898 / 0.861 | 0.833 at 200 | 4.4 |
+| 3e-5 | 50 / 100 / 200 | 0.955 / 0.968 / 0.885 | 0.226 / 0.470 / 0.882 | 1.05 / 1.64 / 2.44 | 0.875 / 0.818 / 0.752 | 0.375 at 200 | 10.9 |
+
+- Every lr gains on the task. At every lr, response KL passes 0.05 within about 100 updates, yet at 3e-6 and 1e-5 the
+  gate stays at or above base. Response KL past 0.05 therefore does not mean broken behaviour, and the gate is the
+  check. At 3e-5 the model overfits and the gate collapses.
+- Owner decision: LionSR 3e-6 is the default. Guard option 2: response KL above 0.05 (or agreement below 0.97) warns
+  and runs the gate; the run stops if the gate is below base − 0.1, with a hard stop at response KL 0.5. The
+  tiebreak is Lion unless Muon is clearly better. MuonSR was not clearly better: about 19 s/update, and at
+  preserve-only it was lower drift only at 7.5e-7 / 2.5e-6, both far below a useful update size.
+- Variant A was skipped by the owner decision for Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md).
+  Direct-v1 smokes and the full run are recorded there.
+

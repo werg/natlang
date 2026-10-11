@@ -32,7 +32,7 @@ from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_
 from .checkpoint_policy import CheckpointPolicy
 
 SCHEMA = 'natlang.neuralese-direct/1'
-OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'device', 'value_margin', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
+OPERATIONAL = frozenset({'steps', 'checkpoint_every', 'eval_every', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows'})
 
@@ -84,6 +84,9 @@ def parse(argv=None):
     p.add_argument('--drift-gate', action=argparse.BooleanOptionalAction, default=True,
                    help='run the behaviour gate at an eval whose drift is past warn, and stop on a gate regression')
     p.add_argument('--gate-held-rows', type=int, default=48)
+    p.add_argument('--save-state', action=argparse.BooleanOptionalAction, default=True,
+                   help='write the full training state (weights, optimizer); smokes pass --no-save-state and keep '
+                        'only their logs and report')
     p.add_argument('--value-margin', type=float, default=0.0,
                    help='qualification needs the final held value_relative_mse_delta (NeuraleseProjection minus the '
                         'soft-token mixture) below minus this margin: the Neuralese value must be useful')
@@ -333,6 +336,8 @@ def main(argv=None):
 
     # Resume.
     policy = CheckpointPolicy(a.out, every_steps=a.checkpoint_every)
+    if not a.save_state:
+        policy.save = lambda state, **_: None  # a smoke: logs and report only, never a full state
     step, best, base_eval, history = 0, None, None, []
     if policy.slot.exists():
         state = CheckpointPolicy.load(policy.slot)

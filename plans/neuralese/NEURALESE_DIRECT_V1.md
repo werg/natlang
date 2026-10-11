@@ -129,8 +129,39 @@ The stage report lists:
 - drift (response KL and agreement) at every eval;
 - the final behaviour gate.
 
-The stage passes when held CE is below base, the drift guard never stopped, and the behaviour gate passes against its
-recipe thresholds.
+The stage passes when all of these hold:
+- held CE is below base;
+- the drift guard never stopped;
+- the behaviour gate passes against its recipe thresholds (the final eval is the gate; it reuses a gate already run
+  at that step on a warn);
+- the Neuralese value is useful. The final held `value_relative_mse_delta` must be finite and below
+  `-value_margin`, with 0.05 in the shared recipe (Pop review; `value_qualified`, `value_gate`).
+
+The lineage's identity qualification is the step-0 identity check (owner decision 2026-10-11, AGENTS.md "Neuralese
+training foundation"). It checks that the NeuraleseProjection equals the soft-token mixture, the TokenChoiceProjection
+is absent or the identity, and the logits equal the base model's. The recipe declares it as `identity_qualification`;
+`identity-check.json` records it in the report, and the runner writes `direct-certificate.json`. Eval and checkpoint
+come at the stage end only, plus step 0 (cadence 1000). Best = an eval that improves held CE writes the full state with
+that metric, and CheckpointPolicy hard-links it as `best-checkpoint.pt`.
+
+## Smokes on Mellum (2026-10-11)
+
+These smokes are runner-exact: `runs/neuralese-direct-mellum-20261011/smoke.py` builds the recipe's own stage
+arguments with a short step count, and smokes write no full state (`--no-save-state`). Step 0 was identical in all
+three: CE 2.2244, value delta +4e-5, response KL 0.0003. The ledger measured a peak of 60.5–61.2 GB.
+
+| smoke | steps | result |
+|---|---|---|
+| 1 | 40 of 60 | CE 2.224 → 1.733; value beats mixture by 0.19–0.26; 5.5 s/update. Stopped by the old guard (response KL stop 0.05) at 0.068. Wrote the 44 GB state twice (fixed). |
+| 2 | 60 | Guard option 2. CE → 1.644; value delta −0.26 / −0.19 / −0.15. Response KL 0.041 / 0.069 / 0.088 and agreement 0.955 / 0.940 / 0.928, each a warn. Gate at warn 0.83 / 0.75 / 0.79 against base 0.75 and floor 0.65, so no stop. 1144 s with the warn gates. |
+| 3 | 12 | Projections read only the supervised positions (5ac31434): step 0 identical to smoke 2; CE → 1.942; value delta −0.18. |
+
+Costs: an eval with the gate takes about 190 s, and the final behaviour gate about 3.5 min. Response KL crosses 0.05
+within about 40 updates at LionSR 3e-6. This matches the SFT positive test (plans/mellum-port.md), so the run relies on
+the gate at warn and the final gate, not on the KL warn level.
+
+The full run is `natlang-neuralese-direct-mellum-122234` (code 5db8fcd0, claim 72 GB, out
+`runs/neuralese-direct-mellum-20261011/run-v1`).
 
 ## Exact semantics (answers to Pop, pop-f7c5 / pop-b359)
 
