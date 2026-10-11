@@ -261,11 +261,30 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
     manifest["manifest_sha256"] = claimed
     if manifest.get("status") != "direct-writer-pending":
         raise ValueError("direct artifact status is not supported by this loader")
-    if manifest.get("base_binding", {}).get("backbone_adapter") != LFM2_ADAPTER:
+    base = manifest["base_binding"]
+    adapter = base.get("backbone_adapter")
+    from ..model.lfm2_port import DEFAULT_BASE
+    # Only the first local artifact predates the explicit adapter discriminator.
+    # Its exact model ID and revision make this LFM restore branch unambiguous.
+    if adapter is None and base.get("model_id") == DEFAULT_BASE:
+        adapter = LFM2_ADAPTER
+    if adapter != LFM2_ADAPTER:
         raise NotImplementedError("this artifact's backbone adapter has no implemented restore path")
     snapshot = Path(base_snapshot).resolve(strict=True)
-    base = manifest["base_binding"]
-    if snapshot.name != base["revision"] or _file_inventory(snapshot) != base["files"]:
+    proof = base.get("source_proof") or {}
+    proof_path, proof_sha = proof.get("launch_receipt_path"), proof.get("launch_receipt_sha256")
+    if (proof.get("backbone_adapter", LFM2_ADAPTER) != LFM2_ADAPTER or
+            proof.get("model_id") != DEFAULT_BASE or proof.get("revision") != snapshot.name or
+            Path(proof.get("snapshot_path", "")).resolve() != snapshot or
+            not proof_path or not proof_sha or sha256_file_hex(proof_path) != proof_sha):
+        raise ValueError("direct artifact LFM source proof is missing or changed")
+    launch_receipt = json.loads(Path(proof_path).read_text())
+    if (launch_receipt.get("runtime_image") != proof.get("runtime_image") or
+            launch_receipt.get("hf_hub_cache") != proof.get("hf_hub_cache")):
+        raise ValueError("direct artifact launch receipt differs from its LFM source proof")
+    cache = Path(proof["hf_hub_cache"]).resolve(strict=True)
+    expected_snapshot = cache / "models--LiquidAI--LFM2.5-350M" / "snapshots" / snapshot.name
+    if snapshot != expected_snapshot or snapshot.name != base["revision"] or _file_inventory(snapshot) != base["files"]:
         raise ValueError("loaded base snapshot differs from direct artifact's exact file inventory")
     payload_path = artifact_dir / manifest["payload"]["path"]
     if sha256_file_hex(payload_path) != manifest["payload"]["sha256"]:
