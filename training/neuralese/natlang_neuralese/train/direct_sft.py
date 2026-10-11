@@ -215,10 +215,10 @@ def latent_drift(directory: Path, named, optimizer, step: int) -> dict:
         if q.ndim > 2:
             drift = torch.linalg.vector_norm(delta, dim=dims).reshape(-1)
             norm = torch.linalg.vector_norm(base.float(), dim=dims).reshape(-1)
-            idle = (optimizer.idle_updates or {}).get(id(q))
+            idle = (getattr(optimizer, 'idle_updates', None) or {}).get(id(q))
             row.update(expert_drift=drift.tolist(), expert_norm=norm.tolist(),
                        expert_idle_updates=None if idle is None else idle.reshape(-1).tolist(),
-                       updates=(optimizer.updates or {}).get(id(q)))
+                       updates=(getattr(optimizer, 'updates', None) or {}).get(id(q)))
             drift, norm = drift.square().sum().sqrt(), norm.square().sum().sqrt()
         else:
             drift, norm = torch.linalg.vector_norm(delta), torch.linalg.vector_norm(base.float())
