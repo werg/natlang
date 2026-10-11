@@ -28,6 +28,7 @@ import { dialectBinding, isNeuraleseRef, neuraleseRef, NeuraleseUnsupportedError
   type NeuraleseRuntimeOptions } from './neuralese.js';
 import { blockInput, FILE_CONTEXT, graphNode, invocationNodeId, valueInputs } from './graph.js';
 import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
+import { isNatlangCallable } from '../runtime/callable.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
 import { compileModule } from '../runtime/modules.js';
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
@@ -102,6 +103,7 @@ function diagnosticArgument(value: unknown, holder: string, liveIdentity?: (valu
 
 const DIAGNOSTIC_HINTS: Record<string, string> = {
   'type-mismatch': 'Pass the value itself with the type shown as expected, not wrapped in another object: for boolean use `true`, for number use `42.5`, for string use text, and for a record use an object with exactly its fields. With `nl.with<T>`, T is the child result type; use `nl.with<CaptureRecord, Result>` only when you want to type both the captures and result. The child input is passed separately.',
+  'callable-not-invoked': 'This is a natlang child function, not its result. Call it with its declared input, then return or store the value it produces.',
   'unknown-field': 'Use one of the fields listed as expected.',
   'no-such-path': 'Use a variable or field that exists in the scope.',
   'capture-conflict': 'Another caller changed that captured variable; run the eval again with its current value.',
@@ -443,6 +445,10 @@ export function inferValueType(value: unknown): string {
       return `Record<string, ${types.length === 1 ? types[0] : types.join(' | ')}>`;
     }
     return `{ ${entries.map(([key, item]) => item === undefined ? `${key}?: unknown` : `${key}: ${inferValueType(item)}`).join(', ')} }`;
+  }
+  if (isNatlangCallable(value)) {
+    throw new Reject([{ path: 'value', code: 'callable-not-invoked',
+      expected: 'the portable result of the natlang callable', got: 'an uninvoked natlang callable' }]);
   }
   throw new Reject([{ path: 'value', code: 'type-mismatch', expected: 'a portable value' }]);
 }
