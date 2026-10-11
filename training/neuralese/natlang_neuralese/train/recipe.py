@@ -34,7 +34,7 @@ HANDLERS = {
                            'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows','drift_every','drift_gate_every','drift_gate_rise','drift_ce_windows','gate_response_kl',
                            'drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop','drift_gate','gate_held_rows','monitor',
                            'value_margin','seed','latent_skip_idle','latent_cautious','latent_beta2_half_life_tokens',
-                           'latent_ns','latent_weight_decay','stop_at','weight_drift_base','save_state'},'result':'report.json'},
+                           'latent_ns','latent_weight_decay','latent_grad_clip','stop_at','weight_drift_base','save_state'},'result':'report.json'},
     'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads','student_checkpoint'},
                         'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','target_tokens','cutoff',
                           'cohort_weights','qualification_cohort','context_weight','feedback_weight',
@@ -68,7 +68,11 @@ HANDLERS = {
                                                'view', 'view_window', 'context_weight', 'feedback_weight',
                                                'context_coverage', 'cohort_weights', 'qualification_cohort',
                                                'stop_pg', 'purpose_contrast', 'purpose_margin', 'view_tokens_per_vector',
-                                               'optimizer_state', 'optimizer_added', 'direct_base_snapshot', 'curriculum_change'},
+                                               'optimizer_state', 'optimizer_added', 'direct_base_snapshot', 'curriculum_change',
+                                               'latent_lr', 'latent_ns', 'latent_weight_decay', 'latent_grad_clip',
+                                               'monitor', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise',
+                                               'gate_response_kl', 'drift_warn', 'drift_stop', 'drift_agreement_warn',
+                                               'drift_agreement_stop', 'drift_gate', 'gate_held_rows'},
                                 'result': 'checkpoint.pt'},
     # The view operator gate (eval/view_gate.py; TRAINING_RECIPE.md "The view operator stage") on the exact weights of
     # the view stage it requires (that stage's recurrence checkpoint).

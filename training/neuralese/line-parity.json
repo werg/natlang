@@ -21,8 +21,16 @@
      "handover": "written", "write_depth": 1, "tokens_per_vector": 1.0, "writer_supervision": "native-value",
      "writer_length_policy": "native-value", "stop_supervision": "generated-length", "distill": 0.0,
      "writer_text_weight": 1.0, "context_weight": 1.0, "feedback_weight": 0.25, "backbone_training": "latent",
-     "optimizer": "muon", "latent_optimizer": "lionsr", "qat_latent_lr": 3e-06, "backbone_lr": 7.5e-06,
-     "lr": 0.0003, "heads_lr": 0.0003, "checkpoint_every": 200, "eval_every": 200, "seed": 20261011
+     "optimizer": "muon", "latent_optimizer": "muonsr", "latent_lr": 3e-06, "latent_ns": "cubic5",
+     "latent_weight_decay": 0.1, "backbone_lr": 7.5e-06,
+     "lr": 0.0003, "heads_lr": 0.0003, "checkpoint_every": 200, "eval_every": 200, "seed": 20261011,
+     "monitor": {
+      "data": {"path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v2/monitor/probes.jsonl", "sha256": "0bce5275646cd95ae36374f41769602995c8587c871275653b26c1cf260c3d52"},
+      "gate": {"probes": {"path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v2/monitor/probes.jsonl", "sha256": "0bce5275646cd95ae36374f41769602995c8587c871275653b26c1cf260c3d52"},
+               "held_rows": 48, "prompt_weight": 0.25, "max_gate_drop": 0.1}
+     },
+     "drift_rows": 16, "drift_warn": 0.5, "drift_stop": 1.5, "drift_agreement_warn": 0.97, "drift_agreement_stop": 0.0,
+     "gate_response_kl": 1.5, "drift_gate_every": 300, "gate_held_rows": 48
     }
    }},
    "acceptance": {
@@ -45,7 +53,7 @@
    },
    "lines": {
     "mellum": {"recipe": null, "pending": "the Mellum E2E launches from the qualified export of the next Mellum direct run (direct-stage recipe with parity {line: mellum, stage: e2e})"},
-    "lfm": {"recipe": "luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v3"}
+    "lfm": {"recipe": null, "pending": "the next LFM E2E launch moves to the shared MuonSR base (2026-10-11; luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v3 ran LionSR 3e-7 without the drift monitor): Pop declares it with parity {line: lfm, stage: e2e}"}
    }
   }
  },
@@ -84,8 +92,16 @@
    "reason": "MuonSR 1e-5 on Mellum (bakeoff 2026-10-11: gate 0.75 = base at update 100, response KL 0.30, train CE per wall-clock hour at or above LionSR 3e-6); the shared 3e-6 is LFM's measured MuonSR rate (gate 26/48 = base at 300); plans/neuralese/OPTIMIZER_BAKEOFF_20261011.md"},
   {"stage": "e2e", "lines": ["lfm"], "key": "parameters.backbone_lr", "kind": "backbone-inherent",
    "reason": "the direct stage's evidence-backed LFM rate, 7.5e-7"},
-  {"stage": "e2e", "lines": ["lfm"], "key": "parameters.qat_latent_lr", "kind": "backbone-inherent",
-   "reason": "the direct stage's evidence-backed LFM latent rate, 3e-7"},
+  {"stage": "e2e", "lines": ["mellum"], "key": "parameters.latent_lr", "kind": "backbone-inherent",
+   "reason": "the direct stage's MuonSR rate per line: Mellum 1e-5 (bakeoff 2026-10-11); the shared 3e-6 is LFM's"},
+  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.monitor.gate.reference", "kind": "backbone-inherent",
+   "reason": "each backbone's own measured base gate_pass on the shared 48 probes (as in the direct stage)"},
+  {"stage": "e2e", "lines": ["mellum"], "key": "parameters.monitor.gate.output_convention", "kind": "backbone-inherent",
+   "reason": "Mellum's chat/tool-call convention (<tool_call>{json}); the shared probes default to LFM's pythonic calls"},
+  {"stage": "e2e", "lines": ["mellum"], "key": "quantization", "kind": "backbone-inherent",
+   "reason": "Mellum's QAT component (owner rule: QAT in every stage); LFM has none declared yet, a known gap"},
+  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.latent_step_in_backward", "kind": "fit-only",
+   "reason": "memory: latents step as their gradients complete (no backbone gradient buffer). Not math-neutral: the stage's exact global clip at 1.0 then no longer reaches the latents; latent_grad_clip 1.0 approximates it but measured harmful at our gradient norms (OPTIMIZER_BAKEOFF_20261011.md), so it stays off"},
   {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.memory_gb", "kind": "fit-only", "reason": "the machine's CUDA envelope (Pop 7.5 of 8 GB)"},
   {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.graph_memory_gb", "kind": "fit-only", "reason": "the machine's graph staging envelope"},
   {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.graph_headroom_gb", "kind": "fit-only", "reason": "the machine's graph staging headroom"},

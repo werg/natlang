@@ -243,9 +243,15 @@ class LionSR(torch.optim.Optimizer):
                 if p.grad is not None:
                     self._update(p, group)
 
-    def step_in_backward(self, *, gated: bool = False):
+    def step_in_backward(self, *, gated: bool = False, clip: float = 0.0):
         """Update each parameter as soon as its gradient is complete and free that gradient (each parameter must
         be used once per backward): the full-latent conversion then never holds a gradient copy of the model.
+
+        ``clip`` (with ``gated``): global gradient-norm clipping at this value for latents that step before the
+        global norm is known (Mellum2's SFT clips at 1.0, arXiv:2605.31268). Inside ``in_backward()`` each latent's
+        gradient is scaled by ``min(1, clip / G_est)``, ``G_est`` being the previous update's exact global norm
+        (``_InBackward.clip_record``); the first update after construction (no estimate) is not clipped. The norm
+        accumulated in ``squared_norm`` is always the unclipped one. 0: off.
 
         ``gated``: the hooks act only inside ``with optimizer.in_backward():`` (one update's single backward); any
         other backward accumulates ``.grad`` as usual for ``step()``. A trainer whose update runs several objective
@@ -257,6 +263,7 @@ class LionSR(torch.optim.Optimizer):
         if self._hooks:
             raise RuntimeError("LionSR step-in-backward hooks are already registered")
         self._gated = gated
+        self.clip, self.global_norm_estimate = float(clip or 0.0), None
         for index, group in enumerate(self.param_groups):
             for p in group["params"]:
                 def hook(param, index=index):
@@ -273,6 +280,8 @@ class LionSR(torch.optim.Optimizer):
                         armed.squared_norm = (armed.squared_norm.to(param.device) + torch.linalg.vector_norm(
                             param.grad, dtype=torch.float32).double().square())
                         armed.stepped.add(id(param))
+                        if armed.coefficient < 1.0:  # clipped by the estimate (after the unclipped norm above)
+                            param.grad.mul_(armed.coefficient)
                     self._update(param, self.param_groups[index])
                     param.grad = None
                 self._hooks.append(p.register_post_accumulate_grad_hook(hook))
@@ -522,6 +531,10 @@ def latent_block_rows(name: str, parameter: torch.Tensor, head_dim: int | None) 
 class _InBackward:
     def __init__(self, optimizer):
         self.optimizer, self.stepped, self.squared_norm = optimizer, set(), torch.zeros((), dtype=torch.float64)
+        clip, estimate = getattr(optimizer, "clip", 0.0), getattr(optimizer, "global_norm_estimate", None)
+        self.estimate = estimate
+        # The in-backward clip factor of this update: min(1, clip / G_est), G_est the previous update's global norm.
+        self.coefficient = min(1.0, clip / (estimate + 1e-6)) if clip and estimate is not None else 1.0
 
     def __enter__(self):
         if self.optimizer._armed is not None:
@@ -540,10 +553,61 @@ class _InBackward:
             raise RuntimeError("nonfinite latent gradient in the in-backward LionSR update")
         return value
 
+    def clip_record(self, global_norm) -> dict:
+        """After the update's backward: ``global_norm`` is the update's exact, unclipped global gradient norm (these
+        latents' ``norm()`` together with every other trainable's). It becomes the next update's estimate. Returns
+        the record that measures the deviation from true clipping: the factor the latents got (``latent_coefficient``,
+        from ``estimate``) against the factor true clipping would have applied (``exact_coefficient``)."""
+        clip, total = getattr(self.optimizer, "clip", 0.0), float(global_norm)
+        exact = min(1.0, clip / (total + 1e-6)) if clip else 1.0
+        if math.isfinite(total):
+            self.optimizer.global_norm_estimate = total
+        return {"clip": clip, "global_norm": total, "latent_norm": float(self.squared_norm.sqrt()),
+                "estimate": self.estimate, "latent_coefficient": self.coefficient, "exact_coefficient": exact}
+
     @property
     def started(self) -> bool:
         """Whether any latent stepped: after that the live weights are mid-update and must not be checkpointed."""
         return bool(self.stepped)
+
+
+MUON_MIN_SIDE = 16  # MuonSR latents: both matrix sides at least this (smaller ones: AdamW)
+
+
+def latent_split(named, latent_optimizer: str):
+    """The latent backbone policy's split of ``named`` backbone tensors into (latents, others): latents are weight
+    matrices (and stacks of them) stepped by the latent optimizer; MoE routers (``.mlp.gate.``), vectors and, under
+    MuonSR, matrices with a side under ``MUON_MIN_SIDE`` (LFM's short-conv kernels [d, 1, k]: no meaningful
+    orthogonalization; Moonlight keeps non-matrix weights on Adam) are others, on AdamW at the backbone rate.
+    Shared by the direct and the end-to-end stage."""
+    def is_latent(n, q):
+        narrow = latent_optimizer == 'muonsr' and q.ndim >= 2 and min(q.shape[-2:]) < MUON_MIN_SIDE
+        return q.ndim >= 2 and '.mlp.gate.' not in n and not narrow
+    named = list(named)
+    return [(n, q) for n, q in named if is_latent(n, q)], [(n, q) for n, q in named if not is_latent(n, q)]
+
+
+def latent_entries(latent_named, latent_optimizer: str, lr: float, head_dim: int | None = None):
+    """``PortMuonAdamW``'s ``latent`` argument: (name, parameter, lr, fourth) with LionSR's per-row ternary scale,
+    AdamMiniSR's ``block_rows`` or MuonSR's ``split_rows`` (Mellum's fused expert gate_up orthogonalized as its two
+    matrices, gate and up, as its pretraining Muon saw them)."""
+    from ..maple.qat_convert import row_scale
+    return [(n, q, lr, row_scale(q) if latent_optimizer == 'lionsr' else
+             latent_block_rows(n, q, head_dim) if latent_optimizer == 'adaminisr' else
+             (2 if '.gate_up' in n else 1)) for n, q in latent_named]
+
+
+def latent_options(latent_optimizer: str, *, weight_decay: float = 0.0, skip_idle: bool = True,
+                   cautious: bool = False, ns: str = 'quintic', betas=None) -> dict:
+    """``PortMuonAdamW``'s ``latent_options`` for one latent optimizer (only the options it takes)."""
+    options = dict(weight_decay=weight_decay)
+    if latent_optimizer in ('lionsr', 'adaminisr'):
+        options.update(skip_idle=skip_idle, cautious=cautious)
+    if latent_optimizer == 'muonsr':
+        options.update(ns=ns)
+    if latent_optimizer == 'adaminisr' and betas is not None:
+        options['betas'] = tuple(betas)
+    return options
 
 
 def latent_partition(named, lr: float):

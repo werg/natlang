@@ -33,11 +33,11 @@ from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_
 from .checkpoint_policy import CheckpointPolicy
 
 SCHEMA = 'natlang.neuralese-direct/1'
-MUON_MIN_SIDE = 16  # MuonSR latents: both matrix sides at least this (smaller ones: AdamW)
+from .optim import MUON_MIN_SIDE  # noqa: F401  (MuonSR latents: both matrix sides at least this)
 # Options added after runs had started, at their defaults, stay out of the resume identity (a run started before them
 # resumes; idle-expert skipping is a defect fix that applies to it from then on).
 LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_beta2_half_life_tokens': 4e6,
-                  'latent_ns': 'quintic', 'latent_weight_decay': 0.0}
+                  'latent_ns': 'quintic', 'latent_weight_decay': 0.0, 'latent_grad_clip': 0.0}
 OPERATIONAL = frozenset({'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows'})
@@ -77,6 +77,11 @@ def parse(argv=None):
                    help="muonsr: the Newton-Schulz variant (cubic5: arXiv:2606.00371, a third fewer matmuls)")
     p.add_argument('--latent-weight-decay', type=float, default=0.0,
                    help='decoupled weight decay of the latents (Mellum2 SFT: 0.1 with Muon)')
+    p.add_argument('--latent-grad-clip', type=float, default=0.0,
+                   help='global gradient-norm clip (Mellum2 SFT: 1.0, arXiv:2605.31268): the latents step in backward '
+                        'before the global norm is known, so each is scaled by min(1, clip / the previous update\'s '
+                        'global norm) (train/optim.py); the other trainables are clipped exactly; every update logs '
+                        'both factors (grad_clip in train.jsonl). 0: off')
     p.add_argument('--stop-at', type=int, default=0,
                    help='operational: end the stage at this update (eval, gate and report as at the end) while the '
                         'schedules (QAT ramps) follow --steps: a prefix of the declared run; 0: --steps')
@@ -97,34 +102,13 @@ def parse(argv=None):
     p.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=True,
                    help='recompute each layer in backward (long windows)')
     p.add_argument('--quantization')
-    p.add_argument('--monitor', help='JSON (or a path to it) of the monitors without a quantization component: '
-                   '{"gate": <quantization.gate schema>, "data": {"path", "sha256"}}; "data" is JSONL of chat '
-                   'prompts whose base-model answers and top-k are captured at step 0 as the drift reference')
-    p.add_argument('--drift-rows', type=int, default=16)
-    p.add_argument('--drift-gate-every', type=int, default=300,
-                   help='while the guard warns, run the behaviour gate at most every this many updates (KL still every '
-                        '--drift-every); always at the stage end')
-    p.add_argument('--drift-gate-rise', type=float, default=0.05,
-                   help='run the gate at once, whatever --drift-gate-every, when response KL has risen by this much '
-                        'since the last gate')
-    p.add_argument('--gate-response-kl', type=float, default=None,
-                   help="the behaviour gate's KL bound for this stage, on response positions (overrides the gate's "
-                        'max_held_kl and held_kl_bound); response KL measures change from base, the gate pass rate '
-                        'and held CE measure damage')
+    from .drift_monitor import add_drift_arguments
+    # The drift guard (owner 2026-10-11; train/drift_monitor.py, shared with the end-to-end stage): response KL or
+    # agreement past warn runs the behaviour gate and stops when the gate falls below its reference minus
+    # max_gate_drop; response KL past --drift-stop stops at once.
+    add_drift_arguments(p)
     p.add_argument('--drift-ce-windows', type=int, default=4,
                    help='held CE on this many held windows at every drift check (where held CE bottoms out); 0: off')
-    p.add_argument('--drift-every', type=int, default=0,
-                   help='also run the drift monitor (held KL on --drift-rows, its guard and the gate at a warn) every '
-                        'this many updates between evals, logged to drift.jsonl; 0: only at evals')
-    # The drift guard (owner 2026-10-11): response KL or agreement past warn runs the behaviour gate at that eval and
-    # stops when the gate falls below its reference minus max_gate_drop; response KL past --drift-stop stops at once.
-    p.add_argument('--drift-warn', type=float, default=.05)
-    p.add_argument('--drift-stop', type=float, default=.5)
-    p.add_argument('--drift-agreement-warn', type=float, default=.97)
-    p.add_argument('--drift-agreement-stop', type=float, default=0.)
-    p.add_argument('--drift-gate', action=argparse.BooleanOptionalAction, default=True,
-                   help='run the behaviour gate at an eval whose drift is past warn, and stop on a gate regression')
-    p.add_argument('--gate-held-rows', type=int, default=48)
     p.add_argument('--save-state', action=argparse.BooleanOptionalAction, default=True,
                    help='write the full training state (weights, optimizer); smokes pass --no-save-state and keep '
                         'only their logs and report')
@@ -234,16 +218,15 @@ def main(argv=None):
     stop = StopSignal().install()
     a = parse(argv)
     from ..common.hashing import sha256_file_hex
-    from ..maple.generation_gate import behaviour_report, held_kl
-    from ..maple.distill_data import render
     from ..model.neuralese_projection import (NeuraleseProjection, TokenChoiceProjection,
                                                project_token_states, soft_token_mixture)
     from ..serve import load_engine
     from .backbone_policy import configure_backbone_training, plain_named_tensors, shared_parametrized_weights
     from .optim import PortMuonAdamW
+    from .trajectory_state import clip_finite_gradients, gradient_norm
     from .quantization import Behaviour, load_component, teacher_shards
     from .text_supervision import balanced_position_weights
-    from .text_warmup import (behaviour_drift_level, chunked_readout, evaluation_batches, load_text_rows,
+    from .text_warmup import (chunked_readout, evaluation_batches, load_text_rows,
                               prepare_text_windows, select_held_document_windows)
     from ..common.paths import root as path_root
 
@@ -264,10 +247,6 @@ def main(argv=None):
     from ..maple.model import set_dense_moe_kernel
     set_dense_moe_kernel(a.moe_kernel)
     quant = load_component(a.quantization, root=path_root('repo'))
-    monitor = None
-    if a.monitor:
-        text = Path(a.monitor).read_text() if not a.monitor.lstrip().startswith('{') else a.monitor
-        monitor = json.loads(text)
     behaviour = None
     gate_held = None
     if quant is not None:
@@ -281,29 +260,14 @@ def main(argv=None):
             gate_held = teacher_shards(preserve['teacher']['artifact'])[1]
         if quant.component.get('gate'):
             behaviour = Behaviour(quant.component['gate'], engine.tokenizer, gate_held, root=path_root('repo'))
-    if monitor is not None:
-        from ..maple.generation_gate import capture_reference
-        if gate_held is None and monitor.get('data'):
-            # The monitor-only drift reference of a lineage without a teacher artifact (LFM): the base model's own
-            # answers and top-k on the monitor prompts, captured before any update and kept with the run.
-            reference_path = a.out / 'monitor-reference.pt'
-            if reference_path.is_file():
-                gate_held = torch.load(reference_path, map_location='cpu', weights_only=False)
-            else:
-                data = path_root('repo') / monitor['data']['path'] if not Path(monitor['data']['path']).is_absolute() \
-                    else Path(monitor['data']['path'])
-                if sha256_file_hex(data) != monitor['data']['sha256']:
-                    raise ValueError('monitor prompts changed since the recipe pinned them: ' + str(data))
-                prompts = [json.loads(line) for line in data.read_text().splitlines() if line.strip()]
-                eos = engine.tokenizer.convert_tokens_to_ids('<|im_end|>')
-                gate_held = capture_reference(backbone.hf, engine.tokenizer, prompts, render, eos)
-                torch.save(gate_held, reference_path)
-                print(json.dumps({'event': 'monitor_reference_captured', 'prompts': len(prompts)}), flush=True)
-        if behaviour is None and monitor.get('gate'):
-            behaviour = Behaviour(monitor['gate'], engine.tokenizer, gate_held, root=path_root('repo'))
-    if behaviour is not None and a.gate_response_kl is not None:
-        # The stage's declared KL bound (coordinator decision 2026-10-11): on response positions, at the hard stop.
-        behaviour.config = {**behaviour.config, 'max_held_kl': a.gate_response_kl, 'held_kl_bound': 'response'}
+    # The monitor (train/drift_monitor.py): the base model's own reference when no teacher holds one (LFM), the
+    # monitor's gate when no quantization component declares one, and the stage's response-KL bound on the gate.
+    from .drift_monitor import DriftMonitor, parse_monitor, setup_monitor
+    behaviour, gate_held = setup_monitor(parse_monitor(a.monitor), a.out, backbone.hf, engine.tokenizer,
+                                         behaviour=behaviour, gate_held=gate_held,
+                                         gate_response_kl=a.gate_response_kl, root=path_root('repo'))
+    monitor = DriftMonitor(backbone.hf, engine.tokenizer, gate_held, behaviour, a,
+                           bf16=(lambda: quant.context('bf16', 0.0)) if quant is not None else None)
     # Trainables: backbone (latent policy), the projections. Embedding, final norm and lm_head stay frozen.
     for parameter in engine.heads.parameters():
         parameter.requires_grad_(False)
@@ -315,28 +279,16 @@ def main(argv=None):
     projections = {'neuralese_projection': neuralese, **({'token_choice_projection': token_choice}
                                                          if token_choice is not None else {})}
     head_named = [(key + '.' + n, q) for key, module in projections.items() for n, q in module.named_parameters()]
-    def is_latent(n, q):
-        # MuonSR: matrices narrower than MUON_MIN_SIDE (LFM's short-conv kernels [d, 1, k]) have no meaningful
-        # orthogonalization; they go to AdamW with the routers and norms, as Moonlight keeps non-matrix weights on Adam.
-        narrow = a.latent_optimizer == 'muonsr' and min(q.shape[-2:]) < MUON_MIN_SIDE if q.ndim >= 2 else False
-        return q.ndim >= 2 and '.mlp.gate.' not in n and not narrow
-    latent_named = [(n, q) for n, q in backbone_named if is_latent(n, q)]
-    other_backbone = [(n, q) for n, q in backbone_named if not is_latent(n, q)]
-    from ..maple.qat_convert import row_scale
-    from .optim import beta_for_half_life, latent_block_rows
+    # The latent split, entries and options are shared with the end-to-end stage (train/optim.py).
+    from .optim import beta_for_half_life, latent_entries, latent_options as latent_options_for, latent_split
+    latent_named, other_backbone = latent_split(backbone_named, a.latent_optimizer)
     config = backbone.hf.config
     head_dim = getattr(config, 'head_dim', None) or config.hidden_size // config.num_attention_heads
-    latent = [(n, q, a.latent_lr, row_scale(q) if a.latent_optimizer == 'lionsr' else
-               latent_block_rows(n, q, head_dim) if a.latent_optimizer == 'adaminisr' else
-               (2 if '.gate_up' in n else 1))  # muonsr: fused gate/up orthogonalized as two matrices
-              for n, q in latent_named]
-    latent_options = dict(weight_decay=a.latent_weight_decay)
-    if a.latent_optimizer in ('lionsr', 'adaminisr'):
-        latent_options.update(skip_idle=a.latent_skip_idle, cautious=a.latent_cautious)
-    if a.latent_optimizer == 'muonsr':
-        latent_options.update(ns=a.latent_ns)
-    if a.latent_optimizer == 'adaminisr':
-        latent_options['betas'] = (0.9, beta_for_half_life(a.tokens * a.batch, a.latent_beta2_half_life_tokens))
+    latent = latent_entries(latent_named, a.latent_optimizer, a.latent_lr, head_dim)
+    latent_options = latent_options_for(
+        a.latent_optimizer, weight_decay=a.latent_weight_decay, skip_idle=a.latent_skip_idle,
+        cautious=a.latent_cautious, ns=a.latent_ns,
+        betas=(0.9, beta_for_half_life(a.tokens * a.batch, a.latent_beta2_half_life_tokens)))
     optimizer = PortMuonAdamW(head_named + other_backbone, lr=a.head_lr, vocab_size=int(backbone.embedding_weight.shape[0]),
                               latent=latent, latent_optimizer=a.latent_optimizer, latent_options=latent_options)
     other_ids = {id(q) for _, q in other_backbone}
@@ -353,8 +305,10 @@ def main(argv=None):
                                        'lr': a.backbone_lr})
     optimizer.param_groups = optimizer._groups()
     in_backward = optimizer.latent
-    in_backward.step_in_backward(gated=True)
+    in_backward.step_in_backward(gated=True, clip=a.latent_grad_clip)
+    other_trainables = [q for _, q in head_named + other_backbone]
     print(json.dumps({'event': 'trainables', 'latent_optimizer': a.latent_optimizer, 'latents': len(latent),
+                      'latent_grad_clip': a.latent_grad_clip,
                       'latent_options': {k: list(v) if isinstance(v, tuple) else v for k, v in latent_options.items()},
                       'adamw_or_muon_backbone': [n for n, _ in other_backbone][:4] + ['...'],
                       'projections': {k: sum(q.numel() for q in m.parameters()) for k, m in projections.items()}}),
@@ -450,8 +404,6 @@ def main(argv=None):
     if not a.save_state:
         policy.save = lambda state, **_: None  # a smoke: logs and report only, never a full state
     step, best, base_eval, history = 0, None, None, []
-    last_gate = None  # the update at which the guard last ran the behaviour gate
-    last_gate_kl = None  # response KL at that gate
     if policy.slot.exists():
         state = CheckpointPolicy.load(policy.slot)
         if state.get('schema') != SCHEMA or state['identity']['options'] != identity['options'] or \
@@ -469,7 +421,9 @@ def main(argv=None):
         own_host_tensors(optimizer)  # no view of the mmap'd state outlives the restore
         optimizer.param_groups = optimizer._groups()
         step, best, base_eval, history = state['step'], state.get('best'), state['base_eval'], state['history']
-        last_gate, last_gate_kl = state.get('last_gate'), state.get('last_gate_kl')
+        monitor.restore(state)  # the update of the guard's last gate and its response KL
+        if in_backward.clip:
+            in_backward.global_norm_estimate = state.get('latent_global_norm_estimate')
         restore_training_rng_state(state['rng'], a.device)
         print(json.dumps({'event': 'resumed', 'step': step, 'code_changed': sorted(
             k for k in code if state['identity']['code'].get(k) != code[k])}), flush=True)
@@ -482,14 +436,13 @@ def main(argv=None):
                 'student_parameters': {n: values[n.removeprefix('backbone.')].detach() for n, _ in backbone_named},
                 **{key: module.state_dict() for key, module in projections.items()},
                 'optimizer': optimizer.state_dict(), 'rng': capture_training_rng_state(a.device),
-                'best': best, 'base_eval': base_eval, 'history': history, 'last_gate': last_gate,
-                'last_gate_kl': last_gate_kl}
+                'best': best, 'base_eval': base_eval, 'history': history, **monitor.state(),
+                'latent_global_norm_estimate': in_backward.global_norm_estimate}
 
     def log(name, value):
         with (a.out / name).open('a') as handle:
             handle.write(json.dumps(value) + '\n')
 
-    gate_by_step = {}  # the full behaviour gate already run at a step (at a warn), reused as the final gate
 
     def evaluate():
         nonlocal base_eval
@@ -513,8 +466,8 @@ def main(argv=None):
             agree = [float((p == torch.tensor(b)).float().mean()) for p, b in zip(predictions, base_eval['predictions'])]
             report.update(base_ce=base_eval['ce'], ce_delta=report['ce'] - base_eval['ce'],
                           base_agreement=sum(agree) / len(agree))
-            if gate_held is not None and a.drift_rows:
-                report['behaviour_drift'] = drift_check()
+            if monitor.active:
+                report['behaviour_drift'] = monitor.check(step, min(a.stop_at or a.steps, a.steps))
         log('eval.jsonl', report)
         return report
 
@@ -529,44 +482,6 @@ def main(argv=None):
             for window in held[:a.drift_ce_windows]:
                 total += forward([window], gradients=False)[1]['ce']
         return total / len(held[:a.drift_ce_windows])
-
-    def drift_check():
-        """The drift monitor: held KL on --drift-rows, its guard level, and at a warn the behaviour gate (stop below
-        its reference minus max_gate_drop) -- at most every --drift-gate-every updates, at once when response KL rose
-        by --drift-gate-rise since the last gate, and at the stage end."""
-        nonlocal last_gate, last_gate_kl
-        with torch.no_grad(), contextlib.ExitStack() as scope:
-            if quant is not None:
-                scope.enter_context(quant.context('bf16', 0.0))
-            drift = held_kl(backbone.hf, gate_held, a.drift_rows, 0.25)
-        drift['guard'] = behaviour_drift_level(drift, a)
-        due = (last_gate is None or step - last_gate >= a.drift_gate_every or step >= min(a.stop_at or a.steps, a.steps) or
-               (last_gate_kl is not None and drift['held_response_kl'] - last_gate_kl >= a.drift_gate_rise))
-        if drift['guard'] == 'warn' and a.drift_gate and behaviour is not None and not due:
-            drift['gate_at_warn'] = {'deferred': True, 'last_gate': last_gate}
-        elif drift['guard'] == 'warn' and a.drift_gate and behaviour is not None:
-            last_gate, last_gate_kl = step, drift['held_response_kl']
-            gate = gate_by_step[step] = gate_report()
-            floor = behaviour.config['reference']['gate_pass'] - behaviour.config.get('max_gate_drop', 0.0)
-            drift['gate_at_warn'] = {k: gate[k] for k in ('gate_pass', 'gate_checks', 'gate_kinds', 'gate_results')}
-            drift['gate_floor'] = floor
-            if gate['gate_pass'] < floor - 1e-9:
-                drift['guard'] = 'stop'
-                drift['stop_reason'] = 'behaviour gate below its reference minus max_gate_drop'
-        elif drift['guard'] == 'stop':
-            drift['stop_reason'] = 'response KL or agreement past the hard stop'
-        return drift
-
-    def gate_report():
-        if behaviour is None:
-            return None
-        with torch.no_grad(), contextlib.ExitStack() as scope:
-            if quant is not None:
-                scope.enter_context(quant.context('bf16', 0.0))
-            result = behaviour_report(backbone.hf, engine.tokenizer, behaviour.probes, render, behaviour.eos, gate_held,
-                                      a.gate_held_rows, behaviour.config.get('prompt_weight', 0.25))
-        result['passed'] = behaviour.passed(result)
-        return result
 
     # Disk: hold the blocks of the next full-state write (its tensors, 5% margin; at least the last write's size) so a
     # write never meets a full disk. The reserve is released just for a write and taken back after it; a run that
@@ -646,7 +561,15 @@ def main(argv=None):
                     if not torch.isfinite(loss):
                         raise RuntimeError('nonfinite neuralese_direct loss')
                     loss.backward()
-                armed.norm()
+                latent_norm = armed.norm()
+        # The global gradient norm: the latents' (stepped in backward, clipped by the estimate) with the others'
+        # (clipped exactly here when --latent-grad-clip is set).
+        if a.latent_grad_clip:
+            global_norm = clip_finite_gradients(other_trainables, a.latent_grad_clip, consumed_norm=latent_norm)
+        else:
+            global_norm = torch.linalg.vector_norm(torch.stack([gradient_norm(other_trainables).to(latent_norm.device),
+                                                                latent_norm.double()]))
+        grad_clip = armed.clip_record(global_norm)
         optimizer.step()  # routers, norms and projections (the latents stepped in backward)
         optimizer.zero_grad(set_to_none=True)
         step = step_index + 1
@@ -658,7 +581,7 @@ def main(argv=None):
                       flush=True)
                 raise SystemExit(2)
         log('train.jsonl', {'step': step, 'loss': float(loss), 'precision': point, 'mix': mix, **metrics,
-                            'seconds': time.time() - tick})
+                            'grad_clip': grad_clip, 'seconds': time.time() - tick})
         if step % a.eval_every == 0 or step == end:
             report = evaluate()
             history.append({k: report[k] for k in ('step', 'ce', 'ce_delta', 'value_relative_mse_delta')})
@@ -672,8 +595,8 @@ def main(argv=None):
                 policy.save(full_state(), metric=report['ce'])
                 saved_step = step
             (a.out / 'report.json').write_text(json.dumps({**report, 'status': 'running'}, indent=2) + '\n')
-        elif a.drift_every and step % a.drift_every == 0 and gate_held is not None and a.drift_rows:
-            drift = drift_check()
+        elif a.drift_every and step % a.drift_every == 0 and monitor.active:
+            drift = monitor.check(step, end)
             if base_eval is not None and 'drift_ce' not in base_eval:
                 base_eval['drift_ce'] = None  # a lineage resumed from before the measure has no base value
             log('drift.jsonl', {'step': step, 'held_ce_subset': drift_ce(), 'base_held_ce_subset':
@@ -685,7 +608,7 @@ def main(argv=None):
             policy.save(full_state())  # it would replace the slot and break best-checkpoint.pt's hard link
             saved_step = step
     finished = step >= end
-    gate = (gate_by_step.get(step) or gate_report()) if finished else None
+    gate = monitor.final_gate(step) if finished else None
     final = json.loads((a.out / 'report.json').read_text()) if (a.out / 'report.json').exists() else {}
     drift_stopped = any((json.loads(line).get('behaviour_drift') or {}).get('guard') == 'stop'
                         for name in ('eval.jsonl', 'drift.jsonl') if (a.out / name).is_file()

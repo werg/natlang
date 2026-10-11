@@ -678,19 +678,31 @@ def main(argv=None):
                         help="Maple QAT dense latents get their own AdamW groups at this rate times each matrix's "
                              "ternary scale (codes flip after moving ~0.5 of it); 0: Muon at the backbone rate, under "
                              "which codes practically never flip")
-    parser.add_argument("--latent-optimizer", choices=["muon", "lionsr"], default="muon",
+    parser.add_argument("--latent-optimizer", choices=["muon", "lionsr", "muonsr"], default="muon",
                         help="lionsr: the latent policy steps backbone weight matrices with LionSR (one BF16 momentum, "
                              "stochastic rounding, --qat-latent-lr per row ternary scale; Mellum conversion v3), as the "
-                             "text warm-up does")
+                             "text warm-up does; muonsr: the shared latent optimizer of the direct stage (MuonSR, "
+                             "train/optim.py: same split, options and implementation as direct_sft) at --latent-lr")
+    parser.add_argument("--latent-lr", type=float, default=0.0,
+                        help="muonsr: the latents' rate, on AdamW's scale (declared per line, as in the direct stage)")
+    parser.add_argument("--latent-ns", choices=("quintic", "cubic5"), default="quintic",
+                        help="muonsr: the Newton-Schulz variant (cubic5: arXiv:2606.00371, a third fewer matmuls)")
+    parser.add_argument("--latent-weight-decay", type=float, default=0.0,
+                        help="muonsr: decoupled weight decay of the latents (Mellum2 SFT: 0.1 with Muon)")
+    parser.add_argument("--latent-grad-clip", type=float, default=0.0,
+                        help="with --latent-step-in-backward: the in-backward latents are clipped like the stage's "
+                             "other gradients (global norm 1.0, Mellum2 SFT), each scaled by min(1, clip / the previous "
+                             "update's global norm) because it steps before the global norm is known (train/optim.py); "
+                             "every update logs both factors (latent_grad_clip in train.jsonl). 0 or 1.0")
     parser.add_argument("--moe-kernel", choices=["loop", "grouped"], default="loop",
                         help="dense (BF16, trainable) MoE experts on CUDA: loop = one matmul pair per expert (reference); grouped = two grouped GEMMs over the expert-sorted routed tokens (maple/fused_moe.dense_grouped_experts; BF16 accumulation-order differences only)")
     parser.add_argument("--latent-step-in-backward", action=argparse.BooleanOptionalAction, default=False,
-                        help="with --latent-optimizer lionsr: the update's objectives (reader loss, crisp SFT, "
+                        help="with --latent-optimizer lionsr or muonsr: the update's objectives (reader loss, crisp SFT, "
                              "preserve stream) are backpropagated together, layer by layer across all of them "
                              "(model/layer_staging.py), and every LionSR latent steps as its layer completes and frees "
                              "its gradient, so no backbone gradient buffer exists; needs batch 1 and the joint backward "
                              "policy, and is refused when a stream reads a deeper layer of another at its input. The "
-                             "latents are not norm-clipped (the global norm counts them)")
+                             "global norm counts the latents; they are clipped only with --latent-grad-clip")
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--projection-anchor-weight", type=float, default=1.0,
                         help="gold-aligned auxiliary relative-MSE anchor for full content and shallow feedback projections against detached raw next-token embeddings; set 0 only for an explicit diagnostic ablation")
@@ -710,7 +722,7 @@ def main(argv=None):
     parser.add_argument("--content-transport", choices=["learned-residual", "raw-identity", "top-state"], default="learned-residual", help="explicit raw identity warm-up or learned content residual")
     parser.add_argument("--content-residual-initialization", choices=["preserve", "fresh-zero"], default="preserve",
                         help="explicit raw-to-learned transition: zero previously bypassed residual and only its optimizer slots")
-    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps", "sketch_gradient", "member_weight", "member_tokens", "member_eval", "member_mask_system", "member_full_weight", "heads_lr", "qat_latent_lr", "projection_anchor_weight", "projection_anchor_backbone_scale", "projection_anchor_decay_steps", "read_adapter"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
+    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps", "sketch_gradient", "member_weight", "member_tokens", "member_eval", "member_mask_system", "member_full_weight", "heads_lr", "qat_latent_lr", "projection_anchor_weight", "projection_anchor_backbone_scale", "projection_anchor_decay_steps", "read_adapter", "latent_optimizer", "latent_lr", "latent_ns", "latent_weight_decay", "latent_grad_clip"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
     parser.add_argument('--max-write-vectors', type=int, default=None,
                         help='explicit port payload bound, distinct from prompt context; constant-stop capacity can extend without changing weights/moments')
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
@@ -828,6 +840,10 @@ def main(argv=None):
     parser.add_argument('--optimizer', choices=['adamw', 'muon'], default='adamw')
     from .optim_restore import add_optimizer_restore_arguments
     add_optimizer_restore_arguments(parser)
+    # The shared drift monitor and guard (train/drift_monitor.py, as in the direct stage): off unless --drift-rows and
+    # a reference (--monitor data or the quantization component's teacher) are given.
+    from .drift_monitor import add_drift_arguments
+    add_drift_arguments(parser, drift_rows=0)
     parser.add_argument('--checkpoint-every', type=int, default=200,
                         help='full-state points: every N updates, a multiple of --eval-every when that is set (the end '
                              'and stops also write the full state); the shared cadence (LINE_PARITY.md): no more '
@@ -957,7 +973,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'eval_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size', 'direct_parent_proof', 'direct_artifact'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'eval_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size', 'direct_parent_proof', 'direct_artifact', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_rows', 'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'gate_held_rows', 'gate_response_kl'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -985,14 +1001,21 @@ def main(argv=None):
         current['options'] = options
         return current
     if resumed is not None:
+        from .trajectory_state import check_latent_optimizer_change
+        check_latent_optimizer_change(resumed, args.latent_optimizer, continuation=False)
         changed_code = validate_resume(resumed, resume_identity_for_saved_parent(resumed), defaults=option_defaults)
         if changed_code:
             print(json.dumps({'event': 'resumed_on_new_code', 'changed_modules': len(changed_code),
                               'modules': [Path(m).name for m in changed_code][:20]}), flush=True)
     elif args.continue_from:
         resumed = torch.load(args.continue_from, map_location='cpu', weights_only=False)
+        from .trajectory_state import LATENT_OPTIMIZER_OPTIONS, check_latent_optimizer_change
+        check_latent_optimizer_change(resumed, args.latent_optimizer, continuation=True,
+                                      curriculum_change=args.curriculum_change, optimizer_state=args.optimizer_state)
         validate_continuation(resumed, resume_identity_for_saved_parent(resumed),
-                              allowed_changes=args.curriculum_change, defaults=option_defaults)
+                              allowed_changes=list(args.curriculum_change) + (
+                                  list(LATENT_OPTIMIZER_OPTIONS) if 'latent_optimizer' in args.curriculum_change
+                                  else []), defaults=option_defaults)
     direct_parent_migration_proof = None
     if resumed is not None and args.direct_artifact:
         from .direct_export import verify_direct_parent_binding, verify_recurrence_parent_proof
@@ -1684,6 +1707,24 @@ def main(argv=None):
         if quant.component.get('gate'):
             behaviour = Behaviour(quant.component['gate'], engine.tokenizer, preserve.held if preserve else None,
                                   root=path_root('repo'))
+    # The shared drift monitor and guard (train/drift_monitor.py; LINE_PARITY.md: the behaviour gate is the hard
+    # criterion, response KL warns and runs the gate, and stops only at --drift-stop). Its KL reference is the
+    # teacher's held rows, else the model at this stage's start (the direct export), captured once per run directory.
+    from .drift_monitor import DriftMonitor, parse_monitor, setup_monitor
+    behaviour, monitor_held = setup_monitor(parse_monitor(args.monitor), out, engine.backbone.hf, engine.tokenizer,
+                                            behaviour=behaviour, gate_held=preserve.held if preserve else None,
+                                            gate_response_kl=args.gate_response_kl, root=path_root('repo'))
+    drift_monitor = (DriftMonitor(engine.backbone.hf, engine.tokenizer, monitor_held, behaviour, args,
+                                  bf16=(lambda: quant.context('bf16', 0.0)) if quant is not None else None)
+                     if args.drift_rows and monitor_held is not None else None)
+    drift_stopped_at = None
+    if drift_monitor is not None and resumed is not None:
+        drift_monitor.restore(resumed.get('drift_monitor'))
+        if resumed.get('drift_stopped_at') is not None and not new_continuation:
+            raise ValueError(f"the drift guard stopped this stage at update {resumed['drift_stopped_at']} "
+                             f"(drift.jsonl), so it is not resumed: diagnose it, or start a declared continuation")
+    if args.monitor and drift_monitor is None:
+        raise ValueError('--monitor needs --drift-rows and a reference (the monitor\'s data or a teacher)')
     from ..maple.family import evaluate_members, family_members, member_backward, private_parameters, window_labels
     family = family_members(engine.backbone)
     codes = None
@@ -1764,7 +1805,7 @@ def main(argv=None):
             head_named += [('backbone.control_head_rows', backbone.control_head_rows)]
     for p in head_params:
         p.requires_grad_(True)
-    latent_lrs, lion = {}, []
+    latent_lrs, lion, latent_options = {}, [], None
     if args.latent_optimizer == 'lionsr':
         if args.optimizer != 'muon' or args.backbone_training != 'latent' or not args.qat_latent_lr:
             raise ValueError('--latent-optimizer lionsr needs --optimizer muon --backbone-training latent and --qat-latent-lr')
@@ -1773,9 +1814,26 @@ def main(argv=None):
         print(json.dumps({'event': 'latent_optimizer', 'optimizer': 'lionsr', 'latents': len(lion),
                           'elements': sum(q.numel() for _, q, *_ in lion), 'lr_row_scale_units': args.qat_latent_lr}),
               flush=True)
+    elif args.latent_optimizer == 'muonsr':
+        # The direct stage's latent optimizer, split and options (train/optim.py): matrices on MuonSR at --latent-lr;
+        # routers, vectors and narrow matrices stay with the backbone group (AdamW at --backbone-lr).
+        if args.optimizer != 'muon' or args.backbone_training != 'latent' or not args.latent_lr:
+            raise ValueError('--latent-optimizer muonsr needs --optimizer muon --backbone-training latent and --latent-lr')
+        if args.qat_latent_lr:
+            raise ValueError('--latent-optimizer muonsr takes its rate from --latent-lr; --qat-latent-lr is LionSR\'s '
+                             'row-scale rate, so drop it')
+        from .optim import latent_entries, latent_options as latent_options_for, latent_split
+        latent_named, _ = latent_split([(f'backbone.{n}', q) for n, q in backbone_named], 'muonsr')
+        lion = latent_entries(latent_named, 'muonsr', args.latent_lr)
+        latent_options = latent_options_for('muonsr', weight_decay=args.latent_weight_decay, ns=args.latent_ns)
+        print(json.dumps({'event': 'latent_optimizer', 'optimizer': 'muonsr', 'latents': len(lion),
+                          'elements': sum(q.numel() for _, q, *_ in lion), 'lr': args.latent_lr,
+                          'latent_options': latent_options}), flush=True)
+    if args.latent_grad_clip not in (0.0, 1.0):
+        raise ValueError('--latent-grad-clip is 0 or 1.0: the stage clips its other gradients at a global norm of 1.0')
     if args.latent_step_in_backward:
         if not lion:
-            raise ValueError('--latent-step-in-backward needs --latent-optimizer lionsr')
+            raise ValueError('--latent-step-in-backward needs --latent-optimizer lionsr or muonsr')
         if args.batch != 1 or args.backward_policy != 'joint' or args.member_weight:
             raise ValueError('--latent-step-in-backward needs one backward per update: --batch 1, '
                              '--backward-policy joint and no --member-weight')
@@ -1790,11 +1848,13 @@ def main(argv=None):
                                      vocab_size=backbone.embedding_weight.shape[0], lr=args.lr,
                                      lora_lr=backbone_lr, heads_lr=args.heads_lr,
                                      embedding_ids={id(backbone.control_rows), id(getattr(backbone, 'control_head_rows', backbone.control_rows))} | {id(p) for m in heads.modules() if isinstance(m, torch.nn.Embedding) for p in m.parameters()},
-                                     lora_names=lora_names, latent_lrs=latent_lrs, lion=lion)
+                                     lora_names=lora_names, latent_lrs=latent_lrs, lion=lion,
+                                     latent_optimizer='muonsr' if args.latent_optimizer == 'muonsr' else 'lionsr',
+                                     latent_options=latent_options)
     in_backward = None
     if args.latent_step_in_backward:
         in_backward = optimizer.latent
-        in_backward.step_in_backward(gated=True)
+        in_backward.step_in_backward(gated=True, clip=args.latent_grad_clip)
         print(json.dumps({'event': 'latent_step_in_backward', 'latents': len(lion),
                           'gradient_buffer_bytes_avoided': sum(q.numel() * q.element_size() for _, q, *_ in lion)}),
               flush=True)
@@ -1838,6 +1898,8 @@ def main(argv=None):
             learning_rates=({name: args.heads_lr for name, _ in head_named}
                             if new_continuation and 'heads_lr' in args.curriculum_change else None))
         record_restore_report(restore_report, out, source=args.continue_from or 'resume')
+        if in_backward is not None and in_backward.clip:
+            in_backward.global_norm_estimate = resumed.get('latent_global_norm_estimate')
         init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
     if new_continuation and args.content_residual_initialization == 'fresh-zero':
         from .trajectory_state import initialize_content_residual
@@ -2278,6 +2340,9 @@ def main(argv=None):
             'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
             'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
             **(direct_projection_state() if direct is not None else {}),
+            **({'latent_global_norm_estimate': in_backward.global_norm_estimate} if in_backward is not None else {}),
+            **({'drift_monitor': drift_monitor.state(), 'drift_stopped_at': drift_stopped_at}
+               if drift_monitor is not None else {}),
             'optimizer_param_names': optimizer_param_names(optimizer, optimizer_named),
             'backbone_training': args.backbone_training,
             **({'maple_qat': True} if qat_named else {}),
@@ -2590,6 +2655,9 @@ def main(argv=None):
                         json.dumps(diagnostic, indent=2, allow_nan=False) + '\n')
                 raise
             direct_update['global_gradient_norm'] = float(global_grad_norm)
+            if armed is not None:
+                # The in-backward latents' clip factor (from the previous update's global norm) against true clipping.
+                direct_update['latent_grad_clip'] = armed.clip_record(global_grad_norm)
             if quant is not None:
                 quant.set_active('bf16', 0.0)  # evaluations and checkpoints after the update see BF16
             commit_optimizer_step(optimizer)
@@ -2645,6 +2713,21 @@ def main(argv=None):
             log.flush()
             if step % 10 == 0 or step == args.steps - 1:
                 print(json.dumps(entry), flush=True)
+            if drift_monitor is not None and not stop.requested and (
+                    eval_cadence.due(step + 1) or step + 1 == args.steps or
+                    (args.drift_every and (step + 1) % args.drift_every == 0)):
+                from .trajectory_state import evaluation_state
+                drift_started = time.perf_counter()
+                with evaluation_state(write_choice, stop_generator, baseline):
+                    drift = drift_monitor.check(step + 1, args.steps)
+                eval_clock['eval_seconds'] += time.perf_counter() - drift_started
+                with (out / 'drift.jsonl').open('a') as drift_log:
+                    drift_log.write(json.dumps({'step': step + 1, 'behaviour_drift': drift}) + '\n')
+                if drift['guard'] == 'stop':
+                    drift_stopped_at = step + 1
+                    print(json.dumps({'event': 'behaviour_drift_stop', 'step': step + 1,
+                                      'reason': drift.get('stop_reason')}), flush=True)
+                    stop.request()
             write_due = checkpoint_cadence.due(step + 1, force=stop.requested or step + 1 == args.steps)
             candidate = None
             # Evaluations at the declared points; the last step's is the final report below.
@@ -2691,10 +2774,19 @@ def main(argv=None):
                     (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
     stop.restore()
     log.close()
+    if drift_stopped_at is not None:
+        print(json.dumps({'status': 'checkpointed_on_drift_guard', 'step': drift_stopped_at,
+                          'checkpoint': str(checkpoint_path)}), flush=True)
+        return 3
     if stop.requested:
         print(json.dumps({'status': 'checkpointed_on_signal', 'checkpoint': str(checkpoint_path)}), flush=True)
         return 0
     report["soft-trained"] = evaluate("soft-trained", leaves)
+    if drift_monitor is not None:
+        # The shared acceptance's behaviour gate on the final weights (the hard criterion) and the guard's record.
+        report["behaviour_gate"] = drift_monitor.final_gate(args.steps)
+        report["drift_guard"] = {'stopped': False, 'warn': args.drift_warn, 'stop': args.drift_stop,
+                                 'log': 'drift.jsonl'}
     if quant is not None:
         report["quantization"] = {**quant.describe(args.steps), "columns": {}}
         final_mixes, required_points = quant.mixes(args.steps), set(quant.required_points())

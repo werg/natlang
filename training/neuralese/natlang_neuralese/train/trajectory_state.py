@@ -40,15 +40,17 @@ def clip_finite_gradients(parameters, maximum=1., consumed_norm=None):
 
 
 def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr, heads_lr, embedding_ids=(),
-                         lora_names=None, latent_lrs=None, lion=()):
+                         lora_names=None, latent_lrs=None, lion=(), latent_optimizer='lionsr', latent_options=None):
     """``latent_lrs`` (name → lr): QAT dense latents that get their own AdamW group at that rate (see
-    ``adapters.qat_latent_scales``) instead of sharing the Muon rate. ``lion``: the latent policy's LionSR partition
-    (``optim.latent_partition``; names ``backbone.<name>``), stepped by PortMuonAdamW's latent child."""
+    ``adapters.qat_latent_scales``) instead of sharing the Muon rate. ``lion``: the latent policy's partition stepped
+    by PortMuonAdamW's latent child (names ``backbone.<name>``): LionSR's (``optim.latent_partition``), or with
+    ``latent_optimizer='muonsr'`` MuonSR's (``optim.latent_split``/``latent_entries``, the direct stage's), with
+    ``latent_options`` (``optim.latent_options``)."""
     latent_lrs = dict(latent_lrs or {})
     lion = list(lion)
     if lion:
         if policy != 'muon' or lora_names is None:
-            raise ValueError('the LionSR latent partition needs the muon policy and named backbone parameters')
+            raise ValueError('the latent partition needs the muon policy and named backbone parameters')
         stepped = {id(q) for _, q, *_ in lion}
         kept = [(n, q) for n, q in zip(lora_names, lora) if id(q) not in stepped]
         lora_names, lora = [n for n, _ in kept], [q for _, q in kept]
@@ -71,7 +73,8 @@ def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr
     named += ([(f'backbone.{name}', value) for name, value in zip(lora_names, lora)] if lora_names is not None
               else [(f'lora_{i}', value) for i, value in enumerate(lora)])
     named += [(f'heads.{i}', value) for i, value in enumerate(heads)]
-    optimizer = PortMuonAdamW(named, lr=lr, vocab_size=vocab_size, embedding_ids=embedding_ids, latent=lion)
+    optimizer = PortMuonAdamW(named, lr=lr, vocab_size=vocab_size, embedding_ids=embedding_ids, latent=lion,
+                              latent_optimizer=latent_optimizer, latent_options=latent_options)
     rates = {id(q): group['lr'] for group in groups for q in group['params']}
     # Keep each optimizer's partition/schema while preserving the three learning rates.
     for child in [optimizer.muon, optimizer.auxiliary]:
@@ -373,7 +376,7 @@ def validate_continuation(state, identity, *, allowed_changes=(), defaults=None)
     original_options = dict((state.get('identity', {}).get('options') or {}))
     old = _with_defaults(state.get('identity', {}), {k: v for k, v in (defaults or {}).items() if k in keys})
     allowed = set(allowed_changes)
-    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient', 'member_weight', 'member_tokens', 'member_eval', 'member_mask_system', 'member_full_weight', 'heads_lr', 'qat_latent_lr', 'projection_anchor_weight', 'projection_anchor_backbone_scale', 'projection_anchor_decay_steps', 'read_adapter'}:
+    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient', 'member_weight', 'member_tokens', 'member_eval', 'member_mask_system', 'member_full_weight', 'heads_lr', 'qat_latent_lr', 'projection_anchor_weight', 'projection_anchor_backbone_scale', 'projection_anchor_decay_steps', 'read_adapter', 'latent_optimizer', 'latent_lr', 'latent_ns', 'latent_weight_decay', 'latent_grad_clip'}:
         raise ValueError('unsupported continuation curriculum changes')
     previous, current = dict(old.get('options', {})), dict(identity.get('options', {}))
     previous.pop('eval_every', None)
@@ -407,6 +410,29 @@ def validate_continuation(state, identity, *, allowed_changes=(), defaults=None)
                        if (old.get('files') or {}).get(k) != (identity.get('files') or {}).get(k))
         raise ValueError('recurrence continuation requires identical inputs and training controls except declared '
                          f'curriculum changes: undeclared {sorted(changed - allowed)}, changed inputs {files}')
+
+
+LATENT_OPTIMIZER_NAMES = {'muon': 'Muon', 'lionsr': 'LionSR', 'muonsr': 'MuonSR'}
+# Options that belong to the latent optimizer: declaring the switch (--curriculum-change latent_optimizer) covers them.
+LATENT_OPTIMIZER_OPTIONS = ('qat_latent_lr', 'latent_lr', 'latent_ns', 'latent_weight_decay')
+
+
+def check_latent_optimizer_change(state, latent_optimizer, *, continuation, curriculum_change=(), optimizer_state='restore'):
+    """Refuse (one sentence) to load one latent optimizer's saved state into another (LionSR -> MuonSR): a resume
+    keeps its latent optimizer; a continuation may switch only when it declares the switch and starts the optimizer
+    fresh."""
+    saved = ((state.get('identity') or {}).get('options') or {}).get('latent_optimizer', 'muon')
+    if saved == latent_optimizer:
+        return
+    old, new = LATENT_OPTIMIZER_NAMES.get(saved, saved), LATENT_OPTIMIZER_NAMES.get(latent_optimizer, latent_optimizer)
+    if not continuation:
+        raise ValueError(f"this run's full state was trained with {old} latents, whose optimizer state {new} cannot "
+                         f"resume: resume with --latent-optimizer {saved}, or start a new stage from it with "
+                         f"--continue-from, --curriculum-change latent_optimizer and --optimizer-state fresh")
+    if 'latent_optimizer' not in curriculum_change or optimizer_state != 'fresh':
+        raise ValueError(f"the checkpoint's latents were trained with {old}, whose optimizer state {new} cannot load: "
+                         f"continue with --latent-optimizer {saved}, or declare the switch with --curriculum-change "
+                         f"latent_optimizer and --optimizer-state fresh")
 
 
 def paired_probe_complete(report):

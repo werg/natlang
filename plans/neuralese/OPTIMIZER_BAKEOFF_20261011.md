@@ -162,3 +162,24 @@ optimizer-specific units; failed high rate alone does not rank optimizer familie
 
 Run length (coordinator, 2026-10-11): the shared supervision budget is 768,000 positions (about 2 epochs): Mellum v3
 750 updates at target 1024 (about 4.6 h at ~22 s/update), LFM 3000 at target 256.
+
+### Follow-ups done (2026-10-11, evening)
+
+- **E2E stage on MuonSR.** `train/trajectories.py` takes `--latent-optimizer muonsr` with `--latent-lr`, `--latent-ns`,
+  `--latent-weight-decay`: the direct stage's split, entries and options, now shared in `train/optim.py`
+  (`latent_split`, `latent_entries`, `latent_options`; `direct_sft` uses the same functions). The line-parity E2E base
+  is MuonSR cubic5, wd 0.1, `latent_lr` 3e-6 (Mellum declares 1e-5). A LionSR full state refuses to resume under
+  MuonSR in one sentence; a continuation switches only with `--curriculum-change latent_optimizer --optimizer-state
+  fresh` (which also covers the latent rate/ns/decay options).
+- **E2E drift policy.** The E2E stage had no drift guard (only a quantization gate at evals). The direct stage's monitor
+  moved to `train/drift_monitor.py` (one implementation, both stages); the E2E base runs it on the shared 48 probes:
+  response KL warns at 0.5 (runs the gate), stops at 1.5, gate floor base − 0.1, final gate in the report. A drift
+  stop exits 3 and that run is not resumed.
+- **Latent grad clip.** `latent_grad_clip` (direct and E2E): in-backward latents scaled by
+  min(1, clip / previous update's global norm); every update logs `global_norm`, `latent_norm`, the factor applied and
+  the exact factor. Short check (LFM2.5-350M direct, MuonSR 3e-6 cubic5, 24 updates, same windows): global norms are
+  17-650, so clip 1.0 is active on every update, and the lagged estimate gives updates 0.07x-20x their exact weight.
+  Train CE was higher on 21 of the 22 updates after the first two (identical) and held CE 4.48 against 3.79 unclipped (base 6.40). Behaviour gate 0.56 against
+  0.58, response KL 0.038 against 0.032. **Not harmless: off in both bases.** Mellum2's 1.0 assumes its own loss scale
+  (large-batch mean); ours is a batch-1 256-token window. Open question for the coordinator: the E2E stage's
+  non-in-backward path already clips everything exactly at 1.0, which is likewise always on at these norms.
