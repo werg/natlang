@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v39-launch-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v39-source/root-launch-review-v1",
+  "files": [
+    {
+      "path": "launch-receipt.json",
+      "bytes": 1099,
+      "sha256": "f6c75fcb504cfacb95d56c7733be3d97055835c198af51c47ab7ecbcdb1f268d"
+    },
+    {
+      "path": "launch-review.json",
+      "bytes": 1474,
+      "sha256": "a847ba1ad22f5bd1737499ed6901b2c621c5da76fa0f1554016c351dfc7d9063"
+    }
+  ],
+  "bytes": 2573
+}

@@ -1,0 +1,81 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v39-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v39-source",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 443716,
+      "sha256": "8b044dc9653a7de7083bed8a1468643a567072da2e3e62a2cfaa68bd95cce7e1",
+      "lines": 512
+    },
+    {
+      "path": "frozen-adapter-v1/frozen-runtime.json",
+      "bytes": 1251,
+      "sha256": "22d060381d05f94755f405e81cb5e1d24400a0c839994bf56c556239a20aa25a"
+    },
+    {
+      "path": "frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/label_decision_cases.py",
+      "bytes": 29796,
+      "sha256": "00d00cae8162d36d7c528ef463289b6eb1730f746b4fd2c84243fb70d38e725d"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+      "bytes": 18701,
+      "sha256": "517f7f6215a8e71b7451d6dfb54c2afee34f6c07e77c69503171f762e0891bc4"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+      "bytes": 157,
+      "sha256": "8352a509d51ef0dc0be958bdd4492caa968933866b171360be39fda43217364f"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+      "bytes": 1755,
+      "sha256": "d4e71ae9211cd625ea5d74706f9e0d4cc7fbf59e731dd0cba34fddd04674e4d2"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 8246902,
+      "sha256": "d59792688c27c6b607cecaae2bbc1688b270c1c0d2a0a925f291744a0a88fc80",
+      "lines": 12454
+    },
+    {
+      "path": "prepared-launch-command-v1.json",
+      "bytes": 1202,
+      "sha256": "96189667cd48c1f39d7577c60cd18fe9c4f520e388bead1f6db02abcc76744d5"
+    },
+    {
+      "path": "root-source-preparation-review-v1.json",
+      "bytes": 3416,
+      "sha256": "a4cf33cb13d8a09b2bd0b95abcf340970f6e35ff3e98cd8843055b2ece7803c3"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 161781,
+      "sha256": "80b0c8daa98ed1cb29e573f50bcc3fe7081e399b9d436f4e89fcd545f40b18a8"
+    },
+    {
+      "path": "source-review-v1/canonical-holds-at-preparation.json",
+      "bytes": 61430,
+      "sha256": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994"
+    },
+    {
+      "path": "source-review-v1/owner-additive-review-v17.json",
+      "bytes": 11086,
+      "sha256": "bda6f310d5dfddeed5800dc8cf8f0d4c0a9e00731c2ac14f94a8521a33429cf1"
+    }
+  ],
+  "bytes": 8984075
+}

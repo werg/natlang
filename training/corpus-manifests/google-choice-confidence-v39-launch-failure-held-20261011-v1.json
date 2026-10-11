@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v39-launch-failure-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v39-source/root-launch-review-v1",
+  "files": [
+    {
+      "path": "launch-failure.json",
+      "bytes": 244,
+      "sha256": "a86a4cc5e14e16485feb5861df5ad80852ddadfbf7bbe9df7ec5d3c9d9c66c53"
+    }
+  ],
+  "bytes": 244
+}

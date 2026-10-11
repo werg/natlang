@@ -30658,6 +30658,69 @@
       "admission": "full-s1-dgx-key-closure-pending",
       "independent_new_worlds": 0,
       "notes": "V33/V35 exact lineage packet: 114 static programs and 824 original train source rows/groups; 75-row V16 quality policy had zero ID/group intersections. Pop harness4, protected, and exact-key checks found no hits. This packet requests DGX full S1 exact-key closure only; it does not certify semantic quality, source license, provider restrictions, teacher correctness, or grant source/native/training admission."
+    },
+    {
+      "id": "google-choice-confidence-v39-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v39-source",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl",
+        "frozen-adapter-v1/**/*",
+        "source-review-v1/**/*",
+        "root-source-preparation-review-v1.json",
+        "prepared-launch-command-v1.json"
+      ],
+      "split": "inherited-train-provider-input",
+      "source_class": "held-provider-label-generation-input",
+      "training_admission": false,
+      "admission": "generation-input-only-no-provider-label-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V39 exact 512-row inherited-train input, 128 each DBpedia, LanguageID, Newsgroups, Yahoo Topic. Exact master row IDs/groups/line hashes and all source fields verified; no intersections with current 79 source-quality holds or prior provider reservations. Frozen runner is shared commit 5022f073a3 with ten-model pool. Labels/generation results are not included in this immutable input snapshot."
+    },
+    {
+      "id": "google-choice-confidence-v39-launch-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v39-source/root-launch-review-v1",
+      "include": [
+        "launch-review.json",
+        "launch-receipt.json"
+      ],
+      "split": "inherited-train-generation-control-evidence",
+      "source_class": "held-provider-launch-authorization-evidence",
+      "training_admission": false,
+      "admission": "launch-evidence-only-no-provider-label-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Separate root approval and waiter launch receipts for V39. Status is started-waiting-for-project-owner; logs, labels, attempts, and other live artifacts are excluded."
+    },
+    {
+      "id": "google-choice-confidence-v39-launch-failure-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v39-source/root-launch-review-v1",
+      "include": [
+        "launch-failure.json"
+      ],
+      "split": "inherited-train-generation-control-evidence",
+      "source_class": "held-provider-launch-failure-evidence",
+      "training_admission": false,
+      "admission": "launch-failure-only-no-provider-label-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "First approved waiter PID1063823 exited because its launcher lacked the configured Gemini key environment; receipt records zero provider calls. The separately pinned v2 receipt retries the same approved queue without exposing key contents."
+    },
+    {
+      "id": "google-choice-confidence-v39-launch-review-v2-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v39-source/root-launch-review-v2",
+      "include": [
+        "launch-receipt.json"
+      ],
+      "split": "inherited-train-generation-control-evidence",
+      "source_class": "held-provider-launch-authorization-evidence",
+      "training_admission": false,
+      "admission": "launch-evidence-only-no-provider-label-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Retry waiter PID1064015 uses the existing reviewed V39 input approval, same frozen runtime and shared quota state. Status started-waiting-for-project-owner; this separate receipt references the prior zero-call launcher failure. No secrets, labels, attempts, or logs included."
     }
   ],
   "coverage_backlog": [
