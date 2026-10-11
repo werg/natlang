@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v36-quality-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-choice-confidence-held-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 341,
+      "sha256": "113ee7164c84823b33fd7c36d0f2b762e3dc99dacb571602b20ebadd4199c428"
+    },
+    {
+      "path": "disagreements.jsonl",
+      "bytes": 174249,
+      "sha256": "f12779a7a063fd7921762c7bdba552c5a16cecc4245f7330000948299597fe3b",
+      "lines": 122
+    },
+    {
+      "path": "quality-review.json",
+      "bytes": 25590,
+      "sha256": "f7c8e1a3bb7dab7c33cd0d0c7209af90fb7a095062fd3dddcb12c5cba7ed9695"
+    },
+    {
+      "path": "quality-review.md",
+      "bytes": 2014,
+      "sha256": "80a5e31504331f19f6afd18c7c2f830772850014c3e719a15dd8d37b3f2f75b9"
+    },
+    {
+      "path": "scorer-output.json",
+      "bytes": 9922,
+      "sha256": "f3f128c87dd1732770fa28ff4d753a0a3c15b55d812129baa2c82c0d44927da8"
+    }
+  ],
+  "bytes": 212116
+}

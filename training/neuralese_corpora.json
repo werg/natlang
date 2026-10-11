@@ -30193,6 +30193,75 @@
       "admission": "held-generation-evidence-only-no-admission",
       "independent_new_worlds": 0,
       "notes": "Append-only copy of root approval and launch receipt for V74's four-lane, 80-program successor campaign on frozen runtime V16. V74 lanes 1,3,4,5 were launched under supervisor PID 1044457; lane 2 was deliberately omitted because its V73 predecessor lane was still pending, avoiding duplicate workers. This receipt does not imply output quality or admission; live queues, journals, logs and results are excluded."
+    },
+    {
+      "id": "annotation-folder-v23-v5-static-replay-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v23-v5",
+      "include": [
+        "source-selection/**/*",
+        "static/**/*",
+        "postrun-review-v1/**/*",
+        "source-policy-pin-correction-v1.json",
+        "source-policy-pin-correction-v1.md",
+        "review.json",
+        "review.md"
+      ],
+      "split": "inherited-train-static-reference-evidence",
+      "source_class": "held-source-annotation-derived-static-reference",
+      "training_admission": false,
+      "admission": "held-static-reference-only-source-quality-clearance-pending",
+      "independent_new_worlds": 0,
+      "notes": "V23-v5 source selection and authored static replay snapshot: 640 inherited-train rows across 8 families, 80 static programs, 80/80 reference output matches, 640/640 exact child eval/return joins, 80/80 full-context visibility; execution component archive and postrun review included. The preparation command exited 1 on final source-component verification drift although archived expected selector bytes were verified; summary.json was absent and not reconstructed. Materializer accepted 0 rows because annotation source-quality clearance remains held. No provider calls, no teacher trajectory, no admission. Exact source quality/current hold policy correction and attribution-only selector diff are retained."
+    },
+    {
+      "id": "google-choice-confidence-v36-closed-label-output-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v36-source",
+      "include": [
+        "labels.jsonl",
+        "labels.jsonl.attempts.jsonl",
+        "labels.jsonl.manifest.json",
+        "root-launch-receipt-v1.json"
+      ],
+      "split": "inherited-train-provider-labels",
+      "source_class": "held-provider-generated-choice-confidence-labels",
+      "training_admission": false,
+      "admission": "held-label-evidence-only-independent-quality-review-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Closed V36 output: 512/512 source-bound choice-confidence rows, 512 terminal HTTP 200 labels, plus 33 failed HTTP attempts in append-only ledger (21 HTTP 500, 12 HTTP 503). Exact source inputs/frozen pool are separately registered. No training admission; paired V36 quality/static snapshots registered separately."
+    },
+    {
+      "id": "google-choice-confidence-v36-static-reference-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v36-adapter-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-derived-static-reference",
+      "source_class": "held-provider-label-derived-static-reference",
+      "training_admission": false,
+      "admission": "held-static-reference-only-no-teacher-trajectory-admission",
+      "independent_new_worlds": 0,
+      "notes": "Shared adapter produced 54 authored static programs from 390 source-matching provider choices; it rejected all 122 exact source-choice disagreements. All 54 scripted reference replays passed, creating 888 authored held native reference turns. Provider answers are label evidence only, not claims of provider-authored scaffolds/reasoning; static replay success is not source-oracle validation or training approval. Full source/result/scorer and execution-component provenance are included."
+    },
+    {
+      "id": "google-choice-confidence-v36-quality-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-choice-confidence-held-v1",
+      "include": [
+        "quality-review.json",
+        "quality-review.md",
+        "disagreements.jsonl",
+        "scorer-output.json",
+        "FILES.sha256"
+      ],
+      "split": "inherited-train-quality-review",
+      "source_class": "independent-provider-label-quality-review",
+      "training_admission": false,
+      "admission": "held-quality-review-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Exact source/provider label scoring supplement. 512 valid typed responses, 390/512 exact choice agreement, 122 disagreements, 0 answer errors/invalid schema. Family-level scorer output, per-model/family aggregates and full source-row disagreement bindings are pinned. The 26b/31b item allocations differ and do not support model ranking. Usage and artifact hashes are recorded; no semantic/source/license clearance or training admission."
     }
   ],
   "coverage_backlog": [
