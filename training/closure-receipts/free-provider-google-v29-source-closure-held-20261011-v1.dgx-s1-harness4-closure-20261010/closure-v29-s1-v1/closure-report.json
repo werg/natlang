@@ -1,0 +1,241 @@
+{
+  "schema": "natlang.authored-source-case-closure-report/1",
+  "status": "held-closed-no-cross-corpus-violations",
+  "training_admission": false,
+  "source": {
+    "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/quality-review-v29-source-closure-v1/closure-input-v1/closure-source-cases.jsonl",
+    "sha256": "e19377eafbfc2e20f74159a4ce22f3198ec0b8127904015c42a5efea75cb6dc3",
+    "rows": 54,
+    "manifest": {
+      "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/quality-review-v29-source-closure-v1/closure-input-v1/closure-source-manifest.json",
+      "sha256": "8e2c618f6539bbc0136934c05241656a4c5bb42477d8b7b9c98a195566f742e3",
+      "source_path_declared": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v29-source-closure-v1/closure-input-v1/closure-source-cases.jsonl",
+      "source_path_used": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/quality-review-v29-source-closure-v1/closure-input-v1/closure-source-cases.jsonl",
+      "source_sha256_declared": "e19377eafbfc2e20f74159a4ce22f3198ec0b8127904015c42a5efea75cb6dc3",
+      "source_sha256_used": "e19377eafbfc2e20f74159a4ce22f3198ec0b8127904015c42a5efea75cb6dc3",
+      "source_binding_matches": true
+    },
+    "raw_lineage": null
+  },
+  "candidate_rows": {
+    "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/quality-review-v29-source-closure-v1/closure-input-v1/closure-candidate-root-actions.jsonl",
+    "sha256": "8e9c173e5fd719bb8ee0f110838ec13dea294c04bc66187a2f3bc3f8f5253cef",
+    "rows": 54,
+    "binding_path": "/home/werg/.claude/jobs/9c849f00/tmp/v29-out/closure-v29-s1-v1/candidate-source-case-bindings.json",
+    "binding_sha256": "cbe0d492d9993b1b674def657c384d2b89b02f9759cdfae512ad77078a56c0fd"
+  },
+  "projection": {
+    "path": "/home/werg/.claude/jobs/9c849f00/tmp/v29-out/closure-v29-s1-v1/source-case-port-projection.jsonl",
+    "sha256": "f9a5936c380b6a6a7a5897a7f926655a21e6331374d8c69656b64bfcffb49d56",
+    "records": 54,
+    "basis": "one port record per source case; exact callable root, manifest-selected visible JSON text fields and other visible input files as sources; actual user request as consumer; authored semantics.expected as target",
+    "visible_json_text_fields": [
+      {
+        "glob": "items/*.json",
+        "pointers": [
+          {
+            "pointer": "/question",
+            "role": "record"
+          },
+          {
+            "pointer": "/state",
+            "role": "record"
+          }
+        ],
+        "basis": "Exact semantic inputs to the decision call."
+      },
+      {
+        "glob": "task.json",
+        "pointers": [],
+        "basis": "Visible task contract metadata."
+      }
+    ],
+    "visible_json_text_fields_sha256": "62e6b834845e1cd01817ee657b64913c02cc37b9aaea8287899d6e5f619ab873"
+  },
+  "closed_projection": {
+    "path": "/home/werg/.claude/jobs/9c849f00/tmp/v29-out/closure-v29-s1-v1/closed-source-case-port-projection.jsonl",
+    "sha256": "f9a5936c380b6a6a7a5897a7f926655a21e6331374d8c69656b64bfcffb49d56",
+    "records": 54,
+    "omitted_projection_ids": []
+  },
+  "indexes": [
+    {
+      "reference": "cross-corpus-index-s1-full-final-20261003-v1",
+      "registered_id": "cross-corpus-index-s1-full-final-20261003-v1",
+      "path": "/home/werg/data/natlang-corpora/cross-corpus-index/s1-full-final-20261003",
+      "registered": true,
+      "manifest_path": "/home/werg/.claude/jobs/9c849f00/tmp/wt-v29/training/corpus-manifests/cross-corpus-index-s1-full-final-20261003-v1.json",
+      "manifest_sha256": "914893de2e0ce260e4000ca7609e51f8997b66e8d15a845064d812bc68c7514e",
+      "manifest_verified": true,
+      "index_sha256": "eb78bbdfc5673a7b4e97c42881beae49a14de1a3f7db1741f80a311d15f087a4",
+      "format": "port",
+      "records": 1870591,
+      "groups": 985434,
+      "files": [
+        {
+          "path": "/home/werg/data/natlang-corpora/cross-corpus-index/s1-full-final-20261003/digests.npz",
+          "bytes": 115212068,
+          "sha256": "6432ff67414718ec95ea34d9683941f3488557df26256eee7846e3e8aa36ea80",
+          "manifest_bytes": 115212068,
+          "manifest_sha256": "6432ff67414718ec95ea34d9683941f3488557df26256eee7846e3e8aa36ea80",
+          "matches": true
+        },
+        {
+          "path": "/home/werg/data/natlang-corpora/cross-corpus-index/s1-full-final-20261003/groups.json",
+          "bytes": 47084554,
+          "sha256": "accb6981c6be55d117b05f8633632fc6b77452dd45a870ce75a10412483711ed",
+          "manifest_bytes": 47084554,
+          "manifest_sha256": "accb6981c6be55d117b05f8633632fc6b77452dd45a870ce75a10412483711ed",
+          "matches": true
+        },
+        {
+          "path": "/home/werg/data/natlang-corpora/cross-corpus-index/s1-full-final-20261003/index.json",
+          "bytes": 15277,
+          "sha256": "eb78bbdfc5673a7b4e97c42881beae49a14de1a3f7db1741f80a311d15f087a4",
+          "manifest_bytes": 15277,
+          "manifest_sha256": "eb78bbdfc5673a7b4e97c42881beae49a14de1a3f7db1741f80a311d15f087a4",
+          "matches": true
+        },
+        {
+          "path": "/home/werg/data/natlang-corpora/cross-corpus-index/s1-full-final-20261003/sketches.npz",
+          "bytes": 1273593899,
+          "sha256": "c2ae4b4a691e953db7527b7c9eaf3dbd8dc123efef692ef17adfa6e6170f37c8",
+          "manifest_bytes": 1273593899,
+          "manifest_sha256": "c2ae4b4a691e953db7527b7c9eaf3dbd8dc123efef692ef17adfa6e6170f37c8",
+          "matches": true
+        }
+      ]
+    },
+    {
+      "reference": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+      "registered_id": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+      "path": "/mnt/external/natlang-development-data/data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+      "registered": true,
+      "manifest_path": "/home/werg/.claude/jobs/9c849f00/tmp/wt-v29/training/corpus-manifests/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1.json",
+      "manifest_sha256": "18bf74c8c2b599e19af99a46ede0553b0b9c91d574b6f0aaaea9498b4a8f0f1b",
+      "manifest_verified": true,
+      "index_sha256": "7df97307d0702ab06ad44e2c6a868b50040cdf665a9d44bdd76b158e06f9595f",
+      "format": "turn",
+      "records": 3843,
+      "groups": 769,
+      "files": [
+        {
+          "path": "/mnt/external/natlang-development-data/data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1/digests.npz",
+          "bytes": 1570,
+          "sha256": "0678d15fe2bdb3179b5e82246cc4ecabe6c600afb1ed5279afd8b9a7d6c24e8d",
+          "manifest_bytes": 1570,
+          "manifest_sha256": "0678d15fe2bdb3179b5e82246cc4ecabe6c600afb1ed5279afd8b9a7d6c24e8d",
+          "matches": true
+        },
+        {
+          "path": "/mnt/external/natlang-development-data/data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1/groups.json",
+          "bytes": 41889,
+          "sha256": "3d67d4c227b536a06320c6ab84defdefc95adb96196532e7b7a2e5f46e6100dc",
+          "manifest_bytes": 41889,
+          "manifest_sha256": "3d67d4c227b536a06320c6ab84defdefc95adb96196532e7b7a2e5f46e6100dc",
+          "matches": true
+        },
+        {
+          "path": "/mnt/external/natlang-development-data/data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1/index.json",
+          "bytes": 802,
+          "sha256": "7df97307d0702ab06ad44e2c6a868b50040cdf665a9d44bdd76b158e06f9595f",
+          "manifest_bytes": 802,
+          "manifest_sha256": "7df97307d0702ab06ad44e2c6a868b50040cdf665a9d44bdd76b158e06f9595f",
+          "matches": true
+        },
+        {
+          "path": "/mnt/external/natlang-development-data/data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1/sketches.npz",
+          "bytes": 756,
+          "sha256": "1a0f905a83eb0bbb4728cf31eab23f5f2cb33e34ed16e7b6fcb52de2974d0ac0",
+          "manifest_bytes": 756,
+          "manifest_sha256": "1a0f905a83eb0bbb4728cf31eab23f5f2cb33e34ed16e7b6fcb52de2974d0ac0",
+          "matches": true
+        }
+      ]
+    }
+  ],
+  "protected": {
+    "path": "/mnt/external/natlang-development-data/data/neuralese/protected/bgkit-benchmarks.protected.json",
+    "sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf",
+    "hits_by_source_case": {
+      "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_d13322ac5e15_a54a498ec282515f9633d622:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_d13322ac5e15_2f8c02deb578bea4efdaa5b8:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_d13322ac5e15_064bb2a7583b6f587a0133fe:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_d13322ac5e15_994fa52ba81bf24118b84ea2:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_d13322ac5e15_990bf7c0aee752bee4b2a9a4:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_d13322ac5e15_5ab8883abf455bf642c56ccf:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_dbpedia_choice:source_d13322ac5e15_fb8ed774a7e69dc18709fa48:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_dbpedia_choice:source_d13322ac5e15_90fb948813236178a46f412b:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_dbpedia_choice:source_d13322ac5e15_d4f1378616706b3efebb96f4:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_dbpedia_choice:source_d13322ac5e15_ad4b7e5e1489161a35c65781:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_dbpedia_choice:source_d13322ac5e15_3694969294a69ee1f03b463e:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_dbpedia_choice:source_d13322ac5e15_5832cccec2218ee307ca0a96:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_dbpedia_choice:source_d13322ac5e15_567f2aaab45578d67da2873a:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_dbpedia_choice:source_d13322ac5e15_46b666268c8bfbdce7295950:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_d13322ac5e15_ab89e93dfd81f4f4d0d28443:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_d13322ac5e15_2af7de14cac36b46b8c9c82a:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_d13322ac5e15_2c1b034475a1c4c32e156eca:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_d13322ac5e15_bc3cc65c7eed09f8ec0f6a07:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_language_id_choice:source_d13322ac5e15_991b4235fd96f4e8e3f2fbb4:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_language_id_choice:source_d13322ac5e15_2394a89a4ec85c507e3ebb84:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_language_id_choice:source_d13322ac5e15_4946bc7bbd831de43a9b01c8:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_language_id_choice:source_d13322ac5e15_42dde50bc0b2ab4c7950b57e:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_language_id_choice:source_d13322ac5e15_d897669f144969afd9848302:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_language_id_choice:source_d13322ac5e15_ad1483c508977b16d6f692c9:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_language_id_choice:source_d13322ac5e15_841a2903e649291030273715:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_language_id_choice:source_d13322ac5e15_0fd5e478bea92461b72d770d:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_newsgroups_choice:source_d13322ac5e15_d88adcfaf11f6a790dd5d6e6:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_newsgroups_choice:source_d13322ac5e15_23d3eb78896c0f95854b706f:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_newsgroups_choice:source_d13322ac5e15_78abaaf97acf45be53c26ca8:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_newsgroups_choice:source_d13322ac5e15_8490a8e6d605d0a259bc780a:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_newsgroups_choice:source_d13322ac5e15_20fc347981fe9b2ce0406730:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_newsgroups_choice:source_d13322ac5e15_3c4bb18e27e73f5da753d4c1:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_d13322ac5e15_6a504ec6933c3a037e761a32:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_d13322ac5e15_585bea8a6a0a6a5500071892:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_d13322ac5e15_23014fad4f25a70bab9777e2:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_d13322ac5e15_55102d30de716215328be384:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_d13322ac5e15_7220db8467ef69634f75cf38:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_d13322ac5e15_faa132b4e65cc3ffb4839686:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_d13322ac5e15_f6c47ff0e3244ca46ad44c06:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_d13322ac5e15_ab0588ae07f12169b47d6c61:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_d13322ac5e15_98be89548f43066be09ca6ed:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_d13322ac5e15_4f2f45de0a4500afe045d56f:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_d13322ac5e15_ac39a9d573ce340dc09f3e89:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_d13322ac5e15_9cf6d5e973e89150f78154d4:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_d13322ac5e15_cfd06b7fe6a72be7e3e61874:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_d13322ac5e15_16cbdc099c6f3bc23d2ab905:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_d13322ac5e15_95565608da8df9c169877395:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_d13322ac5e15_e56f0657522cf45cee0dd47e:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_d13322ac5e15_fbfc24a0d9851abdc3989f37:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_yahoo_topic_choice:source_d13322ac5e15_3878b7fbef0028e0c9b6617d:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_d13322ac5e15_1bfd42f975983b3bdd383d33:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_d13322ac5e15_71c062e347165d26f6ef64ec:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_d13322ac5e15_3848f52c65319a4065344c46:exact-choice-with-held-confidence-receipt-v1": null,
+      "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_d13322ac5e15_9e915a3d018438a53be5370c:exact-choice-with-held-confidence-receipt-v1": null
+    },
+    "scope": "the protected map indexes question hashes and IDs, not source text"
+  },
+  "apply": {
+    "records_in": 54,
+    "indexes": [
+      "s1-full-final-20261003",
+      "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+    ],
+    "internal": {},
+    "external_links": {},
+    "protected_hits": {},
+    "components": 54,
+    "moved": {},
+    "dropped": {},
+    "records_out": 54,
+    "by_split": {
+      "train": 54
+    }
+  },
+  "cross_corpus_check_errors": [],
+  "internal_split_group_errors": [],
+  "limits": [
+    "Candidate native action targets remain provenance only; they are not interpreted as source-case answers.",
+    "Closure does not certify source semantic correctness, trajectory quality, or training/native qualification."
+  ]
+}

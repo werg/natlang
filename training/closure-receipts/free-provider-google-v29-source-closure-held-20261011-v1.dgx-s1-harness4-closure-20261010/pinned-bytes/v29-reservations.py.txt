@@ -1,0 +1,32 @@
+"""V29: selected original ids/groups vs every dc-/g- key referenced in the prior provider batches (direct + nested) and the
+annotation reservations listed in the V29 provider source manifest; files hash-verified first."""
+import json, os, re, sys, hashlib
+ROOT = '/home/werg/natlang/runs/free-provider-generation-20261009-v1/'
+SRV = '/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/'
+man_p = ROOT + 'provider-google-choice-confidence-v29-source/source-manifest.json'
+src_p = ROOT + 'quality-review-v29-source-closure-v1/closure-input-v1/closure-source-cases.jsonl'
+h = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
+m = json.load(open(man_p))
+rows = [json.loads(l) for l in open(src_p) if l.strip()]
+ids = {k for r in rows for k in r['source_ids_original']}; groups = {k for r in rows for k in r['source_groups_original']}
+loc = lambda p: ROOT + p[len(SRV):] if p.startswith(SRV) else p
+DC, G = re.compile(r'\bdc-[0-9a-f]{20}\b'), re.compile(r'\bg-[0-9a-f]{24}\b')
+per, all_ids, all_groups = [], set(), set()
+for kind, fs in (('prior_provider_cases', m['prior_provider_cases']['files']), ('annotation_reservations', m['annotation_reservations']['files'])):
+    for x in fs:
+        p = loc(x['path']); text = open(p, errors='replace').read()
+        fi, fg = set(DC.findall(text)), set(G.findall(text))
+        all_ids |= fi; all_groups |= fg
+        per.append({'kind': kind, 'path': x['path'], 'sha256_pinned': x['sha256'], 'sha256_ok': h(p) == x['sha256'],
+                    'dc_keys_referenced': len(fi), 'g_keys_referenced': len(fg),
+                    'selected_id_hits': sorted(ids & fi), 'selected_group_hits': sorted(groups & fg)})
+out = {'schema': 'natlang.v29-prior-reservation-closure/1', 'request': '2026-10-11T00:37:02.406686Z-pop-9f66', 'note': 'pop-745c nested reservations',
+       'provider_source_manifest': {'path': man_p, 'sha256': h(man_p)}, 'source_cases': {'path': src_p, 'sha256': h(src_p)},
+       'selected_original_ids': len(ids), 'selected_original_groups': len(groups),
+       'manifest_counts': {k: v for k, v in m['prior_provider_cases'].items() if k != 'files'} | {'annotation_reserved_ids': m['annotation_reservations'].get('reserved_source_ids'), 'annotation_reserved_groups': m['annotation_reservations'].get('reserved_source_groups')},
+       'method': 'every dc-[0-9a-f]{20} and g-[0-9a-f]{24} token anywhere in each file (superset of direct program and nested source ids/groups)',
+       'files': per, 'all_files_hash_ok': all(f['sha256_ok'] for f in per),
+       'referenced_ids_total': len(all_ids), 'referenced_groups_total': len(all_groups),
+       'selected_id_hits_total': sorted(ids & all_ids), 'selected_group_hits_total': sorted(groups & all_groups)}
+json.dump(out, open(sys.argv[1], 'w'), indent=1)
+print({k: (len(v) if isinstance(v, list) else v) for k, v in out.items() if k not in ('files', 'manifest_counts', 'provider_source_manifest', 'source_cases')}, out['manifest_counts'])

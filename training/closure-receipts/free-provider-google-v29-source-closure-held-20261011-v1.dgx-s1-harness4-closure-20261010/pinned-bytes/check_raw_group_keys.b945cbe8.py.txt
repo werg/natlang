@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""Check exact raw source IDs/groups against one registered index's groups.json."""
+import argparse,hashlib,json
+from pathlib import Path
+def sha(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+def main():
+ p=argparse.ArgumentParser();p.add_argument('--source-cases',required=True,type=Path);p.add_argument('--groups-json',required=True,type=Path);p.add_argument('--out',required=True,type=Path);a=p.parse_args()
+ rows=[json.loads(s) for s in a.source_cases.read_text().splitlines() if s.strip()]; groups=json.loads(a.groups_json.read_text())
+ ids=sorted({v for r in rows for v in r['source_ids_original']}); raw=sorted({v for r in rows for v in r['source_groups_original']})
+ aliases=sorted({v for r in rows for v in r['source_groups']})
+ report={'schema':'natlang.v22-raw-source-key-precheck/1','source_cases_path':str(a.source_cases.resolve()),'source_cases_sha256':sha(a.source_cases),'source_cases_rows':len(rows),'groups_json_path':str(a.groups_json.resolve()),'groups_json_sha256':sha(a.groups_json),'index_json_sha256':sha(a.groups_json.parent/'index.json'),'index_group_keys':len(groups),'unique_original_source_row_ids':len(ids),'unique_original_source_group_ids':len(raw),'original_source_row_id_hits':[{'key':k,'split':groups[k]} for k in ids if k in groups],'original_source_group_id_hits':[{'key':k,'split':groups[k]} for k in raw if k in groups],'namespace_alias_hits':[{'key':k,'split':groups[k]} for k in aliases if k in groups],'scope':'Exact key membership only against the supplied groups.json; no text, near-duplicate, answer, or full-S1 check.'}
+ a.out.write_text(json.dumps(report,indent=2)+'\n'); print(json.dumps({'rows':len(rows),'original_row_hits':len(report['original_source_row_id_hits']),'original_group_hits':len(report['original_source_group_id_hits']),'alias_hits':len(report['namespace_alias_hits']),'sha256':sha(a.out)},indent=2))
+if __name__=='__main__':main()

@@ -1,0 +1,407 @@
+{
+ "schema": "natlang.v29-prior-reservation-closure/1",
+ "request": "2026-10-11T00:37:02.406686Z-pop-9f66",
+ "note": "pop-745c nested reservations",
+ "provider_source_manifest": {
+  "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v29-source/source-manifest.json",
+  "sha256": "ecd9fa2c9f91932a32f60053f8fe63435fc7cb7e7a56f78e3b9173ce5cd8c65d"
+ },
+ "source_cases": {
+  "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/quality-review-v29-source-closure-v1/closure-input-v1/closure-source-cases.jsonl",
+  "sha256": "e19377eafbfc2e20f74159a4ce22f3198ec0b8127904015c42a5efea75cb6dc3"
+ },
+ "selected_original_ids": 396,
+ "selected_original_groups": 396,
+ "manifest_counts": {
+  "root": "/home/werg/natlang/runs/free-provider-generation-20261009-v1",
+  "unique_case_ids": 12844,
+  "unique_source_groups": 12554,
+  "unique_direct_program_ids": 12844,
+  "unique_direct_program_groups": 12554,
+  "unique_nested_source_ids": 1152,
+  "unique_nested_source_groups": 1152,
+  "unique_reserved_id_union": 13224,
+  "unique_reserved_group_union": 12934,
+  "lineage_policy": "Direct program IDs/groups and nested source_ids/source_groups are stored and counted separately, then the union is used for overlap prevention.",
+  "annotation_reserved_ids": 640,
+  "annotation_reserved_groups": 640
+ },
+ "method": "every dc-[0-9a-f]{20} and g-[0-9a-f]{24} token anywhere in each file (superset of direct program and nested source ids/groups)",
+ "files": [
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v10/cases.jsonl",
+   "sha256_pinned": "752cf6dd22a71f6ac6d2534eb9f1e8dda3136b99e25488906fbf9bee0c3139c9",
+   "sha256_ok": true,
+   "dc_keys_referenced": 193,
+   "g_keys_referenced": 193,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v11/cases.jsonl",
+   "sha256_pinned": "d0951dd0b880ffcef63cea13235e630cf717a3cba7df8f71b9b47c0325315a8d",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v12/cases.jsonl",
+   "sha256_pinned": "57e8c110d5d56d81d49d4af510e8bd66563b94c9c14969b840fbebda52176d80",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v13/cases.jsonl",
+   "sha256_pinned": "d2dfb8a58ab6f5de6b9959c8f94f451d45b8d339a9046b97fd4daa33914327cd",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v14/cases.jsonl",
+   "sha256_pinned": "e579b82682570cc2baa0b766e32c18dd2e478b1a53d52edbfbab9fac34636bed",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v15/cases.jsonl",
+   "sha256_pinned": "357910aab48036717d2486067d0a35c7df452622fa2be337bbf19f5785545cbd",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v16/cases.jsonl",
+   "sha256_pinned": "abf2e7f3b8a60536f6a8e003e491ac253c89bbe6bee9e76de959cc90cdc40fcf",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v17/cases.jsonl",
+   "sha256_pinned": "48dda6ae7533d400cca3e705b8e4c975589122debd64225f1e596e9e2564c839",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v18/cases.jsonl",
+   "sha256_pinned": "2ff88eb5fc3197c5eb9d8180dbadf8239d08d12e4dea75d4c52d2c280f0d20db",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v19/cases.jsonl",
+   "sha256_pinned": "58ce152499f9c318400cd783c2df4844ac8ef8cf4fc1c81630b8bbe94416a6ba",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v20/cases.jsonl",
+   "sha256_pinned": "86ecdfe75f62190522ab81d50596121182a942e4e0c5b3daa414b1813f556b4f",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v22/cases.jsonl",
+   "sha256_pinned": "429457ae275a4630e4fe59753df74cbb1e38bd634035fd90b7f2f45f4223c370",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v23/cases.jsonl",
+   "sha256_pinned": "11f63c3a3d179d38674983bd11502dceb5e60831a159b2dd768088baffc07772",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v24/cases.jsonl",
+   "sha256_pinned": "9ab821f12badb63767133ff494ffbeb957b62059ebb81663ceae907b409c95fa",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v25/cases.jsonl",
+   "sha256_pinned": "ab160b766f3ea6c576385b8b91264624e41b4b4800c18c5a4ce86481f720a998",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v26/cases.jsonl",
+   "sha256_pinned": "86d245d740d8af8b607500cc4ca000f27840cc70a958c432b2538e9bc5252c76",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v26-reviewed-v2/cases.jsonl",
+   "sha256_pinned": "2816b5ead243cd0ad779859f6059a2a94edc620115288fa19db389e908427c2b",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v27/cases.jsonl",
+   "sha256_pinned": "5b08b5e78f7074dec2aae3d18b36c99b090bf1a4e26b92a12e25564b61242987",
+   "sha256_ok": true,
+   "dc_keys_referenced": 512,
+   "g_keys_referenced": 512,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v9/cases.jsonl",
+   "sha256_pinned": "0511463eb2387788fc8733d3413456667f74e371035b663f0bffd9907acd14f7",
+   "sha256_ok": true,
+   "dc_keys_referenced": 92,
+   "g_keys_referenced": 92,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v1/cases.jsonl",
+   "sha256_pinned": "66e0b2d8936f6e7e04c00d2e6a566bb0a95e8ba36443a99d8fbf2ab1d7f970e4",
+   "sha256_ok": true,
+   "dc_keys_referenced": 6,
+   "g_keys_referenced": 6,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v1/cases.jsonl",
+   "sha256_pinned": "76b16902119b76f6bd35f5e549ec2d353579cc164993d8c2ea0226cbab2f1bed",
+   "sha256_ok": true,
+   "dc_keys_referenced": 256,
+   "g_keys_referenced": 256,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v2/cases.jsonl",
+   "sha256_pinned": "bb4b40568997d33e58bd07dbd9031d9c57085a85f27b24b2ae8f2a8fa162402e",
+   "sha256_ok": true,
+   "dc_keys_referenced": 1024,
+   "g_keys_referenced": 1024,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v3/cases.jsonl",
+   "sha256_pinned": "e80fa6a36eb0697e40a78e57ab07bb9ecf55ef4a36587de8da26ffb3c39ccb59",
+   "sha256_ok": true,
+   "dc_keys_referenced": 1024,
+   "g_keys_referenced": 1024,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v4/cases.jsonl",
+   "sha256_pinned": "d2739c560cde9b87e06433cdf06a2ec103d577871b5cff277a4289c7a80a5376",
+   "sha256_ok": true,
+   "dc_keys_referenced": 1024,
+   "g_keys_referenced": 1024,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v5/cases.jsonl",
+   "sha256_pinned": "9b05be433ca215750490577600a096b114271f1fdf49fdf1fb04c44f121baea9",
+   "sha256_ok": true,
+   "dc_keys_referenced": 1024,
+   "g_keys_referenced": 1023,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v6/cases.jsonl",
+   "sha256_pinned": "37f296751f2a0e08dcb283772bfb69bf2421e9d8f9cabea37a56a2b85d71c493",
+   "sha256_ok": true,
+   "dc_keys_referenced": 178,
+   "g_keys_referenced": 178,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v7/cases.jsonl",
+   "sha256_pinned": "37f296751f2a0e08dcb283772bfb69bf2421e9d8f9cabea37a56a2b85d71c493",
+   "sha256_ok": true,
+   "dc_keys_referenced": 178,
+   "g_keys_referenced": 178,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-model-pool-v5-mass-json-repair-v8/cases.jsonl",
+   "sha256_pinned": "ea1a8afaef1984b3003262facd9cbb45880f74de3f79d09298391f6fa557338c",
+   "sha256_ok": true,
+   "dc_keys_referenced": 176,
+   "g_keys_referenced": 176,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-pubmedqa-full-abstract-v21/cases.jsonl",
+   "sha256_pinned": "a0433d18ff2436d7fde9882d34d109783576568d73f522e2f3341b7f9ce3bc73",
+   "sha256_ok": true,
+   "dc_keys_referenced": 43,
+   "g_keys_referenced": 43,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-robotics-er2-mixed-decisions-v2/cases.jsonl",
+   "sha256_pinned": "4883b2a986c2ea4542b91b24bcab012145d362d0cfe403ef2caee6297269b9fd",
+   "sha256_ok": true,
+   "dc_keys_referenced": 120,
+   "g_keys_referenced": 120,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-google-robotics-er2-mixed-decisions-v3/cases.jsonl",
+   "sha256_pinned": "f6b47f0b85b78354a5b752bd223e0d754cf7dafd56d15db5d4e982b48feebf4d",
+   "sha256_ok": true,
+   "dc_keys_referenced": 114,
+   "g_keys_referenced": 114,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-groq-openai-gpt-oss-20b-typed-error-diagnostic-v1/cases.jsonl",
+   "sha256_pinned": "6cab049dbef6ef35069a82d10a511cc283e7b71666876a5affa288857755a035",
+   "sha256_ok": true,
+   "dc_keys_referenced": 3,
+   "g_keys_referenced": 3,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-groq-short-decisions-v1/cases.jsonl",
+   "sha256_pinned": "863781e0f461202b9c29bbcba72f858270a7355bf184853bbf2b06b4db4f56d7",
+   "sha256_ok": true,
+   "dc_keys_referenced": 16,
+   "g_keys_referenced": 16,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v16/cases.jsonl",
+   "sha256_pinned": "53be2b0f7189f3c970a5c210d915e0c4b312586f0bbfe46fa2377f4b8f6233c1",
+   "sha256_ok": true,
+   "dc_keys_referenced": 96,
+   "g_keys_referenced": 96,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v17/cases.jsonl",
+   "sha256_pinned": "738bb47325f1e73f177e60ca27d15610818edeffb83b13532d586e67765b8931",
+   "sha256_ok": true,
+   "dc_keys_referenced": 416,
+   "g_keys_referenced": 416,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "prior_provider_cases",
+   "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v21/cases.jsonl",
+   "sha256_pinned": "329d70a0114b4c36a226a6cbbc2c7602e7592c5d5fb59672019f235b96790abe",
+   "sha256_ok": true,
+   "dc_keys_referenced": 640,
+   "g_keys_referenced": 640,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  },
+  {
+   "kind": "annotation_reservations",
+   "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-static-annotation-decision-folders-v21/cases.jsonl",
+   "sha256_pinned": "329d70a0114b4c36a226a6cbbc2c7602e7592c5d5fb59672019f235b96790abe",
+   "sha256_ok": true,
+   "dc_keys_referenced": 640,
+   "g_keys_referenced": 640,
+   "selected_id_hits": [],
+   "selected_group_hits": []
+  }
+ ],
+ "all_files_hash_ok": true,
+ "referenced_ids_total": 12936,
+ "referenced_groups_total": 12934,
+ "selected_id_hits_total": [],
+ "selected_group_hits_total": []
+}
