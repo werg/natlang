@@ -346,10 +346,20 @@ Measured: consumer task success (exact verifiers where the task has them) and co
 2. **Re-entry at call and return boundaries.**
    - In this stage nothing is re-entered. Every input, inside and outside Neuralese spans, is the ordinary
      embedding of the gold token, and there is no reader mapping or read adapter.
-   - Once values are fed back (the recurrence stage), a value v_t, which lives in input-embedding space, enters as
-     the input at position t+1 in place of E[token_{t+1}], within the producing call's Neuralese span.
+   - In direct-v1 end-to-end training and serving, positions **inside a producing
+     call** still read ordinary token embeddings: gold tokens for a text-sized
+     training write, otherwise the TokenChoiceProjection's greedy token. Emitted
+     Neuralese values do not re-enter that producer. Recurrence is across call
+     boundaries: the consumer reads the producer's emitted values.
    - At a call's return, the returned values enter the caller's context as input embeddings at the return
      positions.
+   - Course correction, 2026-10-11 (`4d95ec57`): the previous clause incorrectly
+     described emitted-value feedback inside the producer. That route was
+     exercised by the earlier Pop runtime gate and produced nonfinite gradients
+     on the original V8 102-vector case before any end-to-end update. Token-driven
+     writing makes the exact case finite; runtime qualification was rerun against
+     the new shared contract. Explicit value feedback remains an experimental
+     recurrence-stage option, not direct-v1's implementation or qualification.
    - A read adapter is not part of the design. If the recurrence stage measures that one is needed, it becomes its
      own declared component, separate from both projections.
 3. **The causal conv.**

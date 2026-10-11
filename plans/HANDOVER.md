@@ -11095,3 +11095,46 @@ No context reduction, frozen backbone or detached producer gradient was used.
   is preparing a controlled enum-omission diagnostic/recovery, preserving strict
   local option/confidence validation and the exclusive shared quota lock. Do not
   start a second quota owner or edit the live frozen plan. Outputs remain held.
+
+### 15:42 UTC — resolved writer contract, full epoch restarted, provider recovery
+
+- Pulled shared `4d95ec57`: direct-v1 uses ordinary gold/greedy token embeddings
+  inside a producer; emitted values cross producer→consumer boundaries. The
+  published exact-semantics clause is corrected to match this owner decision.
+  Current serving scheduler, differentiable replay and trajectory training share
+  `DirectWriter.next_input`; no private Pop implementation.
+- Exact wetland diagnostic v3 completed its update from original V8: NL gradient
+  5.6086, TCP22.3844, global201.275, peak4.06GiB, replay delta0, step31.45s. Original
+  nonfinite diagnostic remains held. Token-driven runtime qualification v2 passed
+  8/32/102 vectors, with scheduler/cache/producer-replay/input-adjoint deltas0 and
+  finite payloads/adjoints. Report SHA
+  2b20dc7d1fe211fe4b6d2b0b35de820caab7fe8cc44bc8e6b4659762fc2b432b.
+  v1's comma-separated-length argparse failure is preserved separately.
+- Full native endpoint epoch v2 is now active from ORIGINAL V8 (not a smoke or
+  failed E2E checkpoint): session43993, containerpop-direct-native-e2e-endpoint-v2,
+  recipe9f88311f89f2eb6548aa86e2338027bac929296095f5230af9bf1feffe03c298,
+  commit a4b2156e. First update finite, peak3.31GiB, errors0. Initial held32 crisp
+  CE1.35804 and soft CE1.72788; 32 proven reciprocal typed readers selected.
+  Task and autonomous stopping qualification remain false.
+- Closed diagnostic/qualification receipts and frozen code are registered/synced
+  in f9dd474fb9: 842 files verified on DGX, admission false; active epoch outputs
+  and model/checkpoint weights excluded.
+- Storage floor stopped all five V41 successor workers before cases (exit75,
+  ~890MiB free). Relocated eleven **closed** checkpoint files, 8.98GiB, to ignored
+  `.local/checkpoint-storage-relief-20261011-v1`; SHA-256 verified copies and
+  symlinks preserve original artifact paths and existing Docker repo mounts.
+  Active epoch and original V8 source untouched; /srv/storage recovered~9.8GiB.
+  Move receipts live in that directory. Additive V41 retry v2 approved plan
+  d8c72422238b27426000b7d9887ccce9fce5db1ba0be657614cfaae5f1799795
+  preserves the first storage-paused attempt and same seven programs/39 items.
+- V15 paired probe finished12/12 programs, all lane exits0; actual semantic and
+  paired quality review is pending. Do not adopt candidate guidance from exits.
+- V43 paused by exact frozen worker PID/SIGINT after143 labels/165 attempts.
+  Same-case, same Gemma26 model, 151-option JSON-schema diagnostic changed only
+  enum inclusion: omitted enum returned200 with strict valid choice/confidence.
+  Original400 receipts preserved. Root verified107 prior200 outputs are locally
+  valid and excluded; additive1941-row resume includes36 prior400s plus1905 unseen
+  rows, exact original bytes, complete disjoint2048 partition. Resume plan
+  52d84efec995f99546042cc5c8e37b04f91a5c4d1ba010a2f6041b806ba41ba4
+  is running under the same exclusive project lock/frozen bundle, enum omission
+  with unchanged exact local validation; first two completions succeeded.
