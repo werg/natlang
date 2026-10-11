@@ -31157,6 +31157,69 @@
       "admission": "quality-review-only-no-source-quality-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Closed V75/V76 source/result review. Exact provider source-case and static-reference pins are in the audit; disagreement means source-annotation mismatch only. Child visibility claims use invocation-bound saved rendered requests and stored hash metadata, not original wire bytes. All outputs remain held."
+    },
+    {
+      "id": "google-choice-confidence-v40-no-enum-freeze-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v40-source",
+      "include": [
+        "frozen-adapter-v1-json-schema-no-choice-enum/**/*",
+        "prepared-no-choice-enum-v1/preparation.json"
+      ],
+      "split": "inherited-train-provider-input",
+      "source_class": "held-provider-runner-freeze",
+      "training_admission": false,
+      "admission": "input-freeze-only-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Six-file V40 provider adapter freeze prepared after the exact V41 CLINC JSON-schema diagnostic succeeded when choice.enum was omitted. Local exact-label and confidence checks are unchanged. Not launched and no provider output is included."
+    },
+    {
+      "id": "google-choice-confidence-v41-clinc-enum-diagnostics-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-source",
+      "include": [
+        "v41-clinc-400-diagnostic-v2/receipt.json",
+        "v41-clinc-400-diagnostic-v6/receipt.json"
+      ],
+      "split": "inherited-train-provider-diagnostic",
+      "source_class": "held-provider-schema-diagnostic",
+      "training_admission": false,
+      "admission": "diagnostic-evidence-only-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Same CLINC request: original strict JSON Schema enum request returned HTTP400; v6 JSON schema without choice enum returned HTTP200 and passed the unchanged local exact-option/confidence validator. No fallback or source/output mutation."
+    },
+    {
+      "id": "google-choice-confidence-v41-prefix-static-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v1",
+      "include": [
+        "prefix-input/**/*",
+        "prefix-snapshot-receipt.json",
+        "static/**/*"
+      ],
+      "split": "inherited-train-static-reference",
+      "source_class": "held-static-reference-from-provider-label-prefix",
+      "training_admission": false,
+      "admission": "static-reference-only-no-source-quality-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Immutable prefix snapshot of 187 complete newline-terminated rows from the still-active V41 JSON-object label append stream, SHA 770ea33d4898aca32837c26d4bec1351a8aac51a38ca14eec60ae62183e93995. Shared adapter accepted 159 strict source-consistent labels into 23 authored programs; 18 replays passed full capture visibility. Five CLINC programs remain present in static output and failures because the criteria capture is absent; no dropped source rows or output changes. Zero provider calls in adapter/replay. Not training admission."
+    },
+    {
+      "id": "luna-choice-confidence-v78-v41-prefix-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v78-v41-prefix-runtimev17-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "source-review/**/*",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-generation-input",
+      "source_class": "held-luna-provider-generation-input",
+      "training_admission": false,
+      "admission": "prepared-input-only-root-review-required-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root-review candidate only: 18 visible, accepted authored references from the V41 immutable label prefix; 122 source items across five queues, V17 frozen runtime. Root approval is false and no worker was launched. The 5 other static references remain preserved in the prefix-static artifact with missing criteria capture reported."
     }
   ],
   "coverage_backlog": [

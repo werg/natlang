@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v41-clinc-enum-diagnostics-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-source",
+  "files": [
+    {
+      "path": "v41-clinc-400-diagnostic-v2/receipt.json",
+      "bytes": 794,
+      "sha256": "5f61b40a30c27878cc578afbc7c4621caf027bb690110677377abd677cf8372a"
+    },
+    {
+      "path": "v41-clinc-400-diagnostic-v6/receipt.json",
+      "bytes": 1458,
+      "sha256": "e9827202b232bacdfb92310838852c02a917fbbfbe48dbf53133eec8afa592af"
+    }
+  ],
+  "bytes": 2252
+}

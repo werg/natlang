@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v40-no-enum-freeze-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v40-source",
+  "files": [
+    {
+      "path": "frozen-adapter-v1-json-schema-no-choice-enum/frozen-runtime.json",
+      "bytes": 1251,
+      "sha256": "c7019c8161cde58f51375d867c74a561f05c2199392f6f7acb2c599ab5061c7c"
+    },
+    {
+      "path": "frozen-adapter-v1-json-schema-no-choice-enum/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "frozen-adapter-v1-json-schema-no-choice-enum/scripts/label_decision_cases.py",
+      "bytes": 32252,
+      "sha256": "19632e964db4f2fb567a983f418b35d0ffd14b2306888e5b465aaecc3bfdd4f7"
+    },
+    {
+      "path": "frozen-adapter-v1-json-schema-no-choice-enum/scripts/run_gemini_decision_pool.py",
+      "bytes": 20526,
+      "sha256": "1a894e7bd8a481162bbc2a7985c4a37de425618a2a4f1750e26a873e612e0bee"
+    },
+    {
+      "path": "frozen-adapter-v1-json-schema-no-choice-enum/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "frozen-adapter-v1-json-schema-no-choice-enum/training/neuralese/natlang_neuralese/common/__init__.py",
+      "bytes": 157,
+      "sha256": "8352a509d51ef0dc0be958bdd4492caa968933866b171360be39fda43217364f"
+    },
+    {
+      "path": "frozen-adapter-v1-json-schema-no-choice-enum/training/neuralese/natlang_neuralese/common/jsonio.py",
+      "bytes": 1755,
+      "sha256": "d4e71ae9211cd625ea5d74706f9e0d4cc7fbf59e731dd0cba34fddd04674e4d2"
+    },
+    {
+      "path": "prepared-no-choice-enum-v1/preparation.json",
+      "bytes": 3233,
+      "sha256": "f30e09199de34baec5b2e7005668676609944973ad30f20a8defea7eba5e72e3"
+    }
+  ],
+  "bytes": 62056
+}
