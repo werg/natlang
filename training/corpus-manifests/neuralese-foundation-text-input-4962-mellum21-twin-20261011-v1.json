@@ -1,0 +1,37 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1",
+  "owner": "dgx",
+  "path": "runs/neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1",
+  "files": [
+    {
+      "path": "loader-validation-v1.json",
+      "bytes": 2703,
+      "sha256": "1cbe1b67b51565c6c10957c148b8cd4639e40e6a42093ce02ee7a094bab1fd69"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "row-stats.jsonl",
+      "bytes": 1369534,
+      "sha256": "afcd15724c0aeac3987387a98f962b0b6cd37e546c194230808f8bffcbc1a309",
+      "lines": 4962
+    },
+    {
+      "path": "text-data.jsonl",
+      "bytes": 246967897,
+      "sha256": "7fe4e0557a546c2127adf617439d4a0db5b8435a1a68db2cdfa37ac5d511477d",
+      "lines": 4962
+    },
+    {
+      "path": "twin-identity-check.json",
+      "bytes": 14851,
+      "sha256": "50e37e2be41fe24f748208f4973f2ca95da26bac38fe73ab296c554dc667ac7d"
+    }
+  ],
+  "bytes": 248354985
+}

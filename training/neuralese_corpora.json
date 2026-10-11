@@ -18471,6 +18471,71 @@
       "notes": "4962 exact ordered previously root-adopted text rows (3258train/1704test). First4880 bytes reproduce prior adopted input;82 unique train rows added, no held changes. Source snapshot pins seven streams and original root admission receipt. Current shared loader and independent root exact-byte concatenation verified. No new action admission or alignment/runtime qualification. Native/recurrence unions referenced, not counted as extra text. text-data.jsonl is a file-leaf alias to external immutable body; sync materializes exact bytes."
     },
     {
+      "id": "neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1",
+      "owner": "dgx",
+      "path": "runs/neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1",
+      "include": [
+        "text-data.jsonl",
+        "twin-identity-check.json",
+        "omissions.jsonl",
+        "row-stats.jsonl",
+        "loader-validation-v1.json"
+      ],
+      "admission": "tokenizer-twin-of-root-adopted-text-composition-training-input-no-new-example-admission (inherits the admission of neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1)",
+      "status": "published-derived-text-input",
+      "derived_from": [
+        "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1"
+      ],
+      "tokenizer_twin_of": {
+        "corpus": "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1",
+        "file": "text-data.jsonl",
+        "sha256": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576",
+        "twin_file": "text-data.jsonl",
+        "twin_sha256": "7fe4e0557a546c2127adf617439d4a0db5b8435a1a68db2cdfa37ac5d511477d",
+        "identity": "per-row id, split, source_groups, source_record_ids equal in order"
+      },
+      "license": "facts from the source native records' license field (project-generated for most; CC-BY-SA-4.0 and CC-BY-4.0 for a few authored-source records), as in neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1; Mellum2.1-12B-A2.5B-Thinking tokenizer/chat template Apache-2.0",
+      "build": {
+        "script": "scripts/neuralese_data/text_tokenizer_twin.py",
+        "wrapper": "scripts/neuralese_data/text_tokenizer_twin_mellum4962.sh",
+        "code_commit": "d5dd626b",
+        "ledger_unit": "twin-mellum4962-full2",
+        "renderer": "natlang_neuralese.data.text_corpus.native_gold_packet (natlang.native_gold_chat/3)",
+        "renderer_package_root": "runs/neuralese-gold-text-serving-boundary-refresh-20261009-v1/publication-candidate-v3/code/renderer-snapshot-v2",
+        "renderer_code": {
+          "natlang_neuralese/data/text_corpus.py": "4025b451c156bde26460bb06a1854cd85138ca3d34cf41fbafbef5063f0db536",
+          "natlang_neuralese/serve/chat.py": "d3b5911d81c136b0c12351f5fa7546136e7e6fc73c47027808c9197ceae0332e"
+        },
+        "source_tokenizer_sha256": "e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008",
+        "tokenizer_sha256": "1abe5e6333be0157f76f5484b389e5586b0e6dbb9bc776f54ca9fd62fce6cb56",
+        "tokenizer": {
+          "path": "/home/werg/data/models/mellum21-12b-a2.5b-thinking",
+          "files": {
+            "chat_template.jinja": "4593a34d52f3364ac13ce57f4bea5688924e8942da6df8201e411db17e729f48",
+            "special_tokens_map.json": "20e1ead0b0986b55989aa8116bafe63efcbae0daf8ed047970cd28b36aada4d9",
+            "tokenizer.json": "58548a346eb073e5132bf7d8ad17dc6971bca36ade378ca4d2bfbc49bf60da2a",
+            "tokenizer_config.json": "e2950960d2a3040a1938e6357c8c3628d531133c464286a7869b2e0504fcc59e"
+          }
+        },
+        "native_record_files": "scripts/neuralese_data/text_tokenizer_twin_mellum4962.natrecords (paths and SHA-256 in twin-identity-check.json)"
+      },
+      "tokens": {
+        "train": {
+          "documents": 3258,
+          "tokens": 17626600,
+          "suffix_tokens": 250020,
+          "max_document_tokens": 17066
+        },
+        "test": {
+          "documents": 1704,
+          "tokens": 9177219,
+          "suffix_tokens": 133994,
+          "max_document_tokens": 13297
+        }
+      },
+      "notes": "Mellum2.1-12B-A2.5B-Thinking tokenizer twin of neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1 (sha256 30ef44f4...) built 2026-10-11 on DGX so the Mellum line trains on the same documents as the LFM line. All seven source streams were rendered by the same tokenizer-dependent step, native_gold_packet, whose code (and serve/chat.py d3b5911d) is identical in every Oct-9 renderer snapshot; the twin uses the 4793-view snapshot (commit d7b9dd92). Method: each source row's (messages, target, tools) is recovered from its LFM token IDs (structural template tokens vs escaped content), every history assistant turn's reasoning_content is restored from the source native record (the LFM template shows only the last history turn's reasoning; the record is matched on that shown reasoning and the assistant-turn count, exactly one candidate each), then re-rendered with the LFM tokenizer through the pinned renderer: all 4962 rows reproduce text, token_ids and supervised_suffix_start byte for byte; then rendered with the Mellum tokenizer and chat template. 4962 documents (3258 train / 1704 test), 0 omitted; id, split, source_groups, source_record_ids and attestation lists equal per row in order (twin-identity-check.json); 5733 source records, train/test source-group intersection 0. 26,803,819 tokens (train 17,626,600 / test 9,177,219), supervised suffix 384,014; document length mean 5402, median 4531, p90 8085, max 17066. Supervised tokens whose preceding context exceeds 7168 tokens: 26.5% (962 documents); exceeding 31744: 0. History reasoning restored in 2921 documents (5627 turns); the Mellum template renders history reasoning only after the last user query, so 42 documents show fewer think blocks than history assistant turns (turns before the last user query, or empty reasoning). Targets carry no reasoning and no empty think block (the renderer's Mellum generation prompt does not open one). Shared loader load_text_rows with the Mellum tokenizer (current code, CPU, ledger unit twin-mellum4962-validate2) passed: loader-validation-v1.json. Same admission scope as the source; no new example admission or qualification."
+    },
+    {
       "id": "nebius-swe-rebench-tasks-20261009-v1",
       "owner": "dgx",
       "path": "data/neuralese/corpora/nebius-swe-rebench-tasks-20261009-v1",
