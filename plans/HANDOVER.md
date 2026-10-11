@@ -11330,3 +11330,11 @@ No context reduction, frozen backbone or detached producer gradient was used.
   then matchingrepeat14, to qualify zero-arg hidden inputs fix. Authored mechanism
   probe confirms V18 local `const inputs` rejects, V19 succeeds; final acceptance
   alone missed this difference. No tests run or training admissions changed.
+
+### 18:28 UTC — low cadence retained; follow-up rate checks
+
+Owner rejected frequent eval/checkpoints; regular native cadence remains200/200, with emergency/final saves. Best225 actual trainedTCP penalty versus raw readout is.067454nats (1.392042 vs1.324588) on exact32held rows, narrowly failing shared.05 acceptance; final687 penalty.136630 also fails. No semantic qualification claimed. Preparing full-state best225 heads_lr3e-5 continuation through the shared trainer, not a separate implementation.
+
+Lion finite300-update comparison closed (heldCE5.098805 vsbase6.192337; behavior25/48 vs26/48;326.36s). Muon1e-5 stopped100 atresponseKL.535719, preserving negative evidence. Declared Muon3e-6 follow-up launched from same cleanbase/data/seed/schedule, regular measurements200/final300; previous unlaunched5e-7 plan preserved. No default optimizer change. Five Luna lanes approved forV19 pairedrepeat14, same world/seed asV18, held qualification only.
+
+Recipe/hash checks and actual runs used; automated tests were not run this turn under the developer instruction against unrequested tests.
