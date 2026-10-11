@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v43-first-launch-preflight-reconstruction-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-first-launch-preflight-reconstruction-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 162,
+      "sha256": "1f4e70119b9129dcdd394bfe32992cf3cd0df087dd02c04c7b9256b47772bfab"
+    },
+    {
+      "path": "diagnostic.json",
+      "bytes": 3393,
+      "sha256": "339e458c42517b95e62eac6d57fa45191f85bc041819ddbb2b2fda2db6fe99db"
+    },
+    {
+      "path": "diagnostic.md",
+      "bytes": 1003,
+      "sha256": "4e4a8520007dd87f55abe2dd7da0bc2a22bc52a68e7a5d729e8f31c0f2e9c3ba"
+    }
+  ],
+  "bytes": 4558
+}

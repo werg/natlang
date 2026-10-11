@@ -1827,10 +1827,11 @@ export class NativeSession {
     const callableNames = Object.keys(this.lam.codebase);
     const opaqueNames: string[] = [];
     if (this.lam.projectTransaction) opaqueNames.push('folder');
-    // read_inputs() returns the call's arguments (a frozen copy), which the opening eval also holds as `inputs`;
-    // a parameter or local of either name takes precedence.
+    // Calls with formal parameters expose their frozen arguments through `read_inputs()` and `inputs`.
+    // With no formal parameters there is no caller input object to inspect, so keep both names available for locals.
     const taken = (name: string) => inputNames.includes(name) || Object.hasOwn(this.lam.let, name);
-    const inputsBinding = !taken('read_inputs'), inputsObject = !taken('inputs');
+    const hasCallInputs = inputNames.length > 0;
+    const inputsBinding = hasCallInputs && !taken('read_inputs'), inputsObject = hasCallInputs && !taken('inputs');
     if (inputsBinding) opaqueNames.push('read_inputs');
     if (inputsObject) opaqueNames.push('inputs');
     // return_result also works as a function in eval: return_result(value) stages a result, and

@@ -29,6 +29,7 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 - Seeds and pinned sources support reproducibility; they do not make native state replayable or decisions identical across inference backends.
 - For a folder reducer, keep item-file and task-file contracts distinct: preserve each item's options and use shared options, criteria, or levels only as declared fallbacks. Bind values from those files before constructing per-item inline calls, keep explicit empty lists empty, and use declared options as the answer domain when no criteria are supplied.
 - Native input and scope listings show up to 4,096 characters per value. A cut-off listing names the complete live eval variable; use ordinary code such as `value.slice(start, end)` to inspect omitted ranges. Tool-result text remains separately capped at 2,000 characters and is paged with `read_page`.
+- Eval exposes `inputs` and `read_inputs()` only for calls with formal input fields, unless those names are shadowed. A zero-argument call has no implicit caller-input object; ordinary local declarations may use those names.
 - Verify live-model quality separately from fixture wiring and rendering, and name the remaining empirical gates.
 
 Pair with `natlang-authoring` for substantial natural-language algorithms when that skill is available; this skill is independently usable.

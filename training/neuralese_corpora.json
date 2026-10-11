@@ -33812,6 +33812,21 @@
         "luna-v43-prefix-329-runtimev17-prepared-held-20261011-v1"
       ],
       "notes": "Additive snapshot of the root-approved plan, independent approval and observed five-worker campaign-launch receipt at 2026-10-11T16:19:28Z. Active journals, logs and results are deliberately excluded. Approved plan SHA 3128917280a5c94670d680292e35c1521d7a1650838d80ae8cacc6b822458792; no training or trace admission."
+    },
+    {
+      "id": "free-provider-luna-v43-first-launch-preflight-reconstruction-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-first-launch-preflight-reconstruction-v1",
+      "include": [
+        "diagnostic.json",
+        "diagnostic.md",
+        "FILES.sha256"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-quality-evidence",
+      "training_admission": false,
+      "admission": "held-diagnostic-only-no-training-admission",
+      "notes": "Reconstruction of reported V43 first preflight refusal; durable files show expected approved SHA vs final launch-plan SHA, but actual refusal output/observed SHA is unavailable. Do not treat reconstruction as launch log."
     }
   ],
   "coverage_backlog": [
