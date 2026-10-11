@@ -30471,6 +30471,42 @@
       "admission": "held-policy-provenance-only-no-training-admission",
       "independent_new_worlds": 0,
       "notes": "Corrected V17 policy adoption receipt: pins the exact parent V16 policy snapshot, the root-reviewed V17 hold decisions, and exact 79-hold policy bytes (SHA c8eab8b4...). It records unchanged source labels and does not itself grant training admission."
+    },
+    {
+      "id": "luna-choice-confidence-v75-v36-runtimev17-v4-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v75-v36-runtimev17-v4",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "source-review/**/*",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ],
+      "split": "inherited-train-generation-input",
+      "source_class": "held-luna-generation-inputs",
+      "training_admission": false,
+      "admission": "root-approved-generation-input-only-no-output-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V75 v4 preparation-only input snapshot on runtime V17, 54 static programs / 390 source items, five exact worker queues. It binds the current 79-hold policy snapshot SHA c8eab8b4... and exact completed preparer snapshot SHA 6c1ff89f...; later canonical policy or code changes do not invalidate the prepared source identity. Predecessors are explicitly numbered logical lanes 1–5 with exact queue hashes and V16 runtime manifest pins in the reviewed/root-approved plans. Root supervisor 1052262 has started lane 2 and waits on other predecessor lanes; live campaign status/journals/results/logs excluded."
+    },
+    {
+      "id": "luna-choice-confidence-v75-v36-runtimev17-v4-root-approval-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v75-v36-runtimev17-v4",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-launch-receipt-v1.json"
+      ],
+      "split": "inherited-train-launch-evidence",
+      "source_class": "held-luna-generation-approval-launch-receipt",
+      "training_admission": false,
+      "admission": "held-launch-evidence-only-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Separate root-approved plan and launch receipt for V75 v4. Supervisor PID 1052262 replaces empty/stopped V75 v3 supervisor 1048971; approved plan SHA 1458c439... . Five workers authorized; lane 2 is currently running while other lanes await exact predecessors. This is launch evidence, not output quality or admission."
     }
   ],
   "coverage_backlog": [

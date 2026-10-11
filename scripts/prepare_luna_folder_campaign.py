@@ -182,11 +182,35 @@ def load_predecessors(campaign: Path) -> list[dict[str, Any]]:
     workers = launch.get("workers")
     if not isinstance(workers, list) or not workers:
         raise ValueError("Predecessor campaign launch has no actual worker records")
+    bundle_path = campaign / "predecessors.json"
+    bundle_by_number: dict[int, dict[str, Any]] = {}
+    if bundle_path.is_file():
+        bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+        if bundle.get("schema") != "natlang.luna-predecessor-lane-bundle/1":
+            raise ValueError(f"Unsupported predecessor bundle schema: {bundle_path}")
+        rows = bundle.get("predecessors")
+        if not isinstance(rows, list) or not rows:
+            raise ValueError(f"Predecessor bundle has no explicit lanes: {bundle_path}")
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ValueError(f"Malformed predecessor bundle lane: {bundle_path}")
+            number = row.get("number")
+            runtime = row.get("runtime")
+            if isinstance(number, bool) or not isinstance(number, int) or number < 1 or number in bundle_by_number:
+                raise ValueError(f"Predecessor bundle needs unique positive logical lane numbers: {bundle_path}")
+            if not isinstance(runtime, str) or not runtime:
+                raise ValueError(f"Predecessor bundle lane {number} has no explicit runtime: {bundle_path}")
+            bundle_by_number[number] = row
     predecessors = []
     seen_queues: set[Path] = set()
+    seen_numbers: set[int] = set()
     for worker in workers:
         if not isinstance(worker, dict):
             raise ValueError("Malformed predecessor worker record")
+        number = worker.get("number")
+        if isinstance(number, bool) or not isinstance(number, int) or number < 1 or number in seen_numbers:
+            raise ValueError("Predecessor workers need unique positive logical lane numbers")
+        seen_numbers.add(number)
         pid = worker.get("pid")
         queue = Path(worker.get("queue", "")).expanduser().resolve()
         journal = Path(worker.get("journal", "")).expanduser().resolve()
@@ -197,8 +221,34 @@ def load_predecessors(campaign: Path) -> list[dict[str, Any]]:
         if queue in seen_queues:
             raise ValueError(f"Duplicate predecessor queue: {queue}")
         seen_queues.add(queue)
-        predecessors.append({"pid": pid, "queue": str(queue), "journal": str(journal),
-                             "queue_sha256": digest(queue)})
+        record: dict[str, Any] = {"number": number, "pid": pid, "queue": str(queue),
+                                  "journal": str(journal), "queue_sha256": digest(queue)}
+        runtime_value = worker.get("runtime")
+        if bundle_by_number:
+            lane = bundle_by_number.get(number)
+            if lane is None:
+                raise ValueError(f"Predecessor launch lane {number} is absent from its explicit bundle")
+            if (lane.get("pid") != pid or
+                    Path(lane.get("queue", "")).expanduser().resolve() != queue or
+                    Path(lane.get("journal", "")).expanduser().resolve() != journal):
+                raise ValueError(f"Predecessor launch and bundle disagree for logical lane {number}")
+            lane_queue_sha = lane.get("queue_sha256")
+            if lane_queue_sha is not None and lane_queue_sha != record["queue_sha256"]:
+                raise ValueError(f"Predecessor bundle queue hash mismatch for logical lane {number}")
+            runtime_value = lane["runtime"]
+        if isinstance(runtime_value, str) and runtime_value:
+            runtime = Path(runtime_value).expanduser().resolve(strict=True)
+            runtime_manifest = runtime / "frozen-runtime.json"
+            if not runtime_manifest.is_file():
+                raise ValueError(f"Predecessor runtime has no frozen manifest for lane {number}: {runtime}")
+            frozen = json.loads(runtime_manifest.read_text(encoding="utf-8"))
+            if not isinstance(frozen.get("files"), dict) or tree_identity(runtime) != frozen["files"]:
+                raise ValueError(f"Predecessor runtime does not match its frozen manifest for lane {number}")
+            record["runtime"] = str(runtime)
+            record["runtime_manifest_sha256"] = digest(runtime_manifest)
+        predecessors.append(record)
+    if bundle_by_number and set(bundle_by_number) != seen_numbers:
+        raise ValueError("Predecessor launch lanes do not exactly match explicit bundle logical lane numbers")
     return predecessors
 
 
@@ -343,6 +393,12 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         "max_new_workers": args.workers,
         "predecessor_campaign": str(predecessor_campaign) if predecessor_campaign else None,
         "predecessor_worker_count": len(predecessors),
+        "predecessor_lanes": [
+            {key: predecessor[key] for key in (
+                "number", "pid", "queue", "queue_sha256", "runtime", "runtime_manifest_sha256"
+            ) if key in predecessor}
+            for predecessor in predecessors
+        ],
         "reasoning_effort": args.reasoning_effort,
         "prepared_only": True,
     }
@@ -359,6 +415,11 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         str(SUPERVISOR): digest(SUPERVISOR),
         str(STARTER): digest(STARTER),
     }
+    for predecessor in predecessors:
+        artifact_hashes[predecessor["queue"]] = predecessor["queue_sha256"]
+        if "runtime" in predecessor:
+            runtime_manifest = Path(predecessor["runtime"]) / "frozen-runtime.json"
+            artifact_hashes[str(runtime_manifest)] = predecessor["runtime_manifest_sha256"]
     worker_records = []
     all_cases = list(case_rows)
     for worker_number in range(1, args.workers + 1):
