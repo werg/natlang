@@ -34135,21 +34135,6 @@
       "notes": "Cutoff snapshot captured status running with five actual worker PIDs. Treat as a launch observation only; later raw outputs require a separate closed snapshot."
     },
     {
-      "id": "luna-v43-static-replay-callstore-attempt-held-20261011-v1",
-      "owner": "pop",
-      "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-static-replay-attempt-v1",
-      "include": [
-        "quality-review-v43-static-replay-attempt-v1.json",
-        "quality-review-v43-static-replay-attempt-v1-termination.json"
-      ],
-      "split": "held-operational-diagnostic-no-admission",
-      "source_class": "static-reference-replay-operational-diagnostic",
-      "training_admission": false,
-      "trace_admission": false,
-      "admission": "preserved interrupted pre-fix attempt; not semantic or model evidence",
-      "notes": "Attempt v2 was stopped after 30 minutes and high userspace I/O from repeated call-store eviction scans; no replay result rows were emitted. See the separate successful v3 static adapter for completed replays."
-    },
-    {
       "id": "luna-v43-runtimev18-v19-paired48-review-held-20261011-v1",
       "owner": "pop",
       "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-runtimev19-paired48-v1",
