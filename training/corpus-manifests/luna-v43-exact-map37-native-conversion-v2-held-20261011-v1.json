@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v43-exact-map37-native-conversion-v2-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/v43-exact-map37-native-conversion-review-v2-20261011-v1",
+  "files": [
+    {
+      "path": "FILES.sha256.json",
+      "bytes": 656,
+      "sha256": "1e6ae4fadd1720011139a5907015428fe871b689966de11aa5506ab69d350d6d"
+    },
+    {
+      "path": "converted.jsonl",
+      "bytes": 114814004,
+      "sha256": "98753013a98dad5cd016b997727955186d1df7fc714c6dee6d9d8a31d5f76d4c",
+      "lines": 926
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 62348,
+      "sha256": "c0bd3e56dc9a757803444809b93fd0c887ae640cd663265ac67e80300a29b2af",
+      "lines": 82
+    },
+    {
+      "path": "review.json",
+      "bytes": 4848,
+      "sha256": "bf99af3a5b26b4d9434f83127a60b8c53744eecf8bdf8d75e5f546c143ef6637"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 1899,
+      "sha256": "83bba21a01d6dcbefed9705c93dc17c6395242a8097f38812baeb169db5eb3a5"
+    }
+  ],
+  "bytes": 114883755
+}

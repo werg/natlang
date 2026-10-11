@@ -34535,6 +34535,24 @@
         }
       },
       "notes": "Every row written (0 omissions). Tokens from the first non-system turn on are the source IDs (supervised suffix identical, checked); 4289 rows re-tokenize exactly and match; 673 rows with escaped special spellings are token-level splices. Program-specific system paragraphs kept verbatim: directory-reducer declaration, call nesting layer, Neuralese parameter/result declarations, Neuralese text-channel emulation declaration, the edit_code capability paragraph. Generic runtime prose and all tool schemas dropped."
+    },
+    {
+      "id": "luna-v43-exact-map37-native-conversion-v2-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/v43-exact-map37-native-conversion-review-v2-20261011-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-from-native-sft-v43; conversion-only-review",
+      "source_class": "native-inline-instruction-conversion-candidate",
+      "training_admission": false,
+      "trace_admission": false,
+      "native_admission": false,
+      "admission": "held-conversion-candidate; no recurrence or runtime qualification",
+      "derived_from": [
+        "luna-v43-exact-map37-native-sft-926-20261011-v1"
+      ],
+      "notes": "Existing converter output for the 926 already-admitted native SFT rows. Converts 20 compiler-attested model-authored inline instruction writers with 34 distinct reads (35 read appearances); 20/20 sidecars pass the scoped Python validator. Child-result conversion remains zero: 895 producer-missing, 164 host-result-only. Supersedes the preliminary v1 readiness report’s zero-inline-conversion interpretation; it does not add independent source credit or change native-SFT admission. Reciprocal writer/read, source quality, split, and recurrence review remain pending. Exact input and converter pins are in review.json."
     }
   ],
   "coverage_backlog": [
