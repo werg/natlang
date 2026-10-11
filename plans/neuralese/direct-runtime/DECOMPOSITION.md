@@ -71,3 +71,11 @@ identity/version/device/dtype changes, and bypasses caching for trainable tables
 Module device transfers also transfer/release this buffer; no global cache holds
 GPU tensors. Hidden-state gradients and vocabulary precision remain unchanged.
 The failed smoke remains held; this change alone grants no qualification.
+
+Native E2E updates additionally report each projection's preclip gradient norm,
+actual applied update norm, and global preclip gradient norm. These are crisp
+measurements of the existing update, not a new clipping or training policy. Only
+small projection tensors are snapshotted; full backbone weights are not copied.
+The six-row v7 smoke completed20updates at peak3.5–4.07GiB with no errors, but
+held CE degraded and finite projection gradients amplified to4e13. Mechanics
+success is not task qualification; preserve the failed usefulness evidence.

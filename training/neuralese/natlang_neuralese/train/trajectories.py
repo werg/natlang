@@ -2555,12 +2555,31 @@ def main(argv=None):
                 layer_staging.end()
             optimizer_phase = start_phase('gradient_clip_and_optimizer', step)
             writer_grad = float(gradient_norm(head_params)) if head_params else None
-            clip_finite_gradients(trainables, 1.0, consumed_norm=consumed if armed is not None else None)
+            direct_update = {}
+            if direct is not None:
+                projection_groups = {key: list(module.parameters()) for key, module in (
+                    ('neuralese_projection', direct.neuralese_projection),
+                    ('token_choice_projection', direct.token_choice_projection))}
+                projection_before = {key: [p.detach().clone() for p in group]
+                                     for key, group in projection_groups.items()}
+                direct_update['projection_gradient_norms'] = {
+                    key: float(gradient_norm(group)) for key, group in projection_groups.items()}
+            global_grad_norm = clip_finite_gradients(
+                trainables, 1.0, consumed_norm=consumed if armed is not None else None)
+            direct_update['global_gradient_norm'] = float(global_grad_norm)
             if quant is not None:
                 quant.set_active('bf16', 0.0)  # evaluations and checkpoints after the update see BF16
             commit_optimizer_step(optimizer)
+            if direct is not None:
+                with torch.no_grad():
+                    direct_update['projection_update_norms'] = {
+                        key: float(torch.linalg.vector_norm(torch.stack([
+                            torch.linalg.vector_norm(p.detach() - before, dtype=torch.float64)
+                            for p, before in zip(group, projection_before[key])])))
+                        for key, group in projection_groups.items()}
+                del projection_before
             stop_phase(optimizer_phase)
-            entry = {"step": step, "iteration_index": step, "completed_updates": step + 1, "reader_record_ids": step_record_ids, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
+            entry = {"step": step, "iteration_index": step, "completed_updates": step + 1, "reader_record_ids": step_record_ids, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started), **direct_update,
                      "errors": errors, "backward_mode": mode, "staged_nodes": staged_nodes,
                      "host_gc_seconds": round(host_gc_seconds - step_gc_seconds, 6),
                      "host_gc_calls": host_gc_calls - step_gc_calls,
