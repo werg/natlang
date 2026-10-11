@@ -775,6 +775,8 @@ def main(argv=None):
     direct_trainables = head_named + backbone_named
     cuda_active = torch.cuda.is_available() and str(a.device).startswith('cuda')
 
+    cache_released = []
+
     def execution_plan(batch):
         """Pick sequential accumulation and the least checkpointing that fits live device memory."""
         if a.window_execution == 'auto':
@@ -827,6 +829,37 @@ def main(argv=None):
                 raw, predicted, calibration = estimate(checkpointed)
         incremental = predicted + floor
         fits = available is None or incremental <= available
+        if not fits and cuda_active and not cache_released:
+            # On unified memory (DGX GB10) CUDA allocations only use MemFree: stale page cache of read-once
+            # checkpoints and corpora hides reusable memory. Drop it once (the ledger's shared release) and re-measure.
+            import os
+            import subprocess
+            cache_released.append(True)
+            ledger = Path(os.environ.get('NATLANG_REPO', path_root('repo'))) / 'scripts' / 'memory_ledger.py'
+            output = ''
+            if ledger.is_file():
+                released = subprocess.run(['python3', str(ledger), 'release-cache'], capture_output=True, text=True)
+                output = released.stdout[-400:]
+            # This process's own reads (model weights, heads, data) are the bulk of the cache it meets; drop them
+            # directly too, so a busy or stuck shared release never leaves them pinned.
+            sources = {Path(p).resolve().parent for p in (a.heads, a.text_data, a.records, a.pieces) if p}
+            name = getattr(backbone.hf.config, '_name_or_path', None)
+            if name and Path(name).exists():
+                sources.add(Path(name).resolve())
+            advised = 0
+            for source in sources:
+                for path in source.rglob('*'):
+                    try:
+                        if path.is_file() and path.stat().st_size >= 64 << 20:
+                            handle = os.open(path, os.O_RDONLY)
+                            os.posix_fadvise(handle, 0, 0, os.POSIX_FADV_DONTNEED)
+                            os.close(handle)
+                            advised += path.stat().st_size
+                    except OSError:
+                        continue
+            print(json.dumps({'event': 'page_cache_released', 'ledger': output,
+                              'own_files_advised_gb': advised / 2 ** 30}), flush=True)
+            return execution_plan(batch)
         if not fits:
             raise MemoryError('neuralese_direct estimated update exceeds reusable CUDA memory: '
                               f'{incremental} bytes required, {available} available; no forward was started')
