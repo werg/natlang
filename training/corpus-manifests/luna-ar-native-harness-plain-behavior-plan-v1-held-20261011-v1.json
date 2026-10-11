@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-ar-native-harness-plain-behavior-plan-v1-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
+  "files": [
+    {
+      "path": "plain-text-behavior-comparison-plan-v1/plan.json",
+      "bytes": 4665,
+      "sha256": "782fd4d2b909c849a53d20e4c83fd060c666d6a8c8a785cf40438ff2d4aec026"
+    },
+    {
+      "path": "plain-text-behavior-comparison-plan-v1/plan.md",
+      "bytes": 1940,
+      "sha256": "94cd9c1d605edc8fc726d8c1cd00d297636e9bd8679665193d8a3c23ea98f86a"
+    }
+  ],
+  "bytes": 6605
+}

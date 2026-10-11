@@ -30300,6 +30300,84 @@
       "admission": "held-generation-launch-evidence-only-no-training-admission",
       "independent_new_worlds": 0,
       "notes": "Separate immutable root approval and launch receipt for V75 v3, supervisor PID 1048971. Receipt pins approved plan SHA 2cdd29b7b8a50690d7f057be47c6c8f0f16db7358f7b80785590c8fdbdf1f4f3. Does not imply outcome quality or admission."
+    },
+    {
+      "id": "luna-ar-native-harness-plain-behavior-probes-v1-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
+      "include": [
+        "plain-behavior-probes-v1/probes.jsonl",
+        "plain-behavior-probes-v1/build-probes.py",
+        "plain-behavior-probes-v1/probe-manifest.json"
+      ],
+      "split": "held-eval-probe-history-superseded",
+      "source_class": "held-paired-plain-behavior-evaluation-probes",
+      "training_admission": false,
+      "admission": "held-evaluation-evidence-only-superseded-probe-convention-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Immutable original V1 probe artifact retained as history. Its convention predates the owner-reviewed LFM-native V2 and it is not the execution input. No generation or training admission."
+    },
+    {
+      "id": "luna-ar-native-harness-plain-behavior-probes-v2-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
+      "include": [
+        "plain-behavior-probes-v2/probes.jsonl",
+        "plain-behavior-probes-v2/build-probes.py",
+        "plain-behavior-probes-v2/probe-manifest.json"
+      ],
+      "split": "held-paired-plain-behavior-evaluation-input",
+      "source_class": "held-paired-plain-behavior-evaluation-probes",
+      "training_admission": false,
+      "admission": "reviewed-evaluation-input-only-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Owner-reviewed fixed 48-probe LFM-native paired plain-text input. Expected fields remain offline; open/native outputs require manual semantic review. No generation has been run."
+    },
+    {
+      "id": "luna-ar-native-harness-baseline-restore-only-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
+      "include": [
+        "baseline-restore-only-cpu-v1/restore.json"
+      ],
+      "split": "held-loader-restore-only-validation",
+      "source_class": "held-cpu-model-loader-restore-validation",
+      "training_admission": false,
+      "admission": "restore-compatibility-evidence-only-no-behavior-qualification",
+      "independent_new_worlds": 0,
+      "notes": "CPU-only restore validation of exact pre-alignment embedded LFM LoRA checkpoint; no generation, GPU load, training, or admission. Records shared loader/environment pins and exact tensor key/shape/value matches."
+    },
+    {
+      "id": "luna-ar-native-harness-plain-behavior-plan-v1-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
+      "include": [
+        "plain-text-behavior-comparison-plan-v1/plan.json",
+        "plain-text-behavior-comparison-plan-v1/plan.md"
+      ],
+      "split": "held-paired-behavior-plan-history-superseded",
+      "source_class": "held-evaluation-run-plan",
+      "training_admission": false,
+      "admission": "plan-history-only-superseded-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Original plan retained unchanged as planning history. It has superseded component pins and does not authorize an execution; see additive V2 plan snapshot."
+    },
+    {
+      "id": "luna-ar-native-harness-plain-behavior-plan-v2-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
+      "include": [
+        "plain-text-behavior-comparison-plan-v2/plan.json",
+        "plain-text-behavior-comparison-plan-v2/plan.md",
+        "plain-text-behavior-execution-v1/package-manifest.json",
+        "plain-text-behavior-execution-v1/package-source.tar"
+      ],
+      "split": "held-paired-behavior-execution-plan",
+      "source_class": "held-evaluation-package-and-plan",
+      "training_admission": false,
+      "admission": "prepared-execution-evidence-not-run-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Prepared plan and immutable package source for future 48-probe x 3-role paired evaluation. Wait for V8 closure and exact selected checkpoint receipt; do not overlap training. No model generation performed."
     }
   ],
   "coverage_backlog": [
