@@ -915,7 +915,17 @@ def stage_parameter_args(parameters):
     return command
 
 
-def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, device):
+def recurrence_completion_gate(checkpoint, steps):
+    """Read committed progress, rather than infer completion from a clean exit."""
+    import torch
+    state = torch.load(checkpoint, mmap=True, weights_only=False, map_location='cpu')
+    if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
+        raise ValueError('wrong recurrence artifact schema')
+    return {'training_stage_completed': state['step'] >= steps,
+            'step': state['step'], 'errors': state['errors'], 'semantic_channel_qualified': False}
+
+
+def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, device, handoff=False):
     """Freeze, bind, and run one explicitly declared shared stage.
 
     Direct stages are only appropriate when lineage evidence already qualifies
@@ -928,8 +938,9 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     declared_output = Path(recipe['outputs']['directory']).resolve()
     if output != declared_output:
         raise ValueError('direct-stage output differs from its declaration')
+    previous = None
     if output.exists():
-        raise ValueError('fresh direct-stage output directory required')
+        previous = json.loads((output / 'direct-stage-plan.json').read_text())
     metadata_path = Path(launch_metadata).resolve()
     if metadata_path.exists() or output == metadata_path or output in metadata_path.parents:
         raise ValueError('direct-stage launch metadata must be a fresh external path')
@@ -955,14 +966,46 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     if actual_code != recipe['runtime']['package_code']:
         raise ValueError('direct-stage shared package differs from its frozen code inventory')
 
-    output.mkdir(parents=True)
+    stage = recipe['stage']
+    stage_output = output / stage['id']
+    handler = HANDLERS[stage['kind']]
+    resume = None
+    if previous is not None:
+        for key, value in [('stage', stage), ('inputs', inputs), ('device', device)]:
+            if previous.get(key) != value:
+                raise ValueError('direct-stage resume changes ' + key)
+        old_parameters, new_parameters = dict(previous['parameters']), dict(recipe['parameters'])
+        if handoff:
+            for key in OPERATIONAL_STAGE_PARAMETERS:
+                old_parameters.pop(key, None)
+                new_parameters.pop(key, None)
+        if old_parameters != new_parameters:
+            raise ValueError('direct-stage resume changes training parameters')
+        if previous['frozen_code'] != actual_code and not handoff:
+            raise ValueError('direct-stage code change requires --handoff')
+        checkpoint = stage_output / 'checkpoint.pt'
+        if not checkpoint.is_file():
+            raise ValueError('direct-stage resume requires the committed handler checkpoint')
+        history = output / 'resume-history' / (time.strftime('%Y%m%dT%H%M%S') + '-' + str(os.getpid()))
+        history.mkdir(parents=True)
+        for name in ('direct-stage-plan.json', 'direct-stage-result.json'):
+            path = output / name
+            if path.is_file():
+                shutil.copyfile(path, history / name)
+        resume = {'checkpoint_path': str(checkpoint), 'checkpoint_sha256': sha(checkpoint),
+                  'previous_plan_path': str(history / 'direct-stage-plan.json'),
+                  'previous_plan_sha256': sha(history / 'direct-stage-plan.json'),
+                  'code_handoff': previous['frozen_code'] != actual_code}
+        if resume['code_handoff']:
+            (output / 'runtime').rename(history / 'runtime')
+    output.mkdir(parents=True, exist_ok=True)
     frozen = output / 'runtime' / 'natlang_neuralese'
-    shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    if not frozen.exists():
+        shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     frozen_code = {str(path.relative_to(frozen)): sha(path)
                    for path in sorted(frozen.rglob('*.py'))}
     if frozen_code != actual_code:
         raise ValueError('direct-stage runtime snapshot differs from reviewed package bytes')
-    stage = recipe['stage']
     # The handler owns its fresh output boundary; pre-creating this path breaks
     # handlers that reject an existing --out directory before creating it.
     stage_output = output / stage['id']
@@ -983,6 +1026,8 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
             'parameters': parameters, 'child_argv': command, 'stage_output': str(stage_output),
             'lineage': recipe['lineage'], 'lineage_evidence': lineage_evidence,
             'lineage_gate_verifications': lineage_gate_verifications}
+    if resume is not None:
+        plan['resume'] = resume
     write_json(output / 'direct-stage-plan.json', plan)
     write_json(metadata_path, {'schema': 'natlang.neuralese-direct-stage-launch-intent/1',
                                'recipe_id': recipe['id'], 'recipe_sha256': plan['recipe_sha256'],
@@ -1003,6 +1048,8 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
         result = signal_forwarder.run(command, env=environment)
     stage_report = stage_output / 'report.json'
     report = json.loads(stage_report.read_text()) if stage_report.is_file() else None
+    if stage['kind'] == 'raw_recurrence_training' and (stage_output / handler['result']).is_file():
+        report = recurrence_completion_gate(stage_output / handler['result'], parameters.get('steps', 500))
     qualified = False
     if result.returncode == 0 and report is not None:
         try:
@@ -1018,7 +1065,8 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
                 'interrupted': signal_forwarder.stopped[0],
                 'process_finished': True,
                 'completed': result.returncode == 0 and not signal_forwarder.stopped[0] and
-                    (stage['kind'] != 'neuralese_direct' or bool(report and report.get('completed', False))),
+                    (bool(report and report.get('training_stage_completed', False)) if stage['kind'] == 'raw_recurrence_training'
+                     else stage['kind'] != 'neuralese_direct' or bool(report and report.get('completed', False))),
                 'qualified': qualified,
                 'gate_scope': recipe['lineage'].get('qualification_scope'),
                 'report': report, 'outputs': outputs})
@@ -1102,7 +1150,7 @@ def main(argv=None):
             parser.error('direct-stage recipes use only their pinned inputs and declared output')
         if args.launch_metadata is None:
             parser.error('direct-stage execution requires --launch-metadata')
-        return run_declared_direct_stage(recipe, args.recipe, args.out, args.launch_metadata, args.device)
+        return run_declared_direct_stage(recipe, args.recipe, args.out, args.launch_metadata, args.device, args.handoff)
     if args.heads is None:
         parser.error('multi-stage training recipes require --heads')
     if args.until and args.until not in {stage['id'] for stage in recipe['stages']}:
@@ -1291,8 +1339,7 @@ def main(argv=None):
                             raise ValueError('wrong recurrence artifact schema')
                         if state['identity']['files'].get(str(Path(stage_heads).resolve())) != sha(stage_heads):
                             raise ValueError('recurrence artifact runtime handoff differs')
-                        gate = {'training_stage_completed': state['step'] >= stage['parameters'].get('steps', 500),
-                                'step': state['step'], 'errors': state['errors'], 'semantic_channel_qualified': False}
+                        gate = recurrence_completion_gate(output, stage['parameters'].get('steps', 500))
                     else:
                         gate = state['best']
                         if state['identity']['inputs'].get(str(args.heads)) != sha(args.heads):

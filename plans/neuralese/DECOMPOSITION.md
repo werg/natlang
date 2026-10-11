@@ -33,3 +33,16 @@ for each token. This is execution plumbing, not a model policy change.
 | Emit values from prefix state plus all but the last advanced state | Shared Neuralese projection | Each value describes the next token; no new projection or private trainer. |
 | Record stop scores and final states | Shared token-choice readout | Scores align to post-token states, preserving the incremental writer's diagnostics. |
 | Qualify outputs, cache and gradients | GPU mechanism diagnostic against the incremental writer | Sequence and decode kernels may differ numerically; measure before adopting the execution change. |
+
+## Declared direct-stage resume and completion — 2026-10-11
+
+Checkpoint restoration belongs to the existing shared trainer. The recipe runner
+verifies the same stage, inputs, device and training parameters, binds the full
+checkpoint, then invokes that trainer in its existing output directory. A code
+handoff uses the existing `--handoff` convention and preserves the earlier frozen
+runtime and launch/result receipts. These are exact durability/provenance checks;
+no model decides whether a saved optimizer or source identity matches.
+
+Committed checkpoint steps and error counts determine recurrence-stage completion
+through one shared reader. A clean child exit after a requested checkpoint is not
+completion. Completion remains distinct from semantic channel/task qualification.
