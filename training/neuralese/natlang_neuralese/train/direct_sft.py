@@ -157,7 +157,8 @@ def main(argv=None):
     from ..common.hashing import sha256_file_hex
     from ..maple.generation_gate import behaviour_report, held_kl
     from ..maple.distill_data import render
-    from ..model.neuralese_projection import NeuraleseProjection, TokenChoiceProjection, soft_token_mixture
+    from ..model.neuralese_projection import (NeuraleseProjection, TokenChoiceProjection,
+                                               project_token_states, soft_token_mixture)
     from ..serve import load_engine
     from .backbone_policy import configure_backbone_training, plain_named_tensors, shared_parametrized_weights
     from .optim import PortMuonAdamW
@@ -319,7 +320,9 @@ def main(argv=None):
         # Both projections read only the supervised positions: segments start inside the span (context is -1), so
         # no convolution tap reaches the context and the slice is exact. Never full-context logits or mixtures.
         hidden, segments = hidden[:, start:], segments[:, start:]
-        read = hidden if token_choice is None else token_choice(hidden, segments)
+        # Project once over the whole turn so every chunk sees its full causal
+        # history, then keep the vocabulary-sized readout chunked as before.
+        read = project_token_states(hidden, token_choice, segments)
         ce, training_ce, prediction, _, token_losses = chunked_readout(
             backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights)
         mixture = soft_token_mixture(backbone.logits, table, hidden.detach())

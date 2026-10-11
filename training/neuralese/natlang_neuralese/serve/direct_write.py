@@ -10,10 +10,11 @@ import torch
 
 
 class DirectWriter:
-    def __init__(self, backbone, projection, opened, max_length, stop_ids, *, length=None):
+    def __init__(self, backbone, projection, opened, max_length, stop_ids, *, length=None, token_choice_projection=None):
         if opened.top is None:
             raise ValueError('direct writing needs the final causal prefix state')
         self.backbone, self.projection, self.opened = backbone, projection, opened
+        self.token_choice_projection = token_choice_projection
         self.cache = opened.cache
         self.max_length = int(max_length)
         if self.max_length < 1:
@@ -26,11 +27,17 @@ class DirectWriter:
         self.payloads, self.states, self.stop_tensors = [], [], []
         self.stop_logits = []
         self.count, self.done, self.truncated, self.passes = 0, False, False, 0
-        config = projection.stack.config
-        self.history_limit = 1 + config['blocks'] * (config['kernel'] - 1)
+        from ..model.neuralese_projection import causal_conv_receptive_field
+        self.history_limit = max(causal_conv_receptive_field(projection),
+                                 causal_conv_receptive_field(token_choice_projection)
+                                 if token_choice_projection is not None else 1)
 
     def stop_logit(self):
-        logits = self.backbone.logits(self.history[-1][:, None])[:, -1].float()
+        from ..model.neuralese_projection import token_choice_logits
+        hidden = torch.stack(self.history[-self.history_limit:], 1)
+        segments = torch.zeros(hidden.shape[:2], dtype=torch.long, device=hidden.device)
+        logits = token_choice_logits(self.backbone, hidden, self.token_choice_projection,
+                                     segments, last_only=True)[:, -1].float()
         logp = torch.log_softmax(logits, -1)
         stop_logp = torch.logsumexp(logp[:, self.stop_ids], -1)
         # Log odds are useful for replay scoring; greedy stopping itself uses argmax.
@@ -88,9 +95,10 @@ class DirectWriter:
         return payload, payload, torch.zeros_like(payload, dtype=torch.float32)
 
 
-def write_direct(backbone, projection, opened, max_length, stop_ids, *, length=None):
+def write_direct(backbone, projection, opened, max_length, stop_ids, *, length=None, token_choice_projection=None):
     """Run the same incremental writer without a scheduler; retains gradient paths."""
-    writer = DirectWriter(backbone, projection, opened, max_length, stop_ids, length=length)
+    writer = DirectWriter(backbone, projection, opened, max_length, stop_ids, length=length,
+                          token_choice_projection=token_choice_projection)
     while not writer.step():
         pass
     return writer

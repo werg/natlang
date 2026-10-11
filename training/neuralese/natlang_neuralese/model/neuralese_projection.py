@@ -101,6 +101,44 @@ class TokenChoiceProjection(nn.Module):
         return self.stack(hidden, segments)
 
 
+def causal_conv_receptive_field(stack_or_projection) -> int:
+    """Number of current and preceding positions read by a causal projection stack.
+
+    This is derived from the declared stack geometry so incremental callers can
+    retain exactly the history needed by the projection.
+    """
+    stack = getattr(stack_or_projection, 'stack', stack_or_projection)
+    config = getattr(stack, 'config', None)
+    if not isinstance(config, dict):
+        raise TypeError('expected a causal convolution stack or projection')
+    blocks, kernel = config.get('blocks'), config.get('kernel')
+    if type(blocks) is not int or blocks < 1 or type(kernel) is not int or kernel < 1:
+        raise ValueError('causal convolution stack has invalid blocks/kernel configuration')
+    return 1 + blocks * (kernel - 1)
+
+
+def project_token_states(hidden: torch.Tensor, projection: TokenChoiceProjection | None = None,
+                         segments: torch.Tensor | None = None) -> torch.Tensor:
+    """Apply the optional causal token-choice projection to hidden states."""
+    return hidden if projection is None else projection(hidden, segments)
+
+
+def token_choice_logits(backbone, hidden: torch.Tensor, projection: TokenChoiceProjection | None = None,
+                        segments: torch.Tensor | None = None, last_only: bool = False) -> torch.Tensor:
+    """Apply the optional causal token-choice projection, then the base vocabulary readout.
+
+    ``last_only`` slices after projection, so the final position still sees its
+    full supplied causal history. Callers must provide the complete current
+    segment (or its receptive-field suffix) when using it incrementally.
+    """
+    if hidden.ndim != 3 or hidden.shape[1] < 1:
+        raise ValueError('token readout expects nonempty [batch,time,width] hidden states')
+    hidden = project_token_states(hidden, projection, segments)
+    if last_only:
+        hidden = hidden[:, -1:]
+    return backbone.logits(hidden)
+
+
 @torch.no_grad()
 def soft_token_mixture(logits_fn, embedding: torch.Tensor, hidden: torch.Tensor, *, chunk: int = 128) -> torch.Tensor:
     """softmax(logits_fn(hidden))·embedding per position, in position chunks (never all positions' full-vocabulary
