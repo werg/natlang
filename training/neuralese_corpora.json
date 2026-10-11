@@ -31253,6 +31253,56 @@
       "admission": "diagnostic-only-no-native-or-trace-admission-and-no-846-subset-closure-claim",
       "independent_new_worlds": 0,
       "notes": "Exact saved assistant tool-call/tool-result pair join for failed trace actions into retained 846-row V3 histories. 63/63 trace actions match by same trajectory+invocation, function, exact decoded args, linked saved tool_call_id and exact result text; these appear in 82 unique retained turns (145 row/action occurrences). One bad-action lacks trace call ID and is bound by exact args plus linked saved pair. No loose substring/first-line join. Existing full S1 closure covers the 909-row V2 ancestor only; no inferred closure, context masking, admission, or negative-label claim."
+    },
+    {
+      "id": "google-choice-confidence-v41-prefix-remainder-static-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-remainder-static-v1",
+      "include": [
+        "prefix-snapshot-receipt.json",
+        "prefix-input/**/*",
+        "static/**/*",
+        "visible-subset-v1/**/*"
+      ],
+      "split": "inherited-train-static-reference-only",
+      "source_class": "held-label-derived-static-reference-and-replay",
+      "training_admission": false,
+      "admission": "authored-reference-generation-only-no-provider-turns-no-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Byte-prefix remainder derivative of V41 JSON-object output after the already-snapshotted V78 prefix. At cutoff it contains 59 new typed labels; static adapter produced 8 programs/47 accepted labels, with 2 capture failures. Visible subset has 6 programs/37 items passing authored admission and full capture visibility. The exact full adapter evidence, failures/rejections, source manifest, 58 component archive, and subset selection are retained. No labels from the prior 187-row V78 prefix are selected."
+    },
+    {
+      "id": "luna-choice-confidence-v79-v41-remainder-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v79-v41-remainder-runtimev17-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "source-review/**/*",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-provider-generation-input",
+      "source_class": "held-luna-generation-inputs-and-plan",
+      "training_admission": false,
+      "admission": "root-approved-launch-authorization-recorded-separately; generation-output-not-source-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Six fully visible authored static source programs/37 original train items from V41 JSON-object remainder, excluding the previously used V78 prefix. Prepared with frozen V17 and actual V78 predecessor lane records. Input plan/source review/snapshotted policy+preparer and five immutable queues are pinned. Mutable campaign-launch files, worker journals/logs, and generated outputs are deliberately excluded."
+    },
+    {
+      "id": "luna-choice-confidence-v79-root-approval-launch-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v79-v41-remainder-runtimev17-v1",
+      "include": [
+        "root-approved-plan-v1.json",
+        "root-independent-review-v1.json",
+        "root-supervisor-launch-v1.json"
+      ],
+      "split": "inherited-train-generation-authorization-evidence",
+      "source_class": "held-root-review-and-launch-receipt",
+      "training_admission": false,
+      "admission": "authorization-and-plan-review-only-not-data-admission",
+      "independent_new_worlds": 0,
+      "notes": "Root independently reviewed exact master rows, annotation bindings, disjointness, replay/capture and source pins, approved plan SHA 7174e4f635e38af7efa35a45187a4d1b18b15e7154617a4944618136aa3e9717 (prepared plan remains separately preserved), then launched supervisor PID 1096406. Campaign state/results are excluded."
     }
   ],
   "coverage_backlog": [
