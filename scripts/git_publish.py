@@ -11,7 +11,9 @@ conflict markers in other sessions' files and their staged entries unstaged. Thi
      content differs from origin/main's is published, including content committed locally but never pushed. The
      caller's base is the merge base of the local HEAD and origin/main (the local HEAD itself when it is behind);
      a path upstream changed since that base is merged 3-way (`git merge-file` of base / origin/main / worktree);
-     any conflict aborts before anything is pushed;
+     any conflict aborts before anything is pushed. Changed regular `.json` blobs are parsed before commit creation;
+     invalid JSON aborts without repairing or changing the candidate content. Checkout fast-forwards and merge-tree
+     advances receive the same validation before the index/worktree advances;
   3. `git commit-tree` with parent origin/main, `git push origin <sha>:main`; a non-fast-forward rejection refetches
      and rebuilds (up to --retries times);
   4. advances the shared checkout without stashing: paths whose worktree already holds the new content get that
@@ -33,6 +35,7 @@ A deleted path is published as a deletion. A directory expands to its tracked an
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import stat
@@ -91,6 +94,43 @@ class Git:
 
     def is_ancestor(self, a: str, b: str) -> bool:
         return self.run("merge-base", "--is-ancestor", a, b, check=False).returncode == 0
+
+
+def validate_json_blob(git: Git, path: str, entry: tuple[str, str]) -> None:
+    """Reject invalid JSON content before a candidate tree can be committed or checked out."""
+    mode, sha = entry
+    if mode not in {"100644", "100755"} or not path.lower().endswith(".json"):
+        return
+    try:
+        json.loads(git.blob(sha).decode("utf-8"))
+    except UnicodeDecodeError as error:
+        raise PublishError(f"{path}: candidate JSON blob {sha[:12]} is not UTF-8 "
+                           f"(byte {error.start}); content was not changed, committed or pushed") from error
+    except json.JSONDecodeError as error:
+        raise PublishError(f"{path}: candidate JSON blob {sha[:12]} is invalid JSON "
+                           f"(line {error.lineno}, column {error.colno}: {error.msg}); "
+                           "content was not changed, committed or pushed") from error
+
+
+def validate_json_tree_changes(git: Git, before_treeish: str, after_treeish: str) -> None:
+    """Validate changed JSON blobs in a proposed commit/tree transition."""
+    paths = [path for path in git.out("diff-tree", "-r", "-z", "--name-only", "--no-renames",
+                                      before_treeish, after_treeish).split("\0") if path]
+    for path in paths:
+        if not path.lower().endswith(".json"):
+            continue
+        previous, candidate = git.entry(before_treeish, path), git.entry(after_treeish, path)
+        if candidate is not None and candidate != previous:
+            validate_json_blob(git, path, candidate)
+
+
+def validate_json_plan(git: Git, upstream: str, plan) -> None:
+    """Validate changed regular JSON entries after worktree/upstream 3-way merges."""
+    for path, candidate, _ in plan:
+        if candidate is None or not path.lower().endswith(".json"):
+            continue
+        if candidate != git.entry(upstream, path):
+            validate_json_blob(git, path, candidate)
 
 
 def worktree_entry(git: Git, path: str) -> tuple[str, str] | None:
@@ -248,11 +288,14 @@ def advance_checkout(git: Git, new: str, *, dry_run: bool = False, write_back: l
             return False, (f"the checkout's HEAD {old[:10]} has local commits that conflict with {new[:10]}; "
                            "not advanced. Their owner must merge them.")
         tree = proc.stdout.decode().split()[0]
+        validate_json_tree_changes(git, git.out("rev-parse", old + "^{tree}"), tree)
         if dry_run:
             return True, f"would merge {new[:10]} into the checkout's local commits at {old[:10]}"
         new = git.out("commit-tree", tree, "-p", old, "-p", new,
                       input=f"Merge {new[:10]} (origin/main) into the shared checkout's local commits\n\n"
                             "Made by scripts/git_publish.py (no stash).\n".encode())
+    validate_json_tree_changes(git, git.out("rev-parse", old + "^{tree}"),
+                               git.out("rev-parse", new + "^{tree}"))
     for path in write_back:
         if git.entry(new, path) is not None:
             (git.root / path).write_bytes(git.run("cat-file", "--filters", f"{new}:{path}").stdout)
@@ -389,6 +432,7 @@ def main(argv: list[str] | None = None) -> int:
                       "only the named paths' content is published (their local commits included), not the commits",
                       flush=True)
             plan = plan_paths(git, base, upstream, paths)
+            validate_json_plan(git, upstream, plan)
             commit, _ = build_commit(root, upstream, plan, message)
             for path, new, note in plan:
                 print(f"  {'delete' if new is None else 'publish'} {path} ({note})")
