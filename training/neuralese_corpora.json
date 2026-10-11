@@ -33854,6 +33854,235 @@
         "*.jsonl",
         "summary.json"
       ],
+      "admission": "superseded-by-clef-pools-20261011-v2; reference-demonstrations-verified-replay; clef-flash-distilled child labels with per-item confidence gating; action-notes reasoning (not trained); not teacher-sampled",
+      "training_admission": false,
+      "training_admission_reason": "superseded by clef-pools-20261011-v2 (concrete defect: skill_routing item type Request resolved to the fetch Request; 152 failed root evals, children never ran)",
+      "review_status": "verified replay 446/446 cases; Clef-flash labels unreviewed",
+      "required_conversion": "render (render_native_turn_corpus.sh, both tokenizers); root rationales in a teacher window",
+      "split": "train only: items drawn from the train side of the shared content partition (source-split.mjs, training/source-split-reservations.json); generated case ids carry the seed",
+      "source_class": "public-dataset-items-with-clef-flash-decisions",
+      "license": "per source: CLINC150 CC-BY-3.0, dair-ai/emotion (dataset card), CoEdIT Apache-2.0, CUAD v1 CC-BY-4.0; Clef-flash outputs (Cloudflare Workers AI terms). Provenance facts only (owner rule 2026-10-10)",
+      "build": {
+        "driver": "scripts/neuralese_data/clef_pools_daily.py",
+        "seed": 8100,
+        "templates": "clef-programs.mjs NEW_POOLS (skill_routing, wellbeing_triage, edit_review, clause_risk)",
+        "model": "@cf/cloudflare/clef-flash",
+        "input_tokens": 785973
+      },
+      "note": "Clef-flash-distilled inline-lambda programs over new source pools, day 20261011: 446 cases, 2034 decisions ({'clef_edit_review': 125, 'clef_clause_risk': 76, 'clef_skill_routing': 152, 'clef_wellbeing_triage': 93}). Files: *.skeletons (Clef requests), *.answers (Clef outputs with usage), *.ir (cases), *.rows (trajectories), *.turns (native training turns).",
+      "consumable_by_direct_stage": false,
+      "superseded_by": "clef-pools-20261011-v2"
+    },
+    {
+      "id": "natlang-native-turns-static-lambda-expansion-render-20261011-v1",
+      "owner": "dgx",
+      "path": "runs/natlang-native-turns-static-lambda-expansion-render-20261011-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: static-lambda-expansion-20261005-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "static-lambda-expansion-20261005-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "71489850f12404c9089a08532cff861a3ba00f832d884af23463e3f3b9f40a55",
+            "documents": 5794,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 5794,
+                "supervised_tokens": 257539,
+                "tokens": 25078962,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 7613,
+            "merge_omissions": {
+              "exact_duplicate_document": 2403
+            }
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "d00750949245a4a3fd4a1f2661884d63ac11e47b6789d89009cd5f01c238f207",
+            "documents": 5794,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 5794,
+                "supervised_tokens": 349285,
+                "tokens": 25359926,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 7885,
+            "merge_omissions": {
+              "exact_duplicate_document": 2403
+            }
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "8349bd0882c2d05c4b02a1f74e10026a8798c476c3ca7291a9aeb9602c3c8b5b",
+            "documents": 5794,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 5794,
+                "supervised_tokens": 257539,
+                "tokens": 4992404,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 2357,
+            "merge_omissions": {
+              "exact_duplicate_document": 2403
+            }
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "2d1cc47f3d7ea5d846e914f9cb7a9d7f2eac5888b1c3aa90af55c6ee0c393d16",
+            "documents": 5794,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 5794,
+                "supervised_tokens": 349285,
+                "tokens": 5106754,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 2636,
+            "merge_omissions": {
+              "exact_duplicate_document": 2403
+            }
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "251b882167fa12835b1cba4939e2cc97a32b577d1d85f3ead5b302bc688bc46d",
+            "documents": 5395,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 2011832,
+                "documents": 5395,
+                "opening_tokens": 1625930,
+                "supervised_tokens": 385902,
+                "tokens": 4540809,
+                "tool_tokens": 725573
+              }
+            },
+            "max_document_tokens": 2326,
+            "merge_omissions": {
+              "exact_duplicate_document": 2182
+            }
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "4bffd71acb58961732778c69332b5113087b41229c7e73e87b95912af0b32579",
+            "documents": 5395,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 2201976,
+                "documents": 5395,
+                "opening_tokens": 1664941,
+                "supervised_tokens": 537035,
+                "tokens": 4752137,
+                "tool_tokens": 789035
+              }
+            },
+            "max_document_tokens": 2636,
+            "merge_omissions": {
+              "exact_duplicate_document": 2182
+            }
+          }
+        }
+      },
+      "selection": {
+        "omitted:jeff_reserved_test_text": 222,
+        "omitted:not_approved": 1088,
+        "reserved_groups": 207,
+        "reserved_programs_hit": 13,
+        "selected": 8915,
+        "selected:train": 8915,
+        "source_rows": 10225
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 90,
+        "lfm25/all/train_decision_shares_held_source_group": 90,
+        "mellum21/all/decontaminated": 90,
+        "mellum21/all/train_decision_shares_held_source_group": 90
+      },
+      "program_header_parity": {
+        "equal": 16394,
+        "retokenization_checked": 16394
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "aac0925621bf7169bda60e3b2e7f0663caf61e2f14c12f8af7d531307a105ea4",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "3fc79d524b38dd200aa4bad71ea1318d6f695d224e71f3f8af4ba86709206c16",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "099a293efc7f83a675bc38bda4677391419a8e68a035dbfe0a5f44b9342fd1a6",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "16f5941d4a6ddc876ace120949281ca25aebee5c40581d079a6862490ccfac9c",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc"
+        },
+        "receipt": "runs/natlang-native-turns-static-lambda-expansion-render-20261011-v1/receipt.json",
+        "sources": {
+          "data/neuralese/corpora/static-lambda-expansion-20261005-v1/cross-products/native.jsonl": {
+            "bytes": 116506170,
+            "sha256": "d6cc1f926a4db9547daa9fcaaf1526e5471b17536b51f0e9b880f84790c5d50e"
+          },
+          "data/neuralese/corpora/static-lambda-expansion-20261005-v1/folders/native.jsonl": {
+            "bytes": 65601380,
+            "sha256": "e03ce4be477b02c9779a8b58f5ad9be82988b8781da1a34f195e11b8525024cf"
+          },
+          "data/neuralese/corpora/static-lambda-expansion-20261005-v1/iteration/native.jsonl": {
+            "bytes": 107974065,
+            "sha256": "1f242424662abddd91a2b9262d8c5acab8be36effdffe4600244718daca213ca"
+          },
+          "data/neuralese/corpora/static-lambda-expansion-20261005-v1/workbench/native.jsonl": {
+            "bytes": 286706428,
+            "sha256": "33a9634d820814350852eb0068cdf0a70b8ce59bdf87f279cec75eb994f6e5b3"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": "10,225 source decisions: 1,088 approved=false (D5 noisy labels, held) and 222 in 13 programs carrying JeFF reserved test texts (not found by the audit, which did not scan this corpus) omitted; their 207 source groups decontaminated (90 more decisions). 2,403 exact duplicate decision documents dropped (the static generator repeats programs across families). 5,794 decision documents, 5,395 whole-trajectory documents. Train supervised target tokens: decision LFM 257,539 / Mellum 349,285; whole-trajectory decision tokens LFM 385,902 / Mellum 537,035. Program-header parity 16,394/16,394 equal (all re-tokenization checked)."
+    },
+    {
+      "id": "clef-pools-20261011-v2",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/clef-pools-20261011-v2",
+      "include": [
+        "*.jsonl",
+        "summary.json"
+      ],
       "admission": "reference-demonstrations-verified-replay; clef-flash-distilled child labels with per-item confidence gating; action-notes reasoning (not trained); not teacher-sampled",
       "training_admission": true,
       "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
@@ -33869,8 +34098,12 @@
         "model": "@cf/cloudflare/clef-flash",
         "input_tokens": 785973
       },
-      "note": "Clef-flash-distilled inline-lambda programs over new source pools, day 20261011: 446 cases, 2034 decisions ({'clef_edit_review': 125, 'clef_clause_risk': 76, 'clef_skill_routing': 152, 'clef_wellbeing_triage': 93}). Files: *.skeletons (Clef requests), *.answers (Clef outputs with usage), *.ir (cases), *.rows (trajectories), *.turns (native training turns).",
-      "consumable_by_direct_stage": false
+      "note": "Clef-flash-distilled inline-lambda programs over new source pools, day 20261011: 446 cases, 2838 decisions ({'clef_edit_review': 125, 'clef_clause_risk': 76, 'clef_skill_routing': 152, 'clef_wellbeing_triage': 93}). Files: *.skeletons (Clef requests), *.answers (Clef outputs with usage), *.ir (cases), *.rows (trajectories), *.turns (native training turns). Rebuilt from v1's skeletons and Clef answers (no new Clef calls) after the skill_routing item type was renamed Request -> UserRequest: in v1 the name resolved to the platform's fetch Request, every root eval of the 152 skill_routing cases failed (152 unapproved decisions) and their children never ran. v2: 2,838 decisions, all approved.",
+      "consumable_by_direct_stage": false,
+      "supersedes": "clef-pools-20261011-v1",
+      "derived_from": [
+        "clef-pools-20261011-v1"
+      ]
     }
   ],
   "coverage_backlog": [
