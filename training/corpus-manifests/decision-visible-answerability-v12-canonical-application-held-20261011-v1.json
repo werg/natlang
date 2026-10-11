@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "decision-visible-answerability-v12-canonical-application-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-v12-canonical-application-v1",
+  "files": [
+    {
+      "path": "application.json",
+      "bytes": 566,
+      "sha256": "3d25d27178b5f62e9e0ce5637c552a4aa756960febc815bd10282226d363a1df"
+    },
+    {
+      "path": "current-policy.json",
+      "bytes": 46827,
+      "sha256": "79b3ea6fe4817aa356f1053fe5cce5b64de64ce911c0f862c1c40d63e2626299"
+    },
+    {
+      "path": "prior-policy.json",
+      "bytes": 42916,
+      "sha256": "7dd8bcef424457d230a5edbe06982f6f0576d5aa0384a82dbde7bcac8cfc6d68"
+    }
+  ],
+  "bytes": 90309
+}

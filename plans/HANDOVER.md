@@ -10601,3 +10601,8 @@ V7 active36717/37888, GPU100% latestsample; nextscheduled36864eval. Luna V65clos
 Google V30closed512 and V29four2048budget retries closed4withoutschemaerrors; detailed/staticreference audit assigned. V31nowPID989021/sourceSHAb1a27bb7802915ebbe6f1efdb84fb2a8eec017577899fd6848db3e5f62372ca2 runs512fresh complete9-family rows under57canonical+5additiveholds, sharedfreepool/quota/backoff and2048outputbudget. Originalsunchanged/admissionheld.
 
 DGX fullS1 receipts:3129564b closes16typediterate traincases, 16internalnearduplinks/4train-domaincomponents/noexternalhits, exactselectedsourceobjects; earlier excluded V35v1splitproposal cannot conferindependentworldcredit and source split audit explicit. da92f5f1 closes V29 54program396originalitems with fullS1/protected/harnessnohits; also checked37prior source reservations againstselected originals, zerointersection. All actualpolicy/checker bytes pinned inreceipt. Sourceclosuredoes not granttracewriter/operator/trainingapproval.
+
+
+### Pop 2026-10-11T01:32:26.801609+00:00 — canonical source holds applied
+
+V64 seven-source related recovery bothprograms completed with correct-looking returned7DBpedia choices; actualfiles/childvisibility audit remains separate. Its previous policy pin is no longer waiting. V12fiveprospectiveholds now folded into canonical policy62, SHA79b3ea6fe4817aa356f1053fe5cce5b64de64ce911c0f862c1c40d63e2626299; prior/current exactpolicy bytes andapplicationreceipt preserved separately. Future waitingcampaign plans should pin archived policy context, not mutablecanonicalpath. V31 had already applied the same57+5 set via additive receipt, so no selected sourcechanges.
