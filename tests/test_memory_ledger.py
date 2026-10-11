@@ -97,10 +97,11 @@ def test_one_cache_release_at_a_time(monkeypatch, tmp_path):
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     # Never the real balloon: it touches up to 24 GB of anonymous memory (a ledgered suite was OOM-killed by it).
     monkeypatch.setattr(ledger, 'balloon_reclaim', lambda *a, **k: 0)
-    holder = open(str(tmp_path / 'ledger.json.release.lock'), 'w')
-    ledger.fcntl.flock(holder, ledger.fcntl.LOCK_EX)
+    pidfile = tmp_path / 'ledger.json.release.pid'
+    pidfile.write_text(ledger.json.dumps({'pid': ledger.os.getpid(), 'started': ledger.time.time()}))  # a live walk
     assert ledger.release_cache([str(tmp_path)]) == {'skipped': 'another cache release is running'}
-    holder.close()
+    # a walk stuck past its time (D state on a slow disk) no longer blocks the next release
+    pidfile.write_text(ledger.json.dumps({'pid': ledger.os.getpid(), 'started': ledger.time.time() - 3 * ledger.RELEASE_SECONDS}))
     assert ledger.release_cache([str(tmp_path)])['files'] == 0
 
 
@@ -474,7 +475,7 @@ def test_a_waiting_run_registers_in_the_queue_before_any_slow_cache_walk(monkeyp
     monkeypatch.setattr(ledger, 'mem_free', lambda: 1 * GIB)
     monkeypatch.setattr(ledger, 'mem_available', lambda: 50 * GIB)
     monkeypatch.setattr(ledger, 'reclaimable', lambda: 40 * GIB)
-    monkeypatch.setattr(ledger, 'release_cache', lambda: {})
+    monkeypatch.setattr(ledger, 'start_release', lambda: None)
     args = type('A', (), {'budget_gb': 96, 'reserve_gb': 8, 'unit': 'e2e', 'priority': 'high', 'cls': 'experiment', 'wait': 0,
                           'host_max_gb': None, 'workdir': '.', 'env': [], 'stop_seconds': None, 'command': ['x'],
                           'resumable': None, 'hold_budget': False, 'oom_policy': 'stop'})()
@@ -536,3 +537,44 @@ def test_launch_puts_local_bin_first_on_path(monkeypatch):
     cmd = seen[-1]
     assert any(a.startswith('PATH=') and a[5:].startswith(ledger.os.path.expanduser('~/.local/bin') + ':') for a in cmd)
     assert 'docker stop -t 5 u c1' in ' '.join(cmd)
+
+
+def test_a_cache_walk_stops_itself_at_its_deadline_and_skips_the_slow_disk_by_default(tmp_path, monkeypatch):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'balloon_reclaim', lambda *a, **k: 0)
+    assert not any(root.startswith('/mnt/external') for root in ledger.CACHE_ROOTS)
+    for i in range(3):
+        (tmp_path / f'f{i}').write_bytes(b'x' * (17 << 20))
+    assert ledger.release_cache([str(tmp_path)], seconds=-1)['files'] == 0  # deadline passed: no work at all
+    assert ledger.release_cache([str(tmp_path)])['files'] == 3
+    assert not (tmp_path / 'ledger.json.release.pid').exists()
+
+
+def test_a_small_resumable_unit_backfills_behind_a_big_waiting_head_but_a_non_resumable_does_not():
+    order = [('head.service', {}), ('small.service', {})]
+    assert ledger.may_start(order, 'head.service', False, True)
+    assert not ledger.may_start(order, 'head.service', False, False)
+    assert ledger.may_start(order, 'small.service', True, True)
+    assert not ledger.may_start(order, 'small.service', False, True)
+    assert not ledger.may_start(order, 'small.service', True, False)
+
+
+def test_the_guard_relaunches_a_requeued_unit_behind_a_head_that_waits_for_room(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'CHECKPOINT_WRITES', str(tmp_path / 'none'))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 30 * GIB)
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('inactive', ''))
+    monkeypatch.setattr(ledger, 'container_running', lambda n: False)
+    launched = []
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec['unit']) or 0)
+    now = ledger.time.time()
+    spec = {'unit': 'small.service', 'budget': 1 * GIB, 'cls': 'experiment', 'command': ['x'], 'priority': 'medium',
+            'resumable': True, 'reserve': 8 * GIB}
+    with ledger.ledger() as state:  # no running claims to preempt; the head needs 75 GiB, 30 are free
+        state['waiting'] = {'big.service': {'priority': 'high', 'since': now, 'seen': now, 'budget': 75 * GIB, 'reserve': 8 * GIB},
+                            'small.service': {'priority': 'medium', 'since': now, 'requeued': True, 'not_before': now - 1,
+                                              'budget': 1 * GIB, 'reserve': 8 * GIB, 'spec': spec}}
+    ledger.guard(type('A', (), {'floor_gb': 8, 'overshoot': 1.15, 'interval': 0, 'once': True})())
+    assert launched == ['small.service']
