@@ -32752,6 +32752,26 @@
       "independent_new_worlds": 0,
       "admission": "incomplete superseded diagnostic retained; no quality receipt",
       "notes": "Intermediate corrected PID receipt only. Superseded by v3; do not use as the quality result."
+    },
+    {
+      "id": "neuralese-native-e2e-smoke-cohort-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "neuralese-native-e2e-binding-candidate-20261011-v1/direct-e2e-smoke-six-records-v1.jsonl",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/direct-e2e-smoke-selector-review-v1.json",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/direct-e2e-smoke-selector-review-v1.md",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/full-authenticated-1243-cohort-v1.jsonl",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/full-authenticated-1243-cohort-v1.receipt.json",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/binding-candidate.json",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/full-authenticated-context-review.json",
+        "neuralese-native-e2e-binding-candidate-20261011-v1/full-candidate-closure-v1.json"
+      ],
+      "admission": "held feasibility/evaluation design and exact-row materialization only; no training admission, no qualification, and no independent-world credit",
+      "derived_from": [
+        "neuralese-native-e2e-binding-candidate-held-20261011-v1"
+      ],
+      "notes": "Contains the six-row direct smoke input, a selector diagnosis, and a byte-preserving 1,243-endpoint subset (687 train, 556 test) of the previously reviewed full authenticated closure. Inline writer sites in these rows are authenticated by validated neuralese_code sidecars. The reciprocal shuffled-donor selector returns zero for parser-coverage and factual disjoint-donor reasons documented in the selector review. This snapshot is held; do not infer admission or qualification."
     }
   ],
   "coverage_backlog": [
