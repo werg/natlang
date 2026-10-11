@@ -191,6 +191,8 @@ def select(args, shard_dir: Path):
                     reason = 'not_a_native_teacher_turn'
                 elif rid in seen_ids:
                     reason = 'duplicate_source_row_id'
+                elif args.train_only and row.get('split') != 'train':
+                    reason = 'held_split_kept_out'
                 elif not (isinstance(row.get('training_admission'), dict)
                           and row['training_admission'].get('approved') is True):
                     reason = 'not_approved:' + str((row.get('training_admission') or {}).get('reason') or 'approved=false')[:80]
@@ -285,7 +287,9 @@ def whole_trajectory_records(records: list[dict], blocked: dict) -> list[tuple[d
 
 
 def render_shard(job):
-    shard_path, out_dir, tok_name, blocked, corpus, held_groups = job
+    shard_path, out_dir, tok_name, blocked, corpus, held_groups, decision_exclude, header_as_full = job
+    # header_as_full: the corpus's system prompt is its program's own prompt (no generic runtime prose), so the
+    # program-header rendering is the full rendering.
     from natlang_neuralese.data.text_corpus import (authenticated_context_writer_sources,
                                                     authenticated_crisp_context_messages, gold_text_rows,
                                                     native_gold_document, tokenizer_fingerprint)
@@ -316,9 +320,16 @@ def render_shard(job):
         write_done(Path(out_dir), tok_name, stem, result)
         return result
     rows = {}
-    for mode in ('full', 'program-header'):
-        r, receipt, omitted, provenance = gold_text_rows(records, [], tokenizer=tok, require_independent_splits=False,
-                                                         prompt_rendering=mode)
+    # Decisions already rendered elsewhere (--decision-exclude-ids: e.g. the 4962 union's source records) are not
+    # rendered again as decision documents; they still complete their whole trajectories.
+    decision_records = [r for r in records if r['id'] not in decision_exclude]
+    result['decision_excluded'] = len(records) - len(decision_records)
+    for mode in (('full',) if header_as_full else ('full', 'program-header')):
+        if not decision_records:
+            rows[mode] = []
+            continue
+        r, receipt, omitted, provenance = gold_text_rows(decision_records, [], tokenizer=tok,
+                                                         require_independent_splits=False, prompt_rendering=mode)
         for row, prov in zip(r, provenance):
             row['corpus'] = corpus
             row['prompt_rendering'] = mode
@@ -328,12 +339,15 @@ def render_shard(job):
                                                              'documents', 'omitted_records',
                                                              'duplicate_same_split_documents_deduplicated',
                                                              'excluded_train_exact_held_complete_documents')}
+    if header_as_full:
+        rows['program-header'] = [dict(row, prompt_rendering='program-header', system_prompt_mode='program-own')
+                                  for row in rows['full']]
     # Program-header parity: the renderer's rows must equal the strip script's derivation from the full rows.
     im_start, im_end = tok.convert_tokens_to_ids('<|im_start|>'), tok.convert_tokens_to_ids('<|im_end|>')
     by_id = {row['id']: row for row in rows['program-header']}
     parity = Counter()
     kept_ph = []
-    for full in rows['full']:
+    for full in ([] if header_as_full else rows['full']):
         ph = by_id.get(full['id'])
         if ph is None:
             parity['program_header_missing'] += 1
@@ -344,6 +358,17 @@ def render_shard(job):
             omissions.append({'id': full['id'], 'rendering': 'program-header', 'stage': 'parity', 'reason': 'strip_failed: ' + reason})
             continue
         parity['retokenization_checked'] += bool(info['retokenization_checked'])
+        same_text = (stripped['text'] == ph['text'] and
+                     tok.decode(stripped['token_ids'][stripped['supervised_suffix_start']:]) ==
+                     tok.decode(ph['token_ids'][ph['supervised_suffix_start']:]))
+        if same_text and stripped['token_ids'] != ph['token_ids']:
+            # Same bytes, different token boundaries: the header carries special-token spellings, which the serving
+            # renderer tokenizes per escaped run while the strip splice encodes the header as one string. The
+            # renderer's IDs are the serving tokenization; keep them.
+            parity['equal_text_serving_token_boundaries'] += 1
+            ph['system_prompt_mode'] = stripped['system_prompt_mode']
+            kept_ph.append(ph)
+            continue
         if (stripped['text'], stripped['token_ids'], stripped['supervised_suffix_start']) != (
                 ph['text'], ph['token_ids'], ph['supervised_suffix_start']):
             parity['mismatch'] += 1
@@ -353,7 +378,8 @@ def render_shard(job):
         parity['equal'] += 1
         ph['system_prompt_mode'] = stripped['system_prompt_mode']
         kept_ph.append(ph)
-    rows['program-header'] = kept_ph
+    if not header_as_full:
+        rows['program-header'] = kept_ph
     result['parity'] = dict(parity)
     # Whole trajectory.
     fingerprint = tokenizer_fingerprint(tok)
@@ -364,7 +390,7 @@ def render_shard(job):
             messages, _, _ = authenticated_crisp_context_messages(record, {}, writer_sources)
             target = crisp_messages([record['target']], {}, handover_notes(record))[0]
             text, ids = native_gold_document(tok, messages, target, record.get('tools') or [],
-                                             prompt_rendering='program-header')
+                                             prompt_rendering='full' if header_as_full else 'program-header')
         except (KeyError, TypeError, ValueError, IndexError) as exc:
             omissions.append({'id': record['id'], 'rendering': 'whole-trajectory', 'stage': 'render',
                               'reason': 'native_chat_render_failed', 'detail': str(exc)[:240]})
@@ -381,7 +407,8 @@ def render_shard(job):
                    'source_groups': sorted(set(g for g in record.get('source_groups') or [] if isinstance(g, str) and g)),
                    'id': 'whole-trajectory:' + record['id'], 'source_record_ids': members,
                    'source_records': [{'id': m, 'sha256': source_hashes[m]} for m in members],
-                   'corpus': corpus, 'prompt_rendering': 'program-header', 'supervision': 'whole-trajectory'})
+                   'corpus': corpus, 'prompt_rendering': 'program-header', 'supervision': 'whole-trajectory',
+                   **({'system_prompt_mode': 'program-own'} if header_as_full else {})})
     rows['whole-trajectory'] = wt
     for mode, rs in rows.items():
         path = Path(out_dir) / mode / tok_name / f'{stem}.jsonl'
@@ -527,6 +554,11 @@ def main(argv=None):
     p.add_argument('--out-dir', type=Path, required=True)
     p.add_argument('--exclude-programs', type=Path, nargs='*', default=[],
                    help='jsonl rows {id, reason_code?}: programs whose rows are dropped')
+    p.add_argument('--program-header-as-full', action='store_true',
+                   help="the system prompt is the program's own prompt, not generic runtime prose: keep it")
+    p.add_argument('--train-only', action='store_true', help='leave held rows out entirely (their held set lives elsewhere)')
+    p.add_argument('--decision-exclude-ids', type=Path, nargs='*', default=[],
+                   help='jsonl {id}: decisions already rendered elsewhere; used only inside whole trajectories')
     p.add_argument('--reserved', type=Path, help='explicit test reservations (training/source-split-reservations.json)')
     p.add_argument('--protected', type=Path)
     p.add_argument('--held-text', type=Path, nargs='*', default=[])
@@ -564,7 +596,11 @@ def main(argv=None):
     print(json.dumps({'selection': counts, 'internal_held_groups': len(test_groups),
                       'external_held_groups': len(held_external), 'seconds': round(time.time() - t0)}), flush=True)
     shards = sorted(f.stem for f in shard_dir.glob('*.jsonl'))
-    jobs = [(str(shard_dir / f'{s}.jsonl'), str(out / 'work'), name, blocked, a.corpus_id, held_groups)
+    decision_exclude = set()
+    for path in a.decision_exclude_ids:
+        decision_exclude.update(json.loads(line)['id'] for line in path.read_text().splitlines() if line.strip())
+    jobs = [(str(shard_dir / f'{s}.jsonl'), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
+             a.program_header_as_full)
             for s in shards for name in tokenizers]
     results = []
     pending = []
@@ -594,6 +630,7 @@ def main(argv=None):
     for res in results:
         parity.update(res.get('parity') or {})
         render_omissions[f"{res['tokenizer']}/all/decontaminated"] += res.get('decontaminated', 0)
+        render_omissions[f"{res['tokenizer']}/decision/already_rendered_elsewhere"] += res.get('decision_excluded', 0)
     for name in tokenizers:
         for f in sorted((out / 'work' / 'omissions' / name).glob('*.jsonl')):
             for line in f.read_text().splitlines():
