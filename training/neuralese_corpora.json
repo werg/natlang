@@ -29008,6 +29008,36 @@
       "training_admission": false,
       "admission": "held-inputs-no-generated-output",
       "notes": "Rootverified53train programs393exactoriginal rows/current64holds disjoint/58execution payloads. Shared default lane-aware launch uses explicit V68ownership. Approved plan46f0014a..., supervisor1005511 waiting. Inputs only; no live evidence, admission or newworldcredit."
+    },
+    {
+      "id": "google-v32-final-quality-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v32-final-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-generation-quality-and-source-closure",
+      "training_admission": false,
+      "admission": "held-pending-explicit-quality-and-source-review",
+      "notes": "512strict typedvalid/119fullinputdifferences/53acceptedstaticreferences393item-bound captures. Allheld; annotationagreement/staticreplay not admission."
+    },
+    {
+      "id": "google-v32-source-closure-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v32-source-closure-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-generation-quality-and-source-closure",
+      "training_admission": false,
+      "admission": "held-pending-explicit-quality-and-source-review",
+      "notes": "393exactoriginalIDs/groups53programs;Popportableharnessclosed/fullS1DGXpending. Policy64historicalpin preserved; V14fourholds disjoint accepteditems."
+    },
+    {
+      "id": "decision-visible-answerability-root-review-held-20261011-v14",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v14",
+      "split": "inherited-train-evidence",
+      "source_class": "held-generation-quality-and-source-closure",
+      "training_admission": false,
+      "admission": "held-pending-explicit-quality-and-source-review",
+      "notes": "Fourrootreviewed prospectiveholds; prior64retained68total. Originalsources/outcomes unchanged; noautomaticDPOnegative."
     }
   ],
   "coverage_backlog": [

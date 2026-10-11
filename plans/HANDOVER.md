@@ -10712,3 +10712,12 @@ Shared start_reviewed_luna_campaign.py now replaces the batch barrier with numbe
 ### Pop 2026-10-11 02:45 UTC — V69 lane refill approved
 
 V69 root-approved-plan-v1 SHA46f0014a01068b211a07b337cfc02a22ab32750115dcee036c3fb6674846e163; supervisor1005511 now waits per lane on explicit V68 worker identities. Root independently checked53train programs393original master-equal source objects,64hold ID/group disjointness,58exact declared archive payloads, unique queues and actual predecessor launchrecord/PID binding. Fresh approved plan pins updated shared launcher; preparation plan preserved. Inputs snapshot excludes live journals/logs/results. Generation only, no source/trace/training admission or independent-world credit.
+
+
+### Pop 2026-10-11 02:49 UTC — V32 review and forward source policy V14
+
+Sealed V32semantic audit45a0720145bd76d663240c304c784ccb7bd957a6902d74f6eaef8e30e2b30a5e bindsall119full-input differences/attempts and393fullchildcapture static items.512valid/393annotationmatches,554attempts(27HTTP500/13HTTP503/2HTTP429)allfinalsuccessful. Fourrootverified originalrowsheld prospectively: English-title languageID annotatedPolish dc-03e1d65204c7462908a6; topiclessNewsgroups dc-77568b87e1671291e151,dc-6ea3d7486a30cf5ad240,dc-bc4bc13a60e793c79ef0. Canonical68holds SHAd448b118f17c09398f25dc06ee88308e1cd3bddce445d794303c4d05f73df0bd; rootreceipt5886622a16759dfd2febe3467cb27d971b05f053470493fc52c388e2301461c7. V33/V34andV31/V32static selecteditems disjoint4newholds; immutable historicalapprovals unchanged. No relabel/automaticDPOnegative.
+
+Future sharedlabeler prompt now explicitly uses supplied criteria to interpretlabels, replacing wording that limited inputs to state/question despite sendingcriteria. Active frozen jobs unchanged; causal benefit unmeasured. V32sourceclosure packete3fa5c2f25be36b7e2480c95fabb5f0e846b866c31da962b2071750356634c9f covers393original IDs/groups53programs, Popharnessclosed/fullS1DGXpending. Threeheld review snapshots registered.
+
+DGXperf reports eightredTSfiles; Popclaims filetoolguidance fixture, inlinecurriculum mismatch, materializercontextschema/producercontextfixture, scopecompilerawait-lowering issue. No weakening provenance/typing gates. Exact failure stacks requested; other owners take builtinsbaseline/guidedwording/cryptogloballeakage.

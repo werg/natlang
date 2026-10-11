@@ -1,0 +1,122 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-v32-source-closure-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v32-source-closure-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 2209,
+      "sha256": "c3aac64cd2db797016c242996ae3e43d157bddefb916da41d899fa8cd1ebf76f"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1997,
+      "sha256": "ae60e9f3c2eb67c31d071c00b49f19412c868a689e4b0d28c9c1af9ccc043a15"
+    },
+    {
+      "path": "build_v32_closure_inputs.py",
+      "bytes": 19968,
+      "sha256": "ca516f6a2b0b85d0e1702d5afd8ed4d86ba976bc99ac52ccf69fabe23b680665"
+    },
+    {
+      "path": "closure-input-v1/check_raw_group_keys.py",
+      "bytes": 1933,
+      "sha256": "b945cbe89c3fe6ad76b562d59a1206a5d85b051620b64ec4bf541ec0f7ee8c4a"
+    },
+    {
+      "path": "closure-input-v1/closure-candidate-root-actions.jsonl",
+      "bytes": 6470897,
+      "sha256": "30b276ec3869d9bf60c3a1ef3159f615bfad71e76651081286f2f63b082f6462",
+      "lines": 53
+    },
+    {
+      "path": "closure-input-v1/closure-source-cases.jsonl",
+      "bytes": 1974921,
+      "sha256": "90e65cd9c02633012299354a20128215c5850ce8dfb77f081465520f1735787e",
+      "lines": 53
+    },
+    {
+      "path": "closure-input-v1/closure-source-manifest.json",
+      "bytes": 11614,
+      "sha256": "5e2bc84197b4a75ff3353a0b57ac48eadedc1fe7553eada44741723cf6641afb"
+    },
+    {
+      "path": "closure-input-v1/component-payload-verification.json",
+      "bytes": 42636,
+      "sha256": "1ff1023442d0dc2b6385625aa6f583ab22d540d2a9bbec7055e8dd67421031b7"
+    },
+    {
+      "path": "closure-input-v1/decision-source-quality-holds-current64-v13.json",
+      "bytes": 48684,
+      "sha256": "a7dfc77fd8b84e0e517a9395cd45687cb4ac1c14250720c28f9fa9d67d5dee3c"
+    },
+    {
+      "path": "closure-input-v1/raw-key-harness.json",
+      "bytes": 1455,
+      "sha256": "332a2d2a839de689988d6845f497ca9964f4f14357a837ca6d847ed22a66ed12"
+    },
+    {
+      "path": "closure-input-v1/selected-program-index.jsonl",
+      "bytes": 923724,
+      "sha256": "36583da4d56a397dfeef093fddb9553937cccb7f3951461892599c10bce261f1",
+      "lines": 53
+    },
+    {
+      "path": "closure-input-v1/selected-source-case-index.jsonl",
+      "bytes": 850499,
+      "sha256": "eaced3118da692591b0e85675d95af822c503d7b0ad27593678d408cbd49330f",
+      "lines": 393
+    },
+    {
+      "path": "closure-packet-v1.json",
+      "bytes": 35579,
+      "sha256": "e3fa5c2f25be36b7e2480c95fabb5f0e846b866c31da962b2071750356634c9f"
+    },
+    {
+      "path": "pop-harness4-v1/candidate-source-case-bindings.json",
+      "bytes": 30356,
+      "sha256": "2edcdd7b39ccdff3fbfad613003d9c14534c32db44c7b28ccc3a31834c8667c7"
+    },
+    {
+      "path": "pop-harness4-v1/closed-source-case-port-projection.jsonl",
+      "bytes": 1082645,
+      "sha256": "8675aa530a4742e590bc5989dda35d750b27390e53cf507ff115b1b979d41570",
+      "lines": 53
+    },
+    {
+      "path": "pop-harness4-v1/closure-report.json",
+      "bytes": 16253,
+      "sha256": "0904264c964aaa2730f15d8bde2e260f1b9f2413fc6e9f8539f6254046c6fc1c"
+    },
+    {
+      "path": "pop-harness4-v1/source-case-port-projection.jsonl",
+      "bytes": 1082645,
+      "sha256": "8675aa530a4742e590bc5989dda35d750b27390e53cf507ff115b1b979d41570",
+      "lines": 53
+    },
+    {
+      "path": "pop-harness4-v2/candidate-source-case-bindings.json",
+      "bytes": 30356,
+      "sha256": "2edcdd7b39ccdff3fbfad613003d9c14534c32db44c7b28ccc3a31834c8667c7"
+    },
+    {
+      "path": "pop-harness4-v2/closed-source-case-port-projection.jsonl",
+      "bytes": 1082645,
+      "sha256": "8675aa530a4742e590bc5989dda35d750b27390e53cf507ff115b1b979d41570",
+      "lines": 53
+    },
+    {
+      "path": "pop-harness4-v2/closure-report.json",
+      "bytes": 16253,
+      "sha256": "e768b3b6c22daa60e4e3953b071738065cf941d2402be543781945be0d79146c"
+    },
+    {
+      "path": "pop-harness4-v2/source-case-port-projection.jsonl",
+      "bytes": 1082645,
+      "sha256": "8675aa530a4742e590bc5989dda35d750b27390e53cf507ff115b1b979d41570",
+      "lines": 53
+    }
+  ],
+  "bytes": 14809914
+}
