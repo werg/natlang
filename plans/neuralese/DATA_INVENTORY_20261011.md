@@ -294,7 +294,7 @@ files that exist on DGX and not on Pop; 91.2 GB of them sit in entries without `
 | Live training-shaped, admitted here | 1.8 GB | below |
 
 Recovered (all set to `training_admission: true` with `review_status`; JeFF reserved-text scan found 0 hits in each):
-- `luna-v17-v9-portable-context-view-20261010-v1`: label was "root-admitted" with no flag. 3,207 train native records (~582k target+reasoning tokens, chars/4). 2,792 are decisions already in the 4962 union. **415 train decisions are not in the union text** (413 `curriculum_decision_extract_chain` from 58 trajectories whose other decisions are in the union; ~55k tokens). The 2,035 test records stay out.
+- `luna-v17-v9-portable-context-view-20261010-v1`: 3,207 train native records (~582k target+reasoning tokens, chars/4); the 2,035 test records stay out. The earlier estimate of 415 new decisions (~55k tokens) was an ID-level false negative. The hash-bound V16 audit found all 415 reviewed targets in supervised loss spans across 198 existing 4962 union train documents: 231 exact eval-code targets and 184 semantic `return_result` targets, with zero target mapping failures or held/test matches. This source remains admitted as native data. The 415 audited targets add zero incremental targets, documents, or tokens; this audit does not establish target-level incremental coverage for the other source rows. Receipt: `LUNA_V16_415_UNION_SUPERVISION_AUDIT_20261011.json`.
 - `refine-judge-exact-20261009-v1`: 1,020 train rows of exact predicate labels; 307 held-out predicate/family rows stay out.
 - `refine-author-static-20261009-v1`: 28 authoring pairs (~197k tokens).
 - `neuralese-operator-cases-20261009-v1`: 1,166 train spans (834 test stay out); S5 objective cases.
