@@ -1282,10 +1282,20 @@ def main(argv=None):
         pre = prefill_write_context(backbone, heads, context)
         opened = Opened(pre.cache, pre.state, backbone.logits(pre.top[:, None])[:, -1], pre.top)
         crisp = engine._tokens(source) if source else None
-        written = write_direct(backbone, direct.neuralese_projection, opened, target or heads.max_length,
-                               engine.stop_ids, length=target, feedback='token',
-                               tokens=crisp if crisp is not None and target == len(crisp) else None,
-                               token_choice_projection=getattr(direct, 'token_choice_projection', None))
+        forced = crisp if crisp is not None and target is not None and target == len(crisp) else None
+        if forced is not None:
+            # A write whose every token is known runs as one causal sequence pass (the shared forced_sequence),
+            # exactly as direct SFT computed its values: teacher-forced gold tokens in one forward, not one decode
+            # step per token (the Mellum E2E smoke: 409 s per update decoding long child results step by step).
+            from ..serve.direct_write import DirectWriter
+            written = DirectWriter(backbone, direct.neuralese_projection, opened, target, engine.stop_ids,
+                                   length=target, feedback='token', tokens=forced,
+                                   token_choice_projection=getattr(direct, 'token_choice_projection', None)
+                                   ).forced_sequence()
+        else:
+            written = write_direct(backbone, direct.neuralese_projection, opened, target or heads.max_length,
+                                   engine.stop_ids, length=target, feedback='token',
+                                   token_choice_projection=getattr(direct, 'token_choice_projection', None))
         payload = written.complete()[0]
         n = int(payload.shape[1])
         lengths.append(n)

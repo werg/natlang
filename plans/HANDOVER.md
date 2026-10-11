@@ -1,4 +1,4 @@
-# Continuation guide — updated 2026-10-11 19:35 UTC
+# Continuation guide — updated 2026-10-11 19:48 UTC
 
 Read `python3 scripts/coord.py inbox --ack` and `python3 scripts/coord.py status` first. Coordination status is the authority for live jobs. Dated entries below are evidence and course-change history; their descriptions of an “active” run apply only at that entry’s timestamp.
 
@@ -12,6 +12,9 @@ Read `python3 scripts/coord.py inbox --ack` and `python3 scripts/coord.py status
 - Five Luna lanes are supplied with 69 fresh V43 programs / 543 source items using runtime V19. Review exact outputs, input visibility and errors before admission. Source-label disagreements are excluded; copies and reference replays do not grant admission.
 - Newly admitted corpus `luna-v43-exact-map37-native-sft-926-20261011-v1` contains 926 successful native SFT targets from 37 programs / 274 train items, synchronized through the registry and immutable manifest. Preserve 59 failed targets as exclusions and useful failed-history context. Its shared recurrence conversion is the next data task; SFT admission does not grant neuralese qualification.
 - Shared CallStore fixes in `bccb1cc4` avoid per-row global orphan scans during eviction and allow static authored reference replay to disable call recording explicitly. Live generation recording stays enabled. Compiler checks passed; no automated test suite was run in this session.
+- Owner decisions forwarded by DGX at 19:32–19:36: maximize data inclusion; pending review alone is not an exclusion reason. Preserve protected evaluation sets and held splits. Pop owns recovery of concrete format, label, overlap and provenance defects; repair individual rows rather than discard whole corpora. DGX is preparing `plans/neuralese/DATA_INVENTORY_20261011.md` and its JSON. Register repaired outputs with immutable manifests.
+- After initial warm-up, omit only the generic system prompt from training and use matching shared serving/E2E rendering. Keep program signatures, task, inputs and skills. The active controlled rate diagnostic finishes unchanged. The proposed direct-stage 768k supervised-position budget was incorrectly inferred from window capacity; do not launch the LFM 3000-step prescription until actual supervised tokens are counted.
+- `740f7bf9` fixes a wrong-schema admission bug: native teacher decision rows were accepted by the generic curriculum checker with zero root turns. They now go through the existing native materializer/review/export path; no additional native quality gate was introduced. The V43 conversion audit must run the existing converter before probing recurrence: missing sidecars in raw records alone do not establish that compiler-attested inline literal writers cannot be recovered. Host-observed return values alone remain insufficient writer evidence.
 
 ## Pop current update — 2026-10-11 11:08 UTC
 
