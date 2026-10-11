@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v19-reviewed-static-decision-children-20261012-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/luna-v19-reviewed-static-decision-children-20261012-v1",
+  "files": [
+    {
+      "path": "candidate-audit.json",
+      "bytes": 518232,
+      "sha256": "0fb716490a871075ff613b5e112d99b38a0b27c0b7705e951bffd46390ff4d8f"
+    },
+    {
+      "path": "review.json",
+      "bytes": 370554,
+      "sha256": "73e3f43fbfe58bc2b9daaaf63f1ccdf5f77d185a74f1954bec32c560849e8d85"
+    },
+    {
+      "path": "salvage-receipt.json",
+      "bytes": 622984,
+      "sha256": "cb448d0f053a0ebd4297dba553ea22e0c5917feebbc6cd1625277bdc2cd8134f"
+    },
+    {
+      "path": "teacher-turns.jsonl",
+      "bytes": 28205389,
+      "sha256": "3f8c2ab5c59efeb42183bd1bfa516192b47bc0f52cb093c29788e319a04e8a65",
+      "lines": 283
+    }
+  ],
+  "bytes": 29717159
+}

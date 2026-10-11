@@ -37626,6 +37626,28 @@
         "twin_sha256": "f1b8d55024771888068ff5fe4815b2e1aaea215c2496b929a180263a8059a4ea",
         "identity": "per-row id, split, source_groups, source_record_ids equal in order (4962 rows, 0 mismatches)"
       }
+    },
+    {
+      "id": "luna-v19-reviewed-static-decision-children-20261012-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/luna-v19-reviewed-static-decision-children-20261012-v1",
+      "include": [
+        "teacher-turns.jsonl",
+        "salvage-receipt.json",
+        "review.json",
+        "candidate-audit.json"
+      ],
+      "split": "inherited-source-train-only",
+      "source_class": "provider-generated-source-bound-decision-actions",
+      "training_admission": true,
+      "trace_admission": false,
+      "admission": "owner-reviewed-exact-source-bound-child-actions; training SFT only",
+      "independent_new_worlds": 0,
+      "review_status": "283 exact completed child targets admitted with unique source item, source group, complete task fields, runtime caseId, and exact source label binding; 186 siblings not admitted",
+      "training_admission_reason": "Every selected target came from a complete successful host invocation and exactly matched its pinned source expected value; the source state, question and decision schema were visible or scope-bound, exactly one child invocation matched, source caseId bound the item, inherited group closure is train-only, canonical source holds passed, and exact JeFF reservation overlap was excluded. No source annotation/gold value was copied into model-visible input. IDs/groups are disjoint from Luna V43 suffix 401, exact-map 926, and static-reference source items. Review and candidate-audit receipts preserve the exact child-level approvals and all 186 exclusions.",
+      "required_conversion": "shared native chat renderer for full, program-header, and whole-trajectory twins; no inference or runtime qualification implied",
+      "consumable_by_direct_stage": false,
+      "notes": "Provider generated source annotation decisions only. Approves the exact 283 selected actions, not unselected sibling actions; toxicity and star-rating children are excluded pending revised visible-text contracts. The 186 candidate rejections remain non-admitted: 70 lacking complete successful visible input/action binding, 13 ambiguous child invocations, 79 old toxicity/rating task-contract cases, 24 protected JeFF overlaps."
     }
   ],
   "coverage_backlog": [
