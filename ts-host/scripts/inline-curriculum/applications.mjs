@@ -1,5 +1,5 @@
 // Application and interface-coverage families: inline placement and near neighbours, late rows past the
-// opening preview, contract diagnosis with warranted and unwarranted edits, directory reducers, eval
+// opening scope, contract diagnosis with warranted and unwarranted edits, directory reducers, eval
 // repair, child results that change the parent's plan, and hierarchical callable discovery.
 import { Random, blockedCall, capitalize, curriculumCase, evalCall, literal, nonceWords, returnCall } from './lib.mjs';
 
@@ -8,7 +8,7 @@ export function cohortPolicy(seed, index) {
   const rng = new Random(seed, `cohort:${index}`);
   const groups = ['new', 'returning'];
   const make = (cohort, group, n, rate) => Array.from({ length: n }, (_, i) => ({ cohort, group, converted: i < Math.round(n * rate) }));
-  // A shared prefix keeps the opening identical; the variants differ in rows past the preview.
+  // Variants share the callable interface; their complete rows are retrieved at runtime.
   const prefix = rng.shuffle([...make('A', 'new', 10, 0.3), ...make('B', 'new', 10, 0.3), ...make('A', 'returning', 10, 0.5), ...make('B', 'returning', 10, 0.5)]);
   const tails = {
     b_better_everywhere: [...make('A', 'new', 20, 0.2), ...make('B', 'new', 20, 0.35), ...make('A', 'returning', 20, 0.5), ...make('B', 'returning', 20, 0.65)],
@@ -27,21 +27,23 @@ export function cohortPolicy(seed, index) {
   return Object.entries(tails).map(([variant, tail]) => {
     const rows = [...prefix, ...rng.shuffle(tail)];
     const expected = verdictOf(rows);
-    const code = `const rate = (cohort: string, group: string) => {
+    const code = `const rows = visits();
+const rate = (cohort: string, group: string) => {
   const sel = rows.filter(r => r.cohort === cohort && r.group === group);
   return 100 * sel.filter(r => r.converted).length / sel.length;
 };
 const diffs = ['new', 'returning'].map(g => ({ group: g, a: rate('A', g), b: rate('B', g), diff: rate('B', g) - rate('A', g) }));
 diffs`;
-    return curriculumCase({ family: 'inline_cohort_policy', shape, variant, pairGroup: `cohort:${shape}`,
+    return curriculumCase({ family: 'inline_cohort_policy', familyVersion: 2, shape, variant, pairGroup: `cohort:${shape}`,
       slice: 'inline_placement', domain: 'other', mode: 'single_call', inline: 'optional',
       evidence: { world: [policy], retrieved: [`${rows.length} rows`], background: ['Pooled rates can reverse subgroup rates (Simpson\'s paradox).'] },
       plausibleActions: [], minimumSequence: ['compute per-group conversion rates in code', 'apply the policy to the computed differences'],
       reference: { root: [evalCall(code), returnCall(expected)] },
-      root: { name: 'check_claim', args: { claim: 'string', policy: 'string', rows: 'Visit[]' }, returns: 'Verdict',
-        instructions: 'Decide whether the experiment rows support claim, following policy.' },
-      files: { 'types.ts': 'export type Visit = { cohort: "A" | "B", group: "new" | "returning", converted: boolean };\nexport type Verdict = "supported" | "contradicted" | "uncertain";\n' },
-      inputs: { claim: 'Variant B converts better than variant A.', policy, rows }, expected });
+      root: { name: 'check_claim', args: { claim: 'string', policy: 'string' }, returns: 'Verdict',
+        instructions: 'Load the complete experiment rows with visits() and decide whether they support claim, following policy.' },
+      files: { 'types.ts': 'export type Verdict = "supported" | "contradicted" | "uncertain";\n',
+        'check_claim/visits.ts': `export type Visit = { cohort: "A" | "B", group: "new" | "returning", converted: boolean };\n/** Complete experiment visits, including both customer groups. */\nexport default function visits(): Visit[] { return ${literal(rows)}; }\n` },
+      inputs: { claim: 'Variant B converts better than variant A.', policy }, expected });
   });
 }
 
@@ -117,7 +119,7 @@ const ROLLOUT_LATE = {
   recovered: { note: 'The eu-west error spike from minute 12 has returned to baseline and stayed there for twenty minutes.', decision: 'continue' },
   internal: { note: 'A synthetic test tenant reported errors; no customer traffic was affected.', decision: 'continue' },
 };
-/** A long health log whose decisive row is past the opening preview. */
+/** Retrieve the complete health log before judging its late customer-impact evidence. */
 export function pagedLateRow(seed, index) {
   const rng = new Random(seed, `rollout:${index}`);
   const regions = ['us-east', 'us-west', 'eu-west', 'ap-south'];
@@ -129,17 +131,17 @@ export function pagedLateRow(seed, index) {
     const tail = Array.from({ length: 6 }, (_, i) => ({ minute: 34 + i, region: rng.pick(regions), status: 'ok', note: 'no alerts' }));
     tail.splice(3, 0, { minute: 37, region: 'eu-west', status: variant === 'regression' ? 'fail' : 'ok', note: late.note });
     const checks = [...early, ...tail].map((row, i) => ({ ...row, minute: i }));
-    return curriculumCase({ family: 'paged_late_row', shape, variant, pairGroup: `rollout:${shape}`,
+    return curriculumCase({ family: 'paged_late_row', familyVersion: 2, shape, variant, pairGroup: `rollout:${shape}`,
       slice: 'observation_followup', domain: 'other', mode: 'followup',
       evidence: { world: checks.map(c => `${c.minute} ${c.region} ${c.status}: ${c.note}`), retrieved: [late.note], background: [] },
       decisive: [{ marker: late.note, source: 'page', note: 'the late health check decides' }],
       plausibleActions: ['continue from the early rows', 'halt on the early warning', 'read the rest and decide'],
-      minimumSequence: ['read every health check, including the rows the opening cuts off', 'judge customer impact'],
-      reference: { root: [evalCall('checks.slice(30).map(c => `${c.minute} ${c.region} ${c.status}: ${c.note}`).join("\\n")'), returnCall(late.decision)] },
-      root: { name: 'rollout_gate', args: { checks: 'HealthCheck[]' }, returns: '"continue" | "halt"',
-        instructions: 'Decide whether the rollout may continue. Halt when a health check shows customers are currently harmed by the new build; a problem that has recovered, or one that touches no customer traffic, does not stop the rollout.' },
-      files: { 'types.ts': 'export type HealthCheck = { minute: number, region: string, status: string, note: string };\n' },
-      inputs: { checks }, expected: late.decision });
+      minimumSequence: ['retrieve the health checks, including the late rows', 'judge customer impact'],
+      reference: { root: [evalCall('checks().slice(30).map(c => `${c.minute} ${c.region} ${c.status}: ${c.note}`).join("\\n")'), returnCall(late.decision)] },
+      root: { name: 'rollout_gate', args: {}, returns: '"continue" | "halt"',
+        instructions: 'Load the health log with checks() and decide whether the rollout may continue. Halt when a health check shows customers are currently harmed by the new build; a problem that has recovered, or one that touches no customer traffic, does not stop the rollout.' },
+      files: { 'rollout_gate/checks.ts': `export type HealthCheck = { minute: number, region: string, status: string, note: string };\n/** Complete rollout health log in chronological order. */\nexport default function checks(): HealthCheck[] { return ${literal(checks)}; }\n` },
+      inputs: {}, expected: late.decision });
   });
 }
 
