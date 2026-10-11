@@ -723,7 +723,7 @@ def write_json(path, value):
 
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
-OPERATIONAL_STAGE_PARAMETERS = frozenset({'moe_kernel', 'checkpoint_layers', 'report_column_fraction', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows',
+OPERATIONAL_STAGE_PARAMETERS = frozenset({'moe_kernel', 'checkpoint_layers', 'report_column_fraction', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl',
                                           'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop'})
 # Stage parameters the runner consumes itself (never passed to a trainer).
 RUNNER_STAGE_PARAMETERS = frozenset({'quantization_steps'})
