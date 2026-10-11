@@ -18,6 +18,8 @@ export type BatchingSettings = {
 };
 
 export type ModelProfile = {
+  /** Match the prompt rendering declared by the trained weights; unadapted models use full. */
+  promptRendering?: import('../native/system-prompts.js').PromptRendering;
   endpoint?: string; chatCompletionsUrl?: string; provider?: string; model?: string; apiKeyEnv?: string;
   headers?: Record<string, string>; request?: Record<string, unknown>;
   piOptions?: Record<string, unknown>; piPayload?: Record<string, unknown>;
@@ -36,7 +38,7 @@ export type ModelProfile = {
   runtime?: Omit<ModelConfig, 'driver'> & { seed?: NatlangRuntimeOptions['seed'] };
 };
 
-type Common = { headers?: Record<string, string>; runtime?: ModelProfile['runtime']; concurrency?: number; batching?: BatchingSettings };
+type Common = { promptRendering?: ModelProfile['promptRendering']; headers?: Record<string, string>; runtime?: ModelProfile['runtime']; concurrency?: number; batching?: BatchingSettings };
 export type ResolvedModelChoice =
   | (Common & { kind: 'managed-local'; model: string; request?: Record<string, unknown>; local?: ModelProfile['local'] })
   | (Common & { kind: 'external'; endpoint: string; chatCompletionsUrl?: string; model: string; apiKeyEnv: string; request?: Record<string, unknown> })
@@ -48,6 +50,8 @@ export type ModelSelectionOverrides = { provider?: string; model?: string };
 export type LoadedModelConfiguration = { name: string; configPath: string; profile: ModelProfile; choice: ResolvedModelChoice };
 
 export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
+  if (profile.promptRendering !== undefined && !['full', 'program-header'].includes(profile.promptRendering))
+    throw new Error('promptRendering must be full or program-header');
   if (profile.runtime && (typeof profile.runtime !== 'object' || Array.isArray(profile.runtime)))
     throw new TypeError('profile.runtime must be an object');
   if (profile.runtime?.review && 'driver' in profile.runtime.review)
@@ -103,7 +107,7 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
     if (batching.scoreEndpoint && batching.mode !== 'explicit-batch')
       throw new Error('batching.scoreEndpoint requires batching.mode explicit-batch');
   }
-  const common = { headers: profile.headers, runtime: profile.runtime,
+  const common = { promptRendering: profile.promptRendering ?? 'full', headers: profile.headers, runtime: profile.runtime,
     ...(profile.concurrency === undefined ? {} : { concurrency: profile.concurrency }),
     ...(batching === undefined ? {} : { batching }) };
   if (profile.provider) return { ...common, kind: 'pi-provider', provider: profile.provider, model: profile.model!,

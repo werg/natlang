@@ -35,3 +35,14 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 Pair with `natlang-authoring` for substantial natural-language algorithms when that skill is available; this skill is independently usable.
 
 Persistent eval helpers support TypeScript `as const` assertions for literal and tuple results; the assertion needs no captured type binding. Other referenced named types must remain available in the call scope.
+
+## Student prompt rendering
+
+Use `promptRendering: "program-header"` in the model profile (or runtime `model`
+settings) for students trained beyond the full-prompt warm-up. Match the checkpoint's
+`prompt_rendering` declaration. Other models default to `"full"`.
+Program-header requests retain the signature, types, instructions, inputs, skills,
+call-specific declarations and trajectory. They omit generic interpreter prose and
+wire tool schemas; the same tool calls still execute. Custom application instructions
+remain. Training and serving use the scope table exported by
+`node ts-host/scripts/neuralese-prompt-pieces.mjs` after building ts-host.

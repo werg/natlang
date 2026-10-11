@@ -13,45 +13,52 @@
  */
 import { DECISION_SYSTEM_PROMPT } from './decision.js';
 import { isNeuraleseRef, neuraleseSentinel, type NeuraleseRef } from './neuralese.js';
-import { APPROACH_PROMPT, AUTOMATIC_NOTE, COMPACTED_RESULT, COMPACTION_NOTICE, directoryReducerPrompt, FILE_TOOL_SURFACES, FUNCTION_TOOLS_PROMPT,
+import { APPROACH_PROMPT, AUTOMATIC_NOTE, COMPACTED_RESULT, COMPACTION_NOTICE, directoryReducerPrompt, DIRECTORY_REDUCER_DECLARATION, FILE_TOOL_SURFACES, FUNCTION_TOOLS_PROMPT,
   GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, promptAtNlDepthLimit,
-  TOOLS_PROMPT } from './prompt.js';
+  SEMANTIC_RESULT_PROMPT, TEXT_NEURALESE_EMULATION_PROMPT, TOOLS_PROMPT } from './prompt.js';
 import { VIEW_PROMPT } from '../builtin/index.js';
 import { DEFAULT_JUDGE_INSTRUCTIONS, predicatePrompt } from '../runtime/iterate.js';
 
 export const SYSTEM_PROMPT_TYPE = 'Neuralese<SystemPrompt>';
 
-export type PromptPiece = { readonly id: string; readonly text: string };
+export type PromptRendering = 'full' | 'program-header';
+export type PromptPiece = { readonly id: string; readonly text: string; readonly scope: 'generic' | 'program' };
 
 /** The fixed paragraphs of the predicate prompt: those that do not depend on the step counts. */
 function predicatePieces(): PromptPiece[] {
   const variants = [predicatePrompt(0, 0), predicatePrompt(1, 0), predicatePrompt(3, 2)].map(text => text.split('\n'));
   return variants[0]!.filter(paragraph => variants.every(variant => variant.includes(paragraph)))
-    .map((text, index) => ({ id: `predicate/${index}`, text }));
+    .map((text, index) => ({ id: `predicate/${index}`, text, scope: 'generic' as const }));
 }
 
 /** The current runtime's prompt pieces. IDs are stable across runtime versions; texts are this version's. */
 export function promptPieces(): PromptPiece[] {
   const pieces: PromptPiece[] = [
-    { id: 'interpreter', text: TOOLS_PROMPT },
-    { id: 'interpreter/depth-limit', text: promptAtNlDepthLimit(TOOLS_PROMPT) },
-    { id: 'depth-limit-notice', text: NL_DEPTH_LIMIT_NOTICE },
-    { id: 'function-tools', text: FUNCTION_TOOLS_PROMPT },
-    ...FILE_TOOL_SURFACES.flatMap(surface => [
-      { id: `directory-reducer/${surface}`, text: directoryReducerPrompt(surface, true) },
-      { id: `directory-reducer/${surface}/depth-limit`, text: directoryReducerPrompt(surface, false) }]),
-    { id: 'generation-guidance', text: GENERATION_GUIDANCE },
-    { id: 'approach', text: APPROACH_PROMPT },
-    { id: 'decision', text: DECISION_SYSTEM_PROMPT },
+    { id: 'interpreter', text: TOOLS_PROMPT, scope: 'generic' },
+    { id: 'interpreter/depth-limit', text: promptAtNlDepthLimit(TOOLS_PROMPT), scope: 'generic' },
+    { id: 'depth-limit-notice', text: NL_DEPTH_LIMIT_NOTICE, scope: 'program' },
+    { id: 'directory-reducer/declaration', text: DIRECTORY_REDUCER_DECLARATION, scope: 'program' },
+    { id: 'neuralese/text-emulation', text: TEXT_NEURALESE_EMULATION_PROMPT, scope: 'program' },
+    { id: 'neuralese/string-boundaries', text: SEMANTIC_RESULT_PROMPT.split('\n\n')[1]!, scope: 'program' },
+    { id: 'function-tools/edit-capability', text: FUNCTION_TOOLS_PROMPT.split('\n')[1]!, scope: 'program' },
+    { id: 'function-tools', text: FUNCTION_TOOLS_PROMPT, scope: 'generic' },
+    ...FILE_TOOL_SURFACES.flatMap<PromptPiece>(surface => [
+      { id: `directory-reducer/${surface}`, text: directoryReducerPrompt(surface, true), scope: 'generic' },
+      { id: `directory-reducer/${surface}/depth-limit`, text: directoryReducerPrompt(surface, false), scope: 'generic' },
+      { id: `directory-reducer/${surface}/read-only`, text: directoryReducerPrompt(surface, true, false), scope: 'generic' },
+      { id: `directory-reducer/${surface}/read-only/depth-limit`, text: directoryReducerPrompt(surface, false, false), scope: 'generic' }]),
+    { id: 'generation-guidance', text: GENERATION_GUIDANCE, scope: 'generic' },
+    { id: 'approach', text: APPROACH_PROMPT, scope: 'generic' },
+    { id: 'decision', text: DECISION_SYSTEM_PROMPT, scope: 'generic' },
     ...predicatePieces(),
-    { id: 'compaction-notice', text: COMPACTION_NOTICE },
-    { id: 'automatic-note', text: AUTOMATIC_NOTE },
-    { id: 'handover/open', text: HANDOVER_NOTE_OPEN },
-    { id: 'handover/close', text: HANDOVER_NOTE_CLOSE },
-    { id: 'last-turn-notice', text: LAST_TURN_NOTICE },
-    { id: 'compacted-result', text: COMPACTED_RESULT },
-    { id: 'progress-judge', text: DEFAULT_JUDGE_INSTRUCTIONS },
-    { id: 'view', text: VIEW_PROMPT },
+    { id: 'compaction-notice', text: COMPACTION_NOTICE, scope: 'generic' },
+    { id: 'automatic-note', text: AUTOMATIC_NOTE, scope: 'generic' },
+    { id: 'handover/open', text: HANDOVER_NOTE_OPEN, scope: 'generic' },
+    { id: 'handover/close', text: HANDOVER_NOTE_CLOSE, scope: 'generic' },
+    { id: 'last-turn-notice', text: LAST_TURN_NOTICE, scope: 'generic' },
+    { id: 'compacted-result', text: COMPACTED_RESULT, scope: 'generic' },
+    { id: 'progress-judge', text: DEFAULT_JUDGE_INSTRUCTIONS, scope: 'generic' },
+    { id: 'view', text: VIEW_PROMPT, scope: 'generic' },
   ];
   const seen = new Set<string>();
   return pieces.filter(piece => piece.text.trim() && !seen.has(piece.text) && seen.add(piece.text));
@@ -74,8 +81,8 @@ export function systemPromptBank(values: Readonly<Record<string, unknown>>, piec
 }
 
 /** Where pieces occur in a text, longest pieces first and without overlaps: [start, end, piece]. */
-export function findPieces(text: string, pieces: readonly PromptPiece[]): [number, number, PromptPiece][] {
-  const found: [number, number, PromptPiece][] = [];
+export function findPieces<P extends Pick<PromptPiece, 'id' | 'text'>>(text: string, pieces: readonly P[]): [number, number, P][] {
+  const found: [number, number, P][] = [];
   const taken = (start: number, end: number) => found.some(([s, e]) => start < e && s < end);
   for (const piece of [...pieces].sort((a, b) => b.text.length - a.text.length)) {
     if (!piece.text) continue;
@@ -114,4 +121,32 @@ export function softenMessages<M extends Record<string, unknown>>(messages: read
   if (!bank?.size) return [...messages];
   return messages.map(message => message.role !== 'assistant' && typeof message.content === 'string' ?
     { ...message, content: softenText(message.content, bank) } : message);
+}
+
+/** Remove runtime-owned generic prose, preserving program declarations and caller-supplied additions verbatim.
+ * Program pieces can be nested in a larger generic piece (also used by soft prompt banks).
+ * Matching the two scopes independently makes those declarations survive the encompassing replacement.
+ */
+export function renderSystemPrompt(text: string, mode: PromptRendering = 'full', pieces = promptPieces()): string {
+  if (mode === 'full') return text;
+  const generic = findPieces(text, pieces.filter(piece => piece.scope === 'generic'));
+  const program = findPieces(text, pieces.filter(piece => piece.scope === 'program'));
+  let out = '', cursor = 0;
+  for (const [start, end] of generic) {
+    out += text.slice(cursor, start);
+    const retained = program.filter(([a, b]) => a >= start && b <= end).map(([a, b]) => text.slice(a, b));
+    if (retained.length) out += '\n\n' + retained.join('\n\n') + '\n\n';
+    cursor = end;
+  }
+  return (out + text.slice(cursor)).trim();
+}
+
+/** Shared outbound rendering; an empty header has no system turn. History and user content are untouched. */
+export function renderPromptMessages<M extends Record<string, unknown>>(messages: readonly M[], mode: PromptRendering = 'full'): M[] {
+  if (mode === 'full') return [...messages];
+  return messages.flatMap(message => {
+    if (message.role !== 'system' || typeof message.content !== 'string') return [message];
+    const content = renderSystemPrompt(message.content, mode);
+    return content ? [{ ...message, content }] : [];
+  });
 }

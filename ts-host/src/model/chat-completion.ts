@@ -226,7 +226,8 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
     };
     while (true) {
       if (signal?.aborted) throw new Error('model turn aborted');
-      const wireRequest: Json = { ...options.request, messages: attemptMessages, tools, tool_choice: request.tool_choice ?? 'auto' };
+      const wireRequest: Json = { ...options.request, messages: attemptMessages, ...(tools.length ? { tools, tool_choice: request.tool_choice ?? 'auto' } : {}) };
+      if (!tools.length) { delete wireRequest.tools; delete wireRequest.tool_choice; }
       if (request.temperature !== undefined) wireRequest.temperature = request.temperature;
       // Weight adapters bound by the calling function's context; only Neuralese transports send them.
       if (request.adapters?.length) wireRequest.x_natlang_adapters = request.adapters;

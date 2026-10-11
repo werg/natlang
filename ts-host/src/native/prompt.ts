@@ -42,12 +42,14 @@ export function scopedFileToolNames(surface: FileToolSurface = 'all', writable =
   return fileToolNames(surface).filter(name => writable || !MUTATING_FILE_TOOLS.has(name));
 }
 
+export const DIRECTORY_REDUCER_DECLARATION = 'This call is a directory reducer: folder is a private copy of its input folder, and the changes you have made to it when you reply done are kept.';
+
 export function directoryReducerPrompt(surface: FileToolSurface = 'all', allowAdHoc = true, writable = true): string {
   const order = ['bash', 'python', 'delegate', 'editor', 'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'];
   const names = new Set(scopedFileToolNames(surface, writable));
   if (!allowAdHoc) names.delete('delegate');
   return `
-This call is a directory reducer: folder is a private copy of its input folder, and the changes you have made to it when you reply done are kept.
+${DIRECTORY_REDUCER_DECLARATION}
 Paths are relative POSIX paths such as "notes/todo.md".
 
 File tools:
@@ -166,3 +168,45 @@ export const listingViewInstructions = (name: string, type: string, instructions
   `The view is shown in the opening listing of a call that receives the value as ${name} (${type}). The call reads ` +
   `${name} itself for exact details, so keep the view short: what the value is, how it is organised, and what in it ` +
   `bears on the call's instructions, so that the call knows what to look up. The call's instructions:\n${instructions}`;
+
+/** Declared teacher transport capability, retained as a call-specific prompt piece. */
+export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-channel emulation for this run:\n` +
+  `Use <|neuralese|>BODY<|/neuralese|> in return_result only when the current call declares ` +
+  `a Neuralese<T> result. This marker is transport syntax, not a JavaScript string. In eval code, use it only as ` +
+  `an unquoted value in an explicitly typed Neuralese position, for example ` +
+  `const note: Neuralese<string> = <|neuralese|>the note text<|/neuralese|>. A quoted occurrence is ordinary string content, ` +
+  `not marker transport syntax; at a Neuralese<string> result boundary, the configured writer stores it as literal body text. ` +
+  `Everything between the markers is literal body text: \${name} is stored exactly as written, never evaluated or interpolated. ` +
+  `To pass a computed soft value, return the variable itself from eval when it has the declared result type ` +
+  `(for example, return notes;), or pass it directly as a typed child argument. Never put a variable name between marker delimiters. ` +
+  `For ordinary string results, return ordinary strings. When a prior Neuralese value is bound as a variable in eval, ` +
+  `use String(notes), \`\u0024{notes}\`, string concatenation, or JSON.stringify(notes) when ordinary text is needed; ` +
+  `the declared text read conversion handles these string positions automatically in this call. If a child argument expects ` +
+  `Neuralese<T>, pass the original typed variable unchanged to preserve its soft type. Return that same typed variable from eval ` +
+  `when it matches the declared result type. A displayed [[Neuralese text block ...]] label is a human-readable preview. ` +
+  `A complete unchanged label may be resolved as a Neuralese result only when its ID, type, and exact body digest match ` +
+  `a typed value visible in this call; partial, altered, or nonvisible labels remain strings and fail type checking. Prefer ` +
+  `the bound variable in eval; readText and read_code do not unpack a displayed label. ` +
+  `For a nested child call whose declared result is exactly Neuralese<string>, return the computed plain text as the result ` +
+  `by finishing with return_result using status success and the exact completed text value after all required reads and ` +
+  `computation are done; the configured Neuralese writer ` +
+  `materializes that plain text as a typed block. Use eval for actual evidence reads, computation, or runtime effects, and ` +
+  `preserve those actions. When that eval work computes the final text, it may stage it with return_result(text) inside eval; ` +
+  `do not use eval with finish:true solely to wrap a fixed string literal. If more work is needed, ` +
+  `continue working rather than returning early. This route guidance applies only to nested Neuralese<string> results. ` +
+  `For other result types, follow their declared contract. A direct return_result tool call may carry a plain string value. ` +
+  `When you can compose the requested prose directly, prefer that direct typed return for this nested child; use eval when ` +
+  `the answer needs real computation or runtime effects, and do not add eval or another child solely to wrap prose. ` +
+  `A literal <|neuralese|>BODY<|/neuralese|> remains an option when the body itself is literal text; markers are not needed ` +
+  `to wrap a computed variable. Do not put a variable name between marker delimiters ` +
+  `or expect \${...} inside a marker body to interpolate. Native JavaScript text-coercion contexts use typed readout ` +
+  `at the operand's declared Neuralese<T> type, then apply the ordinary JavaScript conversion (for example String(value), ` +
+  `untagged template interpolation, string concatenation, Error(message), JSON.stringify(value), or supported native text methods). ` +
+  `A string payload yields its text; other payloads receive JavaScript's normal conversion after readout. This does not enable ` +
+  `field inspection of opaque values or turn console display into readout. Outside a native coercion context, use read(value) ` +
+  `to obtain the ordinary typed value, or pass the existing typed value to compatible soft code. ` +
+  `For an ordinary string result, any characters that look like Neuralese marker delimiters are literal string content; ` +
+  `return them exactly without wrapping or interpreting them as a block. ` +
+  `eval({code, finish:true}) completes its fresh typed expression. In JavaScript, a quoted marker is an ordinary string, ` +
+  `not a soft block; when the declared result is Neuralese<string>, that string is written as literal body text. ` +
+  `Neuralese is a built-in type, not a callable function. Use read_code("Neuralese") to inspect its declaration; do not try to invoke or redefine the type.\n`;
