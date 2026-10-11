@@ -1,0 +1,64 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-choice-confidence-v86-v41-prefix-runtimev17-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v86-v41-prefix-runtimev17-v1",
+  "files": [
+    {
+      "path": "prior-source-disjointness-review-v1.json",
+      "bytes": 402944,
+      "sha256": "a954bd33c25b657906686704c02271db04740abe194c6b88f5cd1308489e482a"
+    },
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 9912,
+      "sha256": "d87fc16fe43402adfbb4d5d45621e24b79d625adbedbb429749d4559ec92de63"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 14423,
+      "sha256": "d581ced5b0b370ff47a195f6ced329a0fa0c830ded4e4736deb5950496498205"
+    },
+    {
+      "path": "source-review/decision_source_quality_holds.json",
+      "bytes": 61430,
+      "sha256": "c8eab8b4285373003010315fc7d87fc234e2e33035f932000fd3407ae9dd7994"
+    },
+    {
+      "path": "source-review/prepare_luna_folder_campaign.py",
+      "bytes": 28136,
+      "sha256": "30b41714cafc8d4a6c7b5bb4ba00a4993204654dbb6344c830336385aa69f918"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 3844,
+      "sha256": "18a8fc46498b23e98c86f7f5ec1fc2743abfa31de3ecf73badef22b8b092431f",
+      "lines": 4
+    },
+    {
+      "path": "worker-02/queue.jsonl",
+      "bytes": 3844,
+      "sha256": "d21062bd920bdd63b4a7e3e68ac2dfb334ce276fe53b9e18972ace3652766b13",
+      "lines": 4
+    },
+    {
+      "path": "worker-03/queue.jsonl",
+      "bytes": 3844,
+      "sha256": "7520781410c3783c6bf3e42f582bc59453e06482bb795e80d400b32fa2b931f3",
+      "lines": 4
+    },
+    {
+      "path": "worker-04/queue.jsonl",
+      "bytes": 3844,
+      "sha256": "9d68ffc027a0fdf45cdf7e465ababe26a95ad4c9ba4dd4a0d299f84f624d3382",
+      "lines": 4
+    },
+    {
+      "path": "worker-05/queue.jsonl",
+      "bytes": 3844,
+      "sha256": "17510fa9940bbd3350b457035f6f334912edd0c2d6afe5c4cd5f194151b91b22",
+      "lines": 4
+    }
+  ],
+  "bytes": 536065
+}

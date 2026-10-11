@@ -31916,6 +31916,54 @@
       "admission": "static-reference-review-only-no-training-or-native-trajectory-admission",
       "independent_new_worlds": 0,
       "notes": "Root-reviewed field-ownership correction, archived source and v1/v2/v3 references, failures, component payloads and replay evidence. V3 replay: 2 CLINC items, 1 authored reference result matching exact annotation, 0 replay failures, both child calls passed visibility checks for source state/question/item options/answer domain and actual task.levels:[]; model-visible task/item files contain no answer/gold. The materializer deliberately held the annotation-derived row. V1 and V2 failures remain preserved. No live model sampling was performed; instruction change remains unmeasured/model-facing debt as recorded in MODEL_FACING_CHANGES.md."
+    },
+    {
+      "id": "google-v41-label-prefix-1052-parent-to-v86-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v10-fieldowned",
+      "include": [
+        "labels-prefix.jsonl",
+        "labels-prefix.jsonl.manifest.json",
+        "prefix-receipt.json"
+      ],
+      "split": "inherited-train-partial-provider-label-prefix",
+      "source_class": "held-byte-complete-prefix-of-active-google-label-output",
+      "training_admission": false,
+      "admission": "partial immutable byte-prefix provenance only; labels are not training data; no admission or new-world credit",
+      "independent_new_worlds": 0,
+      "notes": "A byte-complete snapshot of 1,052 lines from the still-mutable V41 JSON-object label output. Prefix SHA 17996d29b843b9064bcee7c5a09590fc049f3e274650f122dfe7003d7da467b7. Parent for disjoint V11 static conversion; not a completed provider screen. Broad static output in this directory is intentionally not included in this snapshot."
+    },
+    {
+      "id": "google-v41-prefix-static-v11-fieldowned-disjoint-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v11-disjoint-fieldowned",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-static-label-derivative",
+      "source_class": "held-disjoint-static-folder-decision-reference-from-pinned-label-prefix",
+      "training_admission": false,
+      "admission": "static reference generation only; source and annotation quality remains held; no native trajectory or training admission",
+      "independent_new_worlds": 0,
+      "notes": "Filtered raw prefix against 217 exact program reservations from V77-V85, mapped to 1,587 original source IDs/groups; retained 298 raw label lines. Shared adapter produced 20 programs/147 exact annotation-consistent labels, all 20 reference replays passed, zero replay failures. Current scaffold field-ownership correction is pinned by static output; all source facts remain held. See prefix-derivation.json and parent-source-disjointness review in V86 input packet."
+    },
+    {
+      "id": "luna-choice-confidence-v86-v41-prefix-runtimev17-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v86-v41-prefix-runtimev17-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "prior-source-disjointness-review-v1.json",
+        "source-review/**/*",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-reviewed-generation-inputs",
+      "source_class": "held-luna-provider-generation-inputs",
+      "training_admission": false,
+      "admission": "root review pending; input and queue preparation only; no provider calls, outputs, or training admission",
+      "independent_new_worlds": 0,
+      "notes": "Prepared five-worker V86 plan from 20 static authored programs/147 exact labels. Plan SHA d87fc16fe43402adfbb4d5d45621e24b79d625adbedbb429749d4559ec92de63; root_approved=false at preparation. V17 runtime; five actual V85 predecessor lanes. Root must independently validate final predecessor journal/accounting and approve before launch. Prior-source-disjointness review records zero ID/group overlaps with selected V77-V85 rows."
     }
   ],
   "coverage_backlog": [

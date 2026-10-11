@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-v41-label-prefix-1052-parent-to-v86-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v10-fieldowned",
+  "files": [
+    {
+      "path": "labels-prefix.jsonl",
+      "bytes": 4065034,
+      "sha256": "17996d29b843b9064bcee7c5a09590fc049f3e274650f122dfe7003d7da467b7",
+      "lines": 1052
+    },
+    {
+      "path": "labels-prefix.jsonl.manifest.json",
+      "bytes": 2585,
+      "sha256": "7726d730ccf4cb405742655ad11ed1a21542bd35c740ec7ed1f385daecfab56e"
+    },
+    {
+      "path": "prefix-receipt.json",
+      "bytes": 665,
+      "sha256": "3763b13e0203edb698a4f1684f43eb0e7a0c9a1f01318f3368c7111e88b199c4"
+    }
+  ],
+  "bytes": 4068284
+}
