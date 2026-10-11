@@ -175,6 +175,7 @@ Run length (coordinator, 2026-10-11): the shared supervision budget is 768,000 p
   moved to `train/drift_monitor.py` (one implementation, both stages); the E2E base runs it on the shared 48 probes:
   response KL warns at 0.5 (runs the gate), stops at 1.5, gate floor base − 0.1, final gate in the report. A drift
   stop exits 3 and that run is not resumed.
+- **E2E smoke (LFM2.5-350M, raw-token heads, 6 updates, MuonSR 3e-6 stepped after the exact clip):** ran clean; global norms 155-915 (the exact clip at 1.0 is active on every update), response KL 0.016 at updates 3 and 6, final gate 29/48 passed, written CE 2.51 to 2.08 (shuffled 2.40). A LionSR resume of its state was refused with the one-sentence error. `--latent-step-in-backward` failed on this objective set ("a latent received a second gradient"), a limit of that option in trajectories with any latent optimizer; no declared E2E recipe uses it.
 - **Latent grad clip.** `latent_grad_clip` (direct and E2E): in-backward latents scaled by
   min(1, clip / previous update's global norm); every update logs `global_norm`, `latent_norm`, the factor applied and
   the exact factor. Short check (LFM2.5-350M direct, MuonSR 3e-6 cubic5, 24 updates, same windows): global norms are
