@@ -295,6 +295,10 @@ files that exist on DGX and not on Pop; 91.2 GB of them sit in entries without `
 
 Recovered (all set to `training_admission: true` with `review_status`; JeFF reserved-text scan found 0 hits in each):
 - `luna-v17-v9-portable-context-view-20261010-v1`: 3,207 train native records (~582k target+reasoning tokens, chars/4); the 2,035 test records stay out. The earlier estimate of 415 new decisions (~55k tokens) came from ID-only comparison. A hash-bound audit of the V16 parent source (3,178 train rows) found every exact rendered prompt prefix and action target together in existing union train loss spans: 2,691 distinct prompts and 2,763 distinct prompt/action pairs, zero missing pairs. This establishes no incremental V16 parent action or prompt/action-pair coverage; whole rendered documents can still differ. The V17 portable-context source has a distinct source snapshot and may carry corrected context, so its prompt/action coverage is not inferred from V16 and remains under audit. The test split stays out. Receipt: `LUNA_V16_415_UNION_SUPERVISION_AUDIT_20261011.json`.
+  - **Exact V17 coverage audit (DGX, 2026-10-12, Pop pop-9e9b):** all 3,207 V17 train decisions, re-rendered with the
+    current renderer and the LFM2.5 tokenizer (gold_text_rows with V17's native pieces), equal their 4962 union train
+    document byte for byte (text, token IDs and supervised_suffix_start): 3,207/3,207, 0 differences, 0 omissions
+    (2,792 distinct documents). **V17 adds zero new decision examples.**
   - DGX render: V17 contributes whole trajectories only (`natlang-native-turns-luna-v17-v9-render-20261011-v1`, no decision
     documents: `--decision-exclude-ids` over the union's 5,733 source records).
 - `refine-judge-exact-20261009-v1`: 1,020 train rows of exact predicate labels; 307 held-out predicate/family rows stay out.
