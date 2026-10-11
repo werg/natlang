@@ -37,7 +37,8 @@ from .optim import MUON_MIN_SIDE  # noqa: F401  (MuonSR latents: both matrix sid
 # Options added after runs had started, at their defaults, stay out of the resume identity (a run started before them
 # resumes; idle-expert skipping is a defect fix that applies to it from then on).
 LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_beta2_half_life_tokens': 4e6,
-                  'latent_ns': 'quintic', 'latent_weight_decay': 0.0, 'latent_grad_clip': 0.0}
+                  'latent_ns': 'quintic', 'latent_weight_decay': 0.0, 'latent_grad_clip': 0.0,
+                  'epochs': None, 'batch_tokens': 0, 'continue_from': None}
 OPERATIONAL = frozenset({'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows'})
@@ -50,7 +51,14 @@ def parse(argv=None):
     for name in ('records', 'pieces', 'text-data'):  # the data: prepared --text-data, or --records (+ --pieces)
         p.add_argument('--' + name, type=Path)
     p.add_argument('--device', default='cuda')
-    p.add_argument('--steps', type=int, default=1000)
+    p.add_argument('--steps', type=int, help='legacy budget in updates (default 1000); a recipe declares --epochs')
+    p.add_argument('--epochs', type=float, help='the stage budget: passes over the target-bearing train windows, '
+                   'sampled by document without replacement (text_supervision.epoch_schedule); the update count is '
+                   'derived from the data and the packing')
+    p.add_argument('--batch-tokens', type=int, default=0, help='fit-only: pack each update with windows up to this '
+                   'many forward tokens (count x longest, right-padded, length-bucketed); 0: --batch windows per update')
+    p.add_argument('--continue-from', type=Path, help="a predecessor neuralese_direct stage's full state (its "
+                   'checkpoint.pt): weights, projections and optimizer continue on this stage\'s data from update 0')
     p.add_argument('--tokens', type=int, default=8192, help='window capacity: the whole preceding document, system '
                    'prompt included, up to this many tokens')
     p.add_argument('--target-tokens', type=int, default=1024, help='supervised (Neuralese) positions per window')
@@ -117,7 +125,13 @@ def parse(argv=None):
                         'minus this margin (the value requirement is the end-to-end stage\'s, owner 2026-10-11)')
     p.add_argument('--seed', type=int, default=0)
     a = p.parse_args(argv)
-    if min(a.steps, a.tokens, a.target_tokens, a.batch, a.eval_batch, a.eval_every, a.held_documents) < 1:
+    if a.epochs is not None and a.steps is not None:
+        p.error('declare the budget as --epochs or --steps, not both')
+    if a.epochs is None and a.steps is None:
+        a.steps = 1000
+    if a.epochs is not None and not (math.isfinite(a.epochs) and a.epochs > 0) or a.batch_tokens < 0:
+        p.error('--epochs must be positive and --batch-tokens nonnegative')
+    if min(a.steps or 1, a.tokens, a.target_tokens, a.batch, a.eval_batch, a.eval_every, a.held_documents) < 1:
         p.error('positive bounds required')
     if a.checkpoint_every < 0 or a.neuralese_weight < 0:
         p.error('invalid checkpoint cadence or Neuralese weight')
@@ -225,7 +239,7 @@ def main(argv=None):
     from .optim import PortMuonAdamW
     from .trajectory_state import clip_finite_gradients, gradient_norm
     from .quantization import Behaviour, load_component, teacher_shards
-    from .text_supervision import balanced_position_weights
+    from .text_supervision import ROLE_CODES, balanced_position_weights
     from .text_warmup import (chunked_readout, evaluation_batches, load_text_rows,
                               prepare_text_windows, select_held_document_windows)
     from ..common.paths import root as path_root
@@ -233,6 +247,12 @@ def main(argv=None):
     torch.manual_seed(a.seed)
     random.seed(a.seed)
     a.out.mkdir(parents=True, exist_ok=True)
+    reference = a.out / 'monitor-reference.pt'
+    if a.continue_from is not None and not reference.exists() and \
+            (Path(a.continue_from).parent / reference.name).is_file():
+        # A continued stage measures drift against the lineage's base-model reference, not its predecessor's weights.
+        import shutil
+        shutil.copyfile(Path(a.continue_from).parent / reference.name, reference)
     options = {k: str(v) if isinstance(v, Path) else v for k, v in vars(a).items()}
     code = {str(path.relative_to(Path(__file__).parents[1])): sha256_file_hex(path)
             for path in sorted(Path(__file__).parents[1].rglob('*.py'))}
@@ -288,7 +308,7 @@ def main(argv=None):
     latent_options = latent_options_for(
         a.latent_optimizer, weight_decay=a.latent_weight_decay, skip_idle=a.latent_skip_idle,
         cautious=a.latent_cautious, ns=a.latent_ns,
-        betas=(0.9, beta_for_half_life(a.tokens * a.batch, a.latent_beta2_half_life_tokens)))
+        betas=(0.9, beta_for_half_life(a.batch_tokens or a.tokens * a.batch, a.latent_beta2_half_life_tokens)))
     optimizer = PortMuonAdamW(head_named + other_backbone, lr=a.head_lr, vocab_size=int(backbone.embedding_weight.shape[0]),
                               latent=latent, latent_optimizer=a.latent_optimizer, latent_options=latent_options)
     other_ids = {id(q) for _, q in other_backbone}
@@ -325,7 +345,42 @@ def main(argv=None):
     held, held_selection = select_held_document_windows(windows['test'], a.held_documents)
     if not train_windows or not held:
         raise ValueError('neuralese_direct needs train and held windows')
-    print(json.dumps({'event': 'windows', 'train': len(train_windows), 'held': len(held),
+    # The budget (data audit 2026-10-11, DATA_INVENTORY_20261011.md E): epochs over the target-bearing train windows
+    # (a window whose span holds decision-target tokens, or assistant positions in a document without a declared
+    # suffix), sampled by document without replacement through the shared CohortDocumentSampler, packed into updates
+    # of up to --batch-tokens forward tokens. Context-only windows (history repeated by later decision documents)
+    # are not trained.
+    from .text_supervision import CohortDocumentSampler, epoch_schedule
+    assistant_codes = {ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply')}
+
+    def target_bearing(window):
+        size = len(window['ids']) - window['prefix']
+        if window.get('supervised_suffix_start') is not None:
+            return window['supervised_suffix_start'] < size
+        roles = window.get('roles')
+        return roles is None or any(roles[i] in assistant_codes for i in range(window['prefix'], len(window['ids'])))
+
+    targets = [w for w in train_windows if target_bearing(w)]
+    if not targets:
+        raise ValueError('neuralese_direct found no target-bearing train window')
+    cohorts = sorted({w.get('cohort', 'native') for w in targets})
+    sampler = CohortDocumentSampler(targets, {c: 1 / len(cohorts) for c in cohorts},
+                                    cohort_key=lambda w: w.get('cohort', 'native'), document_key=lambda w: w['document'])
+    schedule = epoch_schedule(sampler, seed=a.seed, length=lambda w: len(w['ids']) - 1, epochs=a.epochs,
+                              updates=None if a.epochs is not None else a.steps, max_tokens=a.batch_tokens,
+                              max_items=a.batch)
+    if a.epochs is not None:
+        a.steps = len(schedule)  # derived: the stage's schedules (QAT ramps, cadence ends) follow it
+    if quant is not None and quant.stage['end'] == 'derived':
+        quant.stage['end'] = a.steps
+    budget = {'epochs': a.epochs, 'updates': a.steps, 'batch_tokens': a.batch_tokens,
+              'train_windows': len(train_windows), 'target_windows': len(targets),
+              'documents': sum(len(d) for d in sampler.documents.values()),
+              'windows_per_update': sum(len(batch) for batch, _ in schedule) / len(schedule),
+              'policy': 'epoch-ordered document shuffle without replacement, target-bearing windows, '
+                        'length-bucketed right-padded updates (text_supervision.epoch_schedule)'}
+    totals = {'supervised_tokens': 0, 'target_tokens': 0, 'windows': 0}
+    print(json.dumps({'event': 'windows', 'train': len(train_windows), 'held': len(held), 'budget': budget,
                       'held_selection': {k: held_selection.get(k) for k in ('policy', 'limit_documents')},
                       'system_prompt_context_tokens': mask_receipt.get('masked_system_tokens')}), flush=True)
     table = backbone.embedding_weight.detach().float().clone()
@@ -352,50 +407,83 @@ def main(argv=None):
         return [mask[i] for i in range(window['start'], window['start'] + len(window['ids']))]
 
     def tensors(rows_):
-        ids = torch.tensor([list(r['ids']) for r in rows_], device=a.device)
-        prefix = rows_[0]['prefix']
-        span = ids[:, prefix:]
-        roles = (torch.tensor([list(r['roles']) for r in rows_], device=a.device)
-                 if all('roles' in r for r in rows_) else None)
-        exclude = (torch.tensor([failed(r) for r in rows_], device=a.device)[:, prefix:].bool()
-                   if roles is not None or declared_by_document else None)
-        weights = balanced_position_weights(span, [r.get('supervised_suffix_start') for r in rows_],
-                                            roles=None if roles is None else roles[:, prefix:],
-                                            context_weight=a.context_weight, feedback_weight=a.feedback_weight,
-                                            exclude=exclude)
-        return ids, prefix, span, roles, weights
+        """One update's windows as a right-padded batch, any geometry: ``ids`` [B, L] (pad: the close token; causal
+        attention and causal convolutions keep every real position exact, and padding carries no weight), and each
+        window's supervised span re-aligned to column 0: ``span`` [B, S], ``index`` (the hidden-state position that
+        predicts each span token), ``valid``, ``weights`` (``balanced_position_weights`` per window, so a batch of one
+        is the unpadded computation), ``segments`` (-1 off the span) and ``suffix`` (decision-target positions)."""
+        count = len(rows_)
+        longest = max(len(r['ids']) for r in rows_)
+        spans = max(len(r['ids']) - r['prefix'] for r in rows_)
+        close = backbone.controls.close_id
+        ids = torch.full((count, longest), close, dtype=torch.long)
+        span = torch.full((count, spans), close, dtype=torch.long)
+        index = torch.zeros((count, spans), dtype=torch.long)
+        valid = torch.zeros((count, spans), dtype=torch.bool)
+        suffix = torch.zeros((count, spans), dtype=torch.bool)
+        weights = torch.zeros((count, spans), dtype=torch.float32)
+        segments = torch.full((count, spans), -1, dtype=torch.long)
+        for b, r in enumerate(rows_):
+            row = torch.tensor(list(r['ids']), dtype=torch.long)
+            length, prefix = len(row), r['prefix']
+            size = length - prefix
+            ids[b, :length] = row
+            span[b, :size] = row[prefix:]
+            index[b, :size] = torch.arange(prefix - 1, length - 1)
+            index[b, size:] = prefix - 1
+            valid[b, :size] = True
+            roles = torch.tensor(list(r['roles']), dtype=torch.long) if 'roles' in r else None
+            exclude = (torch.tensor(failed(r), dtype=torch.bool)[prefix:][None]
+                       if roles is not None or declared_by_document else None)
+            start = r.get('supervised_suffix_start')
+            weights[b, :size] = balanced_position_weights(
+                row[prefix:][None], [start], roles=None if roles is None else roles[prefix:][None],
+                context_weight=a.context_weight, feedback_weight=a.feedback_weight, exclude=exclude)[0]
+            if start is not None and start < size:
+                suffix[b, start:size] = True if exclude is None else ~exclude[0, start:]
+            segments[b, :size] = segment_ids(None if roles is None else roles[None, :-1], prefix - 1, length - 1, 1,
+                                             'cpu')[0, prefix - 1:]
+        to = lambda t: t.to(a.device, non_blocking=True)
+        return to(ids), to(span), to(index), to(valid), to(weights), to(segments), to(suffix)
+
+    def span_states(ids, index):
+        """The final hidden states that predict each span token, [B, S, width] (one forward over ``ids[:, :-1]``)."""
+        hidden = backbone.forward_ids(ids[:, :-1], cutoff=engine.heads.cutoff, logits=False)['h_final']
+        return hidden.gather(1, index[..., None].expand(-1, -1, hidden.shape[-1]))
 
     def forward(rows_, *, gradients):
-        """(weighted CE, metrics, per-position hidden/value tensors) of one same-shape batch at the active precision."""
-        ids, prefix, span, roles, weights = tensors(rows_)
-        start = prefix - 1
+        """(weighted CE, metrics, predictions, token losses) of one padded batch at the active precision."""
+        ids, span, index, valid, weights, segments, suffix = tensors(rows_)
         usable = float(weights.sum()) > 0  # a window made only of failed assistant turns teaches nothing
         if not usable:
-            weights = torch.ones_like(weights)
-        out = backbone.forward_ids(ids[:, :-1], cutoff=engine.heads.cutoff, logits=False)
-        hidden = out['h_final']
-        segments = segment_ids(roles[:, :-1] if roles is not None else None, start, hidden.shape[1], hidden.shape[0],
-                               hidden.device)
-        # Both projections read only the supervised positions: segments start inside the span (context is -1), so
-        # no convolution tap reaches the context and the slice is exact. Never full-context logits or mixtures.
-        hidden, segments = hidden[:, start:], segments[:, start:]
-        # Project once over the whole turn so every chunk sees its full causal
-        # history, then keep the vocabulary-sized readout chunked as before.
+            weights = valid.float()
+        # Both projections read only the supervised positions: segments start inside the span (context and padding
+        # are -1), so no convolution tap reaches the context and the slice is exact. Never full-context logits.
+        hidden = span_states(ids, index)
+        # Project once over the whole turn so every chunk sees its full causal history, then keep the
+        # vocabulary-sized readout chunked as before.
         read = project_token_states(hidden, token_choice, segments)
-        ce, training_ce, prediction, _, token_losses = chunked_readout(
+        _, training_ce, prediction, _, token_losses = chunked_readout(
             backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights)
+        real = valid.sum().clamp_min(1)
+        training_ce = training_ce * (span.numel() / real)  # the token mean over real positions (padding excluded)
+        ce = (token_losses * valid).sum() / real
         mixture = soft_token_mixture(backbone.logits, table, hidden.detach())
         value = neuralese(hidden.detach(), mixture.to(hidden.dtype), segments)
         target = table[span]
         value_error = relative_mse(value, target, weights)
-        metrics = {'ce': float(ce), 'gold_accuracy': float((prediction == span).float().mean()),
+        metrics = {'ce': float(ce), 'gold_accuracy': float(((prediction == span) & valid).sum() / real),
                    'value_relative_mse': float(value_error)}
         if not torch.is_grad_enabled():
             mixture_error = relative_mse(mixture, target, weights)
             nearest = (2 * (value.float() @ table.t()) - table.square().sum(-1)).argmax(-1)
             metrics.update(value_mixture_relative_mse=float(mixture_error),
                            value_relative_mse_delta=float(value_error - mixture_error),
-                           value_nearest_accuracy=float((nearest == span).float().mean()))
+                           value_nearest_accuracy=float(((nearest == span) & valid).sum() / real))
+        else:
+            metrics.update(windows=len(rows_), supervised_tokens=int((weights > 0).sum()),
+                           target_tokens=int(suffix.sum()), real_tokens=sum(len(r['ids']) - 1 for r in rows_),
+                           forward_tokens=int(ids.shape[0] * (ids.shape[1] - 1)))
         loss = training_ce + a.neuralese_weight * value_error
         return (loss if usable else loss * 0.0), metrics, prediction, token_losses
 
@@ -427,6 +515,27 @@ def main(argv=None):
         restore_training_rng_state(state['rng'], a.device)
         print(json.dumps({'event': 'resumed', 'step': step, 'code_changed': sorted(
             k for k in code if state['identity']['code'].get(k) != code[k])}), flush=True)
+        del state
+    elif a.continue_from is not None:
+        # A later phase of the lineage (recipe stage after a neuralese_direct predecessor): the predecessor's weights,
+        # projections and optimizer state continue on this stage's data from update 0; held baselines are this
+        # stage's own (measured at update 0 on its held windows), the drift reference stays the base model's.
+        state = CheckpointPolicy.load(a.continue_from)
+        if state.get('schema') != SCHEMA:
+            raise ValueError('--continue-from is not a neuralese_direct full state')
+        from .text_warmup import copy_restored_values
+        tensors_by_name = plain_named_tensors(backbone.hf)
+        copy_restored_values({'backbone.' + n: t for n, t in tensors_by_name.items()}, state['student_parameters'])
+        for key, module in projections.items():
+            module.load_state_dict(state[key])
+        from .optim_restore import own_host_tensors
+        optimizer.load_state_dict(state['optimizer'])
+        own_host_tensors(optimizer)
+        optimizer.param_groups = optimizer._groups()
+        if in_backward.clip:
+            in_backward.global_norm_estimate = state.get('latent_global_norm_estimate')
+        print(json.dumps({'event': 'continued', 'from': str(a.continue_from), 'predecessor_step': state['step']}),
+              flush=True)
         del state
 
     def full_state():
@@ -519,11 +628,19 @@ def main(argv=None):
         policy.save = reserved_save
 
     # Step 0: the NeuraleseProjection is exactly the base soft-token mixture on a held batch.
-    if step == 0:
+    if step == 0 and a.continue_from is not None:
+        # The lineage's identity qualification is its first stage's; a continued stage carries it forward.
+        inherited = Path(a.continue_from).parent / 'identity-check.json'
+        if not inherited.is_file():
+            raise ValueError('the predecessor stage has no identity-check.json')
+        (a.out / 'identity-check.json').write_text(json.dumps({
+            **json.loads(inherited.read_text()), 'inherited_from': str(inherited)}, indent=2) + '\n')
+        evaluate()
+        base_eval['drift_ce'] = drift_ce()
+    elif step == 0:
         with torch.no_grad():
-            ids, prefix, span, roles, _ = tensors(held[:1])
-            hidden = backbone.forward_ids(ids[:, :-1], cutoff=engine.heads.cutoff, logits=False)['h_final']
-            hidden = hidden[:, prefix - 1:]
+            ids, span, index, _, _, _, _ = tensors(held[:1])
+            hidden = span_states(ids, index)
             mixture = soft_token_mixture(backbone.logits, table, hidden)
             if not torch.equal(neuralese(hidden, mixture.to(hidden.dtype)), mixture.to(hidden.dtype)):
                 raise RuntimeError('NeuraleseProjection is not the soft-token mixture at initialization')
@@ -537,18 +654,13 @@ def main(argv=None):
             'logits_equal_base': True}, indent=2) + '\n')
         evaluate()
         base_eval['drift_ce'] = drift_ce()
-    order = random.Random(f'{a.seed}:direct')
-    for _ in range(step):  # the sampler is keyed by step: replay its draws
-        order.randrange(len(train_windows))
     end = min(a.stop_at or a.steps, a.steps)  # --stop-at: a prefix of the declared schedule
     loop = TrainingLoop(step, end, stop)
     start_index = step
     saved_step = None
     started = time.time()
     for step_index in loop:
-        first = train_windows[order.randrange(len(train_windows))]
-        same = [w for w in train_windows if w['prefix'] == first['prefix'] and len(w['ids']) == len(first['ids'])]
-        batch = [first] + [same[order.randrange(len(same))] for _ in range(a.batch - 1)]
+        batch, covered = schedule[step_index]
         point, mix = ('bf16', 0.0) if quant is None else quant.sampled(step_index)[:2]
         tick = time.time()
         with contextlib.ExitStack() as scope:
@@ -580,8 +692,14 @@ def main(argv=None):
                 print(json.dumps({'event': 'checkpoint_space_preflight_refused', 'step': step, 'error': str(error)}),
                       flush=True)
                 raise SystemExit(2)
+        seconds = time.time() - tick
+        for key in totals:
+            totals[key] += metrics[key]
         log('train.jsonl', {'step': step, 'loss': float(loss), 'precision': point, 'mix': mix, **metrics,
-                            'grad_clip': grad_clip, 'seconds': time.time() - tick})
+                            'epochs': covered, 'supervised_tokens_per_second': metrics['supervised_tokens'] / seconds,
+                            'cuda_peak_allocated_gb': torch.cuda.max_memory_allocated() / 2 ** 30
+                            if torch.cuda.is_available() else None,
+                            'grad_clip': grad_clip, 'seconds': seconds})
         if step % a.eval_every == 0 or step == end:
             report = evaluate()
             history.append({k: report[k] for k in ('step', 'ce', 'ce_delta', 'value_relative_mse_delta')})
@@ -626,7 +744,8 @@ def main(argv=None):
                  behaviour_gate=gate, drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
                  value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta'),
                              'report_only': True, 'moved_to': 'end-to-end stage (owner 2026-10-11)'},
-                 seconds=time.time() - started,
+                 seconds=time.time() - started, budget=budget,
+                 epochs_covered=schedule[step - 1][1] if step else 0.0, this_run=dict(totals),
                  cuda_peak_allocated_gb=torch.cuda.max_memory_allocated() / 2 ** 30 if torch.cuda.is_available() else None,
                  scope='Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md)')
     if saved_step != step:

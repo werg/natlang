@@ -279,3 +279,54 @@ def test_direct_monitor_and_gate_fields_change_at_a_handoff():
     changed = copy.deepcopy(new)
     changed['stage_parameter_defaults']['neuralese_direct']['latent_lr'] = 1e-5
     assert _without_operational(changed) != _without_operational(new)  # training semantics still refuse
+
+
+def _windows(documents, per_document=2):
+    return [{'document': f'd{d}', 'ids': list(range(10 + (d * 7 + w * 13) % 40)), 'prefix': 2, 'cohort': 'native', 'w': w}
+            for d in range(documents) for w in range(per_document)]
+
+
+def test_epoch_schedule_sees_every_window_once_per_epoch_without_replacement():
+    from natlang_neuralese.train.text_supervision import CohortDocumentSampler, epoch_schedule
+    windows = _windows(50)
+    sampler = CohortDocumentSampler(windows, None, cohort_key=lambda w: w['cohort'], document_key=lambda w: w['document'])
+    length = lambda w: len(w['ids']) - 1
+    plan = epoch_schedule(sampler, seed=3, length=length, epochs=2.0, max_tokens=160)
+    seen = [id(w) for batch, _ in plan for w in batch]
+    assert len(seen) == 200 and len(set(seen)) == 100 and abs(plan[-1][1] - 2.0) < 1e-9
+    first = [id(w) for batch, covered in plan if covered <= 1.0 for w in batch]
+    assert sorted(first) == sorted(id(w) for w in windows)  # epoch 1 is a permutation of every window
+    assert all(len(batch) * max(map(length, batch)) <= 160 or len(batch) == 1 for batch, _ in plan)
+    assert [[id(w) for w in b] for b, _ in plan] == [[id(w) for w in b] for b, _ in
+                                                     epoch_schedule(sampler, seed=3, length=length, epochs=2.0,
+                                                                    max_tokens=160)]  # resumable: a pure function
+    half = epoch_schedule(sampler, seed=3, length=length, epochs=0.5, max_tokens=0, max_items=1)
+    assert len(half) == 50 and abs(half[-1][1] - 0.5) < 1e-9
+    legacy = epoch_schedule(sampler, seed=3, length=length, updates=250)
+    assert len(legacy) == 250 and all(len(b) == 1 for b, _ in legacy)
+    with pytest.raises(ValueError):
+        epoch_schedule(sampler, seed=3, length=length, epochs=1.0, updates=10)
+
+
+def test_direct_phases_resolve_in_epochs_with_a_derived_quantization_end():
+    from natlang_neuralese.train.recipe import resolve_recipe_data, stage_parameter_args, stage_quantization
+    from natlang_neuralese.train.quantization import Quantization
+    for name in ('neuralese-direct-mellum-v3.json', 'neuralese-direct-lfm-v2.json'):
+        recipe = resolve_recipe_data(RECIPES / name)
+        assert [s['id'] for s in recipe['stages']] == ['direct_warmup', 'direct_sft']
+        assert recipe['stages'][1]['requires'] == ['direct_warmup']
+        for stage, epochs in zip(recipe['stages'], (0.5, 2.0)):
+            parameters = {**recipe['stage_parameter_defaults']['neuralese_direct'], **stage['parameters']}
+            assert parameters['epochs'] == epochs and 'steps' not in parameters and parameters['batch_tokens'] > 0
+            assert '--epochs' in stage_parameter_args(parameters)
+    mellum = resolve_recipe_data(RECIPES / 'neuralese-direct-mellum-v3.json')
+    stage = mellum['stages'][1]
+    component = stage_quantization(mellum, stage, {**mellum['stage_parameter_defaults']['neuralese_direct'],
+                                                   **stage['parameters']}, [])
+    assert component['stage']['end'] == 'derived'
+    quant = Quantization(component)
+    with pytest.raises(ValueError, match='not bound'):
+        quant.progress(0)
+    quant.stage['end'] = 346
+    assert quant.progress(346) == pytest.approx(0.35)
+    assert stage_quantization(mellum, mellum['stages'][0], {'epochs': 0.5}, []) is None  # the warm-up is BF16

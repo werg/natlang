@@ -2,21 +2,31 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-v2",
  "extends": "neuralese-direct-v1",
- "description": "Unified shared base of Neuralese direct v1 for both lines (line parity, owner 2026-10-11; plans/neuralese/LINE_PARITY.md). Same stage as neuralese-direct-v1 with: (1) the data declared here, the root-adopted 4962-document text union (3258 train / 1704 held; a strict superset of the V9 set with the same held documents), which the CLI cannot substitute; a line whose tokenizer differs binds its registered tokenizer twin (same documents, ids, splits and source groups); (2) a shared context capacity of tokens 32768 (capacity 32768 - target_tokens, so every document of the union keeps its whole preceding context); target_tokens is a per-line memory knob and steps x target_tokens x batch (768,000 supervised positions: about 2 epochs of the Mellum twin's ~384k supervised tokens; coordinator decision 2026-10-11: more than ~2 SFT epochs erodes instruction following, arXiv:2609.01244, v2 plateaued near update 1800 and MuonSR learns several times faster per update) stays equal across lines; (3) one monitor for both lines: Pop's 48 clean-base probes (12 each plain exact math, tool, open answer, natlang test turn) as the in-run captured drift reference and as the behaviour gate's probes, each line declaring its own measured base gate_pass; (4) the shared cadence policy: eval and full-state checkpoints at the stage end (plus the checkpoint at half way and the final/emergency saves), the drift monitor and gate-at-warn at a cadence keeping evaluation near 3% of wall time, set per line from measured seconds (fit-only). (5) Optimizer and drift policy (coordinator decision 2026-10-11 under the owner's tie-break for a cheap, battle-tested Muon; plans/neuralese/OPTIMIZER_BAKEOFF_20261011.md): latents on MuonSR (Nesterov 0.95, cubic5 Newton-Schulz, 0.2 sqrt(max) scale, wd 0.1, idle experts skipped; Mellum2 was pretrained and SFT'd with this Muon) at one shared latent_lr 3e-6; the behaviour gate (pass >= base - 0.1) is the hard criterion, response KL warns at 0.5 (runs the gate) and stops only at 1.5 (catastrophic shift), because SFT is meant to change the distribution and the gate measures forgetting. Cadence for the 750-step Mellum run at ~22 s/update: held eval at half way and the end, drift monitor every 150, gate-at-warn at most every 450.",
+ "description": "Unified shared base of Neuralese direct v1 for both lines (line parity, owner 2026-10-11; plans/neuralese/LINE_PARITY.md). Same stage as neuralese-direct-v1 with: (1) two phases of one lineage, as recipe stages: direct_warmup, 0.5 epoch of the root-adopted 4962-document text union with its full system prompts, then direct_sft, continuing from it (weights, projections, optimizer), 2 epochs of the same documents' program-header twin (generic system prompt dropped after the warm-up, owner 2026-10-11; NO_SYSTEM_PROMPT_RENDERING_DECOMPOSITION.md); whole-trajectory documents join as a later phase when registered (newest-data rule: a handoff). The CLI cannot substitute the data; a line whose tokenizer differs binds its registered tokenizer twins (same documents, ids, splits and source groups). (2) The budget is epochs, not steps (data audit 2026-10-11, DATA_INVENTORY_20261011.md E: the former 750 x 1024 = 768,000 'supervised positions' covered 0.11 epoch): an epoch is one pass over the target-bearing train windows (a window whose span holds decision-target tokens), sampled by document without replacement (the shared CohortDocumentSampler, text_supervision.epoch_schedule); context-only windows are not trained; direct_sft derives the update count from the data and the packing and reports epochs covered and supervised tokens per update. Equal supervision across lines is equal epochs over the same (twin) data. (3) Packing: each update holds windows up to batch_tokens forward tokens (count x longest, right-padded, length-bucketed in runs of 256; causal attention and convolutions keep real positions exact; padding carries no weight); batch_tokens is a fit-only per-line value (Mellum 32768: 333 updates for the warm-up, 346 for direct_sft on the current twins, ~23 s each at the fitted MuonSR cost). (4) Shared context capacity 32768 tokens (capacity 32768 - target_tokens, so every document keeps its whole preceding context); target_tokens is a per-line memory knob. (5) One monitor for both lines: Pop's 48 clean-base probes (12 each plain exact math, tool, open answer, natlang test turn) as the in-run captured drift reference (the base model's, kept across phases) and as the behaviour gate's probes, each line declaring its own measured base gate_pass. (6) Cadence keeping evaluation near 3% of wall time, set per line from the derived update count (fit-only): held eval and the gate at each phase end, full state at half way and the end, drift monitor every 110 updates, gate-at-warn at most every 220. (7) Optimizer and drift policy (coordinator decision 2026-10-11; OPTIMIZER_BAKEOFF_20261011.md): latents on MuonSR (Nesterov 0.95, cubic5 Newton-Schulz, 0.2 sqrt(max) scale, wd 0.1, idle experts skipped) at one shared latent_lr 3e-6; the behaviour gate (pass >= base - 0.1) is the hard criterion, response KL warns at 0.5 (runs the gate) and stops only at 1.5.",
  "overrides": {
   "input_bindings": {
    "direct_text": {
     "path": "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl",
     "sha256": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+   },
+   "direct_text_program_header": {
+    "path": "runs/neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v1/text-data.jsonl",
+    "sha256": "67baa0829149233c7b1220960b037a439a8d7c0505e972ba2b1692e283edbeac"
    }
   },
   "stages": {
    "direct_sft": {
+    "requires": [
+     "direct_warmup"
+    ],
     "inputs": {
-     "text_data": "direct_text"
+     "text_data": "direct_text_program_header"
     },
     "parameters": {
-     "steps": 750
+     "steps": {
+      "$delete": true
+     },
+     "epochs": 2.0
     }
    }
   },
@@ -24,10 +34,11 @@
    "neuralese_direct": {
     "tokens": 32768,
     "target_tokens": 1024,
-    "eval_every": 375,
-    "checkpoint_every": 375,
-    "drift_every": 150,
-    "drift_gate_every": 450,
+    "batch_tokens": 32768,
+    "eval_every": 400,
+    "checkpoint_every": 170,
+    "drift_every": 110,
+    "drift_gate_every": 220,
     "monitor": {
      "data": {
       "path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v2/monitor/probes.jsonl",
@@ -51,6 +62,22 @@
     "drift_stop": 1.5,
     "gate_response_kl": 1.5
    }
-  }
+  },
+  "stages_added": [
+   {
+    "before": "direct_sft",
+    "stage": {
+     "id": "direct_warmup",
+     "kind": "neuralese_direct",
+     "requires": [],
+     "inputs": {
+      "text_data": "direct_text"
+     },
+     "parameters": {
+      "epochs": 0.5
+     }
+    }
+   }
+  ]
  }
 }

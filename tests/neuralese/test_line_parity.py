@@ -27,9 +27,16 @@ def test_an_undeclared_difference_fails():
 def test_unequal_supervision_fails():
     parity = line_parity.load_parity()
     kind, config = line_parity.effective_config({'recipe': 'neuralese-direct-lfm-v2'})
-    config = {**config, 'derived.supervised_positions': 256 * 1000}
+    config = {**config, 'stages.direct_sft.derived.supervision': '3.0 epochs'}
     errors, _ = line_parity.compare(parity, 'direct', 'lfm', kind, config)
-    assert errors and 'supervised_positions' in errors[0]
+    assert errors and 'supervision' in errors[0]
+
+
+def test_direct_phases_are_compared_stage_by_stage_in_epochs():
+    kind, config = line_parity.effective_config({'recipe': 'neuralese-direct-mellum-v3'})
+    assert config['stages.direct_warmup.derived.supervision'] == '0.5 epochs'
+    assert config['stages.direct_sft.derived.supervision'] == '2.0 epochs'
+    assert 'stages.direct_sft.parameters.steps' not in config
 
 
 def test_a_data_substitution_needs_a_registered_twin():

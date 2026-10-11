@@ -10,12 +10,16 @@ Effective configuration, flattened to dotted keys:
 - ``parameters.*``: the stage's resolved parameters (recipe defaults merged with the stage's own);
 - ``inputs.<role>``: each data input's sha256 (identity, not location);
 - ``quantization.*``: the quantization component, if any (without its description);
-- ``derived.supervised_positions``: steps x target_tokens x batch of a neuralese_direct stage (the amount of
-  supervision, which must stay equal when target_tokens is a per-line memory knob).
+- ``derived.supervision``: the amount of supervision of a neuralese_direct stage, which must stay equal across lines:
+  its ``epochs`` over the target-bearing windows of its (twin) data (the update count is derived from the data and
+  each line's fit-only packing), or for a legacy steps-budgeted stage steps x target_tokens x batch.
+- A recipe of several stages (phases of one lineage, all of one kind) prefixes every key with ``stages.<id>.``;
+  declared differences and lineage keys name the unprefixed key and apply to every stage.
 """
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 PARITY_SCHEMA = 'natlang.neuralese-line-parity/1'
@@ -68,9 +72,12 @@ def _stage_view(kind, parameters, inputs, quantization=None):
     if quantization:
         _flatten('quantization', {k: v for k, v in quantization.items() if k != 'description'}, out)
     if kind == 'neuralese_direct':
-        out['derived.supervised_positions'] = (parameters.get('steps', 0) * parameters.get('target_tokens', 0) *
-                                               parameters.get('batch', 1))
+        out['derived.supervision'] = (f"{parameters['epochs']} epochs" if 'epochs' in parameters else
+                                      f"{parameters.get('steps', 0) * parameters.get('target_tokens', 0) * parameters.get('batch', 1)} positions")
     return out
+
+
+STAGE_PREFIX = re.compile(r'^stages\.[^.]+\.')
 
 
 def effective_config(spec, repo=None):
@@ -91,13 +98,17 @@ def recipe_config(recipe):
         kind = recipe['stage']['kind']
         return kind, _stage_view(kind, recipe.get('parameters', {}), recipe.get('inputs', {}))
     stages = [s for s in recipe['stages'] if s.get('admitted', True) is not False]
-    if len(stages) != 1:
-        raise ValueError('line parity compares single-stage recipes: ' + recipe['id'])
-    stage = stages[0]
-    parameters = {**recipe.get('stage_parameter_defaults', {}).get(stage['kind'], {}), **stage.get('parameters', {})}
+    if not stages or len({s['kind'] for s in stages}) != 1:
+        raise ValueError('line parity compares recipes whose stages share one kind: ' + recipe['id'])
     catalog = recipe.get('input_bindings', {})
-    inputs = {role: catalog[name] for role, name in stage.get('inputs', {}).items()}
-    return stage['kind'], _stage_view(stage['kind'], parameters, inputs, recipe.get('quantization'))
+    views = {}
+    for stage in stages:
+        parameters = {**recipe.get('stage_parameter_defaults', {}).get(stage['kind'], {}), **stage.get('parameters', {})}
+        inputs = {role: catalog[name] for role, name in stage.get('inputs', {}).items()}
+        views[stage['id']] = _stage_view(stage['kind'], parameters, inputs, recipe.get('quantization'))
+    if len(views) == 1:
+        return stages[0]['kind'], next(iter(views.values()))
+    return stages[0]['kind'], {f'stages.{sid}.{key}': value for sid, view in views.items() for key, value in view.items()}
 
 
 def _twin_registered(base_sha, line_sha, repo):
@@ -110,6 +121,7 @@ def _twin_registered(base_sha, line_sha, repo):
 
 
 def _allowed(parity, stage, line, key):
+    key = STAGE_PREFIX.sub('', key)
     for entry in parity.get('allowed_differences', []):
         if entry['stage'] == stage and line in entry['lines'] and (key == entry['key'] or
                                                                   key.startswith(entry['key'] + '.')):
@@ -118,6 +130,7 @@ def _allowed(parity, stage, line, key):
 
 
 def _lineage(parity, stage, key):
+    key = STAGE_PREFIX.sub('', key)
     return any(key == k or key.startswith(k + '.') for k in parity.get('lineage_keys', {}).get(stage, []))
 
 

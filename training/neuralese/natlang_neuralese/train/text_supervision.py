@@ -149,6 +149,83 @@ class CohortDocumentSampler:
                 'documents': {c: len(d) for c, d in self.documents.items()},
                 'admission_granted': False}
 
+    def epoch(self, index, seed):
+        """Pass ``index`` (0-based) of an epoch-ordered shuffle without replacement: every document of every cohort
+        exactly once, in the order ``Random(f'{seed}:epoch:{index}')`` draws; one document's items stay together in
+        their given order. A pass covers each cohort whole, so cohort weights do not apply to it."""
+        import random
+        documents = [items for cohort in self.cohorts for items in self.documents[cohort]]
+        random.Random(f'{seed}:epoch:{index}').shuffle(documents)
+        return documents
+
+
+def pack_updates(items, *, length, max_tokens=0, max_items=1, bucket=256, rng):
+    """Group ``items`` (kept in their pass order at the scale of ``bucket``) into updates.
+
+    ``max_tokens > 0``: length-bucketed right-padded batches. Each consecutive run of ``bucket`` items is sorted by
+    ``length`` (longest first) and packed greedily while count x longest stays within ``max_tokens`` (an item longer
+    than the budget is an update of its own); the run's batches are then shuffled with ``rng``. ``max_tokens == 0``:
+    consecutive groups of ``max_items``. Every item lands in exactly one update."""
+    if max_tokens < 0 or max_items < 1 or bucket < 1:
+        raise ValueError('pack_updates needs max_tokens >= 0, max_items >= 1 and bucket >= 1')
+    items = list(items)
+    if not max_tokens:
+        return [items[i:i + max_items] for i in range(0, len(items), max_items)]
+    updates = []
+    for begin in range(0, len(items), bucket):
+        run = sorted(items[begin:begin + bucket], key=length, reverse=True)
+        batches, current, longest = [], [], 0
+        for item in run:
+            size = length(item)
+            if current and (len(current) + 1) * max(longest, size) > max_tokens:
+                batches.append(current)
+                current, longest = [], 0
+            current.append(item)
+            longest = max(longest, size)
+        if current:
+            batches.append(current)
+        rng.shuffle(batches)
+        updates += batches
+    return updates
+
+
+def epoch_schedule(sampler, *, seed, length, epochs=None, updates=None, max_tokens=0, max_items=1, bucket=256):
+    """The whole update plan of a stage, a pure function of the data, ``seed`` and the packing settings (a resumed run
+    rebuilds it and continues at its step). Passes come from ``sampler.epoch``, each packed with ``pack_updates``.
+
+    ``epochs`` (float > 0): ``floor(epochs)`` whole passes plus the first ``round(fraction x items)`` items of the next
+    one. ``updates`` (int, the legacy ``steps``): as many passes as needed, cut at that many updates. Returns a list of
+    ``(batch, epochs_covered_after_it)``."""
+    import random
+    if (epochs is None) == (updates is None):
+        raise ValueError('declare the stage budget as epochs or as updates, not both')
+    if epochs is not None and not (math.isfinite(epochs) and epochs > 0):
+        raise ValueError('epochs must be finite and positive')
+    if updates is not None and (type(updates) is not int or updates < 1):
+        raise ValueError('updates must be a positive integer')
+    plan, index = [], 0
+    while True:
+        order = [item for document in sampler.epoch(index, seed) for item in document]
+        if not order:
+            raise ValueError('an epoch holds no items')
+        full = len(order)
+        if epochs is not None:
+            remaining = epochs - index
+            if remaining <= 0:
+                break
+            if remaining < 1:
+                order = order[:max(1, round(remaining * len(order)))]
+        batches = pack_updates(order, length=length, max_tokens=max_tokens, max_items=max_items, bucket=bucket,
+                               rng=random.Random(f'{seed}:pack:{index}'))
+        seen = 0
+        for batch in batches:
+            seen += len(batch)
+            plan.append((batch, index + seen / full))
+            if updates is not None and len(plan) == updates:
+                return plan
+        index += 1
+    return plan
+
 
 class DocumentWindowSampler(CohortDocumentSampler):
     """Text batches with document-uniform companions conditional on shape.

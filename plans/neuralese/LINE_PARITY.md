@@ -13,7 +13,8 @@ How it is kept:
 - **Exact check.** `natlang_neuralese.train.line_parity` (in `scripts/check-main.sh --quick`, via
   `tests/neuralese/test_line_parity.py`) resolves each line's effective configuration and fails on any undeclared
   difference, on a declared difference that no longer differs, and on unequal supervision
-  (`steps x target_tokens x batch`).
+  (`derived.supervision`: equal epochs over the same twin data; legacy steps-budgeted stages: `steps x target_tokens x
+  batch`). Multi-phase direct recipes are compared stage by stage (`stages.<id>.` keys).
 - **Launch refusals.**
   - The recipe CLI refuses `--records/--pieces/--text-data` for a recipe that declares its data; files move only
     with `--input-binding NAME=PATH`, which keeps the sha256.
@@ -44,6 +45,7 @@ Classes:
 | tokens (context window) | 8192 (context ≤ 7168) | 32768 (≤ 32512) | accidental | 32768 | Every union document keeps its whole preceding context (Mellum max 13,366 tokens; Mellum2.1 supports 131,072 positions via YaRN). At 7168, 3.1% (Mellum) / 4.3% (LFM) of supervised tokens lost early context. |
 | target_tokens | 1024 | 256 | fit-only | Mellum 1024, LFM 256 | Pop's 8 GB GPU; each token is supervised once either way. |
 | steps | 2000 | 1000 | accidental (8x less supervision on LFM) | equal supervised positions: 750 x 1024 = 768,000 (about 2 epochs); LFM 3000 steps (fit-only consequence) | Revised 2026-10-11 (coordinator): about 2 epochs of the ~384k supervised tokens (more erodes instruction following, arXiv:2609.01244); v2 plateaued near update 1800 with Lion and MuonSR learns several times faster per update. Mellum cadence: eval at 375 and 750, drift every 150, gate-at-warn at most every 450; LFM 3000/1500/750/2250. |
+| budget (2026-10-11 rework) | steps | steps | superseded | **epochs** per phase: warm-up 0.5 (full prompt), direct_sft 2.0 (program header); updates derived from the data and the line's fit-only `batch_tokens` (Mellum 32768: 333 + 346 updates; LFM 16384: 884 + 782) | Data audit (DATA_INVENTORY_20261011.md E): 750 x 1024 covered 0.11 epoch (one window per update, sampled with replacement, history-only windows included). Now an epoch-ordered document shuffle without replacement over target-bearing windows (shared CohortDocumentSampler, `text_supervision.epoch_schedule`), length-bucketed right-padded updates. Equal supervision = equal epochs. Cadence per line from the derived updates: Mellum eval at each phase end (eval_every 400), full state at 170, drift every 110, gate-at-warn at most every 220; LFM 1000/440/300/600 (Pop resets from measured seconds). |
 | latent optimizer | LionSR | LionSR | shared | MuonSR (cubic5 Newton-Schulz, Nesterov 0.95, 0.2·sqrt(max) scale, wd 0.1, idle experts skipped) for both | Owner tie-break 2026-10-11: a cheap, battle-tested Muon for both lines when comparable; Mellum2 was pretrained and SFT'd with Muon. One implementation, not a per-backbone split (OPTIMIZER_BAKEOFF_20261011.md). |
 | latent_lr (MuonSR) | 1e-5 | 3e-6 (shared base value) | backbone-inherent (evidence) | per line | LFM MuonSR 3e-6: gate 26/48 = base at 300, held CE 6.19 to 1.05 (1e-5 drift-stopped under the old 0.5 bound). Mellum MuonSR 1e-5: gate 0.75 = base at 100, response KL 0.30, train CE per hour at or above LionSR 3e-6. |
 | drift policy | gate + KL stop 0.5 | gate + KL stop 0.5 | shared | behaviour gate (≥ base − 0.1) is the hard criterion; response KL warns at 0.5 (runs the gate), stops at 1.5 | Coordinator decision 2026-10-11: SFT is meant to change the distribution; the gate measures forgetting. |

@@ -385,3 +385,24 @@ response KL was above the warn level from step 100, so every 100-update check ra
   every check once KL plateaued above it, which brought back ~30% gate overhead.
 - `drift_ce_windows` 4: every drift check logs held CE on the first 4 held windows, with its step-0 base, so the
   held-CE minimum is visible between evals (v2's train CE 0.07 suggested memorisation).
+
+## neuralese-direct-v2 budget in epochs, packed updates, two phases (2026-10-11)
+
+The data audit (plans/neuralese/DATA_INVENTORY_20261011.md, section E) found that `steps x target_tokens` (750 x 1024
+= 768,000 "about 2 epochs") covered 0.11 epoch on Mellum: one window per update, sampled with replacement over all
+6,801 train windows (only 3,258 hold a decision target), each supervising ~508 positions while MuonSR costs ~17.4 s
+fixed per update. Changes (shared base, both lines):
+- Budget: `epochs` per stage. direct_sft builds an epoch-ordered document shuffle without replacement over the
+  target-bearing train windows (the shared `CohortDocumentSampler.epoch`, `text_supervision.epoch_schedule`),
+  context-only windows skipped, and derives the update count; `steps` is gone from the direct recipes (legacy
+  `--steps` still runs through the same schedule). Each update logs windows, supervised/target/forward tokens,
+  epochs covered and supervised tokens per second; the report gives the budget and epochs covered.
+- Packing: `batch_tokens` (fit-only; Mellum 32768, LFM 16384): length-bucketed right-padded updates (runs of 256,
+  count x longest within the budget). Right padding is exact for causal attention and causal convolutions; padding
+  carries no weight; the loss is the token mean over real positions (a batch of one is the old computation).
+- Phases as recipe stages: `direct_warmup` (0.5 epoch of the full-prompt union twin) then `direct_sft` (2 epochs of
+  the program-header twin), continuing from the warm-up's full state (`--continue-from`, runner-supplied) with the
+  base model's drift reference and the inherited identity check. `stages_added` accepts `before`.
+- Quantization: a stage budgeted in epochs passes `end: "derived"`; direct_sft binds it to the derived update count.
+- Line parity: `derived.supervision` (epochs) replaces `derived.supervised_positions`; multi-stage recipes compare per
+  stage. The Mellum program-header twin is registered as the tokenizer twin of the LFM program-header set.
