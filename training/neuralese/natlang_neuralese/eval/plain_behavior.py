@@ -13,6 +13,7 @@ offline expected_exact_text). Legacy numeric answer presence is only structural.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 import gc
 import importlib.metadata
 import json
@@ -101,8 +102,13 @@ def _run_role(role: str, checkpoint: Path | None, probes: list[dict], *, device:
     results = []
     for probe in probes:
         encoded = _render(tokenizer, probe)
-        if isinstance(encoded, dict):
+        # Transformers 5 returns BatchEncoding, a Mapping, from
+        # apply_chat_template(return_tensors="pt"); older versions may return
+        # the input-id tensor directly. Normalize either declared shape here.
+        if isinstance(encoded, Mapping):
             encoded = encoded["input_ids"]
+        if not isinstance(encoded, torch.Tensor):
+            raise TypeError("tokenizer chat template must return an input_ids Tensor or mapping")
         if encoded.ndim == 1:
             encoded = encoded[None, :]
         prompt_len = int(encoded.shape[-1])
