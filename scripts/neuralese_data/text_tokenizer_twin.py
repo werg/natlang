@@ -246,13 +246,42 @@ def work(args):
         what = [n for n, a, b in (("text", text, row["text"]), ("token_ids", ids, row["token_ids"]),
                                   ("boundary", boundary, row["supervised_suffix_start"])) if a != b]
         return index, None, {**ident, "reason": "source_roundtrip_mismatch", "detail": ",".join(what)}, None
+    span_indices = None
+    if row.get("context_only_spans"):
+        # Context-only spans are whole history assistant messages (native_gold_packet_context_only_messages).
+        # Recover which messages from the source's own spans, then re-express them in the twin's coordinates.
+        candidates = [i for i, m in enumerate(messages) if m["role"] == "assistant"]
+        try:
+            _, _, _, all_spans = tc.native_gold_packet_context_only_messages(_G["src"], messages, target, tools,
+                                                                              candidates)
+        except Exception as exc:  # noqa: BLE001
+            return index, None, {**ident, "reason": "context_only_span_recovery_failed", "detail": str(exc)[:300]}, None
+        by_span = {tuple(span): i for span, i in zip(all_spans, candidates)}
+        wanted = [tuple(span) for span in row["context_only_spans"]]
+        if any(span not in by_span for span in wanted):
+            return index, None, {**ident, "reason": "context_only_span_not_a_whole_assistant_message"}, None
+        span_indices = [by_span[span] for span in wanted]
     try:
-        t_text, t_ids, t_boundary = tc.native_gold_packet(_G["twin"], messages, target, tools)
+        if span_indices is None:
+            t_text, t_ids, t_boundary = tc.native_gold_packet(_G["twin"], messages, target, tools)
+        else:
+            t_text, t_ids, t_boundary, t_spans = tc.native_gold_packet_context_only_messages(
+                _G["twin"], messages, target, tools, span_indices)
     except Exception as exc:  # noqa: BLE001
         return index, None, {**ident, "reason": "twin_render_failed", "detail": str(exc)[:300]}, None
     out = dict(row)
     out.update(text=t_text, token_ids=t_ids, supervised_suffix_start=t_boundary,
                tokenizer_sha256=tc.tokenizer_fingerprint(_G["twin"]))
+    if span_indices is not None:
+        # Acceptance: each masked twin span holds the same assistant message as the source span (the start of its
+        # reply content and every tool call's name), so no failed turn is silently unmasked.
+        for (b, e), i in zip(t_spans, span_indices):
+            masked = _G["twin"].decode(t_ids[b:e])
+            m = messages[i]
+            parts = [(m.get("content") or "")[:80]] + [c["function"]["name"] for c in m.get("tool_calls") or []]
+            if not all(part.strip() in masked for part in parts if part.strip()):
+                return index, None, {**ident, "reason": "context_only_span_text_mismatch"}, None
+        out["context_only_spans"] = [list(span) for span in t_spans]
     history_think = sum(1 for m in messages if m["role"] == "assistant" and "<think>" in (m.get("content") or ""))
     stats = {"restored_history_reasoning": restored, "history_assistant_turns": len(asst), "tokens": len(t_ids), "boundary": t_boundary, "source_tokens": len(row["token_ids"]),
              "history_think_messages": history_think, "twin_think_spans": t_text.count("<think>"),

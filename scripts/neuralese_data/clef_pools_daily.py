@@ -24,6 +24,8 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -35,6 +37,8 @@ CORPORA = ROOT / 'data/neuralese/corpora'
 EPOCH = dt.date(2026, 10, 11)
 SEED_BASE = 8100  # seeds 8100+day; 71/72 (clef-new), 6145 (dataset expansion), 102/900 (evaluation) stay unused
 DGX_SHARE = 800_000
+# systemd units see /usr/bin/node (v18), which lacks the runtime's crypto.randomUUID path: use the interactive node.
+NODE = os.environ.get('NATLANG_NODE') or shutil.which('node', path=f"{Path.home()}/.local/bin:{os.environ.get('PATH', '')}") or 'node'
 
 
 def corpus_id(day: str) -> str:
@@ -50,9 +54,14 @@ def seed_for(day: str) -> int:
 
 
 def node(*args: str) -> str:
-    out = subprocess.run(['node', *args], cwd=TS, check=True, capture_output=True, text=True)
-    sys.stderr.write(out.stderr)
-    return out.stdout.strip().splitlines()[-1] if out.stdout.strip() else ''
+    # One retry: a concurrent ts-host dist rebuild by another agent can fail a run transiently.
+    for attempt in range(2):
+        out = subprocess.run([NODE, *args], cwd=TS, capture_output=True, text=True)
+        sys.stderr.write(out.stderr)
+        if out.returncode == 0:
+            return out.stdout.strip().splitlines()[-1] if out.stdout.strip() else ''
+        sys.stderr.write(f'node {args[0]} exited {out.returncode} (attempt {attempt + 1})\n')
+    raise SystemExit(f'node {args[0]} failed twice')
 
 
 def spent(answers: Path) -> int:

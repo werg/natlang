@@ -5,6 +5,7 @@
 # build.json marks a finished build), then replay every shard not yet done (replay-port-record-calls.mjs) and keep
 # turns and rows zstd-compressed under OUT_DIR/turns/<family>/NNNNN.{turns,rows}.jsonl.zst + .summary.json (the
 # summary marks the shard done). Interrupt and rerun at any time; finished work is skipped.
+# BUILD_ARGS passes builder options (large-evidence pass: BUILD_ARGS='--min-evidence 32000 --max-evidence 120000').
 # Run under the DGX memory ledger:
 #   python3 scripts/memory_ledger.py run --unit s1-natlang-<id> --budget-gb 16 -- scripts/neuralese_data/port_record_calls.sh IN OUT 6
 set -euo pipefail
@@ -18,7 +19,7 @@ build() {
   [ -f "$OUT/ir/$f/build.json" ] && return 0
   rm -rf "$OUT/ir/$f"
   nice -n 15 node "$TS/build-port-record-calls.mjs" --input "$IN/$f.port-records.jsonl" --out "$OUT/ir" \
-    --corpus-id "$CORPUS" --reservations "$RES" > "$OUT/logs/$f.build.log" 2>&1
+    --corpus-id "$CORPUS" --reservations "$RES" ${BUILD_ARGS:-} > "$OUT/logs/$f.build.log" 2>&1
 }
 replay() {
   shard=$1; f=$(basename "$(dirname "$shard")"); n=$(basename "$shard" .ir.jsonl)
@@ -35,7 +36,7 @@ replay() {
   fi
   rm -rf "$tmp"
 }
-export -f build replay; export OUT IN TS RES CORPUS
+export -f build replay; export OUT IN TS RES CORPUS BUILD_ARGS
 families=$(ls "$IN" | sed -n 's/\.port-records\.jsonl$//p')
 echo "$(date -Is) build $(echo $families | wc -w) families"
 printf '%s\n' $families | xargs -P "$WORKERS" -I{} bash -c 'build {} || echo "build failed: {}" >&2'
