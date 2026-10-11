@@ -31141,6 +31141,22 @@
       "admission": "launch-evidence-only-no-provider-label-or-training-admission",
       "independent_new_worlds": 0,
       "notes": "Root-approved V41 JSON-object relaunch and exclusive quota-state repair evidence; binds 2047 remaining cases and frozen adapter manifest. No mutable runner log or generated labels included."
+    },
+    {
+      "id": "luna-v75-v76-choice-confidence-quality-review-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v75-v76-closed-source-result-audit-v1",
+      "include": [
+        "audit.json",
+        "audit.md",
+        "FILES.sha256"
+      ],
+      "split": "inherited-train-quality-review-only",
+      "source_class": "held-provider-output-quality-review",
+      "training_admission": false,
+      "admission": "quality-review-only-no-source-quality-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Closed V75/V76 source/result review. Exact provider source-case and static-reference pins are in the audit; disagreement means source-annotation mismatch only. Child visibility claims use invocation-bound saved rendered requests and stored hash metadata, not original wire bytes. All outputs remain held."
     }
   ],
   "coverage_backlog": [
