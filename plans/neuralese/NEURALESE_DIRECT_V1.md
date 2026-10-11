@@ -233,7 +233,7 @@ with a test.
 Storage: the 44 GB full state was written twice at step 1000 (best, then the due point), which split the hard link.
 The two files were byte-identical and are re-linked. Fixed in 32314556.
 
-## End-to-end stage (DRAFT for review; not implemented)
+## End-to-end stage (design resolved 2026-10-11; implementation in progress)
 
 The owner's decision of 2026-10-11 gives the Neuralese value requirement to this stage. It starts from a qualified
 direct stage. Its prerequisite is shared runtime/export qualification on the exact starting weights.
@@ -293,13 +293,34 @@ Measured: consumer task success (exact verifiers where the task has them) and co
 - **Runtime requalification:** on the exact final weights (AGENTS.md: runtime transport/gradient replay is qualified
   against those weights).
 
-**5. Open questions for review.**
-- T reads gold text or the model's own greedy text.
-- The declared margins.
-- Which natlang trajectories provide producer→consumer pairs, and how many held pairs.
-- Whether the block length is fixed (e.g. 8/32 as in the runtime review) or follows the call's token length.
-- The anchor heads: raw-token heads for Mellum, which needs a raw-token Mellum anchor.
-- Whether the gate's KL bound is combined or response-only (the open run-v1 question).
+**5. Resolved defaults** (the owner's "keep moving forward" rule; each can be revisited after review).
+- **Where it lives: `train/trajectories.py` with `--handover written`.** That trainer already reads the converted
+  native records: child calls' results (`child-result` / `child-result-write` sites, 1866 / 666 in the v17 records)
+  are written by their producer record and read where the caller's eval output shows them, trained in one graph.
+  It also evaluates crisp, written and shuffled readers. The e2e stage adds a direct writer there: the producer
+  writes with `serve.direct_write.write_direct` (Pop's shared writer, which consumes the TokenChoiceProjection since
+  462a66b9) in place of the sketch `unroll_write`. The engine is restored with the shared `load_direct_artifact`.
+  `graph_replay` (runtime replay records) uses the same rewrite semantics and stays the place for whole-program
+  replay records. No second producer→consumer trainer is added (one implementation per concept).
+- **T reads the gold crisp text** (the converted record's crisp rendering, `crisp_messages`) in v1 of the gate. It
+  is what the producer was trained to say, it exists for every held pair, and it needs no generation pass. A
+  greedy-text arm (the model's own words) is the fairer runtime comparison and comes next, reported only.
+- **Margins.** V passes when its mean held consumer CE is at most T's (margin 0), and it beats shuffled by 0.05 nats
+  and zeroed by 0.05 nats. Task success: on records with exact oracles (`outcome.oracle.level == exact`), V's
+  success rate must be at least T's minus 0.02 (two held records in a hundred, the noise floor of ~100 held pairs).
+- **Pairs.** All train-split records that read or write a child result; held pairs are the test-split ones, all of
+  them (trajectories' `--eval`), at least 64 reader records.
+- **Block length** follows the crisp text it stands for (`--tokens-per-vector 1`, trajectories' existing sizing): one
+  Neuralese value per token of the child's return value. The stop decision is learned on that boundary
+  (`--stop-weight`). A compression ratio above 1 is a later stage.
+- **Anchor:** raw-token heads (run-v2's `heads-raw-token.pt`, through its direct export).
+- **Gate KL:** response-only (58e901f6), as in the direct stage.
+- **What trains, as above.** `--backbone-training latent` with LionSR latents at 3e-6 (trajectories already has the
+  latent policy and LionSR). The NeuraleseProjection and TokenChoiceProjection train at the head lr, with soft
+  parameters as in trajectories.
+- **Losses.** Each record's target CE through the written blocks, plus the producers' own target CE (whole
+  trajectory); no self-distillation (`--distill 0`).
+- **Owner-level questions:** none outstanding.
 
 ## Exact semantics (answers to Pop, pop-f7c5 / pop-b359)
 
