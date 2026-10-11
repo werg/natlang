@@ -34129,28 +34129,6 @@
       ]
     },
     {
-      "id": "static-inline-iterate-reference-20261011-v1",
-      "owner": "pop",
-      "path": "data/neuralese/corpora/static-inline-iterate-reference-20261011-v1",
-      "include": [
-        "teacher-turns.jsonl",
-        "salvage-receipt.json"
-      ],
-      "split": "train",
-      "source_class": "authored-static-reference-trajectories",
-      "training_admission": true,
-      "trace_admission": false,
-      "admission": "8 complete source-bound static inline/iterate reference trajectories; 16 independently approved turns with exact accepted reference replays",
-      "derived_from": [
-        "static-inline-iterate-reference-pilot-20261005-v1"
-      ],
-      "training_admission_reason": "Each admitted trajectory is complete and every decision is independently approved; all 8 corresponding reference executions completed and were accepted. All turns are inherited train, source inputs and tool histories are preserved, exact renderer selection found no JeFF reservation or protected benchmark hits, and source groups/IDs are disjoint from admitted V43 native 401 and exact-map 926. Partial or review-held trajectories remain held.",
-      "review_status": "exact reference replays passed; renderer selection and JeFF/protected selection passed; complete-trajectory gate and V43 source-group overlap checks passed",
-      "required_conversion": "render full, program-header, and whole-trajectory twins for both tokenizers",
-      "consumable_by_direct_stage": false,
-      "notes": "Only 8 fully approved trajectories were admitted (16 turns); 22 trajectories with any pending/held decision and 124 associated turns remain held as whole trajectories. No generated teacher reasoning or execution plans are trained. Training admission does not qualify recurrence or runtime behavior."
-    },
-    {
       "id": "natlang-native-turns-clef-pools-20261011-v2-render",
       "owner": "dgx",
       "path": "runs/natlang-native-turns-clef-pools-20261011-v2-render",
