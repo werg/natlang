@@ -198,3 +198,38 @@ def test_direct_writer_feeds_back_tokens_so_a_consumer_reaches_each_value_at_dep
         assert float(torch.autograd.grad(last.float().sum(), down)[0].abs().sum()) > 0
     else:
         assert gradient is not None and float(gradient.abs().sum()) > 0
+
+
+def test_forced_sequence_write_matches_the_step_by_step_write(loaded):
+    """The E2E stage writes known-token values in one causal sequence pass (DirectWriter.forced_sequence); in FP32 it
+    is the step-by-step token-feedback write, values and gradients."""
+    from natlang_neuralese.model.neuralese_projection import NeuraleseProjection
+    from natlang_neuralese.serve.direct_write import DirectWriter, write_direct
+    from natlang_neuralese.train.execution import prefill_write_context
+    from natlang_neuralese.write import Opened
+    from types import SimpleNamespace
+
+    model, tokenizer, backbone = loaded
+    heads = SimpleNamespace(cutoff=backbone.num_layers, read_markers=False)
+    torch.manual_seed(0)
+    projection = NeuraleseProjection(int(model.config.hidden_size), hidden=8)
+    with torch.no_grad():
+        for block in projection.stack.blocks:
+            block.down.weight.normal_(0, 0.05)
+            block.taps.normal_(0, 0.5)
+    context = backbone.embed(torch.tensor([tokenizer.encode("The parcel is ready.", add_special_tokens=False)]))
+    forced = tokenizer.encode(" It arrived on Monday at noon.", add_special_tokens=False)
+    stop = {tokenizer.eos_token_id}
+
+    def opened():
+        pre = prefill_write_context(backbone, heads, context)
+        return Opened(pre.cache, pre.state, backbone.logits(pre.top[:, None])[:, -1], pre.top)
+    stepwise = write_direct(backbone, projection, opened(), len(forced), stop, length=len(forced), tokens=forced)
+    sequence = DirectWriter(backbone, projection, opened(), len(forced), stop, length=len(forced),
+                            tokens=forced).forced_sequence()
+    a, b = stepwise.complete()[0], sequence.complete()[0]
+    assert a.shape == b.shape and torch.allclose(a, b, atol=1e-4, rtol=1e-4)
+    down = projection.stack.blocks[-1].down.weight
+    ga, = torch.autograd.grad(a.float().square().sum(), down)
+    gb, = torch.autograd.grad(b.float().square().sum(), down)
+    assert torch.allclose(ga, gb, atol=1e-3, rtol=1e-3)
