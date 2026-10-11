@@ -270,11 +270,22 @@ def render(root: Path, name: str, cpus: int, budget_gb: int, docker_gb: int) -> 
         return
     out.parent.mkdir(parents=True, exist_ok=True)
     # A render unit left running by an interrupted loop (preempted, restarted) is waited for, not duplicated.
-    listed = subprocess.run(['systemctl', '--user', 'list-units', '--state=active,activating', '--plain', '--no-legend',
-                             f'static-render-{name}-*'], capture_output=True, text=True).stdout.split()
-    for running in [u for u in listed if u.startswith(f'static-render-{name}-')]:
-        while subprocess.run(['systemctl', '--user', 'is-active', '-q', running]).returncode == 0:
-            time.sleep(30)
+    # A unit the ledger preempted sits in its queue (requeued) and relaunches by itself: wait for that one too.
+    prefix = f'static-render-{name}-'
+
+    def pending_units() -> list[str]:
+        listed = subprocess.run(['systemctl', '--user', 'list-units', '--state=active,activating', '--plain',
+                                 '--no-legend', f'{prefix}*'], capture_output=True, text=True).stdout.split()
+        try:
+            status = json.loads(subprocess.run(['python3', str(REPO / 'scripts/memory_ledger.py'), 'status'],
+                                               capture_output=True, text=True).stdout)
+            queued = [w['unit'] for w in status.get('waiting', [])]
+        except (ValueError, KeyError, TypeError):
+            queued = []
+        return [u for u in listed + queued if u.startswith(prefix)]
+
+    while pending_units() and not (out / 'receipt.json').exists():
+        time.sleep(60)
     if (out / 'receipt.json').exists():
         return
     plain = root / 'batches' / f'.{name}.turns.jsonl'
