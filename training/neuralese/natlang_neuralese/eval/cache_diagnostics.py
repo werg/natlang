@@ -87,13 +87,19 @@ def main(argv=None):
         ("bf16_reference", torch.bfloat16, False, None),
         ("f32_reference", torch.float32, False, None),
     ):
-        backbone.hf.to(dtype=dtype)
+        # Change compute parameters only. Module-wide .to(dtype) also rounds
+        # FP32 RoPE frequency buffers; promoting them later cannot recover the
+        # original values and contaminates the following FP32 control.
+        for parameter in backbone.hf.parameters():
+            parameter.data = parameter.data.to(dtype=dtype)
         # Control rows and trained head parameters retain their trained float32 dtype.
         heads.feedback.embedding = backbone.embedding_weight.detach().clone()
         backbone.fast, backbone.conv_kernel = fast, conv
         cases = [compare(backbone, heads, p, z, args.steps) for p, z in zip(prefixes, payloads)]
         result = {"variant": name, "dtype": str(dtype), "device": args.device,
-                  "fast": fast, "conv_kernel_loaded": conv is not None, "cases": cases}
+                  "fast": fast, "conv_kernel_loaded": conv is not None,
+                  "buffer_dtypes": {name: str(value.dtype) for name, value in backbone.hf.named_buffers()},
+                  "cases": cases}
         results.append(result)
         print(json.dumps(result), flush=True)
         (out / f"{name}.json").write_text(json.dumps(result, indent=2) + "\n")
