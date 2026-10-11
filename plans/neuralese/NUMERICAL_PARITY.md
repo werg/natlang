@@ -160,6 +160,16 @@ payload relative L2 is 0.0255/0.0486/0.0378 and downstream logits relative L2 is
 That diagnostic uses a synthetic token-choice projection only for its downstream
 consumer; its CE and speedup are mechanism measurements, not trained-agent scores.
 Report SHA: `cb866582337300a97bc2f265f11c2edbc50164f51e2904839a9f8a87c19e345f`.
-Next: fresh independent restores for each mode and first-divergent-operator tracing.
-Keep BF16 and target any precision intervention to the responsible operation;
-standalone transport replay success does not resolve full/incremental equivalence.
+Fresh independent restores confirmed identical unchanged parameters and buffers.
+The first difference is a one-BF16-ULP `layers.0.conv.in_proj` Linear result with
+identical inputs; disabling reduced-precision GEMM reductions did not change it.
+Equal-input reference convolution and cache-window updates matched bit-for-bit.
+The unavailable fused convolution path has not been checked. Ordinary crisp text
+on the same token history already showed about 2.19% hidden-state and 1.87% logit
+relative L2 drift, with identical next-token CE on the seven diagnostic targets.
+Control report SHA: `1c1aa37b3fd118ef5a5e8540222e119eac4adec09476c22ebfca4218210e8383`.
+These findings do not establish task quality, but do not support attributing all
+BF16 drift to Neuralese transport. Keep BF16; next compare actual paired crisp and
+Neuralese consumer/stopping tasks rather than require bitwise agreement or adopt
+full-backbone FP32. The accumulation flag remains unchanged because its control
+provided no improvement.
