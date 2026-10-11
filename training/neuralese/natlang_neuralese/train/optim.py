@@ -40,7 +40,8 @@ class PortMuonAdamW(torch.optim.Optimizer):
         """``latent``: (name, parameter, lr, row_scale) of BF16 latents stepped in backward with one BF16 momentum and
         stochastic-rounding writes, for the latent backbone policy. ``latent_optimizer``: ``lionsr`` (per-row step
         ``lr x row_scale``, the memory-lean path of Mellum's conversion v3; ``lr`` in units of each row's ternary
-        scale), ``muonsr`` (Muon per matrix, ``lr`` on AdamW's scale; row_scale unused) or ``adaminisr`` (Adam-mini,
+        scale), ``muonsr`` (Muon per matrix, ``lr`` on AdamW's scale; the fourth element is the latent's
+        ``split_rows``) or ``adaminisr`` (Adam-mini,
         ``lr`` on AdamW's scale; the fourth element is the latent's ``block_rows``, ``latent_block_rows``).
         ``latent_options``: constructor options of the latent optimizer (LionSR/AdamMiniSR: ``skip_idle``,
         ``cautious``; AdamMiniSR: ``betas``; MuonSR: ``ns``) plus ``weight_decay`` of every latent group."""
@@ -82,7 +83,8 @@ class PortMuonAdamW(torch.optim.Optimizer):
         else:
             decay = options.pop("weight_decay", 0.0)
             self.latent = MuonSR([{"params": [parameter], "lr": rate, "qat_latent_lr": rate, "weight_decay": decay,
-                                   "name": name} for name, parameter, rate, _ in latent], lr=latent[0][2],
+                                   "split_rows": int(split or 1), "name": name}
+                                  for name, parameter, rate, split in latent], lr=latent[0][2],
                                  momentum=momentum, ns_steps=ns_steps, **options)
         if not muon:
             raise ValueError("the muon policy found no eligible hidden matrices")
@@ -377,8 +379,8 @@ class MuonSR(LionSR):
         self._hooks, self._gated, self._armed = [], False, None
         for group in self.param_groups:
             for p in group["params"]:
-                if p.ndim < 2:
-                    raise ValueError("MuonSR latents are matrices (or stacks of matrices)")
+                if p.ndim < 2 or p.shape[-2] % (group.get("split_rows", 1) or 1):
+                    raise ValueError("MuonSR latents are matrices (or stacks of matrices) whose rows split evenly")
 
     @torch.no_grad()
     def _update(self, p, group):
@@ -397,10 +399,15 @@ class MuonSR(LionSR):
                                                                              running)
         m = state["momentum"].float().mul_(beta).add_(g)
         state["momentum"].copy_(m)
-        direction = newton_schulz(g.add_(m, alpha=beta), group["ns_steps"], variant=getattr(self, "ns", "quintic"))
+        # ``split_rows``: the matrix is that many row blocks orthogonalized separately (Mellum's fused expert gate_up
+        # is the gate and up projections its pretraining Muon saw as two matrices; half the Newton-Schulz cost).
+        split = group.get("split_rows", 1) or 1
+        rows, cols = p.shape[-2] // split, p.shape[-1]
+        nesterov = g.add_(m, alpha=beta).view(*p.shape[:-2], split, rows, cols)
+        direction = newton_schulz(nesterov, group["ns_steps"], variant=getattr(self, "ns", "quintic")).view(p.shape)
         if active is not None:
             direction = direction * active.to(direction.dtype)
-        scale = 0.2 * math.sqrt(max(p.shape[-2], p.shape[-1]))
+        scale = 0.2 * math.sqrt(max(rows, cols))
         value = p.float()
         if group["weight_decay"]:
             decay = 1 - group["lr"] * group["weight_decay"]

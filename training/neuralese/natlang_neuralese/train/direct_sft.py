@@ -327,7 +327,8 @@ def main(argv=None):
     config = backbone.hf.config
     head_dim = getattr(config, 'head_dim', None) or config.hidden_size // config.num_attention_heads
     latent = [(n, q, a.latent_lr, row_scale(q) if a.latent_optimizer == 'lionsr' else
-               latent_block_rows(n, q, head_dim) if a.latent_optimizer == 'adaminisr' else None)
+               latent_block_rows(n, q, head_dim) if a.latent_optimizer == 'adaminisr' else
+               (2 if '.gate_up' in n else 1))  # muonsr: fused gate/up orthogonalized as two matrices
               for n, q in latent_named]
     latent_options = dict(weight_decay=a.latent_weight_decay)
     if a.latent_optimizer in ('lionsr', 'adaminisr'):

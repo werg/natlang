@@ -290,3 +290,21 @@ def test_port_optimizer_passes_latent_weight_decay_and_ns_to_muonsr():
                               latent_optimizer='muonsr', latent_options={'weight_decay': 0.1, 'ns': 'cubic5'})
     assert isinstance(optimizer.latent, MuonSR) and optimizer.latent.ns == 'cubic5'
     assert optimizer.latent.param_groups[0]['weight_decay'] == 0.1
+
+
+def test_muonsr_split_rows_orthogonalizes_each_row_block_separately():
+    """A fused [gate; up] expert matrix with split_rows 2 steps exactly like the two matrices stepped separately."""
+    from natlang_neuralese.train.optim import MuonSR
+    torch.manual_seed(0)
+    fused = nn.Parameter(torch.randn(2, 8, 12))
+    gate, up = (nn.Parameter(fused.detach()[:, :4].clone()), nn.Parameter(fused.detach()[:, 4:].clone()))
+    grad = torch.randn(2, 8, 12)
+    optimizer = MuonSR([{'params': [fused], 'split_rows': 2}], lr=1e-2)
+    fused.grad = grad.clone()
+    optimizer.step()
+    separate = MuonSR([gate, up], lr=1e-2)
+    gate.grad, up.grad = grad[:, :4].clone(), grad[:, 4:].clone()
+    separate.step()
+    assert torch.allclose(fused.detach(), torch.cat([gate.detach(), up.detach()], 1), atol=1e-6)
+    with pytest.raises(ValueError):
+        MuonSR([{'params': [nn.Parameter(torch.randn(7, 4))], 'split_rows': 2}], lr=1e-2)
