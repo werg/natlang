@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v73-native-candidate-operational-metrics-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-operational-metrics-v4",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 156,
+      "sha256": "a51dd516fbe073c3c675ba5fe39c21e30fd7fc54bb8502b04f6b983ed2088124"
+    },
+    {
+      "path": "metrics.json",
+      "bytes": 41216,
+      "sha256": "644086d5b85ccba31916a70f12ef34ecc19bf67bb2d9cc3e9fe0bdf0939375de"
+    },
+    {
+      "path": "metrics.md",
+      "bytes": 945,
+      "sha256": "21c7f1e88540bc1cdedba178485983f843bc92d92141ea17a41c86811f260c7e"
+    }
+  ],
+  "bytes": 42317
+}

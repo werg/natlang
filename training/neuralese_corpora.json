@@ -30911,6 +30911,201 @@
       "admission": "superseded-diagnostic-only-no-training-admission",
       "independent_new_worlds": 0,
       "notes": "Preserves the exact uncommitted Pop preservation/capture patch removed after owner decision dgx-8f98 superseded that approach. Its V1 native text-window teacher cache is explicitly invalid diagnostic-only due to possible final-norm reapplication; no corrected V2 cache was created. No code or cache is admitted for training or qualification."
+    },
+    {
+      "id": "google-choice-confidence-v40-input-unlaunched-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v40-source",
+      "include": [
+        "cases.jsonl",
+        "omissions.jsonl",
+        "source-manifest.json"
+      ],
+      "split": "inherited-train-provider-input",
+      "source_class": "held-provider-generation-input",
+      "training_admission": false,
+      "admission": "prepared-input-only-unlaunched-no-provider-label-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V40 prepared 512-case input buffer, never launched. Preserved after root moved to larger V41 refill; no labels or provider attempts included."
+    },
+    {
+      "id": "google-choice-confidence-v41-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-source",
+      "include": [
+        "cases.jsonl",
+        "omissions.jsonl",
+        "source-manifest.json",
+        "prepared-launch-command-v1.json",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "inherited-train-provider-input",
+      "source_class": "held-provider-generation-inputs",
+      "training_admission": false,
+      "admission": "input-only-launch-receipt-separate-no-label-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V41 2048 fresh inherited-train source rows; 715 CLINC, 288 DBpedia, 290 LanguageID, 40 Newsgroups, 715 Yahoo. Exact master/hash/train and current hold/source reservations root-checked before launch. Frozen ten-model bundle pinned; active mutable labels/attempts/logs excluded."
+    },
+    {
+      "id": "google-choice-confidence-v41-launch-receipt-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-source/root-launch-review-v1",
+      "include": [
+        "review.json",
+        "receipt.json",
+        "stop-receipt.json"
+      ],
+      "split": "inherited-train-launch-evidence",
+      "source_class": "held-provider-launch-and-stop-receipts",
+      "training_admission": false,
+      "admission": "launch-control-evidence-only-no-provider-label-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Separate V41 root launch/stop evidence. PID1084868 made one successful request before stop when repeated CLINC HTTP 400 failures were identified; this is not a closed batch snapshot. Mutable labels, attempts and runner logs excluded."
+    },
+    {
+      "id": "google-choice-confidence-v38-static-reference-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v38-adapter-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-derived-static-reference",
+      "source_class": "held-provider-label-derived-static-reference",
+      "training_admission": false,
+      "admission": "static-reference-and-replay-only-no-provider-teacher-trajectory-admission",
+      "independent_new_worlds": 0,
+      "notes": "V38 shared static adapter: 512 source rows, 428 accepted labels, 84 rejections; 55 authored static programs with 55/55 successful reference replays. Labels remain annotation-derived and source truth is not independently adjudicated; held."
+    },
+    {
+      "id": "google-choice-confidence-v39-static-reference-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v39-adapter-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-derived-static-reference",
+      "source_class": "held-provider-label-derived-static-reference",
+      "training_admission": false,
+      "admission": "static-reference-and-replay-only-no-provider-teacher-trajectory-admission",
+      "independent_new_worlds": 0,
+      "notes": "V39 shared static adapter: 512 source rows, 405 accepted labels, 107 rejections; 52 authored static programs with 52/52 successful reference replays. Labels remain annotation-derived and source truth is not independently adjudicated; held."
+    },
+    {
+      "id": "google-choice-confidence-v38-v39-combined-static-reference-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v38-v39-combined-v2",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-derived-static-reference",
+      "source_class": "held-combined-static-reference-inputs",
+      "training_admission": false,
+      "admission": "reference-replay-only-no-native-training-or-teacher-admission",
+      "independent_new_worlds": 0,
+      "notes": "Fresh combined V77 source input: unchanged V38/V39 static cases and replay rows, 107 programs/833 source items, 107/107 authored reference replays pass, exact source IDs/groups disjoint between parents. All data held."
+    },
+    {
+      "id": "luna-choice-folder-v77-v38-v39-runtimev17-input-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v77-v38-v39-runtimev17-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "source-review/**/*",
+        "root-approved-plan-v1.json",
+        "root-launch-receipt-v1.json",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ],
+      "split": "inherited-train-generation-input",
+      "source_class": "held-luna-generation-inputs",
+      "training_admission": false,
+      "admission": "root-approved-generation-input-only-no-quality-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "V77 on runtime V17, 107 static programs/833 source items, five reviewed worker queues; root-approved SHA 3925092770395e6feea636aee873b57ee25accb7485e619df1fd0cff3ffb8b37 and supervisor 1085068. Per-lane V76 predecessors pinned; active campaign status, logs, journals and results excluded."
+    },
+    {
+      "id": "v73-native-candidate-packet-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-candidate-v1",
+      "include": [
+        "FILES.sha256",
+        "candidate-manifest-v2.json",
+        "quality-review-v2.json",
+        "quality-review-v2.md",
+        "selected-results.jsonl",
+        "result-trace-pins.json",
+        "visibility-and-source-bindings.json",
+        "child-return-bindings-v1.json",
+        "native-turns-candidate-only-v2.jsonl",
+        "native-turns-held.jsonl",
+        "decision-holds.json",
+        "candidate-gate-projection-v2.json",
+        "candidate-gate-projection-v2-turn-bindings.json"
+      ],
+      "split": "inherited-train-quality-review-only",
+      "source_class": "held-native-candidate-materialization",
+      "training_admission": false,
+      "admission": "candidate-only-pending-full-source-closure-and-root-review-no-native-or-trace-admission",
+      "independent_new_worlds": 0,
+      "notes": "V73 quality v2 selects 43 parent-accepted programs (302 source items) and 909 candidate turns with source/request/return bindings. All target decision holds remain; candidate projection forces training and trace admission false. Not semantic truth certification or recurrence qualification."
+    },
+    {
+      "id": "v73-native-candidate-s1-closure-request-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-candidate-s1-closure-v1",
+      "include": [
+        "FILES.sha256",
+        "closure-packet-v1.json",
+        "dgx-request-v1.md",
+        "build-summary-v2.json",
+        "closure-input-v2/**/*",
+        "pop-harness4-v2/**/*"
+      ],
+      "split": "inherited-train-source-closure-request",
+      "source_class": "held-candidate-source-closure-request",
+      "training_admission": false,
+      "admission": "candidate-s1-closure-pending-no-native-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Exact candidate-level closure packet for 43 programs/909 materialized turns/302 source IDs and groups. Shared source_case_closure adapter locally produced 43 records, 909 bound candidate rows, zero harness4/protected/internal group errors; full DGX S1 still pending. Input v2 supersedes a failed v1 task.json field-pointer attempt, retained as history."
+    },
+    {
+      "id": "v73-native-candidate-operational-metrics-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-operational-metrics-v4",
+      "include": [
+        "metrics.json",
+        "metrics.md",
+        "FILES.sha256"
+      ],
+      "split": "inherited-train-quality-review-only",
+      "source_class": "held-native-operational-diagnostics",
+      "training_admission": false,
+      "admission": "trace-frequency-and-context-diagnostics-only-no-semantic-or-training-admission",
+      "independent_new_worlds": 0,
+      "notes": "Direct counts from 43 pinned trace files: 909 saved model request starts/ends/turns, 937 tool actions, 44 scope failure events, action outcome distributions, and message-content context size statistics. Recovery means only later successful action in the same invocation. No raw-wire claim."
+    },
+    {
+      "id": "v73-native-candidate-action-failure-exclusions-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-candidate-v3-action-failure-exclusions",
+      "include": [
+        "FILES.sha256",
+        "candidate-projection-v3.json",
+        "candidate-projection-v3.md",
+        "failed-action-target-bindings.json",
+        "action-failure-examples.json",
+        "native-turns-candidate-only-v3.jsonl"
+      ],
+      "split": "inherited-train-quality-review-only",
+      "source_class": "held-native-candidate-failed-action-target-projection",
+      "training_admission": false,
+      "admission": "candidate-only-pending-root-review-and-full-candidate-source-closure-no-native-or-trace-admission",
+      "independent_new_worlds": 0,
+      "notes": "Exact-trace-bound v3 derivative of the V73 candidate-only v2 turn set. Excludes only the 63 rejected/error eval action targets (36 rejected, 27 errors) after one-to-one joins by selected program, invocation, tool and exact decoded arguments. Retains 846 byte-identical rows; all later same-invocation retry contexts remain byte-identical and contain the failed result first line. Failed actions are protocol/runtime failures, not valid negative semantic targets; successful repairs remain. Earlier candidate and raw artifacts stay immutable; no source or recurrence admission."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v73-native-candidate-action-failure-exclusions-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-candidate-v3-action-failure-exclusions",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 487,
+      "sha256": "675b142435254a89dc557ff3b351e5b1319240a1485747441576af8b08d0c008"
+    },
+    {
+      "path": "action-failure-examples.json",
+      "bytes": 7319,
+      "sha256": "0b6574449d57754d577d07c6c11fe0184fd3896835f4c8ebeaabb84a2f986d9c"
+    },
+    {
+      "path": "candidate-projection-v3.json",
+      "bytes": 3488,
+      "sha256": "4ef0afecf393f82a0e15b0963cdfea96f9598ce86d65325ef873371bcebc322b"
+    },
+    {
+      "path": "candidate-projection-v3.md",
+      "bytes": 3383,
+      "sha256": "2dc8b972df4f13179e5d38d874afc2ee225ba480520417fb71453979309aa187"
+    },
+    {
+      "path": "failed-action-target-bindings.json",
+      "bytes": 288349,
+      "sha256": "662f0dd78ec4501ebf4ffb9f0f9acd600fcde4989124ab055356c5f09635bb34"
+    },
+    {
+      "path": "native-turns-candidate-only-v3.jsonl",
+      "bytes": 103126302,
+      "sha256": "b9018e525b07ada7926f0ea1dcaac81c5248c7479f4c872b07cb3ec516c27c73",
+      "lines": 846
+    }
+  ],
+  "bytes": 103429328
+}

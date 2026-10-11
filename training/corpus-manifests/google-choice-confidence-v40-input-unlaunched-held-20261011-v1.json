@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v40-input-unlaunched-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v40-source",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 648269,
+      "sha256": "92aa40e43685d5c35888675af087256a2802b83964e59d4f42edb345a2e4390f",
+      "lines": 512
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 7381254,
+      "sha256": "e9ac05e5883f4a391bfa2b79acb973cca817c0609aa8e4f5ad8fb19b8a5ac547",
+      "lines": 11098
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 162140,
+      "sha256": "b5311967e26a1d390965004914a289498d3a729e351f2898e0919bf3dfddb8ff"
+    }
+  ],
+  "bytes": 8191663
+}

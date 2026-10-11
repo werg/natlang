@@ -1,0 +1,77 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v73-native-candidate-packet-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-candidate-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 1810,
+      "sha256": "e0095ca046b9092c99682415b8e73fb4bc590f68944bc3219b1934a62d014f93"
+    },
+    {
+      "path": "candidate-gate-projection-v2-turn-bindings.json",
+      "bytes": 464583,
+      "sha256": "7ee82eb5f51b3c18979e69bf7876223dfbe1686216bd4a95a7f5f7d271ecd96b"
+    },
+    {
+      "path": "candidate-gate-projection-v2.json",
+      "bytes": 1275,
+      "sha256": "2ce5d6133ae4df4b182da0e482292d90c962cb2db6e9a2fd468721c58531cc73"
+    },
+    {
+      "path": "candidate-manifest-v2.json",
+      "bytes": 3233,
+      "sha256": "13b4918b9e784a3a4f545b51030cd0b38c29c2b0e46904c707224c00653355c1"
+    },
+    {
+      "path": "child-return-bindings-v1.json",
+      "bytes": 380511,
+      "sha256": "6ba39f26102f842c6ce46076e6e26bc7a967e5749fc1dec8f19694bdb1781bb6"
+    },
+    {
+      "path": "decision-holds.json",
+      "bytes": 562400,
+      "sha256": "b6e7814748dfb407301cf7bd0ed8cfc0e2f971210af9c7bb091581661415c5ee"
+    },
+    {
+      "path": "native-turns-candidate-only-v2.jsonl",
+      "bytes": 110850782,
+      "sha256": "762752ba7c96b0285043b70c82a132a1209472b3e981868228130349c2927915",
+      "lines": 909
+    },
+    {
+      "path": "native-turns-held.jsonl",
+      "bytes": 110524451,
+      "sha256": "092b922b04d33dcd0d117f8c22d3c6d466ab1d08f2fc31b580ac5fc9d71d3886",
+      "lines": 909
+    },
+    {
+      "path": "quality-review-v2.json",
+      "bytes": 24032,
+      "sha256": "e2201e5090a9c560d7f828aa86e293aa02527b870f4887ff0ce8e54cd9c1bfe1"
+    },
+    {
+      "path": "quality-review-v2.md",
+      "bytes": 4598,
+      "sha256": "77bfed9847534f47019fed6780229b126699dc2a3c77a2c38b92f696a8b246cd"
+    },
+    {
+      "path": "result-trace-pins.json",
+      "bytes": 42496,
+      "sha256": "aade55b801750ff763976890f0d393988aac14ecba5812324e000568b39d6547"
+    },
+    {
+      "path": "selected-results.jsonl",
+      "bytes": 76928780,
+      "sha256": "c384b561b1ef2e0bbeb033ca0b120a8300dab4203bdaed5736813757fc4e55fa",
+      "lines": 43
+    },
+    {
+      "path": "visibility-and-source-bindings.json",
+      "bytes": 1009767,
+      "sha256": "47123cc92bc8b92132bb0a75a4931befd5b4b2c3f59c8773f662e1e6ac3c1ba7"
+    }
+  ],
+  "bytes": 300798718
+}

@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-choice-confidence-v38-v39-combined-static-reference-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v38-v39-combined-v2",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 252,
+      "sha256": "a733df23e5d929ba5219e58858770162fce5db5f105d6cf39ddf27ea48a25da3"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 3882727,
+      "sha256": "adf74a3f7acf93df7479682d34bf47eacb8dc461173bb972a886a8d07532c890",
+      "lines": 107
+    },
+    {
+      "path": "replay.results.jsonl",
+      "bytes": 59857424,
+      "sha256": "4f2097d1cf800f08761fde982ae295e79cba39f4e6f2d4a9065d8a6e36b23fe5",
+      "lines": 107
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 3311,
+      "sha256": "fcf4f433fcab2509dfa6a7735a36174ebfa4aad04a67c2661fd4ef61b04cd072"
+    }
+  ],
+  "bytes": 63743714
+}
