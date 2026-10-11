@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-preservation-superseded-owner-dgx8f98-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1/superseded-preservation-owner-dgx8f98-v1",
+  "files": [
+    {
+      "path": "FILES.sha256",
+      "bytes": 658,
+      "sha256": "d6e08c85ace2ed695d3daeb5b93bb6443cd7e3b6903423b42387583d85c8e066"
+    },
+    {
+      "path": "SHA256SUMS-original",
+      "bytes": 865,
+      "sha256": "c91c77c425e8ecdcd6664ae743b50cf66655f7003a0bbc1ab6c5d915164a3479"
+    },
+    {
+      "path": "disposition.json",
+      "bytes": 1226,
+      "sha256": "5ae22ed78f864110be5ae028af4d3df17b68c4497d831eaf2fa948138544601f"
+    },
+    {
+      "path": "superseded-preservation.patch",
+      "bytes": 39805,
+      "sha256": "316f05ffeb31874c135c51d89c70cff4a38cf2c6854971b2bdf3a370a4077372"
+    }
+  ],
+  "bytes": 42554
+}

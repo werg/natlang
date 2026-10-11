@@ -1,0 +1,977 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-ar-native-harness-plain-behavior-and-runtime-diagnostics-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-ar-native-harness-alignment-evidence-held-20261011-v1",
+  "files": [
+    {
+      "path": "plain-behavior-earliest-retained-full-v1/container.log",
+      "bytes": 5396,
+      "sha256": "41b1393cb981efdf405b3345a174b08208f84aba72829d00e63a18754771398b"
+    },
+    {
+      "path": "plain-behavior-earliest-retained-full-v1/cpu-restore-preflight.py",
+      "bytes": 1169,
+      "sha256": "9d52dbf4e67711ea64e3952817867fba2271ea838ccba17221a1060bbeedc6ef"
+    },
+    {
+      "path": "plain-behavior-earliest-retained-full-v1/launch-intent.json",
+      "bytes": 276,
+      "sha256": "3b5eb9555cff10c28b37127bb242f20955d2d29b8ffb122557b1d0707d1a3f2f"
+    },
+    {
+      "path": "plain-behavior-earliest-retained-full-v1/launch-receipt.json",
+      "bytes": 1369,
+      "sha256": "b4a223c6422afd50a8a5bc6696cce94a7cd50a57b1da14446e7be2ec740310aa"
+    },
+    {
+      "path": "plain-behavior-earliest-retained-full-v1/launch-request.json",
+      "bytes": 6087,
+      "sha256": "bca1ea9e364122c986eec81a84cebdccac0b18a2c3baeba590d9e9c731e34f4a"
+    },
+    {
+      "path": "plain-behavior-earliest-retained-full-v1/results/execution-journal.jsonl",
+      "bytes": 273358,
+      "sha256": "b4f72ef5b0fea8426c6bb6be15c9c48525545cc1258b6acde9f62edb4d576762",
+      "lines": 156
+    },
+    {
+      "path": "plain-behavior-earliest-retained-full-v1/results/invocation.json",
+      "bytes": 17280,
+      "sha256": "769465ccd86215827db5cd1b637ec8878617f878dc89d0934f4e1537f54268ed"
+    },
+    {
+      "path": "plain-behavior-earliest-retained-full-v1/results/paired-results.jsonl",
+      "bytes": 256827,
+      "sha256": "3936dac120dc74c7fb17c9dc0cf2f0f8dcdfadba4b72e8a04e01672417f62040",
+      "lines": 48
+    },
+    {
+      "path": "plain-behavior-earliest-retained-full-v1/results/run-status.json",
+      "bytes": 354,
+      "sha256": "bce595a561e4ce0550b79c5c290dc716fce9858e65b5ff235801f3706c732138"
+    },
+    {
+      "path": "plain-behavior-earliest-retained-full-v1/results/summary.json",
+      "bytes": 20506,
+      "sha256": "bd663443a3536cd80297e45be048b06c710e6713b546515d7ca6f170dc1859f4"
+    },
+    {
+      "path": "plain-behavior-earliest-retained-full-v1/results/weight-drift.json",
+      "bytes": 60910,
+      "sha256": "0a4e5eacef081799934e09f53ea19798f84a06acdb3e1146bedbefa1f8fc0589"
+    },
+    {
+      "path": "plain-behavior-lineage-diagnostic-v1/FILES.sha256",
+      "bytes": 154,
+      "sha256": "cd640cbbe4eb2bb238a857448bf186783e704a804da56e114983f2302392973f"
+    },
+    {
+      "path": "plain-behavior-lineage-diagnostic-v1/review.json",
+      "bytes": 19210,
+      "sha256": "a73cf2cf46098694e90efa75d8fd1581d40317a54510c43d420902bf1aadcefb"
+    },
+    {
+      "path": "plain-behavior-lineage-diagnostic-v1/review.md",
+      "bytes": 3292,
+      "sha256": "e0efc2a95a900924bd86b94e8ae188724ae3e932a96b4cc585eadeaf59a5ef33"
+    },
+    {
+      "path": "plain-behavior-probes-v2/build-probes.py",
+      "bytes": 4828,
+      "sha256": "dd460e16d3af2737fdf918378ca1abcbaf9b19fcbe34e1ee9ebaf0df306b5029"
+    },
+    {
+      "path": "plain-behavior-probes-v2/probe-manifest.json",
+      "bytes": 2925,
+      "sha256": "04978f860d7287868a5b1660b9a12fbb153793f5d14c19868e9d414cea061475"
+    },
+    {
+      "path": "plain-behavior-probes-v2/probes.jsonl",
+      "bytes": 290679,
+      "sha256": "0bce5275646cd95ae36374f41769602995c8587c871275653b26c1cf260c3d52",
+      "lines": 48
+    },
+    {
+      "path": "plain-behavior-v7-predecessor-comparison-v1/launch-request.json",
+      "bytes": 3652,
+      "sha256": "150b7bb83c3066d2a663667d3bdd17ac59a251b4d518d4d070815865e24a7617"
+    },
+    {
+      "path": "plain-behavior-v7-predecessor-comparison-v1/results/execution-journal.jsonl",
+      "bytes": 272237,
+      "sha256": "7f9ebb0889dff95b19a00716528fdf96d4f11a8f5614b3491f930cbcf7625e41",
+      "lines": 156
+    },
+    {
+      "path": "plain-behavior-v7-predecessor-comparison-v1/results/invocation.json",
+      "bytes": 17304,
+      "sha256": "2ae447ac4e48ae7398b619082618e64b1b6345eb2a37a715b1306f7aadf841dc"
+    },
+    {
+      "path": "plain-behavior-v7-predecessor-comparison-v1/results/paired-results.jsonl",
+      "bytes": 255706,
+      "sha256": "6189c654f62e8ac1ccacd1699d99d3eea38472d75e0ecf0427e6d24ae52a296e",
+      "lines": 48
+    },
+    {
+      "path": "plain-behavior-v7-predecessor-comparison-v1/results/run-status.json",
+      "bytes": 354,
+      "sha256": "6fbce96b20405f0700c26d8d86d726ff5fbf4a766ced1b47884db4acdddff055"
+    },
+    {
+      "path": "plain-behavior-v7-predecessor-comparison-v1/results/summary.json",
+      "bytes": 20516,
+      "sha256": "775a5746aeea514b6f7f9ece6be229b64dac5a182c8c790dcb0a4a8bafdfed2a"
+    },
+    {
+      "path": "plain-behavior-v7-predecessor-comparison-v1/results/weight-drift.json",
+      "bytes": 60902,
+      "sha256": "ab5e28efa2996c9f68db264d79e5325e6feceab2b31621a5a8a1869b7717417b"
+    },
+    {
+      "path": "v7-final/FILES.sha256",
+      "bytes": 837,
+      "sha256": "fca799b74174dcd65c0198a5e72614dfd88e0461c931af349d7beff18a975424"
+    },
+    {
+      "path": "v7-final/baseline.json",
+      "bytes": 459031,
+      "sha256": "f7aec591c85fa4c2d2970ecff8364c99aeb357bb4b46db59d89bdb2c6be3efac"
+    },
+    {
+      "path": "v7-final/evaluation-history.jsonl",
+      "bytes": 1669787,
+      "sha256": "9e97a358af6eb962e5bda14e796984b1ec225520aa9362fa847253f265e62a5d",
+      "lines": 5
+    },
+    {
+      "path": "v7-final/final-report.json",
+      "bytes": 458971,
+      "sha256": "86a4e12bd0e1b4e5a231b42bf4c6d10b2ab6206f829daf7a9412b8339c3e7c27"
+    },
+    {
+      "path": "v7-final/launch-metadata.json",
+      "bytes": 4186,
+      "sha256": "43f86257046b30b69abfb9b7b0abd5e993a8921d3cce8e48d1e1b9fbdb547b80"
+    },
+    {
+      "path": "v7-final/optimizer-restore.jsonl",
+      "bytes": 511,
+      "sha256": "dce42e2ef46faff9aa7101fd6065ad0dd5004d7ab58ef5e1db96faccdb182fe0",
+      "lines": 1
+    },
+    {
+      "path": "v7-final/recipe.json",
+      "bytes": 18836,
+      "sha256": "2971dc4d17c71ca4134726f9267aad0f40aa1e5967a0b294b59849868a790bfb"
+    },
+    {
+      "path": "v7-final/review.json",
+      "bytes": 4378,
+      "sha256": "c7036b7a8b850c611eecacb69a35b9d0bddcc7212d25d73fd296ab946964a655"
+    },
+    {
+      "path": "v7-final/review.md",
+      "bytes": 423,
+      "sha256": "1cbce507d8b48ccaa1343fb75ce86f21ac83dc6817ed61f8458f7f45a1f4bfe8"
+    },
+    {
+      "path": "v7-final/run-plan.json",
+      "bytes": 122767,
+      "sha256": "37483bba9baeeeaf0b888815fa8d4b463df721c7bccaad74eb4f9b72018d3791"
+    },
+    {
+      "path": "v7-final/selected-best-receipt.json",
+      "bytes": 481168,
+      "sha256": "ddca29939bcf62fef1e697ffa7c0d3205eb8e86834cc9ca7743b8453bc86bb80"
+    },
+    {
+      "path": "v7-final/snapshot-manifest.json",
+      "bytes": 1650,
+      "sha256": "323bbdcc3f478e38a1bc7bfb0602913a3d6271bfecf590ae90ac72057a6cf29d"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/adapted_runtime/metrics.jsonl",
+      "bytes": 1785,
+      "sha256": "b370083104c39f15553326f2542dbad499171d3a3d1ecbd4be0663e08fa26f3a",
+      "lines": 2
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/adapted_runtime/report.json",
+      "bytes": 3292,
+      "sha256": "0881f1ab844c1b1200739d2ceb3ee54b82317e31418f0a5578be6cd5e8ced93e"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/direct-stage-plan.json",
+      "bytes": 17927,
+      "sha256": "3616366f1ab237ad16a5c599bf767af15c27d83c39dd30b40d7ce5daabda83cf"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/direct-stage-result.json",
+      "bytes": 4246,
+      "sha256": "170c70cf2942d820739c30a8c7a5882545b0818dad54114dc7fb2cce88e6af82"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/artifacts.py",
+      "bytes": 18763,
+      "sha256": "93fe52d40906981bbcf71da52e782bbcb36651a03e7fd195cae432ccebe00c95"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/common/__init__.py",
+      "bytes": 157,
+      "sha256": "8352a509d51ef0dc0be958bdd4492caa968933866b171360be39fda43217364f"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/common/artifact_paths.py",
+      "bytes": 7375,
+      "sha256": "cd2601130be04ad4a8aeb3ae8a6d143e9528195abeff672b385e4f5acd06ab2f"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/common/hashing.py",
+      "bytes": 1321,
+      "sha256": "2194f3ac0fd4356a896a81c5590edd8978b928dbe67ceacf6e7d8d48331454d4"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/common/jsonio.py",
+      "bytes": 1755,
+      "sha256": "d4e71ae9211cd625ea5d74706f9e0d4cc7fbf59e731dd0cba34fddd04674e4d2"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/common/paths.py",
+      "bytes": 1797,
+      "sha256": "053fecadec6ce45236f8143fc659dce336f36dc57261ba092a19865157fed464"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/data/__init__.py",
+      "bytes": 324,
+      "sha256": "3f82efa809e3aded4938fe22e4019c206fce8f92d5dd25b6b11fd5b2eff81aa4"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/data/context_refs.py",
+      "bytes": 1867,
+      "sha256": "654d29a39f3224b1eb7c240b21aeadbe7edd8062302d0f53b52634ef74ec7cc3"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/data/fixtures.py",
+      "bytes": 4024,
+      "sha256": "025f120373164e91ca10adac2ef09356429eef3c168320a91efe21e01fa7684b"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/data/operator_cases.py",
+      "bytes": 5848,
+      "sha256": "6b690fb651dd94141d24281409e9b42272a35b8892263c15eedecb0879900a0c"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/data/records.py",
+      "bytes": 5373,
+      "sha256": "d019f2c29cc01bf49b3dd7bfc6cbff5799d83334ba600b5dd1c50e99f141b190"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/data/render.py",
+      "bytes": 9273,
+      "sha256": "f8424cc6f03f25b2c635032fc9624c799d44dd96449fe1aba16275580520be78"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/data/shortcuts.py",
+      "bytes": 4039,
+      "sha256": "739e0cd49695b1d6a2369757d903d0f4593961ad25deec0d7cd13ca6e9967766"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/data/stream.py",
+      "bytes": 10895,
+      "sha256": "bdbeec01055a2a77a4bb77ebba257cd98b5be57f6c9eb7162980ff8f2597d4f3"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/data/text_corpus.py",
+      "bytes": 112129,
+      "sha256": "149e7448ef7a50ee955b8fab198deb2c397bf90a1a34ed8b2f3cbe47a854bbe7"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/data/view_records.py",
+      "bytes": 9179,
+      "sha256": "e8ca26584e5f6b8d35868e07326d335b75bcde0da07e66b4dc38a295ac135b9a"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/devices.py",
+      "bytes": 1127,
+      "sha256": "70e5c6d324168c9a1ede345e07762adde8ecace3b2f2a6c10d766985ad0ca4aa"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/__init__.py",
+      "bytes": 240,
+      "sha256": "f81525b180f7b751e1391357e6ae351634d801d0291d61eab62e907bb5aaa051"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/bench.py",
+      "bytes": 4504,
+      "sha256": "7bad3c806ac24c3c03ffb6951a0901aec551e837489bbc7514cd687228c9ae2b"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/cache_diagnostics.py",
+      "bytes": 5672,
+      "sha256": "11c070e1b78ddd3235d4ee936726c918cf05aaa73115c1f8f1eecc892b6c314b"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/ffn_dispatch.py",
+      "bytes": 5271,
+      "sha256": "ce861bf97ee1a705f162b1a35ca8e9d37c03bbe0359b27eb3957644aceed3027"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/foundation.py",
+      "bytes": 6943,
+      "sha256": "7b3e159cd02f1ed58a937c4478baab29915ec6afc1b4dbd8f0f930978ceeaab2"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/generation_checks.py",
+      "bytes": 4310,
+      "sha256": "834ac186e5f9d9062cf377bce79c6ac66227c232b658b7786ccd3ae7267667c6"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/harness.py",
+      "bytes": 15707,
+      "sha256": "c0d3e742b9f4180aab03e0c2109b6de390f3c8b7e6224e8fd3e41a21a6718749"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/inference.py",
+      "bytes": 1339,
+      "sha256": "44ed81c9a861861c273695abbf1d7ec37240deaed7e81c1729b430553e0c597f"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/local_stage.py",
+      "bytes": 6873,
+      "sha256": "9f7ffc3984e7866b892349ada10041bc15d932937d41bd508ab5b91843bb09d6"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/mtp_draft_probe.py",
+      "bytes": 14566,
+      "sha256": "a0aa74f91fae8b4a73afbfa24214e7be519fcca4d79856f7f29a15148bd711c0"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/plain_behavior.py",
+      "bytes": 25891,
+      "sha256": "a9d4a1f0f89598dd4b30d510832c8c3e68f3aef59669a7d940287918e7b68451"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/plain_weight_drift.py",
+      "bytes": 8721,
+      "sha256": "8a497626b599ee22d6c7a95b825869ffafdb88a824271194389bb96b83e0d2fc"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/projected_history.py",
+      "bytes": 26245,
+      "sha256": "ea63515a0cfbfb637cf830b21dee7db1a1f2f4d0ac32a6104757e4cc987c5c41"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/raw_port_handoff.py",
+      "bytes": 10761,
+      "sha256": "fe8d45f1a1ca1fd0d166889a5cd90b012378394d4585ff18c9c4c3d7d394905b"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/raw_writer_trace.py",
+      "bytes": 1427,
+      "sha256": "2391c2b2164003f804a1666ee34e6952b3d9feb82c1171cc5d877d8dde8fb947"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/recurrence_autoregressive_history.py",
+      "bytes": 31439,
+      "sha256": "dc57f1fb02318a8e5283ded261f206ec26a37d1ec8cf81940e13b357d68ede90"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/recurrence_runtime.py",
+      "bytes": 2403,
+      "sha256": "215e747ccfda6d84605040f1f4e0bbd7b8a8709c016aa027fe7e8431d91e0054"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/residual_transition.py",
+      "bytes": 2239,
+      "sha256": "3a7cefa5387a042197cf202fdab57038fbc854558992cc2b445d13b1cee50359"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/scheduler_throughput.py",
+      "bytes": 4182,
+      "sha256": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/self_feedback.py",
+      "bytes": 22478,
+      "sha256": "064339913cebb5a8253d0fbf09e97956c495fff018f5d84ff06dd2230f4c94dd"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/stopping_diagnostics.py",
+      "bytes": 3033,
+      "sha256": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/text_warmup_runtime.py",
+      "bytes": 14715,
+      "sha256": "32d55ae89e69d1b2be117c673008c3a18284d5110d273c00193b7da712e78537"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/trajectory_execution.py",
+      "bytes": 16756,
+      "sha256": "82d4032da64cfe39e0e1eda30dd79eeacb24d5f6de495a73b8058b673d18506a"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/eval/view_gate.py",
+      "bytes": 21610,
+      "sha256": "e48a2268ffa1514a58ef4ce3141d898a5920b1843cafeeb82ca0123061b0b799"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/export/__init__.py",
+      "bytes": 257,
+      "sha256": "538548d5d45ff9bda71b77a5463c0b0081f304799ba05f69e4e379c2baed9eb5"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/export/__main__.py",
+      "bytes": 11259,
+      "sha256": "1f83aed997e0fe5de3fc126f54da947fd6e408e13e64578c98484f71a9e3a2fb"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/export/adapters.py",
+      "bytes": 4839,
+      "sha256": "aa2339586fa46ef8d0b3586c2e0ede061f23e9e6b36b5e36ad89aa2089ab40af"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/export/gguf.py",
+      "bytes": 10421,
+      "sha256": "3b24512db9513b1420af7f0617e61333ce708c953a023385b740eda94a3955f4"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/harness_bench/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/harness_bench/openhands.py",
+      "bytes": 12665,
+      "sha256": "f8c31e352ced0ac53d7789363c0cfccf350c2469a0ceee4d811074d936fce06f"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/harness_bench/prepare.py",
+      "bytes": 3373,
+      "sha256": "73775f67ace1c241de39ba91e47426b87e9df6d0ddd18fdd41e60e552749b524"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/harness_bench/records.py",
+      "bytes": 22272,
+      "sha256": "0d8d72f323fc25cb6f08f6fbd48f6368a415228d4f45f25ab8a2398167e1fa62"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/laws.py",
+      "bytes": 2377,
+      "sha256": "a854787db4d495a8a213809b36da71d8d6bf36928cc42abbfa5d4bd48c8369e2"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/distill_data.py",
+      "bytes": 21518,
+      "sha256": "ed5e158c8dc143d7ad89d3b2df07c4bc46a796ff8942b317b9b3077995ac4aa6"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/export_member.py",
+      "bytes": 8328,
+      "sha256": "7a655a250c7854cc3024b99eb410da1349ac897bd2d7b611eee1eac68530e152"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/family.py",
+      "bytes": 5250,
+      "sha256": "8760fcf2f06a357c5189499fd85781df60a35b5c8e0301ffb49410c45abf1977"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/foundation_heads.py",
+      "bytes": 3991,
+      "sha256": "49b13f374f40af5c82f02cb32c11f03782b21a1b9853fc6939ae7a0fe78c72e9"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/fused_moe.py",
+      "bytes": 20243,
+      "sha256": "7fa152b6e7386dabd116d59d1903e6133e5b892caa82b884efdf16f079d0bce8"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/gate_diagnostic.py",
+      "bytes": 3787,
+      "sha256": "32797732070f47b2cf01e07c60bdc6ad4e5fc3db4e51b9eae15e7edf0e6e79b3"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/generation_gate.py",
+      "bytes": 5711,
+      "sha256": "c095da822db4e6978f2e2d4388b2d3959ddb9157b49d5f583129116e505b3730"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/maple_port.py",
+      "bytes": 1531,
+      "sha256": "0c703d39ccf53124f36f8e8a97cfe72a068eaac2f7071c0406c39217f46160ca"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/model.py",
+      "bytes": 36097,
+      "sha256": "524aa27f793e691d115f1c0ec966405e1f299e36531f895a8fe6d6d4f88c8941"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/nested_train.py",
+      "bytes": 17463,
+      "sha256": "b69f3e18ee6f7cb94c207a44bcbdc39a045fc967ead217451813153710f93897"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/precision_kernels.py",
+      "bytes": 3248,
+      "sha256": "42a2ae5f4c8752e5ac968218b208992e3dae2d84d6f3cb7d4a4c6ae24d8c4c15"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/qat_convert.py",
+      "bytes": 29577,
+      "sha256": "9c2e2bb2e54798fa79ea4caccb6b9d49199f136a26a9d919c9f6c6055161e93d"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/qat_export.py",
+      "bytes": 7791,
+      "sha256": "f514ec6ebc0533467dd6a201d3269ba6051752e686b9fdacf525d0c149427ace"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/routing.py",
+      "bytes": 8009,
+      "sha256": "2405f2b97659dd6b2e69985a2974e388a9a7a92f60bd625762135ab546f5762b"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/student.py",
+      "bytes": 6287,
+      "sha256": "26275155511f6672bf7bb402bb3fa2ba5ab0f9adea0655d2d270118e47275965"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/ternary.py",
+      "bytes": 26767,
+      "sha256": "e05f225c162e615c086d9b4415492b0d27dfef12d89ffb52e9d31101e2a285ad"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/maple/ternary_pack.py",
+      "bytes": 6366,
+      "sha256": "b92bea791c721cfcd13c5b04999fa92e4b4f0f02f35b184cb3031d377f6f291c"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/model/__init__.py",
+      "bytes": 435,
+      "sha256": "4c75aa4c3a490969f9db9aec7f3ce82bb01dac99000a981f5d889126785b22a0"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/model/capacity.py",
+      "bytes": 2261,
+      "sha256": "acc56b11b70216627f84ca866dbbfe22997d720ce0f75a72a7ba4630fc817472"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/model/causal_feedback.py",
+      "bytes": 7044,
+      "sha256": "f6ee121957ac075d0722f1970f153ecbb9d34bd5b1418fe175c49c3fef7efdc0"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/model/dialect.py",
+      "bytes": 1769,
+      "sha256": "57561646624b75cfa0a0d226b4ba3b24ab212014d364d8a7f65c908cf6785186"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/model/heads.py",
+      "bytes": 22944,
+      "sha256": "5717f620e8f11d081d73b2703b59ab1674e2d026236ef404d2e3f5aecba64a8f"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/model/hf_port.py",
+      "bytes": 14700,
+      "sha256": "6feb10ecff954fac5a4a2ceaa1a478df22a5405b94cfee39ff94a0dedc2e3dff"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/model/input_map.py",
+      "bytes": 1977,
+      "sha256": "fe4d0665fffe2cf8a284bc84bf9aa0c31e6f7994afe3fa2bd607dd289c1eaaa1"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/model/isolated_sequence.py",
+      "bytes": 10891,
+      "sha256": "7ceb6f85ca8b65d9023d999364d89c9151d2ab9daf6e81cce71ff95b7a7fb020"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/model/layer_staging.py",
+      "bytes": 5396,
+      "sha256": "b9c82b8bfd5b51399b3d4ff9b23ee068ee09777ad231573295cce2a13edb085c"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/model/lfm2_port.py",
+      "bytes": 34245,
+      "sha256": "ed5593cf32233ea64cc9af9d05a212e1c11425c5e4c600b8ae64582496666923"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/model/projections.py",
+      "bytes": 5842,
+      "sha256": "7a2fb00067f717ddaafda36c5a016cc39e857e81c9b9e44aa04ec47a59432486"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/model/tiny_adapters.py",
+      "bytes": 14535,
+      "sha256": "dd1275937320126a2def53144eb8e7726d6a51f7b5c4474031c6056fbb52a052"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/nz.py",
+      "bytes": 1349,
+      "sha256": "da611cd1db596b1041ff1e4ab64379cc042f92802a94204b493da78762bb9ff6"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/prompt_bank.py",
+      "bytes": 5405,
+      "sha256": "f72333f6b98dc0add5dc66beffc31936be4cb9b5fddad70f091d91aa4985f0cc"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/read.py",
+      "bytes": 4539,
+      "sha256": "45e3128aba58dc7eca8a26b7fe72397316df055bf508e0f168145a0971eb039f"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/rl/__init__.py",
+      "bytes": 123,
+      "sha256": "177133f12d780bddb16728b0e3a88cb83ecd11534b0f6c309eea1a8929bce5c5"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/rl/grpo.py",
+      "bytes": 13157,
+      "sha256": "fb17320ecd4091025a26560715ce1e50fb9392a7d23db5be9695d9d40860a220"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/__init__.py",
+      "bytes": 8359,
+      "sha256": "ceff8601aef4da9d63b84e81d67163e32155408020dca94af4844722337bb074"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/__main__.py",
+      "bytes": 7126,
+      "sha256": "f73005e1774a859921915552fe7937a389804ba77126be8172eb749bdbcc2c5d"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/batch.py",
+      "bytes": 5597,
+      "sha256": "4b63539ec3fb285e317879cef0df66b253f710e0a69990054dc5cbe9f96cef68"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/chat.py",
+      "bytes": 32264,
+      "sha256": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/crossing.py",
+      "bytes": 3060,
+      "sha256": "8381a010f6344fe7862ad08b22cd31c091e714675a6846f6ee9323d65f33650d"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/engine.py",
+      "bytes": 47683,
+      "sha256": "55c41b35693c75c2d7f3871aa8e6616a4cd66bdba294c3b0f69a36b032639c94"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/grad.py",
+      "bytes": 66143,
+      "sha256": "a056afb9a424b1c39cd1b971fdcb92dc5beaa738129b14ea9543a816ac4fea29"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/guidance.py",
+      "bytes": 10773,
+      "sha256": "4291528365d0422ddc0668df94c3ea55c5a082f90183963516609e723a474041"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/http.py",
+      "bytes": 32336,
+      "sha256": "07e5f675b43aa31bef0ccff04719fd755d44359dade980f9ba1653865fcd2046"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/recurrence_checkpoint.py",
+      "bytes": 3725,
+      "sha256": "4f6b3349ed21e4183f7b7c0a85add603c426da9858ead21638eb2350602ec846"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/store.py",
+      "bytes": 17007,
+      "sha256": "0e1139ebbe75471084406f886ced36ea8f4907090bcb054d9e791b4bc5c0a966"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/token_cache.py",
+      "bytes": 1820,
+      "sha256": "9aa6faeccee1b622ee60aefe9313a0037986051e7047baa4a1f96b49dcdcd374"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/serve/vllm_rollout.py",
+      "bytes": 14181,
+      "sha256": "cce7d3d77f058f21be9eea1fc600374b28b2cc07eb2954768456d1f1db49898f"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/shared_space.py",
+      "bytes": 9065,
+      "sha256": "b19573afc125780373f383f3f13a4f40b6f2768312ee8df2aed28cc78a8ed86a"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/stdlib.py",
+      "bytes": 7508,
+      "sha256": "4864645904156e4564beaf6f0afba3ce1bf967e1a31f69fd0a87ee2d3609e531"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/text_init.py",
+      "bytes": 10670,
+      "sha256": "8ff0ed5b1b4c2a57d5b530a299ffb7c12148ff56c7eae7c8950df0309a0ccc9a"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/__init__.py",
+      "bytes": 225,
+      "sha256": "10520e8a073233c3efe499e3fdd9cad1d7fe1f4c2e9727b862154c1fb9be5a9f"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/adapters.py",
+      "bytes": 12996,
+      "sha256": "f7e457a2a7e4654f2e640cae21936bb0158b7c0b1ec016ff38ceb2683cbd026e"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/backbone_policy.py",
+      "bytes": 7516,
+      "sha256": "f27b927250406ae1e6b49aa21656e19882a0c769c225c3b65b094f2d5fec8cd9"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/bootstrap_data.py",
+      "bytes": 2836,
+      "sha256": "d0c81f35472498ac2319e4b922b3eb727523a0a4b0e2140fbc4e3207e0f522c1"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/causal_bootstrap.py",
+      "bytes": 20672,
+      "sha256": "e3eac13228db70516434041b5db5569a6d71d5d1cef089159e06d5b75ae4849c"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/channel_objective.py",
+      "bytes": 7776,
+      "sha256": "bc7647227db2a956d059ae9b274aee67134d0698f4634d4b7fe3c854c690201e"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/checkpoint_policy.py",
+      "bytes": 8066,
+      "sha256": "c20688f760fb72f96669f3de3b84fb4a5a993fd6bca7b1d35f9a6f87b3d2a789"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/checkpoint_safety.py",
+      "bytes": 9232,
+      "sha256": "01cff7ce3a3ca788570ad2288bf96e21385bd03730ed8b80b76d99a7e2f69bd1"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/decision.py",
+      "bytes": 15304,
+      "sha256": "57e754f7dae64019310207337238a5f284b7fb8277660a06538089f585a4cb7f"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/delta_e2e.py",
+      "bytes": 13124,
+      "sha256": "3a5676e1ceb92b5d5ae9ff126be3a13ed2519ad21ffecdadcc116f29792942b5"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/delta_projection.py",
+      "bytes": 7870,
+      "sha256": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/execution.py",
+      "bytes": 47451,
+      "sha256": "a847a145e5b4e1987f0c69c8cbc7902406754be8b57e2e37bd1139d8756643b3"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/export_trajectory.py",
+      "bytes": 3553,
+      "sha256": "5bbc545ff603530fbcc5b5930c6f841c70b09f37732b0f26bd088666250fef14"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/exposure_curriculum.py",
+      "bytes": 9304,
+      "sha256": "eada1d6fbd3dc06eb07bbe632fa5548bf308d1011baf28ce902769e4fe0ff5b3"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/exposure_data.py",
+      "bytes": 11889,
+      "sha256": "da28fc95bbbbecdd8787e55e6b9a8e5c8d7816b2e45cfd32f1a78393549ce639"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/foundation_schedule.py",
+      "bytes": 11219,
+      "sha256": "204dbf170830fb751f98adca659344f8a6ccb5650bd0e8c9e763bcead51dc507"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/graph_replay.py",
+      "bytes": 20765,
+      "sha256": "16b51f0c88e2b94634719d477456598e243e3e54e05d08e2b993d779d4ab1d8e"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/inline_instructions.py",
+      "bytes": 27436,
+      "sha256": "cb7a32fbe46f1ac733e5038f90992ffbe112137c4f292197d9c21ee898994a7c"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/joint.py",
+      "bytes": 9887,
+      "sha256": "bdc47b1063894137bb4d1ff3938a3e10a8a109ee5f2c4cdf8ea64e3fa2d66951"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/joint_kd.py",
+      "bytes": 6239,
+      "sha256": "f4cfc8816d22037e462a9fe4e8ccc808a6e352cb0dde46ca9d98cb7c71acc3cf"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/learned_updater.py",
+      "bytes": 13583,
+      "sha256": "b65b2210c5fa602203155a726b50b086c0edab1745053afc7ec8f683935ae16e"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/loop.py",
+      "bytes": 7033,
+      "sha256": "96db67cbea42d7862c21ce46abe50c6e010701b00e272f32f2138b4f783e3714"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/losses.py",
+      "bytes": 21367,
+      "sha256": "c9f30f034f8d138bee7e08ab8b2c69e00caccb7a15b9230be1b6e81f7dd6d795"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/memory.py",
+      "bytes": 3689,
+      "sha256": "f7d4ed66bc9ff9963f4d9108c4a662871943f87b0c5bc4cf85cbf6f12cddb7ef"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/memory_estimator.py",
+      "bytes": 9632,
+      "sha256": "4f30940e46990d3a390ec2a86f8cc158de4c843469161091720460d6ba491e17"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/memory_policy.py",
+      "bytes": 16906,
+      "sha256": "c1eb5d5afae25793e390adf1a717c729b1d0fcd37bf8d67df55e22678f2a5d02"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/optim.py",
+      "bytes": 26711,
+      "sha256": "18f1f29acb3a2dc98df3828e0a7084e7497ca646f7d9ddb8de2ab93965e459ed"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/optim_restore.py",
+      "bytes": 12593,
+      "sha256": "83495dce705547836597e19fbcfca313e2d54797f45272c229dc1a7b0c6a6079"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/output_embedding_projection.py",
+      "bytes": 8240,
+      "sha256": "b3fcc0c902420c7781b1a125c46eb703ff2410fbea55d6f275561cde3c9c8a5b"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/port_handoff.py",
+      "bytes": 2986,
+      "sha256": "d2af160f9f0c2e93ea6b28ffb23246754640604b99ec2c9af126a91e2e292d37"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/projection.py",
+      "bytes": 7516,
+      "sha256": "f52ad0fb2ead0afac04865db3e66f460a6de235db77f0ef7125e7876fcc80194"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/projection_anchor.py",
+      "bytes": 1951,
+      "sha256": "300f993e439432faee809694ac3f71a0089cefab9e47142f0ffb4e98caae5ac8"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/projection_e2e.py",
+      "bytes": 14064,
+      "sha256": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/quantization.py",
+      "bytes": 42737,
+      "sha256": "5bd83ddf12955eec9189586ae5f30f81528e1ac8eb9e08586705bb20526aa24f"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/recipe.py",
+      "bytes": 77302,
+      "sha256": "66349be20a759644ca781be9bd25c008a12d0b3fc9d114654759329ad133d441"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/record_cohorts.py",
+      "bytes": 3584,
+      "sha256": "7c69d0dfa81869e6dcd6bce45bb7230d51b995ca648a4ca16663bfaea7e99dba"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/recurrence.py",
+      "bytes": 2927,
+      "sha256": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/staging.py",
+      "bytes": 8902,
+      "sha256": "d826eee727aae24930ba2ebffb782da71c7d18dafc05575a345a4acbb87ebb19"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/text_supervision.py",
+      "bytes": 6457,
+      "sha256": "4dc3a26c4a5dabd2c1327ee32c89c656358d54cfffb8f6ce37c0863a2e31e57d"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/text_warmup.py",
+      "bytes": 198832,
+      "sha256": "5a90898133cdbeaf9fc09a389919d28949ee74c131b138ae00fffea6402125f7"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/trajectories.py",
+      "bytes": 185260,
+      "sha256": "c8f041137c9a93f7842ed0442668c5054aa7ea848c262f5fda523ae44ddaae4c"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/trajectory_probe.py",
+      "bytes": 15821,
+      "sha256": "823167290de7191d169aef654945bbaf63779c138c8749241aee97c3b9bc4e79"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/trajectory_state.py",
+      "bytes": 26147,
+      "sha256": "b2fecf2b6d39269b30d218b60ea0b0edb5bc75c751883a4dd276dab8681edfea"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/verified_heads_handoff.py",
+      "bytes": 7391,
+      "sha256": "fe61991aeebf9db005e0ffc5cdc681a4d9f79c443181318ccf01ba6905e7e0e0"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/train/warmup_export.py",
+      "bytes": 11133,
+      "sha256": "61edb413d8d5292e5cfe7c305b3b22e6bf9e99d4cbb6d5067b7d61c5604d2fa1"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/view.py",
+      "bytes": 8845,
+      "sha256": "4ee2b3d93cac3df4e154a539a2b2dc7eddeb25efb6e58982b79daaadde27c4dd"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/direct-stage-run/runtime/natlang_neuralese/write.py",
+      "bytes": 12504,
+      "sha256": "e5ed6033825e4f34f17e81c77eaded56fb3235646eb9baa151d5dd78d574bbb5"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/quality-review-v1/FILES.sha256",
+      "bytes": 154,
+      "sha256": "93592f2eb4c86df4d521ab2a9a600ab9585cb0ce896ac4dea6233eecc94242ba"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/quality-review-v1/review.json",
+      "bytes": 5347,
+      "sha256": "fbfcb9b2d3643c426eba172809770a1b7df82dc0c5e6ccca1b4851e1d65aa455"
+    },
+    {
+      "path": "v8-adapted-runtime-diagnostic-v5/quality-review-v1/review.md",
+      "bytes": 1194,
+      "sha256": "f93894ad5ecdb45e1b1c9531180c6731a250a65e2f94a57574af65946cc6d95c"
+    }
+  ],
+  "bytes": 7015257
+}
