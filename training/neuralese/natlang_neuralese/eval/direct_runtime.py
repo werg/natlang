@@ -243,12 +243,28 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda', token_choice_
                               for vector in written.payloads]
         state_gradients = [float(torch.linalg.vector_norm(state.grad, dtype=torch.float64)) if state.grad is not None else None
                            for state in written.states]
-        finite = bool(gradients) and all(torch.isfinite(p.grad).all().item() for p in projection.parameters() if p.grad is not None)
+        projection_finite = bool(gradients) and all(
+            torch.isfinite(p.grad).all().item() for p in projection.parameters() if p.grad is not None)
+        payload_gradient_finite = [bool(torch.isfinite(vector.grad).all()) if vector.grad is not None else None
+                                   for vector in written.payloads]
+        state_gradient_finite = [bool(torch.isfinite(state.grad).all()) if state.grad is not None else None
+                                 for state in written.states]
+        payload_finite = all(bool(torch.isfinite(vector).all()) for vector in written.payloads)
+        # Every emitted value participates directly in the consumer. The final
+        # producer state has no successor decision and legitimately lacks an
+        # adjoint; report that absence instead of treating it as a finite tensor.
+        finite = projection_finite and payload_finite and all(
+            flag is True for flag in payload_gradient_finite) and all(
+            flag is not False for flag in state_gradient_finite)
         row = {'length': length, 'scheduler_writer_delta': serving_delta, 'cache_readback_delta': cache_delta,
                'cache_lengths_equal': lengths_equal, 'cache_contents_equal': contents_equal,
                'consumer_ce': float(loss.detach()), 'projection_gradients': gradients,
                'payload_gradient_norm_by_position': feedback_gradients,
                'final_state_gradient_norm_by_position': state_gradients,
+               'projection_gradients_finite': projection_finite,
+               'payloads_finite': payload_finite,
+               'payload_gradients_finite_by_position': payload_gradient_finite,
+               'final_state_gradients_finite_by_position': state_gradient_finite,
                'payload_rms_by_position': [float(vector.detach().float().square().mean().sqrt())
                                            for vector in written.payloads],
                'finite_gradients': finite, 'projection_receives_consumer_gradient': sum(gradients.values()) > 0}

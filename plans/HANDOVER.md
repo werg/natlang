@@ -11058,3 +11058,40 @@ No context reduction, frozen backbone or detached producer gradient was used.
 - Native1243endpoint materialization and six-row file registered/synced2063c06c; corrected selector design separately c995f2bc. Helper caught a post-publication edit, restoredv1exact from verified artifact copy, and registered corrected bytes as additivev2.
 - Root rejected paired prompt probev9 before spending provider calls: variants changed reference code only; real semantics were identical and no authored-root execution contract was present. Collector would sample identical root prompts. Helper preparingv10 with candidate guidance in actual NLrootinstructions and rerendered/replayed evidence. Keepv9as diagnostic, not a live measurement.
 - Googlev43 source prepared2048fresh IDs from58,500master. Root independently verified exact id/group/family/kind/state/question/options/answer fields for all2048, zero mismatch. SourceSHA9d84b3f3df60325dfac3117da40c24c7769601d4518debb9898efac33478654b. Provider launcher/lockchain review pending; no requests yet.
+
+## Pop continuation — 2026-10-11 15:29 UTC
+
+- The endpoint epoch stopped safely after seven updates. The next wetland case
+  (`teacher-program:0253e33eb7a227f66f7c:decision:0003`) has 102/43-vector writes
+  and ~11k-token producer contexts. Joint backward exceeded memory; automatic
+  staging then rejected nonfinite gradients before an optimizer update. The
+  emergency checkpoint is preserved; do not call this a completed epoch.
+- Exact failing-context diagnostic v2 reproduces the failure from ORIGINAL V8,
+  before any E2E update, with staged backward. Its receipt is
+  `.../native-e2e-failing-context-diagnostic-v2/native_e2e/nonfinite-gradients-step-0.json`
+  beneath the V8 artifact root. Of 163 nonfinite-gradient parameters, 147 belong
+  to the backbone, 12 to the Neuralese projection and four to soft rows; TCP
+  gradients are finite. This is not evidence that Lion's update caused it.
+- Independent 102-vector short-context diagnostic gives emitted-value norm
+  ~1.93e21 and projection gradient norm ~9.70e21. FP64 norm telemetry avoids
+  false overflow from finite FP32 gradient elements. Runtime qualification now
+  checks emitted payloads and their adjoints as well as projection gradients;
+  absent final-state adjoints are reported explicitly.
+- Writer contract needs reconciliation with DGX: its latest coordination note
+  says ordinary gold/sampled token embeddings drive positions inside a producer,
+  while the current published direct-v1 exact semantics explicitly require
+  emitted-value feedback there. Pop requested a coherent shared plan/code change,
+  rather than a private fix or silent gradient truncation. GPU is temporarily
+  idle after the completed diagnostics; restart on the resolved shared contract.
+- Five Luna lanes are active on the corrected V15 paired typed-choice probe:
+  12 programs / 96 item instances, 48 identical source IDs per variant. Candidate
+  guidance is in the actual root instructions, unlike rejected V9. Approved plan
+  SHA8468e96360510b971c978c244ec8756453d41e2ba03896afbebb83fbbafeb4c0.
+  Held launch evidence is registered/synced in a0a0c784; helper prepares fresh
+  family-balanced successor work while monitoring the current lanes.
+- Google V43 is live on 2,048 fresh cases, with immutable frozen runner and
+  approved launch. At the investigated cutoff all eleven Gemma-26 HTTP400s were
+  151-option CLINC schema requests; other label counts succeeded. Provider helper
+  is preparing a controlled enum-omission diagnostic/recovery, preserving strict
+  local option/confidence validation and the exclusive shared quota lock. Do not
+  start a second quota owner or edit the live frozen plan. Outputs remain held.
