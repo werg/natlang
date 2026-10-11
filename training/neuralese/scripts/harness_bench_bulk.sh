@@ -55,6 +55,8 @@ for h in handles:
 EOF
   touch "$OUT/shards/.split"
 fi
+# The shards hold every prepared trajectory now; the row-group parts are duplicates (their summaries stay).
+rm -f "$OUT"/prepared/*.jsonl
 # One shard: replay (resumable), then its records once replay finished (the records stage is per repository, so a
 # shard of whole repositories places exactly as the whole would).
 cat > "$OUT/shard.sh" <<EOF
@@ -71,5 +73,6 @@ rmdir "\$D/records.tmp"
 echo "shard \$D done \$(date -u +%FT%TZ)"
 EOF
 chmod +x "$OUT/shard.sh"
+# PARALLEL replays at once (each mostly waits on git fetches); the records stage after each is CPU and disk bound.
 ls -d "$OUT"/shards/[0-9]* | xargs -P "$PARALLEL" -n 1 "$OUT/shard.sh"
 echo "all shards done $(date -u +%FT%TZ)"
