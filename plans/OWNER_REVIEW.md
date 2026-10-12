@@ -13,7 +13,7 @@ acting on the owner's recorded answer, moves an entry to "Done" with the date an
 
 | # | Item | What needs doing |
 | --- | --- | --- |
-| F1 | Heartbeat leftovers | Delete the untracked, gitignored `applications/heartbeat/*.d.nl.ts` and `applications/dist/heartbeat` on DGX (and Pop if present); the program was removed in a0800c94. The reviewing agent's delete was refused by the permission classifier |
+| F1 | Heartbeat leftovers | DONE 2026-10-12: owner authorized; deleted untracked `applications/heartbeat/*.d.nl.ts` (3 files) and `applications/dist/heartbeat` on DGX. Pop: delete the same if present |
 | F2 | refine-data `authoring.json` | Add the guard-sentence / `Is<T, "...">` pairs from the refinement tables of helpdesk, terminal, media, notebook, evidence, publisher, ide, specializer and program-improver (none registered yet; the 28 entries cover only the first seven apps) |
 | F3 | FAILURE_EXPLANATION_PROGRAM questions 1-5 | Decide (agents may, per "keep moving forward"): explain tag 33 `answer_mismatch_needs_review`; judge redundant vs necessary delegations; `RULES` in `admission-dispositions.mjs` as a data table with manifest; confirm nothing tunes to the .99/.02/.05 thresholds; explanation files beside the reports or one `runs/explanations/` tree |
 | F4 | Tiered engine and fused pipelines next steps | TIERED_ENGINE: tier 2 replay verification, persisted tier config, tier 1 confidence guard, tier 4. FUSED_PIPELINES: observed facts from live runs, wiki/migration chains and compilers `analyze -> declare`, consumer-side shadow, a real certificate with a qualified server and benchmark |
