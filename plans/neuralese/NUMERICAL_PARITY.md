@@ -99,7 +99,10 @@ LFM2.5's gap is 0.033-0.038 payload and 0.055-0.099 consumer logits. On Mellum t
 1.4 and 0.6 nats of consumer CE, and their gradients are uncorrelated in direction (median relative L2 near 1). This
 fits the dragnet: the incremental write runs one row per MoE call, the sequence pass runs all rows in one call, and
 routing flips amplify the shape-dependent GEMM differences. Losses and gradients measured on Mellum's BF16
-writer paths with the old kernels are not execution-order invariant. The invariant-kernel arm was stopped by
+writer paths with the old kernels are not execution-order invariant. Scope: training that runs only sequence and packed passes
+(the direct stage, v3p included) is not affected by this order dependence: every update computes the same
+shapes the same way. It matters wherever a write runs incrementally (one decode step per value) against a model trained
+or evaluated in sequence form: the E2E stage's greedy writes and serving. There the invariant kernel is required. The invariant-kernel arm was stopped by
 the memory guard before it finished (v3p's resume has priority); it is re-run after v3p, with named containers and a
 60 GB claim.
 
