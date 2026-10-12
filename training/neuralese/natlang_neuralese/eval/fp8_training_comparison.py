@@ -247,6 +247,18 @@ def summarize_run(output: Path) -> dict[str, Any]:
     aggregate_tokens = sum(int(row['supervised_tokens']) for row in warmed
                            if isinstance(row.get('supervised_tokens'), (int, float)))
     evaluations = _read_jsonl(output / 'direct_sft' / 'eval.jsonl')
+    report = json.loads((output / 'direct_sft' / 'report.json').read_text(encoding='utf-8'))
+    runtime_inventory = _read_jsonl(output / 'direct_sft' / 'fp8-runtime-inventory.jsonl')[-1:] or None
+    initial_fp8 = report.get('fp8_training')
+    def dtype_bytes(inventory):
+        if not isinstance(inventory, dict):
+            return {}
+        totals = {}
+        for module in (inventory.get('runtime_module_tensor_inventory') or {}).values():
+            for dtype, count in (module.get('unique_storage_bytes_by_dtype') or {}).items():
+                totals[dtype] = totals.get(dtype, 0) + int(count)
+        return totals
+    fp8_plan = updates[0].get('memory_plan', {}) if updates else {}
     return {
         'updates_logged': len(updates),
         'warm_updates_used': len(warmed),
@@ -270,7 +282,24 @@ def summarize_run(output: Path) -> dict[str, Any]:
         'saved_tensor_audit_first_update': updates[0].get('saved_tensor_audit') if updates else None,
         'gradient_audit_first_update': updates[0].get('gradient_audit') if updates else None,
         'fp8_training_first_update': updates[0].get('fp8_training') if updates else None,
-        'fp8_runtime_inventory': _read_jsonl(output / 'direct_sft' / 'fp8-runtime-inventory.jsonl')[-1:] or None,
+        'fp8_runtime_inventory': runtime_inventory,
+        'fp8_memory_attribution': {
+            'kind': 'post-update module-owned unique tensor storage inventory; excludes transient kernels/workspaces and is not total allocator memory',
+            'eligible_bf16_parameter_bytes': initial_fp8.get('eligible_parameter_bytes')
+            if isinstance(initial_fp8, dict) else None,
+            'initial_module_owned_bytes_by_dtype': dtype_bytes(initial_fp8),
+            'post_update_module_owned_bytes_by_dtype': dtype_bytes(runtime_inventory[0])
+            if runtime_inventory else {},
+            'plan_fp8_weight_cache_estimate_bytes': fp8_plan.get('fp8_weight_cache_estimate_bytes'),
+            'plan_fp8_weight_cache_reservation_bytes': fp8_plan.get('fp8_weight_cache_reservation_bytes'),
+            'peak_cuda_allocated_gb': max((float(row['cuda_peak_allocated_gb']) for row in updates
+                                            if isinstance(row.get('cuda_peak_allocated_gb'), (int, float))),
+                                           default=None),
+            'peak_cuda_reserved_gb': max((float(row['cuda_peak_reserved_gb']) for row in updates
+                                           if isinstance(row.get('cuda_peak_reserved_gb'), (int, float))),
+                                          default=None),
+            'bf16_master_parameters_and_optimizer_retained': True,
+        },
     }
 
 

@@ -65,6 +65,7 @@ def test_warm_aggregate_rate_uses_same_updates_and_actual_supervised_count(tmp_p
         '{"step":4,"seconds":2,"supervised_tokens":100}',
         '{"step":5,"seconds":3,"supervised_tokens":300}',
     ]) + "\n")
+    (output / "report.json").write_text("{}\n")
     measured = COMPARISON.summarize_run(tmp_path)
     assert measured["warm_aggregate_wall_seconds"] == 5
     assert measured["warm_aggregate_supervised_tokens"] == 400

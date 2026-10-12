@@ -8,10 +8,12 @@ extra state. Wall-clock fields and output paths are intentionally excluded.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
 
 
@@ -36,6 +38,27 @@ def _walk(left: Any, right: Any, path: str, result: dict[str, Any]) -> None:
     if isinstance(left, torch.Tensor) and isinstance(right, torch.Tensor):
         result[path] = _tensor_stats(left, right)
         return
+    if isinstance(left, np.ndarray) and isinstance(right, np.ndarray):
+        if left.shape != right.shape or left.dtype != right.dtype:
+            result[path] = {"exact": False, "same_shape": left.shape == right.shape,
+                            "same_dtype": left.dtype == right.dtype,
+                            "left_shape": list(left.shape), "right_shape": list(right.shape),
+                            "left_dtype": str(left.dtype), "right_dtype": str(right.dtype)}
+        elif left.dtype.kind in "fc":
+            delta = np.abs(left.astype(np.float64) - right.astype(np.float64))
+            denom = float(np.max(np.abs(left.astype(np.float64)))) if left.size else 0.0
+            result[path] = {"exact": bool(np.array_equal(left, right)), "numel": int(left.size),
+                            "max_abs": float(np.max(delta)) if delta.size else 0.0,
+                            "relative_to_left_max": float(np.max(delta) / denom)
+                            if delta.size and denom else None,
+                            "finite_left": bool(np.isfinite(left).all()),
+                            "finite_right": bool(np.isfinite(right).all())}
+        else:
+            result[path] = {"exact": bool(np.array_equal(left, right)), "numel": int(left.size),
+                            "dtype": str(left.dtype)}
+        return
+    if isinstance(left, np.generic) and isinstance(right, np.generic):
+        left, right = left.item(), right.item()
     if isinstance(left, dict) and isinstance(right, dict):
         left_keys, right_keys = set(left), set(right)
         result[path + ".$keys"] = {"exact": left_keys == right_keys,
@@ -52,6 +75,11 @@ def _walk(left: Any, right: Any, path: str, result: dict[str, Any]) -> None:
     if type(left) is type(right) and isinstance(left, (str, int, float, bool, type(None))):
         result[path] = {"exact": left == right, "left": left, "right": right}
         return
+    if isinstance(left, bytes) and isinstance(right, bytes):
+        result[path] = {"exact": left == right, "left_bytes": len(left), "right_bytes": len(right),
+                        "left_sha256": hashlib.sha256(left).hexdigest(),
+                        "right_sha256": hashlib.sha256(right).hexdigest()}
+        return
     result[path] = {"exact": False, "left_type": type(left).__name__, "right_type": type(right).__name__}
 
 
@@ -61,6 +89,16 @@ def compare(left_path: Path, right_path: Path) -> dict[str, Any]:
     fields = ("schema", "step", "student_parameters", "neuralese_projection", "token_choice_projection",
               "optimizer", "rng", "fp8_training")
     details: dict[str, Any] = {}
+    left_identity = dict(left.get("identity") or {})
+    right_identity = dict(right.get("identity") or {})
+    left_options = dict(left_identity.get("options") or {})
+    right_options = dict(right_identity.get("options") or {})
+    left_options.pop("out", None)
+    right_options.pop("out", None)
+    identity_match = {
+        "options_match_ignoring_output_path": left_options == right_options,
+        "inputs_match": left_identity.get("inputs") == right_identity.get("inputs"),
+    }
     for key in fields:
         if key in left or key in right:
             if key not in left or key not in right:
@@ -79,6 +117,8 @@ def compare(left_path: Path, right_path: Path) -> dict[str, Any]:
             "entries": len(values), "tensor_entries": len(tensors),
             "exact_tensor_entries": sum(bool(value.get("exact")) for value in tensors),
             "comparable_tensor_entries": len(numeric),
+            "all_entries_exact": all(bool(value.get("exact")) for value in values),
+            "mismatch_entry_count": sum(not bool(value.get("exact")) for value in values),
             "max_abs_delta": max((value.get("max_abs", 0.0) for value in numeric), default=None),
             "max_relative_to_left": max((value["relative_to_left_max"] for value in numeric
                                           if value.get("relative_to_left_max") is not None), default=None),
@@ -90,6 +130,7 @@ def compare(left_path: Path, right_path: Path) -> dict[str, Any]:
         "interrupted_resumed_checkpoint": str(left_path.resolve()),
         "uninterrupted_control_checkpoint": str(right_path.resolve()),
         "left_step": left.get("step"), "right_step": right.get("step"),
+        "identity_match": identity_match,
         "compared_fields": list(fields), "families": family_summary, "details": details,
         "interpretation": "Exact equality is reported per tensor/scalar; nonexact floating tensors include max absolute and relative deltas. This compares one shared schedule, not task or runtime qualification.",
     }

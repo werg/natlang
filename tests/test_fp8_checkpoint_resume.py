@@ -55,3 +55,19 @@ def test_checkpoint_comparison_reports_all_training_state_families(tmp_path):
     assert result["left_step"] == result["right_step"] == 12
     assert result["families"]["fp8_training"]["exact_tensor_entries"] == 1
     assert result["families"]["optimizer"]["exact_tensor_entries"] == 1
+
+
+def test_checkpoint_comparison_compares_numpy_rng_and_ignores_only_output_path(tmp_path):
+    import numpy as np
+
+    common = {"schema": "natlang.neuralese-direct/1", "step": 12,
+              "identity": {"options": {"out": "/arm/a", "seed": 5}, "inputs": {"data": "abc"}},
+              "rng": {"numpy": ("MT19937", np.array([1, 2, 3], dtype=np.uint32), 4, 0, 0.0)}}
+    left, right = tmp_path / "left-rng.pt", tmp_path / "right-rng.pt"
+    torch.save(common, left)
+    other = dict(common)
+    other["identity"] = {"options": {"out": "/arm/b", "seed": 5}, "inputs": {"data": "abc"}}
+    torch.save(other, right)
+    result = COMPARATOR.compare(left, right)
+    assert result["identity_match"] == {"options_match_ignoring_output_path": True, "inputs_match": True}
+    assert result["families"]["rng"]["all_entries_exact"] is True
