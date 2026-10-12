@@ -474,18 +474,28 @@ def registered_candidate_selection_admission(corpus_id, sources):
 
 
 def validate_candidate_selection_row(row, approved):
-    """Keep corpus-level approval from overriding a rejected or out-of-scope child row."""
+    """Keep corpus approval bound to one verifier-approved child row."""
     rid = row.get('id')
     if (approved.get('decision') != 'admit-exact-selected-native-action-SFT-only' or
             approved.get('training_admission') is not True):
         raise ValueError(f'registry candidate-selection row lacks exact native-action SFT approval: {rid}')
+    if (approved.get('id') != rid or
+            sha(canonical(row.get('target')).encode()) != approved.get('target_sha256') or
+            sha(canonical(row.get('messages')).encode()) != approved.get('messages_sha256') or
+            row.get('split') != approved.get('split') or
+            row.get('source_groups') != approved.get('source_groups')):
+        raise ValueError(f'registry candidate-selection row changed after packet verification: {rid}')
     decision = row.get('decision')
     if isinstance(decision, dict) and decision.get('training_approved') is not True:
         raise ValueError(f'candidate-selection source row is explicitly rejected: {rid}')
     admission = row.get('training_admission')
     if isinstance(admission, dict) and admission.get('approved') is False:
         pending = (admission.get('kind') == 'candidate-selection-pending-corpus-admission' and
-                   admission.get('reason') == 'exact child target selected for review; corpus admission remains false')
+                   admission.get('reason') in {
+                       'exact child target selected for review; corpus admission remains false',
+                       'source quality remains held; exact child target is materialized for review only; '
+                       'corpus admission remains false',
+                   })
         if not pending:
             raise ValueError(f'candidate-selection source row has an explicit training rejection: {rid}')
 
@@ -554,14 +564,6 @@ def select(args, shard_dir: Path):
                         reason = 'not_in_registry_candidate_selection_admission'
                     else:
                         validate_candidate_selection_row(row, approved)
-                        actual_target = sha(canonical(row.get('target')).encode())
-                        actual_messages = sha(canonical(row.get('messages')).encode())
-                        # The packet verifier binds item/source and target provenance; the registered corpus
-                        # manifest binds this exact turns.jsonl file. Recheck fields rendered from the row itself.
-                        if (actual_target != approved['target_sha256'] or row.get('split') != approved['split'] or
-                                actual_messages != approved['messages_sha256'] or
-                                row.get('source_groups') != approved['source_groups']):
-                            raise ValueError(f'registry candidate-selection row changed after packet verification: {rid}')
                         row['training_admission'] = {
                             'approved': True, 'kind': 'registry-bound-candidate-selection',
                             'status': 'admitted-exact-selected-child-action', 'corpus_id': candidate_admission['corpus_id'],

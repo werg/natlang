@@ -19,18 +19,29 @@ def load_renderer():
 
 def test_registry_approval_is_per_row_and_cannot_override_rejection():
     render = load_renderer()
-    approved = {'decision': 'admit-exact-selected-native-action-SFT-only', 'training_admission': True}
+    row = {
+        'id': 'turn-1', 'item_id': 'item-1', 'split': 'train', 'source_groups': ['group-1'],
+        'sampling_group': 'source-item:item-1', 'target': {'value': 'answer'},
+        'messages': [{'role': 'user', 'content': 'question'}],
+    }
+    approved = {
+        'id': 'turn-1', 'item_id': 'item-1', 'split': 'train', 'source_groups': ['group-1'],
+        'target_sha256': render.sha(render.canonical(row['target']).encode()),
+        'messages_sha256': render.sha(render.canonical(row['messages']).encode()),
+        'decision': 'admit-exact-selected-native-action-SFT-only', 'training_admission': True,
+    }
     pending = {
-        'id': 'turn-1',
+        **row,
         'decision': {'training_approved': True},
         'training_admission': {
             'kind': 'candidate-selection-pending-corpus-admission',
             'approved': False,
-            'reason': 'exact child target selected for review; corpus admission remains false',
+            'reason': 'source quality remains held; exact child target is materialized for review only; '
+                      'corpus admission remains false',
         },
     }
 
-    # The exact pending-selection marker is promoted only because this row also has owner approval.
+    # The source-quality-pending marker is promoted only with the exact verifier/owner row.
     render.validate_candidate_selection_row(pending, approved)
 
     rejected = {**pending, 'training_admission': {'approved': False, 'reason': 'reviewer rejected target'}}
@@ -39,12 +50,37 @@ def test_registry_approval_is_per_row_and_cannot_override_rejection():
 
     with pytest.raises(ValueError, match='exact native-action SFT approval'):
         render.validate_candidate_selection_row(pending, {
+            **approved,
             'decision': 'admit-reviewed-candidate-selection', 'training_admission': True,
         })
     with pytest.raises(ValueError, match='exact native-action SFT approval'):
         render.validate_candidate_selection_row(pending, {
+            **approved,
             'decision': 'admit-exact-selected-native-action-SFT-only', 'training_admission': False,
         })
+    with pytest.raises(ValueError, match='exact native-action SFT approval'):
+        render.validate_candidate_selection_row(pending, {})
+
+    for field, value in (
+        ('id', 'turn-2'),
+        ('target', {'value': 'changed'}),
+        ('messages', [{'role': 'user', 'content': 'changed'}]),
+        ('split', 'test'),
+        ('source_groups', ['other-group']),
+    ):
+        tampered = {**pending, field: value}
+        with pytest.raises(ValueError, match='changed after packet verification'):
+            render.validate_candidate_selection_row(tampered, approved)
+
+    unsupported_pending = {
+        **pending,
+        'training_admission': {
+            'kind': 'candidate-selection-pending-corpus-admission', 'approved': False,
+            'reason': 'some other pending state',
+        },
+    }
+    with pytest.raises(ValueError, match='explicit training rejection'):
+        render.validate_candidate_selection_row(unsupported_pending, approved)
 
 
 def test_correction_pin_must_be_absent_on_both_sides_or_match_exactly():
