@@ -18,6 +18,7 @@ def test_scopes_are_shared_noops_when_no_profile_records(tmp_path):
     profiler.close(1)
     assert not profiler.active and not list(tmp_path.iterdir())
     assert profiling.parse_range('5:8') == (5, 8) and profiling.parse_range('3') == (3, 3)
+    assert all(profiling.parse_range(v) is None for v in ('', None, '0', '0:0', 'off', 'none'))  # launchers' "no profile"
     with pytest.raises(ValueError):
         profiling.parse_range('8:5')
 

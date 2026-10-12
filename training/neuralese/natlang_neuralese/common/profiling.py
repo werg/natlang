@@ -71,7 +71,8 @@ def backward_phase():
 
 
 def parse_range(value: str | None):
-    if not value:
+    """(a, b) from ``a:b`` (or ``a``); None, profiling off, for unset, empty, ``0``, ``0:0``, ``off`` or ``none``."""
+    if not value or value.strip().lower() in ('0', '0:0', 'off', 'none'):
         return None
     first, _, last = value.partition(':')
     a, b = int(first), int(last or first)
