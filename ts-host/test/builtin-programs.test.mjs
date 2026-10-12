@@ -8,12 +8,13 @@ import { renderBuiltinPrompts } from './support/builtin-prompts.mjs';
 
 const folder = new URL('../src/builtin/', import.meta.url).pathname;
 
-test('what the model sees for the built-in natlang functions is byte-identical to the base commit', async () => {
+test('captured full prompts stay byte-identical to baseline and the current prompt-piece registry stays pinned', async () => {
   const before = JSON.parse(readFileSync(new URL('./fixtures/builtin-prompts.json', import.meta.url), 'utf8'));
   const after = JSON.parse(JSON.stringify(await renderBuiltinPrompts()));
   for (const key of Object.keys(before)) assert.deepEqual(after[key], before[key], `${key} changed what the model sees`);
   assert.deepEqual(Object.keys(after).sort(), Object.keys(before).sort());
-  // Prompt-piece ids and texts, which soft-prompt substitution and the training-data converter match textually.
+  // This registry also records scopes and read-only variants used by program-header rendering. The captured full
+  // requests above remain the base prompt; pin the current registry separately for substitution and conversion.
   assert.deepEqual(after.promptPieces.map(piece => piece.id), before.promptPieces.map(piece => piece.id));
   for (const id of ['progress-judge', 'view'])
     assert.equal(after.promptPieces.find(piece => piece.id === id).text, before.promptPieces.find(piece => piece.id === id).text);
