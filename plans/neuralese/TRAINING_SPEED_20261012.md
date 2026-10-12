@@ -252,3 +252,11 @@ outermost aten op, and Triton launches are not aten ops. Attribution now goes by
 | Fused SwiGLU forward/backward for the FP8 experts (unclamped) | Same roundings as eager; removes the zero-padded slice gradients and their add | adopted (`NATLANG_FUSED_SWIGLU=0`) |
 | The three together, 2 layers × 4×4000 tokens beside v4 (same claim, interleaved arms) | GPU/update 1.338 → 1.162 s (−13%): Newton-Schulz 0.339 → 0.253, other MuonSR 0.112 → 0.060, expert backward 0.197 → 0.149. Fixed-batch losses equal through update 2, then differ in the 4th–5th digit (new SR draws) | adopted |
 | FlexAttention backward block sizes (8k tokens, window 1024) | Best (32/64/64/32, 4 warps, 2 stages) 16.0 ms vs default 18.4 ms: ≈ −0.09 s/update | not wired (below the bar) |
+
+## Round 5 (2026-10-12, expert-backward glue, norm attribution)
+
+| Item | Result | Decision |
+|---|---|---|
+| Output-gradient FP8 quantization fused into the kernels that write the gradients (`expert_gemm.GradQuant`: combine backward for `down`, SwiGLU backward for `gate_up`) | Bit-identical (test, fixed-batch losses equal in all arms). 2 layers × 4×4000 tokens beside v4, two interleaved pairs: expert backward 0.275 → 0.257 s (−7%), GPU/update −1.3% to −4% (noisy under contention). ≈ −0.3 s/update on v4 | adopted (`NATLANG_FUSED_GRAD_QUANT=0`) |
+| Gather folded into the weight-gradient kernel | The `a[rows]` gather is ~10% of expert backward (≈ 0.3 s/update on v4). Folding it needs our own grouped wgrad. Our Triton wgrad measured 2–5× slower than cuBLAS `_grouped_mm` (round 2), which would cost more than the gather | not built |
+| bwd/norm attribution | 0.4–0.5 s of v4's 1.06 s "bwd/norm" was the q/k projection GEMMs (they ran inside the norm scope). Moved to the attention scope. What remains under norm is the RMSNorm and rope backward kernels plus residual adds, ≈ 0.04 s per 2 layers | fixed |
