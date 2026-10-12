@@ -1,0 +1,9 @@
+[Unit]
+Description=Twice an hour: register finished renders (calendar-anchored, survives user-manager restarts)
+
+[Timer]
+OnCalendar=*:05,35
+Persistent=true
+
+[Install]
+WantedBy=timers.target

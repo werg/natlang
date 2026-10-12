@@ -1,0 +1,9 @@
+[Unit]
+Description=Register finished native-turn renders from the pending-renders queue and answer their coord requests
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/werg/natlang
+Environment=PATH=/home/werg/.local/bin:/usr/local/bin:/usr/bin:/bin
+Nice=10
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/neuralese_data/render_registration_tick.py
