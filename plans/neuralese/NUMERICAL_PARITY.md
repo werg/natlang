@@ -384,3 +384,27 @@ checks pass. Exact optimizer/RNG resume3000 completed the same3005 shape with
 checkpointing in2.139 seconds, observed incremental1,181,845,504 bytes versus
 forecast1,273,942,873; later updates continue without checkpointing when they
 fit. This is a memory-policy correction, not an arithmetic precision fix.
+
+## Main Muon profile, 2026-10-12
+
+The live Pop main program-header phase uses512 supervised tokens per window,
+32,768 context capacity, adaptive q95 memory estimates plus5% margin, and MuonSR.
+Updates20–22 recorded15.088 s wall time,14.926 s GPU busy (98.9%), and0.162 s
+GPU idle. The three updates comprise two checkpointed long single windows
+(23,551 and32,263 forward tokens) and one uncheckpointed15-window update
+(15,398 forward tokens). This is a short geometry sample, not a whole-run
+throughput comparison. Matrix backward and attention dominate; Newton–Schulz
+accounts for1.047 s (about7% of the sampled wall time). Convolution is a small
+component. GPU utilization is not currently limited by a large CPU gap during
+these updates. Profiling writes introduce a brief CPU interval after recording.
+
+Profiler attribution has unscoped HF model/backward nodes, so its reported zero
+recomputation must not be read as no checkpoint recomputation: two updates
+explicitly used layer checkpointing. Total GPU busy time and kernel-level
+attribution remain informative. Summary SHA-256: `e013a45eb2e2ff41b53759f3fa27468db7e8b301269649e31d53336fc1b6f81c`.
+Artifact: `/srv/storage/natlang-artifacts/neuralese-direct-lfm-muon-main-20261012-v2/direct_sft/profile-20-22.json`.
+
+The first27 main updates completed without OOM, preserving supervised masks and
+role weights. Widening spans is an explicit new-phase geometry decision, not an
+in-place exact resume or a claim that differing window-normalized objectives
+are numerically identical.

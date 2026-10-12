@@ -131,6 +131,93 @@ def test_shared_recipe_inputs_resolve_heads_from_first_stage_binding(monkeypatch
     assert stage_inputs["held"] == {}
 
 
+def shared_resume_fixture(tmp_path, monkeypatch):
+    output = tmp_path / "shared-output"
+    frozen = output / "runtime" / "natlang_neuralese"
+    frozen.mkdir(parents=True)
+    code_file = frozen / "train" / "direct_sft.py"
+    code_file.parent.mkdir(parents=True)
+    code_file.write_bytes(b"pinned trainer code\n")
+    code = {"train/direct_sft.py": LAUNCHER.sha256(code_file)}
+    recipe_path = tmp_path / "shared-recipe.json"
+    recipe_path.write_text("{}\n")
+    recipe = {
+        "schema": "natlang.neuralese-training-recipe/1",
+        "id": "shared-resume-fixture-v1",
+        "runtime": {"image": "sha256:" + "1" * 64, "package_code": code},
+        "outputs": {"directory": str(output)},
+        "input_bindings": {"heads": {"path": str(tmp_path / "heads.pt"), "sha256": "b" * 64}},
+        "lineage": {"evidence": []},
+        "stages": [
+            {"id": "header", "kind": "neuralese_direct", "requires": [],
+             "inputs": {"heads": "heads"}, "parameters": {"text_data": "records.jsonl"}},
+            {"id": "whole", "kind": "neuralese_direct", "requires": ["header"],
+             "inputs": {"heads": "header_heads"}, "parameters": {"text_data": "records.jsonl"}},
+        ],
+    }
+    stage_inputs = {
+        "header": {"heads": {"path": str(tmp_path / "heads.pt"), "sha256": "b" * 64,
+                              "binding": "heads"}},
+        "whole": {"heads": {"path": str(output / "header" / "checkpoint.pt"),
+                             "sha256": "c" * 64, "binding": "header_heads"}},
+    }
+    heads = {"path": str(tmp_path / "heads.pt"), "sha256": "b" * 64}
+    inputs = {heads["path"]: heads["sha256"],
+              str(output / "header" / "checkpoint.pt"): "c" * 64}
+    monkeypatch.setattr(recipe_module, "recipe_identity_sha256", lambda _path: "d" * 64)
+    plan = {"schema": "natlang.neuralese-recipe-plan/1", "recipe": recipe,
+            "recipe_sha256": "d" * 64, "inputs": inputs, "device": "cuda",
+            "stage_inputs": stage_inputs, "code": code}
+    (output / "recipe-plan.json").write_text(json.dumps(plan))
+    return output, recipe, recipe_path, heads, stage_inputs, code
+
+
+def test_exact_existing_shared_resume_binds_recipe_inputs_device_and_frozen_runtime(tmp_path, monkeypatch):
+    output, recipe, recipe_path, heads, stage_inputs, code = shared_resume_fixture(tmp_path, monkeypatch)
+
+    binding = LAUNCHER.validate_existing_shared_resume(
+        output, recipe, recipe_path, heads, stage_inputs, "cuda", code)
+
+    assert binding["frozen_code"] == code
+    assert binding["plan_sha256"] == LAUNCHER.sha256(output / "recipe-plan.json")
+    assert binding["device"] == "cuda"
+
+
+@pytest.mark.parametrize("field", ["recipe", "inputs", "device", "stage_inputs"])
+def test_shared_resume_rejects_changed_committed_plan_fields(tmp_path, monkeypatch, field):
+    output, recipe, recipe_path, heads, stage_inputs, code = shared_resume_fixture(tmp_path, monkeypatch)
+    plan_path = output / "recipe-plan.json"
+    plan = json.loads(plan_path.read_text())
+    if field == "recipe":
+        plan[field]["id"] = "different-recipe"
+    elif field == "inputs":
+        plan[field]["/elsewhere/heads.pt"] = "e" * 64
+    elif field == "device":
+        plan[field] = "cpu"
+    else:
+        plan[field]["whole"]["heads"]["sha256"] = "e" * 64
+    plan_path.write_text(json.dumps(plan))
+
+    with pytest.raises(ValueError, match=f"committed {field}"):
+        LAUNCHER.validate_existing_shared_resume(
+            output, recipe, recipe_path, heads, stage_inputs, "cuda", code)
+
+
+def test_shared_resume_rejects_changed_or_missing_frozen_runtime(tmp_path, monkeypatch):
+    output, recipe, recipe_path, heads, stage_inputs, code = shared_resume_fixture(tmp_path, monkeypatch)
+    frozen_file = output / "runtime" / "natlang_neuralese" / "train" / "direct_sft.py"
+    frozen_file.write_bytes(b"different code\n")
+
+    with pytest.raises(ValueError, match="frozen recipe runtime differs"):
+        LAUNCHER.validate_existing_shared_resume(
+            output, recipe, recipe_path, heads, stage_inputs, "cuda", code)
+
+    frozen_file.unlink()
+    with pytest.raises(ValueError, match="committed code inventory"):
+        LAUNCHER.validate_existing_shared_resume(
+            output, recipe, recipe_path, heads, stage_inputs, "cuda", code)
+
+
 @pytest.mark.parametrize("value", ["0", "1:0", "4:3", "1:2:3", "x:2", " 1:2"])
 def test_profile_range_rejects_invalid_values(value):
     with pytest.raises(ValueError):
