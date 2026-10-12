@@ -61,6 +61,16 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
     if outcome.get("resource_limit_reason") or outcome.get("resource_limit"):
         return "budget_exhaustion"
 
+    incomplete_details = [outcome.get("detail")]
+    invocations = outcome.get("invocation_ledger")
+    if isinstance(invocations, list):
+        incomplete_details.extend(invocation.get("completion_detail") for invocation in invocations
+                                  if isinstance(invocation, dict))
+    if any(isinstance(detail, str) and
+           re.match(r"^model_incomplete:\s*terminated_without_result\b", detail.casefold())
+           for detail in incomplete_details):
+        return "model_incomplete"
+
     details = _text({
         "failure_reason": outcome.get("failure_reason"),
         "rejection_reasons": outcome.get("rejection_reasons"),
@@ -71,11 +81,6 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
         "error": result.get("error"),
         "finish": finish,
     })
-    # Authored-root adapters preserve a child's explicit agent termination in
-    # the invocation/action ledgers and scope failures, while wrapping the
-    # outer result in a generic "root eval did not finish" detail.
-    if re.search(r"\bmodel_incomplete:\s*terminated_without_result\b", details):
-        return "model_incomplete"
     if re.search(r"(econnrefused|econnreset|connection refused|connection reset|provider request retry exhausted|http 5\d\d|server unavailable)", details):
         return "infrastructure_error"
     scope_failures = outcome.get("scope_failures")
