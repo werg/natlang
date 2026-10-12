@@ -73,7 +73,8 @@ def model_id(endpoint: str) -> str:
 
 def session_stats(path: Path) -> dict:
     """Assistant turns, tool calls and the largest prompt the agent was sent, from a pi session database."""
-    stats: dict = {"assistant_turns": None, "tool_calls": None, "max_input_tokens": None, "output_tokens": None}
+    stats: dict = {"assistant_turns": None, "tool_calls": None, "invalid_tool_calls": None, "unparsed_call_turns": None,
+                   "first_turn_valid_call": None, "max_input_tokens": None, "output_tokens": None}
     if not path.exists():
         return stats
     db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
@@ -89,23 +90,37 @@ def session_stats(path: Path) -> dict:
                         except (ValueError, TypeError):
                             pass
         seen, turns, calls, inputs, outputs = set(), 0, 0, [], 0
+        invalid, unparsed, first = 0, 0, None
         for message in messages:
             key = json.dumps(message, sort_keys=True)[:4000]
             if key in seen:
                 continue
             seen.add(key)
+            content = message.get("content")
+            text = json.dumps(content)
+            if message.get("role") == "toolResult":
+                # pi's own rejections of a call: an unknown tool or arguments failing the tool's schema.
+                bad = "Validation failed for tool" in text or "is not available" in text
+                invalid += bad
+                if first is True and bad:
+                    first = False
+                continue
             if message.get("role") != "assistant":
                 continue
             turns += 1
-            content = message.get("content")
+            unparsed += "<|tool_call_start|>" in text or "<tool_call>" in text
             if isinstance(content, list):
-                calls += sum(1 for part in content if isinstance(part, dict) and part.get("type") == "toolCall")
+                n = sum(1 for part in content if isinstance(part, dict) and part.get("type") == "toolCall")
+                calls += n
+                if turns == 1:
+                    first = n > 0
             usage = message.get("usage") or {}
             if isinstance(usage, dict):
                 if usage.get("input") is not None:
                     inputs.append(int(usage.get("input") or 0) + int(usage.get("cacheRead") or 0))
                 outputs += int(usage.get("output") or 0)
-        stats.update(assistant_turns=turns, tool_calls=calls, max_input_tokens=max(inputs) if inputs else None,
+        stats.update(assistant_turns=turns, tool_calls=calls, invalid_tool_calls=invalid, unparsed_call_turns=unparsed,
+                     first_turn_valid_call=first, max_input_tokens=max(inputs) if inputs else None,
                      output_tokens=outputs)
     finally:
         db.close()
@@ -140,21 +155,28 @@ def summarize(out: Path, meta: dict | None = None) -> dict:
         summary[config] = {"passed": passed, "tasks": len(mine),
                            "mean_seconds": round(sum(r["seconds"] for r in mine) / max(1, len(mine)), 1),
                            "mean_tool_calls": round(sum(r["tool_calls"] or 0 for r in mine) / max(1, len(mine)), 2),
+                           "requests": sum(r["assistant_turns"] or 0 for r in mine),
+                           "tool_calls": sum(r["tool_calls"] or 0 for r in mine),
+                           "invalid_tool_calls": sum(r["invalid_tool_calls"] or 0 for r in mine),
+                           "unparsed_call_turns": sum(r["unparsed_call_turns"] or 0 for r in mine),
+                           "first_turn_valid_call": sum(1 for r in mine if r["first_turn_valid_call"]),
                            "statuses": {s: sum(1 for r in mine if r["status"] == s) for s in {r["status"] for r in mine}}}
     report = {"meta": meta, "summary": summary, "pending": PENDING, "rows": rows}
     (out / "matrix.json").write_text(json.dumps(report, indent=2) + "\n")
     lines = [f"# Harness-bench matrix: {meta.get('label', out.name)}", "",
-             "| configuration | passed | mean s | mean tool calls | statuses |", "| --- | --- | --- | --- | --- |"]
+             "| configuration | passed | mean s | requests | tool calls (invalid) | unparsed-call turns | valid first call | statuses |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for config, s in summary.items():
-        lines.append(f"| {config} | {s['passed']}/{s['tasks']} | {s['mean_seconds']} | {s['mean_tool_calls']} | "
+        lines.append(f"| {config} | {s['passed']}/{s['tasks']} | {s['mean_seconds']} | {s['requests']} | {s['tool_calls']} ({s['invalid_tool_calls']}) | "
+                     f"{s['unparsed_call_turns']} | {s['first_turn_valid_call']}/{s['tasks']} | "
                      + ", ".join(f"{k}: {v}" for k, v in sorted(s["statuses"].items(), key=str)) + " |")
     for config, why in PENDING.items():
-        lines.append(f"| {config} | pending | | | {why} |")
-    lines += ["", "| configuration | task | pass | status | s | turns | tool calls | max input tok |",
-              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+        lines.append(f"| {config} | pending | | | | | | {why} |")
+    lines += ["", "| configuration | task | pass | status | s | turns | tool calls | invalid | max input tok |",
+              "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for r in rows:
         lines.append(f"| {r['config']} | {r['task']} | {'yes' if r['passed'] else 'no'} | {r['status'] or r['error'] and 'error'} "
-                     f"| {r['seconds']} | {r['assistant_turns']} | {r['tool_calls']} | {r['max_input_tokens']} |")
+                     f"| {r['seconds']} | {r['assistant_turns']} | {r['tool_calls']} | {r['invalid_tool_calls']} | {r['max_input_tokens']} |")
     (out / "matrix.md").write_text("\n".join(lines) + "\n")
     return report
 
@@ -166,6 +188,8 @@ def main() -> int:
     parser.add_argument("--summarize", action="store_true", help="only rebuild matrix.json/matrix.md from --out")
     parser.add_argument("--student-base", type=Path, help="HF snapshot of the student (or the direct export's base)")
     parser.add_argument("--student-artifact", type=Path, help="direct-SFT serving export")
+    parser.add_argument("--student-code", type=Path, default=ROOT,
+                        help="checkout whose training/neuralese serves the student (e.g. a worktree at another commit)")
     parser.add_argument("--student-endpoint", help="use a running student server")
     parser.add_argument("--student-ctx", type=int, default=32768)
     parser.add_argument("--student-memory-gb", type=float, default=6.0)
@@ -202,8 +226,9 @@ def main() -> int:
                      "--dtype", "bfloat16", "--port", str(port), "-c", str(args.student_ctx), "--memory-gb", str(args.student_memory_gb)]
             serve += (["--direct-artifact", str(args.student_artifact), "--direct-base-snapshot", str(args.student_base)]
                       if args.student_artifact else ["--base", str(args.student_base)])
-            env = {**os.environ, "PYTHONPATH": str(ROOT / "training/neuralese"), "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
-            procs.append(subprocess.Popen(serve, cwd=ROOT, env=env, stdout=log.open("w"), stderr=subprocess.STDOUT))
+            code = args.student_code.resolve()
+            env = {**os.environ, "PYTHONPATH": str(code / "training/neuralese"), "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
+            procs.append(subprocess.Popen(serve, cwd=code, env=env, stdout=log.open("w"), stderr=subprocess.STDOUT))
             student = f"http://127.0.0.1:{port}"
             wait_http(student + "/health", procs[-1], 900, log)
         student_model, executor_model = model_id(student), model_id(executor)
@@ -211,6 +236,8 @@ def main() -> int:
         meta = {"label": args.label or out.name, "commit": commit, "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "student_model": student_model, "student_base": str(args.student_base or ""),
                 "student_artifact": str(args.student_artifact or ""),
+                "student_code_commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=args.student_code, capture_output=True,
+                                                      text=True).stdout.strip(),
                 "student_artifact_manifest_sha256": sha256(args.student_artifact / "manifest.json") if args.student_artifact else None,
                 "executor_model": executor_model, "executor_gguf": str(args.executor_gguf) if not args.executor_endpoint else None,
                 "minutes_per_task": args.minutes, "student_ctx": args.student_ctx, "max_tokens": args.max_tokens}
