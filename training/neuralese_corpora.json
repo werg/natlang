@@ -57047,6 +57047,115 @@
       "supersedes": [
         "natlang-free-provider-v28-wholetraj-render-20261012-v1"
       ]
+    },
+    {
+      "id": "natlang-free-provider-v29-wholetraj-render-20261012-v3",
+      "owner": "dgx",
+      "path": "runs/natlang-free-provider-v29-wholetraj-render-20261012-v3",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: free-provider-v29-admitted-ordinary-text-20-20261010-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "free-provider-v29-admitted-ordinary-text-20-20261010-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "80886fb44f8dedc2a153ac18fb0f62fe4ed50b852c9d5440b4d13cf2a13dfc1e",
+            "documents": 16,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 16297,
+                "documents": 16,
+                "opening_tokens": 8007,
+                "supervised_tokens": 8290,
+                "tokens": 49136,
+                "tool_tokens": 10700
+              }
+            },
+            "max_document_tokens": 5758,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "6d4ec60e987ff3006be2f29fcb03b7a60e74522137631fc230be8497d23a0dac",
+            "documents": 16,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 18095,
+                "documents": 16,
+                "opening_tokens": 7778,
+                "supervised_tokens": 10317,
+                "tokens": 51363,
+                "tool_tokens": 11426
+              }
+            },
+            "max_document_tokens": 6220,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "approved_through_include_set": 20,
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 20,
+        "selected:train": 20,
+        "source_rows": 20
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 0,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 0
+      },
+      "program_header_parity": {},
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "50c612fabf42bb26116d5b1bf968acb97e02b0cc684809e4fd8e2958a3bbc7ec",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "d279bb01a12a8e6e3ae98b1fe012ea201861dc3a102f3c5cc7f1e9a6cce9e57f",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/natlang-free-provider-v29-wholetraj-render-20261012-v3/receipt.json",
+        "sources": {
+          "runs/free-provider-generation-20261009-v1/v29-root-ordinary-text-admission-v1/selected-native-turns-render-input.jsonl": {
+            "bytes": 2924291,
+            "sha256": "508475eb883a90d7e875aa69b9cbea90f698d3019420579e714a9d208f8bc429"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": "Re-render on c268978d (renderer attests the exact source target; teacher reasoning added only for rendering) + c7e39596. Prior omissions (prepare_record had projected teacher_reasoning into target before the provider attestation gates) all resolved: 0 render omissions. v29: 16 docs/tokenizer (unregistered v1/v2 had 6 + 10 omitted)."
     }
   ],
   "coverage_backlog": [
