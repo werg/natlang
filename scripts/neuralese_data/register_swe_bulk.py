@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Register the bulk harness-bench SWE-rebench corpus (D13) and its two text twins: entries and manifests are committed
+"""Register the bulk harness-bench SWE-rebench corpus (D13) and its four text twins: entries and manifests are committed
 and pushed by register_corpora.py from a private worktree off origin/main (never the shared checkout's registry).
 Run by swe_bulk_followup.sh when the twins are assembled.
 
@@ -17,10 +17,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts/neuralese_data'))
 from register_corpora import link as data_link, register  # noqa: E402
+from swe_bulk_twins import file_sha  # noqa: E402
 RECORDS_ID = 'harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1'
 # Whole-trajectory twins (coordinator 2026-10-11): one document per trajectory chain, not one per decision.
-TWINS = {'lfm25': ('harness-bench-swe-rebench-openhands-pi-wholetraj-lfm25-350m-bulk-20261011-v1', 'last_turn_only', 'LFM'),
-         'mellum21': ('harness-bench-swe-rebench-openhands-pi-wholetraj-mellum21-12b-bulk-20261011-v1', 'keep', 'Mellum')}
+TWINS = {
+    ('whole-trajectory', 'lfm25'): ('harness-bench-swe-rebench-openhands-pi-wholetraj-lfm25-350m-bulk-20261011-v1', 'last_turn_only', 'LFM'),
+    ('whole-trajectory', 'mellum21'): ('harness-bench-swe-rebench-openhands-pi-wholetraj-mellum21-12b-bulk-20261011-v1', 'keep', 'Mellum'),
+    ('program-header', 'lfm25'): ('harness-bench-swe-rebench-openhands-pi-program-header-lfm25-350m-bulk-20261012-v1', 'last_turn_only', 'LFM'),
+    ('program-header', 'mellum21'): ('harness-bench-swe-rebench-openhands-pi-program-header-mellum21-12b-bulk-20261012-v1', 'keep', 'Mellum'),
+}
 ADMISSION_REASON = ("owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, "
                     "protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason "
                     "to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)")
@@ -86,31 +91,39 @@ def main() -> int:
                   "into native records (8 sampled targets per trajectory, the v4 default). Additive to v4: no trajectory in "
                   "common. Built and stored on NVMe."),
     })
-    for name, (twin_id, policy, line) in TWINS.items():
-        receipt = json.loads((args.twin_root / name / 'receipt.json').read_text())
-        rel_t = link(twin_id, args.twin_root / name)
+    for (rendering, name), (twin_id, policy, line) in TWINS.items():
+        twin_path = args.twin_root / name if rendering == 'whole-trajectory' else args.twin_root / rendering / name
+        receipt = json.loads((twin_path / 'receipt.json').read_text())
+        if receipt.get('rendering') != rendering or receipt.get('text_jsonl_sha256') != file_sha(twin_path / 'text.jsonl'):
+            raise ValueError(f'{twin_path}: rendering receipt mismatch')
+        rel_t = link(twin_id, twin_path)
         entries.append({
             'id': twin_id, 'owner': 'dgx', 'path': rel_t,
             'include': ['text.jsonl', 'receipt.json', 'shards/*/receipt.json', 'shards/*/omissions.jsonl',
                         'shards/*/render-omissions.jsonl'],
             'split': 'inherited from the source records (by repository; source groups repository and instance)',
-            'source_class': 'rendered-whole-trajectory-text-of-harness-bench-records',
-            'admission': f'admitted-harness_bench-cohort-text-stages ({line} line); whole-trajectory documents: every assistant turn of a trajectory supervised, tool output at the shared feedback weight; test documents are a reported stratum, never qualification evidence',
+            'source_class': f'rendered-{rendering}-text-of-harness-bench-records',
+            'admission': f'admitted-harness_bench-cohort-text-stages ({line} line); {rendering} documents, tool output at the shared feedback weight; test documents are a reported stratum, never qualification evidence',
             'training_admission': True, 'training_admission_reason': ADMISSION_REASON,
             'corpus_publication_for_training': False, 'derived_from': [RECORDS_ID],
             'license': "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
             'build': {'script': 'scripts/neuralese_data/swe_bulk_twins.py (render_native_turn_corpus.py --renderings '
-                                'whole-trajectory --program-header-as-full per shard, concatenated)',
-                      'code_commit': commit, 'renderer': 'scripts/neuralese_data/render_native_turn_corpus.py whole-trajectory',
-                      'renderer_code': receipt['renderer_code'], 'tokenizer': receipt['tokenizer'],
+                                'program-header whole-trajectory --program-header-as-full per shard, concatenated)',
+                      'code_commit': commit, 'renderer': f'scripts/neuralese_data/render_native_turn_corpus.py {rendering}',
+                      'renderer_code': receipt['renderer_code'], 'tokenizer': receipt['tokenizer'], 'rendering': rendering,
                       'history_reasoning_policy': policy, 'text_jsonl_sha256': receipt['text_jsonl_sha256']},
             'tokens': receipt['tokens'],
-            'notes': (f"Whole-trajectory text of {RECORDS_ID} (the system prompt is the pi harness's own, kept whole with its "
+            'notes': (f"{rendering} text of {RECORDS_ID} (the system prompt is the pi harness's own, kept whole with its "
                       "tool schemas). Chosen over v4's one document per decision, which repeats each trajectory's context "
                       "per target: on 120 v4 trajectories (940 decisions) all 940 decisions are covered, and Mellum train "
                       "text is 4.06M tokens with 817k supervised assistant tokens against 17.1M / 145k per decision. "
                       "Per-shard receipts under shards/."),
         })
+        if rendering == 'program-header':
+            entries[-1]['notes'] = (f"Program-header decisions of {RECORDS_ID}, using the source pi harness's own "
+                                    "system prompt and tool schemas. Suffix targets and balanced context supervision "
+                                    "use the shared renderer; whole-trajectory twins separately cover complete clean "
+                                    "assistant chains. Repository/source splits are inherited, not resampled.")
     added = register(entries, f'Register bulk SWE-rebench harness-bench records and text twins (D13): '
                               f'{total["trajectories"]} trajectories, {total["records"]} records')
     print(json.dumps({'registered': added, 'counts': total,

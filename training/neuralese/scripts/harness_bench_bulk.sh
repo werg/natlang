@@ -63,9 +63,18 @@ cat > "$OUT/shard.sh" <<EOF
 #!/bin/sh
 set -eu
 D=\$1
-[ -e "\$D/summary.json" ] && exit 0
+REBUILD_RECORDS=0
+if [ -e "\$D/summary.json" ]; then
+  if "$PY" -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("target_selection", {}).get("final_clean_assistant_retained") is True else 1)' "\$D/summary.json"; then
+    exit 0
+  fi
+  REBUILD_RECORDS=1
+  echo "shard \$D rebuilding records from completed replay for final assistant coverage"
+fi
 "$ROOT/scripts/disk_guard.sh" "$OUT"  # pause while the NVMe is short (coordinator 2026-10-12)
-nice -n 10 node "$ROOT/ts-host/bin/natlang.mjs" run "$ROOT/applications/pi" -- replay --in "\$D/prepared.jsonl" --out "\$D/replayed.jsonl" 2>> "\$D/replay.log"
+if [ "\$REBUILD_RECORDS" -eq 0 ]; then
+  nice -n 10 node "$ROOT/ts-host/bin/natlang.mjs" run "$ROOT/applications/pi" -- replay --in "\$D/prepared.jsonl" --out "\$D/replayed.jsonl" 2>> "\$D/replay.log"
+fi
 cd "$ROOT/training/neuralese"
 nice -n 10 "$PY" -m natlang_neuralese.harness_bench.records --replayed "\$D/replayed.jsonl" --surface "$OUT/surface.json" \\
   --corpus nebius-swe-rebench-openhands-trajectories-20261009-v1 --out "\$D/records.tmp"
