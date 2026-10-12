@@ -468,6 +468,10 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             retries = entry['request_retries']
             if type(retries) is not int or retries < 0:
                 raise ValueError(f'entry request_retries must be a nonnegative integer: {entry.get("key")}')
+        if 'temperature' in entry:
+            temperature = entry['temperature']
+            if type(temperature) not in (int, float) or not 0 <= temperature <= 2:
+                raise ValueError(f'entry temperature must be a number in [0, 2]: {entry.get("key")}')
         if 'action_max_tokens' in entry:
             action_max_tokens = entry['action_max_tokens']
             if type(action_max_tokens) is not int or action_max_tokens < 1:
@@ -545,6 +549,9 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             command += ['--request-retries', str(entry['request_retries'])]
         if 'action_max_tokens' in entry:
             command += ['--action-max-tokens', str(entry['action_max_tokens'])]
+        if 'temperature' in entry:
+            # Sampled rollouts (S7 GRPO groups); absent means the collector's greedy default.
+            command += ['--temperature', str(entry['temperature'])]
         command += ['--provider', provider, '--context-tokens', str(entry.get('context_tokens', 16384)), '--reasoning-effort', reasoning_effort] if provider else [
             '--server', server or 'http://127.0.0.1:8081']
         if external:
