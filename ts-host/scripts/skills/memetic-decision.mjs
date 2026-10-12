@@ -125,13 +125,13 @@ async function evaluateOn(cases, ind) {
     const predicted = await readoutOf(c, params(ind));
     const { gold } = caseTarget(c);
     return { c, predicted, logLoss: -gold.reduce((s, g, i) => s + (g ? g * Math.log(Math.max(predicted[i], 1e-12)) : 0), 0),
-      quality: quality(c, predicted, gold) };
+      quality: quality(c, predicted, gold), correct: Number(predicted.indexOf(Math.max(...predicted)) === gold.indexOf(Math.max(...gold))) };
   });
   // `perCase` and `loss` are what selection minimises: 1 − quality, or the log loss.
   const cost = r => options.fitness === 'quality' ? 1 - r.quality : r.logLoss;
   const mean = values => values.reduce((s, x) => s + x, 0) / values.length;
   return { perCase: rows.map(cost), loss: mean(rows.map(cost)), logLoss: mean(rows.map(r => r.logLoss)),
-    quality: mean(rows.map(r => r.quality)), rows };
+    quality: mean(rows.map(r => r.quality)), accuracy: mean(rows.map(r => r.correct)), rows };
 }
 async function refine(ind, support, steps = options.steps) {
   const adam = learning.optimizers.adam({ lr: options.lr });
@@ -299,6 +299,8 @@ for (const [index, family] of families.entries()) {
     query: { best: bestQuery.quality, seed: baseQuery.quality, 'soft-gold': refQuery.quality, uniform: uniformQuality(query) },
     validation: { best: best.fit.quality, seed: baseline.quality, 'soft-gold': refValidation.quality },
     transfer: { best: bestTransfer.quality, seed: baseTransfer.quality },
+    // Argmax agreement with the gold's most probable value: quality can rise by calibration alone, accuracy cannot.
+    accuracy: { query: { best: bestQuery.accuracy, seed: baseQuery.accuracy, 'soft-gold': refQuery.accuracy }, validation: { best: best.fit.accuracy, seed: baseline.accuracy } },
     compute: { search: searchCompute, 'soft-gold': referenceCompute }, bandit: bandit.stats, log });
   // The final population's soft skills and the reference, so the steps stay resolvable after the server is gone.
   await learning.save(join(out, 'artifacts', `${family.replace(/[^a-z0-9-]+/gi, '_')}.nz`), Object.fromEntries([...population.map(ind =>

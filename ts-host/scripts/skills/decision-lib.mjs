@@ -71,8 +71,8 @@ export function decisionSession(endpoint) {
   const store = new MemoryNeuraleseStore();
   const learning = createLearning(learningService({ endpoint, store }));
   const traces = [];
-  const runtime = createNatlangRuntime({ model: { driver: neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store }) },
-    neuralese: { store }, seed: { mode: 'backend' }, trace: trace => traces.push(trace) });
+  const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
+  const runtime = createNatlangRuntime({ model: { driver }, neuralese: { store }, seed: { mode: 'backend' }, trace: trace => traces.push(trace) });
   const functions = new Map();
   /** The case as a typed decision function: `params.guidance` (crisp text before the question), `params.skill` (a soft
    * context item), `params.adapter` (active weight adapter) and `params.prompts` (soft system-prompt pieces by piece ID,
@@ -93,11 +93,15 @@ export function decisionSession(endpoint) {
     return params.adapter ? learning.withAdapters(params.adapter, prompted) : prompted();
   }
   const readouts = () => traces.reduce((n, trace) => n + trace.events.filter(item => Array.isArray(item.probabilities) && item.options).length, 0);
-  /** The readout distribution of `params` on one case. */
+  /** The readout distribution of `params` on one case. The call runs on its own runtime whose trace sink is this call's:
+   * with concurrent readouts (`bounded(cases, 4, …)`) the shared trace list interleaves, and taking the first readout
+   * after a list position returned another case's distribution (fixed 2026-10-12). */
   async function readoutOf(c, params) {
-    const before = traces.length;
-    await call(c, params);
-    const event = traces.slice(before).flatMap(trace => trace.events).find(item => Array.isArray(item.probabilities) && item.options);
+    const own = [];
+    const single = createNatlangRuntime({ model: { driver }, neuralese: { store }, seed: { mode: 'backend' },
+      trace: trace => { traces.push(trace); own.push(trace); } });
+    await call(c, params, single);
+    const event = own.flatMap(trace => trace.events).find(item => Array.isArray(item.probabilities) && item.options);
     if (!event) throw Error('no decision readout recorded for ' + c.id);
     return event.probabilities;
   }
