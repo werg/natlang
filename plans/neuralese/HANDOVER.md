@@ -1727,6 +1727,33 @@ the epsilon explicitly. Unknown variants, malformed explicit epsilons and
 incomplete adapter tensor sets still fail. The focused restore test receipt is
 `runs/neuralese-read-adapter-cpp-port-20261009-v1/checkpoint-epsilon-restore-receipt-v2.json (v1 is retained with its original commit locator)`.
 
+### Pop direct-SFT step-838 resume and RMSNorm diagnostic (2026-10-12)
+
+The previous in-place resume had already overwritten its step-828 checkpoint
+before a comparison backup was made. Step 828 is not available as an exact
+fallback. Before the next experiment, the current full checkpoint was copied
+and SHA-verified before further writes: step 838,
+`af3548fb100f32c43278f3517b88180bf8db986ca1e9d926d5ae2a8df25a119f`, at
+`/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-union-r2-epoch1-v18/rmsnorm-recompute-comparison-v1/parent-step838.pt`.
+The standard HF RMSNorm run resumed from this checkpoint in place and is the
+active BF16/automatic-checkpoint path; the backup remains as its comparison
+parent.
+
+An isolated exact-expression RMSNorm recomputation diagnostic matched whole-model
+forward outputs and predictions, reduced incremental peak allocation by about
+15% at contexts 1,024 and 3,072, and was about 0.4% and 2.8% slower respectively.
+Gradient L2 differed by 0.55–0.60%; this short diagnostic does not determine
+whether the memory reduction can avoid full-layer checkpointing near a longer
+context boundary. The experimental runtime option was removed. Report SHA:
+`c60a0f6b7b3e9f0c26745c2066aeaffc227e59b8eccc2cdee89dacee3c8b55fa` in
+`.../rmsnorm-recompute-comparison-v1/wholemodel-report.json`.
+
+For any future in-place experiment or pause, copy the current full checkpoint
+to a fresh versioned path and verify its SHA before the existing output can be
+resumed or overwritten. Keep only the current checkpoint and one explicitly
+needed comparison/fallback parent; record a missing historical backup honestly
+instead of treating a later checkpoint as its substitute.
+
 ## Deleted runs (2026-10-11)
 
 Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
