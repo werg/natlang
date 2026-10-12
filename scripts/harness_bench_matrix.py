@@ -122,23 +122,6 @@ def find_messages(value) -> list[dict]:
     return []
 
 
-def proof_mounts(args) -> list[tuple[str, str]]:
-    """(host, container) mounts that put a direct export's LFM source proof where its manifest says, or [] when the
-    proof paths exist here already."""
-    proof = json.loads((args.student_artifact / "manifest.json").read_text())["base_binding"].get("source_proof") or {}
-    receipt, cache = proof.get("launch_receipt_path"), proof.get("hf_hub_cache")
-    if not receipt or Path(receipt).exists():
-        return []
-    if not args.launch_receipt or sha256(args.launch_receipt) != proof.get("launch_receipt_sha256"):
-        raise SystemExit(f"the export's launch receipt {receipt} is not here; pass --launch-receipt with its exact copy")
-    hub = Path(args.student_base).resolve().parents[2]
-    snapshot = Path(proof["snapshot_path"])
-    if Path(args.student_base).resolve().name != snapshot.name:
-        raise SystemExit("--student-base is not the export's base revision")
-    args.student_base = snapshot   # served by its proof path inside the container
-    return [(str(args.launch_receipt.resolve()), receipt), (str(hub), cache)]
-
-
 def summarize(out: Path, meta: dict | None = None) -> dict:
     meta = meta or (json.loads((out / "matrix.json").read_text())["meta"] if (out / "matrix.json").exists() else {})
     rows, summary = [], {}
@@ -183,8 +166,6 @@ def main() -> int:
     parser.add_argument("--summarize", action="store_true", help="only rebuild matrix.json/matrix.md from --out")
     parser.add_argument("--student-base", type=Path, help="HF snapshot of the student (or the direct export's base)")
     parser.add_argument("--student-artifact", type=Path, help="direct-SFT serving export")
-    parser.add_argument("--launch-receipt", type=Path, help="local copy of the export's LFM source-proof launch receipt")
-    parser.add_argument("--student-image", default="natlang-neuralese:26.09")
     parser.add_argument("--student-endpoint", help="use a running student server")
     parser.add_argument("--student-ctx", type=int, default=32768)
     parser.add_argument("--student-memory-gb", type=float, default=6.0)
@@ -204,7 +185,6 @@ def main() -> int:
         return 0
     out.mkdir(parents=True, exist_ok=True)
     procs: list[subprocess.Popen] = []
-    containers: list[str] = []
     try:
         executor = args.executor_endpoint
         if not executor:
@@ -218,26 +198,12 @@ def main() -> int:
         student = args.student_endpoint
         if not student:
             port, log = free_port(), out / "student.log"
-            mounts = proof_mounts(args) if args.student_artifact else []
             serve = [str(ROOT / ".venv-neuralese/bin/python"), "-m", "natlang_neuralese.serve", "--device", "cuda",
                      "--dtype", "bfloat16", "--port", str(port), "-c", str(args.student_ctx), "--memory-gb", str(args.student_memory_gb)]
             serve += (["--direct-artifact", str(args.student_artifact), "--direct-base-snapshot", str(args.student_base)]
                       if args.student_artifact else ["--base", str(args.student_base)])
             env = {**os.environ, "PYTHONPATH": str(ROOT / "training/neuralese"), "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
-            if mounts:
-                # The export's source proof names paths of the machine it was trained on: serve it in a container
-                # that has the same files (this machine's HF hub, the copied launch receipt) at those paths.
-                name = os.environ.get("HARNESS_STUDENT_CONTAINER", "harness-matrix-student")
-                container = ["docker", "run", "--rm", "--name", name, "--gpus", "all", "--network", "host",
-                             "--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp",
-                             *[item for key in ("PYTHONPATH", "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE") for item in ("-e", f"{key}={env[key]}")],
-                             "-v", f"{ROOT}:{ROOT}:ro", *[item for source, target in mounts for item in ("-v", f"{source}:{target}:ro")],
-                             "-w", str(ROOT), args.student_image, "python", *serve[1:]]
-                serve = container
-                procs.append(subprocess.Popen(serve, stdout=log.open("w"), stderr=subprocess.STDOUT))
-                containers.append(name)
-            else:
-                procs.append(subprocess.Popen(serve, cwd=ROOT, env=env, stdout=log.open("w"), stderr=subprocess.STDOUT))
+            procs.append(subprocess.Popen(serve, cwd=ROOT, env=env, stdout=log.open("w"), stderr=subprocess.STDOUT))
             student = f"http://127.0.0.1:{port}"
             wait_http(student + "/health", procs[-1], 900, log)
         student_model, executor_model = model_id(student), model_id(executor)
@@ -266,8 +232,6 @@ def main() -> int:
         print(json.dumps(report["summary"], indent=2))
         return 0
     finally:
-        for name in containers:
-            subprocess.run(["docker", "stop", "-t", "10", name], capture_output=True)
         for proc in procs:
             proc.terminate()
         for proc in procs:
