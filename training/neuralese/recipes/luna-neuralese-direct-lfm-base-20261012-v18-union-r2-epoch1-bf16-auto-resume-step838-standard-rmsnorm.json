@@ -1,5 +1,5 @@
 {
-  "description": "Resume the existing V18 full-state run in place from the exact step-838 signal checkpoint, returning to the standard Hugging Face RMSNorm path. Preserve data order, optimizer/RNG state, BF16, automatic checkpoint selection, and existing epoch schedule. This exact-output continuation recipe updates only the frozen shared Python package pin to the reviewed adjacent-context estimator handoff; the recipe identity, source/input bindings, objective, schedule and optimizer remain unchanged.",
+  "description": "Resume the existing V18 full-state run in place from the latest exact checkpoint, preserving data order, optimizer/RNG state, BF16, automatic checkpoint selection, and the declared epoch schedule. This exact-output continuation updates the frozen shared Python package inventory to include the reviewed adjacent-context memory estimator and the current shared package code; recipe identity, source/input bindings, objective, and schedule are unchanged.",
   "execution": "direct_shared_stage",
   "id": "luna-neuralese-direct-lfm-base-20261012-v18-union-r2-epoch1-bf16-auto",
   "inputs": {
@@ -297,7 +297,7 @@
       "train/loop.py": "96db67cbea42d7862c21ce46abe50c6e010701b00e272f32f2138b4f783e3714",
       "train/losses.py": "c9f30f034f8d138bee7e08ab8b2c69e00caccb7a15b9230be1b6e81f7dd6d795",
       "train/memory.py": "f7d4ed66bc9ff9963f4d9108c4a662871943f87b0c5bc4cf85cbf6f12cddb7ef",
-      "train/memory_estimator.py": "a198cf22f349c0241f3ce1877e4f82f56950d34c92cfa0e629b62f03438f6a71",
+      "train/memory_estimator.py": "3e91e4fe5fd470e6c89e2d1663d829cf9ba9ca49c533a03ed1f2ac79ba74130f",
       "train/memory_policy.py": "9fb3e7df8848c8fe33959419693e1e066eb67f0a848fcb080ba1053527977521",
       "train/optim.py": "6753fd90f0ee160d5eaed7643d5858a89386bf9667e20c86bc5a50b7d5bfe3cc",
       "train/optim_restore.py": "fcffacd150af0c5c38cea7280b87d33e5388f0dbb4bc68448828d42a0a43ec96",
@@ -313,7 +313,7 @@
       "train/staging.py": "d826eee727aae24930ba2ebffb782da71c7d18dafc05575a345a4acbb87ebb19",
       "train/text_supervision.py": "af50cc4bd3cbf17fd70339cae4c1a441eddd97d4f0f898baed1bff49b7658725",
       "train/text_warmup.py": "28e385bea831418ed094c998d15fbd6203a0c2bf028a17cd0cd511ec076f50e5",
-      "train/trajectories.py": "d8d0ceaebf7cfe4a43c115ed2efbdcb9cb4254b755ef1e971c2e8f0f676cea92",
+      "train/trajectories.py": "9ba9a384cb42c7e7aa274231ceb149c85d63cb5499e8e014e3fd861c552ffc33",
       "train/trajectory_probe.py": "db38a21baff1654213c3a9196b6a14849ddd9986838dfd5a48b2e5c011126bb6",
       "train/trajectory_state.py": "134df94993cdb2a6f03e8127ec6e0262194b776b12dce9b0bc72c4c7c593b06f",
       "train/verified_heads_handoff.py": "fe61991aeebf9db005e0ffc5cdc681a4d9f79c443181318ccf01ba6905e7e0e0",
