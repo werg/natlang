@@ -76,6 +76,14 @@ def test_te_replacement_keeps_master_parameter_objects_and_pads_only_row_axis():
     assert source.weight.grad is not None and source.weight.grad.shape == source.weight.shape
 
 
+def test_te_training_bookkeeping_can_be_enabled_for_eval_mode_hf_backbone():
+    source = nn.Linear(16, 16, bias=False, dtype=torch.bfloat16).eval()
+    replacement = make_te_linear_preserving_rng(source, FakeTELinear, training=True)
+    assert source.training is False
+    assert replacement.training is True
+    assert replacement.weight is source.weight
+
+
 def test_fp8_layer_initialization_does_not_advance_rng():
     source = nn.Linear(16, 16, bias=False, dtype=torch.bfloat16)
     before = torch.random.get_rng_state().clone()
