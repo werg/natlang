@@ -9,7 +9,7 @@ runs `full_check_service.py tick`:
    note goes to Pop with the commit, the commands, the log path and the failures; every open request to DGX that asks
    for a full check (matches FULL_CHECK) and names commits contained in the checked commit is answered; each failing
    step or test is routed with the last commit that touched its test file (sent to all). The worktree is removed.
-2. When no run is in progress and origin/main moved since the last run, a clean worktree at origin/main is checked out
+2. When no run is in progress and origin/main moved since the last completed run, a clean worktree at origin/main is checked out
    and `scripts/check-main.sh` runs there as ledger unit natlang-full-check-<sha> (medium priority, resumable: a
    preempted run restarts from scratch on relaunch).
 
@@ -52,8 +52,9 @@ def save(state: dict) -> None:
 
 
 def unit_live(unit: str) -> bool:
-    if subprocess.run(['systemctl', '--user', 'is-active', '-q', f'{unit}.service']).returncode == 0:
-        return True
+    for name in (unit, unit + '-admission'):
+        if subprocess.run(['systemctl', '--user', 'is-active', '-q', f'{name}.service']).returncode == 0:
+            return True
     try:
         status = json.loads(subprocess.run(['python3', str(REPO / 'scripts/memory_ledger.py'), 'status'],
                                            capture_output=True, text=True).stdout)
@@ -76,11 +77,16 @@ def launch(state: dict, sha: str) -> None:
     log = BASE / f'{sha[:10]}.log'
     unit = f'natlang-full-check-{sha[:10]}'
     command = f'scripts/check-main.sh > {log} 2>&1; echo exit=$? >> {log}'
-    # `run --wait` blocks until admitted: detached, so the timer's tick returns; the unit name marks the run.
-    subprocess.Popen(['python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '28',
-                      '--priority', 'medium', '--resumable', '--wait', '86400', '--workdir', str(wt), '--',
-                      'sh', '-c', command], start_new_session=True,
-                     stdout=open(BASE / f'{sha[:10]}.ledger.log', 'ab'), stderr=subprocess.STDOUT)
+    # A detached process still belongs to the timer service's cgroup and dies
+    # when its oneshot exits. Keep the waiting admission client in its own
+    # managed service; the admitted check has its separate ledger-managed unit.
+    subprocess.run(['systemd-run', '--user', '--collect', '--unit', unit + '-admission',
+                    '--property=Type=exec',
+                    '--property=StandardOutput=append:' + str(BASE / f'{sha[:10]}.ledger.log'),
+                    '--property=StandardError=inherit',
+                    'python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '28',
+                    '--priority', 'medium', '--resumable', '--wait', '86400', '--workdir', str(wt), '--',
+                    'sh', '-c', command], check=True)
     state['running'] = {'sha': sha, 'unit': unit, 'worktree': str(wt), 'log': str(log), 'started': time.time(),
                         'command': f'python3 scripts/memory_ledger.py run --unit {unit} --budget-gb 28 --priority '
                                    f'medium --resumable --workdir {wt} -- sh -c "{command}"'}
@@ -125,18 +131,20 @@ def finish(state: dict) -> None:
     log = Path(run['log'])
     text = log.read_text(errors='replace') if log.exists() else ''
     result = failures(text)
+    complete = result['exit'] is not None and bool(result['summary'])
     sha = run['sha']
-    owners = {t: owner_of(t, sha) for t in result['failed_tests']}
+    owners = {t: owner_of(t, sha) for t in result['failed_tests']} if complete else {}
     lines = [f'Full main check of {sha[:10]} ({git("log", "-1", "--format=%s", sha)}): '
-             + ('PASSED' if result['exit'] == 0 else f'FAILED (exit {result["exit"]})'),
+             + ('INCOMPLETE (no full-suite verdict; retry required)' if not complete else
+                'PASSED' if result['exit'] == 0 else f'FAILED (exit {result["exit"]})'),
              f'Command: {run["command"]}', f'Log (DGX): {log}', '', result['summary'] or '(no summary: run incomplete)']
     if owners:
         lines += ['', 'Failing tests (last commit touching the test file):'] + [f'- {t}: {o}' for t, o in owners.items()]
     message = '\n'.join(lines)
     coord('send', '--to', 'pop', '--subject', f'Full main check {sha[:10]}: '
-          + ('passed' if result['exit'] == 0 else 'failures'), '--message', message)
+          + ('incomplete' if not complete else 'passed' if result['exit'] == 0 else 'failures'), '--message', message)
     answered = []
-    for rid, body in open_full_check_requests():
+    for rid, body in open_full_check_requests() if complete else []:
         commits = [c for c in COMMIT.findall(body.split('\n', 2)[-1]) if git('cat-file', '-t', c, check=False) == 'commit']
         if commits and all(contained(c, sha) for c in commits):
             coord('reply', rid, '-m', f'Covered by the standing full check of {sha[:10]} (contains {", ".join(commits)}).'
@@ -152,9 +160,10 @@ def finish(state: dict) -> None:
         run['log'] = str(kept)
     git('worktree', 'remove', '--force', run['worktree'], check=False)
     state.setdefault('history', []).append({**run, **{k: result[k] for k in ('exit', 'failed_steps', 'failed_tests')},
-                                            'answered': answered, 'finished': time.time()})
+                                            'complete': complete, 'answered': answered, 'finished': time.time()})
     state['history'] = state['history'][-50:]
-    state['last_sha'] = sha
+    if complete:
+        state['last_sha'] = sha
     state.pop('running')
     save(state)
 
