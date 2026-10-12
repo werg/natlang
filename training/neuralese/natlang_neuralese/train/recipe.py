@@ -825,6 +825,56 @@ def direct_epoch_budget_change(stage_kind, old_parameters, new_parameters):
             'verification': 'trainer-reconstructs-exact-schedule-prefix-and-checkpoint-step'}
 
 
+def direct_stage_epoch_handoffs(old_recipe, new_recipe):
+    """Validate epoch-only budget changes on matching neuralese_direct stages."""
+    old_stages = {stage.get('id'): stage for stage in old_recipe.get('stages', [])}
+    changes = {}
+    for stage in new_recipe.get('stages', []):
+        old = old_stages.get(stage.get('id'))
+        if old is None or old.get('kind') != stage.get('kind'):
+            continue
+        kind = stage.get('kind')
+        old_parameters = dict(old_recipe.get('stage_parameter_defaults', {}).get(kind, {}))
+        old_parameters.update(old.get('parameters', {}))
+        new_parameters = dict(new_recipe.get('stage_parameter_defaults', {}).get(kind, {}))
+        new_parameters.update(stage.get('parameters', {}))
+        for key in OPERATIONAL_STAGE_PARAMETERS:
+            old_parameters.pop(key, None)
+            new_parameters.pop(key, None)
+        if old_parameters.get('epochs') != new_parameters.get('epochs'):
+            proof = direct_epoch_budget_change(kind, old_parameters, new_parameters)
+            if proof is None:
+                return None
+            changes[stage['id']] = proof
+    return changes
+
+
+def recipe_handoff_epoch_changes(old_recipe, new_recipe):
+    """Require recipe identity to differ only by runtime code, operational parameters, or direct-stage epochs."""
+    changes = direct_stage_epoch_handoffs(old_recipe, new_recipe)
+    if changes is None:
+        raise ValueError('handoff refused: recipe changes outside the direct-stage epoch budget')
+    old = _without_direct_epochs(_without_package_code(_without_operational(old_recipe)))
+    new = _without_direct_epochs(_without_package_code(_without_operational(new_recipe)))
+    if old != new:
+        raise ValueError('handoff refused: the recipe changes more than operational stage parameters, '
+                         'runtime.package_code, and neuralese_direct epoch budgets')
+    return changes
+
+
+def _without_direct_epochs(recipe):
+    value = json.loads(json.dumps(recipe))
+    defaults = value.get('stage_parameter_defaults', {})
+    if isinstance(defaults, dict):
+        direct = defaults.get('neuralese_direct')
+        if isinstance(direct, dict):
+            direct.pop('epochs', None)
+    for stage in value.get('stages', []):
+        if stage.get('kind') == 'neuralese_direct':
+            stage.get('parameters', {}).pop('epochs', None)
+    return value
+
+
 def _stage_steps(recipe, stage):
     """(steps, quantization update range) of a stage as declared (no AR fixup offset)."""
     parameters = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
@@ -903,17 +953,9 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None):
         if existing.get(key) != plan.get(key):
             raise ValueError('handoff refused: ' + key + ' changed; use a new stage lineage')
     extended = stage_extensions(existing['recipe'], plan['recipe'], out if out is not None else plan_path.parent)
-    if (_without_operational(_without_extensions(existing['recipe'], extended)) !=
-            _without_operational(_without_extensions(plan['recipe'], extended))):
-        old_runtime = existing['recipe'].get('runtime', {})
-        new_runtime = plan['recipe'].get('runtime', {})
-        old_pin = old_runtime.get('package_code') if isinstance(old_runtime, dict) else None
-        new_pin = new_runtime.get('package_code') if isinstance(new_runtime, dict) else None
-        if (not isinstance(old_pin, dict) or not isinstance(new_pin, dict) or
-                _without_operational(_without_extensions(_without_package_code(existing['recipe']), extended)) !=
-                _without_operational(_without_extensions(_without_package_code(plan['recipe']), extended))):
-            raise ValueError('handoff refused: the recipe changes more than operational stage parameters, '
-                             'stage extensions, and runtime.package_code')
+    old_handoff_recipe = _without_extensions(existing['recipe'], extended)
+    new_handoff_recipe = _without_extensions(plan['recipe'], extended)
+    epoch_budget_changes = recipe_handoff_epoch_changes(old_handoff_recipe, new_handoff_recipe)
     old_code = existing['code']
     old_runtime = existing['recipe'].get('runtime', {})
     new_runtime = plan['recipe'].get('runtime', {})
@@ -945,6 +987,8 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None):
               'code_removed': sorted(old_code.keys() - new_code.keys())}
     if extended:
         record['extended'] = extended
+    if epoch_budget_changes:
+        record['epoch_budget_changes'] = epoch_budget_changes
     updated = dict(existing, recipe=plan['recipe'], code=new_code,
                    handoffs=list(existing.get('handoffs', [])) + [record])
     write_json(plan_path, updated)
@@ -1280,8 +1324,8 @@ def main(argv=None):
     parser.add_argument('--inspect', action='store_true')
     parser.add_argument('--handoff', action='store_true',
                         help='resume an existing lineage on the newest code (the frozen runtime is replaced) and on a '
-                             'recipe that differs from its own only in operational stage parameters '
-                             '(OPERATIONAL_STAGE_PARAMETERS); recorded in recipe-plan.json "handoffs"')
+                             'recipe that differs only in operational stage parameters and schedule-verified '
+                             'neuralese_direct epoch budgets; recorded in recipe-plan.json "handoffs"')
     args = parser.parse_args(argv)
     recipe = load_recipe(args.recipe)
     if recipe.get('schema') == DIRECT_STAGE_SCHEMA:

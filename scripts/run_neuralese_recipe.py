@@ -325,18 +325,14 @@ def validate_existing_shared_resume(output: Path, recipe: dict, recipe_path: Pat
         if plan.get(key) != value:
             raise ValueError(f"shared recipe resume changes committed {key}")
     recorded_recipe = plan.get("recipe")
+    epoch_budget_changes = {}
     if handoff:
-        def without_package_code(value):
-            if not isinstance(value, dict):
-                return value
-            copy = json.loads(json.dumps(value))
-            runtime = copy.get("runtime")
-            if isinstance(runtime, dict):
-                runtime.pop("package_code", None)
-            return copy
-
-        if without_package_code(recorded_recipe) != without_package_code(recipe):
-            raise ValueError("shared recipe handoff changes more than runtime.package_code")
+        from natlang_neuralese.train.recipe import recipe_handoff_epoch_changes
+        try:
+            epoch_budget_changes = recipe_handoff_epoch_changes(recorded_recipe, recipe)
+        except ValueError as error:
+            raise ValueError("shared recipe handoff changes more than pinned runtime code, operational parameters, "
+                             "and direct-stage epoch budgets") from error
     elif recorded_recipe != recipe:
         raise ValueError("shared recipe resume changes committed recipe")
     recorded_code = plan.get("code")
@@ -361,7 +357,8 @@ def validate_existing_shared_resume(output: Path, recipe: dict, recipe_path: Pat
     return {"plan_path": str(plan_path), "plan_sha256": sha256(plan_path),
             "recipe_sha256": plan["recipe_sha256"], "inputs": inputs, "device": device,
             "frozen_runtime_path": str(frozen), "frozen_code": actual_code,
-            "frozen_code_changed": actual_code != package_code}
+            "frozen_code_changed": actual_code != package_code,
+            "epoch_budget_changes": epoch_budget_changes}
 
 
 def acquire_output_launch_lock(output: Path) -> tuple[int, Path]:
@@ -392,7 +389,8 @@ def main(argv=None) -> int:
     parser.add_argument("--resume-existing", action="store_true",
                         help="resume an existing output after exact recipe/input/device/runtime validation")
     parser.add_argument("--handoff", action="store_true",
-                        help="record the shared-code handoff required when resuming with changed package code")
+                        help="resume with the pinned current shared code; permits only operational recipe changes and "
+                             "an epoch-only neuralese_direct budget change (the trainer proves schedule continuity)")
     parser.add_argument("--docker", default="docker")
     parser.add_argument("--launch-metadata", type=Path,
                         help="external intent/result receipt; default is beside outputs.directory")

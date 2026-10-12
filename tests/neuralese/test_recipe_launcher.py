@@ -239,7 +239,34 @@ def test_shared_resume_code_handoff_allows_only_a_pinned_package_code_change(tmp
     assert binding["frozen_code"] == plan["code"]
 
     recipe["stages"][0]["parameters"]["learning_rate"] = 0.5
-    with pytest.raises(ValueError, match="changes more than runtime.package_code"):
+    with pytest.raises(ValueError, match="changes more than pinned runtime code"):
+        LAUNCHER.validate_existing_shared_resume(
+            output, recipe, recipe_path, heads, stage_inputs, "cuda", new_code, handoff=True)
+
+
+def test_shared_resume_handoff_allows_epoch_only_neuralese_direct_budget_change(tmp_path, monkeypatch):
+    output, recipe, recipe_path, heads, stage_inputs, _old_code = shared_resume_fixture(tmp_path, monkeypatch)
+    plan_path = output / "recipe-plan.json"
+    plan = json.loads(plan_path.read_text())
+    plan["recipe"]["stages"][0]["parameters"]["epochs"] = 2.0
+    plan_path.write_text(json.dumps(plan))
+    new_code = {"train/direct_sft.py": "e" * 64}
+    recipe = json.loads(json.dumps(recipe))
+    recipe["runtime"]["package_code"] = new_code
+    recipe["stages"][0]["parameters"]["epochs"] = 1.0
+
+    binding = LAUNCHER.validate_existing_shared_resume(
+        output, recipe, recipe_path, heads, stage_inputs, "cuda", new_code, handoff=True)
+    assert binding["epoch_budget_changes"] == {
+        "header": {
+            "old_epochs": 2.0,
+            "new_epochs": 1.0,
+            "verification": "trainer-reconstructs-exact-schedule-prefix-and-checkpoint-step",
+        }
+    }
+
+    recipe["stages"][0]["parameters"]["batch"] = 2
+    with pytest.raises(ValueError, match="changes more than pinned runtime code"):
         LAUNCHER.validate_existing_shared_resume(
             output, recipe, recipe_path, heads, stage_inputs, "cuda", new_code, handoff=True)
 
