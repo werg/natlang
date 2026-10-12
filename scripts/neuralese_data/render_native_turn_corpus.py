@@ -265,6 +265,32 @@ def registered_source_pieces(sources):
     return tables, bindings
 
 
+def candidate_selection_correction_ref(packet, admission):
+    """Keep the packet and registry correction declaration in exact agreement."""
+    packet_ref = packet.get('selection_review_pin_correction')
+    if packet_ref is not None and not isinstance(packet_ref, dict):
+        raise ValueError('registry candidate-selection correction reference is malformed')
+    packet_sha = packet_ref.get('sha256') if isinstance(packet_ref, dict) else None
+    registry_sha = admission.get('selection_review_pin_correction_sha256')
+    if packet_sha != registry_sha:
+        raise ValueError('registry candidate-selection correction pin mismatch')
+    if packet_ref is None:
+        if packet_sha is not None:
+            raise ValueError('registry candidate-selection correction pin mismatch')
+        return None
+    if (not isinstance(packet_ref.get('path'), str) or not packet_ref['path'] or
+            not isinstance(packet_sha, str) or not packet_sha):
+        raise ValueError('registry candidate-selection correction reference is malformed')
+    return packet_ref
+
+
+def candidate_selection_owner_item_sha(owner_row, verified_item_sha):
+    """Validate a supplied item digest; older receipts omit it under pinned review/registry bindings."""
+    if 'item_sha256' in owner_row and owner_row['item_sha256'] != verified_item_sha:
+        raise ValueError('root candidate-selection owner item hash differs from verified packet')
+    return owner_row.get('item_sha256', verified_item_sha)
+
+
 def registered_candidate_selection_admission(corpus_id, sources):
     """Verify a registry owner's exact admission of a conversion-only candidate packet.
 
@@ -315,16 +341,18 @@ def registered_candidate_selection_admission(corpus_id, sources):
         raise ValueError('registry candidate-selection packet has an invalid stage/admission')
     candidate_ref, semantic_ref = packet.get('candidate_selection_review'), packet.get('semantic_review')
     clearance_ref = packet.get('source_quality_clearance')
+    correction_ref = candidate_selection_correction_ref(packet, admission)
     if (not candidate_ref or not semantic_ref or not clearance_ref or
             candidate_ref.get('sha256') != admission.get('candidate_selection_review_sha256') or
             semantic_ref.get('sha256') != admission.get('semantic_review_sha256') or
             packet.get('semantic_review_input_audit', {}).get('sha256') != admission.get('historical_audit_sha256') or
-            packet.get('selection_review_pin_correction', {}).get('sha256') != admission.get('selection_review_pin_correction_sha256') or
             clearance_ref.get('file_sha256') != admission.get('source_quality_clearance_sha256')):
         raise ValueError('registry candidate-selection review or clearance pin mismatch')
     registered_bytes(candidate_ref['path'])
     registered_bytes(semantic_ref['path'])
     registered_bytes(clearance_ref['path'])
+    if correction_ref:
+        registered_bytes(correction_ref['path'])
     owner_path = admission.get('owner_admission_path')
     owner_sha = admission.get('owner_admission_sha256')
     if owner_path != 'root-selected-action-admission.json' or not isinstance(owner_sha, str):
@@ -398,14 +426,21 @@ def registered_candidate_selection_admission(corpus_id, sources):
                 owner_row.get('training_admission') is not True):
             raise ValueError(f'root candidate-selection row is not approved for exact native action SFT: {row["id"]}')
         messages_sha256 = sha(canonical(turn.get('messages')).encode())
-        actual_owner_rows.append({**row, 'messages_sha256': messages_sha256,
-                                  'decision': owner_row['decision'],
-                                  'training_admission': owner_row['training_admission']})
+        # The manifest pins candidate_id and invocation identity. The owner receipt
+        # intentionally authorizes the native ID plus source/target/message tuple;
+        # keep the row projection here identical to that stable receipt schema.
+        actual_owner_rows.append({
+            'id': row.get('id'), 'item_id': row.get('item_id'), 'item_sha256': row.get('item_sha256'),
+            'target_sha256': row.get('target_sha256'), 'messages_sha256': messages_sha256,
+            'split': row.get('split'), 'source_groups': row.get('source_groups'),
+            'decision': owner_row['decision'], 'training_admission': owner_row['training_admission'],
+        })
     actual_owner_rows.sort(key=lambda row: row['id'])
     actual_by_id = {row['id']: row for row in receipt['rows']}
     declared_owner_rows = [{
         'id': row.get('native_id'), 'item_id': row.get('item_id'),
-        'item_sha256': actual_by_id.get(row.get('native_id'), {}).get('item_sha256'),
+        'item_sha256': candidate_selection_owner_item_sha(
+            row, actual_by_id.get(row.get('native_id'), {}).get('item_sha256')),
         'target_sha256': row.get('target_sha256'), 'messages_sha256': row.get('messages_sha256'),
         'split': row.get('split'), 'source_groups': row.get('source_groups'),
         'decision': row.get('decision'), 'training_admission': row.get('training_admission'),

@@ -37,11 +37,11 @@ export async function openPacketSourceQualityClearanceResolver(packetRootValue, 
     throw new Error('source-quality-clearance-packet-canonical-hash-mismatch');
   return {
     root, manifest, manifest_sha256: manifestSha256, clearance,
-    resolve(reference, program) {
+    resolve(reference, program, actionIdentity) {
       if (sidecar.path !== reference?.sidecar_path || sidecar.file_sha256 !== reference?.file_sha256 ||
           sidecar.review_canonical_sha256 !== reference?.review_canonical_sha256)
         throw new Error('source-quality-clearance-packet-manifest-mismatch');
-      const problems = sourceQualityClearanceRefProblems(reference, clearance, program);
+      const problems = sourceQualityClearanceRefProblems(reference, clearance, program, actionIdentity);
       if (problems.length) throw new Error(problems.join(','));
       return clearance;
     },
@@ -63,6 +63,15 @@ async function packetFile(root, entry, label) {
   return bytes;
 }
 
+export function candidateSelectionCorrectionReference(manifest) {
+  const ref = manifest?.selection_review_pin_correction ?? null;
+  if (ref === null) return null;
+  if (!ref || typeof ref !== 'object' || Array.isArray(ref) || typeof ref.path !== 'string' ||
+      !ref.path || !/^[a-f0-9]{64}$/.test(ref.sha256 ?? ''))
+    throw new Error('candidate-selection-pin-correction-reference-invalid');
+  return ref;
+}
+
 /** Validate a complete candidate packet once; used by renderers before owner-approved promotion. */
 export async function verifyCandidateSelectionPacket(packetRootValue, expectedManifestSha256) {
   const packet = await openPacketSourceQualityClearanceResolver(packetRootValue, expectedManifestSha256);
@@ -79,30 +88,35 @@ export async function verifyCandidateSelectionPacket(packetRootValue, expectedMa
   const historicalAuditRef = manifest.semantic_review_input_audit;
   const historicalAuditBytes = await packetFile(root, historicalAuditRef, 'historical-semantic-review-audit');
   const historicalAudit = JSON.parse(historicalAuditBytes.toString('utf8'));
-  const correctionRef = manifest.selection_review_pin_correction;
-  const correctionBytes = await packetFile(root, correctionRef, 'selection-review-pin-correction');
-  const correction = JSON.parse(correctionBytes.toString('utf8'));
+  const correctionRef = candidateSelectionCorrectionReference(manifest);
+  const correctionBytes = correctionRef == null ? null : await packetFile(root, correctionRef,
+    'selection-review-pin-correction');
+  const correction = correctionBytes ? JSON.parse(correctionBytes.toString('utf8')) : null;
+  const priorReviewSha = correction?.prior_review_sha256 ?? candidateReviewRef.sha256;
+  const correctionValid = correction
+    ? candidateReview.supersedes_review_sha256 === correction.prior_review_sha256 &&
+      correction.schema === 'natlang.provider-child-review-input-pin-correction/1' &&
+      correction.corrected_review_sha256 === candidateReviewRef.sha256 &&
+      correction.corrected_candidate_manifest_sha256 === historicalAuditRef.sha256 &&
+      correction.selected_approval_count === candidateReview.approvals?.length &&
+      correction.selected_action_count === candidateReview.selected_child_count &&
+      !!candidateReview.correction_reason?.trim() && correction.reason === candidateReview.correction_reason &&
+      correction.selected_approvals_unchanged === true
+    : candidateReview.supersedes_review_sha256 === undefined && candidateReview.correction_reason === undefined;
   if (candidateReview.schema !== 'natlang.provider-child-action-review/1' ||
       candidateReview.training_admission !== false || candidateReview.trace_admission !== false ||
       semanticReview.schema !== 'natlang.provider-child-semantic-review/1' ||
       semanticReview.training_admission !== false || semanticReview.trace_admission !== false ||
       semanticReview.source_cases_sha256 !== manifest.source_cases?.sha256 ||
-      historicalAudit.schema !== 'natlang.provider-child-action-candidates/1' ||
+      !['natlang.provider-child-action-candidates/1', 'natlang.provider-child-action-candidates/2'].includes(historicalAudit.schema) ||
       historicalAudit.training_admission !== false ||
       candidateReview.candidate_manifest_sha256 !== historicalAuditRef.sha256 ||
       semanticReview.candidate_audit_sha256 !== historicalAuditRef.sha256 ||
       manifest.semantic_review?.candidate_audit_sha256 !== historicalAuditRef.sha256 ||
       historicalAudit.source_cases?.sha256 !== manifest.source_cases?.sha256 ||
       manifest.review_sha256 !== candidateReviewRef.sha256 ||
-      candidateReview.supersedes_review_sha256 !== correction.prior_review_sha256 ||
-      correction.schema !== 'natlang.provider-child-review-input-pin-correction/1' ||
-      correction.corrected_review_sha256 !== candidateReviewRef.sha256 ||
-      correction.corrected_candidate_manifest_sha256 !== historicalAuditRef.sha256 ||
-      correction.selected_approval_count !== candidateReview.approvals?.length ||
-      correction.selected_action_count !== candidateReview.selected_child_count ||
       candidateReview.approvals?.length !== candidateReview.selected_child_count ||
-      !candidateReview.correction_reason?.trim() || correction.reason !== candidateReview.correction_reason ||
-      correction.selected_approvals_unchanged !== true)
+      !correctionValid)
     throw new Error('candidate-selection-packet-review-schema-or-source-mismatch');
   const candidates = await packetFile(root, { path: manifest.candidate_manifest,
     sha256: manifest.candidate_manifest_sha256 }, 'candidate-manifest');
@@ -115,10 +129,19 @@ export async function verifyCandidateSelectionPacket(packetRootValue, expectedMa
   const sourceRows = sourceCases.toString('utf8')
     .split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
   const sourceById = new Map(sourceRows.map(row => [row.id, row]));
-  const approvals = new Map(candidateReview.approvals.filter(row => row.approved === true)
-    .map(row => [row.item_id, row]));
-  const semanticRows = new Map(semanticReview.rows.map(row => [row.item_id, row]));
-  const historicalAuditRows = new Map(historicalAudit.candidates.map(row => [row.item_id, row]));
+  const reviewKey = row => row.candidate_id ? `candidate:${row.candidate_id}` : `item:${row.item_id}`;
+  const keyedMap = (rows, label) => {
+    const map = new Map();
+    for (const row of rows) {
+      const key = reviewKey(row);
+      if (map.has(key)) throw new Error(`candidate-selection-packet-duplicate-${label}:${key}`);
+      map.set(key, row);
+    }
+    return map;
+  };
+  const approvals = keyedMap(candidateReview.approvals.filter(row => row.approved === true), 'approval');
+  const semanticRows = keyedMap(semanticReview.rows, 'semantic-review');
+  const historicalAuditRows = keyedMap(historicalAudit.candidates, 'candidate-audit');
   const turns = (await readFile(packetPath(root, 'turns.jsonl'), 'utf8'))
     .split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
   if (!Array.isArray(manifest.turns) || manifest.turns.length !== turns.length || approvals.size !== turns.length)
@@ -137,27 +160,43 @@ export async function verifyCandidateSelectionPacket(packetRootValue, expectedMa
         meta.trajectory_sha256 !== row.teacher_trajectory_digest || meta.source_group === undefined ||
         !row.source_groups?.includes(meta.source_group) || row.split !== 'train')
       throw new Error(`candidate-selection-packet-row-binding-mismatch:${row.id}`);
-    const approval = approvals.get(meta.item_id);
-    const semantic = semanticRows.get(meta.item_id);
-    const historical = historicalAuditRows.get(meta.item_id);
+    const key = reviewKey(meta), itemKey = `item:${meta.item_id}`;
+    const approval = approvals.get(key) ?? approvals.get(itemKey);
+    const semantic = semanticRows.get(key) ?? semanticRows.get(itemKey);
+    const historical = historicalAuditRows.get(key) ?? historicalAuditRows.get(itemKey);
     const source = sourceById.get(meta.item_id);
     const rowApproval = meta.approval;
     if (!approval || !semantic || !historical || semantic.semantic_review !== 'clear' || !source ||
         approval.program_id !== meta.program_id || approval.item_sha256 !== meta.item_sha256 ||
         approval.group !== meta.source_group || approval.target_sha256 !== meta.target_sha256 ||
-        !rowApproval || rowApproval.review_sha256 !== correction.prior_review_sha256 ||
+        (approval.candidate_id !== undefined && approval.candidate_id !== meta.candidate_id) ||
+        !rowApproval || rowApproval.review_sha256 !== priorReviewSha ||
         rowApproval.trajectory_id !== meta.trajectory_id || rowApproval.decision_index !== meta.decision_index ||
         rowApproval.target_sha256 !== meta.target_sha256 ||
         historical.program_id !== meta.program_id || historical.trajectory_id !== meta.trajectory_id ||
         historical.trajectory_sha256 !== meta.trajectory_sha256 || historical.item_sha256 !== meta.item_sha256 ||
         historical.source_group !== meta.source_group || historical.invocation_id !== meta.invocation_id ||
         historical.decision_index !== meta.decision_index || historical.target_sha256 !== meta.target_sha256 ||
+        (historical.candidate_id !== undefined && historical.candidate_id !== meta.candidate_id) ||
+        (semantic.candidate_id !== undefined && semantic.candidate_id !== meta.candidate_id) ||
         semantic.source_group !== meta.source_group || semantic.source_row_sha256 !== meta.item_sha256 ||
         semantic.target_sha256 !== meta.target_sha256 || semantic.generated_label !== source.answer ||
         source.group !== meta.source_group || source.role !== 'train')
       throw new Error(`candidate-selection-packet-review-binding-mismatch:${row.id}`);
-    packet.resolve(row.source_ref?.source_quality_clearance, row.task?.program_ir);
-    selected.push({ id: row.id, item_id: meta.item_id, item_sha256: meta.item_sha256,
+      const sourceRef = row.source_ref ?? {};
+      const decisionIndex = row.decision?.index;
+      const actionIdentity = typeof sourceRef.trajectory_id === 'string' &&
+        typeof row.teacher_trajectory_digest === 'string' && Number.isSafeInteger(decisionIndex) &&
+        typeof sourceRef.invocation_id === 'string' && row.target !== undefined ? {
+          trajectory_id: sourceRef.trajectory_id,
+          trajectory_sha256: row.teacher_trajectory_digest,
+          decision_index: decisionIndex,
+          invocation_id: sourceRef.invocation_id,
+          target_sha256: nativeDecisionTargetDigest(row.target),
+        } : undefined;
+      packet.resolve(sourceRef.source_quality_clearance, row.task?.program_ir, actionIdentity);
+    selected.push({ id: row.id, candidate_id: meta.candidate_id ?? null,
+      item_id: meta.item_id, item_sha256: meta.item_sha256,
       target_sha256: meta.target_sha256, split: row.split, source_groups: row.source_groups });
   }
   if (seenIds.size !== manifestRows.size || [...manifestRows.keys()].some(id => !seenIds.has(id)))
@@ -165,6 +204,6 @@ export async function verifyCandidateSelectionPacket(packetRootValue, expectedMa
   return { schema: 'natlang.verified-candidate-selection-packet/1',
     manifest_sha256: packet.manifest_sha256, candidate_review_sha256: candidateReviewRef.sha256,
     semantic_review_sha256: semanticReviewRef.sha256, historical_audit_sha256: historicalAuditRef.sha256,
-    selection_review_pin_correction_sha256: correctionRef.sha256,
+    selection_review_pin_correction_sha256: correctionRef?.sha256 ?? null,
     rows: selected };
 }

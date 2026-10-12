@@ -45,3 +45,37 @@ def test_registry_approval_is_per_row_and_cannot_override_rejection():
         render.validate_candidate_selection_row(pending, {
             'decision': 'admit-exact-selected-native-action-SFT-only', 'training_admission': False,
         })
+
+
+def test_correction_pin_must_be_absent_on_both_sides_or_match_exactly():
+    render = load_renderer()
+    assert render.candidate_selection_correction_ref({}, {}) is None
+    assert render.candidate_selection_correction_ref(
+        {'selection_review_pin_correction': None}, {'selection_review_pin_correction_sha256': None}) is None
+
+    digest = 'a' * 64
+    packet = {'selection_review_pin_correction': {'path': 'selection-review-pin-correction.json', 'sha256': digest}}
+    assert render.candidate_selection_correction_ref(packet, {
+        'selection_review_pin_correction_sha256': digest,
+    }) == packet['selection_review_pin_correction']
+
+    for bad_packet, bad_admission in (
+        (packet, {}),
+        ({}, {'selection_review_pin_correction_sha256': digest}),
+        (packet, {'selection_review_pin_correction_sha256': 'b' * 64}),
+        ({'selection_review_pin_correction': 'not-a-reference'}, {}),
+    ):
+        with pytest.raises(ValueError, match='correction pin mismatch|reference is malformed'):
+            render.candidate_selection_correction_ref(bad_packet, bad_admission)
+
+
+def test_owner_item_digest_is_checked_when_declared_and_optional_under_pinned_receipt():
+    render = load_renderer()
+    verified = 'a' * 64
+    # Older /1 receipts omit this row field; packet verifier + registry pins bind it.
+    assert render.candidate_selection_owner_item_sha({}, verified) == verified
+    assert render.candidate_selection_owner_item_sha({'item_sha256': verified}, verified) == verified
+    with pytest.raises(ValueError, match='owner item hash differs'):
+        render.candidate_selection_owner_item_sha({'item_sha256': 'b' * 64}, verified)
+    with pytest.raises(ValueError, match='owner item hash differs'):
+        render.candidate_selection_owner_item_sha({'item_sha256': None}, verified)
