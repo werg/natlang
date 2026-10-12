@@ -489,3 +489,16 @@ def test_union_r2_three_phase_recipes_and_the_mellum_resume_from_the_v3_warm_up(
     assert direct_phase_predecessor(resume, second) == 'direct_sft'
     component = stage_quantization(resume, second, {'epochs': 1.0}, [])
     assert component['stage']['progress'] == [0.35, 0.5]
+
+
+def test_the_resume_identity_is_content_not_paths():
+    """v4 2026-10-12: the predecessor moved from a staged NVMe copy to the HDD archive between launches; same bytes,
+    same identity. A changed digest or a changed semantic option still refuses."""
+    from natlang_neuralese.train.direct_sft import same_resume_identity
+    saved = {'options': {'heads': '/a/heads.pt', 'text_data': '/staged/x/text.jsonl', 'latent_lr': 1e-5},
+             'inputs': {'/a/heads.pt': 'h', '/staged/x/text.jsonl': 't', '/staged/c/checkpoint.pt': 'c'}}
+    moved = {'options': {'heads': '/a/heads.pt', 'text_data': '/runs/text.jsonl', 'latent_lr': 1e-5},
+             'inputs': {'/a/heads.pt': 'h', '/runs/text.jsonl': 't', '/hdd/archive/checkpoint.pt': 'c'}}
+    assert same_resume_identity(saved, moved)
+    assert not same_resume_identity(saved, {**moved, 'inputs': {**moved['inputs'], '/runs/text.jsonl': 'u'}})
+    assert not same_resume_identity(saved, {**moved, 'options': {**moved['options'], 'latent_lr': 3e-6}})

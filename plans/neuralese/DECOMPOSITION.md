@@ -58,6 +58,23 @@ Direct SFT still uses one global weighted objective and one optimizer update for
 | Accumulate gradients across windows | Ordinary autograd `backward()` per window, shared gradient buffers | Each window graph is freed before the next forward; the optimizer remains unarmed until the complete packed update is ready. |
 | Clip gradients and update MuonSR/LionSR/AdamW | Existing optimizer path, once after accumulation | Optimizer state, update count, global clipping, and packed batch semantics remain one update. |
 
+## Experimental FP8 training backend — 2026-10-12
+
+The experimental backend is an opt-in implementation detail of the existing
+`neuralese_direct` trainer. Normal recipes remain BF16. Transformer Engine
+handles eligible dense LFM linear operations under an explicitly declared FP8
+recipe; BF16 parameters remain the master weights and the existing MuonSR,
+LionSR, and AdamW path owns all updates. This experiment is not a production
+precision policy and does not change the serving artifact.
+
+| Part | Form | Reason |
+| --- | --- | --- |
+| Select eligible LFM dense layers and validate their shapes/runtime | Crisp exact adapter in shared training code | TE availability, module paths, dimensions, and SM/Torch/CUDA compatibility are exact facts. |
+| Run supported dense GEMMs in FP8 | Existing shared trainer with TE autocast and an explicit recipe | This changes numerical execution while preserving the shared SFT objective and optimizer. |
+| Keep BF16 master parameters, optimizer state, and non-eligible operators | Existing shared model and optimizer | Attention softmax, norms, convolutions, embeddings/readout, and Neuralese projections do not silently change precision. |
+| Save FP8 scaling state and activation/cache accounting | Direct checkpoint and training receipts | Exact resume requires scale history; memory reports must distinguish FP8 caches from BF16 parameters and saved tensors. |
+| Compare mixed short/long updates, evaluation, memory, and speed | Dedicated paired diagnostic over the shared direct recipe | This measures an experimental backend; it neither changes production defaults nor qualifies a model. |
+
 ## Declared direct-stage resume and completion — 2026-10-11
 
 Checkpoint restoration belongs to the existing shared trainer. The recipe runner

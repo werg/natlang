@@ -536,6 +536,7 @@ class PortBackbone(nn.Module):
             pad_offsets = tuple(pad.detach().cpu().tolist())
         if getattr(self, 'checkpoint_layers', False) and torch.is_grad_enabled() and not _checkpoint_layer:
             from torch.utils.checkpoint import checkpoint
+            checkpoint = getattr(self, 'activation_checkpoint', checkpoint)
             for i in layers:
                 if getattr(self, 'checkpoint_attention_only', False) and not self.is_attention(i):
                     h, cache = self.run_layers(h, range(i, i + 1), cache, positions=positions,
