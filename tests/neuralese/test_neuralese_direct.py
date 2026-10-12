@@ -356,6 +356,31 @@ def test_a_continued_phase_archives_its_predecessor_state_off_the_nvme(tmp_path,
     assert direct_sft.archive_predecessor_state(slot) is None  # already archived
 
 
+def test_the_predecessor_archive_runs_beside_training_and_a_failure_keeps_the_state(tmp_path, monkeypatch, capsys):
+    """Phase hand-off (owner 2026-10-12): the archive runs in a thread while the stage trains; the deferred disk
+    reserve waits for it; an archive failure is logged and leaves the predecessor in place."""
+    import inspect
+    import threading
+    from natlang_neuralese.train import direct_sft
+    release, seen = threading.Event(), []
+    monkeypatch.setattr(direct_sft, 'archive_predecessor_state', lambda slot: (release.wait(5), seen.append(slot)))
+    archive = direct_sft.PredecessorArchive(tmp_path / 'checkpoint.pt')
+    assert archive.running and not seen  # training is not waiting on the copy
+    release.set()
+    archive.wait()
+    assert not archive.running and seen == [tmp_path / 'checkpoint.pt'] and archive.error is None
+
+    def broken(slot):
+        raise RuntimeError('verification failed')
+    monkeypatch.setattr(direct_sft, 'archive_predecessor_state', broken)
+    failed = direct_sft.PredecessorArchive(tmp_path / 'checkpoint.pt')
+    failed.wait()
+    assert 'verification failed' in failed.error and 'predecessor_state_archive_failed' in capsys.readouterr().out
+    source = inspect.getsource(direct_sft.main)
+    assert 'archive_predecessor_state(' not in source  # never synchronous on the critical path
+    assert 'checkpoint_reserve_deferred_until_archive' in source and 'settle_reserve(wait=True)' in source
+
+
 def test_a_continued_direct_phase_binds_both_sidecars_and_the_plan_check_requires_them(tmp_path, monkeypatch):
     """direct_sft refuses --continue-from without --continue-identity and --continue-monitor-reference (the v3p
     direct_sft failure, 2026-10-12): the runner binds all three from the predecessor phase, and load_recipe refuses a

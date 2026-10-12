@@ -284,6 +284,35 @@ def archive_predecessor_state(slot: Path) -> dict | None:
     return record
 
 
+class PredecessorArchive:
+    """``archive_predecessor_state`` off the critical path (owner 2026-10-12: the synchronous 47 GB copy and hash to
+    the HDD left the GPU idle for 20+ minutes at every phase hand-off). A thread copies, verifies and links while the
+    stage trains; the mover never touches the source before its verified copy exists. A failure is logged and leaves
+    the predecessor where it was."""
+
+    def __init__(self, slot: Path):
+        import threading
+        self.slot, self.error = slot, None
+        self.thread = threading.Thread(target=self._run, name='predecessor-archive', daemon=False)
+        self.thread.start()
+        print(json.dumps({'event': 'predecessor_state_archive_started', 'path': str(slot)}), flush=True)
+
+    def _run(self):
+        try:
+            archive_predecessor_state(self.slot)
+        except Exception as error:  # the stage keeps training; the predecessor stays on the fast disk
+            self.error = repr(error)
+            print(json.dumps({'event': 'predecessor_state_archive_failed', 'path': str(self.slot),
+                              'error': self.error}), flush=True)
+
+    @property
+    def running(self) -> bool:
+        return self.thread.is_alive()
+
+    def wait(self) -> None:
+        self.thread.join()
+
+
 def main(argv=None):
     stop = StopSignal().install()
     a = parse(argv)
@@ -609,6 +638,7 @@ def main(argv=None):
     if not a.save_state:
         policy.save = lambda state, **_: None  # a smoke: logs and report only, never a full state
     step, best, base_eval, history = 0, None, None, []
+    archive = None
     if policy.slot.exists():
         state = CheckpointPolicy.load(policy.slot)
         previous_options = dict(state.get('identity', {}).get('options') or {})
@@ -655,6 +685,8 @@ def main(argv=None):
         print(json.dumps({'event': 'resumed', 'step': step, 'code_changed': sorted(
             k for k in code if state['identity']['code'].get(k) != code[k])}), flush=True)
         del state
+        if a.continue_from is not None and a.save_state and not Path(a.continue_from).is_symlink():
+            archive = PredecessorArchive(Path(a.continue_from))  # an archive a stop interrupted resumes
     elif a.continue_from is not None:
         # A later phase of the lineage (recipe stage after a neuralese_direct predecessor): the predecessor's weights,
         # projections and optimizer state continue on this stage's data from update 0; held baselines are this
@@ -724,7 +756,7 @@ def main(argv=None):
         saved_backbone = saved_projection = saved_optimizer = saved_names = current_optimizer = None
         del state
         if a.save_state:
-            archive_predecessor_state(Path(a.continue_from))
+            archive = PredecessorArchive(Path(a.continue_from))
 
     def full_state():
         from .backbone_policy import plain_named_tensors as plain
@@ -792,19 +824,42 @@ def main(argv=None):
         written = policy.slot.stat().st_size if policy.slot.exists() else 0
         return max(written, int(1.05 * _state_tensor_bytes(full_state())))
 
+    # While the predecessor's archive runs, its blocks may still be on this disk: a reserve that does not fit yet is
+    # deferred and taken as soon as the archive has finished (checked every update), at the latest before a write.
+    deferred_reserve = []
+
+    def settle_reserve(wait):
+        if not deferred_reserve or (archive.running and not wait):
+            return
+        archive.wait()
+        try:
+            reserve.acquire()
+            deferred_reserve.clear()
+            print(json.dumps({'event': 'checkpoint_reserve_acquired_after_archive', 'step': step,
+                              'archive_error': archive.error}), flush=True)
+        except CheckpointReserveError as error:
+            if wait:  # a write is due: attempt it (the save is atomic), the after-write check stops the run
+                print(json.dumps({'event': 'checkpoint_reserve_unavailable_at_write', 'step': step,
+                                  'error': str(error)}), flush=True)
+
     if a.save_state:
         reserve = CheckpointDiskReserve(a.out / '.checkpoint-space.reserve', next_write_bytes())
         try:
             reserve.acquire()
         except CheckpointReserveError as error:
-            print(json.dumps({'event': 'checkpoint_space_preflight_refused', 'step': step, 'error': str(error)}),
-                  flush=True)
-            reserve.cleanup()
-            raise SystemExit(2)
+            if archive is None or not archive.running:
+                print(json.dumps({'event': 'checkpoint_space_preflight_refused', 'step': step, 'error': str(error)}),
+                      flush=True)
+                reserve.cleanup()
+                raise SystemExit(2)
+            deferred_reserve.append(str(error))
+            print(json.dumps({'event': 'checkpoint_reserve_deferred_until_archive', 'step': step,
+                              'error': str(error)}), flush=True)
         atexit.register(reserve.cleanup)
         save_full_state = policy.save
 
         def reserved_save(state, **options):
+            settle_reserve(wait=True)
             reserve.release_space()
             event = save_full_state(state, **options)
             try:
@@ -987,6 +1042,8 @@ def main(argv=None):
         batch, covered = schedule[step_index]
         point, mix = ('bf16', 0.0) if quant is None else quant.sampled(step_index)[:2]
         profiler.begin(step_index + 1)
+        if deferred_reserve:
+            settle_reserve(wait=False)
         tick = time.time()
         with profile_region('update/plan'):
             plan = execution_plan(batch)
@@ -1144,6 +1201,8 @@ def main(argv=None):
             saved_step = step
         profiler.maybe_finish(step)
     profiler.close(step)
+    if archive is not None:
+        archive.wait()
     finished = step >= end
     gate = monitor.final_gate(step) if finished else None
     final = json.loads((a.out / 'report.json').read_text()) if (a.out / 'report.json').exists() else {}
