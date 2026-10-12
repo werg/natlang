@@ -70,3 +70,18 @@ def test_resume_rejects_missing_checkpoint(tmp_path):
 
     with pytest.raises(ValueError, match="committed handler checkpoint"):
         LAUNCHER.validate_existing_direct_resume(output, recipe, "cuda", code, False)
+
+
+def test_output_launch_lock_rejects_a_second_owner(tmp_path):
+    output = tmp_path / "stage-output"
+    first, _ = LAUNCHER.acquire_output_launch_lock(output)
+    try:
+        with pytest.raises(ValueError, match="another recipe launcher owns"):
+            LAUNCHER.acquire_output_launch_lock(output)
+    finally:
+        import os
+        os.close(first)
+
+    second, _ = LAUNCHER.acquire_output_launch_lock(output)
+    import os
+    os.close(second)

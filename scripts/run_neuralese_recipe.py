@@ -9,6 +9,8 @@ the recipe's output directory.
 from __future__ import annotations
 
 import argparse
+import atexit
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -204,6 +206,18 @@ def validate_existing_direct_resume(output: Path, recipe: dict, device: str,
             "frozen_code_changed": code_changed}
 
 
+def acquire_output_launch_lock(output: Path) -> tuple[int, Path]:
+    """Keep concurrent fresh launches/resumes from sharing one stage output."""
+    lock_path = output.parent / ("." + output.name + ".container-launch.lock")
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(descriptor)
+        raise ValueError(f"another recipe launcher owns this output: {output}") from None
+    return descriptor, lock_path
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--recipe", type=Path, required=True)
@@ -223,6 +237,8 @@ def main(argv=None) -> int:
                         help="external intent/result receipt; default is beside outputs.directory")
     parser.add_argument("--log", type=Path, help="external combined container log; default beside receipt")
     args = parser.parse_args(argv)
+    if args.handoff and not args.resume_existing:
+        parser.error("--handoff is only valid together with --resume-existing")
 
     recipe_path = args.recipe.expanduser().resolve()
     recipe = read_direct_recipe(recipe_path)
@@ -243,6 +259,9 @@ def main(argv=None) -> int:
             raise ValueError(f"--resume-existing requires an existing output directory: {output}")
     elif output.exists():
         raise ValueError(f"fresh output directory required: {output}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    launch_lock_fd, launch_lock_path = acquire_output_launch_lock(output)
+    atexit.register(os.close, launch_lock_fd)
     suffix = f"{int(time.time())}-{os.getpid()}" if args.resume_existing else None
     metadata = args.launch_metadata.expanduser().resolve() if args.launch_metadata else output.parent / (output.name + (f".resume-{suffix}" if suffix else "") + ".container-launch.json")
     if metadata.exists() or under(metadata, output):
@@ -385,7 +404,7 @@ def main(argv=None) -> int:
                   {"host": str(host), "container": str(target), "mode": mode} for host, target, mode in mounts],
               "child_recipe_metadata": str(child_metadata), "python_executable": "/usr/bin/python3",
               "resume_existing": args.resume_existing, "resume_binding": resume_binding,
-              "handoff": args.handoff,
+              "handoff": args.handoff, "output_launch_lock": str(launch_lock_path),
               "preflight_argv": preflight, "preflight_scope": "stage_import_and_input_cache_visibility; model_not_loaded",
               "docker_argv": command, "network": "none", "offline": True}
     write_exclusive(metadata, intent)
