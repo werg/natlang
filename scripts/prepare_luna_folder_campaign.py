@@ -418,6 +418,7 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
             for predecessor in predecessors
         ],
         "reasoning_effort": args.reasoning_effort,
+        "action_max_tokens": args.action_max_tokens,
         "prepared_only": True,
     }
     review_path = out / "root-generation-source-review-v1.json"
@@ -460,6 +461,8 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
                 "log": str(case_dir / "collector.log"),
                 "max_model_requests": MAX_MODEL_REQUESTS,
                 "max_turns": MAX_TURNS,
+                **({"action_max_tokens": args.action_max_tokens}
+                   if args.action_max_tokens is not None else {}),
                 "output": str(case_dir / "results.jsonl"),
                 "request_retries": REQUEST_RETRIES,
                 "seed": seed,
@@ -482,6 +485,7 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         "runtime": str(runtime),
         "supervisor": str(SUPERVISOR),
         "reasoning_effort": args.reasoning_effort,
+        "action_max_tokens": args.action_max_tokens,
         "training_admission": False,
         "independent_new_worlds": 0,
         "workers": worker_records,
@@ -509,7 +513,11 @@ def main() -> int:
     parser.add_argument("--reasoning-effort", choices=("low", "medium", "high"), default="medium")
     parser.add_argument("--item-agreement-count", type=int,
                         help="optional caller-supplied count recorded as an unverified review note")
+    parser.add_argument("--action-max-tokens", type=int,
+                        help="optional per-action token ceiling passed through the collector and pinned in provenance")
     args = parser.parse_args()
+    if args.action_max_tokens is not None and args.action_max_tokens < 1:
+        parser.error("--action-max-tokens must be positive")
     plan, path = build_plan(args)
     plan_sha = digest(path)
     quoted_plan = shlex.quote(str(path))

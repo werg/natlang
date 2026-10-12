@@ -10,18 +10,20 @@ import { dirname, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { materializeNativeRows, nativeRowDigest } from '../ts-host/dist/teacher/native-materializer.js';
 import { nativeDecisionTargetDigest } from '../ts-host/dist/native/decision-review.js';
-import { renderValue } from '../ts-host/dist/native/agent.js';
 import { ordinalDistanceRecordReview } from '../ts-host/dist/evaluation/oracles.js';
 import { sourceQualityClearanceForProgram, sourceQualityClearanceProblems } from '../ts-host/dist/teacher/source-quality-clearance.js';
 import { canonical as sharedCanonical } from '../ts-host/dist/adaptation/identity.js';
 import { hexDigest } from '../ts-host/dist/native/hash.js';
-import { visibleTurnText } from './lib/decision-child-visibility.mjs';
+import { visibleTurnText, visibleValue } from './lib/decision-child-visibility.mjs';
+import { parentEvalChain, projectDeclaredChildResult } from './lib/decision-child-projection.mjs';
 
 const { values } = parseArgs({ options: {
   'results-dir': { type: 'string' }, 'source-cases': { type: 'string' },
   'source-manifest': { type: 'string' }, 'candidate-out': { type: 'string' },
   review: { type: 'string' }, out: { type: 'string' }, 'source-quality-review': { type: 'string' },
   'semantic-review': { type: 'string' },
+  'semantic-source-audit': { type: 'string' },
+  'selection-pin-correction': { type: 'string' },
   'source-label-corrections': { type: 'string' },
 } });
 if (!values['results-dir'] || !values['source-cases'] || !values['source-manifest'] || !values['candidate-out'])
@@ -48,12 +50,6 @@ async function resultsFiles(dir) {
     else if (item.isFile() && item.name === 'results.jsonl') out.push(path);
   }
   return out.sort();
-}
-function visibleValue(value, text) {
-  const candidates = [JSON.stringify(value)];
-  if (typeof value === 'string') candidates.push(value);
-  try { candidates.push(renderValue(value, { budget: Infinity })); } catch {}
-  return candidates.some(candidate => typeof candidate === 'string' && candidate.length > 0 && text.includes(candidate));
 }
 function effectiveFields(item, task) {
   // The item ID is the host-side key used to aggregate results; it does not
@@ -181,6 +177,30 @@ if (values['semantic-review']) {
       semanticReview.source_cases_sha256 !== sourceSha || !Array.isArray(semanticReview.rows))
     throw new Error('semantic review must bind the supplied source cases and remain non-admission evidence');
 }
+let semanticSourceAuditBytes = null, semanticSourceAuditSha = null;
+if (values['semantic-source-audit']) {
+  semanticSourceAuditBytes = await readFile(resolve(values['semantic-source-audit']));
+  semanticSourceAuditSha = sha(semanticSourceAuditBytes);
+  if (!semanticReview || semanticReview.candidate_audit_sha256 !== semanticSourceAuditSha)
+    throw new Error('semantic source audit does not match the exact candidate audit pinned by semantic review');
+}
+let selectionPinCorrectionBytes = null, selectionPinCorrectionSha = null, selectionPinCorrection = null;
+if (values['selection-pin-correction']) {
+  selectionPinCorrectionBytes = await readFile(resolve(values['selection-pin-correction']));
+  selectionPinCorrectionSha = sha(selectionPinCorrectionBytes);
+  selectionPinCorrection = JSON.parse(selectionPinCorrectionBytes.toString('utf8'));
+  if (!review || !semanticReview || !semanticSourceAuditSha ||
+      selectionPinCorrection.schema !== 'natlang.provider-child-review-input-pin-correction/1' ||
+      selectionPinCorrection.corrected_review_sha256 !== reviewSha ||
+      selectionPinCorrection.corrected_candidate_manifest_sha256 !== semanticSourceAuditSha ||
+      selectionPinCorrection.selected_approval_count !== review.approvals.length ||
+      selectionPinCorrection.selected_action_count !== review.selected_child_count ||
+      review.supersedes_review_sha256 !== selectionPinCorrection.prior_review_sha256 ||
+      review.candidate_manifest_sha256 !== semanticSourceAuditSha ||
+      review.correction_reason !== selectionPinCorrection.reason ||
+      !selectionPinCorrection.selected_approvals_unchanged)
+    throw new Error('selection pin correction does not exactly bind the reviewed selection and audit');
+}
 let sourceQualityClearance = null;
 const sourceQualityReviewPath = values['source-quality-review'] ? resolve(values['source-quality-review']) : null;
 if (sourceQualityReviewPath) {
@@ -286,9 +306,28 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
       let matches = [];
       const bindingGaps = [];
       for (const entry of ledger) {
-        if (entry.parent_invocation_id !== rootInvocation || entry.completion_status !== 'done' ||
-            entry.host_result?.complete !== true || !sourceOutputReview(item, semantics, expected,
-              entry.host_result.value, correctionsByItem).accepted) continue;
+        if (entry.completion_status !== 'done' || entry.host_result?.complete !== true) continue;
+        const declaredReturnType = entry.inline_instruction_site?.returns?.text;
+        const parentChain = parentEvalChain(row, ledger, entry);
+        const parentCodes = parentChain.flatMap(parent => [parent.code, ...(parent.followup_codes ?? [])]);
+        const projection = projectDeclaredChildResult(declaredReturnType, entry.host_result.value,
+          parentCodes, entry.inline_instruction_site);
+        if (!projection.accepted || !sourceOutputReview(item, semantics, expected,
+            projection.value, correctionsByItem).accepted) continue;
+        // An intermediate caller may return the typed value unchanged before
+        // an enclosing action projects it (for example `return selected;`
+        // followed by a per-item `answer[0]`). Require the captured result at
+        // every such step to equal the child result and the exact action to
+        // return its own typed value; never infer a projection from labels.
+        const passthrough = projection.causal_aggregate || parentChain.slice(0, projection.projection_code_index).every(parent => {
+          const returned = parent.code.match(/\breturn\s+([A-Za-z_$][\w$]*)\s*;?\s*$/);
+          const sameValue = parent.entry?.host_result?.complete === true &&
+            parent.entry.completion_status === 'done' && same(JSON.stringify(parent.entry.host_result.value),
+              JSON.stringify(entry.host_result.value));
+          const sameType = parent.entry?.inline_instruction_site?.returns?.text === declaredReturnType;
+          return returned && sameValue && sameType && /\bnl\.with\s*</.test(parent.code);
+        });
+        if (!passthrough) continue;
         const invocationTurns = materialized.turns.filter(turn => turn.source_ref?.invocation_id === entry.invocation_id);
         const turn = invocationTurns.at(-1);
         if (!turn) { bindingGaps.push({ invocation_id: entry.invocation_id, reason: 'materializer_has_no_child_turn' }); continue; }
@@ -298,7 +337,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         const scopeBound = Object.fromEntries(Object.entries(fields).map(([key, value]) =>
           [key, Object.hasOwn(scopeValues, key) && same(scopeValues[key], value)]));
         const visible = Object.fromEntries(Object.entries(fields).map(([key, value]) =>
-          [key, visibleValue(value, text) || scopeBound[key]]));
+          [key, visibleValue(value, text)]));
         // caseId is provenance rather than task content, but when the runtime
         // recorded it, it must bind this exact invocation to this item. This
         // prevents equal labels from associating another item's child result.
@@ -311,7 +350,15 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
           continue;
         }
         if (Object.values(visible).every(Boolean)) matches.push({ entry, turn, visible, caseIdBound,
-          scopeBoundFields: Object.keys(scopeBound).filter(key => scopeBound[key]) });
+          scopeBoundFields: Object.keys(scopeBound).filter(key => scopeBound[key]), projection: {
+            kind: projection.projection, declared_return_type: declaredReturnType,
+            result_binding: projection.result_binding, parent_invocation_id: entry.parent_invocation_id,
+            parent_action_sha256: sha(parentCodes[projection.projection_code_index] ?? ''),
+            parent_chain_sha256: sha(JSON.stringify(parentChain.map(parent => ({
+              invocation_id: parent.invocation_id, code_sha256: sha(parent.code),
+              followup_code_sha256: (parent.followup_codes ?? []).map(sha),
+              host_value_sha256: sha(JSON.stringify(parent.entry?.host_result?.value ?? null)),
+            })))), projected_value_sha256: sha(JSON.stringify(projection.value)) } });
         else bindingGaps.push({ invocation_id: entry.invocation_id, reason: 'source_fields_not_fully_bound',
           missing_fields: Object.keys(visible).filter(key => !visible[key]),
           scope_capture_names: Object.keys(scopeValues) });
@@ -345,6 +392,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         target_tool: turn.target?.tool_calls?.[0]?.function?.name ?? null,
         visible_fields: Object.keys(visible), scope_bound_fields: scopeBoundFields,
         source_item_id_runtime_bound: caseIdBound,
+        typed_output_projection: matches[0].projection,
         source_reference_review: sourceReview,
         scope_snapshot_sha256: sha(JSON.stringify(entry.inline_instruction_site?.runtime_capture_snapshots ?? null)),
         group_role_closure: [...roles] };
@@ -376,7 +424,8 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         throw new Error(`review claims an unverified source-label correction for ${program.id}/${id}`);
       const decisionApproval = { schema: 'natlang.native-decision-approval/1', trajectory_id: row.id,
         source_row_sha256: originalDigest, decision_index: turn.decision.index,
-        target_sha256: candidate.target_sha256, review_sha256: reviewSha,
+        target_sha256: candidate.target_sha256,
+        review_sha256: review.supersedes_review_sha256 ?? reviewSha,
         reason: approval.reason, evidence: approval.evidence,
         ...(correction ? { source_label_correction: approval.source_label_correction } : {}) };
       const approved = materializeNativeRows([row], { failedRuns: true, decisionApprovals: [decisionApproval],
@@ -465,12 +514,28 @@ if (values.out) {
   const discoveryCopy = await open(resolve(out, 'candidate-discovery-audit.json'), 'wx');
   try { await discoveryCopy.writeFile(candidateBytes); }
   finally { await discoveryCopy.close(); }
+  if (semanticSourceAuditBytes) {
+    const semanticSourceAuditCopy = await open(resolve(out, 'semantic-source-candidate-audit.json'), 'wx');
+    try { await semanticSourceAuditCopy.writeFile(semanticSourceAuditBytes); }
+    finally { await semanticSourceAuditCopy.close(); }
+  }
+  if (selectionPinCorrectionBytes) {
+    const correctionCopy = await open(resolve(out, 'selection-review-pin-correction.json'), 'wx');
+    try { await correctionCopy.writeFile(selectionPinCorrectionBytes); }
+    finally { await correctionCopy.close(); }
+  }
   const manifest = { schema: 'natlang.provider-child-action-packet/2', candidate_selection: true,
     training_admission: false, trace_admission: false, created_at: new Date().toISOString(), review_sha256: reviewSha,
     candidate_selection_review: reviewBytes ? { path: 'candidate-selection-review.json', sha256: reviewSha } : null,
     semantic_review: semanticReviewBytes ? { path: 'semantic-child-review.json', sha256: semanticReviewSha,
       candidate_audit_sha256: semanticReview.candidate_audit_sha256,
+      ...(semanticSourceAuditBytes ? { candidate_audit_path: 'semantic-source-candidate-audit.json',
+        candidate_audit_file_sha256: semanticSourceAuditSha } : {}),
       counts: semanticReview.counts } : null,
+    ...(semanticSourceAuditBytes ? { semantic_review_input_audit: {
+      path: 'semantic-source-candidate-audit.json', sha256: semanticSourceAuditSha } } : {}),
+    ...(selectionPinCorrectionBytes ? { selection_review_pin_correction: {
+      path: 'selection-review-pin-correction.json', sha256: selectionPinCorrectionSha } } : {}),
     source_cases: { path: 'source-cases.jsonl', sha256: sourceSha },
     source_manifest: { path: 'source-manifest.json', sha256: sha(sourceManifestBytes) },
     source_quality_clearance: sourceQualityReviewPath ? { path: 'source-quality-clearance.json',
