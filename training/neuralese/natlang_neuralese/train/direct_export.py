@@ -29,9 +29,11 @@ MAPLE_BF16_ADAPTER = "maple-bf16-local-snapshot/1"
 QAD_LFM_REPOSITORY = "LiquidAI/LFM2.5-350M-GGUF"
 
 
-def lfm_snapshot_source(snapshot: Path, hub_cache: Path) -> tuple[str, str]:
+def lfm_snapshot_source(snapshot: Path, hub_cache: Path | None = None) -> tuple[str, str]:
     """Identify either published LFM base from its exact cached model directory."""
     snapshot = Path(snapshot).resolve(strict=True)
+    if hub_cache is None:
+        hub_cache = snapshot.parents[3] if snapshot.name == "qad" else snapshot.parents[2]
     hub_cache = Path(hub_cache).resolve(strict=True)
     if snapshot.name == "qad":
         revision = snapshot.parent.name
@@ -46,6 +48,18 @@ def lfm_snapshot_source(snapshot: Path, hub_cache: Path) -> tuple[str, str]:
             snapshot != expected):
         raise ValueError("LFM base must be an exact cached HF revision (or its qad model directory)")
     return model_id, revision
+
+
+def _resolve_provenance_file(path: str, digest: str, artifact_dir: Path) -> Path:
+    """Allow a byte-identical receipt or anchor beside a relocated export."""
+    if not path or not digest:
+        raise ValueError("artifact provenance path or digest is missing")
+    original = Path(path)
+    for candidate in (original, artifact_dir / original.name,
+                      artifact_dir.parent / original.name):
+        if candidate.is_file() and sha256_file_hex(candidate) == digest:
+            return candidate
+    raise ValueError(f"artifact provenance file is absent or changed: {original.name}")
 
 
 def _file_inventory(root: Path) -> dict[str, str]:
@@ -926,14 +940,14 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
     proof = base.get("source_proof") or {}
     if adapter == LFM2_ADAPTER:
         proof_path, proof_sha = proof.get("launch_receipt_path"), proof.get("launch_receipt_sha256")
-        cache = Path(proof.get("hf_hub_cache", "")).resolve(strict=True)
-        model_id, revision = lfm_snapshot_source(snapshot, cache)
+        model_id, revision = lfm_snapshot_source(snapshot)
         if (proof.get("backbone_adapter", LFM2_ADAPTER) != LFM2_ADAPTER or
                 proof.get("model_id") != model_id or proof.get("revision") != revision or
-                Path(proof.get("snapshot_path", "")).resolve() != snapshot or
-                not proof_path or not proof_sha or sha256_file_hex(proof_path) != proof_sha):
+                proof.get("snapshot_path") != base.get("snapshot_path_at_export") or
+                not proof_path or not proof_sha):
             raise ValueError("direct artifact LFM source proof is missing or changed")
-        launch_receipt = json.loads(Path(proof_path).read_text())
+        receipt_file = _resolve_provenance_file(proof_path, proof_sha, artifact_dir)
+        launch_receipt = json.loads(receipt_file.read_text())
         if (launch_receipt.get("runtime_image") != proof.get("runtime_image") or
                 launch_receipt.get("hf_hub_cache") != proof.get("hf_hub_cache")):
             raise ValueError("direct artifact launch receipt differs from its LFM source proof")
@@ -1011,17 +1025,16 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
     from .backbone_policy import full_backbone_parameter_names, restore_backbone_trainables
 
     anchor = manifest["anchor"]
-    if sha256_file_hex(anchor["path"]) != anchor["sha256"]:
-        raise ValueError("clean-head anchor changed after direct export")
+    anchor_path = _resolve_provenance_file(anchor["path"], anchor["sha256"], artifact_dir)
     if adapter == MAPLE_BF16_ADAPTER:
-        anchor_state = torch.load(anchor["path"], map_location="cpu", weights_only=False, mmap=True)
+        anchor_state = torch.load(anchor_path, map_location="cpu", weights_only=False, mmap=True)
         if anchor_state.get("backbone") != base.get("anchor_backbone_identity"):
             raise ValueError("Maple base identity differs from its pinned clean-head anchor")
         init = anchor_state["backbone"].get("init") or {}
         if not init.get("receipt") or sha256_file_hex(init["receipt"]) != init.get("receipt_sha256"):
             raise ValueError("Maple anchor initialization receipt is missing or changed")
         del anchor_state
-    engine = load_engine(base=str(snapshot), heads_checkpoint=anchor["path"], device=device, dtype=dtype,
+    engine = load_engine(base=str(snapshot), heads_checkpoint=str(anchor_path), device=device, dtype=dtype,
                          prompt_rendering=prompt_mode)
     if adapter == LFM2_ADAPTER and dtype is not None:
         expected_dtype = dtype

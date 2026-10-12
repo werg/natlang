@@ -7,13 +7,17 @@ sources below, first source wins per id; lines are copied byte-for-byte. Splits 
 and train edges sharing a source group with a held document of the target union are dropped. Writes records.jsonl,
 pieces.jsonl, edges.jsonl and receipt.json to the output directory. Run under the memory ledger (CPU, ~3 GB).
 """
-import json, sys, hashlib, os
+import json, sys, os
 from collections import Counter
-sys.path.insert(0, '/home/werg/natlang/training/neuralese')
-from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view
-R = '/home/werg/natlang/'
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex  # noqa: E402
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
+from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view  # noqa: E402
+R = str(ROOT) + '/'
 ID = 'neuralese-e2e-union-cohort-20261012-v1'
-OUT = f'/home/werg/data/natlang-corpora/{ID}'
+OUT = resolve_str('data_nvme', 'natlang-corpora', ID)
 os.makedirs(OUT, exist_ok=True)
 SOURCES = [
  ('assembly-v3', 'runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-records.jsonl',
@@ -25,8 +29,6 @@ SOURCES = [
  ('free-v29', 'runs/free-provider-generation-20261009-v1/v29-root-ordinary-text-admission-v1/selected-native-turns-render-input.jsonl',
   'runs/free-provider-generation-20261009-v1/held-v29-visible-input-native-text-v2/pieces.jsonl'),
 ]
-def sha(b): return hashlib.sha256(b).hexdigest()
-def fsha(p): return sha(open(R+p,'rb').read())
 tables = {}
 for name, rp, pp in SOURCES:
     tables[name] = {json.loads(l)['name']: (l if l.endswith('\n') else l + '\n') for l in open(R+pp)}
@@ -81,7 +83,7 @@ receipt = {
  'format': 'natlang.teacher_training_turn.native/1 records consumed by train/trajectories.py --records/--pieces (--handover written, --direct-artifact); every line byte-identical to its source line; tokenizer-agnostic (the trainer tokenizes per line), so one file serves both lines in lockstep',
  'selection': 'both endpoints of every gradient_edge=true reference of authenticated_recurrence_context_view (train/trajectories.py) over the union of the sources below, first source wins per id; the same rule that selected the 1243 cohort (full-candidate-closure-v1), which this cohort contains byte-identically',
  'splits': 'each record keeps its own split and source_groups (the unions inherit the same rows); cross-split edges dropped; train edges whose endpoints share a source group with any held document of union r3 (all renderings) dropped',
- 'sources': [{'name': n, 'records': rp, 'records_sha256': fsha(rp), 'pieces': pp, 'pieces_sha256': fsha(pp)} for n, rp, pp in SOURCES],
+ 'sources': [{'name': n, 'records': rp, 'records_sha256': sha256_file_hex(R+rp), 'pieces': pp, 'pieces_sha256': sha256_file_hex(R+pp)} for n, rp, pp in SOURCES],
  'piece_policy': f'assembly-v3 piece table (the pinned e2e_pieces) wins every name; {len(conflict)} names differ in a later table ({sorted(conflict)}); later-source records referencing them are held (piece_version_conflict) rather than read with another version',
  'held_piece_version_conflict_records': len(held_conflict),
  'review': {k: review[k] for k in ('source_records', 'prepared_records', 'excluded_context_records', 'prepared_by_split', 'excluded_by_split')},
@@ -90,7 +92,7 @@ receipt = {
  'edges_dropped': dropped,
  'records': len(ends), 'records_by_split': Counter(split[i] for i in ends), 'records_by_source': Counter(origin[i] for i in ends),
  'readers_by_split': Counter(split[e['reader_record_id']] for e in kept),
- 'files': {n: {'sha256': sha(open(f'{OUT}/{n}','rb').read()), 'bytes': os.path.getsize(f'{OUT}/{n}')}
+ 'files': {n: {'sha256': sha256_file_hex(f'{OUT}/{n}'), 'bytes': os.path.getsize(f'{OUT}/{n}')}
            for n in ('records.jsonl', 'pieces.jsonl', 'edges.jsonl')},
 }
 json.dump(receipt, open(f'{OUT}/receipt.json', 'w'), indent=1, sort_keys=True, default=dict)

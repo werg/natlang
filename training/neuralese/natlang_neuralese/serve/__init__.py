@@ -40,14 +40,17 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
         raise ValueError("cutoff differs from the trained checkpoint")
     saved = dict((state or {}).get("backbone") or {})
     if saved.get("base"):
-        if base is not None and base != saved["base"]:
-            raise ValueError("base override differs from the checkpoint's pinned backbone")
-        base = saved["base"]
         if saved.get("files_sha256"):
             from ..common.hashing import canonical_json_sha256_hex
             from ..train.direct_export import _file_inventory
-            if canonical_json_sha256_hex(_file_inventory(Path(base))) != saved["files_sha256"]:
+            candidate = base or saved["base"]
+            if canonical_json_sha256_hex(_file_inventory(Path(candidate))) != saved["files_sha256"]:
                 raise ValueError("checkpoint's pinned backbone files changed")
+            base = candidate
+        elif base is not None and base != saved["base"]:
+            raise ValueError("base override differs from the checkpoint's pinned backbone")
+        else:
+            base = saved["base"]
     for role in ("student_lora", "student_state"):
         if saved.get(role) and not Path(saved[role]).is_absolute():
             if artifacts is None:
