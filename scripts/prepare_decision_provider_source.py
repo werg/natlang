@@ -111,17 +111,24 @@ def read_prior_cases(prior_root):
     # Annotation campaigns preserve their selected raw rows and derived program
     # cases in separate subdirectories. Both reserve their original source IDs
     # and groups; overlooking them silently regenerates the same worlds.
-    files = sorted({path.resolve() for pattern in (
-        'provider-*/cases.jsonl',
-        'provider-*/source-selection/cases.jsonl',
-        'provider-*/static/cases.jsonl',
-    ) for path in root.glob(pattern)})
+    # Campaigns may put reservations under lane-* directories. Scan all
+    # provider-owned cases.jsonl files so a lane reservation cannot disappear
+    # merely because it is nested one level deeper than a root source packet.
+    files = sorted({path.resolve() for path in root.glob('provider-*/**/cases.jsonl')})
     program_ids, program_groups = set(), set()
     source_ids, source_groups = set(), set()
     manifests = []
     for path in files:
         cancelled_receipt = None
-        campaign = path.parent if path.parent.parent == root else path.parent.parent
+        provider_root = next((parent for parent in path.parents if parent.parent == root), None)
+        if provider_root is None:
+            raise ValueError(f'{path}: reservation source is not under a provider-* directory')
+        # A disposition applies at the nearest ancestor which declares it.
+        # Otherwise use the top-level provider campaign, preserving the
+        # existing behavior for source-selection/ static subdirectories.
+        campaign = next((parent for parent in path.parents
+                         if parent == provider_root or parent.is_relative_to(provider_root)
+                         if (parent / 'reservation-disposition.json').is_file()), provider_root)
         disposition_path = campaign / 'reservation-disposition.json'
         if disposition_path.exists():
             disposition = json.loads(disposition_path.read_text())
@@ -512,7 +519,7 @@ def build(args):
             'option_count_policy': ('explicit operator limit applied; this is a selection limit, not a data-quality judgment' if args.max_options is not None else
                                     'no upper option-count source filter; exact rendered visibility/replay and the live provider context budget are checked downstream'),
             'required_role': 'train', 'required_kind': 'choice',
-            'disjointness': 'case IDs and source groups are checked against every prior-root provider-*/cases.jsonl and against the selected rows',
+            'disjointness': 'case IDs and source groups are checked against every cases.jsonl recursively under prior-root/provider-* and against the selected rows',
             'preservation': 'selected source answers, IDs, groups, and original row hashes are preserved; only explicitly derived shared criteria may be added to prepared model input rows',
             'order': 'source file order within each family, selected in repeated round-robin passes'
         },
@@ -550,7 +557,8 @@ def build(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', required=True, help='Exact source decision-cases.jsonl')
-    parser.add_argument('--prior-root', required=True, help='Root whose provider-*/cases.jsonl files reserve IDs/groups')
+    parser.add_argument('--prior-root', required=True,
+                        help='Root whose provider-*/**/cases.jsonl files reserve IDs/groups')
     parser.add_argument('--out', required=True, help='Fresh output directory; existing directories are refused')
     parser.add_argument('--count', type=int, required=True)
     parser.add_argument('--max-state-chars', type=int, default=3000)
