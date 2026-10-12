@@ -252,3 +252,37 @@ memory. This does not establish a stable workload gain. The owner decision is
 to remove both unadopted FP8 production options, prune unused probe outputs,
 and continue BF16 with measured adaptive checkpointing. Retain these concise
 findings rather than introducing an unused alternate training path.
+
+### RMSNorm memory tradeoff and exact resume (2026-10-12)
+
+A norm-local backward replay preserved the HF forward expression, retaining
+the original input and weight instead of its FP32 intermediate tape. All16
+CPU and16 CUDA local output/input-gradient/weight-gradient cases matched
+bitwise across BF16/FP32 input and weight, strided inputs and frozen weights.
+This did not establish whole-model gradient equality.
+
+From the exact step838 checkpoint, matched authentic-document probes at
+contexts1024/3072 with128 targets gave identical forward outputs/predictions.
+Incremental allocation fell1.406→1.185GB and3.521→2.994GB (about15%). Warm
+median times changed0.12131→0.12183s and0.34292→0.35242s, respectively. Model
+gradient relative L2 differences were0.55%/0.60%. Backward nondeterminism and
+BF16 accumulation order have not been separated with an old-vs-old control.
+The report is `rmsnorm-recompute-comparison-v1/wholemodel-report.json` beneath
+the V18 output; SHA-256
+`c60a0f6b7b3e9f0c26745c2066aeaffc227e59b8eccc2cdee89dacee3c8b55fa`.
+
+The normal BF16 path resumed from step838. The unadopted implementation was
+removed. These probes were already uncheckpointed: they do **not** answer
+whether memory savings near the fit boundary can remove whole-layer replay
+and improve throughput. That matched boundary comparison remains useful;
+prepare it before any further training pause.
+
+The container launcher now supports exact in-place resume and serializes
+launches per output (`a63f0acc`, `939c470e`, `1956a2c9`). A new-corpus
+`continue_from` phase is different: it starts its own schedule/baseline.
+In-place resume restored update828 and optimizer/RNG, then saved update838.
+The promised separate update828 fallback was not copied before the rotating
+slot was overwritten; its bytes are unavailable. Update838 is safely saved
+and a separate comparison parent was preserved. Before experimental updates,
+copy/verify one bounded fallback first; after deciding, prune unnecessary
+copies. Do not retain every periodic checkpoint.
