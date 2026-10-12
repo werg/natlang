@@ -31,6 +31,7 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 - Native input and scope listings show at least 4,096 characters per value. A cut-off listing names the complete live eval variable; use ordinary code such as `value.slice(start, end)` to inspect omitted ranges. Tool-result text is sized from the call's context budget (`contextTokens`; `shownCharsFor` in `ts-host/src/native/cutoff.ts`: an eighth of the budget at 3.5 characters per token, at least 2,000), and only output longer than that is paged with `read_page`. A host that sets a larger `contextTokens` therefore shows longer outputs whole; `contextTokens: null` keeps the 2,000-character floor.
 - Eval exposes `inputs` and `read_inputs()` only for calls with formal input fields, unless those names are shadowed. A zero-argument call has no implicit caller-input object; ordinary local declarations may use those names.
 - Verify live-model quality separately from fixture wiring and rendering, and name the remaining empirical gates.
+- In native collection, an absent result after two consecutive provider-confirmed immediate empty EOS replies is reported as `model_incomplete: terminated_without_result` after one normal recovery prompt. Keep this distinct from transport failures and resource timeouts; if a provider adapter does not expose exact EOS metadata, it must not claim this classification from an empty string alone.
 
 Pair with `natlang-authoring` for substantial natural-language algorithms when that skill is available; this skill is independently usable.
 

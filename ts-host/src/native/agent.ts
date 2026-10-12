@@ -45,6 +45,19 @@ export const EDIT_CODE_DESCRIPTION = 'Edit a function in the program\'s codebase
  * thought for the same reason.
  */
 const thought = (reasoning: string | undefined) => reasoning ? { reasoning_content: reasoning } : {};
+/** Exact provider proof of an immediate empty EOS; an empty decoded string alone is not sufficient. */
+function immediateEmptyEos(response: ModelTurn): boolean {
+  if (response.completion_tokens !== 0 || response.truncated || response.text !== '' ||
+      (response.calls?.length ?? 0) !== 0) return false;
+  const choices = response.raw_response?.choices;
+  if (!Array.isArray(choices) || !choices.length) return false;
+  const choice = choices[0] as Record<string, unknown> | undefined;
+  const message = choice?.message as Record<string, unknown> | undefined;
+  const content = message?.content;
+  const toolCalls = message?.tool_calls;
+  return choice?.finish_reason === 'stop' && (content === null || content === '') &&
+    (toolCalls === undefined || (Array.isArray(toolCalls) && toolCalls.length === 0));
+}
 /**
  * The finishing tool. The last sentence is for judgments: asked "does review recommend the product?", a model answered
  * "it does not" with status blocked, and the caller got an error for a perfectly good answer.
@@ -987,6 +1000,7 @@ export class NativeToolAgent {
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
     let tokens = 0, turns = 0, withdrawals = 0, failureRepairs = 0, refinementRepairs = 0, lastRefinementFailure = '';
+    let consecutiveEmptyEosWithoutResult = 0;
     const timedOut = () => deadline !== null && Date.now() >= deadline;
     const exhausted = () => (maxTurns !== undefined && turns >= maxTurns) ||
       (maxTokens !== undefined && tokens >= maxTokens) || timedOut();
@@ -1122,6 +1136,8 @@ export class NativeToolAgent {
       const written = !response.calls?.length && !response.truncated ? writtenReturnResult(response.text ?? '') : undefined;
       if (written) response = { ...response, text: '', calls: [['return_result', written]] };
       const calls = response.calls ?? [];
+      const exactEmptyEos = immediateEmptyEos(response);
+      if (!exactEmptyEos || calls.length || response.truncated) consecutiveEmptyEosWithoutResult = 0;
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
         phase: 'generated', turn: turns, calls, text: response.text ?? '' });
       tokens += response.completion_tokens === undefined ? limit ?? 0 : Math.max(1, response.completion_tokens);
@@ -1129,6 +1145,7 @@ export class NativeToolAgent {
         return 'episode token or wall-clock budget exhausted';
       if (!response.calls?.length && availableTools !== allTools && !lastTurn && !response.truncated) {
         // The compaction turn was answered without the tool: its text is not a result. Compact without a note.
+        consecutiveEmptyEosWithoutResult = 0;
         const elided = pinNote(null) + collapseHistory(messages, protectedLength);
         compactedAt = estimate(allTools);
         session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns,
@@ -1140,6 +1157,16 @@ export class NativeToolAgent {
         // call with nothing staged, the reply's text is the result.
         if (!response.truncated) session.acceptTextResult(response.text ?? '');
         const missing = this.missing(session);
+        if (!response.truncated && exactEmptyEos && missing) {
+          consecutiveEmptyEosWithoutResult++;
+          if (consecutiveEmptyEosWithoutResult >= 2) {
+            const detail = 'model_incomplete: terminated_without_result (repeated immediate EOS after one recovery turn)';
+            session.runtime.trace.emit('model_incomplete', { call_id: session.runtime.currentCallId ?? null,
+              reason: 'terminated_without_result', evidence: 'two_consecutive_zero_token_stop_replies',
+              recovery_turns: 1 });
+            return detail;
+          }
+        } else if (!missing) consecutiveEmptyEosWithoutResult = 0;
         // A reply without a tool call that leaves a refinement-rejected result unrepaired is a failed repair too: without
         // this count a model that only says "done" is nudged for ever (a scripted or stuck model never runs out of turns).
         if (!response.truncated && missing && lastRefinementFailure && this.options.refinement &&

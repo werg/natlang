@@ -208,6 +208,36 @@ test('a final text reply is the result: text for a string, a JSON value for any 
   assert.equal(early.outcome.kind, 'quiesced', 'done is not an answer');
 });
 
+test('two provider-confirmed empty EOS replies end an absent result as model-incomplete after one recovery prompt', async () => {
+  const requests = [];
+  const emptyEos = { calls: [], text: '', completion_tokens: 0,
+    raw_response: { choices: [{ finish_reason: 'stop', message: { content: null } }] } };
+  const agent = new NativeToolAgent(request => { requests.push(structuredClone(request)); return emptyEos; }, { maxTurns: 10 });
+  const result = await run({ type: '() => number', instructions: 'Return a number.' }, { agent: session => agent.run(session) });
+  assert.equal(requests.length, 2);
+  assert.match(String(requests[1].messages.at(-1).content), /result|next step/i);
+  assert.equal(result.outcome.kind, 'quiesced');
+  assert.match(result.outcome.detail, /^model_incomplete: terminated_without_result/);
+});
+
+test('one empty EOS may recover into a valid result, and empty text without exact EOS proof is not classified', async () => {
+  const emptyEos = { calls: [], text: '', completion_tokens: 0,
+    raw_response: { choices: [{ finish_reason: 'stop', message: { content: null } }] } };
+  let turn = 0;
+  const recovered = await run({ type: '() => number', instructions: 'Return seven.' }, { agent: session =>
+    new NativeToolAgent(() => ++turn === 1 ? emptyEos : { calls: [['return_result', { status: 'success', value: 7 }]], completion_tokens: 1 },
+      { maxTurns: 4 }).run(session) });
+  assert.equal(recovered.outcome.kind, 'done'); assert.equal(recovered.value, 7); assert.equal(turn, 2);
+
+  let unprovenTurns = 0;
+  const unproven = await run({ type: '() => number', instructions: 'Return seven.' }, { agent: session =>
+    new NativeToolAgent(() => { unprovenTurns++; return { calls: [], text: '', completion_tokens: 0 }; },
+      { maxTurns: 2 }).run(session) });
+  assert.equal(unproven.outcome.kind, 'quiesced');
+  assert.doesNotMatch(unproven.outcome.detail, /model_incomplete/);
+  assert.equal(unprovenTurns, 2);
+});
+
 test('native collection temporaries can support a portable result within one eval', async () => {
   const { lam, session } = open({ type: '(items: string[]) => string[]', instructions: 'Remove duplicates.', args: { items: ['a', 'a', 'b'] } });
   const outcome = await session.applyAsync('eval', { code:

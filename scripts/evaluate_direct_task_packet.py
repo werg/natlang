@@ -104,6 +104,7 @@ def verify_plan(plan_path: Path) -> tuple[dict, Path, Path]:
 
 def comparison_key(plan: dict, image: str) -> str:
     """Bind best-checkpoint comparisons to one packet/runtime/inference contract."""
+    threads = int(plan.get("server_threads", 2))
     contract = {
         "schema": "natlang.direct-task-comparison/1",
         "derived_packet_sha256": plan["derived_packet_sha256"],
@@ -113,7 +114,8 @@ def comparison_key(plan: dict, image: str) -> str:
         "base_snapshot_revision": plan["base_snapshot_dirname"],
         "runtime_image": image,
         "serving_precision": f"{plan.get('serving_dtype', 'float32').upper()} on CPU",
-        "threads": 2,
+        "threads": threads,
+        "server_cpu_count": int(plan.get("server_cpu_count", 2)),
         "server_memory_gib": int(plan.get("server_memory_gib", 4)),
         "sampling": plan["sampling"],
         "queue_entries": plan["queue_entries"],
@@ -418,6 +420,10 @@ def run_candidate(args: argparse.Namespace) -> dict:
     serving_dtype = plan.get("serving_dtype", "float32")
     if serving_dtype not in {"float32", "bfloat16"}:
         raise ValueError("evaluation plan has an unsupported CPU serving dtype")
+    server_threads = int(plan.get("server_threads", 2))
+    server_cpu_count = int(plan.get("server_cpu_count", 2))
+    if server_threads < 1 or server_cpu_count < 1:
+        raise ValueError("evaluation plan CPU thread and container CPU limits must be positive")
     server_memory_gib = int(plan.get("server_memory_gib", args.server_memory_gib))
     if args.server_memory_gib is not None and args.server_memory_gib != server_memory_gib:
         raise ValueError("server memory limit differs from the reviewed evaluation plan")
@@ -451,7 +457,7 @@ def run_candidate(args: argparse.Namespace) -> dict:
     server = [
         "docker", "run", "-d", "--name", server_name, "--label", "org.natlang.direct-task-evaluation=held48",
         "--network", "host",
-        f"--memory={server_memory_gib}g", f"--memory-swap={server_memory_gib}g", "--cpus=2",
+        f"--memory={server_memory_gib}g", f"--memory-swap={server_memory_gib}g", f"--cpus={server_cpu_count}",
         "--user", f"{os.getuid()}:{os.getgid()}",
         "-e", "CUDA_VISIBLE_DEVICES=", "-e", "HOME=/tmp",
         "-e", f"PYTHONPATH={ROOT / 'training/neuralese'}",
@@ -461,7 +467,7 @@ def run_candidate(args: argparse.Namespace) -> dict:
         "-v", f"{ROOT}:{ROOT}:ro", "-v", "/srv/storage/natlang-artifacts:/srv/storage/natlang-artifacts:ro",
         "-w", str(ROOT), args.image, "python", "-m", "natlang_neuralese.serve",
         "--direct-artifact", str(artifact), "--direct-base-snapshot", str(base_snapshot),
-        "--device", "cpu", "--dtype", serving_dtype, "--threads", "2", "--port", str(port),
+        "--device", "cpu", "--dtype", serving_dtype, "--threads", str(server_threads), "--port", str(port),
     ]
     try:
         subprocess.run(server, check=True, text=True, capture_output=True)
@@ -477,7 +483,8 @@ def run_candidate(args: argparse.Namespace) -> dict:
             "base_snapshot_revision": base_snapshot.name,
             "serving_precision": f"{serving_dtype.upper()} on CPU",
             "runtime_image": args.image,
-            "threads": 2,
+            "threads": server_threads,
+            "server_cpu_count": server_cpu_count,
             "comparison_key": comparison_key(plan, args.image),
         })
         atomic_json(run_dir / "task-score.json", report)
@@ -535,6 +542,10 @@ def run_base(args: argparse.Namespace) -> dict:
     serving_dtype = plan.get("serving_dtype", "float32")
     if serving_dtype not in {"float32", "bfloat16"}:
         raise ValueError("evaluation plan has an unsupported CPU serving dtype")
+    server_threads = int(plan.get("server_threads", 2))
+    server_cpu_count = int(plan.get("server_cpu_count", 2))
+    if server_threads < 1 or server_cpu_count < 1:
+        raise ValueError("evaluation plan CPU thread and container CPU limits must be positive")
     server_memory_gib = int(plan.get("server_memory_gib", args.server_memory_gib))
     if args.server_memory_gib is not None and args.server_memory_gib != server_memory_gib:
         raise ValueError("server memory limit differs from the reviewed evaluation plan")
@@ -549,7 +560,7 @@ def run_base(args: argparse.Namespace) -> dict:
     command = [
         "docker", "run", "-d", "--name", server_name, "--label", "org.natlang.direct-task-evaluation=held48",
         "--network", "host",
-        f"--memory={server_memory_gib}g", f"--memory-swap={server_memory_gib}g", "--cpus=2",
+        f"--memory={server_memory_gib}g", f"--memory-swap={server_memory_gib}g", f"--cpus={server_cpu_count}",
         "--user", f"{os.getuid()}:{os.getgid()}",
         "-e", "CUDA_VISIBLE_DEVICES=", "-e", "HOME=/tmp",
         "-e", f"PYTHONPATH={ROOT / 'training/neuralese'}",
@@ -559,7 +570,7 @@ def run_base(args: argparse.Namespace) -> dict:
         "-v", f"{ROOT}:{ROOT}:ro", "-v", "/srv/storage/natlang-artifacts:/srv/storage/natlang-artifacts:ro",
         "-w", str(ROOT), args.image, "python", "-m", "natlang_neuralese.serve",
         "--base", str(base_snapshot), "--device", "cpu", "--dtype", serving_dtype,
-        "--threads", "2", "--port", str(port),
+        "--threads", str(server_threads), "--port", str(port),
     ]
     try:
         subprocess.run(command, check=True, text=True, capture_output=True)
@@ -572,7 +583,8 @@ def run_base(args: argparse.Namespace) -> dict:
             "base_snapshot_revision": base_snapshot.name,
             "serving_precision": f"{serving_dtype.upper()} on CPU",
             "runtime_image": args.image,
-            "threads": 2,
+            "threads": server_threads,
+            "server_cpu_count": server_cpu_count,
             "comparison_key": comparison_key(plan, args.image),
         })
         report_path = run_dir / "task-score.json"

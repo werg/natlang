@@ -18,6 +18,7 @@ TASK_OUTCOMES = (
     "repetition",
     "budget_exhaustion",
     "infrastructure_error",
+    "model_incomplete",
     "semantic_mismatch",
     "unresolved",
 )
@@ -59,6 +60,10 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
         return "budget_exhaustion"
     if outcome.get("resource_limit_reason") or outcome.get("resource_limit"):
         return "budget_exhaustion"
+
+    explicit_detail = str(outcome.get("detail") or "").casefold()
+    if re.search(r"\bmodel_incomplete:\s*terminated_without_result\b", explicit_detail):
+        return "model_incomplete"
 
     details = _text({
         "failure_reason": outcome.get("failure_reason"),
