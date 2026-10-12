@@ -222,3 +222,15 @@ test('partial benchmark agreement is held for review rather than teaching incorr
   row.outcome.files_check = { failed: ['r.csv:item'] };
   assert.ok(admitRow(row).reasons.includes('quality_pending_partial_files'));
 });
+
+test('edit_stream oracles require the edited document, not just absent words', async () => {
+  const { editStream } = await import('../scripts/inline-curriculum/edit-stream.mjs');
+  const { checkConstraints } = await import('../dist/evaluation/constraints.js');
+  for (const [seed, index] of [[61012, 0], [61012, 1], [61012, 3], [7, 2]]) {
+    const [record] = editStream(seed, index);
+    const final = record.curriculum.reference.root.at(-1)[1].value;
+    assert.ok(checkConstraints(final, record.semantics.expected).passed, `${seed}:${index} reference passes`);
+    for (const reply of ['ok', 'done', final.split('\n\n')[0]])
+      assert.equal(checkConstraints(reply, record.semantics.expected).passed, false, `${seed}:${index} rejects ${JSON.stringify(reply.slice(0, 30))}`);
+  }
+});

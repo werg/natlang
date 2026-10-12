@@ -76,6 +76,31 @@ const EDITS = {
   },
 };
 
+/**
+ * Constraints that the edited text still IS the document (2026-10-12 dragnet: the per-edit constraints alone only
+ * exclude words and check case, so a reply such as "ok" passed them all and scored a task success). Every kept
+ * paragraph must keep a distinctive word of its own, every rename target must appear, and the length must stay within
+ * a fifth of the reference's. Derived from the reference final text only; no random draws (the generated documents
+ * and instructions are unchanged).
+ */
+function preservation(final, steps) {
+  const excluded = new Set(steps.flatMap(step => {
+    const c = step.constraint(final);
+    return c?.kind === 'exclude_words' ? c.words.map(w => w.toLowerCase()) : [];
+  }));
+  const fixed = new Set([...TITLES, ...CLOSINGS].flatMap(text => words(text).map(w => w.toLowerCase())));
+  const kept = paragraphs(final).filter(p => !/^<<[^<>\n]+>>$/.test(p) && !CLOSINGS.some(line => p.toLowerCase() === line.toLowerCase()));
+  const lower = kept.map(p => new Set(words(p).map(w => w.toLowerCase())));
+  const markers = kept.map((p, i) => words(p).map(w => w.toLowerCase()).find(w => w.length >= 7 && !excluded.has(w) &&
+    !fixed.has(w) && lower.every((other, j) => j === i || !other.has(w)))).filter(Boolean);
+  const renamed = steps.flatMap(step => /^Replace "[^"]+" with "([^"]+)" everywhere\.$/.exec(step.instruction)?.slice(1) ?? [])
+    .filter(name => words(final).some(w => w.toLowerCase() === name.toLowerCase()));
+  const count = words(final).length;
+  const include = [...new Set([...markers, ...renamed])];
+  return [...(include.length ? [{ kind: 'include_words', words: include }] : []),
+    { kind: 'word_count', min: Math.floor(count * 0.8), max: Math.ceil(count * 1.2) }];
+}
+
 export function editStream(seed, index) {
   const rng = new Random(seed, `edit-stream:${index}`);
   for (let attempt = 0; attempt < 40; attempt++) {
@@ -96,7 +121,7 @@ export function editStream(seed, index) {
     const states = [join(paras.map(p => p.text))];
     for (const step of steps) states.push(step.apply(states.at(-1)));
     const final = states.at(-1);
-    const constraints = steps.map(step => step.constraint(final)).filter(Boolean);
+    const constraints = [...steps.map(step => step.constraint(final)).filter(Boolean), ...preservation(final, steps)];
     // The reference's lowercasing makes earlier exact-case constraints vacuous only if they are case-insensitive: they are.
     if (!constraints.length || !checkConstraints(final, constraints).passed) continue;
     const instructions = steps.map(step => step.instruction);

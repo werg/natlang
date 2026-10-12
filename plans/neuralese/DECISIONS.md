@@ -1591,6 +1591,15 @@ fixtures, with a pass bar of one success. It is replaced, for qualification and 
     first evaluation measures its own spread.
   - Mellum2.1 base: queued as a 34 GB ledger job (`heldv2-base-mellum`). Until it lands, the Mellum gate reports
     "reference unmeasured" and does not pass.
+- **Packet v3 (2026-10-12, LFM base dragnet):** the LFM base's one success was a scorer false positive. On
+  `edit_stream` (constraints oracle) the base replied the single token `ok`, and the v2 constraints (exclude the
+  deleted paragraph's word and the renamed name, all lowercase) all held for "ok"; v2's `edits3` was equally
+  trivial (no commas, lowercase). The generator now adds content preservation (`edit-stream.mjs` `preservation()`:
+  include a distinctive word of every kept paragraph and every rename target, word count within 20% of the
+  reference); training-side edit_stream teacher admission had the same hole. **`natlang-held-task-packet-v3-20261012`**
+  (cases SHA-256 `53526986...`) is v2 with only those four rows' `expected` regenerated from the same draws, all 64
+  re-verified by `verifyCases`. neuralese-direct-v2 now evaluates on v3; v2 stays only while the running Mellum v4
+  stage still reads it. The LFM base reference on v3 is re-measured below; the Mellum base reference is measured on v3.
 - **Applications:** nldb, pi and the harness bench are not yet in `natlang.program` form with exact scorers. They join
   as further shapes once adapted (v3), not as separate packets.
 

@@ -206,7 +206,8 @@ afterwards. The rules below are consequences of this one.
   qualification is the identity check, held CE below base, no drift stop and
   natlang task success (owner decision 2026-10-12): the in-run task-success
   evaluation (16 tasks, one per shape, of the registered held packet
-  `natlang-held-task-packet-v2-20261012`, executed for real against the
+  `natlang-held-task-packet-v3-20261012`, which is v2 with content-preserving
+  edit_stream oracles, executed for real against the
   training model at every eval and at the end; `eval/task_cadence.py`) is at
   least the line's base and not below the previous evaluation minus the noise
   measured by repeat runs. The 48-probe
