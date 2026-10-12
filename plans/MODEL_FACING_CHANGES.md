@@ -128,3 +128,15 @@ artifact, and records the choice in the checkpoint. This input transition is
 unmeasured on the live executor. Before accepting the E2E arm as qualified,
 compare about 48 held calls with the direct and E2E renderings for tool validity,
 completion, and task result, and report held CE under the declared E2E rendering.
+
+## MuSiQue hop answer phrases — 2026-10-12
+
+The original `musique_hops` child returns a verbatim evidence sentence. Among the
+first 23 Luna cases, several roots returned that sentence instead of the answer
+entity or value. The `musique_answer_hops` demonstration variant makes the child
+return the short answer phrase and passes those phrases through `known`. It is
+not admitted to the training mix. Its first 48 seed-52001 cases match the
+original by source ID, question, and expected answer, and passed exact reference
+replay. Compare about 48 live completions per variant: accepted answer rate,
+wrong entity versus verbose sentence versus abstention, call structure, and
+model request count. Admit a single version per source group only after review.

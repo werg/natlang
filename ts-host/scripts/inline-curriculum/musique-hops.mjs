@@ -133,7 +133,15 @@ const ROOT = `Answer question from paragraphs (each one starts with its title).
 Break question into single-fact steps and solve them in order. For each step call find_fact with the step, the paragraphs, and the facts found so far as known; a step may refer to an earlier step's answer as #1, #2, ... Print each fact as find_fact returns it.
 Then return only the final answer, as a short phrase.`;
 
-export function musiqueHops(seed, index, split = 'train') {
+const FIND_ANSWER = `Answer one fact question from paragraphs. A question can refer to earlier answers as #1, #2, ...; known lists those answer phrases in order. A lookup written as "subject >> relation" asks for the value of that relation.
+Return the answer as the name, date, quantity, or shortest phrase stated in paragraphs.`;
+
+const ROOT_ANSWER = `Answer question from paragraphs (each one starts with its title).
+1. Break the question into single-fact steps whose answers lead to the final answer.
+2. For each step call find_answer with that step, paragraphs, and the answers found so far as known; a step may refer to an earlier answer as #1, #2, ... Print each answer as find_answer returns it.
+3. Return the last answer phrase.`;
+
+function buildMusiqueHops(seed, index, split, answerPhrases) {
   const { eligible } = musiqueHopRows();
   const order = orderFor(seed, split);
   if (index >= order.length) return [];
@@ -142,20 +150,26 @@ export function musiqueHops(seed, index, split = 'train') {
   // a later argument listing could confuse with the fact a call passed on.
   const paragraphs = row.paragraphs.map(p => `# ${p.title}\n${p.paragraph_text}`);
   const lines = ['const known: string[] = [];'];
+  const childName = answerPhrases ? 'find_answer' : 'find_fact';
   for (const hop of hops)
-    lines.push(`known.push(await find_fact(${JSON.stringify(hop.question)}, paragraphs, [...known]));`, 'console.log(known.at(-1));');
-  const children = hops.map(hop => ({ match: ['You are inside this call: find_fact', JSON.stringify(hop.question)], value: hop.fact }));
+    lines.push(`known.push(await ${childName}(${JSON.stringify(hop.question)}, paragraphs, [...known]));`, 'console.log(known.at(-1));');
+  const children = hops.map(hop => ({ match: [`You are inside this call: ${childName}`, JSON.stringify(hop.question)],
+    value: answerPhrases ? hop.answer : hop.fact }));
   const rng = new Random(seed, `musique_hops:${row.id}`);
-  const record = curriculumCase({ family: 'musique_hops', shape: `musique-${row.id}`, variant: 'v0',
+  const record = curriculumCase({ family: answerPhrases ? 'musique_answer_hops' : 'musique_hops',
+    shape: `musique-${row.id}`, variant: answerPhrases ? 'answer-phrase-v1' : 'v0',
     splitGroup: `musique:${row.id}`, slice: 'nested_scoped', domain: 'relational', mode: 'single_call', inline: 'avoid', named: 'required',
     evidence: { world: [row.question], retrieved: hops.map(hop => hop.title), background: [] }, decisive: [],
-    minimumSequence: ['split the question into single-fact steps', 'call find_fact for each step with the facts found so far',
+    minimumSequence: ['split the question into single-fact steps', `call ${childName} for each step with the answers found so far`,
       'return the final answer from the last fact'],
     reference: { root: [evalCall(lines.join('\n')), returnCall(row.answer)], children },
-    root: { name: 'answer_question', args: { question: 'string', paragraphs: 'string[]' }, returns: 'string', instructions: ROOT },
+    root: { name: 'answer_question', args: { question: 'string', paragraphs: 'string[]' }, returns: 'string',
+      instructions: answerPhrases ? ROOT_ANSWER : ROOT },
     files: {
-      'answer_question/find_fact.nl': nlFile({ args: { question: 'string', paragraphs: 'string[]', known: 'string[]' }, returns: 'string',
-        description: 'The sentence of paragraphs that answers one step of a question, word for word.', instructions: FIND_FACT }),
+      [`answer_question/${childName}.nl`]: nlFile({ args: { question: 'string', paragraphs: 'string[]', known: 'string[]' }, returns: 'string',
+        description: answerPhrases ? 'The short answer to one fact question from paragraphs.'
+          : 'The sentence of paragraphs that answers one step of a question, word for word.',
+        instructions: answerPhrases ? FIND_ANSWER : FIND_FACT }),
     },
     inputs: { question: row.question, paragraphs: rng.shuffle(paragraphs) }, expected: row.answer, split });
   record.semantics.oracle = { level: 'normalized', alternates: row.answer_aliases ?? [] };
@@ -169,7 +183,11 @@ export function musiqueHops(seed, index, split = 'train') {
   record.source_revisions = [`musique:${SOURCE.revision}`];
   record.external_source = { source: 'musique', source_id: row.id, original_split: split === 'train' ? 'train' : 'dev',
     revision: SOURCE.revision, files: SOURCE.files.map(({ path, sha256 }) => ({ path, sha256 })), license: SOURCE.license,
-    adaptation: 'musique-decomposition-as-named-calls; fact = the support paragraph\'s sentence holding the hop answer (the only one, or the one naming the most step terms)' };
+    adaptation: answerPhrases ? 'musique-decomposition-as-named-answer-calls; child answer = source hop answer'
+      : 'musique-decomposition-as-named-calls; fact = the support paragraph\'s sentence holding the hop answer (the only one, or the one naming the most step terms)' };
   record.source_support = { hops: hops.map(({ id, question, answer, fact, title, selection }) => ({ id, question, answer, fact, title, selection })) };
   return [record];
 }
+
+export const musiqueHops = (seed, index, split = 'train') => buildMusiqueHops(seed, index, split, false);
+export const musiqueAnswerHops = (seed, index, split = 'train') => buildMusiqueHops(seed, index, split, true);
