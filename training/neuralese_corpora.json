@@ -56935,6 +56935,118 @@
       "required_conversion": "render train rows through the shared native turn renderer for program-header and whole-trajectory twins, preserving source splits and masks",
       "consumable_by_direct_stage": false,
       "notes": "Ordinary nested NL delegation controls are already in admitted semantic-inline-curriculum-s72-teacher-turns-20261007-v1 (family decision_extract_chain); this corpus references that control family without duplicating its prompts or turns. The acknowledgement-lost report reflects only the actual returned tool error; hidden host delivery state is retained in the source review and is not put in the model-facing input."
+    },
+    {
+      "id": "natlang-free-provider-v28-wholetraj-render-20261012-v2",
+      "owner": "dgx",
+      "path": "runs/natlang-free-provider-v28-wholetraj-render-20261012-v2",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: free-provider-v28-admitted-ordinary-text-280-20261010-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "free-provider-v28-admitted-ordinary-text-280-20261010-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "2742eb6b2c7b9941605dc1acd79089c97c6c637493bd51b71a3f718829a5ae38",
+            "documents": 137,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 152315,
+                "documents": 137,
+                "opening_tokens": 90103,
+                "supervised_tokens": 62212,
+                "tokens": 485440,
+                "tool_tokens": 151935
+              }
+            },
+            "max_document_tokens": 9306,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "fc5121d2f870a5b6f2f8c4f710d03b9a17cb43ca7d51af55914632c2ed21782e",
+            "documents": 137,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 172261,
+                "documents": 137,
+                "opening_tokens": 88454,
+                "supervised_tokens": 83807,
+                "tokens": 507314,
+                "tool_tokens": 156912
+              }
+            },
+            "max_document_tokens": 10011,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "approved_through_include_set": 296,
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 296,
+        "selected:train": 296,
+        "source_rows": 296
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 0,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 0
+      },
+      "program_header_parity": {},
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "50c612fabf42bb26116d5b1bf968acb97e02b0cc684809e4fd8e2958a3bbc7ec",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "d279bb01a12a8e6e3ae98b1fe012ea201861dc3a102f3c5cc7f1e9a6cce9e57f",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/natlang-free-provider-v28-wholetraj-render-20261012-v2/receipt.json",
+        "sources": {
+          "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v10-target-binding/native-turns-render-input.jsonl": {
+            "bytes": 41300228,
+            "sha256": "8ef006ce5b201e3ce8497920e5e1f3de8ba30faee474d9a59533c6f9f65d2595"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": "Re-render on c268978d (renderer attests the exact source target; teacher reasoning added only for rendering) + c7e39596. Prior omissions (prepare_record had projected teacher_reasoning into target before the provider attestation gates) all resolved: 0 render omissions. v28: 137 docs/tokenizer (was 97; 40 omissions resolved).",
+      "supersedes": [
+        "natlang-free-provider-v28-wholetraj-render-20261012-v1"
+      ]
     }
   ],
   "coverage_backlog": [
