@@ -473,6 +473,9 @@ def main():
     parser.add_argument('--per-train', type=int, default=2000)
     parser.add_argument('--per-heldout', type=int, default=300)
     parser.add_argument('--episodes-per-family', type=int, default=20)
+    parser.add_argument('--families', nargs='+', help=(
+        'optional subset of decision families to build; defaults to every family. '
+        'This lets a pinned source revision be regenerated without requiring unrelated source caches.'))
     parser.add_argument('--source-pins', help=(
         'optional natlang.decision-source-pins/1 JSON mapping dataset repos to explicit upstream revisions and '
         'local shard paths/upstream paths/SHA-256 or LFS OIDs. Every pinned local shard must match its declared bytes; '
@@ -495,6 +498,11 @@ def main():
     specs = dict(SPECS)
     specs['hate-speech'] = ('ucberkeley-dlab/measuring-hate-speech', 'score', 'How hateful is this comment?',
                             ['train'], ['train'], None)
+    if args.families:
+        unknown_families = sorted(set(args.families) - set(specs))
+        if unknown_families:
+            parser.error(f'unknown family name(s): {", ".join(unknown_families)}')
+        specs = {name: specs[name] for name in args.families}
     cases, counts, identity_collisions = [], {}, []
     for name, spec in specs.items():
         built = build_cases(name, spec, args.per_train, args.per_heldout, licenses, source_pins,
