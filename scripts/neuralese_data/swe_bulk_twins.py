@@ -6,9 +6,13 @@ assistant turn supervised (tool output at the shared feedback weight), instead o
 repeats the whole context for each of a trajectory's ~8 targets (~4.8B Mellum tokens for ~1% supervised). Each
 finished records shard (a set of whole repositories, so its split is the whole corpus's) is rendered by the shared
 renderer (scripts/neuralese_data/render_native_turn_corpus.py --renderings whole-trajectory, both tokenizers in one
-pass) into TWIN_ROOT/render/NN; once every shard is rendered, each tokenizer's text is concatenated in shard order into
-TWIN_ROOT/<name>/text.jsonl and the per-shard receipts are summed into TWIN_ROOT/<name>/receipt.json. Resumable: a
-shard with a receipt is done; an unfinished one resumes from the renderer's own work dir.
+pass) into TWIN_ROOT/render/NN. Each finished shard's four text files are compressed at once (zstd, verified by the
+receipt's text hash, then the plain file is removed: one copy on disk). Once every shard is rendered, each twin is the
+concatenation of the shards' zstd frames in shard order, TWIN_ROOT/<name>/text.jsonl.zst (a valid zstd stream of the
+concatenated text; the receipt binds both the plain text hash and the file hash), and each shard's frame is removed
+once the assembled file is verified. Program-header text compresses ~48x (it repeats each trajectory's context per
+decision); the union builder streams .zst members. Resumable: a shard with a receipt is done; an unfinished one
+resumes from the renderer's own work dir; an assembled twin with a matching receipt is kept.
 
   swe_bulk_twins.py --bulk BULK_OUT --twin-root DIR --tokenizer lfm25=SNAPSHOT --tokenizer mellum21=SNAPSHOT [--parallel 2]
      [--wait]   (keep polling until the records run has finished every shard)
@@ -59,10 +63,47 @@ def file_sha(path: Path) -> str:
     return h.hexdigest()
 
 
+ZSTD = ['zstd', '-q', '--long=27']
+
+
+def zst_plain_sha(paths: list[Path], hasher=None) -> tuple[str, int]:
+    """sha256 and byte count of the decompressed concatenation of zstd files (streamed, nothing written)."""
+    h = hasher or hashlib.sha256()
+    total = 0
+    for path in paths:
+        proc = subprocess.Popen([*ZSTD, '-dc', str(path)], stdout=subprocess.PIPE)
+        for chunk in iter(lambda: proc.stdout.read(1 << 22), b''):
+            h.update(chunk)
+            total += len(chunk)
+        proc.stdout.close()
+        if proc.wait() != 0:
+            raise RuntimeError(f'zstd failed on {path}')
+    return h.hexdigest(), total
+
+
+def compact_shard(out: Path, receipt: dict, tokenizers: dict) -> None:
+    """Replace a finished shard's plain text files by verified zstd copies (one copy on disk)."""
+    for rendering in RENDERINGS:
+        for name in tokenizers:
+            plain = out / rendering / name / 'text-data.jsonl'
+            packed = plain.with_name('text-data.jsonl.zst')
+            want = receipt['renders'][f'{rendering}/{name}']['text_data_sha256']
+            if not plain.exists():
+                continue  # compacted earlier; absent altogether once assembled (assemble() checks every frame)
+            if file_sha(plain) != want:
+                raise ValueError(f'{plain}: rendered text hash mismatch')
+            tmp = packed.with_name(packed.name + '.tmp')
+            subprocess.run([*ZSTD, '-f', '-T2', str(plain), '-o', str(tmp)], check=True)
+            if zst_plain_sha([tmp])[0] != want:
+                raise ValueError(f'{tmp}: compressed copy does not decompress to the rendered text')
+            tmp.rename(packed)
+            plain.unlink()
+
+
 def render(shard: Path, tokenizers: dict, root: Path, workers: int) -> str:
     out = root / 'render' / shard.name
     if (out / 'receipt.json').exists():
-        verify_shard_receipt(shard, out, tokenizers)
+        compact_shard(out, verify_shard_receipt(shard, out, tokenizers), tokenizers)
         return f'{shard.name} kept'
     out.parent.mkdir(parents=True, exist_ok=True)
     # A shard's twins take ~3.4 GB per 1.15 GB of records (both renderings, both
@@ -78,53 +119,69 @@ def render(shard: Path, tokenizers: dict, root: Path, workers: int) -> str:
         cmd += ['--tokenizer', f'{name}={path}']
     with open(log, 'a') as handle:
         code = subprocess.call(cmd, stdout=handle, stderr=subprocess.STDOUT)
+    if code == 0 and (out / 'receipt.json').exists():
+        compact_shard(out, verify_shard_receipt(shard, out, tokenizers), tokenizers)
     return f'{shard.name} exit {code}'
 
 
 def assemble(root: Path, name: str, rendering: str, shards: list[Path], receipts: dict) -> None:
+    """Concatenate the shards' verified zstd frames into <twin>/text.jsonl.zst, then remove the shards' frames."""
     target = twin_path(root, name, rendering)
+    packed = target / 'text.jsonl.zst'
     if (target / 'receipt.json').exists():
         summary = json.loads((target / 'receipt.json').read_text())
-        if summary.get('rendering') != rendering or summary.get('text_jsonl_sha256') != file_sha(target / 'text.jsonl'):
+        if summary.get('rendering') != rendering or summary.get('text_zst_sha256') != file_sha(packed):
             raise ValueError(f'{target}: assembled twin does not match its receipt')
         return
     totals: dict = {}
-    parts = []
-    tmp = target / 'text.jsonl.tmp'
+    parts, frames = [], []
     target.mkdir(parents=True, exist_ok=True)
+    for shard in shards:
+        part = root / 'render' / shard.name
+        receipt = receipts[shard.name]
+        render = receipt['renders'][f'{rendering}/{name}']
+        frame = part / rendering / name / 'text-data.jsonl.zst'
+        if zst_plain_sha([frame])[0] != render['text_data_sha256']:
+            raise ValueError(f'{frame}: compressed text does not match the shard receipt')
+        frames.append(frame)
+        for split, counts in render['by_split'].items():
+            into = totals.setdefault(split, {})
+            for key, value in counts.items():
+                into[key] = into.get(key, 0) + value
+        totals.setdefault('max_document_tokens', 0)
+        totals['max_document_tokens'] = max(totals['max_document_tokens'], render['max_document_tokens'])
+        keep = target / 'shards' / shard.name
+        keep.mkdir(parents=True, exist_ok=True)
+        shutil.copy(part / 'receipt.json', keep / 'receipt.json')
+        shutil.copy(part / rendering / name / 'omissions.jsonl', keep / 'omissions.jsonl')
+        shutil.copy(part / 'render-omissions' / name / 'omissions.jsonl', keep / 'render-omissions.jsonl')
+        parts.append({'shard': shard.name, 'receipt_sha256': file_sha(part / 'receipt.json'),
+                      'text_data_sha256': render['text_data_sha256'], 'tokens': render['by_split'],
+                      'merge_omissions': render['merge_omissions'], 'selection': receipt['selection']})
+    # zstd frames concatenate: the file decompresses to the shards' text in shard order.
+    tmp = target / 'text.jsonl.zst.tmp'
     with open(tmp, 'wb') as dst:
-        for shard in shards:
-            part = root / 'render' / shard.name
-            receipt = receipts[shard.name]
-            render = receipt['renders'][f'{rendering}/{name}']
-            source_text = part / rendering / name / 'text-data.jsonl'
-            if file_sha(source_text) != render['text_data_sha256']:
-                raise ValueError(f'{source_text}: rendered text hash mismatch')
-            with open(source_text, 'rb') as src:
+        for frame in frames:
+            with open(frame, 'rb') as src:
                 shutil.copyfileobj(src, dst, 1 << 24)
-            for split, counts in render['by_split'].items():
-                into = totals.setdefault(split, {})
-                for key, value in counts.items():
-                    into[key] = into.get(key, 0) + value
-            totals.setdefault('max_document_tokens', 0)
-            totals['max_document_tokens'] = max(totals['max_document_tokens'], render['max_document_tokens'])
-            keep = target / 'shards' / shard.name
-            keep.mkdir(parents=True, exist_ok=True)
-            shutil.copy(part / 'receipt.json', keep / 'receipt.json')
-            shutil.copy(part / rendering / name / 'omissions.jsonl', keep / 'omissions.jsonl')
-            shutil.copy(part / 'render-omissions' / name / 'omissions.jsonl', keep / 'render-omissions.jsonl')
-            parts.append({'shard': shard.name, 'receipt_sha256': file_sha(part / 'receipt.json'),
-                          'text_data_sha256': render['text_data_sha256'], 'tokens': render['by_split'],
-                          'merge_omissions': render['merge_omissions'], 'selection': receipt['selection']})
-    tmp.rename(target / 'text.jsonl')
+    expected = hashlib.sha256()
+    for frame in frames:  # the plain text of the concatenation, from the verified frames
+        zst_plain_sha([frame], expected)
+    plain_sha, plain_bytes = zst_plain_sha([tmp])
+    if plain_sha != expected.hexdigest():
+        raise ValueError(f'{tmp}: assembled file does not decompress to the shards\' text')
+    tmp.rename(packed)
     first = receipts[shards[0].name]
-    summary = {'schema': 'natlang.harness-bench-bulk-twin/2',
+    summary = {'schema': 'natlang.harness-bench-bulk-twin/3',
                'builder': 'scripts/neuralese_data/render_native_turn_corpus.py --renderings program-header whole-trajectory per shard',
                'rendering': rendering, 'renderer_code': first['renderer_code'],
                'tokenizer': first['tokenizers'][name], 'whole_trajectory': first['whole_trajectory'],
-               'text_jsonl_sha256': file_sha(target / 'text.jsonl'), 'tokens': totals, 'shards': parts,
-               'concatenation': 'shard order 00..NN; each shard is a set of whole repositories'}
+               'text_file': 'text.jsonl.zst', 'text_jsonl_sha256': plain_sha, 'text_jsonl_bytes': plain_bytes,
+               'text_zst_sha256': file_sha(packed), 'tokens': totals, 'shards': parts,
+               'concatenation': 'shard order 00..NN of zstd frames; each shard is a set of whole repositories'}
     (target / 'receipt.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+    for frame in frames:  # the assembled twin is now the one copy
+        frame.unlink()
     print(json.dumps({f'{rendering}/{name}': totals}), flush=True)
 
 

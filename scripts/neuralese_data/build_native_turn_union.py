@@ -11,6 +11,7 @@ the same order (twin alignment by document id). Rules:
    document, or whose text equals a held document's, is dropped.
 3. Exact duplicates across members (same split and text in a tokenizer) are kept once, first member wins.
 4. Twin alignment: a document id missing for a tokenizer, or dropped for any tokenizer, is dropped for all.
+5. Document ids are unique per rendering: an id already taken by an earlier member is dropped from the later one.
 
 Each row gets ``corpus`` (the member name) when it has none. Omissions are written with reasons; the receipt counts
 documents, tokens and supervised target tokens per member, rendering and tokenizer.
@@ -94,7 +95,15 @@ def main(argv=None):
                       'seconds': round(time.time() - t0)}), flush=True)
     from build_neuralese_gold_text_delta import load_pinned_tokenizer
     counters = {tok: role_counter(load_pinned_tokenizer(Path(d))) for tok, d in tokenizer_dirs.items()}
+    # The union is a streamed, filtered concatenation of its members: bind each member file it read (a compressed
+    # member is bound by its file hash; the union is then the only plain copy of it).
+    member_files = {rendering: {name: {tok: {'path': str(path), 'bytes': Path(path).stat().st_size,
+                                             'sha256': file_sha(Path(path))}
+                                       for tok, path in paths.items()}
+                                for name, paths in by_name.items()}
+                    for rendering, by_name in members.items()}
     receipt = {'schema': SCHEMA, 'renderings': {}, 'held_groups': len(held_groups), 'held_texts': len(held_texts),
+               'member_files': member_files,
                'tokenizers': {tok: str(Path(d).resolve()) for tok, d in tokenizer_dirs.items()},
                'code': {str(f.relative_to(ROOT)): file_sha(f) for f in (
                    Path(__file__).resolve(), ROOT / 'scripts/neuralese_data/render_native_turn_corpus.py')}}
@@ -103,6 +112,7 @@ def main(argv=None):
         drop = {}  # (member, id) -> reason
         ids = {}
         seen = {tok: set() for tok in tokenizer_dirs}
+        claimed = {}  # document id -> first member holding it (ids are unique in the union; first member wins)
         for name in order[rendering]:
             per_tok = {}
             for tok, path in members[rendering][name].items():
@@ -127,6 +137,14 @@ def main(argv=None):
             for tok, v in id_sets.items():
                 for rid in v - common:
                     drop.setdefault((name, rid), f'missing_tokenizer_twin (only {tok})')
+            # The same document id from two members (e.g. two registered renders of one source, one not declared
+            # superseded; r3 held 19,921 program-header ids twice with different texts) would give the trainer two
+            # different documents under one id: the later member's copy is dropped.
+            for rid in set.union(*id_sets.values()):
+                if rid in claimed:
+                    drop[(name, rid)] = f'duplicate_document_id (first in {claimed[rid]})'
+                else:
+                    claimed[rid] = name
             ids[name] = per_tok
         out = a.out_dir / rendering
         out.mkdir(parents=True, exist_ok=True)

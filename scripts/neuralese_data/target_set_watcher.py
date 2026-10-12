@@ -12,7 +12,7 @@ One pass (``--loop`` repeats it every ``--interval`` seconds; the state lives in
    last revision's and the last union build is older than ``--min-gap`` seconds (or ``--force``), revision N+1:
    - the union is built by build_native_turn_union.py as its own ledger unit (low priority, resumable) into
      ``runs/natlang-target-union-20261011-r<N>`` (one cross-deduplicated, decontaminated, twin-aligned file per
-     rendering and tokenizer; ``.zst`` members are decompressed to NVMe staging first);
+     rendering and tokenizer; ``.zst`` members are streamed through the host's zstd, mounted into the container);
    - ``r<N>.json`` (members, files, skipped with reasons, pending) is written to ``runs/natlang-target-set-20261011``;
    - ``natlang-target-set-20261011-r<N>`` and ``natlang-target-union-20261011-r<N>`` are registered together;
    - the trainer is told the new ids and union files via coord (it resumes onto newer revisions);
@@ -83,14 +83,10 @@ def register_jobs(known: set[str]) -> list[str]:
 
 
 def staged(rel: str, rev: int) -> str:
-    """A path the union container can read: .zst members are decompressed to NVMe staging."""
-    if not rel.endswith('.zst'):
-        return str(ROOT / rel)
-    dst = STAGING / f'r{rev}' / rel[:-4]
-    if not dst.exists():
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(['zstd', '-dqf', '--long=27', str(ROOT / rel), '-o', str(dst)], check=True)
-    return str(dst)
+    """The path the union container reads. .zst members are streamed by the builder (the host's zstd is mounted into
+    the container), never decompressed to staging: the union is then the only plain copy of a compressed member
+    (2026-10-12; the SWE bulk twins are ~110 GB plain, ~2.5 GB compressed)."""
+    return str(ROOT / rel)
 
 
 def ledger_knows(unit: str) -> bool:
@@ -122,7 +118,9 @@ def build_union(members: list[dict], rev: int, launches: int = 0) -> Path | str 
             for tok, rel in toks.items():
                 args += ['--member', f"{m['id']}:{rendering}:{tok}={staged(rel, rev)}"]
     out.mkdir(parents=True, exist_ok=True)
-    mounts = ['-v', f'{ROOT}:{ROOT}:ro', '-v', f'{root("data_hdd")}:{root("data_hdd")}:ro',
+    zstd = shutil.which('zstd') or '/usr/bin/zstd'
+    mounts = ['-v', f'{os.path.realpath(zstd)}:/usr/local/bin/zstd:ro',
+              '-v', f'{ROOT}:{ROOT}:ro', '-v', f'{root("data_hdd")}:{root("data_hdd")}:ro',
               '-v', f'{root("data_nvme")}:{root("data_nvme")}',
               '-v', f'{out}:{out}']
     cmd = [sys.executable, str(ROOT / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '10',

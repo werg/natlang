@@ -94,12 +94,14 @@ def main() -> int:
     for (rendering, name), (twin_id, policy, line) in TWINS.items():
         twin_path = args.twin_root / name if rendering == 'whole-trajectory' else args.twin_root / rendering / name
         receipt = json.loads((twin_path / 'receipt.json').read_text())
-        if receipt.get('rendering') != rendering or receipt.get('text_jsonl_sha256') != file_sha(twin_path / 'text.jsonl'):
+        # The twin is one zstd file (swe_bulk_twins.py): the receipt binds its file hash and its plain-text hash.
+        if (receipt.get('rendering') != rendering or receipt.get('text_file') != 'text.jsonl.zst'
+                or receipt.get('text_zst_sha256') != file_sha(twin_path / 'text.jsonl.zst')):
             raise ValueError(f'{twin_path}: rendering receipt mismatch')
         rel_t = link(twin_id, twin_path)
         entries.append({
             'id': twin_id, 'owner': 'dgx', 'path': rel_t,
-            'include': ['text.jsonl', 'receipt.json', 'shards/*/receipt.json', 'shards/*/omissions.jsonl',
+            'include': ['text.jsonl.zst', 'receipt.json', 'shards/*/receipt.json', 'shards/*/omissions.jsonl',
                         'shards/*/render-omissions.jsonl'],
             'split': 'inherited from the source records (by repository; source groups repository and instance)',
             'source_class': f'rendered-{rendering}-text-of-harness-bench-records',
@@ -111,7 +113,8 @@ def main() -> int:
                                 'program-header whole-trajectory --program-header-as-full per shard, concatenated)',
                       'code_commit': commit, 'renderer': f'scripts/neuralese_data/render_native_turn_corpus.py {rendering}',
                       'renderer_code': receipt['renderer_code'], 'tokenizer': receipt['tokenizer'], 'rendering': rendering,
-                      'history_reasoning_policy': policy, 'text_jsonl_sha256': receipt['text_jsonl_sha256']},
+                      'history_reasoning_policy': policy, 'text_file': 'text.jsonl.zst',
+                      'text_jsonl_sha256': receipt['text_jsonl_sha256'], 'text_zst_sha256': receipt['text_zst_sha256']},
             'tokens': receipt['tokens'],
             'notes': (f"{rendering} text of {RECORDS_ID} (the system prompt is the pi harness's own, kept whole with its "
                       "tool schemas). Chosen over v4's one document per decision, which repeats each trajectory's context "
