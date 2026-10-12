@@ -197,9 +197,13 @@ afterwards. The rules below are consequences of this one.
   declared as the recipe's `identity_qualification` and recorded in
   `direct-certificate.json`. Older lineages keep the rule above. Direct-stage
   qualification is the identity check, held CE below base, no drift stop and
-  the behaviour gate. The behaviour gate (pass at least base minus 0.1) is the
-  hard criterion. Response KL is reported, warns at 0.5 (which runs the gate)
-  and stops a run only at 1.5: SFT is meant to change the distribution, and the
-  gate measures forgetting (coordinator decision 2026-10-11). The Neuralese value is report-only there: its
+  natlang task success (owner decision 2026-10-12): the in-run task-success
+  evaluation (a fixed 16-task subset of the protected held packet, executed for
+  real against the training model at every eval and at the end;
+  `eval/task_cadence.py`) reaches its declared `min_successes`. The 48-probe
+  behaviour gate is report-only: it runs at a drift warn and at the end and is
+  recorded, never a stop or a requirement. Response KL warns at 0.5 (which runs
+  the gate) and stops a run only at 1.5: SFT is meant to change the
+  distribution, and forgetting general ability is reported, not gated. The Neuralese value is report-only there: its
   requirement is the end-to-end stage's, consumers reading values against
   consumers reading tokens (owner decision 2026-10-11).

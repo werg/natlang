@@ -39,7 +39,7 @@ HANDLERS = {
                            'latent_ns','latent_weight_decay','grad_spike_clip','stop_at','weight_drift_base','save_state',
                            'fp8_training','fp8_recipe','fp8_amax_history_len',
                            'gradient_audit_steps','saved_tensor_audit_steps','gradient_digest_steps',
-                           'state_hash_steps','sdpa_backend'},'result':'report.json'},
+                           'state_hash_steps','sdpa_backend','task_eval','task_eval_every'},'result':'report.json'},
     'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads','student_checkpoint'},
                         'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','target_tokens','cutoff',
                           'cohort_weights','qualification_cohort','context_weight','feedback_weight',
@@ -900,7 +900,8 @@ def require_gate(report, kind):
         if report.get('qualified') is not True:raise ValueError('text warm-up alignment goal not met')
     elif kind=='neuralese_direct':
         if report.get('qualified') is not True:
-            raise ValueError('Neuralese direct stage not qualified (held CE below base, no drift stop, behaviour gate)')
+            raise ValueError('Neuralese direct stage not qualified (held CE below base, no drift stop, final task '
+                             'successes >= min_successes; the behaviour gate is report-only, owner 2026-10-12)')
     elif kind=='text_warmup_runtime':
         if report.get('runtime_qualified') is not True or report.get('output_reference_qualified') is not True:
             raise ValueError('adapted warm-up runtime/output reference gate failed')
@@ -924,7 +925,9 @@ OPERATIONAL_STAGE_PARAMETERS = frozenset({'eval_every', 'checkpoint_every', 'moe
                                           # the execution backend; the trainer refuses a switch that loses FP8 state
                                           'fp8_training', 'checkpoint_layers', 'window_execution', 'report_column_fraction', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl',
                                           'drift_gate_now',  # retired by drift_gate_rise (b1cd6632); a lineage that declared it hands off
-                                          'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop'})
+                                          'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop',
+                                          # the in-run task-success evaluation (owner 2026-10-12) joins at a handoff
+                                          'task_eval', 'task_eval_every'})
 # Stage parameters the runner consumes itself (never passed to a trainer).
 RUNNER_STAGE_PARAMETERS = frozenset({'quantization_steps'})
 
@@ -1857,6 +1860,12 @@ def main(argv=None):
                 certificate = {'schema': 'natlang.neuralese-direct-certificate/1',
                                'qualified': bool(stage_report.get('qualified')) and identity.get('passed') is True,
                                'identity_qualification': {'kind': DIRECT_IDENTITY_QUALIFICATION, **identity},
+                               # Owner decision 2026-10-12: qualification is task success plus drift; the 48-probe
+                               # behaviour gate is reported, not required.
+                               'task_gate': stage_report.get('task_gate'),
+                               'drift_stopped': stage_report.get('drift_stopped'),
+                               'behaviour_gate_report_only': True,
+                               'behaviour_gate': stage_report.get('behaviour_gate'),
                                'owner_decision': 'Neuralese direct v1, 2026-10-11 (AGENTS.md "Neuralese training '
                                                  'foundation")',
                                'heads_sha256': sha(args.heads), 'recipe_sha256': plan['recipe_sha256'],

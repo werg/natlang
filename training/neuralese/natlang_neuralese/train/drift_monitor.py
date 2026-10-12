@@ -2,10 +2,11 @@
 
 One implementation (owner rule: one implementation per concept) of the policy in plans/neuralese/LINE_PARITY.md
 (coordinator decision 2026-10-11): held response KL to the base model on ``--drift-rows`` monitor rows and greedy
-agreement, at a cadence; past ``--drift-warn`` (or below ``--drift-agreement-warn``) the behaviour gate runs, and the
-stage stops when the gate pass falls below its reference minus ``max_gate_drop`` (the hard criterion); response KL
-past ``--drift-stop`` stops at once (a catastrophic shift). Crisp by design: it is an exact verifier of what the
-stage produced, not a policy.
+agreement, at a cadence; past ``--drift-warn`` (or below ``--drift-agreement-warn``) the behaviour gate runs and is
+REPORTED (``gate_below_floor`` when its pass falls below its reference minus ``max_gate_drop``); it never stops a stage
+(owner decision 2026-10-12, plans/neuralese/DECISIONS.md: the 48-probe gate is report-only; qualification is natlang task
+success, eval/task_cadence.py, plus drift). Response KL past ``--drift-stop`` stops at once (a catastrophic shift).
+Crisp by design: it is an exact verifier of what the stage produced, not a policy.
 
 The reference is either the quantization component's teacher held rows, or (``--monitor`` with ``data``) the base
 model's own answers and top-k on the monitor prompts, captured before any update and kept in the run directory.
@@ -44,8 +45,8 @@ def add_drift_arguments(parser, *, drift_rows: int = 16) -> None:
     parser.add_argument('--drift-agreement-warn', type=float, default=.97)
     parser.add_argument('--drift-agreement-stop', type=float, default=0.)
     parser.add_argument('--drift-gate', action=argparse.BooleanOptionalAction, default=True,
-                        help='run the behaviour gate at an eval whose drift is past warn, and stop on a gate '
-                             'regression')
+                        help='run the behaviour gate at an eval whose drift is past warn and report it (report-only '
+                             'since 2026-10-12: a gate regression is logged as gate_below_floor, never a stop)')
     parser.add_argument('--gate-held-rows', type=int, default=48)
 
 
@@ -121,8 +122,8 @@ class DriftMonitor:
         self.last_gate, self.last_gate_kl = (state or {}).get('last_gate'), (state or {}).get('last_gate_kl')
 
     def check(self, step: int, end: int) -> dict:
-        """Held KL on --drift-rows, its guard level, and at a warn the behaviour gate (stop below its reference minus
-        max_gate_drop) -- at most every --drift-gate-every updates, at once when response KL rose by
+        """Held KL on --drift-rows, its guard level, and at a warn the behaviour gate (reported; ``gate_below_floor``
+        below its reference minus max_gate_drop) -- at most every --drift-gate-every updates, at once when response KL rose by
         --drift-gate-rise since the last gate, and at the stage end (``step >= end``)."""
         from ..maple.generation_gate import held_kl
         a = self.a
@@ -139,9 +140,9 @@ class DriftMonitor:
             floor = self.behaviour.config['reference']['gate_pass'] - self.behaviour.config.get('max_gate_drop', 0.0)
             drift['gate_at_warn'] = {k: gate[k] for k in ('gate_pass', 'gate_checks', 'gate_kinds', 'gate_results')}
             drift['gate_floor'] = floor
+            drift['gate_report_only'] = True  # owner decision 2026-10-12: reported, never a stop
             if gate['gate_pass'] < floor - 1e-9:
-                drift['guard'] = 'stop'
-                drift['stop_reason'] = 'behaviour gate below its reference minus max_gate_drop'
+                drift['gate_below_floor'] = True
         elif drift['guard'] == 'stop':
             drift['stop_reason'] = 'response KL or agreement past the hard stop'
         return drift

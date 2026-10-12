@@ -217,7 +217,9 @@ class _Behaviour:
         self.gate_pass = gate_pass
 
 
-@pytest.mark.parametrize('kl,gate_pass,guard', [(0.3, 0.5, 'ok'), (0.8, 0.55, 'warn'), (0.8, 0.45, 'stop'),
+# Owner decision 2026-10-12: the behaviour gate is report-only. A gate below its floor at a warn is reported
+# (gate_below_floor) and the guard stays at warn; only response KL past the hard stop stops.
+@pytest.mark.parametrize('kl,gate_pass,guard', [(0.3, 0.5, 'ok'), (0.8, 0.55, 'warn'), (0.8, 0.45, 'warn'),
                                                 (1.6, 0.6, 'stop')])
 def test_drift_guard_warns_at_half_runs_the_gate_and_stops_at_one_and_a_half(monkeypatch, kl, gate_pass, guard):
     from natlang_neuralese.maple import generation_gate
@@ -230,5 +232,6 @@ def test_drift_guard_warns_at_half_runs_the_gate_and_stops_at_one_and_a_half(mon
     drift = monitor.check(10, 100)
     assert drift['guard'] == guard
     assert ('gate_at_warn' in drift) == (0.5 < kl <= 1.5)
+    assert drift.get('gate_below_floor', False) == (0.5 < kl <= 1.5 and gate_pass < 0.5)
     assert monitor.state() == ({'last_gate': 10, 'last_gate_kl': kl} if 0.5 < kl <= 1.5
                                else {'last_gate': None, 'last_gate_kl': None})
