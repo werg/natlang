@@ -866,6 +866,13 @@ def main():
         if not bound.is_file() or sha_file(bound) != expected:
             raise ValueError(f"source approval artifact missing/hash mismatch: {rel}")
     provider_context_bindings = bind_exact_provider_contexts(delta_records, source_approval, repo_root)
+    # Persist the exact context metadata used below. Previously hydration existed
+    # only in memory: later native/whole-trajectory renders reopened the raw input
+    # and lost authenticated external_context_inputs despite valid text output.
+    # This is still a selected-source proposal, not additional action admission.
+    (args.out / "bound-native-records.jsonl").write_text("".join(
+        canonical({key: value for key, value in row.items() if not key.startswith("_")}) + "\n"
+        for row in delta_records), encoding="utf-8")
     def iter_jsonl(path):
         with path.open("r", encoding="utf-8") as f:
             for line in f:
@@ -1107,9 +1114,9 @@ def main():
               "anchor_selection_sha256": sha_file(args.out/"anchor-selection.json"),
               "outputs": {name: {"sha256": sha_file(args.out/name), "bytes": (args.out/name).stat().st_size}
                           for name in (("delta-text.jsonl", "delta-provenance.jsonl", "delta-omissions.jsonl",
-                                        "source-coverage.jsonl", "provider-context-bindings.jsonl", "receipt.json", "anchor-selection.json") if args.compact_only
+                                        "source-coverage.jsonl", "provider-context-bindings.jsonl", "bound-native-records.jsonl", "receipt.json", "anchor-selection.json") if args.compact_only
                                        else ("text.jsonl", "provenance.jsonl", "omissions.jsonl", "source-coverage.jsonl",
-                                             "provider-context-bindings.jsonl", "receipt.json", "anchor-selection.json"))},
+                                             "provider-context-bindings.jsonl", "bound-native-records.jsonl", "receipt.json", "anchor-selection.json"))},
               "training_admission": False, "task_or_trajectory_admission": False}
     (args.out / "packet-manifest.json").write_text(json.dumps(packet, indent=2, ensure_ascii=False, sort_keys=True)+"\n")
     hydrated_contexts = sum(len(item.get("neuralese_context_attestations", [])) for item in provenance)
@@ -1123,14 +1130,15 @@ def main():
         f"{hydrated_contexts} exact named Neuralese reader-context blocks were hydrated from successful, hash-bound writer target sources in the same split and source group; attestations are recorded in `provenance.jsonl`. "
         "The current delta renderer records typed eval-finish marker sidecars and separately labeled full capture context augmentations. Those augmentations come from authenticated same-invocation snapshots and do not claim the omitted text was historically provider-visible. "
         "Hydrated blocks and capture augmentations add context only; they do not create separate target rows. "
+        "`bound-native-records.jsonl` preserves the selected native records with the authenticated context metadata used in this render; use it instead of the raw delta input for subsequent native render proposals, retaining all source/admission and whole-chain checks. "
         f"{receipt['omitted_records']} records remain unresolved omissions; see `source-coverage.jsonl` and `omissions.jsonl`. "
         "The base held-test anchor qualification is recorded separately in `anchor-selection.json`; anchor omissions do not appear as selected-delta omissions. "
         "The proposal does not grant text packet admission, task/trajectory admission, model qualification, or training authorization.\n"
     )
     output_names = (["delta-text.jsonl", "delta-provenance.jsonl", "delta-omissions.jsonl", "source-coverage.jsonl",
-                     "provider-context-bindings.jsonl", "receipt.json", "packet-manifest.json", "README.md", "anchor-selection.json"] if args.compact_only else
+                     "provider-context-bindings.jsonl", "bound-native-records.jsonl", "receipt.json", "packet-manifest.json", "README.md", "anchor-selection.json"] if args.compact_only else
                     ["text.jsonl", "provenance.jsonl", "omissions.jsonl", "source-coverage.jsonl",
-                     "provider-context-bindings.jsonl", "receipt.json", "packet-manifest.json", "README.md", "anchor-selection.json"])
+                     "provider-context-bindings.jsonl", "bound-native-records.jsonl", "receipt.json", "packet-manifest.json", "README.md", "anchor-selection.json"])
     output_manifest = {"schema": "natlang.gold-text-delta-output-manifest/1",
                        "packet_manifest_sha256": sha_file(args.out/"packet-manifest.json"),
                        "outputs": {name: {"sha256": sha_file(args.out/name), "bytes": (args.out/name).stat().st_size}
