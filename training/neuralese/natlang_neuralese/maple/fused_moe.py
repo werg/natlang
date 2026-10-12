@@ -348,15 +348,22 @@ def dense_grouped_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.T
     tokens, top_k = index.shape
     experts, ff = gate_up.shape[0], down.shape[-1]
     flat = index.reshape(-1)
-    order = flat.argsort()
+    glue = x.is_cuda and os.environ.get("NATLANG_MOE_GLUE", "1") != "0"
+    if glue:  # maple/moe_glue.py: the same permutation without scatters in backward
+        from .moe_glue import Combine, GatherRows, routing_permutation
+        order, slot_of = routing_permutation(index)
+    else:
+        order = flat.argsort()
     # Group ends from the sorted expert ids.
     offsets = torch.searchsorted(flat[order], torch.arange(experts, device=flat.device), right=True).to(torch.int32)
-    rows = x[order // top_k]
+    rows = GatherRows.apply(x, order // top_k, slot_of, top_k) if glue else x[order // top_k]
     hidden = torch._grouped_mm(rows, gate_up.transpose(-2, -1), offs=offsets)
     gate, up = hidden[:, :ff], hidden[:, ff:]
     if clamp is not None:
         gate, up = gate.clamp(max=clamp), up.clamp(-clamp, clamp)
     out = torch._grouped_mm(F.silu(gate) * up, down.transpose(-2, -1), offs=offsets)
+    if glue:
+        return Combine.apply(out, slot_of, weights)
     out = out[torch.argsort(order)]  # back to (token, slot) order
     return (out.view(tokens, top_k, -1).float() * weights[..., None]).sum(1)
 
