@@ -1660,3 +1660,15 @@ Outer preflight now calls the shared `lineage_handoff(..., dry_run=True)` policy
 for a handoff, preserving exact input and frozen-code checks. Existing v2 Muon
 weights and optimizer remain on their own checkpoint lineage while these stage
 mechanics are qualified. A fresh LFM start uses the pinned QAD FP32 source.
+
+The first update of the full-rendering E2E arm then failed in layer-staged
+backward with a cross-stream pre-pass gradient mismatch. No post-update state
+was written. The pre-pass stopped when the set of reached edges ceased growing,
+which can miss a changed gradient on an already reached edge after a newly
+reached nested dependency. The shared staging code now checks gradient values
+for fixed-point convergence and reports layer/max-delta if replay still differs.
+This is a concrete bug hypothesis, not yet a qualified fix. The Pop mechanics
+arm temporarily uses ordinary joint backward (`latent_step_in_backward=false`)
+as an exact reference and productive route; compare its first update and memory
+against the staged implementation before restoring staging. Preserve the main
+u11204 full checkpoint while this arm runs.

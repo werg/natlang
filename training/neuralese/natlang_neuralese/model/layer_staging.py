@@ -123,18 +123,26 @@ class LayerStaging:
                     cross[id(leaf)] = reads
         sent: dict[int, dict[int, torch.Tensor]] = {}
         if cross:
-            # Repeat while the walk reaches cross edges it had not reached (a writer's own input reading a nested
-            # writer's value gets its gradient only from the previous round's seeds).
-            while True:
+            # A newly reached nested edge can also change an edge reached in an
+            # earlier round. Converge the gradients, not merely the set of edges.
+            # The cross-stream graph is acyclic, so each round resolves at least
+            # one more dependency; a cap exposes an unexpected cycle.
+            for _ in range(len(cross) + 2):
                 seeds: dict[int, torch.Tensor] = {}
                 for per_edge in sent.values():
                     for i, g in per_edge.items():
                         seeds[i] = g if i not in seeds else seeds[i] + g
                 reached = self._prepass(cross, seeds)
-                grown = set(reached) - set(sent)
+                stable = reached.keys() == sent.keys() and all(
+                    reached[edge].keys() == sent[edge].keys() and all(
+                        torch.allclose(g.float(), sent[edge][read].float(), rtol=1e-4, atol=1e-7)
+                        for read, g in values.items())
+                    for edge, values in reached.items())
                 sent = reached
-                if not grown:
+                if stable:
                     break
+            else:
+                raise RuntimeError('layer-staged backward: cross-stream pre-pass did not converge')
             for per_edge in sent.values():
                 for i, g in per_edge.items():
                     leaf = self.exit_leaves[i]
@@ -163,8 +171,10 @@ class LayerStaging:
                         seed = expected.get(id(read))
                         if (arrived is None) != (seed is None) or (seed is not None and not torch.allclose(
                                 arrived.float(), seed.float(), rtol=1e-3, atol=1e-6)):
+                            delta = (float((arrived.float() - seed.float()).abs().max())
+                                     if arrived is not None and seed is not None else None)
                             raise RuntimeError('layer-staged backward: a cross-stream edge sent a different gradient '
-                                               'than its pre-pass (the pre-pass order missed a dependency)')
+                                               f'than its pre-pass (layer={layer}, max_abs_delta={delta})')
                         read.grad = before[id(read)]  # already delivered by the pre-pass, before its layer
             if any(done.grad is not None for done in passed):
                 raise RuntimeError('layer-staged backward: a gradient reached a layer after it was stepped (a stream '
