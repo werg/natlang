@@ -1,0 +1,18 @@
+{
+ "schema": "natlang.coreweave-job/1",
+ "id": "hw-bench-teacher",
+ "kind": "probe",
+ "placement": {
+  "reason": "Teacher serving benchmark on the RTX PRO 6000 (plans/COREWEAVE_HARDWARE_OPTIMIZATION.md, teacher serving): vLLM NVFP4 Marlin (DGX :8082 parity), native NVFP4, FP8 and MTP speculative decoding, at concurrency 1-256 with natlang-shaped shared-prefix prompts. Decides whether and how a sandbox teacher replaces or extends DGX :8082."
+ },
+ "image": "vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3",
+ "resources": {"cpu": "16", "memory": "96Gi", "gpu": 1},
+ "lifetime_hours": 6,
+ "scratch": {"path": "/work", "size": "150Gi"},
+ "env": {"NATLANG_CW_IMAGE_READY": "1", "HF_HOME": "/work/.cache/huggingface"},
+ "outputs": ["runs/coreweave-hw-bench/teacher"],
+ "command": ["python3", "scripts/coreweave/teacher_bench.py", "--configs", "scripts/coreweave/teacher-configs.json",
+             "--out", "runs/coreweave-hw-bench/teacher/teacher-bench.json"],
+ "needs": {"gpu_memory_gb": 90, "hours": 4, "teacher": false, "lineage_owner": "dgx", "moves_active_lineage": false},
+ "bundle_plan": "scripts/coreweave/bundle.py plan --code-sha origin/main --extra /mnt/external/bgkit-data/models/hf/Qwen3.6-35B-A3B-NVFP4 -o /tmp/cw/hw-bench-teacher.json. The vllm-fp8 config downloads Qwen/Qwen3.6-35B-A3B-FP8 from the hub (needs egress; it is recorded as failed_to_start otherwise). NATLANG_CW_IMAGE_READY=1 keeps the training requirements out of the vLLM image; the bootstrap only adds boto3."
+}

@@ -1542,7 +1542,11 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     parameters = dict(recipe['parameters'])
     if 'text_data' in inputs:
         parameters.pop('text_data', None)
-    command += stage_parameter_args(parameters)
+    # Hardware profile (train/hardware_profile.py): operational knobs chosen by this GPU. The plan keeps the recipe's
+    # parameters (the resume comparison) and records the profile beside them.
+    from . import hardware_profile
+    profiled, profile_environment, profile_record = hardware_profile.for_stage(stage['kind'], parameters, device)
+    command += stage_parameter_args(profiled)
     plan = {'schema': 'natlang.neuralese-direct-stage-plan/1', 'recipe_id': recipe['id'],
             'recipe_path': str(Path(recipe_path).resolve()), 'recipe_sha256': recipe_identity_sha256(recipe_path),
             'stage': stage, 'inputs': inputs, 'device': device,
@@ -1551,6 +1555,8 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
             'lineage': recipe['lineage'], 'lineage_evidence': lineage_evidence,
             'lineage_gate_verifications': lineage_gate_verifications,
             'runtime_environment': declared_runtime_environment(recipe)}
+    if profile_record is not None:
+        plan['hardware_profile'] = profile_record
     if hdd_guard.RECORDS:
         plan['hdd_staged_inputs'] = list(hdd_guard.RECORDS)
     if resume is not None:
@@ -1572,6 +1578,7 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     declared_environment = declared_runtime_environment(recipe)
     if 'NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE' not in declared_environment:
         environment.pop('NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE', None)
+    environment.update(profile_environment)
     environment.update(declared_environment)
     environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
     print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
@@ -1879,7 +1886,12 @@ def main(argv=None):
                 stage_parameters = effective_stage_parameters(stage,reports,recipe)
                 if 'text_data' in stage_inputs[stage['id']]:
                     stage_parameters = {key: value for key, value in stage_parameters.items() if key != 'text_data'}
-                command += stage_parameter_args({key: value for key, value in stage_parameters.items()
+                from . import hardware_profile
+                profiled, profile_environment, profile_record = hardware_profile.for_stage(
+                    kind, stage_parameters, args.device)
+                if profile_record is not None:
+                    print(json.dumps({'event': 'hardware_profile', 'stage': stage['id'], **profile_record}), flush=True)
+                command += stage_parameter_args({key: value for key, value in profiled.items()
                                                  if key not in RUNNER_STAGE_PARAMETERS})
                 component = stage_quantization(recipe, stage, stage_parameters, reports, init_mix)
                 if component is not None:
@@ -1890,6 +1902,7 @@ def main(argv=None):
                 declared_environment = declared_runtime_environment(recipe)
                 if 'NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE' not in declared_environment:
                     environment.pop('NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE', None)
+                environment.update(profile_environment)
                 environment.update(declared_environment)
                 environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
                 if args.plan_only:

@@ -1,0 +1,18 @@
+{
+ "schema": "natlang.coreweave-job/1",
+ "id": "hw-bench-train",
+ "kind": "probe",
+ "placement": {
+  "reason": "First-sandbox hardware benchmark (plans/COREWEAVE_HARDWARE_OPTIMIZATION.md): kernel probe and the training arm matrix (checkpointing, FP8, tokens per update, compile) for Mellum and LFM on the RTX PRO 6000 (sm_120). It can only run on that GPU; its hw-bench.json fills training/neuralese/hardware-profiles.json. Run right after the GPU smoke passes."
+ },
+ "image": "nvcr.io/nvidia/pytorch:26.09-py3",
+ "resources": {"cpu": "16", "memory": "160Gi", "gpu": 1},
+ "lifetime_hours": 8,
+ "scratch": {"path": "/work", "size": "200Gi"},
+ "env": {"HF_HUB_OFFLINE": "1", "TORCHINDUCTOR_CACHE_DIR": "/work/.cache/inductor", "TRITON_CACHE_DIR": "/work/.cache/triton"},
+ "outputs": ["runs/coreweave-hw-bench/first"],
+ "command": ["python", "-m", "natlang_neuralese.train.hw_bench", "--matrix", "full", "--out", "runs/coreweave-hw-bench/first",
+             "--mellum", "/home/werg/data/models/mellum21-12b-a2.5b-thinking", "--lfm", "/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f"],
+ "needs": {"gpu_memory_gb": 90, "hours": 4, "teacher": false, "lineage_owner": "dgx", "moves_active_lineage": false},
+ "bundle_plan": "scripts/coreweave/bundle.py plan --code-sha origin/main --extra /home/werg/data/models/mellum21-12b-a2.5b-thinking --extra /home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f -o /tmp/cw/hw-bench-train.json (the LFM snapshot's files are symlinks into the hub blob store; the bundle stores their content at the snapshot paths)"
+}

@@ -235,7 +235,14 @@ class QwenPortBackbone(PortBackbone):
         pad_offsets = cache.pad_offsets
         if pad is not None and pad_offsets is None:
             pad_offsets = tuple(pad.detach().cpu().tolist())
+        # Selective checkpointing (plans/COREWEAVE_HARDWARE_OPTIMIZATION.md): the top `uncheckpointed_layers` layers keep
+        # their activations when the device has room, saving their recompute; the math is the same.
+        keep_from = self.num_layers - int(getattr(self, 'uncheckpointed_layers', 0) or 0)
         for i in layers:
+            if i >= keep_from:
+                h, cache = self.run_layers(h, range(i, i + 1), cache, positions=positions, padding=padding,
+                                           left_pad=left_pad, _checkpoint_layer=True)
+                continue
             previous = cache.states[i]
             fields = () if previous is None else previous.fields()
             start, size = cache.lengths[i], self.num_layers

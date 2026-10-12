@@ -7,6 +7,15 @@
 # architecture digest while keeping one shared implementation on both machines.
 ARG BASE_IMAGE=nvcr.io/nvidia/pytorch:26.09-py3
 FROM ${BASE_IMAGE}
+# Every GPU this image serves: Pop (8.9), CoreWeave RTX PRO 6000 (12.0), DGX GB10 (12.1). Read by JIT extension builds
+# (torch.utils.cpp_extension); Triton kernels compile per device at run time. plans/COREWEAVE_HARDWARE_OPTIMIZATION.md.
+ARG TORCH_CUDA_ARCH_LIST="8.9 12.0 12.1"
+ENV TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}
 COPY requirements.txt /tmp/natlang-requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /tmp/natlang-requirements.txt
+# Fail the build when the base's PyTorch has no sm_120 code (the RTX PRO 6000; GB10's sm_121 runs it too, and Pop's
+# sm_89 runs the sm_86 code NGC ships), and record the resolved versions inside the image (the pins of this build;
+# launches record the image digest).
+RUN python -c "import torch; arch = torch._C._cuda_getArchFlags().split(); assert 'sm_120' in arch, ('torch lacks sm_120', arch)" \
+ && mkdir -p /opt/natlang && pip freeze > /opt/natlang/pip-freeze.txt
 ENV PYTHONUNBUFFERED=1

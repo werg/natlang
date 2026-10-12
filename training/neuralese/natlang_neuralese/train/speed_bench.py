@@ -9,7 +9,10 @@ the per-update losses so numerics-changing arms can be compared on the same batc
 step, so its loss is the exact fixed-batch comparison).
 
 Arms: ``--checkpoint on|off``, ``--qat <point>:<mix>`` (a precision point of the recipe's quantization component),
-``NATLANG_MAPLE_COMPILE`` in the environment, ``--profile`` (common/profiling.py breakdown of the measured updates).
+``NATLANG_MAPLE_COMPILE`` in the environment, ``--profile`` (common/profiling.py breakdown of the measured updates),
+``--uncheckpointed-layers N`` (selective checkpointing: the top N layers keep their activations), ``--backbone lfm``
+(LFM2.5 through the LFM2 port with the LFM recipe's quantization; ``--fp8-training te-fp8`` replaces its QAT, as
+direct_sft refuses the two together). ``natlang_neuralese.train.hw_bench`` runs a matrix of these arms on new hardware.
 """
 from __future__ import annotations
 
@@ -27,7 +30,9 @@ from ..common.paths import resolve
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--model', default=str(resolve('models', 'mellum21-12b-a2.5b-thinking')))
+    p.add_argument('--backbone', choices=('maple', 'lfm'), default='maple')
+    p.add_argument('--model', default=None, help='maple: the Mellum directory (default the DGX copy); lfm: the LFM2.5 '
+                   'base (default the pinned hub snapshot)')
     p.add_argument('--recipe', default='recipes/neuralese-direct-mellum-v3.json')
     p.add_argument('--layers', type=int, default=4)
     p.add_argument('--rows', type=int, default=6)
@@ -36,6 +41,8 @@ def main(argv=None):
     p.add_argument('--updates', type=int, default=6)
     p.add_argument('--warmup', type=int, default=2)
     p.add_argument('--checkpoint', choices=('on', 'off'), default='on')
+    p.add_argument('--uncheckpointed-layers', type=int, default=0,
+                   help='--checkpoint on: the top N layers run without checkpointing (Maple/Qwen port)')
     p.add_argument('--micro-rows', type=int, default=0,
                    help='sequential accumulation (the trainer\'s sequential path): forward/backward this many rows at a '
                         'time, gradients accumulated, one optimizer step; 0: packed with the latents stepping in backward')
@@ -44,7 +51,7 @@ def main(argv=None):
                    help="direct_sft's readout: chunked_readout + soft_token_mixture, or fused_readout (shared logits)")
     p.add_argument('--dump-grads', type=Path, help='save layer 0\'s expert and attention latent gradients of the '
                    'last update here (real gradients for optimizer numerics checks); the optimizer step is skipped')
-    p.add_argument('--fp8-training', choices=('off', 'triton-experts'), default='off')
+    p.add_argument('--fp8-training', choices=('off', 'triton-experts', 'te-fp8'), default='off')
     p.add_argument('--latent-optimizer', choices=('muonsr', 'lionsr'), default='muonsr')
     p.add_argument('--ns', default='cubic5')
     p.add_argument('--moe-kernel', default='grouped')
@@ -72,19 +79,31 @@ def main(argv=None):
     torch.manual_seed(a.seed)
     device = 'cuda'
     load_start = time.time()
-    maple = load_maple(a.model, device=device, ternary_attention=False, layers=a.layers)
-    maple.natlang_precision = 'bf16'
-    tokenizer = AutoTokenizer.from_pretrained(a.model)
-    backbone = MaplePortBackbone(maple, controls=family_controls(maple, tokenizer)).to(device)
+    if a.backbone == 'maple':
+        a.model = a.model or str(resolve('models', 'mellum21-12b-a2.5b-thinking'))
+        maple = load_maple(a.model, device=device, ternary_attention=False, layers=a.layers)
+        maple.natlang_precision = 'bf16'
+        tokenizer = AutoTokenizer.from_pretrained(a.model)
+        backbone = MaplePortBackbone(maple, controls=family_controls(maple, tokenizer)).to(device)
+        config = maple.config
+    else:
+        from ..model.lfm2_port import ControlTokens, PortBackbone, load_backbone
+        hf, tokenizer = load_backbone(a.model, device=device)
+        if a.layers and a.layers < len(hf.model.layers):
+            hf.model.layers = hf.model.layers[:a.layers]
+            hf.config.num_hidden_layers = a.layers
+        backbone = PortBackbone(hf, ControlTokens.from_tokenizer(tokenizer)).to(device)
+        config = hf.config
+    head_dim = getattr(config, 'head_dim', None) or config.hidden_size // config.num_attention_heads
     set_dense_moe_kernel(a.moe_kernel)
-    recipe = json.loads(Path(a.recipe).read_text())
-    component = dict(recipe['overrides']['quantization'],
-                     stage={'id': 'direct_sft', 'progress': [0.0, 1.0], 'start': 0, 'end': 100})
+    from .recipe import resolve_recipe_data
+    recipe = resolve_recipe_data(a.recipe)
+    component = dict(recipe['quantization'], stage={'id': 'direct_sft', 'progress': [0.0, 1.0], 'start': 0, 'end': 100})
     quant = Quantization(component)
-    installed = quant.install(backbone.hf, layer_count=backbone.num_layers)
+    installed = quant.install(backbone.hf, layer_count=backbone.num_layers) if a.fp8_training != 'te-fp8' else 'te-fp8'
     named = [('backbone.' + n, q) for n, q in configure_backbone_training(backbone, 'latent')]
     latent_named, other = latent_split(named, a.latent_optimizer)
-    latent = latent_entries(latent_named, a.latent_optimizer, 1e-5, maple.config.head_dim)
+    latent = latent_entries(latent_named, a.latent_optimizer, 1e-5, head_dim)
     from ..model.neuralese_projection import NeuraleseProjection
     projection = NeuraleseProjection(int(backbone.embedding_weight.shape[1])).to(device)  # the trainer's head (idle)
     head_named = [('neuralese_projection.' + n, q) for n, q in projection.named_parameters()]
@@ -93,10 +112,13 @@ def main(argv=None):
                               latent_options=latent_options(a.latent_optimizer, weight_decay=0.1, ns=a.ns))
     optimizer.latent.step_in_backward(gated=True)
     backbone.checkpoint_layers = a.checkpoint == 'on'
+    backbone.uncheckpointed_layers = a.uncheckpointed_layers
     fp8_backend = None
     if a.fp8_training != 'off':
         from .fp8_backend import make_backend
         fp8_backend = make_backend(a.fp8_training, backbone.hf, device=device)
+        if a.fp8_training == 'te-fp8':
+            backbone.activation_checkpoint = fp8_backend.checkpoint
     family = None
     if a.member:
         from ..maple.family import Family, member_kl
@@ -110,7 +132,8 @@ def main(argv=None):
         family.install(backbone)
     point, _, mix = a.qat.partition(':')
     mix = float(mix or 0)
-    norm_dtypes = sorted({str(m.weight.dtype) for n, m in maple.named_modules() if n.endswith('norm')})
+    norm_dtypes = sorted({str(m.weight.dtype) for n, m in backbone.hf.named_modules()
+                          if n.endswith('norm') and getattr(m, 'weight', None) is not None})
     print(json.dumps({'event': 'bench_loaded', 'seconds': time.time() - load_start, 'installed': installed,
                       'latents': len(latent), 'norm_weight_dtypes': norm_dtypes,
                       'compile': os.environ.get('NATLANG_MAPLE_COMPILE', '1')}), flush=True)
@@ -155,7 +178,8 @@ def main(argv=None):
 
         fp8 = fp8_backend.autocast() if fp8_backend is not None else contextlib.nullcontext()
         member = family.selected(backbone, a.member) if family is not None else contextlib.nullcontext()
-        with member, fp8, quant.context(point, mix), shared_parametrized_weights(backbone.hf) as next_pass:
+        qat = quant.context(point, mix) if a.fp8_training != 'te-fp8' else contextlib.nullcontext()
+        with member, fp8, qat, shared_parametrized_weights(backbone.hf) as next_pass:
             if a.dump_grads is not None and update == a.updates:  # accumulate this update's real gradients
                 loss = sum(part(chunk, len(chunk) / a.rows) for chunk in ids.split(a.micro_rows or a.rows))
                 torch.save({name: q.grad.detach().cpu() for name, q in latent_named
@@ -182,9 +206,18 @@ def main(argv=None):
     profiler.close(a.updates)
     measured = [r['seconds'] for r in rows[a.warmup:]]
     tokens = a.rows * a.row_tokens
+    supervised = a.rows * min(a.span, a.row_tokens)
+    import resource
+    props = torch.cuda.get_device_properties(0)
     summary = {'arm': {k: str(v) for k, v in vars(a).items()}, 'compile': os.environ.get('NATLANG_MAPLE_COMPILE', '1'),
+               'device': {'name': props.name, 'capability': [props.major, props.minor],
+                          'memory_gb': round(props.total_memory / 2 ** 30, 1), 'integrated': bool(props.is_integrated)},
+               'versions': {'torch': torch.__version__, 'cuda': torch.version.cuda},
+               'host_peak_gb': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20,
                'median_seconds': statistics.median(measured), 'mean_seconds': statistics.fmean(measured),
                'tokens_per_update': tokens, 'tokens_per_second': tokens / statistics.median(measured),
+               'supervised_per_update': supervised,
+               'supervised_tokens_per_second': supervised / statistics.median(measured),
                'peak_gb': max(r['peak_gb'] for r in rows), 'losses': [r['loss'] for r in rows], 'updates': rows}
     (a.out / 'bench.json').write_text(json.dumps(summary, indent=1) + '\n')
     print(json.dumps({k: v for k, v in summary.items() if k != 'updates'}), flush=True)

@@ -6,6 +6,10 @@ commands to run once the key arrives are in "Bring-up checklist". The goal is to
 the DGX GB10, whose 121 GB unified memory is the bottleneck. Today the Mellum v4 run holds 98 GB of it, and the Mellum
 base task reference (34 GB) waits for a pause window.
 
+What runs inside a sandbox and how fast (hardware facts for the RTX PRO 6000 / sm_120, the training and teacher
+serving plans, hardware profiles, the image and the first-sandbox benchmark jobs) is in
+[COREWEAVE_HARDWARE_OPTIMIZATION.md](COREWEAVE_HARDWARE_OPTIMIZATION.md).
+
 ## 1. Facts from the documentation
 
 All facts come from docs.coreweave.com (fetched 2026-10-12) unless a line says otherwise. "Unknown" means the docs
