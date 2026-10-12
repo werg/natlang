@@ -112,8 +112,11 @@ class FP8LinearAdapter:
                 if old.in_features % ROW_MULTIPLE or old.out_features % ROW_MULTIPLE:
                     raise ValueError(f'eligible TE dimensions must be multiples of {ROW_MULTIPLE}: {path} '
                                      f'{old.in_features}x{old.out_features}')
-                replacement = make_te_linear_preserving_rng(old, self.te.Linear)
-                replacement.train(old.training)
+                # The HF backbone intentionally stays in eval mode during direct SFT. TE only records delayed-
+                # scaling recompute metadata while its Linear is in training mode; checkpointed backward otherwise
+                # enters recompute without the saved FP8 buffer position. Linear has no stochastic train/eval
+                # behavior, so enable its training bookkeeping without changing the surrounding HF modules.
+                replacement = make_te_linear_preserving_rng(old, self.te.Linear, training=True)
                 setattr(parent, attribute, replacement)
                 self.originals[path] = (parent, attribute, old)
                 self.linears[path] = replacement
@@ -380,7 +383,7 @@ def _object_tensor_inventory(value: Any) -> dict[str, Any]:
             'shapes': [list(shape) for _, _, shape in tensors.values()]}
 
 
-def make_te_linear(original: nn.Linear, te_linear_type):
+def make_te_linear(original: nn.Linear, te_linear_type, *, training: bool | None = None):
     """Construct one padded TE layer while preserving the source Parameter objects exactly."""
     replacement = _PaddedTELinear(
         te_linear_type, original.in_features, original.out_features, bias=original.bias is not None,
@@ -391,16 +394,16 @@ def make_te_linear(original: nn.Linear, te_linear_type):
     if original.bias is not None:
         replacement.bias = original.bias
         replacement.bias.requires_grad_(original.bias.requires_grad)
-    replacement.train(original.training)
+    replacement.train(original.training if training is None else training)
     if replacement.weight is not original.weight or (original.bias is not None and replacement.bias is not original.bias):
         raise RuntimeError('TE layer did not preserve the original Parameter objects')
     return replacement
 
 
-def make_te_linear_preserving_rng(original: nn.Linear, te_linear_type, *, cuda_devices=()):
+def make_te_linear_preserving_rng(original: nn.Linear, te_linear_type, *, cuda_devices=(), training: bool | None = None):
     """Call TE's initializer without advancing the caller's CPU/CUDA random streams."""
     with torch.random.fork_rng(devices=list(cuda_devices)):
-        return make_te_linear(original, te_linear_type)
+        return make_te_linear(original, te_linear_type, training=training)
 
 
 class _PaddedTELinear:
