@@ -71,6 +71,7 @@ WAITER_TTL = 90  # a waiting `run` refreshes its queue entry every 30 s; older e
 REQUEUE_DELAY = 120  # seconds after a preemption/pressure stop before the unit may be relaunched
 # A unit backfilled behind a waiting head is not preempted for that same head for this long (see backfill_hold).
 BACKFILL_HOLD = RAMP_SECONDS
+UNREACHABLE_WARN_SECONDS = 600  # the guard repeats a high head's 'cannot fit' event at most this often
 # A guard stop gives the victim its declared grace (``run --stop-seconds``) to write its full checkpoint (latents and
 # optimizer: ~4 min for Mellum's 47 GB state), and kills at once only below this emergency level (under the floor).
 EMERGENCY_GB = 3
@@ -267,28 +268,31 @@ def lazyfree_bytes(pid):
     return 0
 
 
-def container_cgroup(command, unit=None):
-    """The cgroup of the container a unit runs: its processes are Docker's, not the unit's, so the unit's own cgroup
-    shows only the docker client. The container is the one its command names (``docker start -a NAME``,
-    ``docker run --name NAME``), else one named like the unit (a wrapper script that runs ``docker run``)."""
-    name = container_name(command) or (unit.removesuffix('.service') if unit else None)
-    if not name:
-        return None
-    out = subprocess.run(['docker', 'inspect', '-f', '{{.Id}}', name],
-                         capture_output=True, text=True).stdout.strip()
-    return f'/sys/fs/cgroup/system.slice/docker-{out}.scope' if out else None
+def container_cgroups(names):
+    """The cgroups of the running containers among ``names``: a container's processes are Docker's, not the unit's, so
+    the unit's own cgroup shows only the docker client. One ``docker inspect`` for all names (missing ones are skipped;
+    two names of one container count once)."""
+    if not names:
+        return []
+    out = subprocess.run(['docker', 'inspect', '-f', '{{.Id}} {{.State.Running}}', *names],
+                         capture_output=True, text=True).stdout.split('\n')
+    ids = [line.split()[0] for line in out if line.strip().endswith(' true')]
+    return [f'/sys/fs/cgroup/system.slice/docker-{i}.scope' for i in dict.fromkeys(ids)]
 
 
-def unit_usage(unit, gpu, command=None):
-    """Host memory charged to the unit's cgroup plus CUDA memory of its processes (and of its attached container)."""
+def unit_usage(unit, gpu, command=None, containers=()):
+    """Host memory charged to the unit's cgroup plus CUDA memory of its processes, and the same for every container it
+    runs (unit_containers: named by its command, declared with ``run --container``, named by a docker client in its
+    cgroup, or named like the unit). 2026-10-12: a wrapper's view-ask container used 12.9 GiB while its claim read 0, so
+    preemption underestimated what stopping it frees and a high head was starved by backfill."""
     active, cgroup = unit_state(unit)
     if active not in ('active', 'activating', 'reloading') or not cgroup:
         return None
     used = cgroup_usage('/sys/fs/cgroup' + cgroup, gpu)
     if used is None:
         return None
-    container = container_cgroup(command, unit)
-    return used + ((cgroup_usage(container, gpu) or 0) if container else 0)
+    roots = container_cgroups(unit_containers(unit, command, containers, cgroup=cgroup))
+    return used + sum(cgroup_usage(root, gpu) or 0 for root in roots)
 
 
 @contextlib.contextmanager
@@ -349,15 +353,12 @@ def learned_budget(state, unit, budget):
     return max(budget, min(int(peak * 1.1), mem_total() - 2 * 8 * GIB))
 
 
-def unit_cuda(unit, gpu, command=None):
-    """CUDA memory held by the unit's processes and its attached container (from nvidia-smi's per-pid list)."""
+def unit_cuda(unit, gpu, command=None, containers=()):
+    """CUDA memory held by the unit's processes and its containers (from nvidia-smi's per-pid list)."""
     active, cgroup = unit_state(unit)
     if active not in ('active', 'activating', 'reloading') or not cgroup:
         return 0
-    roots = ['/sys/fs/cgroup' + cgroup]
-    container = container_cgroup(command, unit)
-    if container:
-        roots.append(container)
+    roots = ['/sys/fs/cgroup' + cgroup, *container_cgroups(unit_containers(unit, command, containers, cgroup=cgroup))]
     total = 0
     for root in roots:
         with contextlib.suppress(OSError, ValueError):
@@ -370,7 +371,8 @@ def live_claims(state, gpu):
     units are released."""
     live = {}
     for unit, claim in list(state['claims'].items()):
-        used = unit_usage(unit, gpu, claim.get('command'))
+        declared = claim.get('spec', {}).get('containers') or ()
+        used = unit_usage(unit, gpu, claim.get('command'), declared)
         if used is None and time.time() - claim['admitted'] > 30:  # give systemd a moment to start the unit
             if claim.get('peak'):  # the family's measured peak sizes its next admission
                 peaks = state.setdefault('family_peaks', {})
@@ -378,7 +380,7 @@ def live_claims(state, gpu):
             del state['claims'][unit]
             state['events'].append({'time': time.time(), 'event': 'released', 'unit': unit})
             continue
-        if gpu and not claim.get('gpu') and unit_cuda(unit, gpu, claim.get('command')):
+        if gpu and not claim.get('gpu') and unit_cuda(unit, gpu, claim.get('command'), declared):
             claim['gpu'] = True
         claim['peak'] = max(claim.get('peak', 0), used or 0)
         claim.setdefault('peak_since', time.time())
@@ -464,10 +466,29 @@ def backfill_held(claim, head, now=None):
     threshold; neither made progress). A unit backfills only while its head is blocked (head_blocked); a later swing
     that would let the head fit if the backfilled unit stopped does not preempt it for that same head until it has run
     BACKFILL_HOLD seconds. Each launch then does real work, and the head waits at most that long longer. A different
-    head (a new, higher job) is not held off, and the floor-pressure stops (victim) ignore the hold. Simpler than
+    head (a new, higher job) and a high head (training outranks a backfill's minutes; 2026-10-12 a Mellum relaunch
+    waited behind backfill) are not held off, and the floor-pressure stops (victim) ignore the hold. Simpler than
     tracking each head's shortfall: the fluctuation is in other units' use, which no recorded shortfall predicts."""
     return bool(head and claim.get('backfilled_behind') == head
                 and (now or time.time()) - claim['admitted'] < BACKFILL_HOLD)
+
+
+def unreachable(live, free, wanted, available=None):
+    """Why a waiting job could not start even if every unit it may preempt stopped, or None when it could: its need
+    (budget plus reserve) against the most it could get, the non-preemptible claims in the way, and the memory used
+    outside the ledger. The guard logs this loudly for a high head (2026-10-12: Mellum v4's relaunch needed 107.5 GB
+    with ~104 GB obtainable, ~18 GB held by non-ledger processes, and waited silently while backfill ran). Shrinking
+    the reserve would not help: it is already below the guard's floor, which would then stop the job itself."""
+    need = wanted['budget'] + wanted['reserve']
+    obtainable = free + sum(c['used'] + outstanding(c) for c in live.values()
+                            if resumable(c) and priority_of(c) < PRIORITIES[wanted['priority']])
+    if obtainable >= need:
+        return None
+    available = mem_available() if available is None else available
+    return {'need_gb': round(need / GIB, 1), 'obtainable_gb': round(obtainable / GIB, 1),
+            'short_gb': round((need - obtainable) / GIB, 1), 'blocked_by': non_preemptible(live, wanted),
+            'outside_ledger_gb': round(max(0, mem_total() - available - sum(c['used'] for c in live.values())) / GIB, 1),
+            'remedy': 'lower its budget (reset-peak --to-gb for a learned peak) or free the memory outside the ledger'}
 
 
 def plan_launch(state, head, wanted, backfill, free):
@@ -489,13 +510,14 @@ def preemption_plan(live, free, wanted, graces=None, head=None, now=None):
     """The running units to stop (in order) so a waiting job of ``wanted`` = {priority, budget, reserve} fits: only
     resumable units of strictly lower priority, the lowest priority first, within it the one freeing the most per
     second of stop grace. Empty when it already fits or when stopping every candidate would not make it fit. With
-    ``head`` (the waiting job's unit), units backfilled behind it within their hold are left out (backfill_held)."""
+    ``head`` (the waiting job's unit), units backfilled behind it within their hold are left out (backfill_held) unless
+    the head is high priority."""
     need = wanted['budget'] + wanted['reserve'] - free
     if need <= 0:
         return []
     graces = graces or {}
     candidates = sorted((u for u, c in live.items() if resumable(c) and priority_of(c) < PRIORITIES[wanted['priority']]
-                         and not backfill_held(c, head, now)),
+                         and not (PRIORITIES[wanted['priority']] < PRIORITIES['high'] and backfill_held(c, head, now))),
                         key=lambda u: (priority_of(live[u]), -(live[u]['used'] / (graces.get(u, GRACE_MIN) + 1)),
                                        -live[u]['admitted']))
     plan, freed = [], 0
@@ -687,7 +709,7 @@ def status(args):
         graces = {}
         plans = {}
         for position, (name, wait) in enumerate(queue):
-            plans[name] = preemption_plan(live, free, wait, graces)
+            plans[name] = preemption_plan(live, free, wait, graces, head=name)
         claims = {u: {'class': c['class'], 'priority': PRIORITY_NAMES[priority_of(c)],
                       'budget_gb': round(c['budget'] / GIB, 1), 'used_gb': round(c['used'] / GIB, 1),
                       'peak_gb': round(c.get('peak', 0) / GIB, 1), 'reserved_gb': round(outstanding(c) / GIB, 1),
@@ -699,7 +721,9 @@ def status(args):
                       'waiting': [{'position': n + 1, 'unit': name, 'priority': w['priority'],
                                    'budget_gb': round(w['budget'] / GIB, 1), 'requeued': bool(w.get('requeued')),
                                    'would_preempt': plans[name],
-                                   'blocked_by': non_preemptible(live, w)} for n, (name, w) in enumerate(queue)]}, indent=2))
+                                   'blocked_by': non_preemptible(live, w),
+                                   **({'cannot_fit': why} if (why := unreachable(live, free, w)) else {})}
+                                  for n, (name, w) in enumerate(queue)]}, indent=2))
 
 
 def cancel(args):
@@ -761,13 +785,14 @@ def escalation(pending, now, available, emergency, active):
     return 'wait'
 
 
-def unit_containers(unit, command=None, extra=()):
+def unit_containers(unit, command=None, extra=(), cgroup=None):
     """Every docker container a unit runs: named by its command, recorded at launch (``run --container``), named in the
     command line of a docker client inside its cgroup (a wrapper script's ``docker run --rm --name X``), or named like the
     unit. Stopping the unit only ends the client (and a shell waiting on its foreground client runs its trap only after
     that client exits), so the containers must be stopped by name."""
-    names = [container_name(command), *extra, unit.removesuffix('.service')]
-    _, cgroup = unit_state(unit)
+    names = [container_name(command), *as_list(extra or ()), unit.removesuffix('.service')]
+    if cgroup is None:
+        _, cgroup = unit_state(unit)
     if cgroup:
         with contextlib.suppress(OSError, ValueError):
             for pid in open('/sys/fs/cgroup' + cgroup + '/cgroup.procs').read().split():
@@ -863,6 +888,7 @@ def guard(args):
     emergency = int(getattr(args, 'emergency_gb', EMERGENCY_GB) * GIB)
     stopped = {}
     pending = {}  # unit -> {'deadline', 'container'}: graceful stops in progress
+    warned = {}  # head -> time of its last 'cannot fit' event
     next_release, release, release_started = 0, None, 0
     while True:
         # CUDA allocates only from MemFree, and the warm-up's memory preflight refuses an update when MemFree is
@@ -923,6 +949,13 @@ def guard(args):
                                             time.time() - stopped[u] > 60}, free, wanted, graces, head=head)
                     if plan:
                         unit, reason = plan[0], f'preempted for {head} ({wanted["priority"]})'
+                why = None if unit or fits(free, wanted['budget'], wanted['reserve']) else \
+                    unreachable(live, free, wanted, available)
+                if why and PRIORITIES[wanted['priority']] >= PRIORITIES['high'] \
+                        and time.time() - warned.get(head, 0) > UNREACHABLE_WARN_SECONDS:
+                    warned[head] = time.time()
+                    state['events'].append({'time': time.time(), 'event': 'head cannot fit', 'unit': head, **why})
+                    print(json.dumps({'head_cannot_fit': head, **why}), flush=True)
                 if not unit and not fits(free, wanted['budget'], wanted['reserve']):
                     # Nothing to preempt for the head (or its blockers are protected): relaunch the first requeued unit
                     # behind it that fits now instead of leaving the room idle.
