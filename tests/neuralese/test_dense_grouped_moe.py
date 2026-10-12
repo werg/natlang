@@ -1,5 +1,7 @@
-"""Dense trainable experts: the grouped-GEMM path (maple/fused_moe.dense_grouped_experts) equals the per-expert loop
-of SparseMoE up to BF16 accumulation order, in values and in gradients, with and without a precision point."""
+"""Dense trainable experts: the grouped-GEMM path (maple/fused_moe.dense_grouped_experts) and the batch-invariant
+fixed-tile path (maple/fused_moe.invariant_dense_experts) equal the per-expert loop of SparseMoE up to BF16
+accumulation order, in values and in gradients, with and without a precision point; the invariant path gives a token
+the same output and routing whatever the other tokens of the call."""
 import pytest
 import torch
 
@@ -25,8 +27,8 @@ def layer(experts, hidden, ff, seed=0):
     return moe
 
 
-def run(moe, x, grouped, monkeypatch, precision):
-    monkeypatch.setitem(DENSE_MOE, 'kernel', 'grouped' if grouped else 'loop')
+def run(moe, x, kernel, monkeypatch, precision):
+    monkeypatch.setitem(DENSE_MOE, 'kernel', kernel)
     for p in (moe.experts.gate_up, moe.experts.down):
         p.grad = None
     x = x.clone().requires_grad_(True)
@@ -43,13 +45,31 @@ def relative(a, b):
 @pytest.mark.parametrize('precision', [None, {'experts': ('int4', 0.5, {'group': 32})},
                                        {'experts': ('ternary', 1.0, {})}])
 @pytest.mark.parametrize('shape', [(8, 128, 64, 37), (64, 2304, 896, 300)])
-def test_grouped_dense_experts_match_the_loop(shape, precision, monkeypatch):
+@pytest.mark.parametrize('kernel', ['grouped', 'invariant'])
+def test_grouped_dense_experts_match_the_loop(shape, precision, kernel, monkeypatch):
     experts, hidden, ff, tokens = shape
     moe = layer(experts, hidden, ff)
     x = (torch.randn(1, tokens, hidden, device='cuda') * 0.5).to(torch.bfloat16)
-    reference = run(moe, x, False, monkeypatch, precision)
-    grouped = run(moe, x, True, monkeypatch, precision)
+    reference = run(moe, x, 'loop', monkeypatch, precision)
+    grouped = run(moe, x, kernel, monkeypatch, precision)
     for name, a, b in zip(('y', 'dx', 'd_gate_up', 'd_down'), grouped, reference):
         assert relative(a, b) < 1e-2, (name, relative(a, b))
     assert float(grouped[2][-1].abs().max()) == 0.0  # the unrouted expert gets no gradient
 
+
+
+@pytest.mark.parametrize('shape', [(16, 256, 128), (64, 2304, 896)])
+def test_the_invariant_kernel_gives_a_token_the_same_output_whatever_the_other_tokens(shape, monkeypatch):
+    """Mellum batch-row dragnet (NUMERICAL_PARITY.md): with cuBLAS kernels chosen by shape, identical rows of one batch
+    came out 1e-6 apart after one MoE layer and flipped top-k routing after the next."""
+    experts, hidden, ff = shape
+    moe = layer(experts, hidden, ff)
+    monkeypatch.setitem(DENSE_MOE, 'kernel', 'invariant')
+    h = (torch.randn(1, 700, hidden, device='cuda') * 0.5).to(torch.bfloat16)
+    with torch.no_grad():
+        one = moe(h)
+        two = moe(h.expand(2, -1, -1).contiguous())
+        many = moe(torch.cat([(torch.randn(3, 700, hidden, device='cuda') * 0.5).to(torch.bfloat16), h]))
+        single = torch.cat([moe(h[:, i:i + 1]) for i in range(0, 700, 97)], 1)  # decode-sized calls
+    assert torch.equal(two[0], two[1]) and torch.equal(two[0], one[0]) and torch.equal(many[-1], one[0])
+    assert torch.equal(single[0], one[0, ::97])

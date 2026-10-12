@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import sysconfig
+from types import SimpleNamespace
 from pathlib import Path
 
 import torch
@@ -359,3 +360,148 @@ def dense_grouped_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.T
     out = out[torch.argsort(order)]  # back to (token, slot) order
     return (out.view(tokens, top_k, -1).float() * weights[..., None]).sum(1)
 
+
+
+# --- Batch-invariant dense experts (plans/neuralese/NUMERICAL_PARITY.md, "Mellum batch-row dragnet") -------------
+# cuBLAS chooses its BF16 GEMM kernel by shape, so a token's expert output changed with the number of tokens routed to
+# the same expert (a batch of one against a packed batch, a decode step against a sequence pass), and the next
+# layers' top-k routing flipped near ties on that difference (Mellum, first 4 layers: identical rows of one batch
+# 1e-6 apart after layer 0's MoE, 3e-3 after layer 1's). Here every routed row is computed by the same Triton tile
+# with one fixed configuration: a row's result depends only on its own inputs and the expert's weights.
+
+INVARIANT_BLOCK = 64  # rows per expert block, fixed: the tile, and so each row's arithmetic, never depends on the call
+
+
+@triton.jit
+def _grouped_dense_mm(a_ptr, rows_ptr, w_ptr, out_ptr, block_expert_ptr,
+                      P, N, K, stride_am, stride_ak, stride_we, stride_inner, stride_outer, stride_om, stride_on,
+                      HAS_ROWS: tl.constexpr, INNER_CONTIGUOUS: tl.constexpr, IEEE: tl.constexpr,
+                      BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
+    """out[m, n] = sum_k A[row(m), k] * W_e[inner=k, outer=n] for the block's expert e, the k loop in one fixed
+    order. ``INNER_CONTIGUOUS``: load weight tiles [BN, BK] along k (the forward of a [N, K] weight)."""
+    pid_m = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    expert = tl.load(block_expert_ptr + pid_m)
+    if expert < 0:
+        return
+    offs_m = pid_m * BM + tl.arange(0, BM)
+    offs_n = pid_n * BN + tl.arange(0, BN)
+    offs_k = tl.arange(0, BK)
+    if HAS_ROWS:
+        rows = tl.load(rows_ptr + offs_m, mask=offs_m < P, other=0)
+    else:
+        rows = offs_m
+    n_mask = offs_n < N
+    acc = tl.zeros((BM, BN), dtype=tl.float32)
+    for k0 in range(0, K, BK):
+        k_idx = k0 + offs_k
+        a = tl.load(a_ptr + rows[:, None] * stride_am + k_idx[None, :] * stride_ak,
+                    mask=(offs_m[:, None] < P) & (k_idx[None, :] < K), other=0.0)
+        if INNER_CONTIGUOUS:
+            w = tl.load(w_ptr + expert * stride_we + offs_n[:, None] * stride_outer + k_idx[None, :] * stride_inner,
+                        mask=n_mask[:, None] & (k_idx[None, :] < K), other=0.0)
+            w = tl.trans(w)
+        else:
+            w = tl.load(w_ptr + expert * stride_we + k_idx[:, None] * stride_inner + offs_n[None, :] * stride_outer,
+                        mask=(k_idx[:, None] < K) & n_mask[None, :], other=0.0)
+        if IEEE:
+            acc += tl.dot(a, w, input_precision="ieee")
+        else:
+            acc += tl.dot(a, w)
+    tl.store(out_ptr + offs_m[:, None] * stride_om + offs_n[None, :] * stride_on, acc.to(out_ptr.dtype.element_ty),
+             mask=(offs_m[:, None] < P) & n_mask[None, :])
+
+
+def _dense_mm(a, rows, weight, plan: Plan, transpose: bool) -> torch.Tensor:
+    """Grouped A @ W_eᵀ (W_e = weight[e], [N, K]) or, transposed, A @ W_e (the input gradient), with one fixed tile."""
+    E, R, C = weight.shape
+    N, K = (R, C) if not transpose else (C, R)
+    out = torch.zeros(plan.size, N, device=a.device, dtype=a.dtype)
+    inner, outer = (weight.stride(2), weight.stride(1)) if not transpose else (weight.stride(1), weight.stride(2))
+    ieee = a.dtype == torch.float32
+    # Fixed per dtype, never per call size. Measured on the GB10 (Mellum's projections, 16k tokens, top-8 of 64):
+    # 256-column tiles 1.4-1.6x the 128-column ones; 64- and 128-row blocks equal.
+    BN, BK, tuning = (64, 32, dict(num_warps=4, num_stages=2)) if ieee else (256, 64, dict(num_warps=8, num_stages=2))
+    grid = (plan.blocks, triton.cdiv(N, BN))
+    _grouped_dense_mm[grid](
+        a, rows if rows is not None else a, weight, out, plan.block_expert,
+        plan.size, N, K, a.stride(0), a.stride(1), weight.stride(0), inner, outer, out.stride(0), out.stride(1),
+        HAS_ROWS=rows is not None, INNER_CONTIGUOUS=not transpose, IEEE=ieee, BM=plan.block, BN=BN, BK=BK, **tuning)
+    return out
+
+
+def _weight_grad(grad, a_rows, plan: Plan, shape) -> torch.Tensor:
+    """dW[e] = sum over expert e's padded rows of grad[p]ᵀ a_rows[p] ([E, N, K]; padding rows hold zeros): one
+    grouped GEMM over the row dimension (the weight gradient need not be batch-invariant)."""
+    ends = (plan.start + (plan.count + plan.block - 1) // plan.block * plan.block).to(torch.int32)
+    if grad.dtype == torch.bfloat16 and hasattr(torch, "_grouped_mm"):
+        return torch._grouped_mm(grad.T, a_rows, offs=ends)
+    out = torch.zeros(shape, device=grad.device, dtype=torch.float32)
+    for expert, (start, end) in enumerate(zip(plan.start.tolist(), ends.tolist())):
+        if end > start:
+            out[expert] = grad[start:end].float().T @ a_rows[start:end].float()
+    return out
+
+
+class _DenseExpertProjection(torch.autograd.Function):
+    """y[p] = A[rows[p]] @ W_eᵀ with the fixed tile; gradients to A and to the (latent) expert weights."""
+
+    @staticmethod
+    def forward(ctx, a, rows, weight, plan):
+        ctx.save_for_backward(a, rows, weight)
+        ctx.plan = plan
+        return _dense_mm(a, rows, weight, plan, transpose=False)
+
+    @staticmethod
+    def backward(ctx, grad):
+        a, rows, weight = ctx.saved_tensors
+        plan = ctx.plan
+        grad = grad.contiguous()
+        grad_weight = None
+        if ctx.needs_input_grad[2]:
+            grad_weight = _weight_grad(grad, a[rows] if rows is not None else a, plan, weight.shape).to(weight.dtype)
+        grad_a = None
+        if ctx.needs_input_grad[0]:
+            grad_rows = _dense_mm(grad, None, weight, plan, transpose=True)
+            if rows is None:
+                grad_a = grad_rows
+            else:
+                tokens = plan.position.numel() // plan.top_k
+                summed = _gather_sum(grad_rows, plan.position, tokens, plan.top_k)
+                grad_a = torch.cat([summed, summed.new_zeros(1, summed.shape[-1])], 0).to(a.dtype)
+        return grad_a, None, grad_weight, None
+
+
+def invariant_dense_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.Tensor, gate_up: torch.Tensor,
+                            down: torch.Tensor, clamp: float | None) -> torch.Tensor:
+    """``SparseMoE``'s dense experts with every routed row computed by one fixed Triton tile (batch-invariant): the
+    same pairs, routing weights and FP32 combine as the loop; only each GEMM's accumulation order differs from it."""
+    tokens, top_k = index.shape
+    plan = Plan(index, gate_up.shape[0], tokens, INVARIANT_BLOCK)
+    padded_x = torch.cat([x, x.new_zeros(1, x.shape[-1])], 0)  # the padding rows read zeros
+    hidden = _DenseExpertProjection.apply(padded_x, plan.rows, gate_up, plan)
+    h = _swiglu(hidden, down.shape[-1], clamp)
+    out = _DenseExpertProjection.apply(h, None, down, plan)
+    return _gather_sum(out, plan.position, tokens, top_k, weights)
+
+
+class _InvariantLinear(torch.autograd.Function):
+    """x @ wᵀ for every row with the same fixed tile (FP32 inputs in exact FP32): the router's logits."""
+
+    @staticmethod
+    def forward(ctx, x, w):
+        ctx.save_for_backward(x, w)
+        rows = x.shape[0]
+        plan = SimpleNamespace(size=rows, blocks=triton.cdiv(rows, INVARIANT_BLOCK), block=INVARIANT_BLOCK,
+                               block_expert=torch.zeros(triton.cdiv(rows, INVARIANT_BLOCK), dtype=torch.int32,
+                                                        device=x.device))
+        return _dense_mm(x.contiguous(), None, w[None], plan, transpose=False)
+
+    @staticmethod
+    def backward(ctx, grad):
+        x, w = ctx.saved_tensors
+        return grad @ w, grad.T @ x
+
+
+def invariant_linear(x: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
+    return _InvariantLinear.apply(x, w)

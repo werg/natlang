@@ -1307,8 +1307,8 @@ def main(argv=None):
                         'layer\'s gradient is complete and frees it, so no backbone gradient buffer exists. Same update '
                         'as separate backwards plus one step, except that the latents are not norm-clipped (the global '
                         'norm still counts them and clips heads and norms)')
-    p.add_argument('--moe-kernel',choices=['loop','grouped'],default='loop',
-                   help='dense (BF16, trainable) MoE experts on CUDA: loop = one matmul pair per expert (reference); grouped = two grouped GEMMs over the expert-sorted routed tokens (maple/fused_moe.dense_grouped_experts; BF16 accumulation-order differences only)')
+    p.add_argument('--moe-kernel',choices=['invariant','loop','grouped'],default='invariant',
+                   help='dense (BF16, trainable) MoE experts on CUDA: invariant = one fixed Triton tile per routed row, batch-invariant (maple/fused_moe.invariant_dense_experts, the default); loop = one matmul pair per expert (reference); grouped = torch grouped GEMMs (maple/fused_moe.dense_grouped_experts); loop and grouped choose kernels by shape')
     p.add_argument('--qat-latent-lr',type=float,default=0.,
                    help='Maple QAT dense latents get their own AdamW groups at this rate times their matrix ternary scale '
                         '(a code flips after its latent moves ~0.5 of it); 0: Muon at the backbone rate, under which '
