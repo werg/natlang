@@ -82,7 +82,10 @@ def resolve(registry: dict, spec: dict) -> tuple[list[dict], list[dict]]:
         if not files:
             skipped.append({'id': c['id'], 'reason': 'no rendering with files for both tokenizers on this machine'})
             continue
-        members.append({'id': c['id'], 'derived_from': c.get('derived_from'), 'files': files,
+        supersedes = c.get('supersedes') or []
+        supersedes = [supersedes] if isinstance(supersedes, str) else list(supersedes)
+        members.append({'id': c['id'], 'derived_from': c.get('derived_from'), 'supersedes': supersedes,
+                        'files': files,
                         'stats': {r: {t: (c['renders'].get(r, {}).get(t) or {}).get('by_split') for t in TOKENIZERS}
                                   for r in files}})
     for ext in spec.get('external_members', []):
@@ -93,14 +96,18 @@ def resolve(registry: dict, spec: dict) -> tuple[list[dict], list[dict]]:
         if not all((ROOT / p).exists() for toks in ext['files'].values() for p in toks.values()):
             skipped.append({'id': ext['id'], 'reason': 'files missing on this machine'})
             continue
-        members.append({'id': ext['id'], 'registry_ids': ext['registry_ids'], 'note': ext.get('note', ''),
+        supersedes = ext.get('supersedes') or []
+        supersedes = [supersedes] if isinstance(supersedes, str) else list(supersedes)
+        members.append({'id': ext['id'], 'registry_ids': ext['registry_ids'], 'supersedes': supersedes,
+                        'note': ext.get('note', ''),
                         'files': ext['files']})
     return members, skipped
 
 
 def signature(members: list[dict]) -> str:
     import hashlib
-    key = [(m['id'], sorted((r, t, p) for r, toks in m['files'].items() for t, p in toks.items())) for m in members]
+    key = [(m['id'], sorted(m.get('supersedes') or []),
+            sorted((r, t, p) for r, toks in m['files'].items() for t, p in toks.items())) for m in members]
     return hashlib.sha256(json.dumps(sorted(key)).encode()).hexdigest()
 
 

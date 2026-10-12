@@ -117,6 +117,8 @@ def build_union(members: list[dict], rev: int, launches: int = 0) -> Path | str 
         for rendering, toks in m['files'].items():
             for tok, rel in toks.items():
                 args += ['--member', f"{m['id']}:{rendering}:{tok}={staged(rel, rev)}"]
+        for older in m.get('supersedes') or []:
+            args += ['--supersedes', f"{m['id']}={older}"]
     out.mkdir(parents=True, exist_ok=True)
     zstd = shutil.which('zstd') or '/usr/bin/zstd'
     mounts = ['-v', f'{os.path.realpath(zstd)}:/usr/local/bin/zstd:ro',
