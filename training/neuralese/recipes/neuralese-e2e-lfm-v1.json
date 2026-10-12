@@ -1,0 +1,34 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-e2e-lfm-v1",
+ "extends": "neuralese-e2e-v1",
+ "description": "neuralese-e2e-v1 on LFM2.5-350M (Pop). Backbone-inherent: backbone_lr 7.5e-7 (the direct stage's evidence-backed LFM rate), LFM's measured base gate_pass in the monitor, the pinned LFM2.5 snapshot; no QAT component yet (the known LFM gap, plans/REVIEW_20261012.md item 4). Fit-only: Pop's 8 GB GPU envelope (memory_gb 7.5, graph_memory_gb 6.9, graph_headroom_gb 0.4), checkpointed layers, auto backward routing. A launch recipe extends this one and binds input_bindings.direct_artifact.",
+ "overrides": {
+  "stages": {
+   "direct_runtime": {
+    "parameters": {
+     "direct_base_snapshot": "/srv/storage/natlang-artifacts/hf-cache-lfm25-postqualification-v1/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f"
+    }
+   },
+   "e2e": {
+    "parameters": {
+     "direct_base_snapshot": "/srv/storage/natlang-artifacts/hf-cache-lfm25-postqualification-v1/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+     "backbone_lr": 7.5e-07,
+     "memory_gb": 7.5,
+     "graph_memory_gb": 6.9,
+     "graph_headroom_gb": 0.4,
+     "checkpoint_layers": true,
+     "backward_policy": "auto",
+     "monitor": {
+      "gate": {
+       "reference": {
+        "gate_pass": 0.5416666666666666,
+        "source": "untrained base LFM2.5-350M on the 48 probes, 26/48 (registry luna-direct-untrained-base-behavior-gate-held-20261011-v2, runs/luna-neuralese-direct-base-behavior-20261011-v2/report.json)"
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}

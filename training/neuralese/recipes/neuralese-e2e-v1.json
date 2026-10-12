@@ -1,0 +1,130 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-e2e-v1",
+ "description": "Shared base of the end-to-end Neuralese stage for both lines (owner decision 2026-10-12: start the E2E arm now, in parallel with SFT; plans/REVIEW_20261012.md item 2; design plans/neuralese/NEURALESE_DIRECT_V1.md \"End-to-end stage\"). It starts from a direct export (a neuralese_direct checkpoint exported by train/direct_export.py) bound as input_bindings.direct_artifact by the launch recipe that extends a line recipe; that binding is a lineage key, not a parity setting. Two stages: direct_runtime runs the exact runtime qualification of that export on the stage's machine (eval/direct_runtime.py: writer, cache readback, producer replay and input adjoints, typed wire); e2e trains train/trajectories.py --direct-artifact on the authenticated 1243-record native cohort: producers write their child results with the shared direct writer (token-driven, one Neuralese value per crisp token, generated-length stops), consumers read the written block, the identity TokenChoiceProjection comes on at step 0 (logits equal the export's), the backbone latents train on MuonSR (cubic5, wd 0.1, spike clip 5) and step inside the layer-staged backward, with the shared drift monitor (response KL warns 0.5, stops 1.5; the 48-probe behaviour gate is reported only, owner 2026-10-12) and the line's QAT component held at its parent's curriculum progress. Acceptance (e2e_acceptance, train/e2e_acceptance.py, written as e2e-certificate.json): consumers reading values against consumers reading the gold tokens on the same held producer calls (V CE at most T CE; V beats shuffled and zeroed blocks by 0.05 nats; at least 32 paired readers), exact-oracle task success (V at most 0.02 below T), and no drift stop. Lines: neuralese-e2e-mellum-v1 (DGX), neuralese-e2e-lfm-v1 (Pop); every difference is declared in training/neuralese/line-parity.json.",
+ "identity_qualification": "direct_e2e_runtime_qualified_export",
+ "input_bindings": {
+  "e2e_records": {
+   "path": "runs/neuralese-native-e2e-binding-candidate-20261011-v1/full-authenticated-1243-cohort-v1.jsonl",
+   "sha256": "35a52f34de92f226bb68e34c2a28cd11dc51afcc56ccb685b7852b62b8cb549a"
+  },
+  "e2e_pieces": {
+   "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-pieces.jsonl",
+   "sha256": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6"
+  }
+ },
+ "stages": [
+  {
+   "id": "direct_runtime",
+   "kind": "direct_runtime_qualification",
+   "requires": [],
+   "inputs": {
+    "direct_artifact_manifest": "direct_artifact"
+   },
+   "parameters": {}
+  },
+  {
+   "id": "e2e",
+   "kind": "raw_recurrence_training",
+   "requires": [
+    "direct_runtime"
+   ],
+   "inputs": {
+    "records": "e2e_records",
+    "pieces": "e2e_pieces",
+    "direct_artifact_manifest": "direct_artifact"
+   },
+   "parameters": {
+    "steps": 687,
+    "batch": 1,
+    "train": 687,
+    "eval": 32,
+    "max_tokens": 32768,
+    "max_write_vectors": 2048,
+    "handover": "written",
+    "write_depth": 1,
+    "tokens_per_vector": 1.0,
+    "writer_supervision": "native-value",
+    "writer_length_policy": "native-value",
+    "stop_supervision": "generated-length",
+    "distill": 0.0,
+    "writer_text_weight": 1.0,
+    "context_weight": 1.0,
+    "feedback_weight": 0.25,
+    "backbone_training": "latent",
+    "optimizer": "muon",
+    "latent_optimizer": "muonsr",
+    "latent_lr": 3e-06,
+    "latent_ns": "cubic5",
+    "latent_weight_decay": 0.1,
+    "grad_spike_clip": 5.0,
+    "latent_step_in_backward": true,
+    "producer_batch_size": 1,
+    "backbone_lr": 7.5e-06,
+    "lr": 0.0003,
+    "heads_lr": 0.0003,
+    "checkpoint_every": 200,
+    "eval_every": 200,
+    "seed": 20261011,
+    "monitor": {
+     "data": {
+      "path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v2/monitor/probes.jsonl",
+      "sha256": "0bce5275646cd95ae36374f41769602995c8587c871275653b26c1cf260c3d52"
+     },
+     "gate": {
+      "probes": {
+       "path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v2/monitor/probes.jsonl",
+       "sha256": "0bce5275646cd95ae36374f41769602995c8587c871275653b26c1cf260c3d52"
+      },
+      "held_rows": 48,
+      "prompt_weight": 0.25,
+      "max_gate_drop": 0.1
+     }
+    },
+    "drift_rows": 16,
+    "drift_warn": 0.5,
+    "drift_stop": 1.5,
+    "drift_agreement_warn": 0.97,
+    "drift_agreement_stop": 0.0,
+    "gate_response_kl": 1.5,
+    "drift_gate_every": 300,
+    "gate_held_rows": 48
+   }
+  }
+ ],
+ "e2e_acceptance": {
+  "description": "NEURALESE_DIRECT_V1.md \"End-to-end stage\" section 4 and its resolved margins; T reads the gold crisp text (teacher-oracle reference); the greedy-T arm, the token-readout regression (eval/direct_token_readout.py) and the behaviour gate are reported.",
+  "paired_reader": {
+   "max_v_minus_t_ce_nats": 0.0,
+   "min_v_margin_over_shuffled_nats": 0.05,
+   "min_v_margin_over_zeroed_nats": 0.05,
+   "min_paired_readers": 32
+  },
+  "task_success": {
+   "oracle": "exact",
+   "max_success_drop_vs_t": 0.02
+  },
+  "drift": {
+   "no_drift_stop": true
+  },
+  "reported": [
+   "behaviour_gate",
+   "drift_guard",
+   "soft-trained",
+   "written-trained-train",
+   "quantization"
+  ]
+ },
+ "parent_readiness": {
+  "description": "When a line's running direct phase hands off into this lineage (owner 2026-10-12: e2e replaces text-only SFT once ready, without waiting for the phase's full epoch). Checked on the direct phase's own logs by train/e2e_acceptance.py readiness; the same criterion and the same moment rule for both lines (lockstep, plans/neuralese/TRAINING_RECIPE.md). Held CE plateau: over the last 3 held evaluations on one held set, at most 2% relative improvement; no drift stop; held task success at least the base's once the direct phase measures it (until then reported, plans/REVIEW_20261012.md item 1). The handoff itself: the phase stops at a checkpoint (--handoff with stop_at, or a signal), that checkpoint is exported (train/direct_export.py), and the line's launch recipe extending neuralese-e2e-<line>-v1 binds the export; this lineage's direct_runtime stage qualifies those exact weights before any e2e update.",
+  "held_ce_plateau": {
+   "evaluations": 3,
+   "max_relative_improvement": 0.02
+  },
+  "no_drift_stop": true,
+  "task_success": {
+   "min_vs_base": 0.0,
+   "until_measured": "reported"
+  }
+ }
+}

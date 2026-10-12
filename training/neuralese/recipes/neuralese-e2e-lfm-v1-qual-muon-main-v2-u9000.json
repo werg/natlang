@@ -1,0 +1,21 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-e2e-lfm-v1-qual-muon-main-v2-u9000",
+ "extends": "neuralese-e2e-lfm-v1",
+ "description": "Mechanics qualification arm of the shared end-to-end lineage on the LFM line (owner 2026-10-12: qualify e2e now so the direct phases can hand off into it on parent_readiness instead of after their full epoch). Starts from Pop's running main LFM direct phase at update 9000 (neuralese-direct-lfm-muon-main-20261012-v2, strict direct export, SHA-verified copy on DGX at runs/pop-lfm-muon-main-v2-export-step9000; Pop binds its own copy with --input-binding direct_artifact=PATH, same sha256). Differences from neuralese-e2e-lfm-v1, all operational for a qualification arm: 200 updates (one evaluation and checkpoint point) instead of one 687-record epoch. It runs the lineage's direct_runtime stage on the exact weights, then e2e; e2e-certificate.json reports V against T, shuffled and zeroed on the paired held readers and the drift guard. Its acceptance is evidence about the stage mechanics, not a qualified artifact of the main lineage.",
+ "overrides": {
+  "input_bindings": {
+   "direct_artifact": {
+    "path": "runs/pop-lfm-muon-main-v2-export-step9000/manifest.json",
+    "sha256": "7d68ecde79dc1409490f85ffa867a3a01697ba24d7cf22c1aa24672f6b5bb514"
+   }
+  },
+  "stages": {
+   "e2e": {
+    "parameters": {
+     "steps": 200
+    }
+   }
+  }
+ }
+}

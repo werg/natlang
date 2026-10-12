@@ -1,0 +1,125 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-e2e-mellum-v1",
+ "extends": "neuralese-e2e-v1",
+ "description": "neuralese-e2e-v1 on Mellum2.1-12B-A2.5B (DGX). Backbone-inherent: MuonSR latent_lr 1e-5 (as the direct stage), maple output convention and Mellum's measured base gate_pass in the monitor, Mellum's QAT component held at the parent's progress, the pinned BF16 base snapshot. Fit-only: memory_gb 102 (the 121 GB unified-memory envelope with the stage alone on the machine), checkpointed layers, auto backward routing. A launch recipe extends this one and binds input_bindings.direct_artifact (and, from a mid-lineage snapshot, quantization.stage_progress.e2e).",
+ "overrides": {
+  "stages": {
+   "direct_runtime": {
+    "parameters": {
+     "direct_base_snapshot": "/home/werg/data/models/mellum21-12b-a2.5b-thinking"
+    }
+   },
+   "e2e": {
+    "parameters": {
+     "direct_base_snapshot": "/home/werg/data/models/mellum21-12b-a2.5b-thinking",
+     "latent_lr": 1e-05,
+     "memory_gb": 102,
+     "checkpoint_layers": true,
+     "backward_policy": "auto",
+     "monitor": {
+      "gate": {
+       "output_convention": "maple",
+       "reference": {
+        "gate_pass": 0.5833333333333334,
+        "source": "BF16 Mellum2.1 (raw-token-v1 heads) on the 48 shared probes, 28/48 with the maple tool-call convention (runs/neuralese-direct-line-parity-20261011/mellum-base-gate-48.json texts, rescored mellum-base-gate-48-maple.json)"
+       }
+      }
+     }
+    }
+   }
+  },
+  "quantization": {
+   "schema": "natlang.neuralese-quantization/1",
+   "description": "Mellum's QAT component (neuralese-direct-mellum-v4: owner rule, QAT in every stage) in the end-to-end stage, held at its parent's curriculum progress: after the full direct lineage (direct_sft [0, 0.35], direct_trajectory [0.35, 0.5]) that is 0.5. A launch from a mid-lineage snapshot holds the snapshot's progress instead (its launch recipe overrides stage_progress.e2e). The ramps belong to the SFT phases; the e2e stage trains at the precision mix its parent reached.",
+   "loss": {
+    "mode": "sample",
+    "bf16_weight": 1.0,
+    "seed": 0
+   },
+   "points": [
+    {
+     "name": "q4",
+     "gate": "required",
+     "weight": 0.5,
+     "ramp": {
+      "start": 0.15,
+      "end": 0.3
+     },
+     "modules": {
+      "experts": {
+       "format": "int4",
+       "group": 32
+      },
+      "mlp": {
+       "format": "int4",
+       "group": 32
+      },
+      "attention": {
+       "format": "int4",
+       "group": 32
+      },
+      "conv": {
+       "format": "int4",
+       "group": 32
+      }
+     }
+    },
+    {
+     "name": "ternary-experts",
+     "gate": "required",
+     "weight": 1.0,
+     "ramp": {
+      "start": 0.3,
+      "end": 0.7
+     },
+     "modules": {
+      "experts": {
+       "format": "ternary"
+      },
+      "mlp": {
+       "format": "ternary"
+      },
+      "attention": {
+       "format": "int4",
+       "group": 32
+      },
+      "conv": {
+       "format": "int4",
+       "group": 32
+      }
+     }
+    },
+    {
+     "name": "ternary",
+     "gate": "report",
+     "weight": 0.5,
+     "ramp": {
+      "start": 0.55,
+      "end": 0.95
+     },
+     "modules": {
+      "experts": {
+       "format": "ternary"
+      },
+      "mlp": {
+       "format": "ternary"
+      },
+      "attention": {
+       "format": "ternary"
+      },
+      "conv": {
+       "format": "ternary"
+      }
+     }
+    }
+   ],
+   "stage_progress": {
+    "e2e": [
+     0.5,
+     0.5
+    ]
+   }
+  }
+ }
+}

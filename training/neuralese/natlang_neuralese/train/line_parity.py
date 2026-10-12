@@ -67,7 +67,8 @@ def _recipe_file(recipe_id, repo):
 
 def _stage_view(kind, parameters, inputs, quantization=None, family=None):
     out = {}
-    _flatten('parameters', parameters, out)
+    if parameters:  # a stage whose only parameters are lineage keys declares none in the base
+        _flatten('parameters', parameters, out)
     for role, binding in inputs.items():
         out['inputs.' + role] = binding.get('sha256', binding.get('artifact'))
     if quantization:
@@ -100,20 +101,29 @@ def recipe_config(recipe):
     if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
         kind = recipe['stage']['kind']
         return kind, _stage_view(kind, recipe.get('parameters', {}), recipe.get('inputs', {}))
+    from .recipe import DIRECT_E2E_KINDS
     stages = [s for s in recipe['stages'] if s.get('admitted', True) is not False]
-    if not stages or len({s['kind'] for s in stages}) != 1:
-        raise ValueError('line parity compares recipes whose stages share one kind: ' + recipe['id'])
+    kinds = {s['kind'] for s in stages}
+    if not stages or (len(kinds) != 1 and not kinds <= DIRECT_E2E_KINDS):
+        raise ValueError('line parity compares recipes whose stages share one kind (or an end-to-end lineage): ' +
+                         recipe['id'])
+    kind = '+'.join(sorted(kinds))
     catalog = recipe.get('input_bindings', {})
     views = {}
     for stage in stages:
         parameters = {**recipe.get('stage_parameter_defaults', {}).get(stage['kind'], {}), **stage.get('parameters', {})}
-        inputs = {role: catalog[name] for role, name in stage.get('inputs', {}).items()}
+        # A line recipe may leave a lineage binding (e.g. the end-to-end stage's direct export) to the launch recipe
+        # that extends it; lineage keys are not compared.
+        inputs = {role: catalog.get(name, {}) for role, name in stage.get('inputs', {}).items()}
         family = recipe.get('family')
         views[stage['id']] = _stage_view(stage['kind'], parameters, inputs, recipe.get('quantization'),
                                          family if family and stage['id'] in family.get('stages', []) else None)
-    if len(views) == 1:
-        return stages[0]['kind'], next(iter(views.values()))
-    return stages[0]['kind'], {f'stages.{sid}.{key}': value for sid, view in views.items() for key, value in view.items()}
+    flat = (next(iter(views.values())) if len(views) == 1 else
+            {f'stages.{sid}.{key}': value for sid, view in views.items() for key, value in view.items()})
+    for key in ('e2e_acceptance', 'parent_readiness'):  # the same acceptance and handoff moment on both lines
+        if key in recipe:
+            _flatten(key, {k: v for k, v in recipe[key].items() if k != 'description'}, flat)
+    return kind, flat
 
 
 def _twin_registered(base_sha, line_sha, repo):

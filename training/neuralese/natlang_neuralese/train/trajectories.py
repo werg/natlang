@@ -993,7 +993,9 @@ def main(argv=None):
     if args.direct_artifact:
         from .direct_export import direct_parent_binding
         direct_parent = direct_parent_binding(args.direct_artifact)
-    resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False) if checkpoint_path.exists() else None
+    # mmap: a Mellum full state is ~47 GB; reading it whole into host RAM beside the CUDA copy of the same weights
+    # does not fit the unified-memory machine (the checkpoint is replaced atomically, so the mapping stays valid).
+    resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False, mmap=True) if checkpoint_path.exists() else None
     new_continuation = resumed is None and bool(args.continue_from)
     def resume_identity_for_saved_parent(state):
         current = dict(identity)
@@ -2120,6 +2122,9 @@ def main(argv=None):
                   'write_errors': write_errors, 'reader_errors': reader_errors, 'missing_donors': missing_donors,
                   'qualification_scope': probe_selection['scope']}
         own, shuffled, groups = [], [], {}
+        # The end-to-end acceptance (train/e2e_acceptance.py) compares the same consumers reading tokens (T: the gold
+        # crisp text where the values stand) and reading a zeroed block (a control) on these exact rows.
+        crisp_scores, zeroed_scores = [], []
         with torch.no_grad():
             for record, names, payloads in sites.values():
                 rid = record['id']
@@ -2142,17 +2147,21 @@ def main(argv=None):
                                                {**leaves, **values}))
                 try:
                     a, b = reader(payloads), reader(swapped)
+                    z = reader({key: torch.zeros_like(value) for key, value in payloads.items()})
+                    t = float(loss_of(record, {}, soft=False, training_objective=False))
                 except RequestError as error:
                     reader_errors.append({'id': rid, 'error': str(error)})
                     continue
                 own.append(a)
                 shuffled.append(b)
+                zeroed_scores.append(z)
+                crisp_scores.append(t)
                 factual = sorted(source_groups(record))
                 key = tuple(factual)
                 groups.setdefault(key, []).append((a, b))
                 result['case_scores'].append({'id': rid, 'source_groups': factual, 'donor_id': donor_id,
                     'donor_source_groups': sorted(source_groups(donor_record)), 'payload_mapping': mapping,
-                    'written': a, 'shuffled': b, 'margin': b - a,
+                    'written': a, 'shuffled': b, 'margin': b - a, 'zeroed': z, 'crisp': t,
                     'slot_lengths': [{'recipient': recipient, 'donor': donor,
                                      'own': int(payloads[names[recipient]].shape[0]),
                                      'donor_length': int(donor_payloads[donor_names[donor]].shape[0])}
@@ -2165,6 +2174,8 @@ def main(argv=None):
                             'shuffled': sum(b for _, b in values) / len(values)}
                            for key, values in sorted(groups.items())]
             result.update({'written': sum(own) / len(own), 'shuffled': sum(shuffled) / len(shuffled),
+                           'zeroed': sum(zeroed_scores) / len(zeroed_scores), 'crisp': sum(crisp_scores) / len(crisp_scores),
+                           'v_minus_t': (sum(own) - sum(crisp_scores)) / len(own),
                            'n': len(own), 'written_better': sum(a < b for a, b in zip(own, shuffled)) / len(own),
                            'factual_group_set_means': group_means,
                            'factual_group_set_written_mean': sum(g['written'] for g in group_means)/len(group_means),

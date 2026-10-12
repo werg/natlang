@@ -473,3 +473,21 @@ also declares the q4 point (the LFM line's light QAT) and the nested-family comp
 21x32 over the N0 order. `neuralese-direct-mellum-v4-from-v3-warmup` declares `objective_continuation` of direct_sft,
 pinning the quantization component it trained with (ebebbaf8...). Its next `--handoff` rebases the curriculum from
 p_k (about 0.03) to 0.75 without a jump. Details: plans/neuralese/DECISIONS.md, 2026-10-12.
+## neuralese-e2e-v1, neuralese-e2e-mellum-v1, neuralese-e2e-lfm-v1 (2026-10-12)
+
+Owner decision 2026-10-12 (plans/REVIEW_20261012.md item 2, clarified): the end-to-end stage is the successor of
+text-only direct SFT on both lines, started as soon as it is ready. `line-parity.json` stages.e2e now names a shared
+base recipe instead of an inline config, and both lines declare a recipe (no pending line).
+- Lineage: `direct_runtime` (new handler `direct_runtime_qualification`, eval/direct_runtime.py on the exact export)
+  then `e2e` (train/trajectories.py --direct-artifact, the c2eea5b2 stage; the parameters of the former inline base
+  config, plus `latent_step_in_backward` and `producer_batch_size` 1 moved into the base now that direct writes train
+  under the layer-staged backward, 4f3bb938). identity_qualification `direct_e2e_runtime_qualified_export`; no --heads.
+- The direct export is a lineage binding (`input_bindings.direct_artifact`) of a launch recipe extending a line recipe.
+- Acceptance `e2e_acceptance` (train/e2e_acceptance.py, e2e-certificate.json): V CE at most T CE (gold crisp text),
+  V beats shuffled and zeroed by 0.05 nats, at least 32 paired readers, exact-oracle task success within 0.02 of T
+  (pending until the task-success evaluator exists), no drift stop. The behaviour gate, token-readout regression and
+  greedy-T arm are reported. trajectories' paired-reader evaluation now also reads T and a zeroed block on the same rows.
+- Handoff moment `parent_readiness`: held CE plateau (3 evaluations, at most 2% relative), no drift stop, task success
+  reported until measured. Mellum: QAT component held at the parent's progress (0.5 after the full direct lineage).
+- `neuralese-e2e-lfm-v1-qual-muon-main-v2-u9000`: mechanics qualification arm on Pop's LFM main at update 9000
+  (200 updates).

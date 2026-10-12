@@ -350,8 +350,9 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda', token_choice_
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--artifact', type=Path, required=True)
-    parser.add_argument('--base-snapshot', type=Path, required=True)
+    # The recipe runner's names (train/recipe.py direct_runtime_qualification) are the trainers' names.
+    parser.add_argument('--artifact', '--direct-artifact', type=Path, required=True)
+    parser.add_argument('--base-snapshot', '--direct-base-snapshot', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--lengths', type=int, nargs='+', default=[8, 32])

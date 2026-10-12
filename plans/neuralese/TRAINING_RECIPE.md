@@ -818,6 +818,35 @@ A bounded periodic probe does not establish comprehensive capability; use broade
 source-group coverage before release qualification. Active frozen runtimes retain
 their recorded probe policy; changed selection remeasures the crisp baseline.
 
+## Two lines in lockstep (owner 2026-10-12)
+
+Owner: "I want our recipe to progress for both LFM and Mellum ... with as much unity and lockstep as we can get."
+
+- **One progression.** Both lines run the same stage sequence: the direct stage (`line-parity.json` stages.direct:
+  neuralese-direct-v3 and its line recipes), then the end-to-end lineage (stages.e2e: neuralese-e2e-v1, whose first
+  stage `direct_runtime` qualifies the exact exported weights and whose second stage `e2e` trains consumers reading
+  values; plans/neuralese/NEURALESE_DIRECT_V1.md "End-to-end stage"). The end-to-end lineage replaces text-only SFT
+  once it is ready; it is the successor stage, not a parallel arm or a mixed objective.
+- **Same recipe fields.** Both line recipes share every field (stages, data unions, objectives, QAT and nested
+  treatment, evaluation cadence, task-success evaluation, gates, acceptance and the handoff criterion) except the
+  differences `line-parity.json` declares, each fit-only or backbone-inherent with its reason. Historical one-offs of
+  a running lineage are listed there too and removed once both lines are back on the shared recipe.
+- **Same moment.** A line moves from direct to e2e when the shared `parent_readiness` of neuralese-e2e-v1 holds on
+  its running direct phase (`python -m natlang_neuralese.train.e2e_acceptance readiness --recipe RECIPE
+  --direct-stage DIR`): held CE plateau over the last 3 evaluations on one held set (at most 2% relative), no drift
+  stop, held task success at least the base's once the phase measures it. Then: stop the phase at a checkpoint,
+  export it (train/direct_export.py), and launch the line's recipe extending neuralese-e2e-<line>-v1 with
+  `input_bindings.direct_artifact` (a snapshot taken mid-curriculum also holds its QAT progress,
+  `quantization.stage_progress.e2e = [p, p]`).
+- **Same data revision.** A new data union (r3, then r4) is adopted by both lines at the same revision, by the same
+  mechanism (data continuation for an active phase, input change for an unstarted one).
+- **Checked in CI.** `tests/neuralese/test_line_parity.py` (in `scripts/check-main.sh --quick`) fails when a line
+  recipe differs from the shared base outside the declared list, when a stage declares a recipe for only one line,
+  or when the lines' e2e acceptance or readiness criterion differ.
+- **Changes land on both lines together.** A change to a shared component (nested family, QAT, objectives, data)
+  updates the base or both line recipes in the same commit; agents working on one component (e.g. dgx-nested)
+  coordinate through coord so neither line runs ahead.
+
 ## Recipe inheritance (`extends` / `overrides`)
 
 A multi-stage recipe may declare `"extends": "<recipe id>"` (the parent is the sibling file in the same directory with

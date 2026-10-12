@@ -449,6 +449,20 @@ Measured: consumer task success (exact verifiers where the task has them) and co
   native binding candidate, and DGX does the shared stage code and the Mellum E2E on direct-mellum-v2's export.
 - **Owner-level questions:** none outstanding.
 
+**Recipes and handoff (2026-10-12).** Owner: the end-to-end stage replaces text-only SFT once it is ready, on both
+lines in lockstep (plans/neuralese/TRAINING_RECIPE.md "Two lines in lockstep").
+- Recipes: neuralese-e2e-v1 (shared base: stages `direct_runtime` then `e2e`; MuonSR latents stepped in the
+  layer-staged backward, the shared drift monitor, the line's QAT held at the parent's progress), line recipes
+  neuralese-e2e-mellum-v1 and neuralese-e2e-lfm-v1, and a launch recipe per start that binds the direct export
+  (`input_bindings.direct_artifact`). History: recipes/HISTORY.md.
+- Acceptance: the recipe's `e2e_acceptance` (section 4 above, with its resolved margins); the behaviour gate is
+  reported only (owner 2026-10-12).
+- When a direct phase hands off: the recipe's `parent_readiness` on the running phase's logs (held CE plateau over 3
+  evaluations within 2%, no drift stop, task success once measured), not the end of its epoch.
+- Mechanics qualification: neuralese-e2e-lfm-v1-qual-muon-main-v2-u9000 on Pop (LFM main at update 9000). A Mellum
+  arm does not fit beside v4 (Mellum E2E updates peaked at 72-94 GB on 2026-10-11); Mellum's first e2e run is its
+  handoff, whose `direct_runtime` stage qualifies the exact weights first.
+
 ## Exact semantics (answers to Pop, pop-f7c5 / pop-b359)
 
 1. **Positional shift and Neuralese span.**

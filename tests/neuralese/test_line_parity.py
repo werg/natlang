@@ -59,3 +59,26 @@ def test_cli_cannot_replace_declared_data(tmp_path, capsys):
         recipe_main(['--recipe', str(RECIPES / 'neuralese-direct-lfm-v2.json'), '--heads', str(tmp_path / 'h.pt'),
                      '--records', str(tmp_path / 'r.jsonl'), '--out', str(tmp_path / 'out')])
     assert 'declares its data inputs' in capsys.readouterr().err
+
+
+def test_both_lines_progress_in_lockstep():
+    """Lockstep (plans/neuralese/TRAINING_RECIPE.md): every stage of the progression (direct, then e2e) declares a
+    recipe for both lines; a pending line or a stage only one line runs fails CI."""
+    parity = line_parity.load_parity()
+    assert list(parity['stages']) == ['direct', 'e2e']
+    for stage, declaration in parity['stages'].items():
+        assert set(declaration['lines']) == set(line_parity.LINES), stage
+        assert all(spec.get('recipe') for spec in declaration['lines'].values()), stage
+
+
+def test_e2e_lines_share_acceptance_and_readiness():
+    parity = line_parity.load_parity()
+    for line in line_parity.LINES:
+        kind, config = line_parity.effective_config(parity['stages']['e2e']['lines'][line])
+        assert kind == 'direct_runtime_qualification+raw_recurrence_training'
+        assert config['parent_readiness.held_ce_plateau.evaluations'] == 3
+        assert config['e2e_acceptance.paired_reader.max_v_minus_t_ce_nats'] == 0.0
+    kind, config = line_parity.effective_config({'recipe': 'neuralese-e2e-lfm-v1'})
+    config = {**config, 'parent_readiness.held_ce_plateau.max_relative_improvement': 0.1}
+    errors, _ = line_parity.compare(parity, 'e2e', 'lfm', kind, config)
+    assert len(errors) == 1 and 'parent_readiness' in errors[0]

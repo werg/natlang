@@ -54,6 +54,12 @@ HANDLERS = {
                           'drift_rows','drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop'},'result':'heads.pt'},
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
                             'parameters':set(),'result':'report.json'},
+    # The end-to-end Neuralese lineage (NEURALESE_DIRECT_V1.md "End-to-end stage"): exact runtime qualification of the
+    # direct export it starts from (AGENTS.md: runtime transport/gradient replay is qualified against those exact
+    # weights), on the stage's own machine, before any update.
+    'direct_runtime_qualification': {'module': 'natlang_neuralese.eval.direct_runtime',
+                                     'required_inputs': {'direct_artifact_manifest'}, 'optional_inputs': set(),
+                                     'parameters': {'direct_base_snapshot'}, 'result': 'report.json'},
     'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads','direct_artifact_manifest','continue_from','direct_parent_proof'},
                                 'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'backbone_lr', 'backbone_training', 'max_tokens',
                                                'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
@@ -504,6 +510,19 @@ def recipe_identity_sha256(path):
 
 
 DIRECT_IDENTITY_QUALIFICATION = 'neuralese_direct_step0_identity'
+# The end-to-end lineage (owner decision 2026-10-12, plans/neuralese/NEURALESE_DIRECT_V1.md "End-to-end stage"):
+# it starts from a direct export, which the lineage's first stage runtime-qualifies on those exact weights; the
+# trainer's step 0 adds the identity TokenChoiceProjection, so its logits equal the export's. Its acceptance is the
+# recipe's ``e2e_acceptance`` and its handoff moment the ``parent_readiness`` (train/e2e_acceptance.py).
+DIRECT_E2E_QUALIFICATION = 'direct_e2e_runtime_qualified_export'
+DIRECT_E2E_KINDS = frozenset({'direct_runtime_qualification', 'raw_recurrence_training'})
+
+
+def direct_e2e_lineage(recipe):
+    """True for a lineage made of direct-export runtime qualification and direct-artifact recurrence stages."""
+    stages = recipe.get('stages') or []
+    return bool(stages) and all(
+        s.get('kind') in DIRECT_E2E_KINDS and 'direct_artifact_manifest' in (s.get('inputs') or {}) for s in stages)
 
 
 def load_recipe(path):
@@ -586,12 +605,25 @@ def load_recipe(path):
         if kind == 'text_warmup_runtime' and 'heads' not in stage.get('inputs', {}):
             if not any(s['id'] in required and s['kind'] == 'core_text_warmup' for s in recipe['stages']):
                 raise ValueError('adapted runtime requires a core warm-up predecessor or exact stage heads binding')
+        if kind == 'direct_runtime_qualification' and not isinstance(parameters.get('direct_base_snapshot'), str):
+            raise ValueError('direct runtime qualification needs direct_base_snapshot (the export\'s pinned base)')
         if kind == 'raw_recurrence_training':
-            runtime_dependencies = [s for s in recipe['stages']
-                                    if s['id'] in required and s['kind'] == 'text_warmup_runtime']
+            stage_inputs = stage.get('inputs', {})
+            if 'direct_artifact_manifest' in stage_inputs:
+                # An end-to-end stage reads a direct export: its runtime gate is that export's exact runtime
+                # qualification (the same binding), not an adapted warm-up runtime.
+                runtime_dependencies = [s for s in recipe['stages'] if s['id'] in required and
+                                        s['kind'] == 'direct_runtime_qualification' and
+                                        (s.get('inputs') or {}).get('direct_artifact_manifest') ==
+                                        stage_inputs['direct_artifact_manifest']]
+                if not runtime_dependencies:
+                    raise ValueError('a direct-artifact recurrence stage requires the direct_runtime_qualification '
+                                     'stage of the same direct_artifact_manifest binding')
+            else:
+                runtime_dependencies = [s for s in recipe['stages']
+                                        if s['id'] in required and s['kind'] == 'text_warmup_runtime']
             if not runtime_dependencies:
                 raise ValueError('recurrence training requires an adapted warm-up runtime gate')
-            stage_inputs = stage.get('inputs', {})
             if 'heads' in stage_inputs and 'direct_artifact_manifest' in stage_inputs:
                 raise ValueError('recurrence stage must choose exactly one of heads or direct_artifact_manifest')
             if not ({'heads', 'direct_artifact_manifest'} & set(stage_inputs)) and not any(
@@ -610,9 +642,21 @@ def load_recipe(path):
     if direct_lineage and recipe.get('identity_qualification') != DIRECT_IDENTITY_QUALIFICATION:
         raise ValueError('a neuralese_direct lineage must declare identity_qualification ' +
                          repr(DIRECT_IDENTITY_QUALIFICATION))
-    if not direct_lineage and (not identity_stages or
+    e2e_lineage = direct_e2e_lineage(recipe)
+    if e2e_lineage and recipe.get('identity_qualification') != DIRECT_E2E_QUALIFICATION:
+        raise ValueError('an end-to-end lineage (direct export runtime qualification + direct-artifact recurrence) '
+                         'must declare identity_qualification ' + repr(DIRECT_E2E_QUALIFICATION))
+    if not direct_lineage and not e2e_lineage and (not identity_stages or
                                not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages'])):
         raise ValueError('neuralese recipe must declare identity and embedding distillation stages')
+    if 'e2e_acceptance' in recipe:
+        if not e2e_lineage:
+            raise ValueError('e2e_acceptance belongs to an end-to-end lineage')
+        from .e2e_acceptance import validate_declaration, validate_readiness
+        validate_declaration(recipe['e2e_acceptance'])
+        validate_readiness(recipe.get('parent_readiness'))
+    elif e2e_lineage:
+        raise ValueError('an end-to-end lineage declares its acceptance (e2e_acceptance) and parent_readiness')
     validate_input_bindings(recipe)
     declared_runtime_environment(recipe)
     if 'family' in recipe:
@@ -893,6 +937,10 @@ def require_gate(report, kind):
     elif kind == 'verified_heads_handoff':
         if report.get('handoff_verified') is not True:
             raise ValueError('exact trained heads handoff gate failed')
+    elif kind == 'direct_runtime_qualification':
+        if (report.get('schema') != 'natlang.neuralese-direct-runtime-qualification/1' or
+                report.get('runtime_qualified') is not True):
+            raise ValueError('direct export runtime qualification failed')
     elif kind == 'raw_recurrence_training':
         if report.get('training_stage_completed') is not True or report.get('errors') != 0:
             raise ValueError('raw recurrence training stage incomplete or errored')
@@ -1591,8 +1639,11 @@ def main(argv=None):
         if args.launch_metadata is None:
             parser.error('direct-stage execution requires --launch-metadata')
         return run_declared_direct_stage(recipe, args.recipe, args.out, args.launch_metadata, args.device, args.handoff)
-    if args.heads is None:
+    e2e_lineage = direct_e2e_lineage(recipe)
+    if args.heads is None and not e2e_lineage:
         parser.error('multi-stage training recipes require --heads')
+    if args.heads is not None and e2e_lineage:
+        parser.error('an end-to-end lineage starts from its declared direct export, not from --heads')
     if args.until and args.until not in {stage['id'] for stage in recipe['stages']}:
         parser.error('unknown stopping stage')
     if args.inspect:
@@ -1604,7 +1655,7 @@ def main(argv=None):
         parser.error('this recipe declares its data inputs, so --records/--pieces/--text-data cannot replace them; '
                      'relocate a declared file with --input-binding NAME=PATH (its sha256 must match)')
     args.out = args.out.resolve()
-    args.heads = args.heads.resolve()
+    args.heads = args.heads.resolve() if args.heads is not None else None
     from ..common import hdd_guard
     hdd_guard.require_nvme(args.out)
     overrides = parse_input_binding_overrides(args.input_binding)
@@ -1617,7 +1668,7 @@ def main(argv=None):
         # A held stage (admitted: false) never runs in this lineage; its inputs are neither resolved nor hashed.
         stage_inputs[stage['id']] = ({} if stage.get('admitted') is False else
                                      resolve_stage_inputs(recipe, stage, stage_defaults, overrides))
-    inputs = {str(args.heads): sha(args.heads)}
+    inputs = {str(args.heads): sha(args.heads)} if args.heads is not None else {}
     for path in (args.records, args.pieces, args.text_data):
         if path is not None:
             resolved = path.resolve()
@@ -1678,8 +1729,8 @@ def main(argv=None):
                               'recipe_path': str(args.recipe.resolve()),
                               'recipe_sha256': plan['recipe_sha256'],
                               'output_path': str(args.out),
-                              'heads_path': str(args.heads),
-                              'heads_sha256': sha(args.heads),
+                              'heads_path': str(args.heads) if args.heads is not None else None,
+                              'heads_sha256': sha(args.heads) if args.heads is not None else None,
                               'device': args.device,
                               'until': args.until,
                               'recipe_plan_path': str(plan_path),
@@ -1693,7 +1744,8 @@ def main(argv=None):
         # the recipe's ``init`` and carry the latents' ramp position into every quantized stage.
         import torch
         from .quantization import init_mix_for
-        heads_identity = torch.load(args.heads, map_location='cpu', weights_only=False, mmap=True).get('backbone')
+        heads_identity = (torch.load(args.heads, map_location='cpu', weights_only=False, mmap=True).get('backbone')
+                          if args.heads is not None else None)
         init_mix = init_mix_for(recipe, heads_identity)
     with _ChildSignalForwarder() as signal_forwarder:
         stopped = signal_forwarder.stopped
@@ -1735,7 +1787,7 @@ def main(argv=None):
                         'heads' not in stage_inputs[stage['id']]):
                     continuation_checkpoint, stage_heads = mapped_fixup_continuation(stage,reports)
                     continuation_checkpoint = str(continuation_checkpoint)
-                direct_artifact_stage = (kind == 'raw_recurrence_training' and
+                direct_artifact_stage = (kind in DIRECT_E2E_KINDS and
                                          'direct_artifact_manifest' in stage_inputs[stage['id']])
                 if kind in ('core_text_warmup','text_warmup_runtime','raw_recurrence_training') and not direct_artifact_stage:
                     has_exact_stage_heads = 'heads' in stage_inputs[stage['id']]
@@ -1821,6 +1873,10 @@ def main(argv=None):
                     gate=json.loads((directory/'report.json').read_text())
                 elif kind in ('core_text_warmup','neuralese_direct'):
                     gate=json.loads((directory/'report.json').read_text())
+                elif kind == 'direct_runtime_qualification':
+                    gate = json.loads((directory / 'report.json').read_text())
+                    if gate.get('artifact_manifest_sha256') != stage_inputs[stage['id']]['direct_artifact_manifest']['sha256']:
+                        raise ValueError('direct runtime qualification measured another export than its binding')
                 elif kind == 'view_operator_gate':
                     gate = json.loads(output.read_text())
                 else:
@@ -1829,7 +1885,12 @@ def main(argv=None):
                     if kind == 'raw_recurrence_training':
                         if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
                             raise ValueError('wrong recurrence artifact schema')
-                        if state['identity']['files'].get(str(Path(stage_heads).resolve())) != sha(stage_heads):
+                        if direct_artifact_stage:
+                            parent = state.get('direct_parent_binding') or {}
+                            if (parent.get('manifest_file_sha256') !=
+                                    stage_inputs[stage['id']]['direct_artifact_manifest']['sha256']):
+                                raise ValueError('recurrence artifact was trained from another direct export')
+                        elif state['identity']['files'].get(str(Path(stage_heads).resolve())) != sha(stage_heads):
                             raise ValueError('recurrence artifact runtime handoff differs')
                         gate = recurrence_completion_gate(output, stage['parameters'].get('steps', 500))
                     else:
@@ -1854,6 +1915,14 @@ def main(argv=None):
                                'stages': [{'kind': report['kind'], 'report': str(args.out / (report['id'] + '-report.json')),
                                            'report_sha256': sha(args.out / (report['id'] + '-report.json'))} for report in reports if report['kind'] in {'token_identity', 'causal_embedding_distillation'}]}
                 write_json(args.out / 'foundation-certificate.json', certificate)
+            if kind == 'raw_recurrence_training' and e2e_lineage:
+                # The lineage's acceptance (consumers reading values against consumers reading tokens, task success,
+                # drift) on the stage's final report; a certificate, not a gate: the stage itself completed.
+                from .e2e_acceptance import certificate as e2e_certificate
+                summary = Path(report['artifact']).parent / 'summary.json'
+                write_json(args.out / 'e2e-certificate.json',
+                           e2e_certificate(recipe['e2e_acceptance'], summary, recipe_sha256=plan['recipe_sha256'],
+                                           stage=stage['id'], report_path=report_path))
             if kind == 'neuralese_direct':
                 stage_report = json.loads(Path(report['artifact']).read_text())
                 identity = stage_report.get('identity_check') or {}
