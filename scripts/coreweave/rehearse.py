@@ -15,7 +15,7 @@ The steps are:
    that the status is recorded, and that the container does not restart.
 7. Plan a gc (dry), then stop the stand-in.
 
-Usage (DGX; every container and the S3 server run as memory-ledger units, priority low):
+Usage (DGX; every container and the S3 server run as memory-ledger units, priority medium, the smoke class):
 
     python3 scripts/coreweave/rehearse.py [--image natlang-neuralese:26.09] [--port 59321] [--keep-tmp]
 
@@ -50,7 +50,7 @@ def log(**event):
 
 def ledger(unit: str, budget_gb: float, command: list[str], container: str | None = None) -> None:
     args = ['python3', str(REPO / 'scripts' / 'memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', str(budget_gb),
-            '--priority', 'low', '--wait', '3600', '--no-resumable']
+            '--priority', 'medium', '--wait', '3600', '--no-resumable']
     if container:
         args += ['--container', container]
     subprocess.run(args + ['--', *command], check=True, stdout=subprocess.DEVNULL)

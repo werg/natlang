@@ -317,7 +317,7 @@ launch tests only CoreWeave itself:
 6. A relaunch with `--resume` and exit status 3 must continue from step 4 to step 8, record status 3, and not restart.
 7. A dry gc plan.
 
-Everything runs as low-priority ledger units, so on a full DGX it waits its turn.
+Everything runs as medium-priority ledger units (the smoke class), so on a full DGX it waits its turn.
 
 ## 5. Bring-up checklist (when the keys arrive)
 
