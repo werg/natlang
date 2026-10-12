@@ -45566,6 +45566,393 @@
       "notes": "Owner admission binds all 371 exact native IDs, target and visible-message hashes, train splits and complete source-group sets. Frozen candidate bytes retain training_admission=false; the shared renderer promotes only these owner-receipted rows in memory. Source-quality clearance scope remains conversion-only. Training admission is for ordinary native SFT; no teacher trace, whole trajectory, new world, recurrence, writer or runtime qualification is claimed."
     },
     {
+      "id": "luna-v24-clinc-intent-reviewed-child-actions-20261012-v2-exact20",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/luna-v24-clinc-intent-reviewed-child-candidates-20261012-v4-exact20",
+      "include": [
+        "candidate-discovery-audit.json",
+        "candidate-selection-review.json",
+        "exact-child-proof-v1.json",
+        "materialized-manifest.json",
+        "packet-verification-v1.json",
+        "reservation-source.json",
+        "root-selected-action-admission.json",
+        "selection-review-pin-correction.json",
+        "semantic-child-review.json",
+        "semantic-source-candidate-audit.json",
+        "source-cases.jsonl",
+        "source-closure.json",
+        "source-manifest.json",
+        "source-quality-clearance.json",
+        "source-quality-review.json",
+        "source-split-reservations.json",
+        "turns.jsonl"
+      ],
+      "split": "inherited-source-train-only",
+      "source_class": "provider-generated-source-bound-clinc-intent-child-actions",
+      "training_admission": true,
+      "trace_admission": false,
+      "admission": "Root-approved exact 20 native SFT child actions; no trace, recurrence, writer, runtime, or new-world qualification",
+      "training_admission_reason": "Root approval binds exactly 20 native IDs, source item hashes, target and messages hashes, train split and source groups. Candidate packet remains selection-stage metadata; only listed native actions are admitted.",
+      "candidate_selection_admission": {
+        "schema": "natlang.registry-candidate-selection-admission/1",
+        "decision": "admit-reviewed-candidate-selection",
+        "training_admission": true,
+        "trace_admission": false,
+        "packet_manifest_sha256": "7c036050a6ac3b667f62888b087f276a9743236194f2f44fac8e13d0ebcb3fe3",
+        "candidate_selection_review_sha256": "6cbd730fd35fe653203ae2326ea834544db146a9d657e8adb8054abcc3df5bbc",
+        "semantic_review_sha256": "f61968d56a39547e1030f162ab4633569182847816c3d81377ddebd92df2cdf1",
+        "historical_audit_sha256": "7a594e7036c3a33d5af402c94cdd8644f0a56111d4e09fbe93d659c269622582",
+        "selection_review_pin_correction_sha256": "f4372754d42d2f8ca2284e5f01fced8e1ebd726ccc975a26226b4b4450c1b2e1",
+        "source_quality_clearance_sha256": "3fd87a6f56c2afe60d2f64e888ba66272d96cb106e2bb8dbfcdc66f02d04c318",
+        "owner_admission_path": "root-selected-action-admission.json",
+        "owner_admission_sha256": "47fecbaafa14f0877435a24cea5f9f9ec30b3846831680f802146f6fd9660205",
+        "rows_sha256": "57245ac1ca2d05b6261930668b3d91b33f3d3a535d4ad576aea1d1bda726249b",
+        "rows": [
+          {
+            "id": "teacher-program:0ece301098b214fe7f9c:decision:0005",
+            "item_id": "dc-079f634461f1f2091a3b",
+            "item_sha256": "58882a30fca071a189ac5dd6209b97ba4ffca1ff2da514e57c0badd8a230759a",
+            "target_sha256": "2f9415b45962136e79837021946859b2e09af3ba09a52b417fcf7ba609115a06",
+            "messages_sha256": "ae75f01f54f8655b3ca25ced2ddcc5e7c8c81469299f55da2c337a2ee9a72a5a",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_c5921a32cfb17a00b0ccf7cf:strict-top-label-v2-ordinal-source-mapping",
+              "g-f56b3dc8da06681e3c330d63",
+              "g-80cfcd0207002f3b3e104e34",
+              "g-9a1fe72c2fc2aec203382eb0",
+              "g-5b912fb7d6b64ddfe8870b3c"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:0ece301098b214fe7f9c:decision:0006",
+            "item_id": "dc-079fc5758f04c4036031",
+            "item_sha256": "23f77c4316d6bc856fd2b64ec2df3994da48d71818d747f4777a0efd2ac5de2c",
+            "target_sha256": "29d65b0aa2e8dcd99acdfee34e23f123735da6a1a327a2704d2588e0e69f48e9",
+            "messages_sha256": "634ddfc5d40f64684fc3164fecd66ee99ceef5a11417118b67f941baa9fd71c6",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_c5921a32cfb17a00b0ccf7cf:strict-top-label-v2-ordinal-source-mapping",
+              "g-f56b3dc8da06681e3c330d63",
+              "g-80cfcd0207002f3b3e104e34",
+              "g-9a1fe72c2fc2aec203382eb0",
+              "g-5b912fb7d6b64ddfe8870b3c"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:0ece301098b214fe7f9c:decision:0010",
+            "item_id": "dc-079d6562ab183be531ea",
+            "item_sha256": "07fc2b3fb5e8b09808761663a12f0ee85fff2ca791129cfbdac5efc128ce6ecd",
+            "target_sha256": "c2998c9605f91768df54bf037188add097f5274fef146b15af241ee502d9c16b",
+            "messages_sha256": "ee356e1878e99fa37e246de39c688afeba2e358c65fa694d059bfeaab894fe5f",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_c5921a32cfb17a00b0ccf7cf:strict-top-label-v2-ordinal-source-mapping",
+              "g-f56b3dc8da06681e3c330d63",
+              "g-80cfcd0207002f3b3e104e34",
+              "g-9a1fe72c2fc2aec203382eb0",
+              "g-5b912fb7d6b64ddfe8870b3c"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:0ece301098b214fe7f9c:decision:0015",
+            "item_id": "dc-079aecdbf2b57b4f73a7",
+            "item_sha256": "fadf3da49342d425125e26ed91b0e9dad60f196eeac7513e8b70beb376d6a46b",
+            "target_sha256": "72d42aa747ca478b8b44034b0fd7e7c845bac8a427f5d422a3fb46c0e2f31299",
+            "messages_sha256": "eb4c292adcec8d15e90f33eb476030f06123184f92557b88f89edc311fb0c534",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_c5921a32cfb17a00b0ccf7cf:strict-top-label-v2-ordinal-source-mapping",
+              "g-f56b3dc8da06681e3c330d63",
+              "g-80cfcd0207002f3b3e104e34",
+              "g-9a1fe72c2fc2aec203382eb0",
+              "g-5b912fb7d6b64ddfe8870b3c"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:260d9f59b8a9acc621da:decision:0004",
+            "item_id": "dc-044ac61b44a97422962c",
+            "item_sha256": "70a423c59eee714687196735d9dee995cc320e7e7c8adae95ed77e6ee6b7bcca",
+            "target_sha256": "4a1e0c57515d0f05aa2b7abb4af8c2615c7e606e388af837bf0592eefa1b07d8",
+            "messages_sha256": "5a2a79d9fec151b77a5b07ffc76ab45f679d1503e72044d761ebd78e719710cb",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_4f99c02a32247c970b41d3b4:strict-top-label-v2-ordinal-source-mapping",
+              "g-456516a50d6677c54b0af927",
+              "g-0e2a4920a631e1d3f5bf319a",
+              "g-ef600f2dc85500b9ddd00f06",
+              "g-5baeca60d03b7701a9fbc048"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:260d9f59b8a9acc621da:decision:0005",
+            "item_id": "dc-044e8e19f427bcf88396",
+            "item_sha256": "e94b9c3c159d50b2bd449716348d03ba95e0fe5f8546c3a1d80e76d993072b6f",
+            "target_sha256": "1139ebd9350ce396e08b5f02ba0add3d24d703a9cdefbc33b714f9f099e162bd",
+            "messages_sha256": "66444fed800e8a9d6e1d654d89c749e5e72b70482245f4d007cf2cce1c228ce4",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_4f99c02a32247c970b41d3b4:strict-top-label-v2-ordinal-source-mapping",
+              "g-456516a50d6677c54b0af927",
+              "g-0e2a4920a631e1d3f5bf319a",
+              "g-ef600f2dc85500b9ddd00f06",
+              "g-5baeca60d03b7701a9fbc048"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:260d9f59b8a9acc621da:decision:0006",
+            "item_id": "dc-0455ced346fd18daf47e",
+            "item_sha256": "740dbe6eb5715e1e4cf5ec186ed264d4097aacc7746d6ecdef71516e33f82512",
+            "target_sha256": "dd7cac5345d740c36f6abbc6ad94363d58450bb2ca676fbab760083f3d8f2e1b",
+            "messages_sha256": "2155b803ad8394fbf141002b67487e18fde213c37c7dd2fa578129e330c03c64",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_4f99c02a32247c970b41d3b4:strict-top-label-v2-ordinal-source-mapping",
+              "g-456516a50d6677c54b0af927",
+              "g-0e2a4920a631e1d3f5bf319a",
+              "g-ef600f2dc85500b9ddd00f06",
+              "g-5baeca60d03b7701a9fbc048"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:83b92b35276766d424ae:decision:0003",
+            "item_id": "dc-0500448215ababc3c3b9",
+            "item_sha256": "59884cad1080b10e49bea1e544a8bed2c7ad1edd52afab2231070a263bf25093",
+            "target_sha256": "96b1e0d082b2193d840ddea57f4cd6acd6cdfaaedf4df5f891bfb172f455f145",
+            "messages_sha256": "b8e43426a6e1223a360c9ba4b7e0583c2838aa24f525251d609d4fdbef11db11",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_9b4bb4c6870a17263de32036:strict-top-label-v2-ordinal-source-mapping",
+              "g-deb73adc000f2512ce12936c",
+              "g-746ff0595ca15088910b85c9",
+              "g-beda843013d249b3f4589ac8",
+              "g-229dd57afe91f22f39ad71da"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:83b92b35276766d424ae:decision:0006",
+            "item_id": "dc-0503bea14eb555e53422",
+            "item_sha256": "f4c903a65b95faf3ff5f1e9e3f64ebc2556d0a1a58b9ca3a2486f7ad1cf90d10",
+            "target_sha256": "247a72ebf8fd464690ebb93105754b6c1dc904e1c34c70a3a2c3b8b798da87a4",
+            "messages_sha256": "3bc49d5c1d4a92910aa5c2c8d1879a006a5e6169501d1b54d3a3a466caaa801a",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_9b4bb4c6870a17263de32036:strict-top-label-v2-ordinal-source-mapping",
+              "g-deb73adc000f2512ce12936c",
+              "g-746ff0595ca15088910b85c9",
+              "g-beda843013d249b3f4589ac8",
+              "g-229dd57afe91f22f39ad71da"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:83b92b35276766d424ae:decision:0018",
+            "item_id": "dc-05017435fdf7ddeab077",
+            "item_sha256": "9c8847e54f571580f27de186ebab7dda033027c70160ddfda45083d2f1e97d25",
+            "target_sha256": "a8432b0993ed62ca57450132f2415fad89dcd35f3b9a5e3f3bde43a07a15c1cf",
+            "messages_sha256": "a4612ce55c445b576cf15c97615b69bbcbdc41b5862b2066a7ef30c6d34ea48e",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_9b4bb4c6870a17263de32036:strict-top-label-v2-ordinal-source-mapping",
+              "g-deb73adc000f2512ce12936c",
+              "g-746ff0595ca15088910b85c9",
+              "g-beda843013d249b3f4589ac8",
+              "g-229dd57afe91f22f39ad71da"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:aba2a6037e8ca03f001b:decision:0003",
+            "item_id": "dc-076a65ec0b92d3356e07",
+            "item_sha256": "f4779b58c779b711b69ab003f8c875719891886f88a614f1efa1b7d054661ca9",
+            "target_sha256": "6883d8eb18d0b176a99ce7afec42e144d5f8a7fae7948c36d5ee3d4862bb96f4",
+            "messages_sha256": "d58bd44cf06d51548f9e92e6ec25cc78c6fe2651b0a40795ef2c4ed04997291c",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_87905ded6d6caf21c754ce7f:strict-top-label-v2-ordinal-source-mapping",
+              "g-b41ba906b206e48b64c21d8d",
+              "g-522892aabc0182673e388bc9",
+              "g-2ee55efbbe6d1cb469d58a92",
+              "g-bb4aab29d32d36bb2a24c9af"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:aba2a6037e8ca03f001b:decision:0004",
+            "item_id": "dc-076b7c7777a18a6bad29",
+            "item_sha256": "517a083ecdce1f7911c9b44686d1c06613920f944185dd4dab518ecc6be641c7",
+            "target_sha256": "bafb81029008b21abadb4da1469eeb4d6e647928974a192f7be80546a36e2f6e",
+            "messages_sha256": "e72a4782072852478cd9e425cd8e6cffb815038e6bd4171886bf2f82765b80d8",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_87905ded6d6caf21c754ce7f:strict-top-label-v2-ordinal-source-mapping",
+              "g-b41ba906b206e48b64c21d8d",
+              "g-522892aabc0182673e388bc9",
+              "g-2ee55efbbe6d1cb469d58a92",
+              "g-bb4aab29d32d36bb2a24c9af"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:aba2a6037e8ca03f001b:decision:0005",
+            "item_id": "dc-0773c5e5e243c5f16bb2",
+            "item_sha256": "5c458db5e5b618a1c23e70ca51e6deb3f99803e2b75430349f49bb520d80158b",
+            "target_sha256": "01b2f5dcbf48376ebd479c1b1a258ddc52020834951e54542c5d61bf4a967de8",
+            "messages_sha256": "9fb8fade92b94fd29db8bd1ddf0091ddd9bae6700c8ab18d84c3cca6545e5404",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_87905ded6d6caf21c754ce7f:strict-top-label-v2-ordinal-source-mapping",
+              "g-b41ba906b206e48b64c21d8d",
+              "g-522892aabc0182673e388bc9",
+              "g-2ee55efbbe6d1cb469d58a92",
+              "g-bb4aab29d32d36bb2a24c9af"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:aba2a6037e8ca03f001b:decision:0006",
+            "item_id": "dc-0773c8e7e4e0ca202004",
+            "item_sha256": "f5dc2808b7422cb0d2523fded42a4ec0f4c7503d21f035968b8286a71a2299c9",
+            "target_sha256": "5092c647ab22ba3b6dec9a159c3ae9d99e49daa8b5e9de333b2d53234fee8e60",
+            "messages_sha256": "f13b7826d7bfcb12206924b641c9152dd0287de87af01fd2b12de188bbac1c6a",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_87905ded6d6caf21c754ce7f:strict-top-label-v2-ordinal-source-mapping",
+              "g-b41ba906b206e48b64c21d8d",
+              "g-522892aabc0182673e388bc9",
+              "g-2ee55efbbe6d1cb469d58a92",
+              "g-bb4aab29d32d36bb2a24c9af"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:c55db0726497058f8834:decision:0004",
+            "item_id": "dc-098fb5a5efd2f86f84b7",
+            "item_sha256": "9697439f705b04cd5f17bf11630a718cccc7a74e734e8b96416124641fcd66b4",
+            "target_sha256": "6f07197d6671712bf97d61d370a9f0e56b09262f6c7c64b9d921048035f9e317",
+            "messages_sha256": "199e7f1da039890ac42c2d7ccb82286e71ddc280f65344b47e19aff3a585c3cc",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_13e3378b8c90453462c872ad:strict-top-label-v2-ordinal-source-mapping",
+              "g-c9236e0a5603f7b239e9f2b1",
+              "g-f3ef31465b307d9bfdaa8278",
+              "g-cac414c192eca937a204b5df",
+              "g-28832d3df57e90828bb6c591"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:c55db0726497058f8834:decision:0005",
+            "item_id": "dc-0993d7bf3fb31ca8e539",
+            "item_sha256": "f6b50fdc3b3a80ea9cc2c7dc10c120d7b4ac448a398a9fe6635f1bd49305011a",
+            "target_sha256": "1cdb926728e5a2158e64d3a8e45eda6ecf9b3d0ca4d8bfc609bd79cc982eb561",
+            "messages_sha256": "2fed191d843eea9ca6caf53c279c9dc65360e68f3a4e5289ff4057900de7d714",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_13e3378b8c90453462c872ad:strict-top-label-v2-ordinal-source-mapping",
+              "g-c9236e0a5603f7b239e9f2b1",
+              "g-f3ef31465b307d9bfdaa8278",
+              "g-cac414c192eca937a204b5df",
+              "g-28832d3df57e90828bb6c591"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:e85bc643556e1eb656df:decision:0003",
+            "item_id": "dc-05daa47586095e0abb4f",
+            "item_sha256": "c3366afca8292d64385894392181650a0d35d4f5e7005e606c001d0bd52e116f",
+            "target_sha256": "1ee0e2521c240f746052aaa697ad273259f83ccc073f52c47814e6bce26f6b43",
+            "messages_sha256": "6108521af12475c876e1cdacea3ca0b6b94be9991988980b75307eb5d04de2b5",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_f7ba81a5ad6850b14783438a:strict-top-label-v2-ordinal-source-mapping",
+              "g-a26b4485fcc5f37c901188c6",
+              "g-c4125c9f5c3ef87e11496b66",
+              "g-88960a341e19dfd75b17b730",
+              "g-4fb1b451fa2aebae8599449b"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:e85bc643556e1eb656df:decision:0004",
+            "item_id": "dc-05e0bd9eb4222a855787",
+            "item_sha256": "7ecccf39c710536587fea61982b1f000ad29f7cb5c944607112a3cd5e71d0273",
+            "target_sha256": "5da681f8ea1484c9124919604b85eda0724a821074d8a535de3a4ccc195a5669",
+            "messages_sha256": "012c93aa23b94a481decb30a25592805b9c05f59e1e661f76193005937a768ab",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_f7ba81a5ad6850b14783438a:strict-top-label-v2-ordinal-source-mapping",
+              "g-a26b4485fcc5f37c901188c6",
+              "g-c4125c9f5c3ef87e11496b66",
+              "g-88960a341e19dfd75b17b730",
+              "g-4fb1b451fa2aebae8599449b"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:e85bc643556e1eb656df:decision:0005",
+            "item_id": "dc-05ea82a2202cd8bfe38f",
+            "item_sha256": "6d6bf92b49da93ac44b40d16852395697f3f25a4dd5657f1b4dfb20f68397d72",
+            "target_sha256": "00148de86dd313c18d4113c22c9ba7a6a66df8128088e6d6c5aa277b3a7ad2e2",
+            "messages_sha256": "0b8bedd75818da0aa4256467a6240bc9ae874a2c0725252d3bd80b5d501655d3",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_f7ba81a5ad6850b14783438a:strict-top-label-v2-ordinal-source-mapping",
+              "g-a26b4485fcc5f37c901188c6",
+              "g-c4125c9f5c3ef87e11496b66",
+              "g-88960a341e19dfd75b17b730",
+              "g-4fb1b451fa2aebae8599449b"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          },
+          {
+            "id": "teacher-program:e85bc643556e1eb656df:decision:0006",
+            "item_id": "dc-05f9fa7acfa93d4c5e35",
+            "item_sha256": "03dd06a248a08a903445388c39869ede2518db97f5691a1d1427f99148e95ed7",
+            "target_sha256": "2eb356ef03f984e88c0ed610f08ab173a09fc26ac9f51af93d233fe0d4089a36",
+            "messages_sha256": "edea107d0106fb53f5a25a6dd49faa3f462aef3aade34acafb3c22ffeba6380d",
+            "split": "train",
+            "source_groups": [
+              "inline-curriculum:annotation_decision_folders_decision_clinc_intent:source_9e8087343308_f7ba81a5ad6850b14783438a:strict-top-label-v2-ordinal-source-mapping",
+              "g-a26b4485fcc5f37c901188c6",
+              "g-c4125c9f5c3ef87e11496b66",
+              "g-88960a341e19dfd75b17b730",
+              "g-4fb1b451fa2aebae8599449b"
+            ],
+            "decision": "admit-exact-selected-native-action-SFT-only",
+            "training_admission": true
+          }
+        ]
+      }
+    },
+    {
       "id": "natlang-native-turns-luna-v24-clinc-render-20261012-v1",
       "owner": "dgx",
       "path": "runs/natlang-native-turns-luna-v24-clinc-render-20261012-v1",
