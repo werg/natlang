@@ -31,7 +31,7 @@ HANDLERS = {
                                             'continue_identity','continue_monitor_reference',
                                             'continued_text_data'},
                          'parameters':{'steps','epochs','batch_tokens','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
-                           'checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
+                           'train_target_tokens','merge_prefix_rows','checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
                            'latent_optimizer','latent_lr','head_lr','neuralese_weight','projection_blocks',
                            'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows','drift_every','drift_gate_every','drift_gate_rise','drift_ce_windows','gate_response_kl',
                            'drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop','drift_gate','gate_held_rows','monitor',
@@ -1038,6 +1038,47 @@ def recipe_handoff_epoch_changes(old_recipe, new_recipe):
     return changes
 
 
+# neuralese_direct train-window geometry (direct_sft.WINDOWING_KEYS, plans/neuralese/HEADER_EFFICIENCY_20261012.md):
+# a handoff may change it on an unfinished direct stage; the trainer continues by a windowing continuation (the plan
+# it trained on rebuilt under the saved geometry, its consumed documents seen, the rest under the new geometry).
+DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows')
+
+
+def direct_windowing_handoffs(old_recipe, new_recipe, out):
+    """{stage id: {parameter: [old, new]}} for the train-window geometry changes of neuralese_direct stages, and the
+    two recipes without those parameters. A finished stage keeps its geometry."""
+    def parameters(recipe, stage):
+        merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
+        merged.update(stage.get('parameters', {}))
+        return merged
+    old_stages = {stage.get('id'): stage for stage in old_recipe.get('stages', [])}
+    changes = {}
+    for stage in new_recipe.get('stages', []):
+        old = old_stages.get(stage.get('id'))
+        if stage.get('kind') != 'neuralese_direct' or old is None or old.get('kind') != stage.get('kind'):
+            continue
+        before, after = parameters(old_recipe, old), parameters(new_recipe, stage)
+        changed = {key: [before.get(key), after.get(key)] for key in DIRECT_WINDOWING_PARAMETERS
+                   if before.get(key) != after.get(key)}
+        if changed:
+            if stage_finished(out, stage['id']):
+                raise ValueError('handoff refused: finished stage ' + stage['id'] + ' keeps its train windows')
+            changes[stage['id']] = changed
+    if not changes:
+        return changes, old_recipe, new_recipe
+    stripped = []
+    for recipe in (old_recipe, new_recipe):
+        value = json.loads(json.dumps(recipe))
+        direct = value.get('stage_parameter_defaults', {}).get('neuralese_direct')
+        for container in [direct] + [stage.get('parameters') for stage in value.get('stages', [])
+                                     if stage.get('kind') == 'neuralese_direct']:
+            if isinstance(container, dict):
+                for key in DIRECT_WINDOWING_PARAMETERS:
+                    container.pop(key, None)
+        stripped.append(value)
+    return changes, stripped[0], stripped[1]
+
+
 def _without_direct_epochs(recipe):
     value = json.loads(json.dumps(recipe))
     defaults = value.get('stage_parameter_defaults', {})
@@ -1238,6 +1279,8 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
         old_handoff_recipe, new_handoff_recipe, input_changes)
     objective_change, old_handoff_recipe, new_handoff_recipe = objective_handoff(
         old_handoff_recipe, new_handoff_recipe, out)
+    windowing_changes, old_handoff_recipe, new_handoff_recipe = direct_windowing_handoffs(
+        old_handoff_recipe, new_handoff_recipe, out)
     epoch_budget_changes = recipe_handoff_epoch_changes(old_handoff_recipe, new_handoff_recipe)
     old_code = existing['code']
     old_runtime = existing['recipe'].get('runtime', {})
@@ -1277,6 +1320,8 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
         record['epoch_budget_changes'] = epoch_budget_changes
     if objective_change:
         record['objective_continuation'] = objective_change
+    if windowing_changes:
+        record['windowing_changes'] = windowing_changes
     updated = dict(existing, recipe=plan['recipe'], code=new_code,
                    handoffs=list(existing.get('handoffs', [])) + [record])
     if input_changes:
@@ -1450,7 +1495,8 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
                 raise ValueError('direct-stage resume changes ' + key)
         old_parameters, new_parameters = dict(previous['parameters']), dict(recipe['parameters'])
         if handoff:
-            for key in OPERATIONAL_STAGE_PARAMETERS:
+            # A train-window geometry change continues in the trainer (a windowing continuation).
+            for key in OPERATIONAL_STAGE_PARAMETERS | set(DIRECT_WINDOWING_PARAMETERS):
                 old_parameters.pop(key, None)
                 new_parameters.pop(key, None)
         epoch_budget_handoff = (direct_epoch_budget_change(

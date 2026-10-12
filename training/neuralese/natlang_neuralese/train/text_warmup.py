@@ -864,13 +864,15 @@ def retain_best_checkpoint(out, report):
 
 
 def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, supervised_suffix_start=None,
-                     context_tokens=0, target_tokens=None):
+                     context_tokens=0, target_tokens=None, supervised_spans=None):
     """Prime with real open; supervise each text token and the real close once.
 
     The first ``context_tokens`` document tokens (the system prompt) are context only: they stay in the
     window as its crisp prefix, but are never targets, so they carry no loss and no held metric. With
     ``target_tokens``, ``tokens`` is the maximum total window and each lazy window advances by at most
-    that supervised span, using all available preceding document tokens as context."""
+    that supervised span, using all available preceding document tokens as context. ``supervised_spans`` (a merged
+    decision chain, ``merge_prefix_rows``) are ``[begin, end)`` observed suffixes in ``token_ids``; each window gets
+    the nonempty ones clipped to its span, in span coordinates, as ``supervised_spans``."""
     ids=array('I',[open_id]);ids.extend(token_ids);ids.append(close_id)
     bounded_target = target_tokens is not None
     if bounded_target:
@@ -892,6 +894,10 @@ def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, sup
         window={'ids':chunk,'prefix':width,'offset':offset,'start':start}
         if supervised_suffix_start is not None:
             window['supervised_suffix_start']=max(0,supervised_suffix_start+1-(start+width))
+        if supervised_spans is not None:
+            base,size=start+width,end-start-width  # token_ids position p is span position p+1-base
+            window['supervised_spans']=[(max(0,b+1-base),min(size,e+1-base)) for b,e in supervised_spans
+                                        if max(0,b+1-base)<min(size,e+1-base)]
         windows.append(window)
     return windows
 
@@ -952,14 +958,83 @@ def chat_roles(ids, *, start_id, role_ids, think_open=None, think_close=None,
     return codes
 
 
+MERGE_KEY_TOKENS = 64
+
+
+def merge_prefix_rows(rows):
+    """Merge linear decision chains (plans/neuralese/HEADER_EFFICIENCY_20261012.md): a train row with a decision
+    suffix whose ``token_ids`` are a prefix of another train row's (same cohort and sampling group) is trained inside
+    that row's forward instead of its own. Program-header rendering writes one row per decision, and decision k+1's
+    row repeats decision k's row as its history, so the history was forwarded once per decision.
+
+    The merged row keeps the longest row's text, tokens and identity and gets ``supervised_spans`` (its own and every
+    contained row's ``[supervised_suffix_start, len)``, sorted) and ``merged_rows`` (``[document sha256, id]`` of
+    every constituent, itself first). The model is causal, so a contained row's positions see exactly the context
+    they saw alone; the only difference is the framing close token after a contained row's last token, which is
+    replaced by the next real token. Rows without token IDs or a decision suffix, rows with declared
+    ``context_only_spans`` and test rows are never merged. A row contained in several branches goes to the first
+    container in byte order. Returns (rows, receipt)."""
+    import collections
+    buckets = collections.defaultdict(list)
+    for index, row in enumerate(rows):
+        ids = row.get('token_ids')
+        if (row.get('split') != 'train' or ids is None or row.get('supervised_suffix_start') is None
+                or row.get('context_only_spans') or len(ids) < MERGE_KEY_TOKENS):
+            continue
+        key = (row.get('text_cohort', 'native'), row.get('sampling_group'),
+               array('I', ids[:MERGE_KEY_TOKENS]).tobytes())
+        buckets[key].append(index)
+    container = {}
+    for members in buckets.values():
+        if len(members) < 2:
+            continue
+        keyed = sorted((array('I', rows[i]['token_ids']).tobytes(), i) for i in members)
+        top = None  # the maximal row that extends the row after this position
+        for position in range(len(keyed) - 1, -1, -1):
+            data, index = keyed[position]
+            # Byte order puts a row's extensions right after it: the next row extends it, or no row does.
+            if position + 1 < len(keyed) and keyed[position + 1][0].startswith(data):
+                container[index] = top
+            else:
+                top = index
+    members = collections.defaultdict(list)
+    for index, owner in container.items():
+        members[owner].append(index)
+    merged, tokens_removed = [], 0
+    for index, row in enumerate(rows):
+        if index in container:
+            tokens_removed += len(row['token_ids'])
+            continue
+        if index in members:
+            parts = [index] + sorted(members[index], key=lambda i: len(rows[i]['token_ids']))
+            spans = sorted({(rows[i]['supervised_suffix_start'], len(rows[i]['token_ids'])) for i in parts})
+            disjoint = []
+            for begin, end in spans:  # overlapping suffixes (a later decision inside an earlier one's span) union
+                if disjoint and begin < disjoint[-1][1]:
+                    disjoint[-1] = (disjoint[-1][0], max(disjoint[-1][1], end))
+                else:
+                    disjoint.append((begin, end))
+            row = {**row, 'supervised_spans': disjoint,
+                   'merged_rows': [[rows[i].get('document_sha256') or hashlib.sha256(rows[i]['text'].encode()).hexdigest(),
+                                    rows[i].get('id')] for i in parts]}
+        merged.append(row)
+    return merged, {'policy': 'merge_prefix_rows/1', 'rows': len(rows), 'merged_rows': len(merged),
+                    'contained_rows': len(container), 'containers': len(members),
+                    'contained_tokens_not_forwarded': tokens_removed}
+
+
 def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
-                         mask_system_prompt=True):
+                         mask_system_prompt=True, train_target_tokens=None):
     """Build split-preserving text windows with the shared chat-role policy.
 
     System prompt tokens remain in the crisp context but can be excluded from
     supervised targets. Held windows retain per-token role labels for role
     diagnostics and the shared context loss. Labels use one byte per token and
     are shared across overlapping windows, including training windows.
+    ``train_target_tokens`` (default ``target_tokens``) is the supervised span of train windows only, so held
+    windows and their metrics keep their geometry. A merged row (``merge_prefix_rows``) passes its suffix spans and
+    its constituents (``merged_rows``) to its windows; ``document_sha256`` stands for the text hash when the text was
+    dropped (a streamed plan).
     """
     tokenizer=engine.tokenizer
     backbone=engine.backbone
@@ -1003,15 +1078,21 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
                 while index<len(labels) and labels[index]==system_code:index+=1
                 context=index-1 if any(c==system_code for c in labels[1:index]) else 0
                 masked_system_tokens+=context
+        spans=row.get('supervised_spans')
+        document=row.get('document_sha256') or hashlib.sha256(row['text'].encode()).hexdigest()
         for window in document_windows(row_tokens,
                 open_id=backbone.controls.open_id,close_id=backbone.controls.close_id,
                 tokens=tokens,prefix_tokens=prefix_tokens,
-                supervised_suffix_start=row.get('supervised_suffix_start'),
-                context_tokens=context,target_tokens=target_tokens):
+                supervised_suffix_start=None if spans is not None else row.get('supervised_suffix_start'),
+                context_tokens=context,
+                target_tokens=train_target_tokens if split=='train' and train_target_tokens else target_tokens,
+                supervised_spans=spans):
             if labels is not None:
                 window['roles']=_TokenWindow(labels,window['start'],window['start']+len(window['ids']))
+            if row.get('merged_rows'):
+                window['merged_rows']=row['merged_rows']
             windows[split].append({**window,
-                'document':hashlib.sha256(row['text'].encode()).hexdigest(),
+                'document':document,
                 'document_id':row.get('id'),  # the producer's document id (a data continuation matches by it too)
                 'cohort':row.get('text_cohort','native'),
                 'groups':row['source_groups'],

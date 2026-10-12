@@ -2,7 +2,7 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-v3",
  "extends": "neuralese-direct-v2",
- "description": "Unified shared base for both lines (line parity, coordinator decision 2026-10-12 following Pop's main LFM line, decision pop-2356): neuralese-direct-v2 on the admitted target union natlang-target-union-20261011-r2 (training/corpus-manifests/natlang-target-union-20261011-r2.json) with three phases of one lineage: direct_warmup, 0.5 epoch of the full-prompt rendering; direct_sft, 1 epoch of the program-header rendering (owner decision 2026-10-12: one epoch, not two) (~133k train documents), continuing from the warm-up; direct_trajectory, 1 epoch of the whole-trajectory rendering (~76k documents), continuing from direct_sft. Each later phase continues from its predecessor phase's full state with the lineage's identity check and the base drift reference (recipe.py DIRECT_PHASE_CONTINUATION). The base binds the LFM2.5 renders; a line with another tokenizer binds the same union's twin renders (same document ids, splits and source groups). Everything else is neuralese-direct-v2. Shared QAT component (owner 2026-10-12, REVIEW_20261012 rec. 4): curriculum direct_sft [0, 0.75], direct_trajectory [0.75, 1.0], one q4 point (int4 g32, ramp 0.15-0.3, weight 0.5, sampled); lines add lower-precision points only where the backbone deploys them. Shared nested-family objective (same date): depth members on the dense base (12xall, 8xall), backbone-inherent members per line, ramped on the shared curriculum.",
+ "description": "Unified shared base for both lines (line parity, coordinator decision 2026-10-12 following Pop's main LFM line, decision pop-2356): neuralese-direct-v2 on the admitted target union natlang-target-union-20261011-r2 (training/corpus-manifests/natlang-target-union-20261011-r2.json) with three phases of one lineage: direct_warmup, 0.5 epoch of the full-prompt rendering; direct_sft, 1 epoch of the program-header rendering (owner decision 2026-10-12: one epoch, not two) (~133k train documents), continuing from the warm-up; direct_trajectory, 1 epoch of the whole-trajectory rendering (~76k documents), continuing from direct_sft. Each later phase continues from its predecessor phase's full state with the lineage's identity check and the base drift reference (recipe.py DIRECT_PHASE_CONTINUATION). The base binds the LFM2.5 renders; a line with another tokenizer binds the same union's twin renders (same document ids, splits and source groups). Everything else is neuralese-direct-v2. Shared QAT component (owner 2026-10-12, REVIEW_20261012 rec. 4): curriculum direct_sft [0, 0.75], direct_trajectory [0.75, 1.0], one q4 point (int4 g32, ramp 0.15-0.3, weight 0.5, sampled); lines add lower-precision points only where the backbone deploys them. Train-window geometry (REVIEW_20261012 rec. 5, plans/neuralese/HEADER_EFFICIENCY_20261012.md): direct_sft and direct_trajectory supervise each train window whole (train_target_tokens 31744 of 32768: prompt, inputs and history at the context weight, tool output at the feedback weight, owner whole-trajectory rule; held windows keep target_tokens), and direct_sft merges linear decision chains (merge_prefix_rows: a decision row that is a prefix of another is trained inside that forward); a running lineage takes it at a handoff by a windowing continuation. Shared nested-family objective (same date): depth members on the dense base (12xall, 8xall), backbone-inherent members per line, ramped on the shared curriculum.",
  "overrides": {
   "input_bindings": {
    "direct_text": {
@@ -31,7 +31,8 @@
       "text_data": "direct_text_trajectory"
      },
      "parameters": {
-      "epochs": 1.0
+      "epochs": 1.0,
+      "train_target_tokens": 31744
      }
     }
    }
@@ -39,7 +40,9 @@
   "stages": {
    "direct_sft": {
     "parameters": {
-     "epochs": 1.0
+     "epochs": 1.0,
+     "train_target_tokens": 31744,
+     "merge_prefix_rows": true
     }
    }
   },

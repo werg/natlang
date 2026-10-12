@@ -59,7 +59,11 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
                   'epochs': None, 'batch_tokens': 0, 'continue_from': None,
                   'fp8_training': 'off', 'fp8_recipe': 'delayed', 'fp8_amax_history_len': 16,
                   'gradient_audit_steps': 0, 'saved_tensor_audit_steps': 0,
-                  'gradient_digest_steps': 0, 'state_hash_steps': 0, 'sdpa_backend': 'default', 'family': None}
+                  'gradient_digest_steps': 0, 'state_hash_steps': 0, 'sdpa_backend': 'default', 'family': None,
+                  'train_target_tokens': None, 'merge_prefix_rows': False}
+# Train-window geometry (HEADER_EFFICIENCY_20261012.md): a running stage changes it only by a windowing continuation
+# (continuation_mode), which rebuilds the plan it trained on under the saved values.
+WINDOWING_KEYS = ('train_target_tokens', 'merge_prefix_rows')
 OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
@@ -104,6 +108,14 @@ def parse(argv=None):
                    'prompt included, up to this many tokens')
     p.add_argument('--target-tokens', type=int, default=1024, help='supervised (Neuralese) positions per window')
     p.add_argument('--prefix-tokens', type=int, default=32)
+    p.add_argument('--train-target-tokens', type=int, default=None,
+                   help='supervised span of TRAIN windows (default --target-tokens); held windows keep --target-tokens. '
+                        'At --tokens minus a context margin, a row up to that length is one window supervised whole '
+                        '(prompt and inputs at --context-weight, tool output at --feedback-weight; owner whole-'
+                        'trajectory rule) instead of only its last --target-tokens positions')
+    p.add_argument('--merge-prefix-rows', action=argparse.BooleanOptionalAction, default=False,
+                   help='train a decision row that is a prefix of another train row inside that row\'s forward '
+                        '(text_warmup.merge_prefix_rows): linear decision chains are forwarded once')
     p.add_argument('--batch', type=int, default=1)
     p.add_argument('--eval-batch', type=int, default=1)
     p.add_argument('--eval-every', type=int, default=100)
@@ -410,6 +422,8 @@ def target_bearing(window):
     suffix (data audit 2026-10-11, DATA_INVENTORY_20261011.md E); context-only windows are not trained."""
     from .text_supervision import ROLE_CODES
     size = len(window['ids']) - window['prefix']
+    if 'supervised_spans' in window:
+        return bool(window['supervised_spans'])
     if window.get('supervised_suffix_start') is not None:
         return window['supervised_suffix_start'] < size
     roles = window.get('roles')
@@ -432,9 +446,12 @@ def _window_length(window):
 
 
 def continued_unseen(targets, continuation):
-    """The target windows of documents a data continuation has not seen (by content hash or document id)."""
+    """The target windows of documents a data continuation has not seen (by content hash or document id). A merged
+    window (``merge_prefix_rows``) is unseen while any of its constituent rows is."""
     hashes, ids = set(continuation['seen_document_sha256']), set(continuation['seen_document_ids'])
-    return [w for w in targets if w['document'] not in hashes and w.get('document_id') not in ids]
+    unseen = lambda sha, name: sha not in hashes and name not in ids
+    return [w for w in targets if (any(unseen(sha, name) for sha, name in w['merged_rows']) if w.get('merged_rows')
+                                   else unseen(w['document'], w.get('document_id')))]
 
 
 def direct_schedule(targets, a, continuation=None):
@@ -469,17 +486,22 @@ def held_documents(held):
     return sorted({w['document'] for w in held})
 
 
-def data_continuation(previous_targets, previous_held, targets, held, *, consumed, previous, quantization_stage, a):
+def data_continuation(previous_targets, previous_held, targets, held, *, consumed, previous, quantization_stage, a,
+                      previous_a=None):
     """Continue the stage's epoch budget on new data after ``consumed`` updates (owner 2026-10-12: "continue our
     training from what we have with more data"). The previous plan is rebuilt exactly (from the previous data and its
     own continuation, if any); the documents of its consumed updates count as seen, and the rest of the epoch is this
     data minus the seen documents, matched by content hash or document id (a partly consumed document counts as
     seen). The update counter, weights and optimizer state continue. The QAT progress is rebased so it continues from
     its value at update k to the stage's end over the new total: progress(t) = p_k + (p1 - p_k) (t - k) / (N - k).
-    Learning rates are constant in this trainer (no schedule, no warm-up), so nothing else is rebased. Returns
-    (record, plan)."""
-    _, previous_plan = direct_schedule(previous_targets, a, previous)
+    Learning rates are constant in this trainer (no schedule, no warm-up), so nothing else is rebased.
+    ``previous_a``: the options the previous plan was built with when the train-window geometry changes too (a
+    windowing continuation, WINDOWING_KEYS); the previous plan must hash to its own record. Returns (record, plan)."""
+    _, previous_plan = direct_schedule(previous_targets, previous_a or a, previous)
     offset = previous['consumed_updates'] if previous else 0
+    if previous is not None and previous.get('plan_documents_sha256') not in (
+            None, plan_documents_sha256(previous_plan, offset)):
+        raise ValueError('the previous plan does not rebuild from the previous data and options')
     if not offset <= consumed <= len(previous_plan):
         raise ValueError(f'data continuation at update {consumed} lies outside the previous plan '
                          f'({offset}..{len(previous_plan)})')
@@ -512,6 +534,7 @@ def data_continuation(previous_targets, previous_held, targets, held, *, consume
                   unseen_documents=len({w['document'] for w in unseen}),
                   matched_seen_documents=len({w['document'] for w in targets} - {w['document'] for w in unseen}),
                   lr_schedule='constant (direct_sft has no LR schedule or warm-up): unchanged',
+                  windowing={'previous': windowing(previous_a or a), 'current': windowing(a)},
                   quantization_rebase=None if quantization_stage is None else {
                       'previous': {'start': start, 'end': previous_end, 'progress': [p0, p1]},
                       'start': consumed, 'end': len(plan), 'progress': [progress_k, p1]},
@@ -643,8 +666,14 @@ def stage_data(engine, a, text_data):
     """(train windows, target-bearing windows, held windows, held selection, mask receipt, rows) of one data file."""
     from .text_warmup import load_text_rows, prepare_text_windows, select_held_document_windows
     rows, _ = load_text_rows(a.records, a.pieces, text_data, tokenizer=engine.tokenizer)
+    merge = None
+    if getattr(a, 'merge_prefix_rows', False):
+        from .text_warmup import merge_prefix_rows
+        rows, merge = merge_prefix_rows(rows)
+        print(json.dumps({'event': 'merge_prefix_rows', **merge}), flush=True)
     windows, mask_receipt = prepare_text_windows(engine, rows, tokens=a.tokens, prefix_tokens=a.prefix_tokens,
-                                                 target_tokens=a.target_tokens, mask_system_prompt=True)
+                                                 target_tokens=a.target_tokens, mask_system_prompt=True,
+                                                 train_target_tokens=getattr(a, 'train_target_tokens', None))
     held, held_selection = select_held_document_windows(windows['test'], a.held_documents)
     targets = [w for w in windows['train'] if target_bearing(w)]
     return windows['train'], targets, held, held_selection, mask_receipt, rows
@@ -717,11 +746,24 @@ def stage_plan_data(engine, a, text_data):
                  'groups': window.get('groups'), 'offset': window.get('offset', 0)}
         if window.get('sampling_group') is not None:
             value['sampling_group'] = window['sampling_group']
+        if window.get('merged_rows'):
+            value['merged_rows'] = window['merged_rows']
         return value
     targets, tests = [], []
-    for row in stream_text_rows(text_data, engine.tokenizer):
+    rows = stream_text_rows(text_data, engine.tokenizer)
+    if getattr(a, 'merge_prefix_rows', False):
+        # Merging needs every train row's tokens at once; the texts are dropped for their hashes.
+        from .text_warmup import merge_prefix_rows
+        light_rows = []
+        for row in rows:
+            row['document_sha256'] = hashlib.sha256(row['text'].encode()).hexdigest()
+            row['text'] = ''
+            light_rows.append(row)
+        rows, _ = merge_prefix_rows(light_rows)
+    for row in rows:
         windows, _ = prepare_text_windows(engine, [row], tokens=a.tokens, prefix_tokens=a.prefix_tokens,
-                                          target_tokens=a.target_tokens, mask_system_prompt=True)
+                                          target_tokens=a.target_tokens, mask_system_prompt=True,
+                                          train_target_tokens=getattr(a, 'train_target_tokens', None))
         targets += [light(w) for w in windows['train'] if target_bearing(w)]
         tests += [light(w) for w in windows['test']]
     held, held_selection = select_held_document_windows(tests, a.held_documents)
@@ -739,6 +781,19 @@ def continuation_inputs(a, inputs):
     return {**inputs, str(a.text_data): sha256_file_hex_cached(a.continued_text_data)}
 
 
+def windowing(options):
+    """The train-window geometry (WINDOWING_KEYS) of parsed options or a saved options dict, defaults filled in."""
+    get = options.get if isinstance(options, dict) else (lambda key, default: getattr(options, key, default))
+    return {key: get(key, LATER_DEFAULTS[key]) for key in WINDOWING_KEYS}
+
+
+def saved_window_options(a, state):
+    """``a`` with the train-window geometry the saved state trained with."""
+    from types import SimpleNamespace
+    saved = (state.get('identity') or {}).get('options') or {}
+    return SimpleNamespace(**{**vars(a), **windowing(saved)})
+
+
 def continuation_mode(a, state, inputs):
     """How the stage continues its saved state (None: a fresh stage): ('none', None), ('resume', record) for a data
     continuation recorded earlier, or ('continue', previous record or None) when the checkpoint trained on
@@ -749,6 +804,10 @@ def continuation_mode(a, state, inputs):
     recorded = state.get('data_continuation')
     saved = (state.get('identity') or {}).get('inputs') or {}
     if sorted(saved.values()) == sorted(inputs.values()):
+        # Same data, new train-window geometry: a windowing continuation (the plan it trained on is rebuilt under
+        # the saved geometry; the rest of the epoch is this geometry's windows of the unseen documents).
+        if windowing(saved_window_options(a, state)) != windowing(a):
+            return 'continue', recorded
         return ('resume', recorded) if recorded is not None else ('none', None)
     if a.continued_text_data is not None and sorted(saved.values()) == sorted(continuation_inputs(a, inputs).values()):
         return 'continue', recorded
@@ -756,13 +815,19 @@ def continuation_mode(a, state, inputs):
 
 
 def compute_continuation(a, state, engine, targets, held, recorded, quantization_stage):
-    """The data continuation record at the saved state's update (data_continuation), from the previous data file."""
-    previous_targets, previous_held, _ = stage_plan_data(engine, a, a.continued_text_data)
+    """The data continuation record at the saved state's update (data_continuation), from the previous data file
+    (--text-data itself in a windowing continuation) under the saved train-window geometry."""
+    same_data = sorted(((state.get('identity') or {}).get('inputs') or {}).values()) == sorted(
+        identity_inputs(a).values())
+    previous_a = saved_window_options(a, state)
+    previous_targets, previous_held, _ = stage_plan_data(engine, previous_a,
+                                                         a.text_data if same_data else a.continued_text_data)
     if recorded is not None and quantization_stage is not None:
         quantization_stage = {**quantization_stage, **{k: recorded['quantization_rebase'][k]
                                                        for k in ('start', 'progress')}}
     record, _ = data_continuation(previous_targets, previous_held, targets, held, consumed=state['step'],
-                                  previous=recorded, quantization_stage=quantization_stage, a=a)
+                                  previous=recorded, quantization_stage=quantization_stage, a=a,
+                                  previous_a=previous_a)
     return record
 
 
@@ -841,7 +906,7 @@ def main(argv=None):
     from .optim import PortMuonAdamW
     from .trajectory_state import clip_finite_gradients, gradient_norm
     from .quantization import Behaviour, load_component, teacher_shards
-    from .text_supervision import ROLE_CODES, balanced_position_weights
+    from .text_supervision import ROLE_CODES, balanced_position_weights, segmented_position_weights
     from .text_warmup import (chunked_readout, evaluation_batches, fused_readout, load_text_rows,
                               prepare_text_windows, select_held_document_windows)
     from ..common.paths import root as path_root
@@ -1121,9 +1186,17 @@ def main(argv=None):
             exclude = (torch.tensor(failed(r), dtype=torch.bool)[prefix:][None]
                        if roles is not None or declared_by_document else None)
             start = r.get('supervised_suffix_start')
-            weights[b, :size] = balanced_position_weights(
-                row[prefix:][None], [start], roles=None if roles is None else roles[prefix:][None],
-                context_weight=a.context_weight, feedback_weight=a.feedback_weight, exclude=exclude)[0]
+            if 'supervised_spans' in r:  # a merged decision chain (merge_prefix_rows): one segment per decision
+                weights[b, :size] = segmented_position_weights(
+                    row[prefix:][None], r['supervised_spans'], roles=None if roles is None else roles[prefix:][None],
+                    context_weight=a.context_weight, feedback_weight=a.feedback_weight, exclude=exclude)[0]
+                for begin, end in r['supervised_spans']:
+                    suffix[b, begin:end] = True if exclude is None else ~exclude[0, begin:end]
+                start = None
+            else:
+                weights[b, :size] = balanced_position_weights(
+                    row[prefix:][None], [start], roles=None if roles is None else roles[prefix:][None],
+                    context_weight=a.context_weight, feedback_weight=a.feedback_weight, exclude=exclude)[0]
             if start is not None and start < size:
                 suffix[b, start:size] = True if exclude is None else ~exclude[0, start:]
             segments[b, :size] = segment_ids(None if roles is None else roles[None, :-1], prefix - 1, length - 1, 1,
@@ -1258,8 +1331,14 @@ def main(argv=None):
         previous_epochs = previous_options.pop('epochs', None)
         current_epochs = current_options.pop('epochs', None)
         # A data continuation's checkpoint read --continued-text-data in --text-data's place (continuation_mode).
-        expected_inputs = (continuation_inputs(a, identity['inputs']) if continuation_launch == 'continue'
-                           else identity['inputs'])
+        windowing_continuation = (continuation_launch == 'continue' and sorted(
+            ((state.get('identity') or {}).get('inputs') or {}).values()) == sorted(identity['inputs'].values()))
+        expected_inputs = (continuation_inputs(a, identity['inputs'])
+                           if continuation_launch == 'continue' and not windowing_continuation else identity['inputs'])
+        if continuation_launch == 'continue':  # the continuation record covers the train-window geometry change
+            for key in WINDOWING_KEYS:
+                previous_options.pop(key, None)
+                current_options.pop(key, None)
         # A declared objective continuation (objective_continuation): the objective components may change; the
         # curriculum continues from the checkpoint's update without a jump. A later resume reapplies the record.
         objective = state.get('objective_continuation')

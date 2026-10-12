@@ -103,6 +103,58 @@ positions are all excluded has weight 0 everywhere.
     return weighted * span.shape[1] / weighted.sum(1, keepdim=True).clamp_min(1e-12)
 
 
+def segmented_position_weights(span, spans, *, roles=None, context_weight=1., feedback_weight=.25, exclude=None):
+    """``balanced_position_weights`` for one window that holds several observed suffixes (a merged decision chain,
+    ``text_warmup.merge_prefix_rows``): ``spans`` are the window's ``[begin, end)`` suffix spans, sorted and disjoint.
+
+    Each decision keeps the policy it had as its own document: the window is cut into segments at every suffix end
+    (segment j runs from the previous suffix end to suffix j's end; positions after the last suffix are a context-only
+    segment), and each segment gets half of its mass on all of its positions (role-weighted, as the context term) and
+    half on its observed suffix, its mass equal to its length. The window is then normalized to its size, as one
+    document. One span that ends at the window's end gives exactly ``balanced_position_weights``. ``span`` is [1, S]."""
+    import torch
+    if span.shape[0] != 1:
+        raise ValueError('segmented weights take one window')
+    size = span.shape[1]
+    if not math.isfinite(context_weight) or context_weight <= 0:
+        raise ValueError('context weight must be finite and positive')
+    if not math.isfinite(feedback_weight) or not 0 <= feedback_weight <= 1:
+        raise ValueError('feedback weight must be finite and between zero and one')
+    importance = torch.ones_like(span, dtype=torch.float32)
+    if roles is not None:
+        if roles.shape != span.shape:
+            raise ValueError('role labels must align with supervised positions')
+        importance = torch.where(roles == ROLE_CODES.index('tool'), feedback_weight, importance)
+    if exclude is not None:
+        if exclude.shape != span.shape:
+            raise ValueError('excluded positions must align with supervised positions')
+        importance = torch.where(exclude, 0., importance)
+    previous, cuts = 0, []
+    for begin, end in spans:
+        if not previous <= begin < end <= size:
+            raise ValueError(f'suffix spans must be sorted, disjoint and inside the window: {spans}')
+        cuts.append((previous, begin, end))
+        previous = end
+    if previous < size:
+        cuts.append((previous, size, size))
+    weighted = torch.zeros_like(importance)
+    for first, begin, end in cuts:
+        last, length = end, end - first
+        part = importance[:, first:last]
+        mass = part.sum()
+        if exclude is None and mass <= 0:
+            raise ValueError('a complete window has zero context supervision; use positive feedback weight')
+        context = part * length / mass.clamp_min(1e-12)
+        mask = torch.zeros_like(part, dtype=torch.bool)
+        mask[:, begin - first:end - first] = True
+        if exclude is not None:
+            mask = mask & ~exclude[:, first:last]
+        count = int(mask.sum())
+        weighted[:, first:last] = (.5 * context_weight * context + .5 * mask.float() * length / count
+                                   if count > 0 else context)
+    return weighted * size / weighted.sum(1, keepdim=True).clamp_min(1e-12)
+
+
 class CohortDocumentSampler:
     """Shared text/trajectory sampler, using the caller's checkpointed RNG.
 
