@@ -555,6 +555,93 @@ def test_protected_target_sidecar_equivalence_is_exact_and_narrow():
         assert not _protected_target_sidecar_equivalence(bad_record, bad_receipt, bad_metadata), tamper
 
 
+def test_provider_action_normalization_accepts_reconstructed_target_without_summary_binding():
+    from natlang_neuralese.data.text_corpus import (
+        _canonical, _direct_result_event_name, _provider_action_normalization_equivalence, _sha)
+
+    source_row = "a" * 64
+    trajectory_id = "trajectory-v29"
+    decision_index = 8
+    call_id = f"teacher_{decision_index}_0"
+    original_args = {"status": "success", "value": "Exact captured text."}
+    normalized_target = {"role": "assistant", "content": "", "tool_calls": [{
+        "id": call_id, "type": "function", "function": {
+            "name": "return_result", "arguments": _canonical(original_args)}}]}
+    raw_action = {"role": "assistant", "content": "", "raw_calls": [{
+        "id": "provider-call-id", "type": "function", "function": {
+            "name": "return_result", "arguments": json.dumps(original_args)}}]}
+    target_sha = _sha(_canonical(normalized_target).encode())
+    adapter = {"schema": "natlang.provider-action-target-normalization/1",
+        "kind": "exact-raw-provider-calls-to-materialized-tool-calls",
+        "source_row_sha256": source_row, "source_trajectory_index": decision_index,
+        "raw_action": raw_action, "normalized_target": normalized_target,
+        "raw_action_sha256": _sha(_canonical(raw_action).encode()),
+        "normalized_target_sha256": target_sha, "call_count": 1}
+    metadata = {"source_row_sha256": source_row,
+        "source_trajectory_index": decision_index,
+        "target_binding_adapter": adapter,
+        "source_action_target_sha256": target_sha}
+    receipt = dict(metadata)
+    row = {"target": normalized_target, "teacher_trajectory_id": trajectory_id,
+        "source_ref": {"source_row_sha256": source_row}, "decision": {"index": decision_index},
+        "neuralese_conversion": {"version": "natlang.neuralese-conversion/15"}}
+
+    # Exact provider normalization is itself enough when the selected target
+    # is unchanged; no converted-target summary is needed.
+    assert _provider_action_normalization_equivalence(row, receipt, metadata)
+
+    changed = json.loads(json.dumps(row))
+    changed["target"]["tool_calls"][0]["function"]["arguments"] = _canonical(
+        {"status": "success", "value": "different text"})
+    assert not _provider_action_normalization_equivalence(changed, receipt, metadata)
+
+    # Rehashing an adapter after changing its raw provider call must not turn
+    # an unrelated raw action into proof for the original normalized target.
+    tampered_adapter = json.loads(json.dumps(adapter))
+    tampered_adapter["raw_action"]["raw_calls"][0]["function"]["arguments"] = json.dumps(
+        {"status": "success", "value": "different text"})
+    tampered_adapter["raw_action_sha256"] = _sha(_canonical(tampered_adapter["raw_action"]).encode())
+    bad_metadata = json.loads(json.dumps(metadata))
+    bad_metadata["target_binding_adapter"] = tampered_adapter
+    bad_receipt = json.loads(json.dumps(receipt))
+    bad_receipt["target_binding_adapter"] = tampered_adapter
+    assert not _provider_action_normalization_equivalence(row, bad_receipt, bad_metadata)
+
+    # A direct typed-text write remains admitted only when its individual
+    # receipt reconstructs the exact converted target. The optional summary,
+    # when declared, must agree with that reconstruction.
+    block_id, writer_call, writer_node = "nz1_" + "b" * 52, "writer/2", "writer/2#9"
+    body = original_args["value"]
+    write_name = _direct_result_event_name(block_id, trajectory_id, writer_call, writer_node)
+    replacement = {"$write": {"name": write_name, "block_id": block_id,
+        "type": "Neuralese<string>", "source": body}}
+    converted_args = {**original_args, "value": replacement}
+    converted_target = json.loads(json.dumps(normalized_target))
+    converted_target["tool_calls"][0]["function"]["arguments"] = _canonical(converted_args)
+    write_receipt = {"schema": "natlang.selected-runtime-result-write/1",
+        "role": "selected-direct-typed-text-semantic-writer", "source_row_sha256": source_row,
+        "trajectory_id": trajectory_id, "result_type": "Neuralese<string>",
+        "body_source_basis": "exact-raw-model-result-string", "result_path": ["return"],
+        "typed_result_receipt_sha256": "c" * 64, "action_target_call_id": call_id,
+        "action_arguments_sha256": _sha(_canonical(original_args).encode()),
+        "body_sha256": _sha(body.encode()), "block_id": block_id,
+        "writer_call_id": writer_call, "writer_node": writer_node,
+        "target_write_name": write_name,
+        "target_write_sha256": _sha(_canonical(replacement).encode())}
+    converted_row = json.loads(json.dumps(row))
+    converted_row["target"] = converted_target
+    converted_row["neuralese_conversion"]["selected_runtime_result_writes"] = [write_receipt]
+    assert _provider_action_normalization_equivalence(converted_row, receipt, metadata)
+
+    bad_binding = json.loads(json.dumps(metadata))
+    bad_binding["target_conversion_binding"] = {
+        "schema": "natlang.provider-action-converted-target-binding/1",
+        "source_materialized_target_sha256": target_sha,
+        "converted_target_sha256": "f" * 64,
+        "conversion_version": "natlang.neuralese-conversion/15"}
+    assert not _provider_action_normalization_equivalence(converted_row, receipt, bad_binding)
+
+
 def test_derived_pure_literal_target_has_explicit_nonruntime_writer_receipt():
     from natlang_neuralese.data.text_corpus import (_authenticated_derived_semantic_text_write,
         _canonical, _sha, _soft_writer_sources)
