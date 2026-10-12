@@ -11,7 +11,10 @@ optimizer (LionSR or MuonSR, in backward); routers, norms and the projections on
 
 Every ``--eval-every`` updates (declared points): held CE, gold accuracy and agreement against the base model's own
 predictions on the same windows, the Neuralese value's error against its soft-token-mixture baseline, and
-``behaviour_drift`` with its guard. At the end: the behaviour gate (texts kept). Full state at declared checkpoint points,
+``behaviour_drift`` with its guard, and (``--task-eval``) the in-run task-success evaluation: a fixed held subset of
+natlang tasks executed for real against the model being trained (eval/task_cadence.py). At the end: the behaviour
+gate, report-only (texts kept). Qualification (owner decision 2026-10-12): held CE below base, no drift stop, and
+the final task evaluation at least its declared ``min_successes``; the 48-probe behaviour gate is reported only. Full state at declared checkpoint points,
 on a stop and at the end; a restart resumes from it. The default ``--window-execution auto`` accumulates gradients
 sequentially across independent windows and uses shared activation geometry plus live CUDA headroom to choose whether
 to checkpoint layer activations. The packed path remains an explicit diagnostic override.
@@ -60,7 +63,9 @@ OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkp
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
                          'continue_monitor_reference', 'gradient_digest_steps', 'state_hash_steps',
-                         'continued_text_data', 'plan_only', 'plan_out', 'objective_continuation'})
+                         'continued_text_data', 'plan_only', 'plan_out', 'objective_continuation',
+                         # the in-run task-success evaluation (owner 2026-10-12) is a verifier, not the objective
+                         'task_eval', 'task_eval_every'})
 # Objective components a declared objective continuation may change in an active stage (recipe.py
 # OBJECTIVE_COMPONENTS): each is a recipe component the stage receives as one JSON option.
 OBJECTIVE_KEYS = ('quantization', 'family')
@@ -177,6 +182,13 @@ def parse(argv=None):
     # agreement past warn runs the behaviour gate and stops when the gate falls below its reference minus
     # max_gate_drop; response KL past --drift-stop stops at once.
     add_drift_arguments(p)
+    p.add_argument('--task-eval', default=None,
+                   help='the in-run task-success evaluation (eval/task_cadence.py; owner 2026-10-12): JSON '
+                        '{"packet": {"path", "sha256"}, "cases", "min_successes", ...}; its final result is the '
+                        "stage's qualification criterion with drift")
+    p.add_argument('--task-eval-every', type=int, default=0,
+                   help='run the task evaluation at evals whose step is a multiple of this (0: every eval) and at '
+                        'the end')
     p.add_argument('--drift-ce-windows', type=int, default=4,
                    help='held CE on this many held windows at every drift check (where held CE bottoms out); 0: off')
     p.add_argument('--save-state', action=argparse.BooleanOptionalAction, default=True,
@@ -1054,7 +1066,15 @@ def main(argv=None):
     # corpus rows (including their JSON text and source arrays) are no longer
     # needed after extracting these producer-declared context masks; keeping
     # them alive needlessly duplicates a large fraction of the corpus in RAM.
+    from ..eval.task_cadence import training_prompt_rendering
+    serving_rendering = training_prompt_rendering(rows)
     del rows
+    from ..eval.task_cadence import TaskEval, parse_task_eval
+    task_eval_spec = parse_task_eval(a.task_eval)
+    # Served through the stage's own engine at the eval cadence, in this process (no second copy of the weights).
+    task_eval = (TaskEval(task_eval_spec, a.out, engine, prompt_rendering=serving_rendering)
+                 if task_eval_spec is not None else None)
+    final_task_summary = None
 
     def failed(window):
         """The window's slice of its document's context-only mask (computed once per document): assistant turns
@@ -1993,6 +2013,13 @@ def main(argv=None):
         if step % a.eval_every == 0 or step == end:
             with profile_region('update/eval'):
                 report = evaluate()
+            if task_eval is not None and (not a.task_eval_every or step % a.task_eval_every == 0 or step == end):
+                with profile_region('update/task_eval'):
+                    task_summary = task_eval.run(step)
+                report['task_eval'] = {k: task_summary[k] for k in
+                                       ('task_successes', 'cases', 'outcome_counts', 'eligible', 'seconds')}
+                if step == end:
+                    final_task_summary = task_summary
             history.append({k: report[k] for k in ('step', 'ce', 'ce_delta', 'value_relative_mse_delta')})
             improved = best is None or report['ce'] < best['ce']
             if (report.get('behaviour_drift') or {}).get('guard') == 'stop':
@@ -2033,13 +2060,19 @@ def main(argv=None):
     value_qualified = math.isfinite(value_delta) and value_delta < -a.value_margin
     # Owner 2026-10-11: the Neuralese value requirement belongs to the end-to-end stage (consumers reading values
     # against consumers reading tokens); here the value metric and its margin are report-only.
+    # Owner decision 2026-10-12 (plans/neuralese/DECISIONS.md): qualification is task success plus drift. The 48-probe behaviour
+    # gate is report-only; without a declared task evaluation the stage cannot qualify.
+    from ..eval.task_cadence import task_gate as task_gate_of
+    task_gate = task_gate_of(final_task_summary, task_eval_spec)
     qualified = bool(finished and step >= a.steps and final.get('ce_delta', 0.0) < 0 and not drift_stopped and
-                     (gate is None or gate['passed']))
+                     task_gate is not None and task_gate['passed'])
     identity_file = a.out / 'identity-check.json'
     final.update(identity_check=json.loads(identity_file.read_text()) if identity_file.is_file() else None)
     status = ('complete' if step >= a.steps else 'stopped_at') if finished else ('checkpointed_on_drift_guard' if drift_stopped else 'checkpointed_on_signal')
     final.update(status=status, completed=step >= a.steps, steps=step, stopped_at=a.stop_at or None, best=best,
-                 behaviour_gate=gate, drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
+                 behaviour_gate=gate, behaviour_gate_report_only=True, task_gate=task_gate,
+                 qualification='held CE below base, no drift stop, final task successes >= min_successes '
+                               '(owner 2026-10-12)', drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
                  value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta'),
                              'report_only': True, 'moved_to': 'end-to-end stage (owner 2026-10-11)'},
                  seconds=time.time() - started, budget=budget, data_continuation=continuation_summary(continuation),

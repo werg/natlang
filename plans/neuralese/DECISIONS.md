@@ -1481,6 +1481,65 @@ plans/MODEL_FACING_CHANGES.md, measured in the next teacher window. Data produce
 batch b00, the first port-record-call shards) used 2,000-character pages; they stay valid trajectories under the old
 size and are recorded as such, not regenerated.
 
+## Qualification is task success plus drift; the 48-probe gate is report-only (owner, 2026-10-12)
+
+Owner decision on the strategic review (plans/REVIEW_20261012.md finding 2, recommendations 1 and 3):
+
+- **The 48-probe behaviour gate is report-only.** It still runs at a drift warn (response KL 0.5) and at the stage
+  end and is logged (`gate_below_floor` when its pass falls below base minus 0.1), but it never stops a stage
+  (`train/drift_monitor.py`) and is not a qualification requirement. Twelve exact-math probes, twelve tool probes
+  checked only for name and argument shape, and 24 stop/repetition probes measure generic ability, which the
+  breadth rule (forgetting is reported, not gated) says not to gate on.
+- **Qualification of a direct stage** (`direct_sft.py`, `recipe.py` certificate): the identity check, held CE below
+  base, no drift stop (response KL 1.5 hard stop), and the final in-run task evaluation reaching `min_successes`
+  (1). A stage without a declared task evaluation cannot qualify.
+- **In-run task-success evaluation** (`eval/task_cadence.py`, stage parameter `task_eval` in neuralese-direct-v2, so
+  both lines): the fixed 16-task subset (rows 0, 3, ..., 45) of the protected held packet
+  `runs/neuralese-direct-held-task-eval-20261012-v1/cases-authored-root-eval-v1.jsonl` (SHA-256 `c5d248a8...`,
+  Pop's derived authored-root packet of `decision-rich-heldout-20261005-v1`). At every eval and at the end, the
+  trainer serves its own engine on loopback (no second copy of the weights) and the shared TS collector executes each
+  task's authored root and every child decision with real tool execution; the shared exact scorer
+  (`eval/task_packet.score_rows`) counts collector-accepted tasks. Serving uses the prompt rendering the stage's
+  training rows declare. Results: `task-eval.jsonl` and `task-eval/step-*/task-score.json` in the stage directory;
+  `report.json` carries `task_eval` per eval and `task_gate` at the end. `task_eval` is operational: a running
+  lineage takes it at its next handoff.
+
+### The LFM base 0/48 (debugged on DGX, 2026-10-12)
+
+Two different measurements were both reported as "base 0/48":
+
+1. **Program-header plan (v4): an evaluation bug.** The base was served with `prompt_rendering: program-header`,
+   which strips the runtime's generic instructions *and every tool schema* (`apply_prompt_rendering` returns
+   `tools=None`). Only a model trained on program-header rows has internalised them. The un-fine-tuned base sees
+   no `eval` or `return_result` and answers each child call with "NL: ..." text then an immediate EOS
+   (27 `model_incomplete: terminated_without_result (repeated immediate EOS)`, the rest budget/unresolved). The
+   evaluator served the base under the candidate's rendering because the comparison key binds one rendering.
+   Fixed: `evaluate-base` now serves the base under its native rendering (`base_prompt_rendering`, default `full`).
+2. **Full-rendering plan (v3): a real capability floor, verified.** The base under its native rendering also scores
+   0/48 (41 `semantic_mismatch`, 2 repetition, 2 budget, 3 unresolved). Checked and ruled out:
+   - rendering: the captured collector requests re-rendered through the serving path match the LFM2.5 template and
+     teacher-row format (system prompt + `List of tools`, Pythonic tool calls, tool turns);
+   - tool parsing: the base's `return_result` calls parse and execute;
+   - error feedback: tool errors reach the next request;
+   - stop handling: the stop ids are `<|im_end|>` and EOS;
+   - scorer: every non-answer check passes (status, effects, files, world). A reference-trajectory replay through
+     the same collector and scorer is accepted (cases 0, 16, 32: `done`, `accepted: true`).
+   The failure is the model's. In all 48 cases the 350M base never issues a single model-authored `eval`: 156
+   text-only turns, 127 of them fenced JSON claiming "the eval result contains ...". It never calls
+   `packet.read()` and returns fabricated evidence. The in-run evaluator reproduces this on DGX (base, full,
+   cases 0 and 16: 2 `semantic_mismatch`, 173 s on CPU).
+
+   The trained step-4000 LFM checkpoint (program-header) already solves 1 of its first 9 resolved tasks. Its
+   dominant failure is repeating one identical failing eval at temperature 0 despite the error feedback.
+
+Open (routed to Pop, who owns the LFM evaluator and data):
+
+- The held packet is one task shape (`decision_extract_chain`, four fixtures). The cadence subset inherits that
+  narrowness; more held natlang shapes are needed.
+- History reasoning in training text is inconsistent with serving. LFM serving drops earlier turns' `<think>`
+  (`last_turn_only`), but in a sample of 5,734 multi-turn program-header rows, 27% of earlier assistant turns keep
+  it.
+
 ## Deleted runs (2026-10-11)
 
 Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
