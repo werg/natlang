@@ -73,6 +73,14 @@ def verify_plan(plan_path: Path) -> tuple[dict, Path, Path]:
     plan["prompt_rendering"] = plan.get("prompt_rendering", "full")
     if plan["prompt_rendering"] not in {"full", "program-header"}:
         raise ValueError("plan declares an unsupported prompt_rendering mode")
+    source_rows = plan.get("prompt_rendering_sources", [])
+    if plan["prompt_rendering"] == "program-header":
+        if not isinstance(source_rows, list) or not source_rows:
+            raise ValueError("program-header evaluation must pin the training text-data sources")
+        for source in source_rows:
+            if (not isinstance(source, dict) or source.get("prompt_rendering") != "program-header" or
+                    not isinstance(source.get("sha256"), str) or len(source["sha256"]) != 64):
+                raise ValueError("invalid program-header training source binding")
     packet = Path(plan["derived_packet"]).resolve(strict=True)
     if sha256_file_hex(packet) != plan["derived_packet_sha256"]:
         raise ValueError("derived held-task packet hash changed")
@@ -126,6 +134,7 @@ def comparison_key(plan: dict, image: str) -> str:
         "max_case_seconds": plan["max_case_seconds"],
         "execution_plans": plan["execution_plans"],
         "prompt_rendering": prompt_rendering_identity(plan["prompt_rendering"]),
+        "prompt_rendering_sources": plan.get("prompt_rendering_sources", []),
     }
     encoded = json.dumps(contract, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     return hashlib.sha256(encoded).hexdigest()
@@ -470,6 +479,10 @@ def run_candidate(args: argparse.Namespace) -> dict:
     prompt_binding = manifest.get("prompt_rendering") or {}
     if prompt_binding.get("mode") != plan["prompt_rendering"]:
         raise ValueError("checkpoint text source rendering mode differs from evaluation plan")
+    source_proof = prompt_binding.get("source_proof") or {}
+    allowed_source_hashes = {source["sha256"] for source in plan.get("prompt_rendering_sources", [])}
+    if allowed_source_hashes and source_proof.get("input_sha256") not in allowed_source_hashes:
+        raise ValueError("checkpoint prompt-rendering source is outside the reviewed training inputs")
     port = free_port()
     server_name = "natlang-direct-task-eval-" + hashlib.sha256(str(run_dir).encode()).hexdigest()[:12]
     server = [
