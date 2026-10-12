@@ -140,8 +140,14 @@ def catalog(repo, config=None):
                     with opener(path, 'rt') as stream:
                         first = stream.readline(4_000_000)
                     row = json.loads(first)
+                    if not isinstance(row, dict):
+                        raise ValueError('First record is not an object')
                     entry['observed_version'] = row.get('version')
-                    entry['observed_program_version'] = row.get('task', {}).get('program_ir', {}).get('version')
+                    # Native action records also use a string task description.
+                    # Inventory its carrier without assuming it is program IR.
+                    task = row.get('task')
+                    program = task.get('program_ir') if isinstance(task, dict) else None
+                    entry['observed_program_version'] = program.get('version') if isinstance(program, dict) else None
                     entry['first_record_sha256'] = hashlib.sha256(first.encode()).hexdigest()
                 except (ValueError, UnicodeError, OSError):
                     entry['inspection_note'] = 'First record unavailable or oversize; full adapter audit required.'
