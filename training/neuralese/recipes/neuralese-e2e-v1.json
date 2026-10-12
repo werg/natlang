@@ -92,6 +92,50 @@
    }
   }
  ],
+ "quantization": {
+  "schema": "natlang.neuralese-quantization/1",
+  "description": "Shared QAT of the end-to-end stage (owner: QAT in every stage, light on LFM; lockstep of both lines): the direct base's q4 point (int4 g32), held at its parent's curriculum progress. After the full direct lineage (direct_sft [0, 0.75], direct_trajectory [0.75, 1.0]) that is 1.0, so q4 is at lambda 1 and sampled at weight 0.5 beside BF16. A launch from a mid-lineage snapshot holds the snapshot's progress instead (its launch recipe overrides stage_progress.e2e). Lines add points only where the backbone deploys lower (Mellum). The nested family is not trained in e2e yet (gap, both lines).",
+  "loss": {
+   "mode": "sample",
+   "bf16_weight": 1.0,
+   "seed": 0
+  },
+  "stage_progress": {
+   "e2e": [
+    1.0,
+    1.0
+   ]
+  },
+  "points": [
+   {
+    "name": "q4",
+    "gate": "required",
+    "weight": 0.5,
+    "ramp": {
+     "start": 0.15,
+     "end": 0.3
+    },
+    "modules": {
+     "experts": {
+      "format": "int4",
+      "group": 32
+     },
+     "mlp": {
+      "format": "int4",
+      "group": 32
+     },
+     "attention": {
+      "format": "int4",
+      "group": 32
+     },
+     "conv": {
+      "format": "int4",
+      "group": 32
+     }
+    }
+   }
+  ]
+ },
  "e2e_acceptance": {
   "description": "NEURALESE_DIRECT_V1.md \"End-to-end stage\" section 4 and its resolved margins; T reads the gold crisp text (teacher-oracle reference); the greedy-T arm, the token-readout regression (eval/direct_token_readout.py) and the behaviour gate are reported.",
   "paired_reader": {

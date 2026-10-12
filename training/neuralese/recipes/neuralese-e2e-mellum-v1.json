@@ -31,7 +31,7 @@
   },
   "quantization": {
    "schema": "natlang.neuralese-quantization/1",
-   "description": "Mellum's QAT component (neuralese-direct-mellum-v4: owner rule, QAT in every stage) in the end-to-end stage, held at its parent's curriculum progress: after the full direct lineage (direct_sft [0, 0.35], direct_trajectory [0.35, 0.5]) that is 0.5. A launch from a mid-lineage snapshot holds the snapshot's progress instead (its launch recipe overrides stage_progress.e2e). The ramps belong to the SFT phases; the e2e stage trains at the precision mix its parent reached.",
+   "description": "Mellum's precision points (the shared q4 plus ternary-experts and ternary, as neuralese-direct-mellum-v4) in the end-to-end stage, held at its parent's curriculum progress on the shared allocation: after the full direct lineage that is 1.0 (every point at lambda 1). A launch from a mid-lineage snapshot holds the snapshot's progress instead (its launch recipe overrides stage_progress.e2e).",
    "loss": {
     "mode": "sample",
     "bf16_weight": 1.0,
@@ -116,8 +116,8 @@
    ],
    "stage_progress": {
     "e2e": [
-     0.5,
-     0.5
+     1.0,
+     1.0
     ]
    }
   }
