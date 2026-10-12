@@ -339,11 +339,26 @@ Phases follow dependencies, not dates. Each ends at a review.
 | 10-12, `--init in-context` (default) | .728 / .507 / .745 | .750 / .508 / .741 | 45.4 s, 300 readouts |
 | 10-12, `--init encode` | .736 / .507 / .729 | .744 / .508 / .697 | 35.3 s, 300 readouts |
 
+| 10-12, Pop Muon-main v2 export step 10006, in context | .749 / .741 / .721 | .750 / .745 / .697 | 95.9 s, 264 readouts |
+| 10-12, Pop Muon-main v2 export step 10006, encode | .747 / .741 / .698 | .749 / .745 / .661 | 51.4 s, 264 readouts |
+
+**Every arm, 10-05 included, sits at the uniform answer, not above it.** Quality is 1 − Brier/2, and on two-way cases with hard labels answering 50/50 scores exactly .75 (the script now reports this as `query.uniform`). Per-case query readouts (`probe-*.jsonl`):
+
+- v8 gives P(spam) .988–.998 for every message, spam or not (accuracy .5).
+- Muon step 10006 gives .56–.59 for every message.
+- The bare question, generic guidance and the generic soft skill all behave the same.
+
+The search therefore learned calibration, not discrimination: it moved v8 from "always spam" (.507) to a hedge (.73–.75). Muon starts at the hedge, so it has nothing to gain, and refinement on 8 support cases overfits below it (soft-gold .66–.72).
+
+To localise this, base LFM2.5-350M (HF transformers, fp32 CPU) was scored as an exact reference on the runtime's own decision prompt, captured from the driver. It gives the same P(true) .993–.998 for every case. On a plain one-message prompt it is still "true"-biased with no discrimination (`hf-probe.log`). The server's readout matches the reference, and the message text is in the prompt (in the scope tool result). That rules out a serving, rendering or readout bug. The 350M backbone cannot tell sms-spam apart in this format.
+
+The next smoke needs a family on which the seed discriminates above uniform, or a larger student (Mellum), before memetic gains mean anything.
+
 In both new arms the best individual is author guidance plus a soft skill and an `xs` adapter. The bandit picks `refine-adapter` (and, in context, `refine-baldwin`). Propose and embed gain about nothing in 10 generations. On the raw-token port, in-context init and encode give the same block for a text, so the seeds are identical and `embed` reproduces its parent exactly. All in-context init gates passed. Query and transfer coincide because both use the one family's held-out cases. Unlike on 10-05 they now match to the last digit, because the readouts are deterministic.
 
 The bug found and fixed (45255079): the first run failed in `refine` with `learning-no-decision`. The coalescing decision scorer flushes a batch in the timer's async context, which belongs to the first caller. So `scoreMany` recorded every batched decision turn into that one caller's recorder and applied that caller's `withAdapters` scope to every item. Concurrent `objectives.decision` calls (`lossOn`, 4 in flight) then found no turn of their own, or silently took another case's turn. The fix captures the recorder and the adapters when the decision is asked for. Servers without the score endpoint now record decision turns too. The test is in `neuralese-score-many.test.mjs`. 9d106d05 (the typed choice/confidence contract) changes only Gemini label generation and scoring, not runtime readouts, so `decision-lib` is unaffected. Raw outputs: `/home/werg/data/memetic-20261012/` (not in git).
 
-*Next milestone:* run the memetic population on natlang task success instead of decision families. An individual is a program state: crisp instruction text, soft values (bodies, skills) and adapters. Fitness is the task verifier on held cases, and the operators are the same with `propose` given failing trajectories. Its kept improvement steps, and its refined soft values and adapters, then become training and initialisation data for the end-to-end Neuralese stage: soft values that consumers read in place of tokens, recorded as `natlang.improvement-step/1` with whole trajectories. Before that: the full 6-family `natlang-memetic-decision-v1` on this artifact, the Pop Muon-main export when it lands, and `merge` exercised (no relatives arose in 10 generations).
+*Next milestone:* run the memetic population on natlang task success instead of decision families. An individual is a program state: crisp instruction text, soft values (bodies, skills) and adapters. Fitness is the task verifier on held cases, and the operators are the same with `propose` given failing trajectories. Its kept improvement steps, and its refined soft values and adapters, then become training and initialisation data for the end-to-end Neuralese stage: soft values that consumers read in place of tokens, recorded as `natlang.improvement-step/1` with whole trajectories. Before that: pick decision families where the seed beats `query.uniform` (screen all families' bare readouts first), rerun there on Muon-main and on Mellum when its export exists, and report accuracy next to quality.
 
 **M4: adapters.**
 8. `Adapter<Base, Kind>` export in `.nz`, base identity, scoping rules, crossing test.

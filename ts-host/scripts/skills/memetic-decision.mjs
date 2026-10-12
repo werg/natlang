@@ -190,6 +190,8 @@ class Bandit {
   credit(arm, reward) { this.stats[arm].n++; this.stats[arm].reward += reward; }
 }
 
+const uniformQuality = cases => cases.reduce((sum, c) => { const { gold } = caseTarget(c); return sum + quality(c, gold.map(() => 1 / gold.length), gold); }, 0) / cases.length;
+
 // Run ------------------------------------------------------------------------------------------------------------
 const record = entry => appendFile(join(out, 'results.jsonl'), JSON.stringify(entry) + '\n');
 const stepRecord = entry => appendFile(join(out, 'improvement-steps.jsonl'), JSON.stringify(improvementStep(entry)) + '\n');
@@ -292,7 +294,9 @@ for (const [index, family] of families.entries()) {
     await evaluateOn(query, plain), await evaluateOn(transfer, plain), await evaluateOn(query, reference), await evaluateOn(validation, reference)];
   await record({ family, transfer_family: other, fitness: options.fitness, best: { id: best.id, operator: best.operator, guidance: best.guidance,
     skill: best.skill.$neuralese.id, ...(best.adapter ? { adapter: best.adapter.$neuralese.id } : {}), validation_loss: best.fit.loss, validation_quality: best.fit.quality }, seed_validation_loss: baseline.loss,
-    query: { best: bestQuery.quality, seed: baseQuery.quality, 'soft-gold': refQuery.quality },
+    // `uniform`: the quality of answering every case with equal probabilities. A score at or below it is hedging, not
+    // discrimination (on two-way cases with hard labels it is .75; 2026-10-12 smoke: every arm sat there).
+    query: { best: bestQuery.quality, seed: baseQuery.quality, 'soft-gold': refQuery.quality, uniform: uniformQuality(query) },
     validation: { best: best.fit.quality, seed: baseline.quality, 'soft-gold': refValidation.quality },
     transfer: { best: bestTransfer.quality, seed: baseTransfer.quality },
     compute: { search: searchCompute, 'soft-gold': referenceCompute }, bandit: bandit.stats, log });
