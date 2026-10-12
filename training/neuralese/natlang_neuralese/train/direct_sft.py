@@ -481,6 +481,11 @@ def main(argv=None):
     for row in rows:  # producer-declared context-only token spans (excluded assistant targets kept as history)
         if row.get('context_only_spans'):
             declared_by_document[hashlib.sha256(row['text'].encode()).hexdigest()] = context_only_spans(row)
+    # prepare_text_windows gives each window its own token/label arrays. The raw
+    # corpus rows (including their JSON text and source arrays) are no longer
+    # needed after extracting these producer-declared context masks; keeping
+    # them alive needlessly duplicates a large fraction of the corpus in RAM.
+    del rows
 
     def failed(window):
         """The window's slice of its document's context-only mask (computed once per document): assistant turns
@@ -633,7 +638,7 @@ def main(argv=None):
         current_options = identity['options']
         # A later phase of one lineage changes its data, its budget and its precision schedule (recipe stages:
         # full-prompt warm-up, then program-header direct_sft with the QAT ramp); everything else must match.
-        phase_keys = {'text_data', 'records', 'pieces', 'epochs', 'quantization'}
+        phase_keys = {'text_data', 'records', 'pieces', 'epochs', 'quantization', 'batch', 'batch_tokens'}
         changed_objective = sorted(key for key in set(previous_options) & set(current_options)
                                    if key not in phase_keys and previous_options[key] != current_options[key])
         if changed_objective:
