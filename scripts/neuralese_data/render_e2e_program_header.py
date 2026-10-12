@@ -10,7 +10,7 @@ edges.jsonl exactly, otherwise nothing is written. Output: records.jsonl (progra
 
   render_e2e_program_header.py SOURCE_COHORT_DIR OUT_DIR --id CORPUS_ID
 """
-import argparse, hashlib, json, os, shutil, sys
+import argparse, json, os, shutil, sys
 from collections import Counter
 from pathlib import Path
 
@@ -18,10 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 from natlang_neuralese.data.prompt_rendering import program_header_native_record, prompt_rendering_identity  # noqa: E402
 from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view  # noqa: E402
-
-
-def sha(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 
 
 def edge_set(records, pieces):
