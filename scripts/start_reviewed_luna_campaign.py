@@ -173,14 +173,33 @@ def main():
     runtime = Path(plan['runtime'])
     if tree_identity(runtime) != json.loads((runtime / 'frozen-runtime.json').read_text())['files']:
         raise ValueError('Frozen runtime changed')
+    record = Path(plan['launch_record'])
+    previous = json.loads(record.read_text()) if record.exists() else None
+    if previous is not None:
+        if previous.get('status') != 'operator_stopped' or Path(previous.get('plan', '')).resolve() != args.plan.resolve():
+            raise ValueError('Only an operator-stopped launch of this reviewed plan may resume')
+        old_workers = {worker['queue']: worker for worker in previous.get('workers', [])}
+        if len(old_workers) != len(previous.get('workers', [])):
+            raise ValueError('Prior launch has duplicate worker queues')
+        for old in old_workers.values():
+            if running(old['pid']):
+                raise ValueError(f'Prior worker is still running: {old["pid"]}')
+            if old.get('runtime_manifest_sha256') != digest(runtime / 'frozen-runtime.json'):
+                raise ValueError('Prior launch used a different frozen runtime')
+    else:
+        old_workers = {}
     keys, indices, evidence = set(), set(), set()
     pinned_paths = {str(Path(path).resolve()) for path in plan['artifact_hashes']}
     for worker in workers:
         if worker['queue'] not in plan['artifact_hashes']:
             raise ValueError('Worker queue is not pinned')
+        old = old_workers.get(worker['queue'])
+        if old is not None and (any(old.get(field) != worker[field] for field in ('queue', 'journal', 'log')) or
+                                old.get('command') != worker_command(plan, worker, runtime)):
+            raise ValueError('Prior worker does not match this reviewed plan')
         for field in ('journal', 'log'):
             path = Path(worker[field]).resolve()
-            if path in evidence or path.exists():
+            if path in evidence or (path.exists() and old is None):
                 raise ValueError('Fresh, distinct evidence paths required')
             evidence.add(path)
         for line in Path(worker['queue']).read_text().splitlines():
@@ -196,7 +215,6 @@ def main():
                 raise ValueError('Queue source is not pinned')
             keys.add(entry['key'])
             indices.add(identity)
-    record = Path(plan['launch_record'])
     predecessors = plan.get('predecessors', [])
     validate_predecessor_identity(predecessors)
     lanes = predecessor_lanes(workers, predecessors)
@@ -220,9 +238,10 @@ def main():
     for lane in worker_lanes:
         lane_states.setdefault(lane, {'status': 'ready'})
     waiting_record = record.with_suffix('.waiting.json')
-    with record.open('x') as stream:
-        json.dump({'status': 'waiting_for_predecessor_lanes' if lanes else 'starting',
-                   'plan': str(args.plan), 'time': time.time(), 'lanes': lane_states}, stream)
+    if previous is None:
+        with record.open('x') as stream:
+            json.dump({'status': 'waiting_for_predecessor_lanes' if lanes else 'starting',
+                       'plan': str(args.plan), 'time': time.time(), 'lanes': lane_states}, stream)
 
     def persist_waiting():
         atomic_json(waiting_record, {'status': 'waiting_for_predecessor_lanes',
@@ -263,11 +282,13 @@ def main():
                 return False
         command = worker_command(plan, worker, runtime)
         Path(worker['log']).parent.mkdir(parents=True, exist_ok=True)
-        with Path(worker['log']).open('xb') as log:
+        with Path(worker['log']).open('ab' if worker['queue'] in old_workers else 'xb') as log:
             process = subprocess.Popen(command, cwd=plan['cwd'], stdin=subprocess.DEVNULL,
                                        stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         processes.append(process)
         launched.append({**worker, 'lane': lane, 'pid': process.pid, 'command': command,
+                         **({'resumed_from_pid': old_workers[worker['queue']]['pid']}
+                            if worker['queue'] in old_workers else {}),
                          'runtime': str(runtime),
                          'runtime_manifest_sha256': digest(runtime / 'frozen-runtime.json'),
                          **({'predecessor_accounting': reason} if predecessor and reason else {})})

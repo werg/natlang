@@ -3396,3 +3396,17 @@ earlier completed trajectories for analysis, but select at most one reviewed
 trajectory per source group for training. Exact rejected answers remain held
 until conservative semantic review; seven seed-52001 aliases have nonadmission
 receipts. This change improves both exact acceptance and request efficiency.
+
+### 2026-10-12 — Resume reviewed Luna campaigns after ledger preemption
+
+The CLINC v17 lane06 wrapper was paused after 77 cases, then rejected its own
+existing journal and log on relaunch because it required fresh evidence paths.
+`start_reviewed_luna_campaign.py` now accepts an `operator_stopped` launch of the
+same reviewed plan when the prior worker is dead, its command and evidence paths
+match, and its frozen runtime and input pins still match; it appends to the
+worker log and lets the queue runner resume from terminal journal entries. The
+old CLINC plan pins the wrapper's pre-fix hash, so it cannot use the new wrapper.
+For that one campaign, we verified every other pin and resumed its exact
+recorded `run_bonsai_queue.py` command under the memory ledger. New plans use
+the fixed wrapper. A future campaign should pin an immutable wrapper snapshot
+if it must survive changes to the live wrapper code.
