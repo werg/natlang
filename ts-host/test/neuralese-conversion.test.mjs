@@ -745,7 +745,7 @@ test('provider-expanded configured function and producer blocks become source-bo
   assert.ok(out.neuralese_conversion.external_context_inputs.every(item => item.learned_vectors === false &&
     item.qualification_certificate === false && item.training_admission === false));
   assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === noteId).learner_representation,
-    'typed-read-linked-to-existing-writer');
+    'typed-read-from-authenticated-runtime-writer-event-context-only');
   assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === noteId).producer_write_node,
     `${invocation}#2`, 'the context read remains bound to the earlier same-invocation producer node');
   assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === noteId).context_occurrences, 1,

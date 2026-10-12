@@ -236,7 +236,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         program.external_source?.snapshot_sha256 !== sourceSha ||
         program.external_source?.source_manifest_sha256 !== sha(sourceManifestBytes)))
       throw new Error(`source-quality clearance is bound to different source bytes: ${program.id}`);
-    const materialized = materializeNativeRows([row], { failedRuns: true,
+    const materialized = materializeNativeRows([row], { failedRuns: true, pendingDecisionCandidates: true,
       ...(verifiedLabelCorrections ? { sourceLabelCorrections: verifiedLabelCorrections } : {}),
       ...(qualityBinding ? { sourceQualityClearance } : {}) });
     if (materialized.unlinked.length) { rejected.push({ id: row.id, reason: 'action-ledger-unlinked', unlinked: materialized.unlinked }); continue; }
