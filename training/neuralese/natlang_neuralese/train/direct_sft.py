@@ -50,7 +50,9 @@ from .optim import MUON_MIN_SIDE  # noqa: F401  (MuonSR latents: both matrix sid
 # resumes; idle-expert skipping is a defect fix that applies to it from then on).
 LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_beta2_half_life_tokens': 4e6,
                   'latent_ns': 'quintic', 'latent_weight_decay': 0.0, 'grad_spike_clip': 0.0,
-                  'epochs': None, 'batch_tokens': 0, 'continue_from': None}
+                  'epochs': None, 'batch_tokens': 0, 'continue_from': None,
+                  'fp8_training': 'off', 'fp8_recipe': 'delayed', 'fp8_amax_history_len': 16,
+                  'gradient_audit_steps': 0, 'saved_tensor_audit_steps': 0}
 OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
@@ -130,6 +132,17 @@ def parse(argv=None):
                    help='auto accumulates independent windows sequentially and chooses checkpointing from shared '
                         'activation geometry plus live CUDA headroom; packed is a diagnostic override')
     p.add_argument('--quantization')
+    p.add_argument('--fp8-training', choices=('off', 'te-fp8'), default='off',
+                   help='experimental LFM dense-GEMM backend; default keeps the established BF16 path')
+    p.add_argument('--fp8-recipe', choices=('delayed', 'current'), default='delayed',
+                   help='Transformer Engine scaling recipe when --fp8-training=te-fp8')
+    p.add_argument('--fp8-amax-history-len', type=int, default=16,
+                   help='FP8 DelayedScaling history length; ignored by CurrentScaling')
+    p.add_argument('--gradient-audit-steps', type=int, default=0,
+                   help='diagnostic: write per-parameter gradient summaries for this many initial updates; requires '
+                        'window_execution=sequential and at least two windows per update')
+    p.add_argument('--saved-tensor-audit-steps', type=int, default=0,
+                   help='diagnostic: inventory autograd saved tensors for this many initial updates')
     from .drift_monitor import add_drift_arguments
     # The drift guard (owner 2026-10-11; train/drift_monitor.py, shared with the end-to-end stage): response KL or
     # agreement past warn runs the behaviour gate and stops when the gate falls below its reference minus
@@ -155,6 +168,8 @@ def parse(argv=None):
         p.error('positive bounds required')
     if a.checkpoint_every < 0 or a.neuralese_weight < 0:
         p.error('invalid checkpoint cadence or Neuralese weight')
+    if min(a.gradient_audit_steps, a.saved_tensor_audit_steps) < 0:
+        p.error('diagnostic audit step counts must be nonnegative')
     if a.text_data is None and a.records is None:
         p.error('give the stage its data: --text-data, or --records with --pieces')
     return a
@@ -372,6 +387,17 @@ def main(argv=None):
     from ..maple.model import set_dense_moe_kernel
     set_dense_moe_kernel(a.moe_kernel)
     quant = load_component(a.quantization, root=path_root('repo'))
+    fp8_backend = None
+    if a.fp8_training != 'off':
+        if quant is not None:
+            raise ValueError('experimental TE FP8 training cannot be combined with the separate quantization component')
+        from .fp8_backend import FP8LinearAdapter
+        fp8_backend = FP8LinearAdapter(backbone.hf, device=a.device, recipe=a.fp8_recipe,
+                                       amax_history_len=a.fp8_amax_history_len)
+        # Use TE's checkpoint wrapper for LFM layer recomputation; ordinary torch checkpoint does not promise to
+        # preserve TE's FP8 metadata across a recomputed module call.
+        backbone.activation_checkpoint = fp8_backend.checkpoint
+    fp8_initial_inventory = fp8_backend.inventory() if fp8_backend is not None else {'enabled': False}
     behaviour = None
     gate_held = None
     if quant is not None:
@@ -445,6 +471,7 @@ def main(argv=None):
                       'backbone_parameter_dtypes': backbone_parameter_dtypes,
                       'backbone_floating_buffer_dtypes': backbone_floating_buffer_dtypes,
                       'declared_autocast': None,
+                      'fp8_training': fp8_initial_inventory,
                       'latent_options': {k: list(v) if isinstance(v, tuple) else v for k, v in latent_options.items()},
                       'adamw_or_muon_backbone': [n for n, _ in other_backbone][:4] + ['...'],
                       'projections': {k: sum(q.numel() for q in m.parameters()) for k, m in projections.items()}}),
@@ -668,6 +695,13 @@ def main(argv=None):
                 {'options': previous_options, 'inputs': state['identity']['inputs']},
                 {'options': current_options, 'inputs': identity['inputs']}):
             raise ValueError('neuralese_direct resume identity changed (options or inputs)')
+        saved_fp8 = state.get('fp8_training')
+        if fp8_backend is not None:
+            if saved_fp8 is None:
+                raise ValueError('exact FP8 resume checkpoint is missing TE scaling state')
+            fp8_backend.restore_extra_state(saved_fp8)
+        elif saved_fp8 is not None:
+            raise ValueError('an FP8 checkpoint cannot resume through the BF16 backend')
         if previous_epochs != current_epochs:
             # The owner may shorten/extend the epoch budget without throwing away trained updates. Reconstruct
             # both deterministic schedules and verify every consumed batch, not just an epoch counter. Fractional
@@ -726,11 +760,24 @@ def main(argv=None):
         # and the memory estimator uses a distinct target-size bin. It changes window grouping, so never an exact
         # in-place resume. Everything else must match.
         phase_keys = {'text_data', 'records', 'pieces', 'epochs', 'quantization', 'batch', 'batch_tokens',
-                      'target_tokens'}
+                      'target_tokens', 'fp8_training', 'fp8_recipe', 'fp8_amax_history_len'}
         changed_objective = sorted(key for key in set(previous_options) & set(current_options)
                                    if key not in phase_keys and previous_options[key] != current_options[key])
         if changed_objective:
             raise ValueError('--continue-from training options differ: ' + ', '.join(changed_objective))
+        saved_fp8 = state.get('fp8_training')
+        previous_fp8 = previous_options.get('fp8_training', 'off')
+        if fp8_backend is not None:
+            if saved_fp8 is not None:
+                fp8_backend.restore_extra_state(saved_fp8)
+            elif previous_fp8 != 'off':
+                raise ValueError('FP8 predecessor checkpoint is missing TE scaling state')
+            else:
+                print(json.dumps({'event': 'fp8_scaling_state_initialized_for_phase',
+                                  'predecessor_backend': 'off', 'backend': 'te-fp8',
+                                  'reason': 'declared precision-backend phase change'}), flush=True)
+        elif saved_fp8 is not None:
+            raise ValueError('FP8 predecessor requires an explicit TE FP8 phase')
         # Full direct checkpoints keep optimizer-schema names in their canonical ``backbone.*`` form.
         # Keep that same form here; only the destination tensor lookup strips the prefix below.
         expected_backbone = dict(backbone_named)
@@ -788,7 +835,8 @@ def main(argv=None):
                 'optimizer_parameter_names': optimizer_parameter_names,
                 'best': best, 'base_eval': base_eval, 'history': history, **monitor.state(),
                 'grad_spike_clip': spike.state_dict() if spike is not None else None,
-                'direct_memory_estimator': memory_estimator.state_dict()}
+                'direct_memory_estimator': memory_estimator.state_dict(),
+                'fp8_training': fp8_backend.extra_state() if fp8_backend is not None else None}
 
     def log(name, value):
         with (a.out / name).open('a') as handle:
@@ -802,6 +850,8 @@ def main(argv=None):
         with torch.no_grad(), contextlib.ExitStack() as scope:
             if quant is not None:
                 scope.enter_context(quant.context('bf16', 0.0))
+            if fp8_backend is not None:
+                scope.enter_context(fp8_backend.native_modules())
             for batch in evaluation_batches(held, a.eval_batch):
                 _, metrics, prediction, _, _ = forward(batch, gradients=False)
                 predictions.append(prediction.cpu())
@@ -830,6 +880,8 @@ def main(argv=None):
         with torch.no_grad(), contextlib.ExitStack() as scope:
             if quant is not None:
                 scope.enter_context(quant.context('bf16', 0.0))
+            if fp8_backend is not None:
+                scope.enter_context(fp8_backend.native_modules())
             for window in held[:a.drift_ce_windows]:
                 total += forward([window], gradients=False)[1]['ce']
         return total / len(held[:a.drift_ce_windows])
@@ -904,7 +956,7 @@ def main(argv=None):
         evaluate()
         base_eval['drift_ce'] = drift_ce()
     elif step == 0:
-        with torch.no_grad():
+        with torch.no_grad(), (fp8_backend.native_modules() if fp8_backend is not None else contextlib.nullcontext()):
             ids, span, index, _, _, _, _ = tensors(held[:1])
             hidden = span_states(ids, index)
             mixture = soft_token_mixture(backbone.logits, table, hidden)
@@ -927,6 +979,27 @@ def main(argv=None):
     started = time.time()
     from .text_warmup import _warmup_update_floor_bytes
     direct_trainables = head_named + backbone_named
+    from .fp8_backend import SavedTensorAudit
+
+    def gradient_audit(named):
+        result = []
+        seen = set()
+        for name, parameter in named:
+            if id(parameter) in seen:
+                continue
+            seen.add(id(parameter))
+            gradient = parameter.grad
+            if gradient is None:
+                result.append({'name': name, 'present': False, 'shape': list(parameter.shape),
+                               'parameter_dtype': str(parameter.dtype)})
+                continue
+            value = gradient.detach().float()
+            result.append({'name': name, 'present': True, 'shape': list(gradient.shape),
+                           'gradient_dtype': str(gradient.dtype), 'l2': float(torch.linalg.vector_norm(value)),
+                           'max_abs': float(value.abs().max()),
+                           'finite': bool(torch.isfinite(value).all())})
+        return result
+
     cuda_active = torch.cuda.is_available() and str(a.device).startswith('cuda')
 
     cache_released = []
@@ -944,7 +1017,14 @@ def main(argv=None):
         context = max(len(window['ids']) - 1 for window in batch)
         target = max(len(window['ids']) - window['prefix'] for window in batch)
         rows = 1 if mode == 'sequential' else len(batch)
-        floor = _warmup_update_floor_bytes(direct_trainables, optimizer, bootstrap=False, in_backward=mode == "packed")  # packed: the latents step in backward
+        optimizer_floor = _warmup_update_floor_bytes(direct_trainables, optimizer, bootstrap=False, in_backward=mode == "packed")  # packed: the latents step in backward
+        fp8_cache_estimate = fp8_backend.cached_weight_bytes_estimate() if fp8_backend is not None else 0
+        fp8_cache_reservation = 0
+        if fp8_backend is not None and not fp8_backend.has_executed:
+            # Ada keeps distinct rowwise and columnwise FP8 weight representations. Reserve both on the first
+            # update before the live allocator can account for those lazily-created TE caches.
+            fp8_cache_reservation = fp8_cache_estimate
+        planning_floor = optimizer_floor + fp8_cache_reservation
         if cuda_active:
             free, total = torch.cuda.mem_get_info(a.device)
             allocator_backend = torch.cuda.get_allocator_backend()
@@ -979,7 +1059,8 @@ def main(argv=None):
             one_raw = geometry_bytes(context, 0, **layout,
                                      target_tokens=min(128, target),
                                      vocab_size=int(backbone.embedding_weight.shape[0]))
-            kind = f'direct-sft-{mode}-checkpointed-{int(checkpointed)}'
+            kind = (f'direct-sft-fp8-{a.fp8_recipe}-{mode}-checkpointed-{int(checkpointed)}'
+                    if fp8_backend is not None else f'direct-sft-{mode}-checkpointed-{int(checkpointed)}')
             predicted_activation = memory_estimator.predict(kind, context, target, one_raw) * rows
             calibration = memory_estimator.calibration_info(kind, context, target)
             return one_raw * rows, predicted_activation, calibration
@@ -989,8 +1070,8 @@ def main(argv=None):
             raw, predicted, calibration = estimate(checkpointed)
         else:
             checkpointed, raw, predicted, calibration = choose_layer_checkpointing(
-                estimate, floor, available if cuda_active else None)
-        incremental = predicted + floor
+                estimate, planning_floor, available if cuda_active else None)
+        incremental = predicted + planning_floor
         fits = available is None or incremental <= available
         device_bound = claim_available is None or device_available < claim_available
         if not fits and cuda_active and device_bound and not cache_released:
@@ -1030,7 +1111,9 @@ def main(argv=None):
         layout = backbone_memory_layout(backbone, checkpointed=checkpointed)
         return {'mode': mode, 'checkpoint_layers': checkpointed, 'context_tokens': context,
                 'target_tokens': target, 'activation_geometry_bytes': raw,
-                'predicted_activation_bytes': predicted, 'gradient_optimizer_floor_bytes': floor,
+                'predicted_activation_bytes': predicted, 'gradient_optimizer_floor_bytes': optimizer_floor,
+                'fp8_weight_cache_estimate_bytes': fp8_cache_estimate,
+                'fp8_weight_cache_reservation_bytes': fp8_cache_reservation,
                 'estimated_incremental_peak_bytes': incremental, 'reusable_cuda_bytes': available,
                 'device_reusable_bytes': device_available, 'ledger_claim_reusable_bytes': claim_available,
                 'ledger_unit': claim['unit'] if claim else None,
@@ -1045,6 +1128,9 @@ def main(argv=None):
                 'allocator_inactive_split_bytes': inactive_split,
                 'cuda_allocator_config': os.environ.get('PYTORCH_CUDA_ALLOC_CONF'),
                 'estimator_margin': memory_estimator.margin, 'estimator_geometry': memory_estimator.geometry_version,
+                'fp8_backend': ({'enabled': False} if fp8_backend is None else {
+                    **fp8_backend.configuration(), 'cache_estimate_bytes': fp8_cache_estimate,
+                    'cache_estimate_reserved_this_update': not fp8_backend.has_executed}),
                 'activation_calibration_sample_count': calibration['sample_count'],
                 'activation_calibration_source_bins': calibration['source_bins'],
                 'activation_calibration_source': calibration['source'],
@@ -1059,6 +1145,8 @@ def main(argv=None):
                                                  'fp32_norm_transient_bytes_per_token')}}
 
     for step_index in loop:
+        if fp8_backend is not None:
+            fp8_backend.reset_row_counts()
         batch, covered = schedule[step_index]
         point, mix = ('bf16', 0.0) if quant is None else quant.sampled(step_index)[:2]
         profiler.begin(step_index + 1)
@@ -1067,15 +1155,22 @@ def main(argv=None):
         tick = time.time()
         with profile_region('update/plan'):
             plan = execution_plan(batch)
+        if step_index < a.gradient_audit_steps and (plan['mode'] != 'sequential' or len(batch) < 2):
+            raise ValueError('--gradient-audit-steps requires multi-window sequential gradient accumulation')
         print(json.dumps({'event': 'execution_plan', 'step': step_index + 1,
                           'source_documents': [window['document'] for window in batch], **plan}), flush=True)
         backbone.checkpoint_layers = plan['checkpoint_layers']
         update_start_allocated = int(torch.cuda.memory_allocated(a.device)) if cuda_active else 0
         if cuda_active:
             torch.cuda.reset_peak_memory_stats(a.device)
+        saved_tensor_audit = SavedTensorAudit() if step_index < a.saved_tensor_audit_steps else None
         with contextlib.ExitStack() as scope:
+            if saved_tensor_audit is not None:
+                scope.enter_context(saved_tensor_audit)
             if quant is not None:
                 scope.enter_context(quant.context(point, mix))
+            if fp8_backend is not None:
+                scope.enter_context(fp8_backend.autocast())
             if plan['mode'] == 'sequential' and len(batch) > 1:
                 _, _, _, valid_all, weights_all, _, _ = tensors(batch)
                 valid_positions = valid_all.sum().clamp_min(1)
@@ -1142,6 +1237,9 @@ def main(argv=None):
                         with profile_region('update/backward'), backward_phase():
                             loss.backward()
                 latent_norm = armed.norm()
+        gradient_metrics = None
+        if step_index < a.gradient_audit_steps:
+            gradient_metrics = gradient_audit(head_named + backbone_named)
         # The global gradient norm: the latents' (stepped in backward, spike-clipped by the norm so far) with the
         # others' (spike-clipped exactly here with --grad-spike-clip).
         if armed is not None:
@@ -1167,12 +1265,16 @@ def main(argv=None):
         seconds = time.time() - tick
         observed_increment = (max(0, int(torch.cuda.max_memory_allocated(a.device)) - update_start_allocated)
                               if cuda_active else None)
+        fp8_rows = fp8_backend.collect_row_counts() if fp8_backend is not None else None
         if observed_increment is not None:
             # Successful updates calibrate only matching packed/sequential and checkpoint geometries.
-            floor = plan['gradient_optimizer_floor_bytes']
-            observed_activation = max(1, observed_increment - floor)
+            fixed_bytes = (plan['gradient_optimizer_floor_bytes'] +
+                           plan['fp8_weight_cache_reservation_bytes'])
+            observed_activation = max(1, observed_increment - fixed_bytes)
             memory_estimator.observe(
-                f"direct-sft-{plan['mode']}-checkpointed-{int(plan['checkpoint_layers'])}",
+                (f"direct-sft-fp8-{a.fp8_recipe}-{plan['mode']}-checkpointed-{int(plan['checkpoint_layers'])}"
+                 if fp8_backend is not None else
+                 f"direct-sft-{plan['mode']}-checkpointed-{int(plan['checkpoint_layers'])}"),
                 plan['context_tokens'], plan['target_tokens'], plan['activation_geometry_bytes'],
                 observed_activation)
         for key in totals:
@@ -1181,13 +1283,21 @@ def main(argv=None):
                             'precision_policy': point, 'mix': mix,
                             'window_execution': plan['mode'], 'checkpoint_layers': plan['checkpoint_layers'],
                             'memory_plan': plan, 'observed_incremental_peak_bytes': observed_increment,
+                            'fp8_training': fp8_backend.configuration() if fp8_backend is not None else {'enabled': False},
+                            'fp8_row_padding': fp8_rows,
+                            'saved_tensor_audit': saved_tensor_audit.report() if saved_tensor_audit is not None else None,
+                            'gradient_audit': gradient_metrics,
                             'backbone_parameter_dtypes': backbone_parameter_dtypes,
                             'backbone_floating_buffer_dtypes': backbone_floating_buffer_dtypes,
                             'declared_autocast': None, **metrics,
                             'epochs': covered, 'supervised_tokens_per_second': metrics['supervised_tokens'] / seconds,
                             'cuda_peak_allocated_gb': torch.cuda.max_memory_allocated(a.device) / 2 ** 30
                             if cuda_active else None,
+                            'cuda_peak_reserved_gb': torch.cuda.max_memory_reserved(a.device) / 2 ** 30
+                            if cuda_active else None,
                             'grad_clip': grad_clip, 'seconds': seconds})
+        if fp8_backend is not None and step == start_index + 1:
+            log('fp8-runtime-inventory.jsonl', {'step': step, **fp8_backend.inventory()})
         profiler.update_done(step, seconds, forward_tokens=metrics['forward_tokens'], windows=metrics['windows'],
                              checkpoint_layers=plan['checkpoint_layers'], mode=plan['mode'], precision=point)
         if step % a.eval_every == 0 or step == end:
