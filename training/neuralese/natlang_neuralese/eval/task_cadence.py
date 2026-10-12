@@ -44,7 +44,6 @@ import threading
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_CASES = tuple(range(0, 48, 3))
 SCHEMA = 'natlang.in-run-task-eval/1'
 
@@ -97,7 +96,8 @@ def node_path_env() -> dict:
 
 def _git_head() -> str | None:
     try:
-        return subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True,
+        from ..common.paths import root as logical_root
+        return subprocess.check_output(['git', '-C', str(logical_root('repo')), 'rev-parse', 'HEAD'], text=True,
                                        stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.CalledProcessError):
         return None
@@ -116,6 +116,12 @@ class TaskEval:
         # Repo-relative paths resolve against the live checkout (a training run executes a code snapshot that
         # carries neither runs/ nor the built ts-host).
         self.repo = logical_root('repo')
+        collector = self.repo / 'scripts' / 'run_bonsai_queue.py'
+        runtime = Path(spec.get('runtime') or self.repo / 'ts-host')
+        if not collector.is_file():
+            raise FileNotFoundError(f'task_eval collector missing from live checkout: {collector}')
+        if not (runtime / 'dist' / 'teacher' / 'cli.js').is_file():
+            raise FileNotFoundError(f'task_eval TS runtime missing built collector: {runtime}')
         packet = Path(spec['packet']['path'])
         if not packet.is_absolute():
             packet = self.repo / packet
@@ -204,10 +210,10 @@ class TaskEval:
             for queue, journal, _ in queues:
                 log = (queue.parent / 'supervisor.log').open('w')
                 children.append((subprocess.Popen(
-                    [sys.executable, str(ROOT / 'scripts' / 'run_bonsai_queue.py'), str(queue), str(journal),
+                    [sys.executable, str(self.repo / 'scripts' / 'run_bonsai_queue.py'), str(queue), str(journal),
                      '--runtime', str(self.spec.get('runtime') or self.repo / 'ts-host'), '--server', url,
                      '--chat-completions-url', url + '/v1/chat/completions', '--model-concurrency', '2'],
-                    cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT), log))
+                    cwd=self.repo, env=env, stdout=log, stderr=subprocess.STDOUT), log))
             codes = []
             for child, log in children:
                 codes.append(child.wait())
@@ -288,6 +294,9 @@ class TaskEval:
         print(json.dumps({'event': 'task_eval', **{k: summary[k] for k in
                           ('step', 'task_successes', 'cases', 'outcome_counts', 'eligible', 'previous_successes',
                            'repeat_noise', 'noise_successes', 'regressed', 'seconds')}}), flush=True)
+        if not eligible:
+            raise RuntimeError(f'task_eval did not complete at step {step}: {score["outcome_counts"]}; '
+                               f'collector exits {codes}; see {run}')
         return summary
 
 
