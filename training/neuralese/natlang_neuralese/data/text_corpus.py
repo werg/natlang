@@ -178,18 +178,24 @@ def _provider_action_normalization_equivalence(record, receipt, metadata):
         and normalized_target_arguments(current_target) is not None
         and _canonical(normalized_target_arguments(expected_converted_target)) ==
             _canonical(normalized_target_arguments(current_target)))
+    # The raw-call adapter and the per-write receipts above are sufficient to
+    # reconstruct the materialized target. Older source packets may therefore
+    # omit this redundant summary binding. If a packet supplies the summary,
+    # still require it to match exactly.
+    converted_binding_valid = (converted_binding is None or (
+        isinstance(converted_binding, dict)
+        and converted_binding.get("schema") == "natlang.provider-action-converted-target-binding/1"
+        and converted_binding.get("source_materialized_target_sha256") == target_sha
+        and metadata.get("source_materialized_target_sha256") == target_sha
+        and converted_binding.get("converted_target_sha256") == current_target_sha
+        and converted_binding.get("conversion_version") == conversion.get("version")))
     if (adapter.get("schema") != "natlang.provider-action-target-normalization/1"
             or adapter.get("kind") != "exact-raw-provider-calls-to-materialized-tool-calls"
             or adapter.get("source_row_sha256") != source_row
             or adapter.get("source_trajectory_index") != (record.get("decision") or {}).get("index")
             or adapter.get("raw_action_sha256") != expected_raw_sha
             or adapter.get("normalized_target_sha256") != target_sha
-            or not isinstance(converted_binding, dict)
-            or converted_binding.get("schema") != "natlang.provider-action-converted-target-binding/1"
-            or converted_binding.get("source_materialized_target_sha256") != target_sha
-            or metadata.get("source_materialized_target_sha256") != target_sha
-            or converted_binding.get("converted_target_sha256") != current_target_sha
-            or converted_binding.get("conversion_version") != conversion.get("version")
+            or not converted_binding_valid
             or not structurally_authenticated
             or receipt.get("source_row_sha256") != source_row
             or receipt.get("source_trajectory_index") != adapter.get("source_trajectory_index")

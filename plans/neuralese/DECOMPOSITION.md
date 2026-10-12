@@ -75,6 +75,17 @@ precision policy and does not change the serving artifact.
 | Save FP8 scaling state and activation/cache accounting | Direct checkpoint and training receipts | Exact resume requires scale history; memory reports must distinguish FP8 caches from BF16 parameters and saved tensors. |
 | Compare mixed short/long updates, evaluation, memory, and speed | Dedicated paired diagnostic over the shared direct recipe | This measures an experimental backend; it neither changes production defaults nor qualifies a model. |
 
+`natlang_neuralese.eval.fp8_training_comparison` prepares two pairs from
+declared `neuralese_direct` templates and is prepare-only unless `--run` is
+passed. It requires the short and long templates to share exact source inputs,
+lineage evidence, and non-context training options. Its summary separates the
+first three cold updates from warmed median update time, checks that each pair
+used the same source windows, and retains GPU clock/power/memory samples,
+initial/final held evaluations, gradient summaries, and saved-tensor inventories.
+This inventory and the configured `save_original_input=False` are evidence to
+inspect; no FP8 activation-memory reduction or quality/speed result is assumed
+before a scheduled CUDA run.
+
 ## Declared direct-stage resume and completion — 2026-10-11
 
 Checkpoint restoration belongs to the existing shared trainer. The recipe runner
