@@ -8,6 +8,8 @@ CUDA or run a model forward, so the same policy can be tested on CPU.
 from dataclasses import dataclass
 import math
 
+from .memory_estimator import CALIBRATED_SAMPLES
+
 
 TEXT_WARMUP_READOUT_CHUNKS = (128, 256, 512)
 TEXT_WARMUP_FFN_CHUNKS = (1024, 2048, 4096)
@@ -272,8 +274,6 @@ def ledger_claim(unit: str | None = None):
     return {'unit': unit, 'budget_bytes': int(budget), 'host_bytes': int(host), 'source': source}
 
 
-# Activation ratios need this many measurements before a prediction uses them (AdaptiveGraphMemory.predict).
-CALIBRATED_SAMPLES = 3
 # An uncalibrated no-checkpoint forecast is raw geometry; it is trusted only with this much room to spare.
 UNCALIBRATED_NO_CHECKPOINT_FACTOR = 2.0
 

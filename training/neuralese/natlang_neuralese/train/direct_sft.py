@@ -444,7 +444,9 @@ def main(argv=None):
         a.steps = len(schedule)  # derived: the stage's schedules (QAT ramps, cadence ends) follow it
     if quant is not None and quant.stage['end'] == 'derived':
         quant.stage['end'] = a.steps
-    from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout, geometry_bytes
+    from .memory_estimator import (AdaptiveGraphMemory, DIRECT_SFT_ADJACENT_CONTEXT_DISTANCE,
+                                  DIRECT_SFT_ADJACENT_MIN_SAMPLES, DIRECT_SFT_ADJACENT_QUANTILE,
+                                  backbone_memory_layout, geometry_bytes)
     from .memory_policy import (choose_layer_checkpointing, effective_cuda_free_bytes, ledger_claim,
                                 ledger_reusable_bytes)
     memory_estimator = AdaptiveGraphMemory(geometry_version=DIRECT_MEMORY_GEOMETRY_VERSION)
@@ -935,6 +937,12 @@ def main(argv=None):
                 'estimator_margin': memory_estimator.margin, 'estimator_geometry': memory_estimator.geometry_version,
                 'activation_calibration_sample_count': calibration['sample_count'],
                 'activation_calibration_source_bins': calibration['source_bins'],
+                'activation_calibration_source': calibration['source'],
+                'activation_calibration_context_bin_distance': calibration['context_bin_distance'],
+                'activation_calibration_quantile': calibration['quantile'],
+                'activation_adjacent_context_distance': DIRECT_SFT_ADJACENT_CONTEXT_DISTANCE,
+                'activation_adjacent_min_samples': DIRECT_SFT_ADJACENT_MIN_SAMPLES,
+                'activation_adjacent_quantile': DIRECT_SFT_ADJACENT_QUANTILE,
                 'activation_layout': {key: value for key, value in layout.items()
                                       if key in ('width', 'layers', 'intermediate', 'kv_width', 'dtype_bytes',
                                                  'fp32_norm_saved_bytes_per_token',

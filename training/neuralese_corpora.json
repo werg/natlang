@@ -39207,7 +39207,7 @@
       },
       "notes": "Luna CLINC v21 reviewed exact child actions (Pop note pop-aca8): program-header and whole-trajectory in both twins; full kept for the 5% warm-up sample."
     },
-    {
+        {
         "id": "luna-v24-clinc-intent-reviewed-child-actions-20261012-v1",
         "owner": "pop",
         "path": "data/neuralese/corpora/luna-v24-clinc-intent-reviewed-child-candidates-20261012-v3",
@@ -39247,7 +39247,7 @@
             "source_quality_clearance_sha256": "3fd87a6f56c2afe60d2f64e888ba66272d96cb106e2bb8dbfcdc66f02d04c318",
             "owner_admission_path": "root-selected-action-admission.json",
             "owner_admission_sha256": "fa9d09a1ff0d8060eac001fe38aa905b622e30daee72cb31e2da63d6261ba3ea",
-            "rows_sha256": "22ae54aa58bb8a2bb8a2abe72175efab7b04be97a862da6fc2ad6c6f3f62091d",
+            "rows_sha256": "257818cca25d209de1cc78d4a44fdec2ee5ac577ec75987470905a1d2cfc7936",
             "rows": [
                 {
                     "id": "teacher-program:0114bc88ec6951faf7a1:decision:0019",
@@ -39262,7 +39262,9 @@
                         "g-a32fcd66a7e2f5f585d3c471",
                         "g-dfcb1467b6cc45eba51d7da1",
                         "g-4daa303367b2a50264db8263"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:0114bc88ec6951faf7a1:decision:0020",
@@ -39277,7 +39279,9 @@
                         "g-a32fcd66a7e2f5f585d3c471",
                         "g-dfcb1467b6cc45eba51d7da1",
                         "g-4daa303367b2a50264db8263"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:0114bc88ec6951faf7a1:decision:0021",
@@ -39292,7 +39296,9 @@
                         "g-a32fcd66a7e2f5f585d3c471",
                         "g-dfcb1467b6cc45eba51d7da1",
                         "g-4daa303367b2a50264db8263"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:079595e829eaad25082e:decision:0004",
@@ -39307,7 +39313,9 @@
                         "g-852a0bbcd24df3cf499cb136",
                         "g-659e64a293e08e3051e04f2c",
                         "g-12fb2e3fc0aae0ddbb2f95b1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:079595e829eaad25082e:decision:0005",
@@ -39322,7 +39330,9 @@
                         "g-852a0bbcd24df3cf499cb136",
                         "g-659e64a293e08e3051e04f2c",
                         "g-12fb2e3fc0aae0ddbb2f95b1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:079595e829eaad25082e:decision:0006",
@@ -39337,7 +39347,9 @@
                         "g-852a0bbcd24df3cf499cb136",
                         "g-659e64a293e08e3051e04f2c",
                         "g-12fb2e3fc0aae0ddbb2f95b1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:079595e829eaad25082e:decision:0013",
@@ -39352,7 +39364,9 @@
                         "g-852a0bbcd24df3cf499cb136",
                         "g-659e64a293e08e3051e04f2c",
                         "g-12fb2e3fc0aae0ddbb2f95b1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:08749df3c89ea3eee501:decision:0002",
@@ -39367,7 +39381,9 @@
                         "g-ca84239d64f7f2b9cb258db3",
                         "g-66edb0589ef3ca7ba5d49d02",
                         "g-0d22d238056329c138422b23"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:08749df3c89ea3eee501:decision:0003",
@@ -39382,7 +39398,9 @@
                         "g-ca84239d64f7f2b9cb258db3",
                         "g-66edb0589ef3ca7ba5d49d02",
                         "g-0d22d238056329c138422b23"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:08749df3c89ea3eee501:decision:0004",
@@ -39397,7 +39415,9 @@
                         "g-ca84239d64f7f2b9cb258db3",
                         "g-66edb0589ef3ca7ba5d49d02",
                         "g-0d22d238056329c138422b23"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:08749df3c89ea3eee501:decision:0005",
@@ -39412,7 +39432,9 @@
                         "g-ca84239d64f7f2b9cb258db3",
                         "g-66edb0589ef3ca7ba5d49d02",
                         "g-0d22d238056329c138422b23"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:0ac5fd07894a7de6e2ba:decision:0003",
@@ -39427,7 +39449,9 @@
                         "g-29dce6179abd7557aff1907a",
                         "g-2a941adcc34f65ce6f219ad6",
                         "g-9a10fceba44bfb6ab2f49a9d"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:0ac5fd07894a7de6e2ba:decision:0004",
@@ -39442,7 +39466,9 @@
                         "g-29dce6179abd7557aff1907a",
                         "g-2a941adcc34f65ce6f219ad6",
                         "g-9a10fceba44bfb6ab2f49a9d"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:0ac5fd07894a7de6e2ba:decision:0005",
@@ -39457,7 +39483,9 @@
                         "g-29dce6179abd7557aff1907a",
                         "g-2a941adcc34f65ce6f219ad6",
                         "g-9a10fceba44bfb6ab2f49a9d"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:0f3b97f59917fd4bb688:decision:0003",
@@ -39472,7 +39500,9 @@
                         "g-c3684d4e52a068433274586b",
                         "g-feeec6b8e4ceee8f6aeea644",
                         "g-1db801467f30de56c7abeec1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:0f3b97f59917fd4bb688:decision:0004",
@@ -39487,7 +39517,9 @@
                         "g-c3684d4e52a068433274586b",
                         "g-feeec6b8e4ceee8f6aeea644",
                         "g-1db801467f30de56c7abeec1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:0f3b97f59917fd4bb688:decision:0005",
@@ -39502,7 +39534,9 @@
                         "g-c3684d4e52a068433274586b",
                         "g-feeec6b8e4ceee8f6aeea644",
                         "g-1db801467f30de56c7abeec1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:0f3b97f59917fd4bb688:decision:0006",
@@ -39517,7 +39551,9 @@
                         "g-c3684d4e52a068433274586b",
                         "g-feeec6b8e4ceee8f6aeea644",
                         "g-1db801467f30de56c7abeec1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:10d6b685c0144ccd68b8:decision:0033",
@@ -39532,7 +39568,9 @@
                         "g-57c5aac8784e87ce429975f2",
                         "g-79085af59d56d570e0973e64",
                         "g-1904b0192f569be0d8158915"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:10d6b685c0144ccd68b8:decision:0034",
@@ -39547,7 +39585,9 @@
                         "g-57c5aac8784e87ce429975f2",
                         "g-79085af59d56d570e0973e64",
                         "g-1904b0192f569be0d8158915"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:10d6b685c0144ccd68b8:decision:0035",
@@ -39562,7 +39602,9 @@
                         "g-57c5aac8784e87ce429975f2",
                         "g-79085af59d56d570e0973e64",
                         "g-1904b0192f569be0d8158915"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:10d6b685c0144ccd68b8:decision:0036",
@@ -39577,7 +39619,9 @@
                         "g-57c5aac8784e87ce429975f2",
                         "g-79085af59d56d570e0973e64",
                         "g-1904b0192f569be0d8158915"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:11a21ed8508924445d8c:decision:0004",
@@ -39592,7 +39636,9 @@
                         "g-9ba042a02debaaaad27e4f83",
                         "g-7f359664e356d1e5c89d3252",
                         "g-f1b2389bb16e35921bf3ec14"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:11a21ed8508924445d8c:decision:0005",
@@ -39607,7 +39653,9 @@
                         "g-9ba042a02debaaaad27e4f83",
                         "g-7f359664e356d1e5c89d3252",
                         "g-f1b2389bb16e35921bf3ec14"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:11a21ed8508924445d8c:decision:0006",
@@ -39622,7 +39670,9 @@
                         "g-9ba042a02debaaaad27e4f83",
                         "g-7f359664e356d1e5c89d3252",
                         "g-f1b2389bb16e35921bf3ec14"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:11a21ed8508924445d8c:decision:0009",
@@ -39637,7 +39687,9 @@
                         "g-9ba042a02debaaaad27e4f83",
                         "g-7f359664e356d1e5c89d3252",
                         "g-f1b2389bb16e35921bf3ec14"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:127ca3620892a63aa230:decision:0003",
@@ -39652,7 +39704,9 @@
                         "g-97ec50061fa50ecd75feb7b2",
                         "g-5fdbee15010006ac2d31a2c0",
                         "g-71b0f4bc3330493da72ca06e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:127ca3620892a63aa230:decision:0004",
@@ -39667,7 +39721,9 @@
                         "g-97ec50061fa50ecd75feb7b2",
                         "g-5fdbee15010006ac2d31a2c0",
                         "g-71b0f4bc3330493da72ca06e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:127ca3620892a63aa230:decision:0005",
@@ -39682,7 +39738,9 @@
                         "g-97ec50061fa50ecd75feb7b2",
                         "g-5fdbee15010006ac2d31a2c0",
                         "g-71b0f4bc3330493da72ca06e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:127ca3620892a63aa230:decision:0006",
@@ -39697,7 +39755,9 @@
                         "g-97ec50061fa50ecd75feb7b2",
                         "g-5fdbee15010006ac2d31a2c0",
                         "g-71b0f4bc3330493da72ca06e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:12cc40c76e01915c0424:decision:0003",
@@ -39712,7 +39772,9 @@
                         "g-3048c491135e03e76902295e",
                         "g-6c91d4fe877ac273f2cff6a2",
                         "g-6376b47af00de2bcbe51b073"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:12cc40c76e01915c0424:decision:0004",
@@ -39727,7 +39789,9 @@
                         "g-3048c491135e03e76902295e",
                         "g-6c91d4fe877ac273f2cff6a2",
                         "g-6376b47af00de2bcbe51b073"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:12cc40c76e01915c0424:decision:0005",
@@ -39742,7 +39806,9 @@
                         "g-3048c491135e03e76902295e",
                         "g-6c91d4fe877ac273f2cff6a2",
                         "g-6376b47af00de2bcbe51b073"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:12cc40c76e01915c0424:decision:0013",
@@ -39757,7 +39823,9 @@
                         "g-3048c491135e03e76902295e",
                         "g-6c91d4fe877ac273f2cff6a2",
                         "g-6376b47af00de2bcbe51b073"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:13775a1f7f995ebe27b7:decision:0004",
@@ -39772,7 +39840,9 @@
                         "g-edc928d0058484942dc6294f",
                         "g-f6a3e99380437ae64ffda596",
                         "g-b891b606bba4733c14c16e0e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:13775a1f7f995ebe27b7:decision:0005",
@@ -39787,7 +39857,9 @@
                         "g-edc928d0058484942dc6294f",
                         "g-f6a3e99380437ae64ffda596",
                         "g-b891b606bba4733c14c16e0e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:13775a1f7f995ebe27b7:decision:0006",
@@ -39802,7 +39874,9 @@
                         "g-edc928d0058484942dc6294f",
                         "g-f6a3e99380437ae64ffda596",
                         "g-b891b606bba4733c14c16e0e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:13775a1f7f995ebe27b7:decision:0009",
@@ -39817,7 +39891,9 @@
                         "g-edc928d0058484942dc6294f",
                         "g-f6a3e99380437ae64ffda596",
                         "g-b891b606bba4733c14c16e0e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:18e6ba6cf0a442d3f63c:decision:0003",
@@ -39832,7 +39908,9 @@
                         "g-060a426fd5efcef9a6c372e6",
                         "g-957fead26e848016177ee92b",
                         "g-caa8713a293ab9b4f6c2dec6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:18e6ba6cf0a442d3f63c:decision:0004",
@@ -39847,7 +39925,9 @@
                         "g-060a426fd5efcef9a6c372e6",
                         "g-957fead26e848016177ee92b",
                         "g-caa8713a293ab9b4f6c2dec6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:18e6ba6cf0a442d3f63c:decision:0005",
@@ -39862,7 +39942,9 @@
                         "g-060a426fd5efcef9a6c372e6",
                         "g-957fead26e848016177ee92b",
                         "g-caa8713a293ab9b4f6c2dec6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:18e6ba6cf0a442d3f63c:decision:0006",
@@ -39877,7 +39959,9 @@
                         "g-060a426fd5efcef9a6c372e6",
                         "g-957fead26e848016177ee92b",
                         "g-caa8713a293ab9b4f6c2dec6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:1c9ddb6ee1cd62dd2d46:decision:0002",
@@ -39892,7 +39976,9 @@
                         "g-dfd2814fdbe4fcd04db517ca",
                         "g-4b7a9312d60a78e658eb163f",
                         "g-1b55aa2a75abf1f7e03f078e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:1c9ddb6ee1cd62dd2d46:decision:0003",
@@ -39907,7 +39993,9 @@
                         "g-dfd2814fdbe4fcd04db517ca",
                         "g-4b7a9312d60a78e658eb163f",
                         "g-1b55aa2a75abf1f7e03f078e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:1c9ddb6ee1cd62dd2d46:decision:0004",
@@ -39922,7 +40010,9 @@
                         "g-dfd2814fdbe4fcd04db517ca",
                         "g-4b7a9312d60a78e658eb163f",
                         "g-1b55aa2a75abf1f7e03f078e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:1c9ddb6ee1cd62dd2d46:decision:0005",
@@ -39937,7 +40027,9 @@
                         "g-dfd2814fdbe4fcd04db517ca",
                         "g-4b7a9312d60a78e658eb163f",
                         "g-1b55aa2a75abf1f7e03f078e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:215b93fb164c6933fe2d:decision:0003",
@@ -39952,7 +40044,9 @@
                         "g-08d5fdca74e09f89ad5fefad",
                         "g-7ed29d0881274b907b581fc1",
                         "g-c466553f6d2b9d81a6e828ed"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:215b93fb164c6933fe2d:decision:0004",
@@ -39967,7 +40061,9 @@
                         "g-08d5fdca74e09f89ad5fefad",
                         "g-7ed29d0881274b907b581fc1",
                         "g-c466553f6d2b9d81a6e828ed"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:215b93fb164c6933fe2d:decision:0006",
@@ -39982,7 +40078,9 @@
                         "g-08d5fdca74e09f89ad5fefad",
                         "g-7ed29d0881274b907b581fc1",
                         "g-c466553f6d2b9d81a6e828ed"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:219983b1b928fb04bd06:decision:0002",
@@ -39997,7 +40095,9 @@
                         "g-6a5584f6b820f067b038a14e",
                         "g-7fd348e30cdf6da4de3efb2d",
                         "g-0d5472d985335a1d2687b6d1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:219983b1b928fb04bd06:decision:0003",
@@ -40012,7 +40112,9 @@
                         "g-6a5584f6b820f067b038a14e",
                         "g-7fd348e30cdf6da4de3efb2d",
                         "g-0d5472d985335a1d2687b6d1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:219983b1b928fb04bd06:decision:0004",
@@ -40027,7 +40129,9 @@
                         "g-6a5584f6b820f067b038a14e",
                         "g-7fd348e30cdf6da4de3efb2d",
                         "g-0d5472d985335a1d2687b6d1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:219983b1b928fb04bd06:decision:0005",
@@ -40042,7 +40146,9 @@
                         "g-6a5584f6b820f067b038a14e",
                         "g-7fd348e30cdf6da4de3efb2d",
                         "g-0d5472d985335a1d2687b6d1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:25f7c27f42b2c8ca843e:decision:0005",
@@ -40057,7 +40163,9 @@
                         "g-bf66c5e4ca5a5d6f576d7ab5",
                         "g-769798a121b7fc3fa967a056",
                         "g-8030ebf956841371cd9dbd44"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:26ee7a7456c94e0350cc:decision:0002",
@@ -40072,7 +40180,9 @@
                         "g-854f8885f6979ec92517dc1f",
                         "g-1875a13587d73563b06b9045",
                         "g-8cb7408f5c02006b0265a98c"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:26ee7a7456c94e0350cc:decision:0003",
@@ -40087,7 +40197,9 @@
                         "g-854f8885f6979ec92517dc1f",
                         "g-1875a13587d73563b06b9045",
                         "g-8cb7408f5c02006b0265a98c"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:26ee7a7456c94e0350cc:decision:0004",
@@ -40102,7 +40214,9 @@
                         "g-854f8885f6979ec92517dc1f",
                         "g-1875a13587d73563b06b9045",
                         "g-8cb7408f5c02006b0265a98c"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:26ee7a7456c94e0350cc:decision:0005",
@@ -40117,7 +40231,9 @@
                         "g-854f8885f6979ec92517dc1f",
                         "g-1875a13587d73563b06b9045",
                         "g-8cb7408f5c02006b0265a98c"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:27718138df764c57b861:decision:0003",
@@ -40132,7 +40248,9 @@
                         "g-2cf80bbe4a20771435737489",
                         "g-3f2a1e3cdfbb9cdaecb3ee5f",
                         "g-14df593e538c5c15cbff0ea1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:27718138df764c57b861:decision:0005",
@@ -40147,7 +40265,9 @@
                         "g-2cf80bbe4a20771435737489",
                         "g-3f2a1e3cdfbb9cdaecb3ee5f",
                         "g-14df593e538c5c15cbff0ea1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:27718138df764c57b861:decision:0009",
@@ -40162,7 +40282,9 @@
                         "g-2cf80bbe4a20771435737489",
                         "g-3f2a1e3cdfbb9cdaecb3ee5f",
                         "g-14df593e538c5c15cbff0ea1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:27718138df764c57b861:decision:0013",
@@ -40177,7 +40299,9 @@
                         "g-2cf80bbe4a20771435737489",
                         "g-3f2a1e3cdfbb9cdaecb3ee5f",
                         "g-14df593e538c5c15cbff0ea1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2783bc61d70ed8926ec7:decision:0003",
@@ -40192,7 +40316,9 @@
                         "g-2c5acff2ccf437ecf2545597",
                         "g-a01ec55fa36183cabaf9362f",
                         "g-4934d39c98bdab0d87d4dc52"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2783bc61d70ed8926ec7:decision:0006",
@@ -40207,7 +40333,9 @@
                         "g-2c5acff2ccf437ecf2545597",
                         "g-a01ec55fa36183cabaf9362f",
                         "g-4934d39c98bdab0d87d4dc52"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2783bc61d70ed8926ec7:decision:0017",
@@ -40222,7 +40350,9 @@
                         "g-2c5acff2ccf437ecf2545597",
                         "g-a01ec55fa36183cabaf9362f",
                         "g-4934d39c98bdab0d87d4dc52"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:28754204a9f5c9640955:decision:0004",
@@ -40237,7 +40367,9 @@
                         "g-ca51d994b5831557d654a4e3",
                         "g-bb660e9ab13ce7451374da62",
                         "g-a18fb4cf80e35ca630e7121d"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:28754204a9f5c9640955:decision:0005",
@@ -40252,7 +40384,9 @@
                         "g-ca51d994b5831557d654a4e3",
                         "g-bb660e9ab13ce7451374da62",
                         "g-a18fb4cf80e35ca630e7121d"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:28754204a9f5c9640955:decision:0006",
@@ -40267,7 +40401,9 @@
                         "g-ca51d994b5831557d654a4e3",
                         "g-bb660e9ab13ce7451374da62",
                         "g-a18fb4cf80e35ca630e7121d"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2c502fb0332f331bc0dd:decision:0002",
@@ -40282,7 +40418,9 @@
                         "g-50e37f7552bdd6e4d2c6af5f",
                         "g-e12669f81e6f17e9e7a78820",
                         "g-d76bd486559631aeae048367"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2c502fb0332f331bc0dd:decision:0003",
@@ -40297,7 +40435,9 @@
                         "g-50e37f7552bdd6e4d2c6af5f",
                         "g-e12669f81e6f17e9e7a78820",
                         "g-d76bd486559631aeae048367"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2c502fb0332f331bc0dd:decision:0005",
@@ -40312,7 +40452,9 @@
                         "g-50e37f7552bdd6e4d2c6af5f",
                         "g-e12669f81e6f17e9e7a78820",
                         "g-d76bd486559631aeae048367"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2cdf12a65769b99c508c:decision:0003",
@@ -40327,7 +40469,9 @@
                         "g-85d582aa56317b86d82a3c07",
                         "g-69af4487eee4ecba725d8168",
                         "g-bcb0386ab2bd5516f17dbd12"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2cdf12a65769b99c508c:decision:0004",
@@ -40342,7 +40486,9 @@
                         "g-85d582aa56317b86d82a3c07",
                         "g-69af4487eee4ecba725d8168",
                         "g-bcb0386ab2bd5516f17dbd12"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2cdf12a65769b99c508c:decision:0005",
@@ -40357,7 +40503,9 @@
                         "g-85d582aa56317b86d82a3c07",
                         "g-69af4487eee4ecba725d8168",
                         "g-bcb0386ab2bd5516f17dbd12"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2cdf12a65769b99c508c:decision:0006",
@@ -40372,7 +40520,9 @@
                         "g-85d582aa56317b86d82a3c07",
                         "g-69af4487eee4ecba725d8168",
                         "g-bcb0386ab2bd5516f17dbd12"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2ee9ffa14f726cc67828:decision:0007",
@@ -40387,7 +40537,9 @@
                         "g-a433256d288fb13487418ff7",
                         "g-61951f160a20ad8c4cbe15d9",
                         "g-5b2163bf8afae58bc6b1f3d3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2ee9ffa14f726cc67828:decision:0012",
@@ -40402,7 +40554,9 @@
                         "g-a433256d288fb13487418ff7",
                         "g-61951f160a20ad8c4cbe15d9",
                         "g-5b2163bf8afae58bc6b1f3d3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2ee9ffa14f726cc67828:decision:0020",
@@ -40417,7 +40571,9 @@
                         "g-a433256d288fb13487418ff7",
                         "g-61951f160a20ad8c4cbe15d9",
                         "g-5b2163bf8afae58bc6b1f3d3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2f43200c9e87c694354b:decision:0014",
@@ -40432,7 +40588,9 @@
                         "g-ad01bd5ecab04f6b4e83e40b",
                         "g-5509698280195507de230b24",
                         "g-7f56cdf714653b0bf97d3707"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2f43200c9e87c694354b:decision:0015",
@@ -40447,7 +40605,9 @@
                         "g-ad01bd5ecab04f6b4e83e40b",
                         "g-5509698280195507de230b24",
                         "g-7f56cdf714653b0bf97d3707"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2f43200c9e87c694354b:decision:0016",
@@ -40462,7 +40622,9 @@
                         "g-ad01bd5ecab04f6b4e83e40b",
                         "g-5509698280195507de230b24",
                         "g-7f56cdf714653b0bf97d3707"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2f43200c9e87c694354b:decision:0017",
@@ -40477,7 +40639,9 @@
                         "g-ad01bd5ecab04f6b4e83e40b",
                         "g-5509698280195507de230b24",
                         "g-7f56cdf714653b0bf97d3707"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2fe2a560b3f5aa2cbf64:decision:0003",
@@ -40492,7 +40656,9 @@
                         "g-3d2a056569a5b894ab9ed15e",
                         "g-c8d0993a899dabb4d4d9c0b4",
                         "g-a9a567c9a660439a73c831f1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2fe2a560b3f5aa2cbf64:decision:0004",
@@ -40507,7 +40673,9 @@
                         "g-3d2a056569a5b894ab9ed15e",
                         "g-c8d0993a899dabb4d4d9c0b4",
                         "g-a9a567c9a660439a73c831f1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:2fe2a560b3f5aa2cbf64:decision:0005",
@@ -40522,7 +40690,9 @@
                         "g-3d2a056569a5b894ab9ed15e",
                         "g-c8d0993a899dabb4d4d9c0b4",
                         "g-a9a567c9a660439a73c831f1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:33de992d68d0e7274f54:decision:0003",
@@ -40537,7 +40707,9 @@
                         "g-9957bf76e2b5b093efd5c6f0",
                         "g-1472a86e405700e6a0239fa6",
                         "g-bc01446260605b348ccf74ed"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:33de992d68d0e7274f54:decision:0004",
@@ -40552,7 +40724,9 @@
                         "g-9957bf76e2b5b093efd5c6f0",
                         "g-1472a86e405700e6a0239fa6",
                         "g-bc01446260605b348ccf74ed"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:33de992d68d0e7274f54:decision:0005",
@@ -40567,7 +40741,9 @@
                         "g-9957bf76e2b5b093efd5c6f0",
                         "g-1472a86e405700e6a0239fa6",
                         "g-bc01446260605b348ccf74ed"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:33de992d68d0e7274f54:decision:0009",
@@ -40582,7 +40758,9 @@
                         "g-9957bf76e2b5b093efd5c6f0",
                         "g-1472a86e405700e6a0239fa6",
                         "g-bc01446260605b348ccf74ed"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:340c78ccb823aaecc4d3:decision:0004",
@@ -40597,7 +40775,9 @@
                         "g-91635219b814ee3e368884b2",
                         "g-fc8fa5fd33461001b7c5cf07",
                         "g-2b646029370328a53afa32e6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:340c78ccb823aaecc4d3:decision:0005",
@@ -40612,7 +40792,9 @@
                         "g-91635219b814ee3e368884b2",
                         "g-fc8fa5fd33461001b7c5cf07",
                         "g-2b646029370328a53afa32e6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:340c78ccb823aaecc4d3:decision:0006",
@@ -40627,7 +40809,9 @@
                         "g-91635219b814ee3e368884b2",
                         "g-fc8fa5fd33461001b7c5cf07",
                         "g-2b646029370328a53afa32e6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:342379def0c8e5341664:decision:0004",
@@ -40642,7 +40826,9 @@
                         "g-536b4d77e1b6ce4652bef4f6",
                         "g-3b8440a2e0e02301422a7831",
                         "g-2fa6f04829af68e6a7e173ee"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:342379def0c8e5341664:decision:0006",
@@ -40657,7 +40843,9 @@
                         "g-536b4d77e1b6ce4652bef4f6",
                         "g-3b8440a2e0e02301422a7831",
                         "g-2fa6f04829af68e6a7e173ee"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:342379def0c8e5341664:decision:0007",
@@ -40672,7 +40860,9 @@
                         "g-536b4d77e1b6ce4652bef4f6",
                         "g-3b8440a2e0e02301422a7831",
                         "g-2fa6f04829af68e6a7e173ee"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:367b9ec8b1b525542cf5:decision:0003",
@@ -40687,7 +40877,9 @@
                         "g-3422e9a6e2b710824383c29f",
                         "g-7791f1f4c1910a48fd9f5a89",
                         "g-8c31ee2507af4e59ee71e5ee"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:367b9ec8b1b525542cf5:decision:0004",
@@ -40702,7 +40894,9 @@
                         "g-3422e9a6e2b710824383c29f",
                         "g-7791f1f4c1910a48fd9f5a89",
                         "g-8c31ee2507af4e59ee71e5ee"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:367b9ec8b1b525542cf5:decision:0005",
@@ -40717,7 +40911,9 @@
                         "g-3422e9a6e2b710824383c29f",
                         "g-7791f1f4c1910a48fd9f5a89",
                         "g-8c31ee2507af4e59ee71e5ee"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:367b9ec8b1b525542cf5:decision:0006",
@@ -40732,7 +40928,9 @@
                         "g-3422e9a6e2b710824383c29f",
                         "g-7791f1f4c1910a48fd9f5a89",
                         "g-8c31ee2507af4e59ee71e5ee"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:38281c4ee506167eb60e:decision:0005",
@@ -40747,7 +40945,9 @@
                         "g-87eb938f524443c7ab436d26",
                         "g-c51e024261e560f8ce9aafcf",
                         "g-e30c77143d8e5c0b4ead3a4b"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:38281c4ee506167eb60e:decision:0006",
@@ -40762,7 +40962,9 @@
                         "g-87eb938f524443c7ab436d26",
                         "g-c51e024261e560f8ce9aafcf",
                         "g-e30c77143d8e5c0b4ead3a4b"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:38281c4ee506167eb60e:decision:0007",
@@ -40777,7 +40979,9 @@
                         "g-87eb938f524443c7ab436d26",
                         "g-c51e024261e560f8ce9aafcf",
                         "g-e30c77143d8e5c0b4ead3a4b"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:38281c4ee506167eb60e:decision:0008",
@@ -40792,7 +40996,9 @@
                         "g-87eb938f524443c7ab436d26",
                         "g-c51e024261e560f8ce9aafcf",
                         "g-e30c77143d8e5c0b4ead3a4b"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:3dddcb8509dbdb8c54fc:decision:0003",
@@ -40807,7 +41013,9 @@
                         "g-fc210ed2cbb88bb87f1d0e37",
                         "g-357b4459b79df1a0a4c26ae8",
                         "g-842933d0138dae3a99e83ecd"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:3dddcb8509dbdb8c54fc:decision:0004",
@@ -40822,7 +41030,9 @@
                         "g-fc210ed2cbb88bb87f1d0e37",
                         "g-357b4459b79df1a0a4c26ae8",
                         "g-842933d0138dae3a99e83ecd"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:3dddcb8509dbdb8c54fc:decision:0005",
@@ -40837,7 +41047,9 @@
                         "g-fc210ed2cbb88bb87f1d0e37",
                         "g-357b4459b79df1a0a4c26ae8",
                         "g-842933d0138dae3a99e83ecd"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:3dddcb8509dbdb8c54fc:decision:0006",
@@ -40852,7 +41064,9 @@
                         "g-fc210ed2cbb88bb87f1d0e37",
                         "g-357b4459b79df1a0a4c26ae8",
                         "g-842933d0138dae3a99e83ecd"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:3f3f7e6dc990e1c88923:decision:0004",
@@ -40867,7 +41081,9 @@
                         "g-b28650a87503c233095443a4",
                         "g-70d3595c1ef06092e5bdbc04",
                         "g-e9bc1b32f1e7a37fdd56a3f4"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:3f3f7e6dc990e1c88923:decision:0005",
@@ -40882,7 +41098,9 @@
                         "g-b28650a87503c233095443a4",
                         "g-70d3595c1ef06092e5bdbc04",
                         "g-e9bc1b32f1e7a37fdd56a3f4"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:3f3f7e6dc990e1c88923:decision:0006",
@@ -40897,7 +41115,9 @@
                         "g-b28650a87503c233095443a4",
                         "g-70d3595c1ef06092e5bdbc04",
                         "g-e9bc1b32f1e7a37fdd56a3f4"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:3f3f7e6dc990e1c88923:decision:0007",
@@ -40912,7 +41132,9 @@
                         "g-b28650a87503c233095443a4",
                         "g-70d3595c1ef06092e5bdbc04",
                         "g-e9bc1b32f1e7a37fdd56a3f4"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:41c7244f40762adbff71:decision:0003",
@@ -40927,7 +41149,9 @@
                         "g-f9f54a8a883352d5818652c5",
                         "g-c55cb9974de1f588d00095c0",
                         "g-8ca64b8d5de6491b87f2971a"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:41c7244f40762adbff71:decision:0004",
@@ -40942,7 +41166,9 @@
                         "g-f9f54a8a883352d5818652c5",
                         "g-c55cb9974de1f588d00095c0",
                         "g-8ca64b8d5de6491b87f2971a"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:41c7244f40762adbff71:decision:0005",
@@ -40957,7 +41183,9 @@
                         "g-f9f54a8a883352d5818652c5",
                         "g-c55cb9974de1f588d00095c0",
                         "g-8ca64b8d5de6491b87f2971a"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:41c7244f40762adbff71:decision:0006",
@@ -40972,7 +41200,9 @@
                         "g-f9f54a8a883352d5818652c5",
                         "g-c55cb9974de1f588d00095c0",
                         "g-8ca64b8d5de6491b87f2971a"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:450c599ca3f7c00bd237:decision:0003",
@@ -40987,7 +41217,9 @@
                         "g-31045f7af4ed4083b431a984",
                         "g-2e8aa3c7cbcac4ba6e981b1a",
                         "g-e7c6bb37ad0d58ad19010ced"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:450c599ca3f7c00bd237:decision:0004",
@@ -41002,7 +41234,9 @@
                         "g-31045f7af4ed4083b431a984",
                         "g-2e8aa3c7cbcac4ba6e981b1a",
                         "g-e7c6bb37ad0d58ad19010ced"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:450c599ca3f7c00bd237:decision:0006",
@@ -41017,7 +41251,9 @@
                         "g-31045f7af4ed4083b431a984",
                         "g-2e8aa3c7cbcac4ba6e981b1a",
                         "g-e7c6bb37ad0d58ad19010ced"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:455aef9e7bf9ad5c4887:decision:0005",
@@ -41032,7 +41268,9 @@
                         "g-9d51ae29451b24d569d0ddc8",
                         "g-fd2dba04acb730845170dcc0",
                         "g-1a2855a2c7c503b4c31b27a0"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:455aef9e7bf9ad5c4887:decision:0014",
@@ -41047,7 +41285,9 @@
                         "g-9d51ae29451b24d569d0ddc8",
                         "g-fd2dba04acb730845170dcc0",
                         "g-1a2855a2c7c503b4c31b27a0"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:45b072a59014774f2af6:decision:0003",
@@ -41062,7 +41302,9 @@
                         "g-bc079475081756c828c2bff6",
                         "g-890d3517a0600d3cb29be9d2",
                         "g-4797bb904061879ab2256440"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:45b072a59014774f2af6:decision:0004",
@@ -41077,7 +41319,9 @@
                         "g-bc079475081756c828c2bff6",
                         "g-890d3517a0600d3cb29be9d2",
                         "g-4797bb904061879ab2256440"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:45b072a59014774f2af6:decision:0005",
@@ -41092,7 +41336,9 @@
                         "g-bc079475081756c828c2bff6",
                         "g-890d3517a0600d3cb29be9d2",
                         "g-4797bb904061879ab2256440"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:45b072a59014774f2af6:decision:0006",
@@ -41107,7 +41353,9 @@
                         "g-bc079475081756c828c2bff6",
                         "g-890d3517a0600d3cb29be9d2",
                         "g-4797bb904061879ab2256440"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:48bfdf0d708194eea8e8:decision:0003",
@@ -41122,7 +41370,9 @@
                         "g-4e926ce162575949b64387dd",
                         "g-accf26300b77bb61481b947e",
                         "g-7834aaceb8399581e27da4a0"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:48bfdf0d708194eea8e8:decision:0008",
@@ -41137,7 +41387,9 @@
                         "g-4e926ce162575949b64387dd",
                         "g-accf26300b77bb61481b947e",
                         "g-7834aaceb8399581e27da4a0"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:4d68660e759a7ebed5bd:decision:0003",
@@ -41152,7 +41404,9 @@
                         "g-5b0f9f183c74be1b70ba2630",
                         "g-5f5905675965afcbfd8b539e",
                         "g-73548526f9bcdf2267a5f41c"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:4d68660e759a7ebed5bd:decision:0005",
@@ -41167,7 +41421,9 @@
                         "g-5b0f9f183c74be1b70ba2630",
                         "g-5f5905675965afcbfd8b539e",
                         "g-73548526f9bcdf2267a5f41c"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:4d68660e759a7ebed5bd:decision:0007",
@@ -41182,7 +41438,9 @@
                         "g-5b0f9f183c74be1b70ba2630",
                         "g-5f5905675965afcbfd8b539e",
                         "g-73548526f9bcdf2267a5f41c"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:4d68660e759a7ebed5bd:decision:0008",
@@ -41197,7 +41455,9 @@
                         "g-5b0f9f183c74be1b70ba2630",
                         "g-5f5905675965afcbfd8b539e",
                         "g-73548526f9bcdf2267a5f41c"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:4e5f9b526dd95853080e:decision:0004",
@@ -41212,7 +41472,9 @@
                         "g-d3b40677d0f42ea6dc0bea95",
                         "g-07061e3f409baaac3268386c",
                         "g-83bbeab3e08b0429c5ec628a"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:4e5f9b526dd95853080e:decision:0005",
@@ -41227,7 +41489,9 @@
                         "g-d3b40677d0f42ea6dc0bea95",
                         "g-07061e3f409baaac3268386c",
                         "g-83bbeab3e08b0429c5ec628a"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:4e5f9b526dd95853080e:decision:0006",
@@ -41242,7 +41506,9 @@
                         "g-d3b40677d0f42ea6dc0bea95",
                         "g-07061e3f409baaac3268386c",
                         "g-83bbeab3e08b0429c5ec628a"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:5275735b49cf03ab1247:decision:0002",
@@ -41257,7 +41523,9 @@
                         "g-899bdc45331dd33fd18987b1",
                         "g-27dc5d61863dc89cc68ce5fa",
                         "g-a47e63b4cf87249fb057235e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:5275735b49cf03ab1247:decision:0004",
@@ -41272,7 +41540,9 @@
                         "g-899bdc45331dd33fd18987b1",
                         "g-27dc5d61863dc89cc68ce5fa",
                         "g-a47e63b4cf87249fb057235e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:5275735b49cf03ab1247:decision:0005",
@@ -41287,7 +41557,9 @@
                         "g-899bdc45331dd33fd18987b1",
                         "g-27dc5d61863dc89cc68ce5fa",
                         "g-a47e63b4cf87249fb057235e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:58b7207bf49d2da95a8a:decision:0003",
@@ -41302,7 +41574,9 @@
                         "g-4bd7f382a67c985c930ed52b",
                         "g-0318ea9c2cd89725f15cf9c3",
                         "g-24962b29b47f3553e253fbe2"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:58b7207bf49d2da95a8a:decision:0005",
@@ -41317,7 +41591,9 @@
                         "g-4bd7f382a67c985c930ed52b",
                         "g-0318ea9c2cd89725f15cf9c3",
                         "g-24962b29b47f3553e253fbe2"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:58b7207bf49d2da95a8a:decision:0007",
@@ -41332,7 +41608,9 @@
                         "g-4bd7f382a67c985c930ed52b",
                         "g-0318ea9c2cd89725f15cf9c3",
                         "g-24962b29b47f3553e253fbe2"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:58b7207bf49d2da95a8a:decision:0008",
@@ -41347,7 +41625,9 @@
                         "g-4bd7f382a67c985c930ed52b",
                         "g-0318ea9c2cd89725f15cf9c3",
                         "g-24962b29b47f3553e253fbe2"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:5a1221992c9ede93ca7f:decision:0003",
@@ -41362,7 +41642,9 @@
                         "g-822fbb45560d2ea7e9017d1b",
                         "g-756fe7fc34b2135bc3a8fb89",
                         "g-a997f8655f9eacb4a732c7c9"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:5a1221992c9ede93ca7f:decision:0004",
@@ -41377,7 +41659,9 @@
                         "g-822fbb45560d2ea7e9017d1b",
                         "g-756fe7fc34b2135bc3a8fb89",
                         "g-a997f8655f9eacb4a732c7c9"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:5a1221992c9ede93ca7f:decision:0005",
@@ -41392,7 +41676,9 @@
                         "g-822fbb45560d2ea7e9017d1b",
                         "g-756fe7fc34b2135bc3a8fb89",
                         "g-a997f8655f9eacb4a732c7c9"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:5a1221992c9ede93ca7f:decision:0006",
@@ -41407,7 +41693,9 @@
                         "g-822fbb45560d2ea7e9017d1b",
                         "g-756fe7fc34b2135bc3a8fb89",
                         "g-a997f8655f9eacb4a732c7c9"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:5d8d2175328570a66a57:decision:0008",
@@ -41422,7 +41710,9 @@
                         "g-01d803850e6e35a4c9b39d41",
                         "g-1d1e8b87b56052830fb4ae89",
                         "g-156508680b0a0aa314229892"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:5def2f5df57bc12abf88:decision:0004",
@@ -41437,7 +41727,9 @@
                         "g-a7f573ee9a822bb50e373fef",
                         "g-77f059f8fddade7621f505c7",
                         "g-7fec0dde733a49c15dab6288"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:5def2f5df57bc12abf88:decision:0005",
@@ -41452,7 +41744,9 @@
                         "g-a7f573ee9a822bb50e373fef",
                         "g-77f059f8fddade7621f505c7",
                         "g-7fec0dde733a49c15dab6288"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:5def2f5df57bc12abf88:decision:0006",
@@ -41467,7 +41761,9 @@
                         "g-a7f573ee9a822bb50e373fef",
                         "g-77f059f8fddade7621f505c7",
                         "g-7fec0dde733a49c15dab6288"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:5def2f5df57bc12abf88:decision:0019",
@@ -41482,7 +41778,9 @@
                         "g-a7f573ee9a822bb50e373fef",
                         "g-77f059f8fddade7621f505c7",
                         "g-7fec0dde733a49c15dab6288"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6304e637c5e576f39c0f:decision:0003",
@@ -41497,7 +41795,9 @@
                         "g-16b632862b2f7e26c58dc5d6",
                         "g-8e0e01c2d25f269e4c9342d7",
                         "g-110fa2622909cc65515da74f"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6304e637c5e576f39c0f:decision:0004",
@@ -41512,7 +41812,9 @@
                         "g-16b632862b2f7e26c58dc5d6",
                         "g-8e0e01c2d25f269e4c9342d7",
                         "g-110fa2622909cc65515da74f"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6304e637c5e576f39c0f:decision:0005",
@@ -41527,7 +41829,9 @@
                         "g-16b632862b2f7e26c58dc5d6",
                         "g-8e0e01c2d25f269e4c9342d7",
                         "g-110fa2622909cc65515da74f"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6377d7dd14b8c58af6f3:decision:0002",
@@ -41542,7 +41846,9 @@
                         "g-8c7d0af7cc84176e15d516b5",
                         "g-0ad6e240fcb11999b526588e",
                         "g-d8c7b961490d2ef1b21f78b0"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6377d7dd14b8c58af6f3:decision:0010",
@@ -41557,7 +41863,9 @@
                         "g-8c7d0af7cc84176e15d516b5",
                         "g-0ad6e240fcb11999b526588e",
                         "g-d8c7b961490d2ef1b21f78b0"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6377d7dd14b8c58af6f3:decision:0011",
@@ -41572,7 +41880,9 @@
                         "g-8c7d0af7cc84176e15d516b5",
                         "g-0ad6e240fcb11999b526588e",
                         "g-d8c7b961490d2ef1b21f78b0"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6377d7dd14b8c58af6f3:decision:0013",
@@ -41587,7 +41897,9 @@
                         "g-8c7d0af7cc84176e15d516b5",
                         "g-0ad6e240fcb11999b526588e",
                         "g-d8c7b961490d2ef1b21f78b0"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6383dc1549437ddb9b40:decision:0003",
@@ -41602,7 +41914,9 @@
                         "g-8ac5e1922b9568e431689580",
                         "g-99a64bd976ddeb297ba6a82b",
                         "g-241a376577ace8a5b55f6b12"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6383dc1549437ddb9b40:decision:0006",
@@ -41617,7 +41931,9 @@
                         "g-8ac5e1922b9568e431689580",
                         "g-99a64bd976ddeb297ba6a82b",
                         "g-241a376577ace8a5b55f6b12"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6383dc1549437ddb9b40:decision:0007",
@@ -41632,7 +41948,9 @@
                         "g-8ac5e1922b9568e431689580",
                         "g-99a64bd976ddeb297ba6a82b",
                         "g-241a376577ace8a5b55f6b12"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6842987743f16aef0884:decision:0002",
@@ -41647,7 +41965,9 @@
                         "g-5f419acf3ec424b30ab3c311",
                         "g-386327b857a08a924fa25aec",
                         "g-fc1b8d80d2618b826c279c75"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6842987743f16aef0884:decision:0003",
@@ -41662,7 +41982,9 @@
                         "g-5f419acf3ec424b30ab3c311",
                         "g-386327b857a08a924fa25aec",
                         "g-fc1b8d80d2618b826c279c75"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6842987743f16aef0884:decision:0004",
@@ -41677,7 +41999,9 @@
                         "g-5f419acf3ec424b30ab3c311",
                         "g-386327b857a08a924fa25aec",
                         "g-fc1b8d80d2618b826c279c75"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6842987743f16aef0884:decision:0009",
@@ -41692,7 +42016,9 @@
                         "g-5f419acf3ec424b30ab3c311",
                         "g-386327b857a08a924fa25aec",
                         "g-fc1b8d80d2618b826c279c75"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6c319d9161b8a88239cd:decision:0002",
@@ -41707,7 +42033,9 @@
                         "g-6b1e89786a3aa153c29167d8",
                         "g-917bd1efc5319f6b8f340300",
                         "g-895da78ef4a09dac067d2a26"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6c319d9161b8a88239cd:decision:0003",
@@ -41722,7 +42050,9 @@
                         "g-6b1e89786a3aa153c29167d8",
                         "g-917bd1efc5319f6b8f340300",
                         "g-895da78ef4a09dac067d2a26"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:6c319d9161b8a88239cd:decision:0004",
@@ -41737,7 +42067,9 @@
                         "g-6b1e89786a3aa153c29167d8",
                         "g-917bd1efc5319f6b8f340300",
                         "g-895da78ef4a09dac067d2a26"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:72058fcfece0cf71e9b6:decision:0002",
@@ -41752,7 +42084,9 @@
                         "g-4c5a8a498e91cf176e477555",
                         "g-c42f7c03186f487c0a2b3ae1",
                         "g-85742c35d23c0e9ac4dc44d5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:72058fcfece0cf71e9b6:decision:0004",
@@ -41767,7 +42101,9 @@
                         "g-4c5a8a498e91cf176e477555",
                         "g-c42f7c03186f487c0a2b3ae1",
                         "g-85742c35d23c0e9ac4dc44d5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:72058fcfece0cf71e9b6:decision:0013",
@@ -41782,7 +42118,9 @@
                         "g-4c5a8a498e91cf176e477555",
                         "g-c42f7c03186f487c0a2b3ae1",
                         "g-85742c35d23c0e9ac4dc44d5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:72058fcfece0cf71e9b6:decision:0014",
@@ -41797,7 +42135,9 @@
                         "g-4c5a8a498e91cf176e477555",
                         "g-c42f7c03186f487c0a2b3ae1",
                         "g-85742c35d23c0e9ac4dc44d5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:7220711defc8a8234d2f:decision:0002",
@@ -41812,7 +42152,9 @@
                         "g-9207cb2273902b8147844bb8",
                         "g-d65d2940cb5048a08056c426",
                         "g-2d6e9ac7aa4c7f866c266b73"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:7220711defc8a8234d2f:decision:0003",
@@ -41827,7 +42169,9 @@
                         "g-9207cb2273902b8147844bb8",
                         "g-d65d2940cb5048a08056c426",
                         "g-2d6e9ac7aa4c7f866c266b73"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:7220711defc8a8234d2f:decision:0005",
@@ -41842,7 +42186,9 @@
                         "g-9207cb2273902b8147844bb8",
                         "g-d65d2940cb5048a08056c426",
                         "g-2d6e9ac7aa4c7f866c266b73"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:75c67fbf92b9510518a7:decision:0003",
@@ -41857,7 +42203,9 @@
                         "g-d730e5d69fa24cf9aba08dcd",
                         "g-798713bc98e1026163f2dc71",
                         "g-c26d3ca8e653e5b4220fd9e5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:75c67fbf92b9510518a7:decision:0004",
@@ -41872,7 +42220,9 @@
                         "g-d730e5d69fa24cf9aba08dcd",
                         "g-798713bc98e1026163f2dc71",
                         "g-c26d3ca8e653e5b4220fd9e5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:75c67fbf92b9510518a7:decision:0010",
@@ -41887,7 +42237,9 @@
                         "g-d730e5d69fa24cf9aba08dcd",
                         "g-798713bc98e1026163f2dc71",
                         "g-c26d3ca8e653e5b4220fd9e5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:80938e15c6e165de2aa4:decision:0003",
@@ -41902,7 +42254,9 @@
                         "g-df022afb2ad7e6aecb8258c2",
                         "g-72474ede9377a3b884362696",
                         "g-7060950fa88d401db96a5ee6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:80938e15c6e165de2aa4:decision:0004",
@@ -41917,7 +42271,9 @@
                         "g-df022afb2ad7e6aecb8258c2",
                         "g-72474ede9377a3b884362696",
                         "g-7060950fa88d401db96a5ee6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:80938e15c6e165de2aa4:decision:0005",
@@ -41932,7 +42288,9 @@
                         "g-df022afb2ad7e6aecb8258c2",
                         "g-72474ede9377a3b884362696",
                         "g-7060950fa88d401db96a5ee6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:80938e15c6e165de2aa4:decision:0006",
@@ -41947,7 +42305,9 @@
                         "g-df022afb2ad7e6aecb8258c2",
                         "g-72474ede9377a3b884362696",
                         "g-7060950fa88d401db96a5ee6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:82d12cc9674ad8020e89:decision:0004",
@@ -41962,7 +42322,9 @@
                         "g-4861425a663914b768ec2f92",
                         "g-138c84bfc23bd338dcf4e169",
                         "g-943ffdaaf45564a94748c190"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:82d12cc9674ad8020e89:decision:0006",
@@ -41977,7 +42339,9 @@
                         "g-4861425a663914b768ec2f92",
                         "g-138c84bfc23bd338dcf4e169",
                         "g-943ffdaaf45564a94748c190"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:82d12cc9674ad8020e89:decision:0026",
@@ -41992,7 +42356,9 @@
                         "g-4861425a663914b768ec2f92",
                         "g-138c84bfc23bd338dcf4e169",
                         "g-943ffdaaf45564a94748c190"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:86e256e92d26beafe55d:decision:0005",
@@ -42007,7 +42373,9 @@
                         "g-f9dec9289f13bc1c63d86743",
                         "g-b705ebcf9762e233d55579ca",
                         "g-f987ead5e8f0d12448b33903"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:86e256e92d26beafe55d:decision:0006",
@@ -42022,7 +42390,9 @@
                         "g-f9dec9289f13bc1c63d86743",
                         "g-b705ebcf9762e233d55579ca",
                         "g-f987ead5e8f0d12448b33903"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:86e256e92d26beafe55d:decision:0007",
@@ -42037,7 +42407,9 @@
                         "g-f9dec9289f13bc1c63d86743",
                         "g-b705ebcf9762e233d55579ca",
                         "g-f987ead5e8f0d12448b33903"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:89503bd2566b327717b0:decision:0011",
@@ -42052,7 +42424,9 @@
                         "g-920b2ebb58d4756a6d1bbc4a",
                         "g-88edfa1274e5cd3f72dd8ea2",
                         "g-12054d04147bbe8677c02e31"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:89503bd2566b327717b0:decision:0012",
@@ -42067,7 +42441,9 @@
                         "g-920b2ebb58d4756a6d1bbc4a",
                         "g-88edfa1274e5cd3f72dd8ea2",
                         "g-12054d04147bbe8677c02e31"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:89503bd2566b327717b0:decision:0013",
@@ -42082,7 +42458,9 @@
                         "g-920b2ebb58d4756a6d1bbc4a",
                         "g-88edfa1274e5cd3f72dd8ea2",
                         "g-12054d04147bbe8677c02e31"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:89503bd2566b327717b0:decision:0014",
@@ -42097,7 +42475,9 @@
                         "g-920b2ebb58d4756a6d1bbc4a",
                         "g-88edfa1274e5cd3f72dd8ea2",
                         "g-12054d04147bbe8677c02e31"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:8a33e06b8aff74059e6d:decision:0005",
@@ -42112,7 +42492,9 @@
                         "g-9a5137fb6ec2e6a1de4da162",
                         "g-7d8cf0022d0f63a0946a5d6d",
                         "g-1297fff6dd1ed7a6af66198b"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:8a33e06b8aff74059e6d:decision:0007",
@@ -42127,7 +42509,9 @@
                         "g-9a5137fb6ec2e6a1de4da162",
                         "g-7d8cf0022d0f63a0946a5d6d",
                         "g-1297fff6dd1ed7a6af66198b"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:8a33e06b8aff74059e6d:decision:0008",
@@ -42142,7 +42526,9 @@
                         "g-9a5137fb6ec2e6a1de4da162",
                         "g-7d8cf0022d0f63a0946a5d6d",
                         "g-1297fff6dd1ed7a6af66198b"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:8a33e06b8aff74059e6d:decision:0013",
@@ -42157,7 +42543,9 @@
                         "g-9a5137fb6ec2e6a1de4da162",
                         "g-7d8cf0022d0f63a0946a5d6d",
                         "g-1297fff6dd1ed7a6af66198b"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:8e82d355bf0720b6f3a8:decision:0003",
@@ -42172,7 +42560,9 @@
                         "g-9175b5872a6465869a495c1c",
                         "g-358eaba71c40d439b70e3c8c",
                         "g-63c122982792590cd5878558"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:8e82d355bf0720b6f3a8:decision:0004",
@@ -42187,7 +42577,9 @@
                         "g-9175b5872a6465869a495c1c",
                         "g-358eaba71c40d439b70e3c8c",
                         "g-63c122982792590cd5878558"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:8e82d355bf0720b6f3a8:decision:0005",
@@ -42202,7 +42594,9 @@
                         "g-9175b5872a6465869a495c1c",
                         "g-358eaba71c40d439b70e3c8c",
                         "g-63c122982792590cd5878558"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:8e82d355bf0720b6f3a8:decision:0006",
@@ -42217,7 +42611,9 @@
                         "g-9175b5872a6465869a495c1c",
                         "g-358eaba71c40d439b70e3c8c",
                         "g-63c122982792590cd5878558"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:8fdfa4406b1dc883acd1:decision:0015",
@@ -42232,7 +42628,9 @@
                         "g-95a07907af6b60b846cec7d8",
                         "g-b859615363e6820067d76dcd",
                         "g-e7e384db71f89b7d21513d8c"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:8fdfa4406b1dc883acd1:decision:0016",
@@ -42247,7 +42645,9 @@
                         "g-95a07907af6b60b846cec7d8",
                         "g-b859615363e6820067d76dcd",
                         "g-e7e384db71f89b7d21513d8c"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:8fdfa4406b1dc883acd1:decision:0018",
@@ -42262,7 +42662,9 @@
                         "g-95a07907af6b60b846cec7d8",
                         "g-b859615363e6820067d76dcd",
                         "g-e7e384db71f89b7d21513d8c"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:90f38e5cfa10679e8b41:decision:0003",
@@ -42277,7 +42679,9 @@
                         "g-307c1283248ae9373050d971",
                         "g-a5204ac3cc019dea876084bf",
                         "g-31504f98b3744a24ed005ae9"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:90f38e5cfa10679e8b41:decision:0004",
@@ -42292,7 +42696,9 @@
                         "g-307c1283248ae9373050d971",
                         "g-a5204ac3cc019dea876084bf",
                         "g-31504f98b3744a24ed005ae9"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:90f38e5cfa10679e8b41:decision:0005",
@@ -42307,7 +42713,9 @@
                         "g-307c1283248ae9373050d971",
                         "g-a5204ac3cc019dea876084bf",
                         "g-31504f98b3744a24ed005ae9"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:920a5840cf6b892b10fc:decision:0004",
@@ -42322,7 +42730,9 @@
                         "g-1d0fc622a4df6c9f20f075bf",
                         "g-8c19b81b8b6bed8666e9a940",
                         "g-c44d536b5c9fc41c2d437e73"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:920a5840cf6b892b10fc:decision:0019",
@@ -42337,7 +42747,9 @@
                         "g-1d0fc622a4df6c9f20f075bf",
                         "g-8c19b81b8b6bed8666e9a940",
                         "g-c44d536b5c9fc41c2d437e73"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:920a5840cf6b892b10fc:decision:0020",
@@ -42352,7 +42764,9 @@
                         "g-1d0fc622a4df6c9f20f075bf",
                         "g-8c19b81b8b6bed8666e9a940",
                         "g-c44d536b5c9fc41c2d437e73"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:93b1f345423a1b9e7d0c:decision:0004",
@@ -42367,7 +42781,9 @@
                         "g-ad4a0bbdf8088f42bb0fa1e7",
                         "g-d3975f0836c82d75f1cc8334",
                         "g-ee1f1147ebaea8c9245045c5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:93b1f345423a1b9e7d0c:decision:0006",
@@ -42382,7 +42798,9 @@
                         "g-ad4a0bbdf8088f42bb0fa1e7",
                         "g-d3975f0836c82d75f1cc8334",
                         "g-ee1f1147ebaea8c9245045c5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:93b1f345423a1b9e7d0c:decision:0012",
@@ -42397,7 +42815,9 @@
                         "g-ad4a0bbdf8088f42bb0fa1e7",
                         "g-d3975f0836c82d75f1cc8334",
                         "g-ee1f1147ebaea8c9245045c5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:93b1f345423a1b9e7d0c:decision:0022",
@@ -42412,7 +42832,9 @@
                         "g-ad4a0bbdf8088f42bb0fa1e7",
                         "g-d3975f0836c82d75f1cc8334",
                         "g-ee1f1147ebaea8c9245045c5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:93d3ac9b45471ee712b6:decision:0003",
@@ -42427,7 +42849,9 @@
                         "g-58f5289f981548bf0cec55a4",
                         "g-7b197a4122d56faac43a4cab",
                         "g-894602605cdfbf5dbc3a3ad2"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:93d3ac9b45471ee712b6:decision:0004",
@@ -42442,7 +42866,9 @@
                         "g-58f5289f981548bf0cec55a4",
                         "g-7b197a4122d56faac43a4cab",
                         "g-894602605cdfbf5dbc3a3ad2"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:93d3ac9b45471ee712b6:decision:0005",
@@ -42457,7 +42883,9 @@
                         "g-58f5289f981548bf0cec55a4",
                         "g-7b197a4122d56faac43a4cab",
                         "g-894602605cdfbf5dbc3a3ad2"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:93d3ac9b45471ee712b6:decision:0010",
@@ -42472,7 +42900,9 @@
                         "g-58f5289f981548bf0cec55a4",
                         "g-7b197a4122d56faac43a4cab",
                         "g-894602605cdfbf5dbc3a3ad2"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:98756482370f1cd8114e:decision:0003",
@@ -42487,7 +42917,9 @@
                         "g-86beb1d150b6b9ebb886835f",
                         "g-6fdbe8bdaf17695d3cb006b0",
                         "g-4c38cbe2f73f537388631ca4"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:98756482370f1cd8114e:decision:0006",
@@ -42502,7 +42934,9 @@
                         "g-86beb1d150b6b9ebb886835f",
                         "g-6fdbe8bdaf17695d3cb006b0",
                         "g-4c38cbe2f73f537388631ca4"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:98756482370f1cd8114e:decision:0010",
@@ -42517,7 +42951,9 @@
                         "g-86beb1d150b6b9ebb886835f",
                         "g-6fdbe8bdaf17695d3cb006b0",
                         "g-4c38cbe2f73f537388631ca4"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:9a50a7dce970f97e1451:decision:0003",
@@ -42532,7 +42968,9 @@
                         "g-485d5da4be02a8cbdedba71c",
                         "g-a735a34027ee0e1a2c84ea07",
                         "g-2885000b5bce4ab5d34cb584"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:9a50a7dce970f97e1451:decision:0004",
@@ -42547,7 +42985,9 @@
                         "g-485d5da4be02a8cbdedba71c",
                         "g-a735a34027ee0e1a2c84ea07",
                         "g-2885000b5bce4ab5d34cb584"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:9a50a7dce970f97e1451:decision:0005",
@@ -42562,7 +43002,9 @@
                         "g-485d5da4be02a8cbdedba71c",
                         "g-a735a34027ee0e1a2c84ea07",
                         "g-2885000b5bce4ab5d34cb584"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:9a50a7dce970f97e1451:decision:0006",
@@ -42577,7 +43019,9 @@
                         "g-485d5da4be02a8cbdedba71c",
                         "g-a735a34027ee0e1a2c84ea07",
                         "g-2885000b5bce4ab5d34cb584"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:9cd6106644688a97c253:decision:0003",
@@ -42592,7 +43036,9 @@
                         "g-2d4d6a54fbd542c362536141",
                         "g-2b6afa21f1e7413744658f86",
                         "g-614bcdfb0b3954b146130cab"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:9cd6106644688a97c253:decision:0004",
@@ -42607,7 +43053,9 @@
                         "g-2d4d6a54fbd542c362536141",
                         "g-2b6afa21f1e7413744658f86",
                         "g-614bcdfb0b3954b146130cab"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:9cd6106644688a97c253:decision:0005",
@@ -42622,7 +43070,9 @@
                         "g-2d4d6a54fbd542c362536141",
                         "g-2b6afa21f1e7413744658f86",
                         "g-614bcdfb0b3954b146130cab"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:9d05e489dd13dcd3ec6d:decision:0003",
@@ -42637,7 +43087,9 @@
                         "g-089711ce7e275c593b469856",
                         "g-5402fd085fe07ca91b43b682",
                         "g-81564e83b8df3fb108a7d02f"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:9d05e489dd13dcd3ec6d:decision:0004",
@@ -42652,7 +43104,9 @@
                         "g-089711ce7e275c593b469856",
                         "g-5402fd085fe07ca91b43b682",
                         "g-81564e83b8df3fb108a7d02f"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:9d05e489dd13dcd3ec6d:decision:0005",
@@ -42667,7 +43121,9 @@
                         "g-089711ce7e275c593b469856",
                         "g-5402fd085fe07ca91b43b682",
                         "g-81564e83b8df3fb108a7d02f"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:9d05e489dd13dcd3ec6d:decision:0006",
@@ -42682,7 +43138,9 @@
                         "g-089711ce7e275c593b469856",
                         "g-5402fd085fe07ca91b43b682",
                         "g-81564e83b8df3fb108a7d02f"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:9d7be11954e026cd342c:decision:0003",
@@ -42697,7 +43155,9 @@
                         "g-7def80e2ce0ed35a820e2fef",
                         "g-c27d813fc8bfd12710ffc82c",
                         "g-76587ec7379e383d88e7bbe6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a1891b19b5c12652d556:decision:0009",
@@ -42712,7 +43172,9 @@
                         "g-761bee71f706f453aea4a54d",
                         "g-2d17ab55c2cf18a81a7b4ccd",
                         "g-3f0ac5ba315be7335efad4dc"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a1891b19b5c12652d556:decision:0010",
@@ -42727,7 +43189,9 @@
                         "g-761bee71f706f453aea4a54d",
                         "g-2d17ab55c2cf18a81a7b4ccd",
                         "g-3f0ac5ba315be7335efad4dc"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a1891b19b5c12652d556:decision:0016",
@@ -42742,7 +43206,9 @@
                         "g-761bee71f706f453aea4a54d",
                         "g-2d17ab55c2cf18a81a7b4ccd",
                         "g-3f0ac5ba315be7335efad4dc"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a1891b19b5c12652d556:decision:0017",
@@ -42757,7 +43223,9 @@
                         "g-761bee71f706f453aea4a54d",
                         "g-2d17ab55c2cf18a81a7b4ccd",
                         "g-3f0ac5ba315be7335efad4dc"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a1bd2a976b4face3e3b7:decision:0006",
@@ -42772,7 +43240,9 @@
                         "g-963b67fb478c372d1362b4b3",
                         "g-191542238f05f02fc6f1034a",
                         "g-223c86aa5717f4df132ac5ca"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a1bd2a976b4face3e3b7:decision:0010",
@@ -42787,7 +43257,9 @@
                         "g-963b67fb478c372d1362b4b3",
                         "g-191542238f05f02fc6f1034a",
                         "g-223c86aa5717f4df132ac5ca"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a1bd2a976b4face3e3b7:decision:0013",
@@ -42802,7 +43274,9 @@
                         "g-963b67fb478c372d1362b4b3",
                         "g-191542238f05f02fc6f1034a",
                         "g-223c86aa5717f4df132ac5ca"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a30ab735901bc90936ae:decision:0005",
@@ -42817,7 +43291,9 @@
                         "g-c4a1ef5b656fef6c2f9cfabf",
                         "g-6d35c2f52cb595bdd934a007",
                         "g-683e2af653e09f8921bc2772"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a30ab735901bc90936ae:decision:0006",
@@ -42832,7 +43308,9 @@
                         "g-c4a1ef5b656fef6c2f9cfabf",
                         "g-6d35c2f52cb595bdd934a007",
                         "g-683e2af653e09f8921bc2772"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a848f05518c252238aa8:decision:0004",
@@ -42847,7 +43325,9 @@
                         "g-d127e5a6bdc25f79dfb41fcf",
                         "g-d84c52bf8a270ef1368ec2cd",
                         "g-8f4ad95e4a2966a774a7323e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a848f05518c252238aa8:decision:0005",
@@ -42862,7 +43342,9 @@
                         "g-d127e5a6bdc25f79dfb41fcf",
                         "g-d84c52bf8a270ef1368ec2cd",
                         "g-8f4ad95e4a2966a774a7323e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a848f05518c252238aa8:decision:0006",
@@ -42877,7 +43359,9 @@
                         "g-d127e5a6bdc25f79dfb41fcf",
                         "g-d84c52bf8a270ef1368ec2cd",
                         "g-8f4ad95e4a2966a774a7323e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a848f05518c252238aa8:decision:0007",
@@ -42892,7 +43376,9 @@
                         "g-d127e5a6bdc25f79dfb41fcf",
                         "g-d84c52bf8a270ef1368ec2cd",
                         "g-8f4ad95e4a2966a774a7323e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a9b723ac5cdab9913a01:decision:0003",
@@ -42907,7 +43393,9 @@
                         "g-da73666c6b291a90f2e1b06d",
                         "g-b5e15f514ca4cdc1d40f0f98",
                         "g-34743f53fa89305a6fb188d7"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a9b723ac5cdab9913a01:decision:0004",
@@ -42922,7 +43410,9 @@
                         "g-da73666c6b291a90f2e1b06d",
                         "g-b5e15f514ca4cdc1d40f0f98",
                         "g-34743f53fa89305a6fb188d7"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a9b723ac5cdab9913a01:decision:0005",
@@ -42937,7 +43427,9 @@
                         "g-da73666c6b291a90f2e1b06d",
                         "g-b5e15f514ca4cdc1d40f0f98",
                         "g-34743f53fa89305a6fb188d7"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:a9b723ac5cdab9913a01:decision:0006",
@@ -42952,7 +43444,9 @@
                         "g-da73666c6b291a90f2e1b06d",
                         "g-b5e15f514ca4cdc1d40f0f98",
                         "g-34743f53fa89305a6fb188d7"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ab96dbb55522bd29ddcf:decision:0003",
@@ -42967,7 +43461,9 @@
                         "g-b00ca3b8079deb5a7fc45710",
                         "g-2ab4e475bb9b10ad4a7783bd",
                         "g-856bf2b8a94603dc974232a1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ab96dbb55522bd29ddcf:decision:0004",
@@ -42982,7 +43478,9 @@
                         "g-b00ca3b8079deb5a7fc45710",
                         "g-2ab4e475bb9b10ad4a7783bd",
                         "g-856bf2b8a94603dc974232a1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ab96dbb55522bd29ddcf:decision:0005",
@@ -42997,7 +43495,9 @@
                         "g-b00ca3b8079deb5a7fc45710",
                         "g-2ab4e475bb9b10ad4a7783bd",
                         "g-856bf2b8a94603dc974232a1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ab96dbb55522bd29ddcf:decision:0006",
@@ -43012,7 +43512,9 @@
                         "g-b00ca3b8079deb5a7fc45710",
                         "g-2ab4e475bb9b10ad4a7783bd",
                         "g-856bf2b8a94603dc974232a1"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:abd7a29096f34d4e482d:decision:0003",
@@ -43027,7 +43529,9 @@
                         "g-4f3af38443e186cad551b3f4",
                         "g-1d0d7ebaadc9580adf156050",
                         "g-3e84dada43ce1cb7c0dd74e5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:abd7a29096f34d4e482d:decision:0004",
@@ -43042,7 +43546,9 @@
                         "g-4f3af38443e186cad551b3f4",
                         "g-1d0d7ebaadc9580adf156050",
                         "g-3e84dada43ce1cb7c0dd74e5"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ae260318d799f851b265:decision:0002",
@@ -43057,7 +43563,9 @@
                         "g-e73932ef456bd5dd5acb67b3",
                         "g-7d2d8293a77856bb20e42b36",
                         "g-0cd46bc7b73e910a93747e7e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ae260318d799f851b265:decision:0004",
@@ -43072,7 +43580,9 @@
                         "g-e73932ef456bd5dd5acb67b3",
                         "g-7d2d8293a77856bb20e42b36",
                         "g-0cd46bc7b73e910a93747e7e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ae260318d799f851b265:decision:0005",
@@ -43087,7 +43597,9 @@
                         "g-e73932ef456bd5dd5acb67b3",
                         "g-7d2d8293a77856bb20e42b36",
                         "g-0cd46bc7b73e910a93747e7e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ae260318d799f851b265:decision:0007",
@@ -43102,7 +43614,9 @@
                         "g-e73932ef456bd5dd5acb67b3",
                         "g-7d2d8293a77856bb20e42b36",
                         "g-0cd46bc7b73e910a93747e7e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:afad35ec8557a68b8663:decision:0004",
@@ -43117,7 +43631,9 @@
                         "g-4c151c9778884d5ccc1a3202",
                         "g-6b999f392afe1dbeaa9318a6",
                         "g-ad8df56c6c9bd870f9d026ad"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:afad35ec8557a68b8663:decision:0005",
@@ -43132,7 +43648,9 @@
                         "g-4c151c9778884d5ccc1a3202",
                         "g-6b999f392afe1dbeaa9318a6",
                         "g-ad8df56c6c9bd870f9d026ad"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:afad35ec8557a68b8663:decision:0007",
@@ -43147,7 +43665,9 @@
                         "g-4c151c9778884d5ccc1a3202",
                         "g-6b999f392afe1dbeaa9318a6",
                         "g-ad8df56c6c9bd870f9d026ad"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:afad35ec8557a68b8663:decision:0013",
@@ -43162,7 +43682,9 @@
                         "g-4c151c9778884d5ccc1a3202",
                         "g-6b999f392afe1dbeaa9318a6",
                         "g-ad8df56c6c9bd870f9d026ad"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:b06af541c0981ef1344d:decision:0003",
@@ -43177,7 +43699,9 @@
                         "g-11d7469d259e57349d09968f",
                         "g-3e2aca87d7e28c88299b6851",
                         "g-a1d5f439f915a24c261b998f"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:b06af541c0981ef1344d:decision:0005",
@@ -43192,7 +43716,9 @@
                         "g-11d7469d259e57349d09968f",
                         "g-3e2aca87d7e28c88299b6851",
                         "g-a1d5f439f915a24c261b998f"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:b06af541c0981ef1344d:decision:0006",
@@ -43207,7 +43733,9 @@
                         "g-11d7469d259e57349d09968f",
                         "g-3e2aca87d7e28c88299b6851",
                         "g-a1d5f439f915a24c261b998f"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:b4f0ad2e715f421d1fad:decision:0003",
@@ -43222,7 +43750,9 @@
                         "g-2eccce5c3244ac9623135773",
                         "g-aaea7c26d6086beca9219736",
                         "g-fe96f0d39946aa20a4775bdf"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:b4f0ad2e715f421d1fad:decision:0004",
@@ -43237,7 +43767,9 @@
                         "g-2eccce5c3244ac9623135773",
                         "g-aaea7c26d6086beca9219736",
                         "g-fe96f0d39946aa20a4775bdf"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:b4f0ad2e715f421d1fad:decision:0005",
@@ -43252,7 +43784,9 @@
                         "g-2eccce5c3244ac9623135773",
                         "g-aaea7c26d6086beca9219736",
                         "g-fe96f0d39946aa20a4775bdf"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:b4f0ad2e715f421d1fad:decision:0006",
@@ -43267,7 +43801,9 @@
                         "g-2eccce5c3244ac9623135773",
                         "g-aaea7c26d6086beca9219736",
                         "g-fe96f0d39946aa20a4775bdf"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:b60ee87a2846a346416f:decision:0003",
@@ -43282,7 +43818,9 @@
                         "g-544de34463cc49f955196f13",
                         "g-2cf06792fce764c8ebc7cdd0",
                         "g-e843a1c744137f046274e130"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:b60ee87a2846a346416f:decision:0004",
@@ -43297,7 +43835,9 @@
                         "g-544de34463cc49f955196f13",
                         "g-2cf06792fce764c8ebc7cdd0",
                         "g-e843a1c744137f046274e130"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:b60ee87a2846a346416f:decision:0006",
@@ -43312,7 +43852,9 @@
                         "g-544de34463cc49f955196f13",
                         "g-2cf06792fce764c8ebc7cdd0",
                         "g-e843a1c744137f046274e130"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:bb46f3994d70a368e7e4:decision:0003",
@@ -43327,7 +43869,9 @@
                         "g-c4c9d4d29a90fd3e73d130ef",
                         "g-a6fedbe1d08b133a11797f37",
                         "g-1c4c6c8a3a9b8f4236809ef8"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:bb46f3994d70a368e7e4:decision:0004",
@@ -43342,7 +43886,9 @@
                         "g-c4c9d4d29a90fd3e73d130ef",
                         "g-a6fedbe1d08b133a11797f37",
                         "g-1c4c6c8a3a9b8f4236809ef8"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:bb46f3994d70a368e7e4:decision:0006",
@@ -43357,7 +43903,9 @@
                         "g-c4c9d4d29a90fd3e73d130ef",
                         "g-a6fedbe1d08b133a11797f37",
                         "g-1c4c6c8a3a9b8f4236809ef8"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:bd9d7d6b034ea7ac9120:decision:0003",
@@ -43372,7 +43920,9 @@
                         "g-f5df7c2647b490749bb8af15",
                         "g-c5f2d1a405084124dd02c4c9",
                         "g-3222fa7e7bb88a5945dc54fa"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:bd9d7d6b034ea7ac9120:decision:0012",
@@ -43387,7 +43937,9 @@
                         "g-f5df7c2647b490749bb8af15",
                         "g-c5f2d1a405084124dd02c4c9",
                         "g-3222fa7e7bb88a5945dc54fa"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:bd9d7d6b034ea7ac9120:decision:0013",
@@ -43402,7 +43954,9 @@
                         "g-f5df7c2647b490749bb8af15",
                         "g-c5f2d1a405084124dd02c4c9",
                         "g-3222fa7e7bb88a5945dc54fa"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c1b832ae7b20009e21bd:decision:0003",
@@ -43417,7 +43971,9 @@
                         "g-7dfcc956dd81c6b30689b340",
                         "g-5785a6706576b12c88513462",
                         "g-c31661d34f1bb3f2751db745"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c1b832ae7b20009e21bd:decision:0004",
@@ -43432,7 +43988,9 @@
                         "g-7dfcc956dd81c6b30689b340",
                         "g-5785a6706576b12c88513462",
                         "g-c31661d34f1bb3f2751db745"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c1b832ae7b20009e21bd:decision:0005",
@@ -43447,7 +44005,9 @@
                         "g-7dfcc956dd81c6b30689b340",
                         "g-5785a6706576b12c88513462",
                         "g-c31661d34f1bb3f2751db745"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c1b832ae7b20009e21bd:decision:0006",
@@ -43462,7 +44022,9 @@
                         "g-7dfcc956dd81c6b30689b340",
                         "g-5785a6706576b12c88513462",
                         "g-c31661d34f1bb3f2751db745"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c223468582c76ee88f0c:decision:0004",
@@ -43477,7 +44039,9 @@
                         "g-5a79605fa61bb869090ce057",
                         "g-653b2c02368cc4ced43bfcc4",
                         "g-f6aff16127b5bc17cdeb1d12"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c223468582c76ee88f0c:decision:0005",
@@ -43492,7 +44056,9 @@
                         "g-5a79605fa61bb869090ce057",
                         "g-653b2c02368cc4ced43bfcc4",
                         "g-f6aff16127b5bc17cdeb1d12"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c223468582c76ee88f0c:decision:0006",
@@ -43507,7 +44073,9 @@
                         "g-5a79605fa61bb869090ce057",
                         "g-653b2c02368cc4ced43bfcc4",
                         "g-f6aff16127b5bc17cdeb1d12"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c6e94f84aac0cca49026:decision:0004",
@@ -43522,7 +44090,9 @@
                         "g-48995651841b7547853dba8f",
                         "g-68d7eea5c24b05ed0f981fe6",
                         "g-3b86679997d74faa11dbc4b3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c6e94f84aac0cca49026:decision:0005",
@@ -43537,7 +44107,9 @@
                         "g-48995651841b7547853dba8f",
                         "g-68d7eea5c24b05ed0f981fe6",
                         "g-3b86679997d74faa11dbc4b3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c6e94f84aac0cca49026:decision:0007",
@@ -43552,7 +44124,9 @@
                         "g-48995651841b7547853dba8f",
                         "g-68d7eea5c24b05ed0f981fe6",
                         "g-3b86679997d74faa11dbc4b3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c6e94f84aac0cca49026:decision:0013",
@@ -43567,7 +44141,9 @@
                         "g-48995651841b7547853dba8f",
                         "g-68d7eea5c24b05ed0f981fe6",
                         "g-3b86679997d74faa11dbc4b3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c9afbd70412f02162a1a:decision:0002",
@@ -43582,7 +44158,9 @@
                         "g-603f46add5779b9544b6e31a",
                         "g-2a92a2d19aa1ed2297707318",
                         "g-7f2f1a59ddd23d6d8d1da797"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c9afbd70412f02162a1a:decision:0003",
@@ -43597,7 +44175,9 @@
                         "g-603f46add5779b9544b6e31a",
                         "g-2a92a2d19aa1ed2297707318",
                         "g-7f2f1a59ddd23d6d8d1da797"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c9afbd70412f02162a1a:decision:0011",
@@ -43612,7 +44192,9 @@
                         "g-603f46add5779b9544b6e31a",
                         "g-2a92a2d19aa1ed2297707318",
                         "g-7f2f1a59ddd23d6d8d1da797"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:c9afbd70412f02162a1a:decision:0012",
@@ -43627,7 +44209,9 @@
                         "g-603f46add5779b9544b6e31a",
                         "g-2a92a2d19aa1ed2297707318",
                         "g-7f2f1a59ddd23d6d8d1da797"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ca5696fb18965f2fc96c:decision:0003",
@@ -43642,7 +44226,9 @@
                         "g-80a5e1da380bbd2773510598",
                         "g-7170892bfd7e528cd25a33e8",
                         "g-739b0a9bf70b7b9ffb824c03"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ca5696fb18965f2fc96c:decision:0005",
@@ -43657,7 +44243,9 @@
                         "g-80a5e1da380bbd2773510598",
                         "g-7170892bfd7e528cd25a33e8",
                         "g-739b0a9bf70b7b9ffb824c03"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ca5696fb18965f2fc96c:decision:0006",
@@ -43672,7 +44260,9 @@
                         "g-80a5e1da380bbd2773510598",
                         "g-7170892bfd7e528cd25a33e8",
                         "g-739b0a9bf70b7b9ffb824c03"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ca5696fb18965f2fc96c:decision:0010",
@@ -43687,7 +44277,9 @@
                         "g-80a5e1da380bbd2773510598",
                         "g-7170892bfd7e528cd25a33e8",
                         "g-739b0a9bf70b7b9ffb824c03"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:cebe63fc4e22583e23cb:decision:0002",
@@ -43702,7 +44294,9 @@
                         "g-75e63091d8722f0b86f939f0",
                         "g-b3d7524e8289a9bb766e719c",
                         "g-cdc7a377aafbd2ecf8802a5d"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:cebe63fc4e22583e23cb:decision:0003",
@@ -43717,7 +44311,9 @@
                         "g-75e63091d8722f0b86f939f0",
                         "g-b3d7524e8289a9bb766e719c",
                         "g-cdc7a377aafbd2ecf8802a5d"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:cebe63fc4e22583e23cb:decision:0005",
@@ -43732,7 +44328,9 @@
                         "g-75e63091d8722f0b86f939f0",
                         "g-b3d7524e8289a9bb766e719c",
                         "g-cdc7a377aafbd2ecf8802a5d"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:cf505bce1f6d669785c7:decision:0004",
@@ -43747,7 +44345,9 @@
                         "g-00690ccd63971448b2130ec2",
                         "g-493f80c88b333e4414b320cd",
                         "g-b553a498d81c8f697b50df02"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:cf505bce1f6d669785c7:decision:0007",
@@ -43762,7 +44362,9 @@
                         "g-00690ccd63971448b2130ec2",
                         "g-493f80c88b333e4414b320cd",
                         "g-b553a498d81c8f697b50df02"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:cf505bce1f6d669785c7:decision:0010",
@@ -43777,7 +44379,9 @@
                         "g-00690ccd63971448b2130ec2",
                         "g-493f80c88b333e4414b320cd",
                         "g-b553a498d81c8f697b50df02"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:cf505bce1f6d669785c7:decision:0011",
@@ -43792,7 +44396,9 @@
                         "g-00690ccd63971448b2130ec2",
                         "g-493f80c88b333e4414b320cd",
                         "g-b553a498d81c8f697b50df02"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:cfef7e965c36c37d0b3b:decision:0003",
@@ -43807,7 +44413,9 @@
                         "g-88aca9aab846e5c33c9cd538",
                         "g-f2d7bf57c45cfda86afd8210",
                         "g-a606b479ce75147e45e86ee3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:cfef7e965c36c37d0b3b:decision:0007",
@@ -43822,7 +44430,9 @@
                         "g-88aca9aab846e5c33c9cd538",
                         "g-f2d7bf57c45cfda86afd8210",
                         "g-a606b479ce75147e45e86ee3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:cfef7e965c36c37d0b3b:decision:0008",
@@ -43837,7 +44447,9 @@
                         "g-88aca9aab846e5c33c9cd538",
                         "g-f2d7bf57c45cfda86afd8210",
                         "g-a606b479ce75147e45e86ee3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:cfef7e965c36c37d0b3b:decision:0009",
@@ -43852,7 +44464,9 @@
                         "g-88aca9aab846e5c33c9cd538",
                         "g-f2d7bf57c45cfda86afd8210",
                         "g-a606b479ce75147e45e86ee3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d02679c5164b9bffbec7:decision:0007",
@@ -43867,7 +44481,9 @@
                         "g-0bd5ec9f19e559bd73b282b6",
                         "g-cd068fe6e85fb304e3c01b92",
                         "g-994cca636cc94b906bda04ef"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d3df7d4ac00b72c36433:decision:0003",
@@ -43882,7 +44498,9 @@
                         "g-49a8570e8fe51842e442ab91",
                         "g-b60da7c4750c977cadcceaca",
                         "g-de78aa113f63371d04a53a71"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d3df7d4ac00b72c36433:decision:0004",
@@ -43897,7 +44515,9 @@
                         "g-49a8570e8fe51842e442ab91",
                         "g-b60da7c4750c977cadcceaca",
                         "g-de78aa113f63371d04a53a71"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d3df7d4ac00b72c36433:decision:0007",
@@ -43912,7 +44532,9 @@
                         "g-49a8570e8fe51842e442ab91",
                         "g-b60da7c4750c977cadcceaca",
                         "g-de78aa113f63371d04a53a71"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d3df7d4ac00b72c36433:decision:0010",
@@ -43927,7 +44549,9 @@
                         "g-49a8570e8fe51842e442ab91",
                         "g-b60da7c4750c977cadcceaca",
                         "g-de78aa113f63371d04a53a71"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d6cafb1375d2a4a22ea0:decision:0003",
@@ -43942,7 +44566,9 @@
                         "g-fc284734d8238e3518732a19",
                         "g-6113e335a20dc860cfa8fa0a",
                         "g-77914774b2a51bea75f3b9b3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d6cafb1375d2a4a22ea0:decision:0008",
@@ -43957,7 +44583,9 @@
                         "g-fc284734d8238e3518732a19",
                         "g-6113e335a20dc860cfa8fa0a",
                         "g-77914774b2a51bea75f3b9b3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d6cafb1375d2a4a22ea0:decision:0009",
@@ -43972,7 +44600,9 @@
                         "g-fc284734d8238e3518732a19",
                         "g-6113e335a20dc860cfa8fa0a",
                         "g-77914774b2a51bea75f3b9b3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d830f45de1b9e3723eac:decision:0019",
@@ -43987,7 +44617,9 @@
                         "g-6a997ebe499644faa74d1505",
                         "g-141b0d144c537d2300957246",
                         "g-c5966f257dbeffda183cb1ed"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d830f45de1b9e3723eac:decision:0021",
@@ -44002,7 +44634,9 @@
                         "g-6a997ebe499644faa74d1505",
                         "g-141b0d144c537d2300957246",
                         "g-c5966f257dbeffda183cb1ed"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d830f45de1b9e3723eac:decision:0022",
@@ -44017,7 +44651,9 @@
                         "g-6a997ebe499644faa74d1505",
                         "g-141b0d144c537d2300957246",
                         "g-c5966f257dbeffda183cb1ed"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d830f45de1b9e3723eac:decision:0026",
@@ -44032,7 +44668,9 @@
                         "g-6a997ebe499644faa74d1505",
                         "g-141b0d144c537d2300957246",
                         "g-c5966f257dbeffda183cb1ed"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d9a30a7b9d78318bea5d:decision:0004",
@@ -44047,7 +44685,9 @@
                         "g-0bccca1a4eaf7e14d59ef4c7",
                         "g-b8048b3edf29145703f1c57b",
                         "g-b1d8a2efce54e1ca0364b8a7"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d9a30a7b9d78318bea5d:decision:0005",
@@ -44062,7 +44702,9 @@
                         "g-0bccca1a4eaf7e14d59ef4c7",
                         "g-b8048b3edf29145703f1c57b",
                         "g-b1d8a2efce54e1ca0364b8a7"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:d9a30a7b9d78318bea5d:decision:0009",
@@ -44077,7 +44719,9 @@
                         "g-0bccca1a4eaf7e14d59ef4c7",
                         "g-b8048b3edf29145703f1c57b",
                         "g-b1d8a2efce54e1ca0364b8a7"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:db471118fd10dedf91fc:decision:0003",
@@ -44092,7 +44736,9 @@
                         "g-d4bed85e8081de6880f4feb1",
                         "g-80252f62eb3f72ea07104536",
                         "g-73428c93a4a7c2ba9b4f6e6b"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:db471118fd10dedf91fc:decision:0004",
@@ -44107,7 +44753,9 @@
                         "g-d4bed85e8081de6880f4feb1",
                         "g-80252f62eb3f72ea07104536",
                         "g-73428c93a4a7c2ba9b4f6e6b"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:db471118fd10dedf91fc:decision:0005",
@@ -44122,7 +44770,9 @@
                         "g-d4bed85e8081de6880f4feb1",
                         "g-80252f62eb3f72ea07104536",
                         "g-73428c93a4a7c2ba9b4f6e6b"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:db471118fd10dedf91fc:decision:0006",
@@ -44137,7 +44787,9 @@
                         "g-d4bed85e8081de6880f4feb1",
                         "g-80252f62eb3f72ea07104536",
                         "g-73428c93a4a7c2ba9b4f6e6b"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:dc6dccaadb9bd4ee4cff:decision:0004",
@@ -44152,7 +44804,9 @@
                         "g-62599e83c4320b2cd72ac476",
                         "g-e7a9d62b2160d5708bfc8c53",
                         "g-95cee50deb6942bf2079be8e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:dc6dccaadb9bd4ee4cff:decision:0005",
@@ -44167,7 +44821,9 @@
                         "g-62599e83c4320b2cd72ac476",
                         "g-e7a9d62b2160d5708bfc8c53",
                         "g-95cee50deb6942bf2079be8e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:dc6dccaadb9bd4ee4cff:decision:0006",
@@ -44182,7 +44838,9 @@
                         "g-62599e83c4320b2cd72ac476",
                         "g-e7a9d62b2160d5708bfc8c53",
                         "g-95cee50deb6942bf2079be8e"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ddfd7a337fa98efe9c6c:decision:0005",
@@ -44197,7 +44855,9 @@
                         "g-7c7dfc6aaf7af3986d7717ee",
                         "g-97532ad37e30b49c16000006",
                         "g-c036441f40f3b9bd9e725bf0"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e1a58a295f73fe352632:decision:0003",
@@ -44212,7 +44872,9 @@
                         "g-32be5afc42f7e2263164b5e4",
                         "g-b6effa593fa833cb45fcf869",
                         "g-6131a77b73b73f8508f5dc42"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e1a58a295f73fe352632:decision:0004",
@@ -44227,7 +44889,9 @@
                         "g-32be5afc42f7e2263164b5e4",
                         "g-b6effa593fa833cb45fcf869",
                         "g-6131a77b73b73f8508f5dc42"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e1a58a295f73fe352632:decision:0005",
@@ -44242,7 +44906,9 @@
                         "g-32be5afc42f7e2263164b5e4",
                         "g-b6effa593fa833cb45fcf869",
                         "g-6131a77b73b73f8508f5dc42"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e1a58a295f73fe352632:decision:0006",
@@ -44257,7 +44923,9 @@
                         "g-32be5afc42f7e2263164b5e4",
                         "g-b6effa593fa833cb45fcf869",
                         "g-6131a77b73b73f8508f5dc42"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e359cef1d7aa1ed4bdb8:decision:0010",
@@ -44272,7 +44940,9 @@
                         "g-89146ddcc4cde7627f850348",
                         "g-8533a38412920dfcf011047c",
                         "g-18909048d074a4e2f95594eb"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e359cef1d7aa1ed4bdb8:decision:0011",
@@ -44287,7 +44957,9 @@
                         "g-89146ddcc4cde7627f850348",
                         "g-8533a38412920dfcf011047c",
                         "g-18909048d074a4e2f95594eb"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e359cef1d7aa1ed4bdb8:decision:0012",
@@ -44302,7 +44974,9 @@
                         "g-89146ddcc4cde7627f850348",
                         "g-8533a38412920dfcf011047c",
                         "g-18909048d074a4e2f95594eb"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e359cef1d7aa1ed4bdb8:decision:0013",
@@ -44317,7 +44991,9 @@
                         "g-89146ddcc4cde7627f850348",
                         "g-8533a38412920dfcf011047c",
                         "g-18909048d074a4e2f95594eb"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e554f9ffe29d04cda316:decision:0002",
@@ -44332,7 +45008,9 @@
                         "g-887a1e6164e7d018ecde694b",
                         "g-734e57f40fae97c0ad90278b",
                         "g-f23463a4387d3f72f616d4b7"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e554f9ffe29d04cda316:decision:0009",
@@ -44347,7 +45025,9 @@
                         "g-887a1e6164e7d018ecde694b",
                         "g-734e57f40fae97c0ad90278b",
                         "g-f23463a4387d3f72f616d4b7"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e554f9ffe29d04cda316:decision:0010",
@@ -44362,7 +45042,9 @@
                         "g-887a1e6164e7d018ecde694b",
                         "g-734e57f40fae97c0ad90278b",
                         "g-f23463a4387d3f72f616d4b7"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e5e41f0baeb77f769b42:decision:0003",
@@ -44377,7 +45059,9 @@
                         "g-94f69766f8e399a3e7792225",
                         "g-05058783faf685b7aa9d90ec",
                         "g-a91bf6fc22e1f13dfb67da89"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e5e41f0baeb77f769b42:decision:0004",
@@ -44392,7 +45076,9 @@
                         "g-94f69766f8e399a3e7792225",
                         "g-05058783faf685b7aa9d90ec",
                         "g-a91bf6fc22e1f13dfb67da89"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e5e41f0baeb77f769b42:decision:0005",
@@ -44407,7 +45093,9 @@
                         "g-94f69766f8e399a3e7792225",
                         "g-05058783faf685b7aa9d90ec",
                         "g-a91bf6fc22e1f13dfb67da89"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e5e41f0baeb77f769b42:decision:0006",
@@ -44422,7 +45110,9 @@
                         "g-94f69766f8e399a3e7792225",
                         "g-05058783faf685b7aa9d90ec",
                         "g-a91bf6fc22e1f13dfb67da89"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e689516d682df01eff18:decision:0004",
@@ -44437,7 +45127,9 @@
                         "g-fcc6fabb65bac5684c83e54a",
                         "g-53322aaf29fa4a0fd0826d7f",
                         "g-b903f74f3d4d8aee12833bab"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:e689516d682df01eff18:decision:0006",
@@ -44452,7 +45144,9 @@
                         "g-fcc6fabb65bac5684c83e54a",
                         "g-53322aaf29fa4a0fd0826d7f",
                         "g-b903f74f3d4d8aee12833bab"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ea6d882b5c09727a6448:decision:0002",
@@ -44467,7 +45161,9 @@
                         "g-15518ee5521f715dacf27d3d",
                         "g-63df66e619b90e7862c80df3",
                         "g-cfb05304c1b4f01a52a31071"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ea6d882b5c09727a6448:decision:0003",
@@ -44482,7 +45178,9 @@
                         "g-15518ee5521f715dacf27d3d",
                         "g-63df66e619b90e7862c80df3",
                         "g-cfb05304c1b4f01a52a31071"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ea6d882b5c09727a6448:decision:0009",
@@ -44497,7 +45195,9 @@
                         "g-15518ee5521f715dacf27d3d",
                         "g-63df66e619b90e7862c80df3",
                         "g-cfb05304c1b4f01a52a31071"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ea6d882b5c09727a6448:decision:0010",
@@ -44512,7 +45212,9 @@
                         "g-15518ee5521f715dacf27d3d",
                         "g-63df66e619b90e7862c80df3",
                         "g-cfb05304c1b4f01a52a31071"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ecf9b5fce308c7f491ef:decision:0003",
@@ -44527,7 +45229,9 @@
                         "g-cd25f2603544ae23a22c6ad7",
                         "g-7b524c3fc122fc8ff5c1bdc0",
                         "g-7ed35cf9385f60403b47ccd3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ecf9b5fce308c7f491ef:decision:0005",
@@ -44542,7 +45246,9 @@
                         "g-cd25f2603544ae23a22c6ad7",
                         "g-7b524c3fc122fc8ff5c1bdc0",
                         "g-7ed35cf9385f60403b47ccd3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ecf9b5fce308c7f491ef:decision:0006",
@@ -44557,7 +45263,9 @@
                         "g-cd25f2603544ae23a22c6ad7",
                         "g-7b524c3fc122fc8ff5c1bdc0",
                         "g-7ed35cf9385f60403b47ccd3"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f1a023037c80ddaada55:decision:0006",
@@ -44572,7 +45280,9 @@
                         "g-ed81a80b427f5041772ea5b5",
                         "g-898fd25c8c8393e35da7e93d",
                         "g-760d6a8ee3054ad364589680"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f1a023037c80ddaada55:decision:0007",
@@ -44587,7 +45297,9 @@
                         "g-ed81a80b427f5041772ea5b5",
                         "g-898fd25c8c8393e35da7e93d",
                         "g-760d6a8ee3054ad364589680"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f1a023037c80ddaada55:decision:0008",
@@ -44602,7 +45314,9 @@
                         "g-ed81a80b427f5041772ea5b5",
                         "g-898fd25c8c8393e35da7e93d",
                         "g-760d6a8ee3054ad364589680"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f1a023037c80ddaada55:decision:0009",
@@ -44617,7 +45331,9 @@
                         "g-ed81a80b427f5041772ea5b5",
                         "g-898fd25c8c8393e35da7e93d",
                         "g-760d6a8ee3054ad364589680"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f606101b3cff30fa2b51:decision:0003",
@@ -44632,7 +45348,9 @@
                         "g-ceb9acc30b6c3635d9708f54",
                         "g-86af830e9c7af0b6d87897d1",
                         "g-d8559833850fb586cb78f595"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f606101b3cff30fa2b51:decision:0017",
@@ -44647,7 +45365,9 @@
                         "g-ceb9acc30b6c3635d9708f54",
                         "g-86af830e9c7af0b6d87897d1",
                         "g-d8559833850fb586cb78f595"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f737a882d4349d5339e8:decision:0003",
@@ -44662,7 +45382,9 @@
                         "g-68546666ff097ed8969c017e",
                         "g-9f146fdadeb7f3691d196c7f",
                         "g-2e620875ebb2138791416ce6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f737a882d4349d5339e8:decision:0004",
@@ -44677,7 +45399,9 @@
                         "g-68546666ff097ed8969c017e",
                         "g-9f146fdadeb7f3691d196c7f",
                         "g-2e620875ebb2138791416ce6"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f7e78819923452544394:decision:0003",
@@ -44692,7 +45416,9 @@
                         "g-e519fb2f10eea652120d905c",
                         "g-1d0e82ef444f9cc0c8ed6509",
                         "g-189db760dc50392de4cde066"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f7e78819923452544394:decision:0004",
@@ -44707,7 +45433,9 @@
                         "g-e519fb2f10eea652120d905c",
                         "g-1d0e82ef444f9cc0c8ed6509",
                         "g-189db760dc50392de4cde066"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f7e78819923452544394:decision:0005",
@@ -44722,7 +45450,9 @@
                         "g-e519fb2f10eea652120d905c",
                         "g-1d0e82ef444f9cc0c8ed6509",
                         "g-189db760dc50392de4cde066"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f7e78819923452544394:decision:0006",
@@ -44737,7 +45467,9 @@
                         "g-e519fb2f10eea652120d905c",
                         "g-1d0e82ef444f9cc0c8ed6509",
                         "g-189db760dc50392de4cde066"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f9ee488478b387ebd66e:decision:0002",
@@ -44752,7 +45484,9 @@
                         "g-3e5f694b685cb79fb611fb0b",
                         "g-995ffdbf46876101878b3342",
                         "g-5aaf2b56dafb07b6afaf7857"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:f9ee488478b387ebd66e:decision:0004",
@@ -44767,7 +45501,9 @@
                         "g-3e5f694b685cb79fb611fb0b",
                         "g-995ffdbf46876101878b3342",
                         "g-5aaf2b56dafb07b6afaf7857"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ffe8090d52875176ffef:decision:0007",
@@ -44782,7 +45518,9 @@
                         "g-3f84160ebf0fe451afe7d0f8",
                         "g-6d1ba59558f14b1d1aea6ca6",
                         "g-382f0c64057547d36bd75008"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ffe8090d52875176ffef:decision:0014",
@@ -44797,7 +45535,9 @@
                         "g-3f84160ebf0fe451afe7d0f8",
                         "g-6d1ba59558f14b1d1aea6ca6",
                         "g-382f0c64057547d36bd75008"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 },
                 {
                     "id": "teacher-program:ffe8090d52875176ffef:decision:0015",
@@ -44812,7 +45552,9 @@
                         "g-3f84160ebf0fe451afe7d0f8",
                         "g-6d1ba59558f14b1d1aea6ca6",
                         "g-382f0c64057547d36bd75008"
-                    ]
+                    ],
+                    "decision": "admit-exact-selected-native-action-SFT-only",
+                    "training_admission": true
                 }
             ]
         },

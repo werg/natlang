@@ -380,13 +380,23 @@ def registered_candidate_selection_admission(corpus_id, sources):
     owner_rows = owner.get('rows')
     if not isinstance(owner_rows, list) or not owner_rows:
         raise ValueError('root candidate-selection receipt has no exact row list')
+    owner_rows_by_id = {row.get('native_id'): row for row in owner_rows if isinstance(row, dict)}
+    if len(owner_rows_by_id) != len(owner_rows):
+        raise ValueError('root candidate-selection receipt has duplicate or malformed row IDs')
     actual_owner_rows = []
     for row in receipt['rows']:
         turn = turns_by_id.get(row['id'])
         if not turn:
             raise ValueError(f'root candidate-selection receipt turn is missing: {row["id"]}')
+        owner_row = owner_rows_by_id.get(row['id'])
+        if (owner_row is None or
+                owner_row.get('decision') != 'admit-exact-selected-native-action-SFT-only' or
+                owner_row.get('training_admission') is not True):
+            raise ValueError(f'root candidate-selection row is not approved for exact native action SFT: {row["id"]}')
         messages_sha256 = sha(canonical(turn.get('messages')).encode())
-        actual_owner_rows.append({**row, 'messages_sha256': messages_sha256})
+        actual_owner_rows.append({**row, 'messages_sha256': messages_sha256,
+                                  'decision': owner_row['decision'],
+                                  'training_admission': owner_row['training_admission']})
     actual_owner_rows.sort(key=lambda row: row['id'])
     actual_by_id = {row['id']: row for row in receipt['rows']}
     declared_owner_rows = [{
@@ -394,6 +404,7 @@ def registered_candidate_selection_admission(corpus_id, sources):
         'item_sha256': actual_by_id.get(row.get('native_id'), {}).get('item_sha256'),
         'target_sha256': row.get('target_sha256'), 'messages_sha256': row.get('messages_sha256'),
         'split': row.get('split'), 'source_groups': row.get('source_groups'),
+        'decision': row.get('decision'), 'training_admission': row.get('training_admission'),
     } for row in owner_rows]
     declared_owner_rows.sort(key=lambda row: row['id'])
     if canonical(actual_owner_rows) != canonical(declared_owner_rows):
@@ -404,7 +415,8 @@ def registered_candidate_selection_admission(corpus_id, sources):
 
     def identity(row):
         return {key: row.get(key) for key in ('id', 'item_id', 'item_sha256', 'target_sha256',
-                                               'messages_sha256', 'split', 'source_groups')}
+                                               'messages_sha256', 'split', 'source_groups', 'decision',
+                                               'training_admission')}
     actual = {row['id']: identity(row) for row in actual_owner_rows}
     declared = {row.get('id'): identity(row) for row in declared_rows if isinstance(row, dict)}
     if (len(declared) != len(declared_rows) or len(actual) != len(actual_owner_rows) or
@@ -420,6 +432,23 @@ def registered_candidate_selection_admission(corpus_id, sources):
             'selection_review_pin_correction_sha256': admission['selection_review_pin_correction_sha256'],
             'owner_admission_sha256': owner_sha,
             'source_quality_clearance_sha256': admission['source_quality_clearance_sha256'], 'rows': actual}
+
+
+def validate_candidate_selection_row(row, approved):
+    """Keep corpus-level approval from overriding a rejected or out-of-scope child row."""
+    rid = row.get('id')
+    if (approved.get('decision') != 'admit-exact-selected-native-action-SFT-only' or
+            approved.get('training_admission') is not True):
+        raise ValueError(f'registry candidate-selection row lacks exact native-action SFT approval: {rid}')
+    decision = row.get('decision')
+    if isinstance(decision, dict) and decision.get('training_approved') is not True:
+        raise ValueError(f'candidate-selection source row is explicitly rejected: {rid}')
+    admission = row.get('training_admission')
+    if isinstance(admission, dict) and admission.get('approved') is False:
+        pending = (admission.get('kind') == 'candidate-selection-pending-corpus-admission' and
+                   admission.get('reason') == 'exact child target selected for review; corpus admission remains false')
+        if not pending:
+            raise ValueError(f'candidate-selection source row has an explicit training rejection: {rid}')
 
 
 def select(args, shard_dir: Path):
@@ -485,6 +514,7 @@ def select(args, shard_dir: Path):
                     if approved is None:
                         reason = 'not_in_registry_candidate_selection_admission'
                     else:
+                        validate_candidate_selection_row(row, approved)
                         actual_target = sha(canonical(row.get('target')).encode())
                         actual_messages = sha(canonical(row.get('messages')).encode())
                         # The packet verifier binds item/source and target provenance; the registered corpus
