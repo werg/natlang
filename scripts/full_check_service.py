@@ -83,11 +83,11 @@ def launch(state: dict, sha: str) -> None:
     subprocess.run(['systemctl', '--user', 'reset-failed', f'{unit}-launch.service'], capture_output=True)
     subprocess.run(['systemd-run', '--user', '--collect', '--unit', f'{unit}-launch', '--property=Type=exec', f'--working-directory={REPO}',
                     '-p', f'StandardOutput=append:{ledger_log}', '-p', f'StandardError=append:{ledger_log}',
-                    'python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '28',
+                    'python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '18',
                     '--priority', 'medium', '--resumable', '--wait', '86400', '--workdir', str(wt), '--',
                     'sh', '-c', command], check=True, capture_output=True)
     state['running'] = {'sha': sha, 'unit': unit, 'worktree': str(wt), 'log': str(log), 'started': time.time(),
-                        'command': f'python3 scripts/memory_ledger.py run --unit {unit} --budget-gb 28 --priority '
+                        'command': f'python3 scripts/memory_ledger.py run --unit {unit} --budget-gb 18 --priority '
                                    f'medium --resumable --workdir {wt} -- sh -c "{command}"'}
     save(state)
 
