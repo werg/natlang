@@ -49,7 +49,7 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import { FileNeuraleseStore, NatlangRuntime, pluggableMode, type NeuraleseStore, type PluggableMode, type TargetContext } from '@natlang/node';
@@ -70,6 +70,13 @@ const VALUED = ['--executor-context', '--agent-endpoint', '--agent-model', '--ag
 const option = (args: string[], name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
 const taskDirectory = ['../../tasks', '../../pi/tasks', './tasks'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
+/** The checkout (git work tree) pi's package lives in, else its package directory: eval task copies must be outside it. */
+const checkout = (() => {
+  for (let dir = resolve(taskDirectory, '..'); ; dir = resolve(dir, '..')) {
+    if (existsSync(join(dir, '.git'))) return dir;
+    if (resolve(dir, '..') === dir) return resolve(taskDirectory, '..');
+  }
+})();
 
 /** The default profile's endpoint, for an agent on the same server as the executor when the launcher names none. */
 function profileEndpoint(): { endpoint: string; model: string } | undefined {
@@ -150,13 +157,14 @@ export async function sessionBlockStore(args: string[], sessionPath: string): Pr
 export type { RunResult };
 
 /** Run one task to its answer on a session at `sessionPath`. */
-export async function runTask(target: TargetContext, args: string[], task: string, cwd: string, sessionPath: string, signal?: AbortSignal): Promise<RunResult> {
+export async function runTask(target: TargetContext, args: string[], task: string, cwd: string, sessionPath: string, signal?: AbortSignal,
+    confine?: string): Promise<RunResult> {
   const natlang = executor(target, args, await sessionBlockStore(args, sessionPath));
   const { models, ref } = await agentModels(args, (target as { modelEndpoint?: { endpoint: string; model: string } }).modelEndpoint,
     natlang.options.neuralese?.store);
   const quiet = args.includes('--quiet');
   const log = (line: string) => { if (!quiet) target.io.error.write(`${line}\n`); };
-  const envs = createEnvs(cwd);
+  const envs = createEnvs(cwd, confine);
   mkdirSync(join(sessionPath, '..'), { recursive: true });
   const registry = nodeCodingRegistry(natlang, { cwd, tools: crispOrNl(args, '--tools') });
   let opened: Harness | undefined;
@@ -225,13 +233,15 @@ async function evaluate(target: TargetContext, args: string[]): Promise<number> 
   for (const name of tasks) {
     const spec = JSON.parse(readFileSync(join(taskDirectory, name, 'task.json'), 'utf8')) as TaskSpec;
     const cwd = join(mkdtempSync(join(tmpdir(), `pi-${name}-`)), 'repo');
+    // An eval task works on its own copy, never inside the checkout pi runs from (its tools are confined to the copy).
+    if (!relative(checkout, cwd).startsWith('..')) throw new Error(`task copy ${cwd} is inside the checkout ${checkout}; set TMPDIR elsewhere`);
     cpSync(join(taskDirectory, name, 'repo'), cwd, { recursive: true });
     execFileSync('sh', ['-c', 'git init -q && git add -A && git -c user.name=pi -c user.email=pi@example.com commit -qm start'], { cwd });
     target.io.error.write(`\n=== ${name}\n`);
     let result: RunResult | undefined, error: string | undefined;
     try {
       const limit = minutes > 0 ? AbortSignal.timeout(minutes * 60_000) : undefined;
-      result = await runTask(target, args, spec.prompt, cwd, join(out, `${name}.sqlite`), limit);
+      result = await runTask(target, args, spec.prompt, cwd, join(out, `${name}.sqlite`), limit, cwd);
     } catch (caught) { error = caught instanceof Error ? caught.message : String(caught); }
     let passed = false, check = '';
     try { check = execFileSync('sh', ['-c', spec.check.replaceAll('{task}', join(taskDirectory, name))], { cwd, encoding: 'utf8', timeout: 300_000 }); passed = true; }
