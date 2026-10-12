@@ -225,6 +225,27 @@ def analyze(profile, wall: float) -> dict:
         nodes[label] = nodes.get(label, 0) + 1
         return 'bwd/unscoped:' + label
 
+    # Scopes by time containment on the launching thread, innermost first: a record_function entered inside an
+    # autograd hook (the latents' in-backward optimizer step) is not a cpu_parent of the ops under it in the event tree.
+    enclosing = {}
+    marks = ('update/', 'optim/') + _MODEL_PREFIXES
+    by_thread = {}
+    for event in events:
+        if event.device_type != DeviceType.CPU:
+            continue
+        is_scope = event.name.startswith(marks)
+        if is_scope or event.kernels:
+            by_thread.setdefault(event.thread, []).append((event.time_range.start, -event.time_range.end, is_scope, event))
+    for items in by_thread.values():
+        items.sort(key=lambda item: (item[0], item[1]))
+        stack = []
+        for start, negative_end, is_scope, event in items:
+            while stack and stack[-1][0] <= start:
+                stack.pop()
+            if event.kernels:
+                enclosing[id(event)] = [name for _, name in reversed(stack)]
+            if is_scope:
+                stack.append((-negative_end, event.name))
     by_phase, by_category, by_kernel, intervals = {}, {}, {}, []
     for event in events:
         if event.device_type == DeviceType.CUDA:
@@ -232,7 +253,7 @@ def analyze(profile, wall: float) -> dict:
             continue
         if event.device_type != DeviceType.CPU or not event.kernels:
             continue
-        chain = _labels(event)
+        chain = enclosing.get(id(event), []) + _labels(event)
         phase, category = _category(chain, lambda _name, e=event: backward_scope_of(e))
         for kernel in event.kernels:
             seconds = kernel.duration / 1e6

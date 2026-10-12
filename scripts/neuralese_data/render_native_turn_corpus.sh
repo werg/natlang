@@ -16,6 +16,8 @@ mkdir -p "$OUT"
 # same-named container would kill another corpus's running render (2026-10-12).
 NAME="render-$(basename "$OUT")-$(printf %s "$OUT" | sha1sum | cut -c1-10)"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
+ERRLOG=$(mktemp "${TMPDIR:-/tmp}/render-stderr.XXXXXX")
+trap 'rm -f "$ERRLOG"' EXIT
 # A stop (ledger preemption, systemctl stop) is a clean resumable stop: the container is stopped and the wrapper
 # exits 0, so the unit ends with Result=success and the ledger requeues it; the relaunch resumes finished shards.
 stopped=0
@@ -30,8 +32,18 @@ docker run --rm --name "$NAME" --network none --user "$(id -u):$(id -g)" --memor
   -v "$REPO:$REPO:ro" -v /mnt/external:/mnt/external:ro -v /home/werg/data:/home/werg/data:ro -v "$OUT:$OUT" \
   -w "$REPO" --entrypoint python3 natlang-neuralese:26.09 \
   scripts/neuralese_data/render_native_turn_corpus.py \
-  --tokenizer lfm25="$LFM" --tokenizer mellum21="$MELLUM" --out-dir "$OUT" "$@" &
-wait $! && status=0 || status=$?  # (set -e must not end the script here)
-wait $! 2>/dev/null || true
+  --tokenizer lfm25="$LFM" --tokenizer mellum21="$MELLUM" --out-dir "$OUT" "$@" \
+  2> >(tee "$ERRLOG" >&2) &
+PID=$!
+wait $PID && status=0 || status=$?  # (set -e must not end the script here)
+wait $PID 2>/dev/null || true
+sleep 1
 [ $stopped = 1 ] && exit 0
+# The ledger/systemd repeats SIGTERM to every process of the unit: the docker client gives up after the third
+# ("got 3 SIGTERM/SIGINTs, forcefully exiting", exit 1) even when this script was not signalled first. That is
+# still a preemption, a clean resumable stop (2026-10-12).
+if [ $status != 0 ] && grep -q 'SIGTERM/SIGINTs, forcefully exiting' "$ERRLOG" 2>/dev/null; then
+  docker stop -t 30 "$NAME" >/dev/null 2>&1 || true
+  exit 0
+fi
 exit $status
