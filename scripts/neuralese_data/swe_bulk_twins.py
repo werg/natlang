@@ -77,7 +77,7 @@ def render(shard: Path, tokenizers: dict, root: Path, workers: int) -> str:
     return f'{shard.name} exit {code}'
 
 
-def assemble(root: Path, name: str, rendering: str, shards: list[Path], tokenizers: dict) -> None:
+def assemble(root: Path, name: str, rendering: str, shards: list[Path], receipts: dict) -> None:
     target = twin_path(root, name, rendering)
     if (target / 'receipt.json').exists():
         summary = json.loads((target / 'receipt.json').read_text())
@@ -91,7 +91,7 @@ def assemble(root: Path, name: str, rendering: str, shards: list[Path], tokenize
     with open(tmp, 'wb') as dst:
         for shard in shards:
             part = root / 'render' / shard.name
-            receipt = verify_shard_receipt(shard, part, tokenizers)
+            receipt = receipts[shard.name]
             render = receipt['renders'][f'{rendering}/{name}']
             source_text = part / rendering / name / 'text-data.jsonl'
             if file_sha(source_text) != render['text_data_sha256']:
@@ -113,7 +113,7 @@ def assemble(root: Path, name: str, rendering: str, shards: list[Path], tokenize
                           'text_data_sha256': render['text_data_sha256'], 'tokens': render['by_split'],
                           'merge_omissions': render['merge_omissions'], 'selection': receipt['selection']})
     tmp.rename(target / 'text.jsonl')
-    first = json.loads((root / 'render' / shards[0].name / 'receipt.json').read_text())
+    first = receipts[shards[0].name]
     summary = {'schema': 'natlang.harness-bench-bulk-twin/2',
                'builder': 'scripts/neuralese_data/render_native_turn_corpus.py --renderings program-header whole-trajectory per shard',
                'rendering': rendering, 'renderer_code': first['renderer_code'],
@@ -151,9 +151,13 @@ def main() -> int:
             if failed:
                 print(json.dumps({'failed': failed}), flush=True)
                 return 1
+            # Bind source shards once before assembling four twins, rather than rehashing
+            # every multi-GB records/piece file for each rendering and tokenizer.
+            receipts = {s.name: verify_shard_receipt(s, args.twin_root / 'render' / s.name, tokenizers)
+                        for s in shards}
             for name in tokenizers:
                 for rendering in RENDERINGS:
-                    assemble(args.twin_root, name, rendering, shards, tokenizers)
+                    assemble(args.twin_root, name, rendering, shards, receipts)
             return 0
         if not args.wait:
             return 0
