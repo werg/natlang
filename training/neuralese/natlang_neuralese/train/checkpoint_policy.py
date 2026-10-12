@@ -44,9 +44,11 @@ from .checkpoint_offload import after_write, path_lock, policy_record, recover_l
 from .trajectory_state import atomic_checkpoint
 
 
-def publish_best(slot: Path, best: Path, receipt: dict | None = None) -> None:
+def publish_best(slot: Path, best: Path, receipt: dict | None = None, *, prune=False) -> None:
     """``best`` becomes the same file as ``slot`` (a hard link: no copy). A later atomic replacement of the slot leaves
-    the linked inode, so the best survives the next rolling write. The receipt (if any) is written last."""
+    the linked inode, so the best survives the next rolling write. The receipt (if any) is written last. The offload
+    then moves it to the external disk; ``prune``: stored weights-only there (only for writers no consumer continues
+    from a best of; plans/STORAGE_POLICY.md 2a)."""
     pending = best.with_name(best.name + '.pending-link')
     with path_lock(best):  # never interleaved with the offload's link swap of the previous best
         pending.unlink(missing_ok=True)
@@ -57,13 +59,13 @@ def publish_best(slot: Path, best: Path, receipt: dict | None = None) -> None:
         temp = manifest.with_name(manifest.name + '.pending')
         temp.write_text(json.dumps(receipt, indent=2) + '\n')
         temp.replace(manifest)
-    after_write(best, 'archive')  # verified copy to the external disk, then a link in its place (checkpoint_offload)
+    after_write(best, 'archive', prune)  # verified copy to the external disk, then a link in its place (checkpoint_offload)
 
 
 class CheckpointPolicy:
     def __init__(self, out_dir, *, every_steps: int = 0, name: str = "checkpoint.pt",
                  best_name: str = "best-checkpoint.pt", final_name: str = "final-weights.pt",
-                 free_factor: float = 1.2):
+                 free_factor: float = 1.2, prune_best: bool = True):
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
         self.cadence = Cadence(every_steps)
@@ -73,6 +75,8 @@ class CheckpointPolicy:
             raise ValueError('the rolling slot, best and final snapshots need distinct file names: a weights-only '
                              'file must never share the optimizer-bearing continuation slot')
         self.free_factor = free_factor
+        # Bests are selection/export copies (direct, QAT conversion): weights-only once offloaded (owner 2026-10-13).
+        self.prune_best = prune_best
         self.best_metric: float | None = None
         self.events: list[dict] = []
         meta = self.out / "checkpoint-policy.json"
@@ -125,7 +129,7 @@ class CheckpointPolicy:
             metric > self.best_metric if higher_is_better else metric < self.best_metric))
         if better:
             publish_best(self.slot, self.best_path, {"step": state.get("step"), "metric": metric,
-                                                     "file": self.slot.name})
+                                                     "file": self.slot.name}, prune=self.prune_best)
             self.write_best_metric(metric)
             event = dict(event, best=True)
         return event

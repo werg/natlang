@@ -57,6 +57,10 @@ LATEST_NAMES = ('checkpoint.pt',)
 ARCHIVE_GLOBS = ('best-*.pt', 'best-*.safetensors', 'final-*.pt', 'final-*.safetensors', 'checkpoint-*.pt',
                  'step-*.pt')
 KEEP_MARKER = '.keep-on-nvme'
+# Full states whose non-latest copies no consumer continues from (prune='auto': sweeps and the one-shot). The direct
+# lineage continues from the predecessor's checkpoint.pt (recipe DIRECT_PHASE_CONTINUATION), never from a best; the
+# text warm-up continues from its verified best, causal bootstrap and trajectories pin or resume theirs: not listed.
+PRUNABLE_SCHEMAS = ('natlang.neuralese-direct/1',)
 
 
 def _paths():
@@ -75,6 +79,7 @@ class OffloadSettings:
     min_bytes: int = GIB
     mirror_latest: bool = True
     link_archived: bool = True
+    prune_archived: bool = True
     hdd_floor_bytes: int = 50 * GIB
     stale_part_seconds: float = 1800.0
     archive_globs: tuple = ARCHIVE_GLOBS
@@ -88,6 +93,7 @@ class OffloadSettings:
         return cls(enabled=not off('NATLANG_CHECKPOINT_OFFLOAD'), mirror_root=root,
                    min_bytes=int(float(env('NATLANG_CHECKPOINT_OFFLOAD_MIN_GB', '1')) * GIB),
                    mirror_latest=not off('NATLANG_CHECKPOINT_OFFLOAD_LATEST'),
+                   prune_archived=not off('NATLANG_CHECKPOINT_PRUNE_OPTIMIZER'),
                    hdd_floor_bytes=int(float(env('NATLANG_CHECKPOINT_OFFLOAD_HDD_FLOOR_GB', '50')) * GIB))
 
     def record(self) -> dict:
@@ -219,6 +225,111 @@ def verified_copy(path, dest, *, partial_suffix=PART_SUFFIX) -> dict:
             'source_identity': _identity(before), 'mtime': before.st_mtime, 'time': time.time()}
 
 
+def is_optimizer_key(key) -> bool:
+    """Top-level state entries that only a resume needs: the optimizer's slots and their parameter naming."""
+    return isinstance(key, str) and 'optimizer' in key.lower() and key != 'optimizer_pruned'
+
+
+def load_state(path):
+    """A full training state, memory-mapped (the trainers' own files)."""
+    import torch
+    from torch.torch_version import TorchVersion
+    try:
+        with torch.serialization.safe_globals([TorchVersion]):
+            return torch.load(path, map_location='cpu', mmap=True, weights_only=True)
+    except Exception:
+        return torch.load(path, map_location='cpu', mmap=True, weights_only=False)
+
+
+def _same_values(a, b, where='state') -> None:
+    import torch
+    if isinstance(a, torch.Tensor):
+        if not isinstance(b, torch.Tensor) or a.dtype != b.dtype or a.shape != b.shape:
+            raise RuntimeError(f'pruned copy differs at {where}')
+        x, y = a.detach().contiguous().reshape(-1), b.detach().contiguous().reshape(-1)
+        try:
+            x, y = x.view(torch.uint8), y.view(torch.uint8)  # bitwise (NaN-safe)
+        except RuntimeError:
+            pass
+        if not torch.equal(x, y):
+            raise RuntimeError(f'pruned copy differs at {where}')
+    elif isinstance(a, dict):
+        if not isinstance(b, dict) or list(a) != list(b):
+            raise RuntimeError(f'pruned copy differs at {where}')
+        for key in a:
+            _same_values(a[key], b[key], f'{where}.{key}')
+    elif isinstance(a, (list, tuple)):
+        if not isinstance(b, (list, tuple)) or len(a) != len(b):
+            raise RuntimeError(f'pruned copy differs at {where}')
+        for index, (x, y) in enumerate(zip(a, b)):
+            _same_values(x, y, f'{where}[{index}]')
+    elif a != b and not (a != a and b != b):  # NaN equals NaN here
+        raise RuntimeError(f'pruned copy differs at {where}')
+
+
+def pruned_copy(path, dest, *, partial_suffix=PART_SUFFIX, schemas=None) -> dict | None:
+    """A weights-only copy of a full training state (owner 2026-10-13: only the latest resume checkpoint keeps the
+    optimizer): every top-level optimizer entry dropped, ``optimizer_pruned: True`` and the dropped keys recorded in
+    the state. Written through the partial name, fsynced, re-read and compared value by value (bitwise) with the
+    source's kept entries, hashed, then renamed into place. None when the file is no dict state with an optimizer
+    (the caller copies it byte for byte)."""
+    import torch
+    path, dest = Path(path), Path(dest)
+    before = path.lstat()
+    try:
+        state = load_state(path)
+    except Exception:
+        return None
+    dropped = sorted(k for k in state if is_optimizer_key(k)) if isinstance(state, dict) else []
+    if schemas is not None and isinstance(state, dict) and state.get('schema') not in schemas:
+        dropped = []  # 'auto': a writer whose non-latest copies are continuation parents or pinned
+    if not dropped:
+        return None
+    kept = {k: v for k, v in state.items() if not is_optimizer_key(k)}
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    partial = dest.with_name(dest.name + partial_suffix)
+    try:
+        with open(partial, 'wb') as out:
+            torch.save({**kept, 'optimizer_pruned': True, 'optimizer_pruned_keys': dropped}, out)
+            out.flush()
+            os.fsync(out.fileno())
+            _drop(out)
+        os.utime(partial, ns=(before.st_atime_ns, before.st_mtime_ns))
+        if _identity(path.lstat()) != _identity(before):
+            raise RuntimeError(f'{path} changed during the copy')
+        written = load_state(partial)
+        if written.get('optimizer_pruned') is not True:
+            raise RuntimeError(f'verification failed for {path}')
+        _same_values(kept, {k: written[k] for k in kept if k in written})
+        del written
+        digest = file_sha256(partial)
+        os.replace(partial, dest)
+    except BaseException:
+        partial.unlink(missing_ok=True)
+        raise
+    finally:
+        state = kept = None
+    _fsync_dir(dest.parent)
+    return {'source': str(path), 'dest': str(dest), 'bytes': dest.stat().st_size, 'sha256': digest,
+            'source_identity': _identity(before), 'source_bytes': before.st_size, 'optimizer_pruned': True,
+            'optimizer_pruned_keys': dropped, 'mtime': before.st_mtime, 'time': time.time()}
+
+
+def local_copy(path, dest, prune=False) -> dict:
+    """The offload copy in this process: weights-only when ``prune`` (True, or 'auto': only a PRUNABLE_SCHEMAS state)
+    and the file carries an optimizer, else bytes."""
+    pruned = (pruned_copy(path, dest, schemas=PRUNABLE_SCHEMAS if prune == 'auto' else None) if prune else None)
+    return pruned or verified_copy(path, dest)
+
+
+def require_optimizer(state, path) -> None:
+    """A continuation that restores optimizer state refuses a weights-only (pruned) non-latest checkpoint clearly."""
+    if isinstance(state, dict) and state.get('optimizer_pruned'):
+        raise ValueError(f'{path} is a weights-only checkpoint (optimizer pruned by the checkpoint offload, '
+                         f'plans/STORAGE_POLICY.md 2a): continue from the stage\'s latest checkpoint.pt, which keeps '
+                         'its optimizer')
+
+
 _LOCKS: dict[str, threading.Lock] = {}
 _LOCKS_GUARD = threading.Lock()
 
@@ -330,7 +441,72 @@ def _hdd_link_shortcut(path: Path, mirror: Path) -> dict | None:
     return record
 
 
-def offload_one(path, role: str, settings: OffloadSettings, *, copier=None) -> dict:
+def _rebind(node, name: str, record: dict) -> bool:
+    changed = False
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == name and isinstance(value, dict) and 'sha256' in value:
+                if value.get('sha256') != record['sha256']:
+                    value.update(sha256=record['sha256'], bytes=record['bytes'], optimizer_pruned=True)
+                    changed = True
+            else:
+                changed = _rebind(value, name, record) or changed
+    elif isinstance(node, list):
+        for value in node:
+            changed = _rebind(value, name, record) or changed
+    return changed
+
+
+def rebind_receipts(path: Path, record: dict) -> list[str]:
+    """Receipts beside ``path`` that pin its bytes (``{"<name>": {"sha256": ...}}``, e.g. best-checkpoint.json's
+    ``files``) are rebound to the weights-only file before the swap, marked ``optimizer_pruned``."""
+    rebound = []
+    for receipt in sorted(path.parent.glob('*.json')):
+        try:
+            if receipt.is_symlink() or receipt.stat().st_size > 8 << 20:
+                continue
+            data = json.loads(receipt.read_text())
+        except (OSError, ValueError):
+            continue
+        if _rebind(data, path.name, record):
+            temp = receipt.with_name(receipt.name + '.pending')
+            with open(temp, 'w') as stream:
+                json.dump(data, stream, indent=2)
+                stream.write('\n')
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temp, receipt)
+            rebound.append(str(receipt))
+    return rebound
+
+
+_MANIFEST_FILES: dict[str, str] | None = None
+
+
+def pinned_by_manifest(path) -> str | None:
+    """The corpus manifest (training/corpus-manifests) that lists ``path``: published held/training data is verified
+    byte for byte and refuses symlinks, so such a file is never linked or rewritten."""
+    global _MANIFEST_FILES
+    if _MANIFEST_FILES is None:
+        repo = Path(os.path.realpath(_paths().root('repo')))
+        files = {}
+        for manifest in sorted((repo / 'training' / 'corpus-manifests').glob('*.json')):
+            try:
+                data = json.loads(manifest.read_text())
+            except (OSError, ValueError):
+                continue
+            root, listed = data.get('path'), data.get('files')
+            if not isinstance(root, str) or not isinstance(listed, list):
+                continue
+            base = os.path.realpath(root if root.startswith('/') else repo / root)
+            for item in listed:
+                if isinstance(item, dict) and isinstance(item.get('path'), str):
+                    files[os.path.join(base, item['path'])] = manifest.name
+        _MANIFEST_FILES = files
+    return _MANIFEST_FILES.get(str(_absolute(path)))
+
+
+def offload_one(path, role: str, settings: OffloadSettings, *, copier=None, prune=False) -> dict:
     """Mirror ``path`` (verify, record) and, for the archive role, replace it by a link to the mirror. Returns an
     event; raises on failure (the NVMe file is then untouched)."""
     path = Path(path)
@@ -346,19 +522,26 @@ def offload_one(path, role: str, settings: OffloadSettings, *, copier=None) -> d
     clean_stale(mirror.parent, older_than=settings.stale_part_seconds)
     record = mirror_current(path, mirror)
     copied = False
-    if record is None and role == 'archive' and path.name != 'checkpoint.pt':
+    prune = prune if role == 'archive' and settings.prune_archived else False
+    pinned = pinned_by_manifest(path) if role == 'archive' else None
+    if pinned:
+        return {'event': 'checkpoint_offload_skipped', 'path': str(path), 'reason': f'pinned by corpus manifest {pinned}'}
+    if record is None and role == 'archive' and not prune:
         record = _hdd_link_shortcut(path, mirror)
     if record is None:
         size = path.stat().st_size
         free = shutil.disk_usage(_mount_of(Path(settings.mirror_root)) or settings.mirror_root).free
         if free - size < settings.hdd_floor_bytes:
             raise OSError(f'external disk floor: {free} bytes free, {size} to copy, floor {settings.hdd_floor_bytes}')
-        record = (copier or verified_copy)(path, mirror)
+        record = (copier or local_copy)(path, mirror, prune)
         write_record(mirror, record)
         copied = True
     event = {'event': 'checkpoint_offloaded', 'role': role, 'path': str(path), 'mirror': str(mirror),
-             'bytes': record['bytes'], 'sha256': record['sha256'], 'copied': copied}
+             'bytes': record['bytes'], 'sha256': record['sha256'], 'copied': copied,
+             'optimizer_pruned': bool(record.get('optimizer_pruned')), 'source_bytes': record.get('source_bytes')}
     if role == 'archive' and settings.link_archived:
+        if record.get('optimizer_pruned'):
+            event['receipts'] = rebind_receipts(path, record)  # pins name the weights-only file from here on
         replace_with_link(path, mirror, expect=record['source_identity'])
         event['linked'] = True
     return event
@@ -434,9 +617,10 @@ def _lower_priority(pid: int) -> None:
             pass
 
 
-def child_copy(path, dest) -> dict:
-    """``verified_copy`` in a child process at idle priority: the trainer keeps its GIL and its I/O share."""
-    process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), 'copy', str(path), str(dest)],
+def child_copy(path, dest, prune=False) -> dict:
+    """``local_copy`` in a child process at idle priority: the trainer keeps its GIL and its I/O share."""
+    process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), {True: 'prune', 'auto': 'prune-auto'}.get(prune, 'copy'),
+                                str(path), str(dest)],
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     _lower_priority(process.pid)
     out, err = process.communicate()
@@ -460,7 +644,7 @@ class CheckpointOffloader:
         self.thread = threading.Thread(target=self._run, name='checkpoint-offload', daemon=True)
         self.thread.start()
 
-    def submit(self, path, role: str | None = None) -> None:
+    def submit(self, path, role: str | None = None, prune=False) -> None:
         try:
             path = _absolute(path)
             role = role or role_of(path, self.settings)
@@ -472,18 +656,18 @@ class CheckpointOffloader:
             except OSError:
                 return
             with self.cond:
-                for retry, retry_role in list(self.failed.items()):
-                    self.pending.setdefault(retry, retry_role)
+                for retry, job in list(self.failed.items()):
+                    self.pending.setdefault(retry, job)
                 self.failed.clear()
                 self.pending.pop(str(path), None)  # coalesce: the newest submission goes last
-                self.pending[str(path)] = role
+                self.pending[str(path)] = (role, prune)
                 if str(path.parent) not in self.swept:  # leftovers of earlier processes: this and sibling stages
                     self.swept.add(str(path.parent))
                     siblings = [d for d in sorted(path.parent.parent.iterdir()) if d.is_dir() and d != path.parent
                                 ] if _within_a_run(path) else []
                     for directory, own in ((path.parent, True), *((d, False) for d in siblings)):
                         for item, item_role in sweep_targets(directory, self.settings, own=own):
-                            self.pending.setdefault(str(item), item_role)
+                            self.pending.setdefault(str(item), (item_role, 'auto'))
                 self.cond.notify()
         except Exception as error:  # never fail a write
             self._event({'event': 'checkpoint_offload_failed', 'path': str(path), 'error': repr(error)})
@@ -515,14 +699,14 @@ class CheckpointOffloader:
             with self.cond:
                 while not self.pending:
                     self.cond.wait()
-                path, role = next(iter(self.pending.items()))
+                path, (role, prune) = next(iter(self.pending.items()))
                 del self.pending[path]
                 self.busy = True
             try:
-                self._event(offload_one(path, role, self.settings, copier=self.copier))
+                self._event(offload_one(path, role, self.settings, copier=self.copier, prune=prune))
             except Exception as error:
                 with self.cond:
-                    self.failed[path] = role
+                    self.failed[path] = (role, prune)
                 self._event({'event': 'checkpoint_offload_failed', 'path': path, 'role': role,
                              'error': repr(error)[:500], 'retry': 'at the next checkpoint write'})
             finally:
@@ -569,12 +753,12 @@ def offloader() -> CheckpointOffloader:
         return _OFFLOADER
 
 
-def after_write(path, role: str | None = None) -> None:
+def after_write(path, role: str | None = None, prune=False) -> None:
     """The hook every checkpoint writer calls after a successful write or best publication. Never raises."""
     try:
         settings = _OFFLOADER.settings if _OFFLOADER is not None else OffloadSettings.from_env()
         if mirror_unavailable(path, settings) is None:
-            offloader().submit(path, role)
+            offloader().submit(path, role, prune)
     except Exception as error:
         print(json.dumps({'event': 'checkpoint_offload_failed', 'path': str(path), 'error': repr(error)}),
               flush=True)
@@ -589,5 +773,6 @@ def policy_record(out) -> dict:
                 unavailable=reason)
 
 
-if __name__ == '__main__' and len(sys.argv) == 4 and sys.argv[1] == 'copy':
-    print(json.dumps(verified_copy(sys.argv[2], sys.argv[3])), flush=True)
+if __name__ == '__main__' and len(sys.argv) == 4 and sys.argv[1] in ('copy', 'prune', 'prune-auto'):
+    mode = {'copy': False, 'prune': True, 'prune-auto': 'auto'}[sys.argv[1]]
+    print(json.dumps(local_copy(sys.argv[2], sys.argv[3], prune=mode)), flush=True)

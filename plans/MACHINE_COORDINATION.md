@@ -340,6 +340,12 @@ training inputs, running jobs' outputs. Finished large artifacts move to the ext
   large items for manual review).
 - To bring a file back for latency-critical use, copy it from the archive over the symlink (`cp --remove-destination`)
   and add a `.keep-on-nvme` marker or an exclude line.
+- Active runs offload their own checkpoints as they write them (owner 2026-10-13; plans/STORAGE_POLICY.md 2a,
+  `train/checkpoint_offload.py`): the resumable `checkpoint.pt` stays on the NVMe with a verified disaster mirror under
+  `/mnt/external/natlang-active-lineage/<path under runs>`; best/final/periodic checkpoints are stored there
+  weights-only (optimizer pruned, `optimizer_pruned: true`) and linked back. One-shot for existing runs:
+  `scripts/offload_checkpoints.py`. Pop gets the same code; without a separate external mount it records
+  `offload.unavailable` and changes nothing.
 
 ### Manifest identities in synchronization receipts
 

@@ -76,6 +76,55 @@ Lion momentum 23 GB), every ~15 min at one per 100 updates.
   `text_warmup.py` / `trajectories.py` is proposed to their owners (Pop: C1 checkpoint/export seam; architecture
   session: C2/C3), not done here.
 
+## 2a. Checkpoint offload to the external disk; weights-only non-latest checkpoints (owner 2026-10-13)
+
+Owner: "we should move active run checkpoints to external on an ongoing basis (async from write)", and "prune
+optimizer state from every checkpoint except the latest resume checkpoint". The NVMe holds only what a resume needs:
+the rolling `checkpoint.pt` (with its optimizer) plus the trainer's `.checkpoint-space.reserve`. Implementation:
+`training/neuralese/natlang_neuralese/train/checkpoint_offload.py`, one hook for every trainer
+(`trajectory_state.atomic_checkpoint`, `checkpoint_policy.publish_best`, `text_warmup.retain_best_checkpoint`).
+
+- **Writes are unchanged** (NVMe, pending file, fsync, atomic rename). After a successful write the file goes to one
+  background worker per process; the copy runs in a child process at nice 19 and the idle I/O class, 8 MiB chunks,
+  page cache dropped every 512 MiB (unified memory). A failure is an event (stdout and
+  `<out>/checkpoint-offload.jsonl`), never a training failure; the file is retried at the next write.
+- **Mirror**: `<data_hdd>/natlang-active-lineage/<path relative to ~/natlang/runs>` (`repo/…`, `home/…` for other
+  trees), only when that root is on a mounted filesystem other than the source's (a container without the
+  `/mnt/external` mount gets no mirror). Copy to `<mirror>.offload.part`, fsync, check the source did not change,
+  re-read and compare size and SHA-256, rename, fsync the directory, then `<mirror>.offload.json` (source identity,
+  bytes, SHA-256).
+- **Roles**: `checkpoint.pt` (latest) is mirrored byte for byte as a disaster copy and stays on the NVMe. `best-*.pt`,
+  `final-*.pt`, `checkpoint-*.pt`, `step-*.pt` (archive) move to the mirror and the NVMe file is atomically replaced
+  by a symlink to it (link written beside it, `os.replace`), so every consumer path keeps working. Files listed in a
+  corpus manifest (`training/corpus-manifests`, verified byte for byte, symlinks refused) are never touched.
+- **Weights-only non-latest checkpoints** (owner 2026-10-13): an archived full state is stored on the mirror without
+  its optimizer (every top-level `*optimizer*` entry dropped; `optimizer_pruned: true` and `optimizer_pruned_keys` in
+  the state and in the `.offload.json` record), re-read and compared value by value (bitwise) with the source before
+  the rename; receipts beside the file that pin its SHA-256 (`best-checkpoint.json` `files`) are rebound to the
+  weights-only file (marked `optimizer_pruned`) before the link swap. A Mellum direct state: 47 GB → about 23 GB.
+  Pruned: bests of `CheckpointPolicy` writers (direct SFT, QAT conversion; `prune_best=True`) and, in sweeps and the
+  one-shot, full states of `PRUNABLE_SCHEMAS` (`natlang.neuralese-direct/1`). Not pruned (consumer audit
+  2026-10-13): the text warm-up's best (`core_text_warmup` continues from it, `recipe.py`), the causal bootstrap's
+  best (stage `artifact_sha256` and foundation-certificate pins), trajectory bests, every `checkpoint.pt` (direct,
+  AR-fixup and trajectory handoffs continue from the predecessor's `checkpoint.pt`; it is never pruned, and
+  `PredecessorArchive` links it to the verified mirror when one exists instead of copying it again). Every
+  continuation loader (`direct_sft`, `text_warmup`, `trajectories`, `causal_bootstrap` `--continue-from`) refuses a
+  pruned state with "weights-only checkpoint … continue from the stage's latest checkpoint.pt". A Maple/Mellum
+  direct export proof (`schema_proof.checkpoint_sha256`) is made against the file as it is at export time.
+- **Resume**: when the NVMe `checkpoint.pt` is missing or truncated (cut-off zip) and the run's
+  `checkpoint-policy.json` records a mirror whose record matches, `CheckpointPolicy` points the slot at the mirror (an
+  atomic symlink; the next write replaces it with a regular NVMe file).
+- **Crash consistency**: the NVMe path is always the old file or a link to a mirror renamed into place and made
+  durable first; never a dangling link. Stale `*.offload.part` (30 min) and `*.offload-link` (1 min) leftovers are
+  removed at the next sweep; another copier's `<mirror>.part` is never touched (that file is skipped).
+- **Settings** (recorded under `offload` in each run's `checkpoint-policy.json`): `NATLANG_CHECKPOINT_OFFLOAD=0`
+  disables, `NATLANG_CHECKPOINT_MIRROR` (root), `NATLANG_CHECKPOINT_OFFLOAD_MIN_GB` (1), `NATLANG_CHECKPOINT_OFFLOAD_LATEST=0`,
+  `NATLANG_CHECKPOINT_PRUNE_OPTIMIZER=0`, `NATLANG_CHECKPOINT_OFFLOAD_HDD_FLOOR_GB` (50). A `.keep-on-nvme` marker
+  keeps a directory's files local.
+- **Existing runs**: `scripts/offload_checkpoints.py [RUN_DIR …]` (dry run by default; `--apply`) does the same for
+  already-written checkpoints; defaults: the Mellum direct lineage and Pop's mirrored LFM v8 runs.
+- **Deleting a run** deletes its mirror under `natlang-active-lineage/` too (standing order above).
+
 ## 3. Compact milestones for ternary models
 
 A qualified Maple/Mellum milestone that QAT will not resume from keeps its deployed form only: `qat_export`

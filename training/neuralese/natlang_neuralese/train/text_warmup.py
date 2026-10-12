@@ -1654,6 +1654,8 @@ def main(argv=None):
     continuation=None
     if a.continue_from:
         continuation=torch.load(a.continue_from,map_location='cpu',weights_only=False,mmap=True)
+        from .checkpoint_offload import require_optimizer
+        require_optimizer(continuation,a.continue_from)  # never a weights-only (pruned) checkpoint
         if continuation.get('schema')!='natlang.neuralese-text-warmup/1':raise ValueError('full text warm-up state required')
         old=continuation['identity']['options']
         if any(old[k]!=options[k] for k in ('optimizer','rank')):

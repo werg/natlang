@@ -202,6 +202,8 @@ def main(argv=None):
     inherited = resumed
     if not resumed and args.continue_from:
         inherited = torch.load(args.continue_from, map_location='cpu', mmap=True, weights_only=False)
+        from .checkpoint_offload import require_optimizer
+        require_optimizer(inherited, args.continue_from)  # never a weights-only (pruned) checkpoint
         if inherited.get('schema') != 'natlang.causal-feedback-bootstrap/1':
             raise ValueError('unrecognized bootstrap handoff')
         previous = inherited['identity']

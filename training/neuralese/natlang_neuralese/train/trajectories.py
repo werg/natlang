@@ -1021,6 +1021,8 @@ def main(argv=None):
                               'modules': [Path(m).name for m in changed_code][:20]}), flush=True)
     elif args.continue_from:
         resumed = torch.load(args.continue_from, map_location='cpu', weights_only=False)
+        from .checkpoint_offload import require_optimizer
+        require_optimizer(resumed, args.continue_from)  # never a weights-only (pruned) checkpoint
         from .trajectory_state import LATENT_OPTIMIZER_OPTIONS, check_latent_optimizer_change
         check_latent_optimizer_change(resumed, args.latent_optimizer, continuation=True,
                                       curriculum_change=args.curriculum_change, optimizer_state=args.optimizer_state)

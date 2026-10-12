@@ -1462,6 +1462,8 @@ def main(argv=None):
         # projections and optimizer state continue on this stage's data from update 0; held baselines are this
         # stage's own (measured at update 0 on its held windows), the drift reference stays the base model's.
         state = CheckpointPolicy.load(a.continue_from)
+        from .checkpoint_offload import require_optimizer
+        require_optimizer(state, a.continue_from)  # a weights-only (pruned) best can never be a continuation parent
         if state.get('schema') != SCHEMA:
             raise ValueError('--continue-from is not a neuralese_direct full state')
         previous_identity = state.get('identity') or {}
