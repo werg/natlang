@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -67,7 +68,7 @@ def object_key(sha256: str) -> str:
 
 
 def manifest_id(manifest: dict[str, Any]) -> str:
-    return canonical_json_sha256_hex({k: v for k, v in manifest.items() if k not in ('id', 'created')})
+    return canonical_json_sha256_hex({k: v for k, v in manifest.items() if k not in ('id', 'created', 'directory')})
 
 
 def manifest_key(manifest: dict[str, Any]) -> str:
@@ -137,6 +138,34 @@ def extra_entries(path: str, repo: Path = REPO) -> list[tuple[dict, Path]]:
     for child in sorted(p for p in source.rglob('*') if p.is_file()):
         logical = str(PurePosixPath(path) / child.relative_to(source).as_posix())
         out.append((entry(logical, child), child))
+    return out
+
+
+def hf_entries(spec: str) -> list[tuple[dict, Path | None]]:
+    """``REPO@REVISION=LOCAL_DIR``: every file of a public Hugging Face repo revision as a URL entry at LOCAL_DIR.
+
+    LFS files carry their sha256 in the HF tree (the oid); other files are hashed from the local copy, which must be
+    the same revision (a hub download). The sandbox downloads from HF and verifies; nothing is uploaded.
+    """
+    import urllib.request
+    repo_rev, local = spec.split('=', 1)
+    repo, revision = repo_rev.split('@', 1)
+    url = f'https://huggingface.co/api/models/{repo}/tree/{revision}?recursive=true'
+    with urllib.request.urlopen(url, timeout=60) as response:
+        tree = json.loads(response.read())
+    out = []
+    for node in tree:
+        if node.get('type') != 'file':
+            continue
+        local_file = Path(local) / node['path']
+        digest = (node.get('lfs') or {}).get('oid')
+        if digest is None:
+            if not local_file.is_file():
+                raise BundleError(f'{local_file}: the local copy is needed to hash non-LFS file {node["path"]}')
+            digest = sha256_file_hex(local_file)
+        item = {'path': _safe_relative(str(local_file)), 'sha256': digest, 'bytes': node['size'],
+                'key': object_key(digest), 'url': f'https://huggingface.co/{repo}/resolve/{revision}/{node["path"]}'}
+        out.append((item, None))
     return out
 
 
@@ -251,12 +280,36 @@ def upload(manifest: dict[str, Any], sources: dict[str, Any], bucket: str, s3, d
     return stats
 
 
-def fetch(manifest: dict[str, Any], bucket: str, s3, root: Path, mapping: list[tuple[str, str]] = (),
-          dry_run: bool = False, log=print) -> dict[str, Any]:
-    """Materialize every file, verifying each sha256 before it is moved into place; write a receipt."""
+def download_url(url: str, target: Path, chunk: int = 8 * 1024 * 1024, attempts: int = 4) -> None:
+    """HTTP(S) download with a few resumable retries (Range); the caller verifies the sha256."""
+    import urllib.request
+    for attempt in range(attempts):
+        have = target.stat().st_size if target.exists() else 0
+        request = urllib.request.Request(url, headers={'Range': f'bytes={have}-'} if have else {})
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response, target.open('ab' if have else 'wb') as out:
+                if have and response.status != 206:  # server ignored the range: start over
+                    out.truncate(0)
+                for block in iter(lambda: response.read(chunk), b''):
+                    out.write(block)
+            return
+        except OSError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(10 * 2 ** attempt)
+
+
+def fetch(manifest: dict[str, Any], bucket: str | None, s3, root: Path, mapping: list[tuple[str, str]] = (),
+          dry_run: bool = False, log=print, inbox: Path | None = None) -> dict[str, Any]:
+    """Materialize every file, verifying each sha256 before it is moved into place; write a receipt.
+
+    Sources, first available wins: ``inbox/<sha256>`` (pushed through the sandbox file API by cwctl), the entry's
+    public ``url`` (e.g. Hugging Face resolve URLs), then the bucket.
+    """
     check_manifest(manifest)
     mapping = list(mapping)
     fetched, present = 0, 0
+    used_inbox: set[Path] = set()
     for item in manifest['files']:
         target = target_path(item['path'], root, mapping)
         if target.is_file() and target.stat().st_size == item['bytes'] and sha256_file_hex(target) == item['sha256']:
@@ -271,7 +324,20 @@ def fetch(manifest: dict[str, Any], bucket: str, s3, root: Path, mapping: list[t
         with tempfile.NamedTemporaryFile(dir=target.parent, prefix='.cw-fetch-', delete=False) as tmp:
             temp = Path(tmp.name)
         try:
-            s3.download_file(bucket, item['key'], str(temp))
+            pushed = inbox / item['sha256'] if inbox is not None else None
+            if pushed is not None and pushed.is_file():
+                temp.unlink()
+                try:
+                    os.link(pushed, temp)  # a link, not a move: duplicate contents share one pushed object
+                except OSError:  # another file system (e.g. a target outside the scratch volume)
+                    shutil.copyfile(pushed, temp)
+                used_inbox.add(pushed)
+            elif item.get('url'):
+                download_url(item['url'], temp)
+            elif s3 is not None and bucket:
+                s3.download_file(bucket, item['key'], str(temp))
+            else:
+                raise BundleError(f'{item["path"]}: no source (not pushed, no url, no bucket)')
             actual = sha256_file_hex(temp)
             if actual != item['sha256']:
                 raise BundleError(f'{item["path"]}: downloaded sha256 {actual} != manifest {item["sha256"]}')
@@ -279,6 +345,8 @@ def fetch(manifest: dict[str, Any], bucket: str, s3, root: Path, mapping: list[t
         finally:
             temp.unlink(missing_ok=True)
         fetched += 1
+    for pushed in used_inbox:  # the placed files hold the bytes now; free the inbox links
+        pushed.unlink(missing_ok=True)
     receipt = {'schema': 'natlang.coreweave-fetch-receipt/1', 'bundle': manifest['id'], 'bucket': bucket,
                'fetched': fetched, 'present': present, 'files': len(manifest['files']), 'verified': not dry_run,
                'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
@@ -557,6 +625,8 @@ def main(argv=None) -> int:
     p.add_argument('--stage', action='append', default=[])
     p.add_argument('--corpus', action='append', default=[], help='corpus snapshot id (training/corpus-manifests)')
     p.add_argument('--extra', action='append', default=[], help='file or directory, repo-relative or absolute')
+    p.add_argument('--hf', action='append', default=[], metavar='REPO@REV=LOCAL_DIR',
+                   help='public Hugging Face files as verified URL entries materialized at LOCAL_DIR')
     p.add_argument('--code-sha', help='commit to package as the code snapshot (git archive)')
     p.add_argument('--note', default='')
     p.add_argument('-o', '--out', type=Path, required=True)
@@ -565,11 +635,12 @@ def main(argv=None) -> int:
     p.add_argument('--bucket', required=True)
     p.add_argument('--dry-run', action='store_true')
     p = sub.add_parser('fetch')
-    p.add_argument('--bucket', required=True)
+    p.add_argument('--bucket', help='omit for the bucketless transports (inbox and URLs; needs --manifest)')
     p.add_argument('--manifest-key')
     p.add_argument('--manifest')
     p.add_argument('--pointer-key', help='outputs/<job>/<dir>/latest.json: fetch the output manifest it names')
     p.add_argument('--missing-ok', action='store_true', help='a missing pointer is not an error (first launch)')
+    p.add_argument('--inbox', type=Path, help='directory of pushed objects named by sha256 (file-API transport)')
     p.add_argument('--root', type=Path, default=Path(os.environ.get('NATLANG_REPO', str(REPO))))
     p.add_argument('--map', action='append', default=[])
     p.add_argument('--dry-run', action='store_true')
@@ -586,6 +657,9 @@ def main(argv=None) -> int:
     p.add_argument('--interval', type=float, default=60)
     p.add_argument('--max-interval', type=float, default=1800)
     p.add_argument('--trigger', action='append', help=f'file-name glob (default {", ".join(DEFAULT_TRIGGERS)})')
+    p = sub.add_parser('snapshot', help='write the manifest of a directory (no upload; the file-API transport)')
+    p.add_argument('directory', type=Path)
+    p.add_argument('-o', '--out', type=Path, required=True)
     p = sub.add_parser('record-exit', help='write <prefix>exit.json with the job status')
     p.add_argument('--bucket', required=True)
     p.add_argument('--prefix', required=True)
@@ -606,6 +680,12 @@ def main(argv=None) -> int:
     p.add_argument('--root', type=Path, default=REPO)
     p.add_argument('--map', action='append', default=[])
     args = parser.parse_args(argv)
+    if args.command == 'fetch' and not args.bucket and not args.manifest:
+        parser.error('fetch without --bucket needs --manifest')
+    if args.command == 'fetch' and not args.bucket:
+        fetch(json.loads(Path(args.manifest).read_text()), None, None, args.root, _mapping(args.map), args.dry_run,
+              inbox=args.inbox)
+        return 0
     if args.command in ('upload', 'fetch', 'publish', 'ping', 'watch', 'record-exit', 'gc') and not getattr(args, 'dry_run', False):
         _use_client_venv()
 
@@ -617,12 +697,14 @@ def main(argv=None) -> int:
             pairs += corpus_entries(corpus)
         for extra in args.extra:
             pairs += extra_entries(extra)
+        for spec in args.hf:
+            pairs += hf_entries(spec)
         code, code_source = None, None
         staging = Path(tempfile.mkdtemp(prefix='cw-bundle-'))
         if args.code_sha:
             code, code_source = code_archive(args.code_sha, staging)
         manifest = build_manifest(pairs, code, args.note)
-        sources = {item['key']: str(source) for item, source in pairs}
+        sources = {item['key']: str(source) for item, source in pairs if source is not None}
         if code:
             sources[code['key']] = str(code_source)
         args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -652,7 +734,7 @@ def main(argv=None) -> int:
         if manifest is None:
             print(json.dumps({'event': 'no_pointer', 'pointer': args.pointer_key}))
             return 0 if args.missing_ok else 1
-        fetch(manifest, args.bucket, s3, args.root, _mapping(args.map), args.dry_run)
+        fetch(manifest, args.bucket, s3, args.root, _mapping(args.map), args.dry_run, inbox=args.inbox)
         return 0
     if args.command == 'publish':
         publish_directory(args.directory, args.bucket, args.prefix, None if args.dry_run else s3_client(),
@@ -666,6 +748,14 @@ def main(argv=None) -> int:
         if args.execute:
             plan['deleted'] = gc_execute(s3, args.bucket, plan)
         print(json.dumps({k: v for k, v in plan.items() if k != 'delete'} | {'delete_count': len(plan['delete'])}))
+        return 0
+    if args.command == 'snapshot':
+        manifest, sources = directory_manifest(args.directory, 'snapshot')
+        close_sources(sources)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps({**manifest, 'directory': os.path.abspath(args.directory)}, indent=1) + '\n')
+        print(json.dumps({'event': 'snapshot', 'directory': os.path.abspath(args.directory),
+                          'files': len(manifest['files']), 'bytes': manifest['bytes']}))
         return 0
     if args.command == 'record-exit':
         record = {'job': os.environ.get('NATLANG_CW_JOB'), 'sandbox': os.environ.get('CW_SANDBOX_ID'),

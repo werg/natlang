@@ -42,7 +42,7 @@ import job as jobs  # noqa: E402
 VENV = Path(os.environ.get('NATLANG_CW_VENV', Path.home() / '.local/share/natlang/cw-venv'))
 STATE = Path(os.environ.get('NATLANG_CW_STATE', Path.home() / '.local/state/natlang/coreweave'))
 ENV_FILE = Path(os.environ.get('NATLANG_CW_ENV_FILE', Path.home() / '.config/natlang/coreweave.env'))
-KEY_NAMES = ('CWSANDBOX_API_KEY', 'COREWEAVE_API_TOKEN')
+KEY_NAMES = ('CWSANDBOX_API_KEY', 'COREWEAVE_API_TOKEN', 'WANDB_API_KEY')
 PASSTHROUGH = ('ls', 'get', 'exec', 'logs', 'stop', 'files', 'snapshots', 'delete', 'sh')
 SMOKE_CHECK = ("import torch; print(torch.__version__, torch.version.cuda, torch.cuda.get_arch_list()); "
                "print(torch.cuda.get_device_name(0), torch.cuda.get_device_capability(0), "
@@ -73,8 +73,31 @@ def load_env_file(path: Path = ENV_FILE) -> list[str]:
     return loaded
 
 
+def auth_strategy() -> str:
+    """`coreweave_api_key` or `wandb` (CWSANDBOX_AUTH, the name the cwsandbox CLI reads; --auth sets it).
+
+    Unset: a CoreWeave token if one is present, else W&B if WANDB_API_KEY is. W&B auth serves serverless sandboxes
+    (billed through Forge); runner discovery and other admin calls need a CoreWeave token.
+    """
+    chosen = os.environ.get('CWSANDBOX_AUTH')
+    if chosen:
+        if chosen not in ('coreweave_api_key', 'wandb'):
+            raise ControllerError(f'CWSANDBOX_AUTH is coreweave_api_key or wandb, got {chosen!r}')
+        return chosen
+    if os.environ.get('CWSANDBOX_API_KEY') or os.environ.get('COREWEAVE_API_TOKEN'):
+        return 'coreweave_api_key'
+    return 'wandb' if os.environ.get('WANDB_API_KEY') else 'coreweave_api_key'
+
+
+def sdk_auth():
+    from cwsandbox import AuthStrategy
+    return AuthStrategy(auth_strategy())
+
+
 def api_key_name() -> str | None:
     """Name of the credential in use; COREWEAVE_API_TOKEN alone is copied to CWSANDBOX_API_KEY for the SDK."""
+    if auth_strategy() == 'wandb':
+        return 'WANDB_API_KEY' if os.environ.get('WANDB_API_KEY') else None
     if os.environ.get('CWSANDBOX_API_KEY'):
         return 'CWSANDBOX_API_KEY'
     if os.environ.get('COREWEAVE_API_TOKEN'):
@@ -85,8 +108,9 @@ def api_key_name() -> str | None:
 
 def require_key() -> None:
     if api_key_name() is None:
-        raise ControllerError('no credential: export CWSANDBOX_API_KEY (CoreWeave API access token with the Sandbox '
-                              f'User role), or put it in {ENV_FILE} (chmod 600)')
+        raise ControllerError(f'no credential for auth {auth_strategy()}: export CWSANDBOX_API_KEY (CoreWeave API access '
+                              'token with the Sandbox User role) or WANDB_API_KEY with CWSANDBOX_AUTH=wandb, or put '
+                              f'it in {ENV_FILE} (chmod 600)')
 
 
 def in_venv() -> bool:
@@ -193,7 +217,76 @@ def records() -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
-def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None) -> dict:
+# Create throttle (owner 2026-10-12: never hit CoreWeave's create rate limits; creates only for real jobs).
+CREATE_INTERVAL_SECONDS = float(os.environ.get('NATLANG_CW_CREATE_INTERVAL', '45'))
+CREATE_ATTEMPTS = int(os.environ.get('NATLANG_CW_CREATE_ATTEMPTS', '5'))
+BACKOFF_BASE_SECONDS = 60.0
+BACKOFF_CAP_SECONDS = 1800.0
+RETRYABLE_REASONS = {'CWSANDBOX_SERVERLESS_CREATE_THROTTLED', 'CWSANDBOX_OCCUPANCY_QUOTA_EXCEEDED',
+                     'CWSANDBOX_RUNNER_CAPACITY_EXHAUSTED', 'CWSANDBOX_RUNNER_OVERLOADED', 'CWSANDBOX_RUNNER_UNAVAILABLE',
+                     'CWSANDBOX_BACKEND_UNAVAILABLE'}
+
+
+def error_facts(error: BaseException) -> dict:
+    """reason / metadata / retry delay of a cwsandbox error, and whether a create may be retried after backoff."""
+    reason = getattr(error, 'reason', None)
+    delay = getattr(error, 'retry_delay', None)
+    text = f'{type(error).__name__}: {error}'
+    retryable = (reason in RETRYABLE_REASONS or type(error).__name__ == 'SandboxResourceExhaustedError'
+                 or 'RESOURCE_EXHAUSTED' in text or '429' in text)
+    return {'reason': reason, 'metadata': dict(getattr(error, 'metadata', {}) or {}),
+            'retry_delay_seconds': delay.total_seconds() if delay is not None else None, 'error': text[:500],
+            'retryable': retryable}
+
+
+def backoff_seconds(attempt: int, hint: float | None, rand=None) -> float:
+    """Exponential backoff with full jitter, never below the server's retry hint nor the create interval."""
+    import random
+    rand = rand or random.random
+    ceiling = min(BACKOFF_CAP_SECONDS, BACKOFF_BASE_SECONDS * 2 ** attempt)
+    return max(hint or 0.0, CREATE_INTERVAL_SECONDS, ceiling * (0.5 + 0.5 * rand()))
+
+
+def throttled_create(create, *, sleep=time.sleep, clock=time.time, attempts: int | None = None):
+    """Run ``create()`` serialized across processes (a file lock), at least CREATE_INTERVAL_SECONDS after the
+    previous create from this machine, retrying only retryable errors with backoff. Every refusal is recorded
+    (an occupancy-quota error tells us the real concurrent limit: learned passively, never probed)."""
+    import fcntl
+    STATE.mkdir(parents=True, exist_ok=True)
+    attempts = attempts or CREATE_ATTEMPTS
+    with (STATE / 'create.lock').open('a+') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        stamp = STATE / 'last-create'
+        for attempt in range(attempts):
+            last = float(stamp.read_text()) if stamp.is_file() else 0.0
+            wait = last + CREATE_INTERVAL_SECONDS - clock()
+            if wait > 0:
+                sleep(wait)
+            stamp.write_text(str(clock()))
+            try:
+                return create()
+            except Exception as error:
+                facts = error_facts(error)
+                record({'event': 'create_refused', 'attempt': attempt, **facts})
+                if facts['reason'] == 'CWSANDBOX_OCCUPANCY_QUOTA_EXCEEDED':
+                    record({'event': 'quota_observed', 'limit': facts['metadata'].get('limit'),
+                            'current': facts['metadata'].get('current')})
+                if not facts['retryable'] or attempt == attempts - 1:
+                    raise
+                sleep(backoff_seconds(attempt, facts['retry_delay_seconds']))
+    raise AssertionError('unreachable')
+
+
+def run_arguments(request: dict) -> list[str]:
+    """`Sandbox.run(*args)` takes the command and its arguments positionally (the constructor takes command=/args=)."""
+    return [request['command'], *request.get('args', [])]
+
+
+def run_keywords(request: dict) -> dict:
+    return {k: v for k, v in request.items() if k not in ('command', 'args')}
+
+
+def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, bundle_file: Path | None = None) -> dict:
     request = jobs.sandbox_request(job, bootstrap_text())
     summary = {'job': job['id'], 'kind': job['kind'], 'placement': job['placement'],
                'cost': jobs.cost_estimate(job, gpu_hour_price), 'request': describe_request(request)}
@@ -204,15 +297,27 @@ def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None) -
         raise ControllerError(f'the placement decision put this job on {where!r} ({job["placement"]["reason"]}); '
                               'run `cwctl.py place` again when the fleet changes')
     require_key()
-    from cwsandbox import AuthStrategy, Sandbox
-    sandbox = Sandbox.run(auth=AuthStrategy.COREWEAVE_API_KEY, **request)
+    from cwsandbox import Sandbox
+    auth = sdk_auth()
+    created = time.time()
+    sandbox = throttled_create(lambda: Sandbox.run(*run_arguments(request), auth=auth, **run_keywords(request)))
+    created = max(created, time.time() - 5)  # the throttle may have waited before the create itself
     entry = {'event': 'launched', 'sandbox_id': sandbox.sandbox_id, 'job': job['id'], 'kind': job['kind'],
              'lifetime_hours': job['lifetime_hours'], 'resources': job['resources'], 'bucket': job.get('bucket'),
              'bundle': job.get('bundle'), 'reason': job['placement']['reason'], 'cost': summary['cost']}
     record(entry)
     if wait:
-        sandbox.wait()
+        # GPU sandboxes attach the GPU to a VM and pull the image (NGC PyTorch is ~20 GB): far beyond the client's
+        # 300 s default. The first measured GPU start is in plans/COREWEAVE_SANDBOXES.md.
+        sandbox.wait(timeout=float(os.environ.get('NATLANG_CW_START_TIMEOUT', '5400')))
         entry['status'] = str(sandbox.status)
+        entry['seconds_to_running'] = round(time.time() - created, 1)
+        record({'event': 'running', 'sandbox_id': entry['sandbox_id'], 'seconds_to_running': entry['seconds_to_running']})
+    if job['transport'] == 'api' and bundle_file is not None:
+        if not wait:
+            sandbox.wait(timeout=float(os.environ.get('NATLANG_CW_START_TIMEOUT', '5400')))
+        entry['push'] = push_inputs(sandbox, job, bundle_file)
+        record({'event': 'inputs_pushed', 'sandbox_id': entry['sandbox_id'], **entry['push']})
     return {**entry, 'cost': summary['cost']}
 
 
@@ -235,20 +340,104 @@ def place(job_path: Path, mode: str | None, model: str | None, write: bool) -> d
     return {'decision': served, 'needs': needs, 'fleet': fleet, 'crisp': item['crisp'], 'written': write}
 
 
+SMOKE_PROBES = ('echo "== nvidia-smi"; nvidia-smi; '
+                'echo "== egress"; for u in https://pypi.org/simple/boto3/ https://nodejs.org/dist/index.json '
+                'https://registry.npmjs.org/ https://huggingface.co https://github.com https://cwobject.com; do '
+                'printf "%s " "$u"; curl -s -o /dev/null -m 15 -w "%{http_code}\\n" "$u" || echo unreachable; done; '
+                'echo "== env"; env | grep -E "^(AWS_|CW_)" | sed "s/=.*/=<set>/"; '
+                'echo "== disk"; df -h /work; nproc; free -g; ')
+
+
+PUSH_CHUNK = 8 * 1024 * 1024
+
+
+def _chunks(path: Path):
+    with path.open('rb') as stream:
+        for block in iter(lambda: stream.read(PUSH_CHUNK), b''):
+            yield block
+
+
+def push_inputs(sandbox, job: dict, manifest_path: Path, log=print) -> dict:
+    """File-API transport: push bundle.json, the code snapshot and every entry without a public URL into the
+    sandbox's inbox (named by sha256), then write the inputs-ready marker the bootstrap waits for."""
+    manifest = json.loads(manifest_path.read_text())
+    sources = json.loads(manifest_path.with_suffix('.sources.json').read_text())
+    inbox = f"{job['scratch']['path']}/.coreweave/inbox"
+    pushed, bytes_pushed = 0, 0
+    items = [i for i in manifest['files'] if not i.get('url')] + ([manifest['code']] if manifest.get('code') else [])
+    seen = set()
+    for item in items:
+        if item['sha256'] in seen:
+            continue
+        seen.add(item['sha256'])
+        source = Path(sources[item['key']])
+        started = time.time()
+        sandbox.write_file_streaming(f"{inbox}/{item['sha256']}", _chunks(source), timeout_seconds=7200).result()
+        pushed += 1
+        bytes_pushed += item['bytes']
+        log(json.dumps({'event': 'pushed', 'path': item.get('path', 'code'), 'bytes': item['bytes'],
+                        'seconds': round(time.time() - started, 1)}))
+    sandbox.write_file(f"{job['scratch']['path']}/.coreweave/bundle.json", manifest_path.read_bytes()).result()
+    sandbox.write_file(f"{job['scratch']['path']}/.coreweave/inputs-ready", b'').result()
+    return {'pushed': pushed, 'bytes': bytes_pushed}
+
+
+def collect(sandbox_id: str, scratch: str = '/work', mapping: list[tuple[str, str]] = (), timeout: float = 86400,
+            log=print) -> dict:
+    """File-API transport: wait for the bootstrap's outputs-ready, pull every output file, verify its sha256 against
+    the manifest the sandbox wrote, place it (``mapping`` remaps path prefixes), then release the sandbox."""
+    import bundle
+    from cwsandbox import Sandbox
+    sandbox = Sandbox.from_id(sandbox_id, auth=sdk_auth()).result()
+    base = f'{scratch}/.coreweave'
+    deadline = time.time() + timeout
+    while sandbox.exec(['test', '-f', f'{base}/outputs-ready']).result().returncode != 0:
+        if time.time() > deadline:
+            raise ControllerError(f'{sandbox_id}: no outputs-ready within {timeout} s')
+        time.sleep(30)
+    names = sandbox.exec(['sh', '-c', f'ls {base}/outputs/ 2>/dev/null; cat {base}/exit-status']).result().stdout.split()
+    status = int(names.pop()) if names and names[-1].lstrip('-').isdigit() else None
+    results = []
+    for name in names:
+        manifest = json.loads(sandbox.read_file(f'{base}/outputs/{name}').result())
+        files = 0
+        for item in manifest['files']:
+            target = bundle.target_path(item['path'], Path('/'), list(mapping))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temp = target.with_name(f'.cw-fetch-{target.name}')
+            with temp.open('wb') as out:
+                for block in sandbox.read_file_streaming(item['path'], timeout_seconds=7200):
+                    out.write(block)
+            if bundle.sha256_file_hex(temp) != item['sha256']:
+                temp.unlink()
+                raise ControllerError(f'{item["path"]}: pulled bytes do not match the sandbox manifest')
+            temp.replace(target)
+            files += 1
+        results.append({'directory': manifest.get('directory'), 'files': files, 'bytes': manifest['bytes'],
+                        'bundle': manifest['id']})
+        log(json.dumps({'event': 'collected', **results[-1]}))
+    sandbox.write_file(f'{base}/outputs-collected', b'').result()
+    entry = {'event': 'collected', 'sandbox_id': sandbox_id, 'status': status, 'outputs': results}
+    record(entry)
+    return entry
+
+
 def smoke_job(gpu: bool) -> dict:
-    command = ['python', '-c', SMOKE_CHECK] if gpu else ['sh', '-c', 'uname -a; nproc; free -g; df -h /work']
+    command = (['sh', '-c', SMOKE_PROBES + 'python -c "$0"', SMOKE_CHECK] if gpu
+               else ['sh', '-c', 'uname -a; nproc; free -g; df -h /work'])
     return {'schema': jobs.SCHEMA, 'id': 'smoke-gpu' if gpu else 'smoke-cpu', 'kind': 'smoke',
             'placement': {'reason': 'bring-up smoke: credentials, placement, image pull, GPU visibility'},
             'image': 'nvcr.io/nvidia/pytorch:26.09-py3' if gpu else 'python:3.11',
             'resources': {'cpu': '4', 'memory': '16Gi', 'gpu': 1} if gpu else {'cpu': '1', 'memory': '2Gi'},
-            'lifetime_hours': 0.25, 'scratch': {'path': '/work', 'size': '20Gi'},
+            'lifetime_hours': 2, 'scratch': {'path': '/work', 'size': '20Gi'},
             'env': {'NATLANG_CW_IMAGE_READY': '1'}, 'command': command}
 
 
 def doctor() -> dict:
     facts = {'venv': str(VENV), 'venv_present': (VENV / 'bin' / 'python').is_file(), 'running_in_venv': in_venv(),
              'env_file': str(ENV_FILE), 'env_file_present': ENV_FILE.is_file(),
-             'credential': api_key_name(), 'credential_names_checked': list(KEY_NAMES),
+             'auth': auth_strategy(), 'credential': api_key_name(),
+             'credential_names_checked': list(KEY_NAMES),
              'bucket': os.environ.get('NATLANG_CW_BUCKET'), 'region': os.environ.get('AWS_REGION')
              or os.environ.get('NATLANG_CW_REGION'), 'state': str(STATE)}
     for module in ('cwsandbox', 'boto3'):
@@ -260,16 +449,27 @@ def doctor() -> dict:
     return facts
 
 
-def check_smoke(sandbox_id: str, gpu: bool, timeout: float = 1800) -> dict:
+def check_smoke(sandbox_id: str, gpu: bool, timeout: float = 5400) -> dict:
     """Wait for the smoke to complete and check its log; a passed GPU smoke is what makes CoreWeave "ready"."""
-    from cwsandbox import AuthStrategy, Sandbox
-    sandbox = Sandbox.from_id(sandbox_id, auth=AuthStrategy.COREWEAVE_API_KEY).result()
-    sandbox.wait_until_complete(timeout, raise_on_termination=False).result()
+    from cwsandbox import Sandbox
+    sandbox = Sandbox.from_id(sandbox_id, auth=sdk_auth()).result()
+    started = time.time()
+    try:
+        sandbox.wait_until_complete(timeout, raise_on_termination=False).result()
+        completed = True
+    except Exception as error:  # still running at the timeout: the container may be restarting
+        completed, sandbox_error = False, f'{type(error).__name__}: {error}'
     text = ''.join(sandbox.stream_logs())
     ok = ('sm_120' in text and '"status":0' in text) if gpu else '"status":0' in text
     result = {'event': 'gpu_smoke_ok' if gpu and ok else 'smoke_ok' if ok else 'smoke_failed',
-              'sandbox_id': sandbox_id, 'log_tail': text[-2000:]}
-    record({k: v for k, v in result.items() if k != 'log_tail'})
+              'sandbox_id': sandbox_id, 'completed': completed, 'status': str(sandbox.status),
+              'seconds_waiting_for_completion': round(time.time() - started, 1),
+              'bootstrap_starts': text.count('"bootstrap":"start"'), 'log': text[-12000:]}
+    if not completed:
+        result['error'] = sandbox_error
+        sandbox.stop(graceful_shutdown_seconds=10, missing_ok=True).result()
+        record({'event': 'stop', 'args': [sandbox_id], 'why': 'smoke did not complete'})
+    record({k: v for k, v in result.items() if k != 'log'})
     return result
 
 
@@ -292,11 +492,15 @@ def passthrough(argv: list[str]) -> int:
         argv = [*argv, '--graceful-shutdown-seconds', os.environ.get('NATLANG_CW_STOP_GRACE', '600')]
     if argv[0] == 'stop':
         record({'event': 'stop', 'args': argv[1:]})
+    # The CLI reads CWSANDBOX_AUTH and the key from this environment; nothing is put on its command line.
+    os.environ['CWSANDBOX_AUTH'] = auth_strategy()
     return subprocess.call([str(cli), *argv])
 
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ['--auth'] and len(argv) > 1:
+        os.environ['CWSANDBOX_AUTH'], argv = argv[1], argv[2:]
     load_env_file()
     if argv and argv[0] in PASSTHROUGH:
         return passthrough(argv)
@@ -308,6 +512,8 @@ def main(argv=None) -> int:
         p.add_argument('job', type=Path)
         p.add_argument('--gpu-hour-price', type=float, help='USD per GPU-hour once CoreWeave quotes it')
         p.add_argument('--bundle', help='bundle manifest key, bundles/<id>.json (from bundle.py plan + upload)')
+        p.add_argument('--bundle-file', type=Path, help='local manifest from bundle.py plan: pushed through the file '
+                       'API (transport "api", no bucket)')
         p.add_argument('--bucket', help='AI Object Storage bucket (default NATLANG_CW_BUCKET)')
         p.add_argument('--resume', action='store_true',
                        help='continue this job id from its latest published outputs (after expiry, stop or failure)')
@@ -322,6 +528,11 @@ def main(argv=None) -> int:
     p = sub.add_parser('smoke')
     p.add_argument('--gpu', action='store_true')
     p.add_argument('--dry-run', action='store_true')
+    p.add_argument('--attach', metavar='SANDBOX_ID', help='check an already launched smoke instead of creating one')
+    p = sub.add_parser('collect', help='pull and verify a file-API job\'s outputs, then release its sandbox')
+    p.add_argument('sandbox_id')
+    p.add_argument('--scratch', default='/work')
+    p.add_argument('--map', action='append', default=[], help='OLD=NEW path prefix for where outputs land')
     sub.add_parser('records')
     sub.add_parser('status-line')
     args = parser.parse_args(argv)
@@ -330,9 +541,14 @@ def main(argv=None) -> int:
     elif args.command == 'plan':
         print(json.dumps(launch(load_job(args.job, args.bundle, args.bucket, args.resume), True, False, args.gpu_hour_price), indent=1))
     elif args.command == 'launch':
-        print(json.dumps(launch(load_job(args.job, args.bundle, args.bucket, args.resume), args.dry_run, args.wait, args.gpu_hour_price), indent=1))
+        print(json.dumps(launch(load_job(args.job, args.bundle, args.bucket, args.resume), args.dry_run, args.wait, args.gpu_hour_price, args.bundle_file), indent=1))
+    elif args.command == 'collect':
+        mapping = [tuple(m.split('=', 1)) for m in args.map]
+        print(json.dumps(collect(args.sandbox_id, args.scratch, mapping), indent=1))
     elif args.command == 'place':
         print(json.dumps(place(args.job, args.mode, args.model, args.write), indent=1))
+    elif args.command == 'smoke' and args.attach:
+        print(json.dumps(check_smoke(args.attach, args.gpu), indent=1))
     elif args.command == 'smoke':
         result = launch(jobs.validate(smoke_job(args.gpu)), args.dry_run, not args.dry_run, None)
         print(json.dumps(result, indent=1))

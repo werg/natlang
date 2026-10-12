@@ -11,10 +11,10 @@
   "memory": "64Gi",
   "gpu": 1
  },
- "lifetime_hours": 4,
+ "lifetime_hours": 12,
  "scratch": {
   "path": "/work",
-  "size": "120Gi"
+  "size": "200Gi"
  },
  "env": {
   "HF_HUB_OFFLINE": "1",
@@ -47,5 +47,6 @@
   "lineage_owner": "dgx",
   "moves_active_lineage": false
  },
- "bundle_plan": "scripts/coreweave/bundle.py plan --code-sha origin/main --extra runs/neuralese-direct-mellum-20261011/heads-raw-token.pt --extra runs/natlang-held-task-packet-v2-20261012 --extra /home/werg/data/models/mellum21-12b-a2.5b-thinking -o /tmp/cw/heldv2-base-mellum.json (the backbone directory is the heads checkpoint's pinned base; it materializes at the same absolute path through the bootstrap's mirror roots)"
+ "bundle_plan": "scripts/coreweave/bundle.py plan --code-sha <pushed commit> --extra runs/neuralese-direct-mellum-20261011/heads-raw-token.pt --extra runs/natlang-held-task-packet-v2-20261012 --hf JetBrains/Mellum2.1-12B-A2.5B-Thinking@92ddae9fc7665e9f801d141d2e5a6b2caf2460c4=/home/werg/data/models/mellum21-12b-a2.5b-thinking -o /tmp/cw/heldv2-base-mellum.json; then cwctl.py launch <this> --bundle-file /tmp/cw/heldv2-base-mellum.json and cwctl.py collect <id> --map /home/werg/natlang/runs/heldv2-base-mellum-full=/home/werg/natlang/runs/heldv2-base-mellum-full-cw (model weights come from the verified HF URLs; code, heads and packet are pushed through the file API)",
+ "transport": "api"
 }

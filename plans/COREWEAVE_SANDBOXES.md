@@ -375,3 +375,139 @@ Check in the smokes:
 - How long does the GPU sandbox take to start?
 
 Record the answers here.
+
+## 6. Auth we have, and the data path without a bucket (2026-10-12)
+
+The owner authorized the W&B key for sandboxes. It lives in `~/.config/natlang/coreweave.env` (mode 600) with
+`CWSANDBOX_AUTH=wandb`, `WANDB_ENTITY=werg` and `WANDB_PROJECT=natlang`. `cwctl.py` picks the strategy from
+`CWSANDBOX_AUTH` (or a leading `--auth wandb|coreweave_api_key`). It never prints the key or forwards it into a
+sandbox.
+
+What W&B auth does not give us:
+- **Runner discovery.** `list_runners` answers "W&B auth is not allowed for this sandbox operation".
+- **The object-storage identity.** `object_storage_access` needs a WIF configuration registered by a CoreWeave
+  `SANDBOX_ADMIN` token for an org with an AI Object Storage bucket. A W&B-billed org has neither. Untested: the
+  sandbox create would be refused, and we create sandboxes only for real jobs.
+- **The token exchange.** It needs a CoreWeave API token.
+
+So, until the owner creates a CoreWeave org token, there is no bucket. The owner would create: a CoreWeave API
+access token with Sandbox User, Sandbox Admin and Object Storage Admin, a bucket, and the WIF setup in section 5.
+Data takes one of these paths, all keeping the bundle manifest as the contract and verifying sha256 on arrival:
+
+1. **Public URLs, verified.** A bundle entry may carry `url`.
+   - Mellum2.1 is public and ungated on Hugging Face. The DGX copy `/home/werg/data/models/mellum21-12b-a2.5b-thinking`
+     is the HF download at revision `92ddae9f`: its `.cache/huggingface/download/*.metadata` etags equal the HF LFS
+     sha256s (`model-00001…` = `f5ccf801…`).
+   - So the sandbox downloads the 23 GB from `https://huggingface.co/<repo>/resolve/<rev>/<file>`, at CoreWeave's
+     bandwidth, not DGX's uplink, and checks each file against the manifest's sha256.
+   - The same works for public base models, the LFM QAD source, and public datasets.
+2. **The sandbox file API, controller-pushed.** This is for our own small and medium files: the code snapshot (58 MB),
+   heads (124 MB), packets and union shards (GB).
+   - `write_file_streaming` into a CAS inbox in the sandbox. The unary file calls are capped at 32 MiB; streaming is
+     the large-file path.
+   - The bootstrap waits for an `inputs-ready` marker, then `bundle.py fetch` moves inbox objects into place after
+     verifying them.
+   - Outputs come back with `read_file_streaming`, verified against the manifest the bootstrap writes.
+   - A completed sandbox has no file API, so in this mode the bootstrap waits for an `outputs-collected` marker (or a
+     timeout) before it exits.
+   - For training this is `cwctl.py collect --follow`, which pulls each new checkpoint. That is the same
+     incremental-publish contract, with the controller pulling.
+3. **W&B Artifacts as the transport.** This needs a W&B credential inside the sandbox. The only acceptable way is
+   the platform's secret store, `secrets=[Secret(store="wandb", name=<W&B secret>, env_var="WANDB_API_KEY")]`,
+   which the owner creates in W&B. We never copy the key in.
+   - Strengths:
+     - content deduplication and versioning, with aliases such as `latest`;
+     - lineage (run → artifact);
+     - one auth for DGX, Pop and sandboxes;
+     - good fit for checkpoints and run outputs.
+   - Weaknesses:
+     - the digests are W&B's, not sha256 (we ship our manifest inside the artifact and verify our hashes on
+       arrival, as now);
+     - W&B storage pricing and per-file limits for 47 GB checkpoints are unknown;
+     - throughput from CoreWeave to W&B storage is unmeasured.
+   - Verdict: a good **output and checkpoint** path once the owner creates the W&B secret. Inputs are better served by
+     paths 1 and 2, since public weights need no storage at all.
+
+Order of use: URL inputs plus API push now. Then W&B Artifacts for outputs when the owner adds the secret, or the
+CoreWeave bucket when the owner adds an org token. Either replaces path 2's controller pull for long training.
+
+## 7. Migration plan: move training and teacher generation off DGX (owner target state, 2026-10-12)
+
+Target state:
+- **Sandboxes:** Mellum v4 and its successor stages, the e2e stage, ablation and dragnet arms, task evals and base
+  references, teacher data generation (serving plus collection lanes).
+- **DGX:** investigations, tests and prototyping.
+- **Working ceiling:** about 20 concurrent GPUs. It is learned passively: an occupancy-quota error on a normal create
+  is recorded as `quota_observed`. No probing.
+- **Creates:** throttled. They are serialized by a lock, at least 45 s apart (`NATLANG_CW_CREATE_INTERVAL`), with
+  exponential backoff and jitter on 429, `CWSANDBOX_SERVERLESS_CREATE_THROTTLED` and `RESOURCE_EXHAUSTED`, and
+  never a tight loop. Long-lived sandboxes are preferred, with several jobs exec'ed into one.
+- **Training lifetime:** training sandboxes get the maximum lifetime, 30 days (`job.py` default for `kind: train`).
+  The bootstrap exits when the job ends, so the sandbox completes then, and the lifetime is only a ceiling.
+- **Cost:** the preview is free; the only limit is the GPU quota.
+
+Steps, in order. Each step needs the previous one.
+
+**(a) GPU smoke.**
+- Needs: the public `nvcr.io/nvidia/pytorch:26.09-py3` (x86_64), the bootstrap, and nothing else.
+- Answers:
+  - GPU model, memory, driver and CUDA from `nvidia-smi`;
+  - torch `sm_120`;
+  - egress to pypi, nodejs.org, npm, Hugging Face, GitHub and cwobject.com;
+  - start-up time;
+  - whether exit 0 completes the sandbox.
+- Results: section 8.
+
+**(b) Mellum base held-task reference** (`jobs/heldv2-base-mellum.json`).
+- Data:
+  - the model by verified HF URLs;
+  - the code snapshot, heads and packet pushed through the file API.
+- Needs node ≥ 22 and a ts-host build in the sandbox. The bootstrap installs them, checked against `SHASUMS256.txt`.
+- Output back: `runs/heldv2-base-mellum-full/` pulled and verified.
+- Check: compare with the DGX value when DGX's pause-window run exists.
+
+**(c) Teacher serving plus one collection lane, end to end.**
+- Engine: vLLM with the DGX teacher's exact flags (`nvidia/Qwen3.6-35B-A3B-NVFP4`, `--max-model-len 65536`,
+  `--kv-cache-dtype fp8`, `--enable-prefix-caching`, the qwen3 tool and reasoning parsers). `--gpu-memory-utilization`
+  rises from 0.45 to about 0.90, because nothing else shares the 96 GB. NVFP4 is native on Blackwell `sm_120`.
+- Image: the public `vllm/vllm-openai` amd64 image. The serving-engine choice and tuning belong to the hardware agent
+  (plans/COREWEAVE_HARDWARE_OPTIMIZATION.md).
+- Topology A (first): **teacher and lane in one sandbox.**
+  - vLLM serves on `127.0.0.1:8082`, the same URL the lanes use on DGX. The node collectors (ts-host) run beside it.
+  - No public port, no auth surface, one create.
+  - The collection outputs (`*.ir.jsonl`, turns, SFT rows) are published as a bundle manifest. DGX registers them in
+    `training/neuralese_corpora.json` with an immutable corpus manifest under `training/corpus-manifests/`, as for
+    any lane. Copying is not admission.
+- Topology B (later, for DGX- or Pop-side lanes): **a long-lived serving sandbox with a public HTTPS endpoint.**
+  - Sandboxes can expose ports: `services=[Service(port, visibility=PUBLIC, endpoint=Endpoint(kind=HTTPS,
+    auth=OPEN))]`. The URL appears in `service_urls` once the sandbox is RUNNING. At most about 5 services per
+    sandbox.
+  - The platform does not authenticate callers, so vLLM runs with `--api-key` set to a per-sandbox token. `cwctl`
+    generates it, keeps it in `~/.local/state/natlang/coreweave/tokens/<job>` (mode 600), and passes it as a
+    declared endpoint token (not an owner credential).
+  - Other sandboxes can reach it the same way, or through `EgressRule(tenant=…)`.
+- Needs:
+  - the lane's inputs (selection/case IR JSONL, small) by API push;
+  - the model by HF URL (public);
+  - throughput measured against DGX :8082 on the same lane.
+
+**(d) One e2e or ablation training arm.**
+- Data: the export or checkpoint it starts from (via the file API until a bucket or W&B Artifacts exists), union
+  subsets, heads.
+- Lifetime 30 days. `bundle.py watch`-style incremental checkpoint pulls (`cwctl.py collect --follow`).
+- Checkpoint path back: pulled into `runs/<arm>-cw/` by `--map`, verified.
+- Throughput and host-RAM peak are compared with DGX. Batch size, compile and FP8 settings come from the hardware
+  agent's benchmark job.
+
+**(e) Mellum lineage handoff to a sandbox.**
+1. The v4 run directory (`checkpoint.pt` 47 GB plus state) goes up at the same absolute paths, through the mirror
+   roots.
+2. The sandbox runs `recipe.py --handoff`, which resumes from that exact checkpoint and optimizer state.
+3. Incremental checkpoint publishing brings every checkpoint back to DGX.
+
+Policy (`placeJob.nl` step 2): moving the active lineage is the owner's decision, so this step needs the owner's go,
+and the coordinator briefs Pop.
+
+## 8. Measured on CoreWeave
+
+(pending: GPU smoke)

@@ -379,3 +379,115 @@ def test_launch_refuses_a_job_placed_elsewhere(monkeypatch):
     with pytest.raises(cwctl.ControllerError, match="queue-dgx"):
         cwctl.launch(placed, False, False, None)
     assert cwctl.launch(placed, True, False, None)['dry_run']  # the dry run still shows the request
+
+
+def test_run_call_matches_the_installed_client_signature():
+    cwsandbox = pytest.importorskip('cwsandbox')
+    import inspect
+    request = job.sandbox_request(base_job(bucket='natlang-cw'), 'echo boot')
+    signature = inspect.signature(cwsandbox.Sandbox.run)
+    signature.bind(*cwctl.run_arguments(request), auth=None, **cwctl.run_keywords(request))
+    assert cwctl.run_arguments(request)[:2] == ['/bin/bash', job.BOOTSTRAP_PATH]
+
+
+def test_throttle_spaces_creates_and_backs_off_only_on_retryable(tmp_path, monkeypatch):
+    monkeypatch.setattr(cwctl, 'STATE', tmp_path)
+    monkeypatch.setattr(cwctl, 'CREATE_INTERVAL_SECONDS', 45.0)
+    now, sleeps = [1000.0], []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    class Throttled(Exception):
+        reason, metadata, retry_delay = 'CWSANDBOX_SERVERLESS_CREATE_THROTTLED', {}, None
+
+    calls = []
+
+    def create():
+        calls.append(now[0])
+        if len(calls) == 1:
+            raise Throttled('429')
+        return 'sandbox'
+
+    assert cwctl.throttled_create(create, sleep=sleep, clock=lambda: now[0]) == 'sandbox'
+    assert len(calls) == 2 and calls[1] - calls[0] >= 45
+    assert cwctl.throttled_create(lambda: 'again', sleep=sleep, clock=lambda: now[0]) == 'again'
+    assert sleeps[-1] == pytest.approx(45.0)  # the next create still waits the minimum interval
+
+    class Invalid(Exception):
+        reason, metadata, retry_delay = 'CWSANDBOX_INVALID_REQUEST', {}, None
+
+    def bad():
+        raise Invalid('bad request')
+
+    before = len(sleeps)
+    with pytest.raises(Invalid):
+        cwctl.throttled_create(bad, sleep=sleep, clock=lambda: now[0])
+    assert len(sleeps) - before <= 1  # the interval wait only; no retry loop
+
+    class Quota(Exception):
+        reason, retry_delay = 'CWSANDBOX_OCCUPANCY_QUOTA_EXCEEDED', None
+        metadata = {'limit': '20', 'current': '20'}
+
+    def full():
+        raise Quota('quota')
+
+    with pytest.raises(Quota):
+        cwctl.throttled_create(full, sleep=sleep, clock=lambda: now[0], attempts=2)
+    observed = [r for r in cwctl.records() if r['event'] == 'quota_observed']
+    assert observed and observed[0]['limit'] == '20'
+
+
+def test_training_jobs_default_to_the_maximum_lifetime():
+    train = {k: v for k, v in base_job(kind='train').items() if k != 'lifetime_hours'}
+    assert job.validate(train)['lifetime_hours'] == 720
+    assert job.sandbox_request(train, 'x')['max_lifetime_seconds'] == 2592000
+
+
+def test_fetch_from_inbox_and_url_without_a_bucket(tmp_path):
+    import functools
+    import http.server
+    import threading
+    served = tmp_path / 'served'
+    served.mkdir()
+    (served / 'weights.bin').write_bytes(b'public weights')
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(served))
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        pairs = make_files(tmp_path / 'src')
+        url_item = {'path': str(tmp_path / 'models' / 'weights.bin'),
+                    'sha256': hashlib.sha256(b'public weights').hexdigest(), 'bytes': 14,
+                    'url': f'http://127.0.0.1:{server.server_port}/weights.bin'}
+        url_item['key'] = bundle.object_key(url_item['sha256'])
+        manifest = bundle.build_manifest(pairs + [(url_item, None)])
+        inbox = tmp_path / 'inbox'
+        inbox.mkdir()
+        for item, source in pairs:
+            (inbox / item['sha256']).write_bytes(source.read_bytes())
+        receipt = bundle.fetch(manifest, None, None, tmp_path / 'dest', inbox=inbox, log=lambda _: None)
+        assert receipt['fetched'] == 4
+        assert (tmp_path / 'models' / 'weights.bin').read_bytes() == b'public weights'
+        assert bundle.verify(manifest, tmp_path / 'dest') == []
+        bad = dict(url_item, sha256='0' * 64, key=bundle.object_key('0' * 64), path=str(tmp_path / 'models' / 'bad.bin'))
+        with pytest.raises(bundle.BundleError, match='downloaded sha256'):
+            bundle.fetch(bundle.build_manifest([(bad, None)]), None, None, tmp_path, log=lambda _: None)
+    finally:
+        server.shutdown()
+
+
+def test_snapshot_manifest_keeps_its_id_with_the_directory_field(tmp_path):
+    out = tmp_path / 'run'
+    out.mkdir()
+    (out / 'report.json').write_text('{}')
+    target = tmp_path / 'm.json'
+    assert bundle.main(['snapshot', str(out), '-o', str(target)]) == 0
+    bundle.check_manifest(json.loads(target.read_text()))
+
+
+def test_api_transport_is_the_default_without_a_bucket():
+    assert job.validate(base_job())['transport'] == 'api'
+    assert job.bootstrap_env(job.validate(base_job()))['NATLANG_CW_TRANSPORT'] == 'api'
+    with pytest.raises(job.JobError, match='transport'):
+        job.validate(base_job(transport='bucket'))

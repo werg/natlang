@@ -32,7 +32,7 @@ nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>
 
 # 1. client deps for object storage (the code snapshot's requirements come after step 3)
 mkdir -p "$WORK"
-if ! python3 -c "import boto3, sys; sys.exit(tuple(map(int, boto3.__version__.split('.')[:2])) < (1, 42))" 2>/dev/null; then
+if [ -n "${NATLANG_CW_BUCKET:-}" ] && ! python3 -c "import boto3, sys; sys.exit(tuple(map(int, boto3.__version__.split('.')[:2])) < (1, 42))" 2>/dev/null; then
   python3 -m pip install -q --no-cache-dir 'boto3>=1.42.5' || die pip-boto3
 fi
 
@@ -44,23 +44,39 @@ for root in ${NATLANG_CW_MIRROR_ROOTS:-/home/werg /mnt/external}; do
 done
 mkdir -p "$NATLANG_REPO"
 
-# 3. code snapshot from the bundle manifest
-if [ -n "${NATLANG_CW_BUNDLE:-}" ]; then
+# 3. code snapshot from the bundle manifest. Transport "bucket": manifest and objects in object storage. Transport
+# "api": cwctl pushes bundle.json and the objects (named by sha256) into $WORK/.coreweave/inbox through the sandbox
+# file API, then writes $WORK/.coreweave/inputs-ready; nothing in the sandbox needs a credential.
+CW="$WORK/.coreweave"; mkdir -p "$CW/inbox"
+if [ "${NATLANG_CW_TRANSPORT:-bucket}" = api ]; then
+  log waiting-for-inputs
+  until [ -f "$CW/inputs-ready" ]; do sleep 2; done
+  log inputs-pushed
+fi
+if [ -n "${NATLANG_CW_BUNDLE:-}" ] || [ "${NATLANG_CW_TRANSPORT:-bucket}" = api ]; then
   python3 - <<'PY' || die code
-import hashlib, json, os, tarfile, boto3
-from botocore.client import Config
-s3 = boto3.client('s3', endpoint_url=os.environ.get('AWS_ENDPOINT_URL_S3', 'https://cwobject.com'),
-                  config=Config(region_name=os.environ['AWS_REGION'],
-                                s3={'addressing_style': os.environ.get('NATLANG_CW_S3_ADDRESSING', 'virtual')}))
-bucket, work, repo = os.environ['NATLANG_CW_BUCKET'], os.environ.get('NATLANG_CW_WORK', '/work'), os.environ['NATLANG_REPO']
-manifest = json.loads(s3.get_object(Bucket=bucket, Key=os.environ['NATLANG_CW_BUNDLE'])['Body'].read())
-os.makedirs(f'{work}/.coreweave', exist_ok=True)
-with open(f'{work}/.coreweave/bundle.json', 'w') as f:
-    json.dump(manifest, f)
+import hashlib, json, os, shutil, tarfile
+work, repo = os.environ.get('NATLANG_CW_WORK', '/work'), os.environ['NATLANG_REPO']
+api = os.environ.get('NATLANG_CW_TRANSPORT', 'bucket') == 'api'
+if api:
+    manifest = json.load(open(f'{work}/.coreweave/bundle.json'))
+else:
+    import boto3
+    from botocore.client import Config
+    s3 = boto3.client('s3', endpoint_url=os.environ.get('AWS_ENDPOINT_URL_S3', 'https://cwobject.com'),
+                      config=Config(region_name=os.environ['AWS_REGION'],
+                                    s3={'addressing_style': os.environ.get('NATLANG_CW_S3_ADDRESSING', 'virtual')}))
+    bucket = os.environ['NATLANG_CW_BUCKET']
+    manifest = json.loads(s3.get_object(Bucket=bucket, Key=os.environ['NATLANG_CW_BUNDLE'])['Body'].read())
+    with open(f'{work}/.coreweave/bundle.json', 'w') as f:
+        json.dump(manifest, f)
 code = manifest.get('code')
 if code:
     path = f'{work}/.coreweave/code.tar.gz'
-    s3.download_file(bucket, code['key'], path)
+    if api:
+        shutil.move(f'{work}/.coreweave/inbox/{code["sha256"]}', path)
+    else:
+        s3.download_file(bucket, code['key'], path)
     digest = hashlib.sha256(open(path, 'rb').read()).hexdigest()
     if digest != code['sha256']:
         raise SystemExit(f'code snapshot sha256 {digest} != {code["sha256"]}')
@@ -71,9 +87,9 @@ PY
   if [ "${NATLANG_CW_IMAGE_READY:-0}" != 1 ] && [ -f "$NATLANG_REPO/training/neuralese/docker/requirements.txt" ]; then
     python3 -m pip install -q --no-cache-dir -r "$NATLANG_REPO/training/neuralese/docker/requirements.txt" || die pip-requirements
   fi
-  # 4. inputs, verified
-  python3 "$NATLANG_REPO/scripts/coreweave/bundle.py" fetch --bucket "$NATLANG_CW_BUCKET" \
-    --manifest "$WORK/.coreweave/bundle.json" --root "$NATLANG_REPO" || die fetch
+  # 4. inputs, verified (pushed inbox objects first, then public URLs, then the bucket)
+  python3 "$NATLANG_REPO/scripts/coreweave/bundle.py" fetch ${NATLANG_CW_BUCKET:+--bucket "$NATLANG_CW_BUCKET"} \
+    --manifest "$CW/bundle.json" --inbox "$CW/inbox" --root "$NATLANG_REPO" || die fetch
 fi
 
 # 5. ts-host for task-success evals
@@ -140,6 +156,18 @@ publish
 if [ -n "${NATLANG_CW_BUCKET:-}" ]; then
   python3 "$BUNDLE" record-exit --bucket "$NATLANG_CW_BUCKET" --prefix "$NATLANG_CW_OUTPUT_PREFIX" --status "$status" \
     || log exit-record-failed
+fi
+# File-API transport: snapshot each output directory into a manifest, signal, and stay up until cwctl has pulled
+# and verified them (a completed sandbox has no file API). NATLANG_CW_COLLECT_WAIT bounds the wait (default 6 h).
+if [ "${NATLANG_CW_TRANSPORT:-bucket}" = api ]; then
+  mkdir -p "$CW/outputs"
+  for dir in "${outputs[@]}"; do
+    [ -d "$dir" ] && python3 "$BUNDLE" snapshot "$dir" -o "$CW/outputs/$(basename "$dir").json"
+  done
+  touch "$CW/outputs-ready"; log outputs-ready
+  waited=0
+  until [ -f "$CW/outputs-collected" ] || [ $waited -ge "${NATLANG_CW_COLLECT_WAIT:-21600}" ]; do sleep 5; waited=$((waited + 5)); done
+  log outputs-collected "\"waited\":$waited"
 fi
 log done "\"status\":$status"
 # Always exit 0: a nonzero main-process exit makes the platform restart the container (docs sandbox-lifecycle.md),

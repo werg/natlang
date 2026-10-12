@@ -83,6 +83,10 @@ def validate(job: dict[str, Any]) -> dict[str, Any]:
     if job.get('placement_mode', 'serverless') == 'serverless' and gpus > SERVERLESS_MAX_GPUS:
         raise JobError('serverless sandboxes get exactly 1 GPU; run independent arms as separate sandboxes, or '
                        'use placement_mode "cks" with a runner that has multi-GPU nodes')
+    if job.get('kind') == 'train' and 'lifetime_hours' not in job:
+        # Training: the platform maximum (owner 2026-10-12). The bootstrap exits when the job ends, so the sandbox
+        # completes then; the lifetime only bounds a run that never ends, and expiry kills without grace.
+        job['lifetime_hours'] = MAX_LIFETIME_SECONDS / 3600
     hours = job.get('lifetime_hours')
     if not isinstance(hours, (int, float)) or hours <= 0 or hours * 3600 > MAX_LIFETIME_SECONDS:
         raise JobError('lifetime_hours: positive and at most 720 (30 days); the platform default is only 10 minutes '
@@ -94,7 +98,7 @@ def validate(job: dict[str, Any]) -> dict[str, Any]:
     if bucket is not None and (not isinstance(bucket, str) or not _BUCKET.match(bucket)):
         raise JobError('bucket: an AI Object Storage bucket name (lower case, 3-63 characters)')
     if job.get('resume') and (bucket is None or not job.get('outputs')):
-        raise JobError('resume fetches the published outputs: it needs bucket and outputs')
+        raise JobError('resume fetches the published outputs from the bucket: it needs bucket and outputs')
     if job.get('bundle') is not None and bucket is None:
         raise JobError('a bundle lives in a bucket: set bucket')
     env = job.get('env', {})
@@ -110,6 +114,12 @@ def validate(job: dict[str, Any]) -> dict[str, Any]:
     memory_gib(scratch.get('size', '200Gi'))
     job['scratch'] = {'path': scratch['path'], 'size': scratch.get('size', '200Gi')}
     job['env'] = env
+    job.setdefault('transport', 'bucket' if bucket else 'api')
+    if job['transport'] not in ('bucket', 'api') or (job['transport'] == 'bucket' and not bucket):
+        raise JobError('transport is "bucket" (needs bucket) or "api" (cwctl pushes inputs and pulls outputs '
+                       'through the sandbox file API)')
+    if job.get('resume') and job['transport'] != 'bucket':
+        raise JobError('resume fetches published outputs from the bucket: use transport "bucket"')
     job.setdefault('placement_mode', 'serverless')
     job.setdefault('tags', [])
     return job
@@ -125,6 +135,7 @@ def bootstrap_env(job: dict[str, Any]) -> dict[str, str]:
     env = {
         'NATLANG_CW_JOB': job['id'],
         'NATLANG_CW_WORK': job['scratch']['path'],
+        'NATLANG_CW_TRANSPORT': job['transport'],
         'PYTHONUNBUFFERED': '1',
         'PYTORCH_CUDA_ALLOC_CONF': 'expandable_segments:True',
     }
