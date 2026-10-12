@@ -61,7 +61,9 @@ class Store:
                 found.append(json.loads(path.read_text()))
             except (OSError, ValueError) as error:
                 print(f'coord: skipping unreadable {path.name}: {error}', file=sys.stderr)
-        return sorted(found, key=lambda m: (m.get('received_at', ''), m['id']))
+        # A peer may deliver another message after settle_arrivals() has run.
+        # Such messages deliberately have no receiver-local arrival timestamp yet.
+        return sorted(found, key=lambda m: (m.get('received_at') or '', m['id']))
 
     def write(self, message, directory=None):
         directory = directory or self.mail
@@ -297,7 +299,7 @@ def main():
             read = set(cursor['read'])
             resolved = resolutions(messages)
             unread = [m for m in messages if addressed(m, store, me) and m['from'] != me and not m.get('legacy')
-                      and m['received_at'] > cursor['since'] and m['id'] not in read]
+                      and m.get('received_at') and m['received_at'] > cursor['since'] and m['id'] not in read]
             open_requests = [m for m in messages if m['kind'] == 'request' and m['id'] not in resolved
                              and addressed(m, store, me) and m not in unread]
             if args.command == 'inbox' and args.json:
