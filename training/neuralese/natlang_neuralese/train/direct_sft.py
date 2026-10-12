@@ -736,7 +736,7 @@ def main(argv=None):
                                               and not (k in LATER_DEFAULTS and v == LATER_DEFAULTS[k])},
                 'inputs': inputs, 'code': code}
     # Data continuation (--continued-text-data): decided from the saved state before the model loads; the record is
-    # computed by a --plan-only child (both corpora in memory only there), then the plan is rebuilt here from it.
+    # computed by a --plan-only child (it streams both corpora), then the plan is rebuilt here and its hash checked.
     policy = CheckpointPolicy(a.out, every_steps=a.checkpoint_every)
     resume_state = CheckpointPolicy.load(policy.slot) if policy.slot.exists() else None
     continuation_launch, continuation = continuation_mode(a, resume_state, inputs)
@@ -1852,4 +1852,4 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
