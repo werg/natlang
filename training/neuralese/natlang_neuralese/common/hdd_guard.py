@@ -1,9 +1,15 @@
 """Keep training-step I/O off the slow external HDD (DGX).
 
-Inputs that resolve (realpath) under the HDD prefix are copied once to an NVMe cache keyed by SHA-256 and the staged
-path is passed to the stage; the declared hash is checked on the copy. The out dir (checkpoints, logs) must not
-resolve under the HDD. A no-op where the prefix does not exist (Pop). The prefix comes from NATLANG_HDD_PREFIX
-(default: the data_hdd root of common.paths); the cache from NATLANG_STAGED_INPUTS (default ~/data/staged-inputs).
+Data inputs (``STAGED_ROLES``: the corpora a stage reads, again at every resume) that resolve (realpath) under the
+HDD prefix are copied once to an NVMe cache keyed by SHA-256 and the staged path is passed to the stage; the declared
+hash is checked on the copy. Load-once state (heads, ``continue_from`` and its sidecars, student/warm-up checkpoints:
+read once at startup, so a copy buys no step speed, only disk churn; the 44 GB v3 warm-up state was copied back from
+the archive) is read directly from the HDD and recorded as ``read_from_hdd``. The cache is bounded
+(NATLANG_STAGED_INPUTS_MAX_GB, default 64): least recently used entries are evicted before a new copy, and the
+archiver or storage retention may delete any entry (a stage re-stages what it needs). The out dir (checkpoints, logs)
+must not resolve under the HDD. A no-op where the prefix does not exist (Pop). The prefix comes from
+NATLANG_HDD_PREFIX (default: the data_hdd root of common.paths); the cache from NATLANG_STAGED_INPUTS (default
+~/data/staged-inputs).
 """
 from __future__ import annotations
 
@@ -15,6 +21,8 @@ from pathlib import Path
 from .paths import resolve
 
 RECORDS: list[dict] = []
+# Roles a stage reads as data (staged when on the HDD); every other role is load-once state, read in place.
+STAGED_ROLES = frozenset({'text_data', 'records', 'pieces', 'harness_records', 'harness_pieces'})
 
 
 def hdd_prefix() -> Path | None:
@@ -47,6 +55,34 @@ def _sha(path: Path) -> str:
     return digest.hexdigest()
 
 
+def input_path(role: str, path, sha256: str | None = None) -> str:
+    """The path a stage reads for input ``role``: data roles staged (``stage_input``), load-once state in place."""
+    if role in STAGED_ROLES:
+        return stage_input(path, sha256)
+    if on_hdd(path):
+        RECORDS.append({'role': role, 'source': os.path.realpath(path), 'read_from_hdd': True,
+                        'reason': 'load-once state: read once at startup, staging buys no step speed'})
+    return str(path)
+
+
+def _evict(cache: Path, incoming: int) -> None:
+    """Least recently used cache entries out until ``incoming`` more bytes fit the bound."""
+    bound = int(float(os.environ.get('NATLANG_STAGED_INPUTS_MAX_GB', '64')) * 2 ** 30)
+    if not cache.is_dir():
+        return
+    entries = [(f.stat().st_mtime, f.stat().st_size, f) for f in cache.glob('*/*') if f.is_file()]
+    used = sum(size for _, size, _ in entries)
+    for _, size, path in sorted(entries):
+        if used + incoming <= bound:
+            break
+        path.unlink(missing_ok=True)
+        try:
+            path.parent.rmdir()
+        except OSError:
+            pass
+        used -= size
+
+
 def stage_input(path, sha256: str | None = None) -> str:
     """The path to read: ``path`` itself if it is on the NVMe, else its verified NVMe copy."""
     if not on_hdd(path):
@@ -54,7 +90,10 @@ def stage_input(path, sha256: str | None = None) -> str:
     source = Path(os.path.realpath(path))
     digest = sha256 or _sha(source)
     target = cache_dir() / digest / source.name
-    if not (target.is_file() and target.stat().st_size == source.stat().st_size):
+    if target.is_file() and target.stat().st_size == source.stat().st_size:
+        os.utime(target)  # recently used
+    else:
+        _evict(cache_dir(), source.stat().st_size)
         target.parent.mkdir(parents=True, exist_ok=True)
         part = target.with_name(target.name + f'.part{os.getpid()}')
         shutil.copyfile(source, part)

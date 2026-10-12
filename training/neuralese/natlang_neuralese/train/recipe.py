@@ -317,9 +317,10 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
 
 
 def _staged_inputs(resolved):
-    """Inputs resolving to the external HDD are read from a verified NVMe copy (common/hdd_guard.py)."""
+    """Data inputs resolving to the external HDD are read from a verified NVMe copy; load-once state is read in place
+    (common/hdd_guard.py ``input_path``)."""
     from ..common import hdd_guard
-    return {role: ({**value, 'path': hdd_guard.stage_input(value['path'], value.get('sha256'))}
+    return {role: ({**value, 'path': hdd_guard.input_path(role, value['path'], value.get('sha256'))}
                    if isinstance(value, dict) and 'path' in value and role != 'direct_artifact_manifest' else value) for role, value in resolved.items()}
 
 
@@ -1196,7 +1197,7 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     handler = HANDLERS[stage['kind']]
     command = [sys.executable, '-m', handler['module']]
     if 'heads' in inputs:
-        command += ['--heads', hdd_guard.stage_input(inputs['heads']['path'], inputs['heads']['sha256'])]
+        command += ['--heads', hdd_guard.input_path('heads', inputs['heads']['path'], inputs['heads']['sha256'])]
     command += stage_input_args(inputs, stage['kind'])
     command += ['--out', str(stage_output), '--device', device]
     parameters = dict(recipe['parameters'])
@@ -1481,7 +1482,7 @@ def main(argv=None):
                         stage_heads=predecessor['artifact']
                 command = [sys.executable, '-m', HANDLERS[kind]['module']]
                 if not direct_artifact_stage:
-                    command += ['--heads', hdd_guard.stage_input(stage_heads)]
+                    command += ['--heads', hdd_guard.input_path('heads', stage_heads)]
                 command += stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
                            str(output if kind == 'token_identity' else directory), '--device', args.device]
                 previous_phase = direct_phase_predecessor(recipe, stage)
