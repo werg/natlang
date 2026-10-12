@@ -86,6 +86,26 @@ Cost (one Mellum MoE layer, top-8 of 64, GB10): decode-sized calls are faster (1
 129 and 302). Recipes that declare `moe_kernel: grouped` (Mellum direct v3) keep it; that choice now trades the
 invariance for about 1.35x MoE speed.
 
+Forced-sequence against incremental writer on Mellum, old kernel (2026-10-12; `eval/direct_forced.py`, run-v2
+export, BF16, MoE "loop", the shape-dependent kernel; `runs/neuralese-direct-mellum-20261011/batch-row-dragnet/
+forced-gap-loop/report.json`): the gap is far larger than on LFM.
+
+| length | payload rel L2 | states | stop logits | consumer logits | consumer CE inc / seq | context grad rel L2 | grad rel L2 median / max | time inc / seq |
+|---|---|---|---|---|---|---|---|---|
+| 8 | 0.137 | 0.062 | 0.016 | 0.965 | 8.22 / 6.83 | 0.62 | 0.80 / 1.69 | 8.5 s / 1.9 s |
+| 32 | 0.063 | 0.073 | 0.012 | 0.705 | 5.53 / 6.12 | 1.22 | 1.12 / 2.84 | 18.9 s / 2.0 s |
+
+LFM2.5's gap is 0.033-0.038 payload and 0.055-0.099 consumer logits. On Mellum the two execution orders disagree by
+1.4 and 0.6 nats of consumer CE, and their gradients are uncorrelated in direction (median relative L2 near 1). This
+fits the dragnet: the incremental write runs one row per MoE call, the sequence pass runs all rows in one call, and
+routing flips amplify the shape-dependent GEMM differences. Losses and gradients measured on Mellum's BF16
+writer paths with the old kernels are not execution-order invariant. Scope: training that runs only sequence and packed passes
+(the direct stage, v3p included) is not affected by this order dependence: every update computes the same
+shapes the same way. It matters wherever a write runs incrementally (one decode step per value) against a model trained
+or evaluated in sequence form: the E2E stage's greedy writes and serving. There the invariant kernel is required. The invariant-kernel arm was stopped by
+the memory guard before it finished (v3p's resume has priority); it is re-run after v3p, with named containers and a
+60 GB claim.
+
 Not covered: dense projections and attention at decode against sequence shapes. They were bitwise equal at 512 and
 1024 rows here, but a single-row GEMM differs (above). The forced-sequence against incremental writer gap on Mellum is
 to be re-measured with the invariant kernel (`eval/direct_forced.py`). LFM2.5 has no MoE, so Pop's LFM gap is not
