@@ -264,7 +264,12 @@ def archive_predecessor_state(slot: Path) -> dict | None:
     mover = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mover)
     real = slot.resolve()
-    dest = mover.destination(real, [r.resolve() for r in mover.ROOTS], mover.ARCHIVE)
+    roots = [r.resolve() for r in mover.ROOTS]
+    if not any(root in real.parents for root in roots):
+        print(json.dumps({'event': 'predecessor_state_archive_skipped', 'path': str(slot),
+                          'resolved_path': str(real), 'reason': 'outside_configured_archive_roots'}), flush=True)
+        return None
+    dest = mover.destination(real, roots, mover.ARCHIVE)
     inode = slot.stat().st_ino
     best = slot.with_name('best-checkpoint.pt')
     record = mover.archive_file(slot, dest, mover.ARCHIVE / mover.MANIFEST_NAME)
