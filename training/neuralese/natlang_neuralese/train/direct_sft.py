@@ -969,6 +969,7 @@ def main(argv=None):
     # computed by a --plan-only child (it streams both corpora), then the plan is rebuilt here and its hash checked.
     policy = CheckpointPolicy(a.out, every_steps=a.checkpoint_every)
     resume_state = CheckpointPolicy.load(policy.slot) if policy.slot.exists() else None
+    resume_optimizer_schema = (resume_state['optimizer']['schema'] if resume_state is not None else None)
     continuation_launch, continuation = continuation_mode(a, resume_state, inputs)
     resume_state = None
     if continuation_launch == 'continue':
@@ -1075,6 +1076,14 @@ def main(argv=None):
     parameter_names = {id(parameter): name for name, parameter in head_named + backbone_named}
     optimizer_parameter_names = [[parameter_names[id(parameter)] for parameter in group['params']]
                                  for group in optimizer.param_groups]
+    if resume_optimizer_schema is not None and resume_optimizer_schema != optimizer.schema:
+        first = next((i for i, (saved, current) in enumerate(zip(resume_optimizer_schema, optimizer.schema))
+                      if saved != current), min(len(resume_optimizer_schema), len(optimizer.schema)))
+        raise ValueError('direct optimizer schema differs before loading the corpus: '
+                         + json.dumps({'saved_count': len(resume_optimizer_schema), 'current_count': len(optimizer.schema),
+                                       'first_difference': first,
+                                       'saved': resume_optimizer_schema[first] if first < len(resume_optimizer_schema) else None,
+                                       'current': optimizer.schema[first] if first < len(optimizer.schema) else None}))
     backbone_parameter_dtypes = sorted({str(parameter.dtype) for parameter in backbone.hf.parameters()})
     backbone_floating_buffer_dtypes = sorted({str(buffer.dtype) for buffer in backbone.hf.buffers()
                                               if buffer.is_floating_point()})
