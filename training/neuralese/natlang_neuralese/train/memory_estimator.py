@@ -202,8 +202,10 @@ class AdaptiveGraphMemory:
     def calibration_info(self, kind, context, length):
         """Return the evidence selected for a prediction, including its source bins."""
         _, details = self._calibration_for_prediction(kind, context, length)
+        # Exact bins are not intrinsically safer than adjacent bins: sparse
+        # q80 estimates underestimated a real direct-SFT readout peak.
         details['quantile'] = (DIRECT_SFT_ADJACENT_QUANTILE
-                               if details['source'] == 'adjacent-context' else .8)
+                               if kind.startswith('direct-sft-') else .8)
         return details
 
     def predict(self, kind, context, length, raw_bytes):
@@ -212,7 +214,7 @@ class AdaptiveGraphMemory:
             ratio = 1.0
         else:
             ordered = sorted(samples)
-            if details['source'] == 'adjacent-context':
+            if kind.startswith('direct-sft-'):
                 rank = max(0, math.ceil(DIRECT_SFT_ADJACENT_QUANTILE * len(ordered)) - 1)
             else:
                 # Preserve the established q80 selection for existing bins.

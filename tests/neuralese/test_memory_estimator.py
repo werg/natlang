@@ -3,6 +3,15 @@ import pytest
 from natlang_neuralese.train.memory_estimator import AdaptiveGraphMemory, geometry_bytes, selective_writer_fits
 
 
+def test_direct_sft_sparse_exact_bin_uses_upper_tail_not_q80():
+    model = AdaptiveGraphMemory(geometry_version='direct-sft-window-v2:fp32-rmsnorm-casts')
+    kind = 'direct-sft-sequential-checkpointed-0'
+    for ratio in [1.20] * 9 + [1.40]:
+        model.observe(kind, 5107, 244, 1000, int(ratio * 1000))
+    assert model.calibration_info(kind, 5107, 244)['quantile'] == .95
+    assert model.predict(kind, 5107, 244, 1000) == 1470
+
+
 def test_direct_sft_prefers_mature_exact_and_same_context_calibration():
     model = AdaptiveGraphMemory(geometry_version='direct-sft-window-v2:fp32-rmsnorm-casts')
     kind = 'direct-sft-sequential-checkpointed-0'
