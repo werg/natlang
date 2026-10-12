@@ -696,14 +696,18 @@ def main(argv=None):
                              "--latent-step-in-backward is math-neutral except inside a spike. Every update logs the "
                              "applied and exact latent norm (grad_clip in train.jsonl). 0: the earlier fixed clip at a "
                              "global norm of 1.0 (in-backward latents unclipped)")
-    parser.add_argument("--moe-kernel", choices=["loop", "grouped"], default="loop",
-                        help="dense (BF16, trainable) MoE experts on CUDA: loop = one matmul pair per expert (reference); grouped = two grouped GEMMs over the expert-sorted routed tokens (maple/fused_moe.dense_grouped_experts; BF16 accumulation-order differences only)")
+    parser.add_argument("--moe-kernel", choices=["invariant", "loop", "grouped"], default="invariant",
+                        help="dense (BF16, trainable) MoE experts on CUDA: invariant = one fixed Triton tile per routed row, batch-invariant (maple/fused_moe.invariant_dense_experts, the default); loop = one matmul pair per expert (reference); grouped = torch grouped GEMMs (maple/fused_moe.dense_grouped_experts); loop and grouped choose kernels by shape")
+    parser.add_argument("--save-state", action=argparse.BooleanOptionalAction, default=True,
+                        help="write full training state and weight exports (checkpoint.pt, best link, heads.pt, adapter.pt); "
+                             "smokes pass --no-save-state and keep only their logs and report (as in the direct stage)")
     parser.add_argument("--latent-step-in-backward", action=argparse.BooleanOptionalAction, default=False,
                         help="with --latent-optimizer lionsr or muonsr: the update's objectives (reader loss, crisp SFT, "
                              "preserve stream) are backpropagated together, layer by layer across all of them "
                              "(model/layer_staging.py), and every LionSR latent steps as its layer completes and frees "
                              "its gradient, so no backbone gradient buffer exists; needs batch 1 and the joint backward "
-                             "policy, and is refused when a stream reads a deeper layer of another at its input. The "
+                             "policy; a value one stream makes from a deeper layer and another reads at its input (a "
+                             "direct write) is resolved by an activation-only pre-pass (model/layer_staging.py). The "
                              "global norm counts the latents; they are clipped only with --grad-spike-clip")
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--projection-anchor-weight", type=float, default=1.0,
@@ -975,7 +979,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'eval_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size', 'direct_parent_proof', 'direct_artifact', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_rows', 'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'gate_held_rows', 'gate_response_kl'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'eval_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size', 'direct_parent_proof', 'direct_artifact', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_rows', 'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'gate_held_rows', 'gate_response_kl', 'save_state'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -1982,7 +1986,8 @@ def main(argv=None):
                          max_layer_kv_width=max_kv_width, dtype_bytes=memory_layout['dtype_bytes'])
                          for c, n in features] or [0])
         return {'writers': features, 'reader_context': reader_context, 'target_tokens': target_tokens,
-                'reader_raw': reader_raw, 'tape_bytes': writer_bytes + reader_bytes,
+                # The crisp SFT term (same backward) reads the record's crisp rendering: a reader-sized tape.
+                'reader_raw': reader_raw, 'tape_bytes': writer_bytes + reader_bytes * (2 if args.crisp_weight else 1),
                 'branch_kv_workspace_bytes': workspace}
 
     reader_geometry = [None]
@@ -2214,6 +2219,13 @@ def main(argv=None):
             torch.cuda.set_rng_state_all(resumed['cuda_rng'])
     graph_routes = dict(resumed.get('graph_routes', {})) if resumed and memory_estimator.joint_routes_compatible else {}
     trainables = list(params.values()) + lora + head_params
+    stepped_in_backward = {id(q) for _, q, *_ in lion} if in_backward is not None else set()
+
+    def pending_gradient_bytes():
+        """Gradient buffers this update will allocate: every trainable without one yet, except latents that step
+        inside the backward (they never hold a whole gradient)."""
+        return sum(p.numel() * p.element_size() for p in trainables
+                   if p.requires_grad and p.grad is None and id(p) not in stepped_in_backward)
     from .loop import (Cadence, StopSignal, TrainingLoop, accumulate_gradients,
                        commit_optimizer_step)
     stop = StopSignal().install()
@@ -2327,6 +2339,8 @@ def main(argv=None):
         return collect_graph_cycles(0)
 
     def save_training_state(step, destination=None):
+        if not args.save_state:
+            return False  # a smoke: logs and report only, never a full state
         started_save = time.perf_counter()
         destination = destination or checkpoint_path
         state_snapshot = {
@@ -2380,7 +2394,9 @@ def main(argv=None):
         # The checkpoint snapshot's device-to-host copies have completed the
         # queued current-stream events. Resolve events here, never at each phase.
         flush_cuda_phase_events()
-    save_training_state(start_step)
+        return True
+    # No full-state write before the first update: a fresh start has nothing to protect (a restart repeats setup),
+    # and a resume or continuation reads a state that is already on disk.
     # The model, fixed corpus, optimizer and imported libraries live until this
     # dedicated trainer process exits. Collect completed setup/probe cycles first,
     # then exclude this static population from every staged graph collection.
@@ -2439,14 +2455,18 @@ def main(argv=None):
                 plan = geometry_plan(record) if args.backward_policy == 'auto' else None
                 reader_geometry[0] = plan
                 if mode == 'auto':
-                    baseline_bytes = cuda_allocated_bytes() if args.device.startswith('cuda') else 0
-                    raw_prediction = baseline_bytes + plan['tape_bytes'] + plan['branch_kv_workspace_bytes']
-                    predicted = memory_estimator.adjust_joint(plan, raw_prediction)
+                    # Fixed part, counted exactly: what is resident now (weights, latents, optimizer state after
+                    # the first update) plus the gradient buffers this update allocates. Only the graph tape is
+                    # predicted and calibrated.
+                    fixed_bytes = ((cuda_allocated_bytes() if args.device.startswith('cuda') else 0) +
+                                   pending_gradient_bytes())
+                    raw_prediction = fixed_bytes + plan['tape_bytes'] + plan['branch_kv_workspace_bytes']
+                    predicted = memory_estimator.adjust_joint(plan, raw_prediction, fixed_bytes)
                     mode = 'staged' if predicted > graph_budget or graph_routes.get(record['id'], 0) >= graph_budget else 'joint'
                     with (out / 'memory-routing.jsonl').open('a') as routing_log:
                         routing_log.write(json.dumps({'step': step, 'record_id': record['id'], 'mode': mode,
                             'estimated_gib': predicted / 2**30, 'graph_budget_gib': graph_budget / 2**30,
-                            'write_sites': len(plan['writers']), 'writer_geometry': plan['writers'],
+                            'fixed_gib': fixed_bytes / 2**30, 'write_sites': len(plan['writers']), 'writer_geometry': plan['writers'],
                             'sketch_gradient': args.sketch_gradient, 'local_stage_batch_size': args.local_stage_batch_size,
                             'branch_kv_workspace_gib': plan['branch_kv_workspace_bytes'] / 2**30}) + '\n')
                 phase_wall_seconds['geometry_and_router_wall'] = (
@@ -2456,23 +2476,34 @@ def main(argv=None):
                               torch.get_rng_state(), torch.cuda.get_rng_state_all() if args.device.startswith('cuda') else [],
                               dict(baseline), len(lengths), len(write_context_lengths), len(writer_batches),
                               len(projection_anchor_values))
+                def crisp_objective():
+                    # The policy learns from the exact ordinary runtime too: one more term of the same backward (a
+                    # joint attempt's, the staged path's or the in-backward update's), so its memory is part of the
+                    # routed update and an out-of-memory attempt falls back like the rest of the objective.
+                    return (args.crisp_weight * loss_of(record, {}, soft=False) / args.batch
+                            if args.crisp_weight else None)
+
                 def attempt_joint():
                     # autograd.grad avoids partial parameter .grad mutations on
                     # an aborted attempt, including accumulated earlier chains.
                     try:
                         with graph_memory_budget(graph_budget):
                             objective = loss_of(record, leaves) / args.batch
-                            gradients = torch.autograd.grad(objective, trainables, allow_unused=True)
+                            crisp = crisp_objective()
+                            gradients = torch.autograd.grad(objective if crisp is None else objective + crisp,
+                                                            trainables, allow_unused=True)
                         peak = torch.cuda.max_memory_allocated() if args.device.startswith("cuda") else 0
-                        return float(objective.detach()), gradients, None, peak
+                        return (float(objective.detach()), None if crisp is None else float(crisp.detach()),
+                                gradients, None, peak)
                     except (GraphBudgetExceeded, torch.OutOfMemoryError) as failure:
                         peak = torch.cuda.max_memory_allocated() if args.device.startswith("cuda") else 0
-                        return None, None, type(failure).__name__, peak
+                        return None, None, None, type(failure).__name__, peak
                 record_phase = start_phase('record_model_and_autograd', step)
                 try:
                     if args.backward_policy == 'auto' and mode == 'joint':
-                        value, gradients, failure, joint_peak = attempt_joint()
-                        memory_estimator.observe_joint(plan, raw_prediction, joint_peak, failed=bool(failure))
+                        value, crisp_value, gradients, failure, joint_peak = attempt_joint()
+                        memory_estimator.observe_joint(plan, raw_prediction, joint_peak, failed=bool(failure),
+                                                       fixed=fixed_bytes)
                         if failure:
                             with (out / 'memory-routing.jsonl').open('a') as routing_log:
                                 routing_log.write(json.dumps({'event': 'joint_failure', 'step': step,
@@ -2507,6 +2538,8 @@ def main(argv=None):
                             accumulate_gradients(trainables, gradients)
                             del gradients
                             losses.append(value * args.batch)
+                            if crisp_value is not None:
+                                crisp_losses.append(crisp_value * args.batch)
                     if mode == 'staged' or args.backward_policy == 'joint':
                         active_staging[0] = StagedWrites(
                             observe=observe_writer,
@@ -2518,12 +2551,17 @@ def main(argv=None):
                         with offload_attention_tensors(int(args.activation_offload_gb * 2**30), activations=True,
                                                       persistent_tensors=persistent) as offload_stats:
                             loss = loss_of(record, leaves) / args.batch
+                            crisp = crisp_objective()
                             if in_backward is not None:
                                 single_terms.append(loss)  # backpropagated once with the update's other terms
+                                if crisp is not None:
+                                    single_terms.append(crisp)
                             else:
-                                loss.backward()
+                                (loss if crisp is None else loss + crisp).backward()
                             losses.append(float(loss.detach()) * args.batch)
-                            del loss
+                            if crisp is not None:
+                                crisp_losses.append(float(crisp.detach()) * args.batch)
+                            del loss, crisp
                             collect_graph_cycles()
                             if active_staging[0] is not None:
                                 replay_phase = start_phase('staged_producer_replay', step)
@@ -2535,27 +2573,19 @@ def main(argv=None):
                                 replay_error = max(replay_error, active_staging[0].replay_max_abs_error)
                                 active_staging[0].clear()
                                 active_staging[0] = None
-                    # The policy learns from the exact ordinary runtime too. Its graph
-                    # is built after the recurrent graph has been freed; all gradients
-                    # accumulate before one optimizer step, never doubling live tapes.
-                    if args.crisp_weight:
-                        objective = args.crisp_weight * loss_of(record, {}, soft=False) / args.batch
-                        if in_backward is not None:
-                            single_terms.append(objective)
-                        else:
-                            gradients = torch.autograd.grad(objective, trainables, allow_unused=True)
-                            accumulate_gradients(trainables, gradients)
-                            del gradients
-                        crisp_losses.append(float(objective.detach()) * args.batch)
-                        del objective
                     collect_graph_cycles()
                     case_peak = torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
                     step_peak_bytes = max(step_peak_bytes, case_peak)
                     if args.backward_policy == 'auto':
+                        result = {'event': 'result', 'step': step, 'record_id': record['id'],
+                                  'mode': mode, 'observed_peak_gib': case_peak / 2**30,
+                                  'estimated_gib': predicted / 2**30, 'fixed_gib': fixed_bytes / 2**30}
                         with (out / 'memory-routing.jsonl').open('a') as routing_log:
-                            routing_log.write(json.dumps({'event': 'result', 'step': step, 'record_id': record['id'],
-                                'mode': mode, 'observed_peak_gib': case_peak / 2**30,
-                                'estimated_gib': predicted / 2**30}) + '\n')
+                            routing_log.write(json.dumps(result) + '\n')
+                        if mode == 'joint' and not 0.67 <= case_peak / max(predicted, 1) <= 1.25:
+                            # A miss this large means the estimator leaves out a term: report it, never absorb it.
+                            print(json.dumps({**result, 'event': 'memory_estimate_miss',
+                                              'observed_over_estimated': case_peak / max(predicted, 1)}), flush=True)
                 except RequestError as error:
                     stop_phase(record_phase)
                     if active_staging[0] is not None:
@@ -2582,9 +2612,9 @@ def main(argv=None):
                         active_staging[0] = None
                     cursor, errors, used = step_cursor, step_errors, step_used
                     restore_iteration_rng(step_rng, write_choice, stop_generator, baseline)
-                    save_training_state(step)
-                    failure['emergency_checkpoint'] = str(checkpoint_path)
-                    failure['checkpoint_step'] = step
+                    saved = save_training_state(step)
+                    failure['emergency_checkpoint'] = str(checkpoint_path) if saved else None
+                    failure['checkpoint_step'] = step if saved else None
                     (out / 'failure.json').write_text(json.dumps(failure, indent=2) + '\n')
                     print(json.dumps(failure), flush=True)
                     raise
@@ -2787,8 +2817,8 @@ def main(argv=None):
                 # best-checkpoint.pt (the end's candidate comes from the final report below).
                 if candidate is not None and not stop.requested:
                     best_evaluation = candidate
-                save_training_state(step + 1)
-                if candidate is not None and not stop.requested:
+                saved = save_training_state(step + 1)
+                if candidate is not None and not stop.requested and saved:
                     publish_best(checkpoint_path, out / 'best-checkpoint.pt')
                     (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
     stop.restore()
@@ -2844,7 +2874,7 @@ def main(argv=None):
             (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
     if lengths:
         report["writes"] = {"count": len(lengths), "mean_length": sum(lengths) / len(lengths), "max_length": max(lengths)}
-    if head_params or lora:
+    if (head_params or lora) and args.save_state:
         from .adapters import adapter_layers
         source_metadata = torch.load(args.heads, map_location='cpu', weights_only=False, mmap=True) if args.heads else {}
         ranks = {int(p.shape[0]) for name, p in backbone.hf.named_parameters() if '.lora_A.' in name}
@@ -2868,7 +2898,7 @@ def main(argv=None):
     report["relative_change"] = moved
     torch.save({"params": {k: v.detach().cpu() for k, v in params.items()}, "texts": texts,
                 'port_profile': heads.profile}, out / "soft-params.pt")
-    if lora:
+    if lora and args.save_state:
         torch.save({"lora": lora_state(engine.backbone), "rank": args.rank}, out / "adapter.pt")
     if bank:
         current = {name.removeprefix("prompt:"): params[name] for name in used if name.removeprefix("prompt:") in bank.texts}

@@ -351,6 +351,61 @@ def test_layer_staging_steps_each_layer_once_from_the_top_and_matches_separate_b
         torch.testing.assert_close(value.detach(), expected.detach(), rtol=0, atol=0, msg=name)
 
 
+@needs_muon
+def test_layer_staging_resolves_a_writer_value_read_at_a_reader_input(monkeypatch):
+    """A direct write: the reader's input contains a value made from the writer's top layer (a cross-stream edge).
+    The lockstep walk alone reached that input only after the writer's layers were stepped, so the writer's context
+    got no gradient. With the activation-only pre-pass, every latent still steps once, deepest layer first, and
+    latents and the writer's context equal separate backwards plus one step."""
+    from natlang_neuralese.model.layer_staging import LayerStaging
+    deterministic_rounding(monkeypatch)
+
+    def setup():
+        backbone, _ = tiny_student()
+        named = [('backbone.' + n, q) for n, q in backbone.hf.named_parameters() if n.startswith('model.layers.')]
+        for _, q in named:
+            q.requires_grad_(True)
+        lion = optim.latent_partition(named, 1e-2)
+        optimizer = LionSR([{'params': [q], 'lr': lr, 'row_scale': s, 'weight_decay': 0., 'name': n}
+                            for n, q, lr, s in lion], lr=1e-2)
+        torch.manual_seed(0)
+        context = torch.nn.Parameter(backbone.embed(torch.randint(0, 60, (1, 5))).detach().clone())
+        projection = torch.nn.Linear(context.shape[-1], context.shape[-1])
+        return backbone, optimizer, named, context, projection
+
+    def loss(backbone, context, projection, step):
+        g = torch.Generator().manual_seed(step)
+        written = backbone.forward_embeds(context, logits=False)['h_final'][:, -3:]  # the writer's top layer
+        value = projection(written)
+        ids = torch.randint(0, 60, (1, 4), generator=g)
+        reader = torch.cat([backbone.embed(ids), value], 1)  # read at the reader's first layer
+        return backbone.forward_embeds(reader, logits=False)['h_final'].square().mean()
+
+    reference, reference_optimizer, reference_named, reference_context, reference_projection = setup()
+    context_grads = []
+    for step in range(2):
+        reference_context.grad = None
+        loss(reference, reference_context, reference_projection, step).backward()
+        context_grads.append(reference_context.grad.clone())
+        reference_optimizer.step()
+        reference_optimizer.zero_grad(set_to_none=True)
+
+    backbone, optimizer, named, context, projection = setup()
+    optimizer.step_in_backward(gated=True)
+    for step in range(2):
+        context.grad = None
+        with LayerStaging() as tape:
+            total = loss(backbone, context, projection, step)
+            with optimizer.in_backward() as armed:
+                total.backward()
+                tape.backward()
+        assert len(armed.stepped) == sum(len(g['params']) for g in optimizer.param_groups)
+        assert float(context.grad.abs().sum()) > 0, "the writer's context gets its gradient"
+        torch.testing.assert_close(context.grad, context_grads[step], rtol=1e-4, atol=1e-7)
+    for (name, value), (_, expected) in zip(named, reference_named):
+        torch.testing.assert_close(value.detach(), expected.detach(), rtol=0, atol=0, msg=name)
+
+
 def test_in_backward_norm_reduces_each_latent_in_fp32_and_accumulates_in_fp64():
     torch.manual_seed(0)
     latents = [torch.nn.Parameter(torch.randn(64, 48, dtype=torch.bfloat16)) for _ in range(3)]

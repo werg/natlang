@@ -1,0 +1,56 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "clinc-plus-full-train-expanded-20261012-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/clinc-plus-full-train-expanded-20261012-v1",
+  "files": [
+    {
+      "path": "clinc__clinc_oos/plus/train/train-00000-of-00001.parquet",
+      "bytes": 312096,
+      "sha256": "30188119cf9f86fc9db27e1c22442d091cb5cb0913c9496f945fe11e7a02a28f"
+    },
+    {
+      "path": "decision-cases.jsonl",
+      "bytes": 58133543,
+      "sha256": "b5dfb9013227db3936dc2caca6228eb75a7e00146a6ce76a91d55a234afaa3f9",
+      "lines": 15250
+    },
+    {
+      "path": "decision-data.manifest.json",
+      "bytes": 3007,
+      "sha256": "85d2c68c962376c118d3bb26c2c8dbae434aa48792823a2ae81801dcc1fa4673"
+    },
+    {
+      "path": "decision-episodes.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "source-availability.json",
+      "bytes": 1739,
+      "sha256": "4ca2f8e899d4843bc9b5064093dfa6e61ab2d9d2e9490874c17fc321b144cfc2"
+    },
+    {
+      "path": "source-catalog.json",
+      "bytes": 217,
+      "sha256": "332eea1a2fab616d7361886474ec6887f1ebc19c357859ed2ee62a6245ff2a15"
+    },
+    {
+      "path": "source-pins.json",
+      "bytes": 472,
+      "sha256": "e33294dc8fe8016f26e6b34aa1b34a0981cd452932bedd1e129c5d4c5ed42c75"
+    },
+    {
+      "path": "source-revision.manifest.json",
+      "bytes": 2388,
+      "sha256": "b2ace6596a0656d2c7eede1db2e10148d32748159e8a2c7b3b6cdd3e192c42b0"
+    },
+    {
+      "path": "upstream-license-source-manifest.json",
+      "bytes": 14706,
+      "sha256": "99346cde6dd7d8d76b485376f5e76c88173a75f4cf33f62ceb6253debbd2a057"
+    }
+  ],
+  "bytes": 58468168
+}

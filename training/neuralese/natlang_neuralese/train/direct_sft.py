@@ -122,7 +122,7 @@ def parse(argv=None):
     p.add_argument('--projection-kernel', type=int, default=4)
     p.add_argument('--token-choice-projection', action=argparse.BooleanOptionalAction, default=False,
                    help='declare the TokenChoiceProjection (the end-to-end Neuralese stage); off in direct v1')
-    p.add_argument('--moe-kernel', choices=('loop', 'grouped'), default='loop')
+    p.add_argument('--moe-kernel', choices=('invariant', 'loop', 'grouped'), default='invariant')
     p.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=None,
                    help='recompute each layer in backward (long windows)')
     p.add_argument('--window-execution', choices=('auto', 'packed', 'sequential'), default='auto',

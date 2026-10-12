@@ -1735,9 +1735,9 @@ fallback. Before the next experiment, the current full checkpoint was copied
 and SHA-verified before further writes: step 838,
 `af3548fb100f32c43278f3517b88180bf8db986ca1e9d926d5ae2a8df25a119f`, at
 `/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-union-r2-epoch1-v18/rmsnorm-recompute-comparison-v1/parent-step838.pt`.
-The standard HF RMSNorm run resumed from this checkpoint in place and is the
-active BF16/automatic-checkpoint path; the backup remains as its comparison
-parent.
+The standard HF RMSNorm run resumed from this checkpoint in place. The extra
+step-838 copy was later deleted after the diagnostic report and summary were
+retained; it is not an active resume input.
 
 An isolated exact-expression RMSNorm recomputation diagnostic matched whole-model
 forward outputs and predictions, reduced incremental peak allocation by about
@@ -1752,7 +1752,10 @@ For any future in-place experiment or pause, copy the current full checkpoint
 to a fresh versioned path and verify its SHA before the existing output can be
 resumed or overwritten. Keep only the current checkpoint and one explicitly
 needed comparison/fallback parent; record a missing historical backup honestly
-instead of treating a later checkpoint as its substitute.
+instead of treating a later checkpoint as its substitute. At the time of this
+step-838 note, the step-1610 fallback for the later union-r2 continuation had
+not yet been pruned; the current status is recorded in the adjacent-context
+entry below.
 
 ## Deleted runs (2026-10-11)
 
@@ -1769,3 +1772,25 @@ Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exa
 - `neuralese-local-recurrence-20261005`: deleted 2026-10-11.
 - `neuralese-s3-pilot-20261003-v2`: deleted 2026-10-11.
 - `neuralese-s3-pilot-20261005-v4`: deleted 2026-10-11.
+
+## Pop direct-SFT adjacent-context estimator evidence — 2026-10-12
+
+The BF16-auto V18 full-union run resumed in place from verified step 1610
+(checkpoint SHA `7a7d5a93d90e76f5cbf15900d8294aa2b5565acac9d9ceccbedf9f232c920301`)
+with the frozen recipe SHA `e808b40727a7f56db440e15996ed18f8f4b295c3195dcc1503fd0dcc1de46341`,
+runtime image `sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de`,
+and 164-file frozen code map SHA `4086ed6408e9424b93515b34ec6072b4522343b69ad681baef03d9f360ef06f2`.
+The active run is under
+`/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-union-r2-epoch1-v18`.
+
+Steps 1633 and 1655 selected the measured adjacent-context fallback at
+contexts 4313 and 4607 with checkpointing off. Forecast/observed incremental
+peaks were 5.487/4.776 GB and 5.810/5.595 GB; both completed. Exact row hashes,
+plan/input pins, and the log snapshot digest are in
+[`runs/neuralese-direct-memory-estimator-boundary-v1/measurement-receipt.json`](../../runs/neuralese-direct-memory-estimator-boundary-v1/measurement-receipt.json)
+(SHA-256 `59fb277cff8bd2ba3ac979cd2ac9d8c3b285901e5ac18adc8646fd585c6511b1`).
+This verifies two boundary decisions, not global speed, quality, or model
+qualification. The active run continues with the shared BF16 adaptive policy;
+the step-1700 full checkpoint was verified with optimizer and RNG state
+(SHA-256 `491c676c183c935f04d3d9698111c5a96103ee397e51384cfd0223fbe6f5ab7b`).
+The older step-1610 handoff copy was then pruned.

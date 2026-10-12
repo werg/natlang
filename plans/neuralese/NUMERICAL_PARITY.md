@@ -45,6 +45,52 @@ and the measured CE difference is about 0.002 nats. The corresponding control
 is `fp32-bf16-transport-v24/run-v1/`. This separates payload storage precision
 from backbone computation precision; it does not qualify the whole runtime.
 
+## Mellum batch-row dragnet: shape-dependent expert GEMMs and routing flips (DGX, 2026-10-12)
+
+Trigger: in the direct trainer smoke, two identical unpadded rows of one packed Mellum batch gave final hidden states
+about 2.4% apart (BF16, 92.5% top-1 agreement). Probe: the first 4 Mellum layers (dense BF16 experts), real text at
+512 and 1500 tokens, hooks on every op; row 0 against row 1 of one batch, and against a batch of one
+(`runs/neuralese-direct-mellum-20261011/batch-row-dragnet/`).
+
+- Input norm, q/k/v projections, attention output, o_proj and post-attention norm: bitwise equal in every
+  comparison. The first difference is always layer 0's MoE: row 0 against row 1 about 1e-6, batch of two against
+  batch of one 1e-4.
+- The amplifier is top-k routing: after layer 0 the next layers' routers pick a different expert set for some tokens
+  (layer 3: up to 9 of 512 tokens row against row, 41 of 1500 batch against batch), and the MoE output differs by
+  3e-3 to 1.7e-2 relative from layer 1 on. That is consistent with 2.4% at the end of 28 layers.
+- The source: a BF16 cuBLAS GEMM gives a row a different result depending on how many rows share the call (the
+  kernel is chosen by shape). One Mellum expert weight, the same rows alone and inside twice as many rows: unequal at
+  1, 37 and 64 rows (5.7e-5 to 7.5e-5 relative), equal at 7 and 129. A token's expert output therefore depends on how
+  many tokens were routed to the same expert, which differs between a batch of one and a packed batch, and between
+  a decode step and a sequence pass.
+- Ruled out: `allow_bf16_reduced_precision_reduction=False` (no change); FP32 expert products (smaller, still 1e-4
+  batch against batch: the NGC image sets `TORCH_ALLOW_TF32_CUBLAS_OVERRIDE=1`, so FP32 products run in TF32 and are
+  shape-dependent too, and the router's FP32 logits carry 3e-4 relative TF32 error); TF32 off through the torch flags
+  alone (routing flips remained, from the expert GEMMs); torch's grouped GEMM (`moe_kernel` "grouped", equally
+  shape-dependent); fixed-size cuBLAS blocks through `bmm` (row-invariant on the real model at 256-row blocks, but
+  unit tests found shapes and batch counts where it is not, so it is not invariant by construction).
+- Full FP32 with TF32 off (`TORCH_ALLOW_TF32_CUBLAS_OVERRIDE=0`): rows bitwise equal, batch against batch 1e-6, no
+  routing flips. BF16 alone is not the problem; shape-dependent rounding plus discrete routing is.
+
+Fix: `moe_kernel` "invariant" (`maple/fused_moe.invariant_dense_experts`, the new default of the MoE and of the three
+trainers' `--moe-kernel`). Every routed row is computed by one Triton tile with a fixed configuration (64-row expert
+blocks, 256 x 64 tiles, the k loop in one order), so a row's result depends only on its own input and its expert's
+weights. The router's FP32 logits use the same kernel in exact FP32 (IEEE `tl.dot`), independent of the TF32 override.
+The weight gradient is one grouped GEMM (it need not be invariant). On the same 4-layer probe at 512 and 1500
+tokens, every op is bitwise equal row against row and batch against batch, with no routing flips. The tests compare
+it with the loop (values and gradients, with and without precision points) and check identical outputs for one row
+alone, beside a copy, beside 3 other rows, and in decode-sized calls.
+
+Cost (one Mellum MoE layer, top-8 of 64, GB10): decode-sized calls are faster (1 token: 2.4 ms forward against 5.9 ms);
+16k tokens forward and backward 630 ms against 467 ms for "grouped" and 1391 ms for "loop" (3k tokens: 156 against
+129 and 302). Recipes that declare `moe_kernel: grouped` (Mellum direct v3) keep it; that choice now trades the
+invariance for about 1.35x MoE speed.
+
+Not covered: dense projections and attention at decode against sequence shapes. They were bitwise equal at 512 and
+1024 rows here, but a single-row GEMM differs (above). The forced-sequence against incremental writer gap on Mellum is
+to be re-measured with the invariant kernel (`eval/direct_forced.py`). LFM2.5 has no MoE, so Pop's LFM gap is not
+explained by routing.
+
 ## Course of action and acceptance
 
 The owner prefers lower precision and removing costly checkpointing where it
@@ -274,15 +320,32 @@ the V18 output; SHA-256
 The normal BF16 path resumed from step 838. The unadopted implementation was
 removed. These probes were already uncheckpointed: they do **not** answer
 whether memory savings near the fit boundary can remove whole-layer replay
-and improve throughput. That matched boundary comparison remains useful;
-prepare it before any further training pause.
+and improve throughput. The later adjacent-context observations below exercise
+the estimator at two longer uncheckpointed boundaries; they do not test the
+RMSNorm replay intervention.
 
 The container launcher now supports exact in-place resume and serializes
 launches per output (`a63f0acc`, `939c470e`, `1956a2c9`). A new-corpus
 `continue_from` phase is different: it starts its own schedule/baseline.
 In-place resume restored update 828 and optimizer/RNG, then saved update 838.
 The promised separate update 828 fallback was not copied before the rotating
-slot was overwritten; its bytes are unavailable. Update 838 is safely saved
-and a separate comparison parent was preserved. Before experimental updates,
-copy/verify one bounded fallback first; after deciding, prune unnecessary
-copies. Do not retain every periodic checkpoint.
+slot was overwritten; its bytes are unavailable. The extra step-838 comparison
+checkpoint was deleted after the diagnostic; only the report remains. Before
+experimental updates, copy/verify one bounded fallback first; after deciding,
+prune unnecessary copies. Do not retain every periodic checkpoint.
+
+### Adjacent-context calibration boundary observations (2026-10-12)
+
+The shared estimator's adjacent-context fallback was exercised during the
+BF16-auto continuation from the verified step-1610 full-state checkpoint. Rows
+at steps 1633 and 1655 used context lengths 4313 and 4607, target length 256,
+and selected sequential execution with layer checkpointing off. Both estimates
+used 72 samples from same-mode/checkpoint context-bin 11 target bins 7 and 8,
+at q95 plus the existing margin. Forecasts were 5,487,257,167 and
+5,809,589,319 bytes; observed incremental peaks were 4,775,798,272 and
+5,594,913,280 bytes. Both rows completed without OOM. This is evidence for
+these two estimator decisions only; it is not a global throughput, quality, or
+model qualification claim. The compact digest-bound receipt, including exact
+JSONL line hashes, is
+[`measurement-receipt.json`](../../runs/neuralese-direct-memory-estimator-boundary-v1/measurement-receipt.json)
+(SHA-256 `59fb277cff8bd2ba3ac979cd2ac9d8c3b285901e5ac18adc8646fd585c6511b1`).

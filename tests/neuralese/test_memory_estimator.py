@@ -1,3 +1,5 @@
+import pytest
+
 from natlang_neuralese.train.memory_estimator import AdaptiveGraphMemory, geometry_bytes, selective_writer_fits
 
 
@@ -235,3 +237,24 @@ def test_formula_only_local_stage_upgrade_preserves_known_joint_failure_routes()
     assert estimator.joint_routes_compatible
     assert estimator.calibration_reset
     assert estimator.samples == {}
+
+
+def test_joint_calibration_scales_only_the_tape_and_carries_to_an_unseen_bin():
+    """A joint attempt's fixed part (resident weights, optimizer state, gradient buffers) is counted exactly; only the
+    graph tape is calibrated, and a first two-writer record borrows the one-writer record's miss (Mellum E2E smoke,
+    2026-10-11: 39.8 GB predicted, 72 GB observed at step 0, out of memory at step 1)."""
+    gib = 2**30
+    model = AdaptiveGraphMemory()
+    one = {'writers': [(4582, 46)], 'reader_context': 4600}
+    two = {'writers': [(4443, 46), (4582, 46)], 'reader_context': 4600}
+    assert model.observe_joint(one, 40 * gib, 72 * gib, fixed=30 * gib) == pytest.approx(4.2)
+    # The next update's fixed part has grown by the optimizer state; the tape ratio, not the whole-peak ratio, applies.
+    predicted = model.adjust_joint(two, 74 * gib, fixed=54 * gib)
+    assert predicted == int(54 * gib + 20 * gib * 4.2)
+    assert predicted > 92 * gib  # routed to staging rather than attempted jointly
+    assert model.adjust_joint(two, 74 * gib, fixed=74 * gib) == 74 * gib  # no tape: nothing to scale
+    restored = AdaptiveGraphMemory(model.state_dict())
+    assert restored.adjust_joint(two, 74 * gib, fixed=54 * gib) == predicted
+    # Older whole-peak ratios are a different quantity and are not reused.
+    legacy = AdaptiveGraphMemory({'joint_ratios': {'joint:0:12': [9.0]}})
+    assert legacy.adjust_joint(one, 40 * gib, fixed=30 * gib) == 40 * gib
