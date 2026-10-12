@@ -18,7 +18,7 @@ import os
 from pathlib import Path
 
 from ..common.hashing import canonical_json_sha256_hex
-from ..common.hashing import sha256_file_hex as sha
+from ..common.hashing import sha256_file_hex_cached as sha  # cached by (realpath, size, mtime_ns)
 
 
 HANDLERS = {
