@@ -72,7 +72,9 @@ def main():
             number = int(batch.name[-2:])
             cases = lines(batch / 'cases.jsonl')
             labels = lines(batch / 'labels.jsonl')
-            if len(labels) < len(cases):
+            case_ids = {row['id'] for row in cases}
+            label_ids = {row['id'] for row in labels}
+            if len(labels) < len(cases) or case_ids != label_ids or len(labels) != len(label_ids):
                 unit = f'natlang-pop-gemini-clinc-batch{number:02d}.service'
                 print(json.dumps({'event': 'active' if unit_active(unit) else 'needs_investigation',
                                   'batch': number, 'completed': len(labels), 'target': len(cases)}))
@@ -80,9 +82,12 @@ def main():
             if cases:
                 valid = sum(isinstance(row.get('answer'), dict) and
                             'error' not in row['answer'] for row in labels)
-                if valid / len(cases) < 0.6:
+                gold = {row['id']: row['answer'] for row in cases}
+                exact = sum(row.get('answer', {}).get('choice') == gold[row['id']]
+                            for row in labels if isinstance(row.get('answer'), dict))
+                if valid / len(cases) < 0.6 or exact / len(cases) < 0.75:
                     print(json.dumps({'event': 'quality_pause', 'batch': number,
-                                      'valid': valid, 'target': len(cases)}))
+                                      'valid': valid, 'exact': exact, 'target': len(cases)}))
                     return
         if len(batches) >= 99:
             print('{"event":"campaign_limit"}')
