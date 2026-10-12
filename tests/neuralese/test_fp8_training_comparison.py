@@ -34,6 +34,7 @@ def test_summary_uses_updates_after_three_cold_start_steps(tmp_path):
     ]
     (stage / 'train.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in rows))
     (stage / 'eval.jsonl').write_text(json.dumps({'step': 5, 'loss': 1.2}) + '\n')
+    (stage / 'report.json').write_text(json.dumps({'fp8_training': None}) + '\n')
     result = summarize_run(output)
     assert result['cold_first_update_seconds'] == 10.0
     assert result['warm_updates_used'] == 2
@@ -71,6 +72,7 @@ def test_variant_separates_wrapper_and_container_logs_and_parses_container_plan(
                                                                 'supervised_tokens_per_second': 100.0}) + '\n'
                                            for i in range(1, 6)))
         (stage / 'eval.jsonl').write_text('{}\n')
+        (stage / 'report.json').write_text(json.dumps({'fp8_training': None}) + '\n')
         return subprocess.CompletedProcess(argv, 0)
 
     monkeypatch.setattr(comparison, '_gpu_sample', no_gpu_sampling)
@@ -81,3 +83,26 @@ def test_variant_separates_wrapper_and_container_logs_and_parses_container_plan(
                                          'target_tokens': 128, 'activation_geometry_bytes': None}]
     assert result['launch_log'].endswith('.wrapper.log')
     assert result['container_log'].endswith('.container.log')
+
+
+def test_prepared_te_arm_declares_trusted_scale_restore_only_for_te(tmp_path, monkeypatch):
+    template_path = tmp_path / 'template.json'
+    template = {
+        'schema': 'natlang.neuralese-declared-direct-stage/1',
+        'execution': 'direct_shared_stage',
+        'id': 'fp8-template-v1',
+        'stage': {'id': 'fit', 'kind': 'neuralese_direct'},
+        'inputs': {'text_data': {'path': str(tmp_path / 'text.jsonl'), 'sha256': 'a' * 64}},
+        'parameters': {'batch': 2, 'steps': 5, 'fp8_training': 'off'},
+        'outputs': {'directory': str(tmp_path / 'template-output')},
+        'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': {'train/direct_sft.py': 'b' * 64}},
+        'lineage': {'scope': 'diagnostic only', 'evidence': []},
+    }
+    template_path.write_text(json.dumps(template))
+    monkeypatch.setattr(comparison, 'package_code_inventory', lambda: {'train/direct_sft.py': 'c' * 64})
+    monkeypatch.setattr(comparison, '_validate_inputs', lambda _recipe: None)
+    variants = comparison.build_pair(template_path, tmp_path / 'pair', 'short', 'sha256:' + '1' * 64)
+    by_backend = {variant['backend']: variant['recipe'] for variant in variants}
+    assert 'environment' not in by_backend['bf16']['runtime']
+    assert by_backend['te_fp8']['runtime']['environment'] == {
+        'NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE': '1'}

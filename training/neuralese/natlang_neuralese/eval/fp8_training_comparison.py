@@ -91,13 +91,16 @@ def build_pair(template_path: Path, output_root: Path, profile: str, image: str,
         raise ValueError('comparison recipe must contain at least four optimizer updates for warm timing')
 
     runtime = dict(template['runtime'])
+    # The paired TE arm may later resume its locally produced scale-state checkpoint. Make that narrowly trusted
+    # restore opt-in part of the declared recipe; the BF16 arm never inherits it.
+    runtime.pop('environment', None)
     runtime['image'] = image
     runtime['package_code'] = package_code_inventory()
     variants = []
     for backend, recipe_name in (('bf16', 'delayed'), ('te_fp8', 'delayed')):
         recipe = json.loads(json.dumps(template))
         recipe['id'] = f"{template['id']}-{profile}-{backend.replace('_', '-')}"
-        recipe['runtime'] = runtime
+        recipe['runtime'] = json.loads(json.dumps(runtime))
         recipe['outputs'] = {'directory': str((output_root / 'outputs' / profile / backend).resolve())}
         recipe['lineage']['scope'] = (
             str(recipe['lineage']['scope']).rstrip() +
@@ -107,6 +110,8 @@ def build_pair(template_path: Path, output_root: Path, profile: str, image: str,
         recipe['parameters']['fp8_amax_history_len'] = 16
         recipe['parameters']['saved_tensor_audit_steps'] = saved_tensor_audit_steps
         recipe['parameters']['gradient_audit_steps'] = 1
+        if backend == 'te_fp8':
+            recipe['runtime']['environment'] = {'NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE': '1'}
         validate_direct_stage_recipe(recipe)
         path = output_root / 'recipes' / f'{profile}-{backend}.json'
         path.parent.mkdir(parents=True, exist_ok=True)
