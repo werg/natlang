@@ -45708,6 +45708,40 @@
         }
       },
       "notes": ""
+    },
+    {
+      "id": "clinc-plus-full-train-expanded-20261012-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/clinc-plus-full-train-expanded-20261012-v1",
+      "include": [
+        "decision-cases.jsonl",
+        "decision-episodes.jsonl",
+        "source-revision.manifest.json",
+        "decision-data.manifest.json",
+        "source-pins.json",
+        "source-catalog.json",
+        "upstream-license-source-manifest.json",
+        "clinc__clinc_oos/plus/train/train-00000-of-00001.parquet",
+        "source-availability.json"
+      ],
+      "split": "train-only; source rows inherit upstream CLINC plus train split; no heldout rows",
+      "source_class": "source-available-for-generation-only",
+      "training_admission": false,
+      "trace_admission": false,
+      "independent_new_worlds": 0,
+      "admission": "generation source availability only; do not render or train directly from this pool without row-level source, split, and quality review",
+      "manifest": "training/corpus-manifests/clinc-plus-full-train-expanded-20261012-v1.json",
+      "license": "CC-BY-3.0 (upstream provenance pinned in source manifest)",
+      "notes": "15,250 train rows: prior 2,000 canonical rows preserved exactly plus 13,250 additional unique train IDs/text identities/source groups. Heldout overlap is zero. Earlier V22-V26 activity used/reserved the prior 2,000 rows; the 500-item V3 plan draws from the additional 13,250, leaving 12,750 additional rows unselected after V3. Source availability only; no SFT, trace, or new-world admission. The bundled source-availability.json separately counts rows outside guided V1/V2/V3 selections only; its 14,450 figure is not the remaining ungenerated count because it excludes historical V22-V26.",
+      "generation_coverage_current": {
+        "as_of": "2026-10-12",
+        "previous_canonical_train_pool_rows": 2000,
+        "historical_reserved_or_generated_from_previous_pool": "Earlier CLINC campaigns V22-V26 used/reserved the prior 2,000-row pool; do not count those rows as remaining.",
+        "additional_train_rows_in_this_expansion": 13250,
+        "additional_rows_selected_in_root_approved_guided_v3_plan": 500,
+        "additional_rows_remaining_unselected_after_v3_plan": 12750,
+        "admission": "generation planning only; selections and outputs require their own provenance and per-row review; training_admission remains false."
+      }
     }
   ],
   "coverage_backlog": [
