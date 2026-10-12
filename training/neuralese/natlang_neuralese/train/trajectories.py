@@ -706,7 +706,8 @@ def main(argv=None):
                              "preserve stream) are backpropagated together, layer by layer across all of them "
                              "(model/layer_staging.py), and every LionSR latent steps as its layer completes and frees "
                              "its gradient, so no backbone gradient buffer exists; needs batch 1 and the joint backward "
-                             "policy, and is refused when a stream reads a deeper layer of another at its input. The "
+                             "policy; a value one stream makes from a deeper layer and another reads at its input (a "
+                             "direct write) is resolved by an activation-only pre-pass (model/layer_staging.py). The "
                              "global norm counts the latents; they are clipped only with --grad-spike-clip")
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--projection-anchor-weight", type=float, default=1.0,
@@ -1852,11 +1853,6 @@ def main(argv=None):
         if args.batch != 1 or args.backward_policy != 'joint' or args.member_weight:
             raise ValueError('--latent-step-in-backward needs one backward per update: --batch 1, '
                              '--backward-policy joint and no --member-weight')
-        if args.direct_artifact:
-            # Measured (test_call_recurrence): under the layer-staged backward the direct writer's child context
-            # receives no gradient, while the separate backward trains it. Refused until that path joins the tape.
-            raise ValueError('--latent-step-in-backward loses the gradient into a direct write\'s producer context; '
-                             'run the direct end-to-end stage without it')
     if args.qat_latent_lr and args.backbone_training == 'qat':
         from .adapters import qat_latent_scales
         latent_lrs = {name: args.qat_latent_lr * scale for name, scale in qat_latent_scales(engine.backbone).items()

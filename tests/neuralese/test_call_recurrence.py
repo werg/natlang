@@ -206,14 +206,24 @@ def test_direct_end_to_end_folds_crisp_sft_into_the_routed_backward(loaded, tmp_
     assert summary["relative_change"]["instructions@child"] > 0
 
 
-def test_direct_end_to_end_refuses_the_in_backward_latent_step(loaded, tmp_path, monkeypatch):
-    """Measured: under --latent-step-in-backward the direct writer's child context got no gradient (relative change
-    0.0 against 0.065 with the separate backward), so the combination is refused until that path joins the tape."""
-    records, pieces, _ = _direct_stand_in(loaded, tmp_path, monkeypatch)
-    with pytest.raises(ValueError, match="producer context"):
-        main(_direct_arguments(records, pieces, tmp_path / "out", tmp_path) + [
+def test_direct_end_to_end_trains_the_child_context_under_the_in_backward_latent_step(loaded, tmp_path, monkeypatch):
+    """--latent-step-in-backward on the direct E2E stage: the caller reads the child's value (made from the writer's
+    top layer) at its first layer. Before the layer staging resolved such cross-stream edges, the child context got
+    no gradient (relative change 0.0 against 0.065 with the separate backward); now it moves like it."""
+    if not hasattr(torch.optim, "Muon"):
+        pytest.skip("needs torch.optim.Muon")
+    moved = {}
+    for label, extra in (("separate", []), ("in-backward", ["--latent-step-in-backward"])):
+        (tmp_path / label).mkdir()
+        records, pieces, _ = _direct_stand_in(loaded, tmp_path / label, monkeypatch)
+        out = tmp_path / label / "out"
+        assert main(_direct_arguments(records, pieces, out, tmp_path / label) + [
             "--no-save-state", "--backbone-training", "latent", "--optimizer", "muon", "--latent-optimizer", "muonsr",
-            "--latent-lr", "1e-3", "--latent-step-in-backward", "--backward-policy", "joint"])
+            "--latent-lr", "1e-3", "--backward-policy", "joint", *extra]) == 0
+        moved[label] = json.loads((out / "summary.json").read_text())["relative_change"]
+    assert moved["in-backward"]["instructions@child"] > 0
+    assert moved["in-backward"]["instructions@child"] == pytest.approx(moved["separate"]["instructions@child"], rel=0.05)
+    assert moved["in-backward"]["instructions@caller"] == pytest.approx(moved["separate"]["instructions@caller"], rel=0.05)
 
 
 @pytest.mark.parametrize("feedback", ["token", "value"])

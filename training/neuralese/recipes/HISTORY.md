@@ -429,3 +429,17 @@ after the router predicted 39.8 GB for an update that peaked at 72 GB.
   passed, so the gradient arriving at the writer's top leaf is never propagated, and the staging check misses it
   (the leaf was never processed). Open work: a correct order for such cross-stream edges, with each layer's
   latents still stepping once.
+
+## 2026-10-12: layer staging resolves cross-stream edges (direct writes under --latent-step-in-backward)
+
+The refusal of `--latent-step-in-backward` with `--direct-artifact` (same day, above) is lifted. `LayerStaging`
+(model/layer_staging.py) finds edges whose source reads exit leaves of the same or deeper layers (the caller's input
+made from the child writer's top layer). Before the layer walk, an activation-only pre-pass (`torch.autograd.grad` to
+the layer leaves: no weight gradient, no latent steps) walks the same layers and sends each such edge's gradient to the
+exit leaves it reads. It repeats while it reaches new cross edges (nested writes). The main walk then starts with those
+gradients in place, so each layer's latents still step once with their whole gradient. When the walk reaches such an
+edge, it checks that the edge sends the pre-pass's gradient and discards the duplicate. Any other gradient arriving at
+an exit leaf after its layer was passed is now refused; before, it was dropped silently.
+Cost: one extra activation-only backward (with checkpointed layers, one more recompute) when cross edges exist; none
+otherwise. Tests: a two-stream tiny-LFM update equals separate backwards plus one step (latents bitwise, context
+gradient); the direct E2E stage moves the child instructions like the separate backward (within 5%).
