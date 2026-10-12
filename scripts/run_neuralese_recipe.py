@@ -119,6 +119,8 @@ def read_direct_recipe(path: Path) -> dict:
         raise ValueError("recipe must pin a sha256 container image")
     if not isinstance(runtime.get("package_code"), dict) or not runtime["package_code"]:
         raise ValueError("recipe must pin the shared package_code inventory")
+    from natlang_neuralese.train.recipe import declared_runtime_environment
+    declared_runtime_environment(recipe)
     allocator_config = runtime.get("cuda_allocator_config")
     if allocator_config is not None and (not isinstance(allocator_config, str) or
                                          not allocator_config.strip() or "\n" in allocator_config):
@@ -141,9 +143,10 @@ def read_direct_recipe(path: Path) -> dict:
 
 def read_shared_recipe(path: Path) -> dict:
     """Load and validate the ordinary shared multi-stage recipe DAG."""
-    from natlang_neuralese.train.recipe import load_recipe
+    from natlang_neuralese.train.recipe import declared_runtime_environment, load_recipe
 
     recipe = load_recipe(path)
+    declared_runtime_environment(recipe)
     if recipe.get("schema") != "natlang.neuralese-training-recipe/1" or not recipe.get("stages"):
         raise ValueError("recipe is not a shared multi-stage training recipe")
     runtime = recipe.get("runtime")
@@ -212,10 +215,13 @@ def validated_container_name(value: str) -> str:
 
 
 def build_training_docker_command(common_docker: list[str], image: str, container_name: str,
-                                  device: str, child: list[str], profile_updates: str | None) -> list[str]:
+                                  device: str, child: list[str], profile_updates: str | None,
+                                  declared_environment: dict[str, str] | None = None) -> list[str]:
     command = [*common_docker, "--name", container_name, "--gpus", "all"]
     if device == "cpu":
         command += ["-e", "CUDA_VISIBLE_DEVICES="]
+    for key, value in sorted((declared_environment or {}).items()):
+        command += ["-e", f"{key}={value}"]
     command += ["--entrypoint", "/usr/bin/python3", image, *child]
     if profile_updates is not None:
         command[command.index(image):command.index(image)] = ["-e", f"NATLANG_PROFILE_UPDATES={profile_updates}"]
@@ -246,6 +252,9 @@ def validate_existing_direct_resume(output: Path, recipe: dict, device: str,
         raise ValueError("existing output has an unsupported direct-stage plan")
     if plan.get("recipe_id") != recipe.get("id"):
         raise ValueError("direct-stage resume changes recipe identity")
+    from natlang_neuralese.train.recipe import declared_runtime_environment
+    if plan.get("runtime_environment", {}) != declared_runtime_environment(recipe):
+        raise ValueError("direct-stage resume changes declared runtime environment")
     expected_stage_output = (output / recipe["stage"]["id"]).resolve()
     if plan.get("stage") != recipe["stage"]:
         raise ValueError("direct-stage resume changes stage")
@@ -583,6 +592,8 @@ def main(argv=None) -> int:
                       "-e", f"XDG_CACHE_HOME={container_kernel_cache / 'xdg'}",
                       "-e", f"PYTHONPATH={map_path(NEURALESE, mounts)}"]
     allocator_config = recipe["runtime"].get("cuda_allocator_config")
+    from natlang_neuralese.train.recipe import declared_runtime_environment
+    declared_environment = declared_runtime_environment(recipe)
     if allocator_config is not None:
         common_docker += ["-e", f"PYTORCH_CUDA_ALLOC_CONF={allocator_config}"]
     preflight_code = (
@@ -607,7 +618,7 @@ def main(argv=None) -> int:
                  "CUDA_VISIBLE_DEVICES=", "--entrypoint", "/usr/bin/python3", image, "-c", preflight_code,
                  stage_kind, str(container_hub_cache), *preflight_paths]
     command = build_training_docker_command(common_docker, image, container_name, args.device,
-                                            child, profile_updates)
+                                            child, profile_updates, declared_environment)
     output_mount = mount_for(output, mounts)
     if output_mount[2] != "rw":
         raise ValueError("the most-specific bind covering outputs.directory must be read-write")
@@ -628,8 +639,9 @@ def main(argv=None) -> int:
               "handoff": args.handoff, "output_launch_lock": str(launch_lock_path),
               "container_name": container_name, "preflight_container_name": preflight_container_name,
               "natlang_profile_updates": profile_updates,
-              "container_environment": ({"NATLANG_PROFILE_UPDATES": profile_updates}
-                                         if profile_updates is not None else {}),
+              "container_environment": {**declared_environment,
+                                        **({"NATLANG_PROFILE_UPDATES": profile_updates}
+                                           if profile_updates is not None else {})},
               "recipe_kind": "declared_direct_stage" if direct else "shared_multi_stage",
               "recipe_stages": ([recipe["stage"]] if direct else
                                 [{"id": stage["id"], "kind": stage["kind"]} for stage in recipe["stages"]]),

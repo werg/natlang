@@ -610,6 +610,7 @@ def load_recipe(path):
                                not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages'])):
         raise ValueError('neuralese recipe must declare identity and embedding distillation stages')
     validate_input_bindings(recipe)
+    declared_runtime_environment(recipe)
     if 'quantization' in recipe:
         # QAT woven into the stages (owner 2026-10-10; train/quantization.py): one component, inherited by every
         # stage it names.
@@ -619,6 +620,29 @@ def load_recipe(path):
         from .quantization import validate_init
         validate_init(recipe['init'], recipe.get('quantization'))
     return recipe
+
+
+_TRUSTED_RUNTIME_ENVIRONMENT = {'NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE': '1'}
+
+
+def declared_runtime_environment(recipe):
+    """Validate the small allowlist of recipe-declared runtime environment switches."""
+    runtime = recipe.get('runtime')
+    environment = runtime.get('environment', {}) if isinstance(runtime, dict) else {}
+    if not isinstance(environment, dict) or any(
+            key not in _TRUSTED_RUNTIME_ENVIRONMENT or value != _TRUSTED_RUNTIME_ENVIRONMENT[key]
+            for key, value in environment.items()):
+        raise ValueError('runtime.environment contains an unsupported declared setting')
+    if environment:
+        stages = ([recipe.get('stage', {})] if isinstance(recipe.get('stage'), dict)
+                  else recipe.get('stages', []))
+        te_enabled = any(
+            stage.get('kind') == 'neuralese_direct' and
+            stage.get('parameters', recipe.get('parameters', {})).get('fp8_training') == 'te-fp8'
+            for stage in stages if isinstance(stage, dict))
+        if not te_enabled:
+            raise ValueError('trusted TE extra-state restore requires a declared te-fp8 neuralese_direct stage')
+    return dict(environment)
 
 
 def validate_direct_stage_recipe(recipe):
@@ -657,6 +681,7 @@ def validate_direct_stage_recipe(recipe):
     if (not isinstance(runtime, dict) or not re.fullmatch(r'sha256:[0-9a-f]{64}', runtime.get('image', '')) or
             not isinstance(runtime.get('package_code'), dict) or not runtime['package_code']):
         raise ValueError('direct stage requires a pinned image and shared package code inventory')
+    declared_runtime_environment(recipe)
     lineage = recipe.get('lineage')
     if not isinstance(lineage, dict) or not lineage.get('scope'):
         raise ValueError('direct stage requires an explicit lineage scope')
@@ -1214,7 +1239,8 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
             'runtime_image': recipe['runtime']['image'], 'frozen_code': frozen_code,
             'parameters': parameters, 'child_argv': command, 'stage_output': str(stage_output),
             'lineage': recipe['lineage'], 'lineage_evidence': lineage_evidence,
-            'lineage_gate_verifications': lineage_gate_verifications}
+            'lineage_gate_verifications': lineage_gate_verifications,
+            'runtime_environment': declared_runtime_environment(recipe)}
     if hdd_guard.RECORDS:
         plan['hdd_staged_inputs'] = list(hdd_guard.RECORDS)
     if resume is not None:
@@ -1233,6 +1259,10 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
                                    json.dumps(frozen_code, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
                                'child_argv': command})
     environment = dict(os.environ)
+    declared_environment = declared_runtime_environment(recipe)
+    if 'NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE' not in declared_environment:
+        environment.pop('NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE', None)
+    environment.update(declared_environment)
     environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
     print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
     with _ChildSignalForwarder() as signal_forwarder:
@@ -1381,6 +1411,9 @@ def main(argv=None):
     plan_path = args.out / 'recipe-plan.json'
     plan = {'schema': 'natlang.neuralese-recipe-plan/1', 'recipe': recipe,
             'recipe_sha256': recipe_identity_sha256(args.recipe), 'inputs': inputs, 'device': args.device}
+    declared_environment = declared_runtime_environment(recipe)
+    if declared_environment:
+        plan['runtime_environment'] = declared_environment
     if any('inputs' in stage for stage in recipe['stages']):
         plan['stage_inputs'] = stage_inputs
     if plan_path.exists():
@@ -1422,7 +1455,8 @@ def main(argv=None):
                               'recipe_plan_path': str(plan_path),
                               'recipe_plan_sha256': sha(plan_path),
                               'frozen_runtime_sha256': plan.get('code', {}),
-                              'stage_inputs': stage_inputs})
+                              'stage_inputs': stage_inputs,
+                              'runtime_environment': declared_runtime_environment(recipe)})
     init_mix = {}
     if recipe.get('quantization') or recipe.get('init'):
         # The lineage's init decision is recorded in its heads (foundation_heads --init-receipt): check it against
@@ -1520,6 +1554,10 @@ def main(argv=None):
                 if component is not None:
                     command += ['--quantization', json.dumps(component, sort_keys=True, separators=(',', ':'))]
                 environment = dict(os.environ)
+                declared_environment = declared_runtime_environment(recipe)
+                if 'NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE' not in declared_environment:
+                    environment.pop('NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE', None)
+                environment.update(declared_environment)
                 environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
                 if hdd_guard.RECORDS:
                     write_json(args.out / 'hdd-staged-inputs.json', hdd_guard.RECORDS)

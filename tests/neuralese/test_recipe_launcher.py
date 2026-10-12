@@ -336,3 +336,28 @@ def test_profile_environment_is_added_to_the_named_training_container():
     assert command[command.index("--name") + 1] == "pop-header2-whole1-1234"
     assert command[command.index("-e") + 1] == "NATLANG_PROFILE_UPDATES=2:6"
     assert command.index("NATLANG_PROFILE_UPDATES=2:6") < command.index("sha256:" + "1" * 64)
+
+
+def test_declared_trusted_te_restore_environment_is_pinned_and_forwarded():
+    recipe = {
+        "runtime": {"environment": {"NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE": "1"}},
+        "stage": {"kind": "neuralese_direct"},
+        "parameters": {"fp8_training": "te-fp8"},
+    }
+    declared = recipe_module.declared_runtime_environment(recipe)
+    command = LAUNCHER.build_training_docker_command(
+        ["docker", "run", "--rm"], "sha256:" + "1" * 64, "pop-te-restore-1234",
+        "cuda", ["-m", "natlang_neuralese.train.recipe"], None, declared)
+    assert declared == {"NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE": "1"}
+    assert "NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE=1" in command
+
+
+@pytest.mark.parametrize("recipe", [
+    {"runtime": {"environment": {"PYTHONPATH": "/tmp"}},
+     "stage": {"kind": "neuralese_direct"}, "parameters": {"fp8_training": "te-fp8"}},
+    {"runtime": {"environment": {"NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE": "1"}},
+     "stage": {"kind": "neuralese_direct"}, "parameters": {"fp8_training": "off"}},
+])
+def test_trusted_te_restore_environment_is_narrowly_scoped(recipe):
+    with pytest.raises(ValueError, match="runtime.environment|te-fp8"):
+        recipe_module.declared_runtime_environment(recipe)
