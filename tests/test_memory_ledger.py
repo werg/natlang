@@ -814,3 +814,36 @@ def test_a_high_head_is_not_held_off_by_a_fresh_backfill():
     fresh = dict(running('collection', 8, 0, priority='low'), admitted=now - 10, backfilled_behind='v4.service')
     head = {'priority': 'high', 'budget': 12 * GIB, 'reserve': 8 * GIB}
     assert ledger.preemption_plan({'r.service': fresh}, 18 * GIB, head, head='v4.service', now=now) == ['r.service']
+
+
+def test_the_default_reserve_is_a_quarter_of_the_budget_between_1_and_8_gib():
+    assert ledger.default_reserve(2 * GIB) == GIB  # plan-only proof
+    assert ledger.default_reserve(12 * GIB) == 3 * GIB
+    assert ledger.default_reserve(100 * GIB) == 8 * GIB
+    assert ledger.spec_reserve({'reserve': 8 * GIB}, 4 * GIB) == GIB  # spec from before: the default applies
+    assert ledger.spec_reserve({'reserve': 8 * GIB, 'reserve_explicit': True}, 4 * GIB) == 8 * GIB
+
+
+def test_small_jobs_start_beside_a_big_trainer_with_proportional_reserves(monkeypatch, tmp_path):
+    # 2026-10-12: ~8 GB headroom beside Mellum v4; 2-12 GB jobs each waited for budget + a flat 8 GB reserve
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'reclaimable', lambda: 0)
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 8 * GIB)
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(): 0)
+    launched = []
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec) or 0)
+
+    def args(unit, budget, reserve=None):
+        return type('A', (), {'budget_gb': budget, 'reserve_gb': reserve, 'unit': unit, 'priority': 'medium',
+                              'cls': 'experiment', 'wait': 0, 'resumable': True, 'host_max_gb': None,
+                              'oom_policy': 'stop', 'workdir': '.', 'env': [], 'stop_seconds': None, 'command': ['x'],
+                              'hold_budget': False, 'container': []})()
+    ledger.run(args('plan-only', 2))
+    assert launched[-1]['reserve'] == GIB and not launched[-1]['reserve_explicit']
+    with pytest.raises(SystemExit):
+        ledger.run(args('explicit', 2, reserve=8))  # an explicit reserve still applies
+    with ledger.ledger() as state:  # a requeued spec takes the default for its budget
+        requeued = {'claims': {'p.service': dict(state['claims']['plan-only.service'])}, 'events': []}
+    assert ledger.requeue_spec(requeued, 'p.service') and requeued['waiting']['p.service']['reserve'] == GIB
