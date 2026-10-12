@@ -464,3 +464,12 @@ shared `neuralese_direct` handler role and the one declaration under which a `--
 inputs. direct_sft keeps its counter, weights, optimizer and QAT state, and trains r3 minus the seen r2 documents for
 the rest of its epoch. The QAT progress continues from its value at the continuation update over the new total
 (31,314 updates at update 400). The base is re-measured on r3's held set. Details: plans/neuralese/NEURALESE_DIRECT_V1.md.
+
+## Shared QAT curriculum and nested family; objective continuation of Mellum v4 (2026-10-12)
+
+`neuralese-direct-v3` (both lines) declares the curriculum direct_sft [0, 0.75], direct_trajectory [0.75, 1.0]. It
+also declares the q4 point (the LFM line's light QAT) and the nested-family component: LFM depth members 12xall and
+8xall, ramp 0.05-0.10. `neuralese-direct-mellum-v4` keeps its ternary points and declares the members 28x32, 28x16 and
+21x32 over the N0 order. `neuralese-direct-mellum-v4-from-v3-warmup` declares `objective_continuation` of direct_sft,
+pinning the quantization component it trained with (ebebbaf8...). Its next `--handoff` rebases the curriculum from
+p_k (about 0.03) to 0.75 without a jump. Details: plans/neuralese/DECISIONS.md, 2026-10-12.

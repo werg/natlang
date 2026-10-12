@@ -1481,6 +1481,24 @@ plans/MODEL_FACING_CHANGES.md, measured in the next teacher window. Data produce
 batch b00, the first port-record-call shards) used 2,000-character pages; they stay valid trajectories under the old
 size and are recorded as such, not regenerated.
 
+## Nested family and full-precision reach as in-stage objectives (owner, 2026-10-12)
+
+Status before: the nested LxE family (owner 2026-10-08) and the ternary reach (owner 2026-10-10) had lapsed without a
+decision. No direct stage trained or evaluated members, and Mellum v4's QAT curriculum ended at 0.5, so
+ternary-experts (ramp to 0.7) never completed. Decision (REVIEW_20261012 rec. 4; "as much unity and lockstep as we can
+get"):
+- The shared base `neuralese-direct-v3` has one curriculum for both lines: direct_sft [0, 0.75], direct_trajectory
+  [0.75, 1.0]. It has one shared q4 point (int4 g32, ramp 0.15-0.3, weight 0.5, sampled), which is the LFM line's light
+  QAT, at its deploy format. Mellum adds ternary-experts (required, completes at 0.7 inside direct_sft) and ternary
+  (report, 0.95).
+- The shared family objective (`maple/family.py`): per update, the full model or one member is drawn. A member update
+  trains the stage objective plus KL(full BF16 || member). The ramp is 0.05-0.10 and the total member weight is 0.3.
+  Members are backbone-inherent: LFM is dense and nests in depth (12xall, 8xall); Mellum nests in N0 expert width and
+  depth (28x32, 28x16, 21x32). There are no private parts.
+- A running stage takes it by a declared `objective_continuation` (`--handoff`): the curriculum continues from its
+  value at the handoff update, and no lambda or member weight may jump.
+Commits 7bbfd00f, f57eb9b6. The e2e lineage does not train members yet (gap).
+
 ## Deleted runs (2026-10-11)
 
 Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
