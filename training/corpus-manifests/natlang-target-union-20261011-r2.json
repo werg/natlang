@@ -1,0 +1,68 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-target-union-20261011-r2",
+  "owner": "dgx",
+  "path": "runs/natlang-target-union-20261011-r2",
+  "files": [
+    {
+      "path": "full/lfm25/text-data.jsonl",
+      "bytes": 2988027159,
+      "sha256": "c240dfad4bf326c42d85fd3448fd9fc3615f8defe8dd3e6ed3fe9cbd7ca7bd2a",
+      "lines": 68851
+    },
+    {
+      "path": "full/mellum21/text-data.jsonl",
+      "bytes": 2977559164,
+      "sha256": "aaa838741ad07e075b89d3b6b39ed22c1659628bb25252d8bc79a0800a57b55d",
+      "lines": 68851
+    },
+    {
+      "path": "full/omissions.jsonl",
+      "bytes": 18392,
+      "sha256": "c2f9c4de8c3330b9ceb7c371e3cce4ced1683ef36e21e21a418c03e05108cc7f",
+      "lines": 107
+    },
+    {
+      "path": "program-header/lfm25/text-data.jsonl",
+      "bytes": 1989030713,
+      "sha256": "9ab8e89b447a7ba9397f881fe13cdc20197c6ba4f32a9973a4d5b730d698b883",
+      "lines": 136191
+    },
+    {
+      "path": "program-header/mellum21/text-data.jsonl",
+      "bytes": 2049858226,
+      "sha256": "2699844e3a76e329ca8a454b38c32bf2695eb9c3b7e4d071730a6e24fefb095f",
+      "lines": 136191
+    },
+    {
+      "path": "program-header/omissions.jsonl",
+      "bytes": 20427,
+      "sha256": "f58e26f4b87fbed9eccc37a0fe70d1e21a62c471878fbd57877ffe68c97bcfb8",
+      "lines": 119
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 27386,
+      "sha256": "e0d1ba6bc5793b788859a7f8cfdb0c6f77b51f2e9d994c8f3d687e2a4d333018"
+    },
+    {
+      "path": "whole-trajectory/lfm25/text-data.jsonl",
+      "bytes": 650108110,
+      "sha256": "2b6cf2e17e146715a10e7fbc954eab72616f3817694229b88be0ad81952bdec5",
+      "lines": 76106
+    },
+    {
+      "path": "whole-trajectory/mellum21/text-data.jsonl",
+      "bytes": 676307394,
+      "sha256": "f92e2f330fc3d8a394b148c5c625e158bb7f7f4ff2c85dd0f9eea514aea81ca4",
+      "lines": 76106
+    },
+    {
+      "path": "whole-trajectory/omissions.jsonl",
+      "bytes": 47921,
+      "sha256": "a311156cc869d1473f8a4b04e9c37c4cfb08728589b66402577283991c3c550e",
+      "lines": 259
+    }
+  ],
+  "bytes": 11331004892
+}

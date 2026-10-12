@@ -247,6 +247,37 @@ def latent_drift(directory: Path, named, optimizer, step: int) -> dict:
             'relative': (total / reference) ** .5 if reference else None, 'latents': rows}
 
 
+def archive_predecessor_state(slot: Path) -> dict | None:
+    """After a phase handoff has loaded its predecessor's full state, move that state off the NVMe (coordinator
+    2026-10-12: a lineage keeps one full state on the fast disk). The shared mover (scripts/archive_to_external.py
+    ``archive_file``) copies it to the HDD archive, verifies size and SHA-256, records it in the archive manifest and
+    replaces the file with a symlink, so ``--continue-from`` (a restart before this phase's first save) still resolves.
+    The predecessor's ``best-checkpoint.pt`` hard link to the same file is relinked to the copy, so the NVMe blocks are
+    freed. A receipt ``<slot>.archived.json`` names the copy and its hash. Already a symlink: nothing to do."""
+    import importlib.util
+    import os
+    if slot.is_symlink() or not slot.is_file():
+        return None
+    from ..common.paths import root as path_root
+    script = Path(os.environ.get('NATLANG_REPO') or path_root('repo')) / 'scripts' / 'archive_to_external.py'
+    spec = importlib.util.spec_from_file_location('archive_to_external', script)
+    mover = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mover)
+    real = slot.resolve()
+    dest = mover.destination(real, [r.resolve() for r in mover.ROOTS], mover.ARCHIVE)
+    inode = slot.stat().st_ino
+    best = slot.with_name('best-checkpoint.pt')
+    record = mover.archive_file(slot, dest, mover.ARCHIVE / mover.MANIFEST_NAME)
+    if best.is_file() and not best.is_symlink() and best.stat().st_ino == inode:
+        link = best.with_name(best.name + '.archive-link')
+        os.symlink(dest, link)
+        os.replace(link, best)
+        record['also_relinked'] = str(best)
+    slot.with_name(slot.name + '.archived.json').write_text(json.dumps(record, indent=2) + '\n')
+    print(json.dumps({'event': 'predecessor_state_archived', **record}), flush=True)
+    return record
+
+
 def main(argv=None):
     stop = StopSignal().install()
     a = parse(argv)
@@ -646,6 +677,8 @@ def main(argv=None):
         print(json.dumps({'event': 'continued', 'from': str(a.continue_from), 'predecessor_step': state['step']}),
               flush=True)
         del state
+        if a.save_state:
+            archive_predecessor_state(Path(a.continue_from))
 
     def full_state():
         from .backbone_policy import plain_named_tensors as plain

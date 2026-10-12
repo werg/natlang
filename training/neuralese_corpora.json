@@ -38138,6 +38138,869 @@
         }
       },
       "notes": "Teacher-campaign evidence turns not covered by earlier imports (runs/teacher-campaign-evidence-uncovered-turns-20261011-v1, 30,434 turns materialized by materialize-native-teacher.mjs)."
+    },
+    {
+      "id": "natlang-target-union-20261011-r2",
+      "owner": "dgx",
+      "path": "runs/natlang-target-union-20261011-r2",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "shared-natlang-target-training-set",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2, harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2, natlang-free-provider-v28-render-20261011-v2, natlang-free-provider-v29-render-20261011-v2, natlang-free-provider-v73-render-20261011-v2, natlang-native-turns-clef-new-render-20261011-v2, natlang-native-turns-clef-pools-20261011-v2-render, natlang-native-turns-luna-v17-v9-render-20261011-v2, natlang-native-turns-misc-admitted-render-20261011-v1, natlang-native-turns-pop-v43-static-render-20261011-v1, natlang-native-turns-refine-render-20261011-v1, natlang-native-turns-s72-render-20261011-v1, natlang-native-turns-static-lambda-expansion-render-20261011-v1, natlang-native-turns-static-lambda-v2-render-20261011-v1, neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1, neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v3, neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v3, neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2",
+        "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2",
+        "natlang-free-provider-v28-render-20261011-v2",
+        "natlang-free-provider-v29-render-20261011-v2",
+        "natlang-free-provider-v73-render-20261011-v2",
+        "natlang-native-turns-clef-new-render-20261011-v2",
+        "natlang-native-turns-clef-pools-20261011-v2-render",
+        "natlang-native-turns-luna-v17-v9-render-20261011-v2",
+        "natlang-native-turns-misc-admitted-render-20261011-v1",
+        "natlang-native-turns-pop-v43-static-render-20261011-v1",
+        "natlang-native-turns-refine-render-20261011-v1",
+        "natlang-native-turns-s72-render-20261011-v1",
+        "natlang-native-turns-static-lambda-expansion-render-20261011-v1",
+        "natlang-native-turns-static-lambda-v2-render-20261011-v1",
+        "neuralese-foundation-text-input-4962-mellum21-twin-20261011-v1",
+        "neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v3",
+        "neuralese-foundation-text-input-4962-program-header-mellum21-20261011-v3",
+        "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "c240dfad4bf326c42d85fd3448fd9fc3615f8defe8dd3e6ed3fe9cbd7ca7bd2a",
+            "documents": 68851,
+            "by_split": {
+              "test": {
+                "documents": 2704,
+                "supervised_tokens": 312684,
+                "tokens": 27731822
+              },
+              "train": {
+                "documents": 66147,
+                "supervised_tokens": 5682148,
+                "tokens": 287985075
+              }
+            },
+            "by_member": {
+              "harness-bench-swe-rebench-openhands-pi-text-v2": {
+                "documents": 3843,
+                "supervised_tokens": 791583,
+                "test_documents": 874,
+                "tokens": 74552953,
+                "train_documents": 2969
+              },
+              "natlang-free-provider-v28-render-20261011-v2": {
+                "documents": 280,
+                "supervised_tokens": 41946,
+                "test_documents": 0,
+                "tokens": 2360661,
+                "train_documents": 280
+              },
+              "natlang-free-provider-v29-render-20261011-v2": {
+                "documents": 19,
+                "supervised_tokens": 5740,
+                "test_documents": 0,
+                "tokens": 163376,
+                "train_documents": 19
+              },
+              "natlang-free-provider-v73-render-20261011-v2": {
+                "documents": 846,
+                "supervised_tokens": 53741,
+                "test_documents": 0,
+                "tokens": 7295757,
+                "train_documents": 846
+              },
+              "natlang-native-turns-clef-new-render-20261011-v2": {
+                "documents": 2564,
+                "supervised_tokens": 171903,
+                "test_documents": 0,
+                "tokens": 7158162,
+                "train_documents": 2564
+              },
+              "natlang-native-turns-clef-pools-20261011-v2-render": {
+                "documents": 2480,
+                "supervised_tokens": 68496,
+                "test_documents": 0,
+                "tokens": 9530650,
+                "train_documents": 2480
+              },
+              "natlang-native-turns-luna-v17-v9-render-20261011-v2": {
+                "documents": 0,
+                "supervised_tokens": 0,
+                "test_documents": 0,
+                "tokens": 0,
+                "train_documents": 0
+              },
+              "natlang-native-turns-misc-admitted-render-20261011-v1": {
+                "documents": 2145,
+                "supervised_tokens": 239963,
+                "test_documents": 0,
+                "tokens": 14088936,
+                "train_documents": 2145
+              },
+              "natlang-native-turns-pop-v43-static-render-20261011-v1": {
+                "documents": 96,
+                "supervised_tokens": 4938,
+                "test_documents": 0,
+                "tokens": 618857,
+                "train_documents": 96
+              },
+              "natlang-native-turns-refine-render-20261011-v1": {
+                "documents": 1048,
+                "supervised_tokens": 48827,
+                "test_documents": 0,
+                "tokens": 218140,
+                "train_documents": 1048
+              },
+              "natlang-native-turns-s72-render-20261011-v1": {
+                "documents": 1791,
+                "supervised_tokens": 283332,
+                "test_documents": 0,
+                "tokens": 8191338,
+                "train_documents": 1791
+              },
+              "natlang-native-turns-static-lambda-expansion-render-20261011-v1": {
+                "documents": 5794,
+                "supervised_tokens": 257539,
+                "test_documents": 0,
+                "tokens": 25078962,
+                "train_documents": 5794
+              },
+              "natlang-native-turns-static-lambda-v2-render-20261011-v1": {
+                "documents": 42983,
+                "supervised_tokens": 3683285,
+                "test_documents": 126,
+                "tokens": 139987670,
+                "train_documents": 42857
+              },
+              "neuralese-foundation-text-input-4962": {
+                "documents": 4962,
+                "supervised_tokens": 343539,
+                "test_documents": 1704,
+                "tokens": 26471435,
+                "train_documents": 3258
+              }
+            }
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "aaa838741ad07e075b89d3b6b39ed22c1659628bb25252d8bc79a0800a57b55d",
+            "documents": 68851,
+            "by_split": {
+              "test": {
+                "documents": 2704,
+                "supervised_tokens": 334282,
+                "tokens": 32042322
+              },
+              "train": {
+                "documents": 66147,
+                "supervised_tokens": 6429749,
+                "tokens": 306527708
+              }
+            },
+            "by_member": {
+              "harness-bench-swe-rebench-openhands-pi-text-v2": {
+                "documents": 3843,
+                "supervised_tokens": 821583,
+                "test_documents": 874,
+                "tokens": 95410999,
+                "train_documents": 2969
+              },
+              "natlang-free-provider-v28-render-20261011-v2": {
+                "documents": 280,
+                "supervised_tokens": 44726,
+                "test_documents": 0,
+                "tokens": 2399278,
+                "train_documents": 280
+              },
+              "natlang-free-provider-v29-render-20261011-v2": {
+                "documents": 19,
+                "supervised_tokens": 6114,
+                "test_documents": 0,
+                "tokens": 165418,
+                "train_documents": 19
+              },
+              "natlang-free-provider-v73-render-20261011-v2": {
+                "documents": 846,
+                "supervised_tokens": 62633,
+                "test_documents": 0,
+                "tokens": 7447120,
+                "train_documents": 846
+              },
+              "natlang-native-turns-clef-new-render-20261011-v2": {
+                "documents": 2564,
+                "supervised_tokens": 200038,
+                "test_documents": 0,
+                "tokens": 7200611,
+                "train_documents": 2564
+              },
+              "natlang-native-turns-clef-pools-20261011-v2-render": {
+                "documents": 2480,
+                "supervised_tokens": 97471,
+                "test_documents": 0,
+                "tokens": 9544391,
+                "train_documents": 2480
+              },
+              "natlang-native-turns-luna-v17-v9-render-20261011-v2": {
+                "documents": 0,
+                "supervised_tokens": 0,
+                "test_documents": 0,
+                "tokens": 0,
+                "train_documents": 0
+              },
+              "natlang-native-turns-misc-admitted-render-20261011-v1": {
+                "documents": 2145,
+                "supervised_tokens": 278578,
+                "test_documents": 0,
+                "tokens": 14433576,
+                "train_documents": 2145
+              },
+              "natlang-native-turns-pop-v43-static-render-20261011-v1": {
+                "documents": 96,
+                "supervised_tokens": 6087,
+                "test_documents": 0,
+                "tokens": 619503,
+                "train_documents": 96
+              },
+              "natlang-native-turns-refine-render-20261011-v1": {
+                "documents": 1048,
+                "supervised_tokens": 49273,
+                "test_documents": 0,
+                "tokens": 220082,
+                "train_documents": 1048
+              },
+              "natlang-native-turns-s72-render-20261011-v1": {
+                "documents": 1791,
+                "supervised_tokens": 307377,
+                "test_documents": 0,
+                "tokens": 8378153,
+                "train_documents": 1791
+              },
+              "natlang-native-turns-static-lambda-expansion-render-20261011-v1": {
+                "documents": 5794,
+                "supervised_tokens": 349285,
+                "test_documents": 0,
+                "tokens": 25359926,
+                "train_documents": 5794
+              },
+              "natlang-native-turns-static-lambda-v2-render-20261011-v1": {
+                "documents": 42983,
+                "supervised_tokens": 4156852,
+                "test_documents": 126,
+                "tokens": 140587154,
+                "train_documents": 42857
+              },
+              "neuralese-foundation-text-input-4962": {
+                "documents": 4962,
+                "supervised_tokens": 384014,
+                "test_documents": 1704,
+                "tokens": 26803819,
+                "train_documents": 3258
+              }
+            }
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "9ab8e89b447a7ba9397f881fe13cdc20197c6ba4f32a9973a4d5b730d698b883",
+            "documents": 136191,
+            "by_split": {
+              "test": {
+                "documents": 2729,
+                "supervised_tokens": 318078,
+                "tokens": 20175324
+              },
+              "train": {
+                "documents": 133462,
+                "supervised_tokens": 16032340,
+                "tokens": 189831481
+              }
+            },
+            "by_member": {
+              "harness-bench-swe-rebench-openhands-pi-text-v2": {
+                "documents": 3843,
+                "supervised_tokens": 791583,
+                "test_documents": 874,
+                "tokens": 74552953,
+                "train_documents": 2969
+              },
+              "natlang-free-provider-v28-render-20261011-v2": {
+                "documents": 280,
+                "supervised_tokens": 41946,
+                "test_documents": 0,
+                "tokens": 1029481,
+                "train_documents": 280
+              },
+              "natlang-free-provider-v29-render-20261011-v2": {
+                "documents": 19,
+                "supervised_tokens": 5740,
+                "test_documents": 0,
+                "tokens": 64102,
+                "train_documents": 19
+              },
+              "natlang-free-provider-v73-render-20261011-v2": {
+                "documents": 846,
+                "supervised_tokens": 53741,
+                "test_documents": 0,
+                "tokens": 2944287,
+                "train_documents": 846
+              },
+              "natlang-native-turns-clef-new-render-20261011-v2": {
+                "documents": 2564,
+                "supervised_tokens": 171903,
+                "test_documents": 0,
+                "tokens": 1266090,
+                "train_documents": 2564
+              },
+              "natlang-native-turns-clef-pools-20261011-v2-render": {
+                "documents": 2480,
+                "supervised_tokens": 68496,
+                "test_documents": 0,
+                "tokens": 1502890,
+                "train_documents": 2480
+              },
+              "natlang-native-turns-luna-v17-v9-render-20261011-v2": {
+                "documents": 0,
+                "supervised_tokens": 0,
+                "test_documents": 0,
+                "tokens": 0,
+                "train_documents": 0
+              },
+              "natlang-native-turns-misc-admitted-render-20261011-v1": {
+                "documents": 2111,
+                "supervised_tokens": 236485,
+                "test_documents": 0,
+                "tokens": 5257738,
+                "train_documents": 2111
+              },
+              "natlang-native-turns-pop-v43-static-render-20261011-v1": {
+                "documents": 1728,
+                "supervised_tokens": 94666,
+                "test_documents": 0,
+                "tokens": 3554774,
+                "train_documents": 1728
+              },
+              "natlang-native-turns-refine-render-20261011-v1": {
+                "documents": 1048,
+                "supervised_tokens": 48827,
+                "test_documents": 0,
+                "tokens": 218140,
+                "train_documents": 1048
+              },
+              "natlang-native-turns-s72-render-20261011-v1": {
+                "documents": 67533,
+                "supervised_tokens": 10552668,
+                "test_documents": 25,
+                "tokens": 69958967,
+                "train_documents": 67508
+              },
+              "natlang-native-turns-static-lambda-expansion-render-20261011-v1": {
+                "documents": 5794,
+                "supervised_tokens": 257539,
+                "test_documents": 0,
+                "tokens": 4992404,
+                "train_documents": 5794
+              },
+              "natlang-native-turns-static-lambda-v2-render-20261011-v1": {
+                "documents": 42983,
+                "supervised_tokens": 3683285,
+                "test_documents": 126,
+                "tokens": 39027228,
+                "train_documents": 42857
+              },
+              "neuralese-foundation-text-input-4962": {
+                "documents": 4962,
+                "supervised_tokens": 343539,
+                "test_documents": 1704,
+                "tokens": 5637751,
+                "train_documents": 3258
+              }
+            }
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "2699844e3a76e329ca8a454b38c32bf2695eb9c3b7e4d071730a6e24fefb095f",
+            "documents": 136191,
+            "by_split": {
+              "test": {
+                "documents": 2729,
+                "supervised_tokens": 339938,
+                "tokens": 24462226
+              },
+              "train": {
+                "documents": 133462,
+                "supervised_tokens": 17556722,
+                "tokens": 211967254
+              }
+            },
+            "by_member": {
+              "harness-bench-swe-rebench-openhands-pi-text-v2": {
+                "documents": 3843,
+                "supervised_tokens": 821583,
+                "test_documents": 874,
+                "tokens": 95410999,
+                "train_documents": 2969
+              },
+              "natlang-free-provider-v28-render-20261011-v2": {
+                "documents": 280,
+                "supervised_tokens": 44726,
+                "test_documents": 0,
+                "tokens": 1060025,
+                "train_documents": 280
+              },
+              "natlang-free-provider-v29-render-20261011-v2": {
+                "documents": 19,
+                "supervised_tokens": 6114,
+                "test_documents": 0,
+                "tokens": 65856,
+                "train_documents": 19
+              },
+              "natlang-free-provider-v73-render-20261011-v2": {
+                "documents": 846,
+                "supervised_tokens": 62633,
+                "test_documents": 0,
+                "tokens": 3086401,
+                "train_documents": 846
+              },
+              "natlang-native-turns-clef-new-render-20261011-v2": {
+                "documents": 2564,
+                "supervised_tokens": 200038,
+                "test_documents": 0,
+                "tokens": 1311103,
+                "train_documents": 2564
+              },
+              "natlang-native-turns-clef-pools-20261011-v2-render": {
+                "documents": 2480,
+                "supervised_tokens": 97471,
+                "test_documents": 0,
+                "tokens": 1553831,
+                "train_documents": 2480
+              },
+              "natlang-native-turns-luna-v17-v9-render-20261011-v2": {
+                "documents": 0,
+                "supervised_tokens": 0,
+                "test_documents": 0,
+                "tokens": 0,
+                "train_documents": 0
+              },
+              "natlang-native-turns-misc-admitted-render-20261011-v1": {
+                "documents": 2111,
+                "supervised_tokens": 274491,
+                "test_documents": 0,
+                "tokens": 5546716,
+                "train_documents": 2111
+              },
+              "natlang-native-turns-pop-v43-static-render-20261011-v1": {
+                "documents": 1728,
+                "supervised_tokens": 116214,
+                "test_documents": 0,
+                "tokens": 3566857,
+                "train_documents": 1728
+              },
+              "natlang-native-turns-refine-render-20261011-v1": {
+                "documents": 1048,
+                "supervised_tokens": 49273,
+                "test_documents": 0,
+                "tokens": 220082,
+                "train_documents": 1048
+              },
+              "natlang-native-turns-s72-render-20261011-v1": {
+                "documents": 67533,
+                "supervised_tokens": 11333966,
+                "test_documents": 25,
+                "tokens": 73976598,
+                "train_documents": 67508
+              },
+              "natlang-native-turns-static-lambda-expansion-render-20261011-v1": {
+                "documents": 5794,
+                "supervised_tokens": 349285,
+                "test_documents": 0,
+                "tokens": 5106754,
+                "train_documents": 5794
+              },
+              "natlang-native-turns-static-lambda-v2-render-20261011-v1": {
+                "documents": 42983,
+                "supervised_tokens": 4156852,
+                "test_documents": 126,
+                "tokens": 39641687,
+                "train_documents": 42857
+              },
+              "neuralese-foundation-text-input-4962": {
+                "documents": 4962,
+                "supervised_tokens": 384014,
+                "test_documents": 1704,
+                "tokens": 5882571,
+                "train_documents": 3258
+              }
+            }
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "2b6cf2e17e146715a10e7fbc954eab72616f3817694229b88be0ad81952bdec5",
+            "documents": 76106,
+            "by_split": {
+              "test": {
+                "documents": 123,
+                "supervised_tokens": 10333,
+                "tokens": 50536
+              },
+              "train": {
+                "documents": 75983,
+                "supervised_tokens": 11717655,
+                "tokens": 64603011
+              }
+            },
+            "by_member": {
+              "natlang-native-turns-clef-new-render-20261011-v2": {
+                "documents": 2164,
+                "supervised_tokens": 147763,
+                "test_documents": 0,
+                "tokens": 1018105,
+                "train_documents": 2164
+              },
+              "natlang-native-turns-clef-pools-20261011-v2-render": {
+                "documents": 2325,
+                "supervised_tokens": 104764,
+                "test_documents": 0,
+                "tokens": 1387010,
+                "train_documents": 2325
+              },
+              "natlang-native-turns-luna-v17-v9-render-20261011-v2": {
+                "documents": 1753,
+                "supervised_tokens": 307879,
+                "test_documents": 0,
+                "tokens": 1697399,
+                "train_documents": 1753
+              },
+              "natlang-native-turns-misc-admitted-render-20261011-v1": {
+                "documents": 912,
+                "supervised_tokens": 175705,
+                "test_documents": 0,
+                "tokens": 2222593,
+                "train_documents": 912
+              },
+              "natlang-native-turns-pop-v43-static-render-20261011-v1": {
+                "documents": 1101,
+                "supervised_tokens": 104796,
+                "test_documents": 0,
+                "tokens": 2438394,
+                "train_documents": 1101
+              },
+              "natlang-native-turns-refine-render-20261011-v1": {
+                "documents": 1048,
+                "supervised_tokens": 53019,
+                "test_documents": 0,
+                "tokens": 220236,
+                "train_documents": 1048
+              },
+              "natlang-native-turns-s72-render-20261011-v1": {
+                "documents": 33083,
+                "supervised_tokens": 7045306,
+                "test_documents": 15,
+                "tokens": 27696352,
+                "train_documents": 33068
+              },
+              "natlang-native-turns-static-lambda-expansion-render-20261011-v1": {
+                "documents": 5395,
+                "supervised_tokens": 385902,
+                "test_documents": 0,
+                "tokens": 4540809,
+                "train_documents": 5395
+              },
+              "natlang-native-turns-static-lambda-v2-render-20261011-v1": {
+                "documents": 28325,
+                "supervised_tokens": 3402854,
+                "test_documents": 108,
+                "tokens": 23432649,
+                "train_documents": 28217
+              }
+            }
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "f92e2f330fc3d8a394b148c5c625e158bb7f7f4ff2c85dd0f9eea514aea81ca4",
+            "documents": 76106,
+            "by_split": {
+              "test": {
+                "documents": 123,
+                "supervised_tokens": 14477,
+                "tokens": 58150
+              },
+              "train": {
+                "documents": 75983,
+                "supervised_tokens": 15902786,
+                "tokens": 70111508
+              }
+            },
+            "by_member": {
+              "natlang-native-turns-clef-new-render-20261011-v2": {
+                "documents": 2164,
+                "supervised_tokens": 215750,
+                "test_documents": 0,
+                "tokens": 1127173,
+                "train_documents": 2164
+              },
+              "natlang-native-turns-clef-pools-20261011-v2-render": {
+                "documents": 2325,
+                "supervised_tokens": 151708,
+                "test_documents": 0,
+                "tokens": 1484518,
+                "train_documents": 2325
+              },
+              "natlang-native-turns-luna-v17-v9-render-20261011-v2": {
+                "documents": 1753,
+                "supervised_tokens": 438027,
+                "test_documents": 0,
+                "tokens": 1851225,
+                "train_documents": 1753
+              },
+              "natlang-native-turns-misc-admitted-render-20261011-v1": {
+                "documents": 912,
+                "supervised_tokens": 244153,
+                "test_documents": 0,
+                "tokens": 2311517,
+                "train_documents": 912
+              },
+              "natlang-native-turns-pop-v43-static-render-20261011-v1": {
+                "documents": 1101,
+                "supervised_tokens": 143015,
+                "test_documents": 0,
+                "tokens": 2472601,
+                "train_documents": 1101
+              },
+              "natlang-native-turns-refine-render-20261011-v1": {
+                "documents": 1048,
+                "supervised_tokens": 57657,
+                "test_documents": 0,
+                "tokens": 226370,
+                "train_documents": 1048
+              },
+              "natlang-native-turns-s72-render-20261011-v1": {
+                "documents": 33083,
+                "supervised_tokens": 9691103,
+                "test_documents": 15,
+                "tokens": 31101475,
+                "train_documents": 33068
+              },
+              "natlang-native-turns-static-lambda-expansion-render-20261011-v1": {
+                "documents": 5395,
+                "supervised_tokens": 537035,
+                "test_documents": 0,
+                "tokens": 4752137,
+                "train_documents": 5395
+              },
+              "natlang-native-turns-static-lambda-v2-render-20261011-v1": {
+                "documents": 28325,
+                "supervised_tokens": 4438815,
+                "test_documents": 108,
+                "tokens": 24842642,
+                "train_documents": 28217
+              }
+            }
+          }
+        }
+      },
+      "union_omissions": {
+        "full": {
+          "natlang-free-provider-v29-render-20261011-v2: exact_duplicate_document": 1,
+          "natlang-native-turns-static-lambda-v2-render-20261011-v1: exact_duplicate_document": 106
+        },
+        "program-header": {
+          "natlang-free-provider-v29-render-20261011-v2: exact_duplicate_document": 1,
+          "natlang-native-turns-pop-v43-static-render-20261011-v1: exact_duplicate_document": 11,
+          "natlang-native-turns-s72-render-20261011-v1: missing_tokenizer_twin": 1,
+          "natlang-native-turns-static-lambda-v2-render-20261011-v1: exact_duplicate_document": 106
+        },
+        "whole-trajectory": {
+          "natlang-native-turns-pop-v43-static-render-20261011-v1: exact_duplicate_document": 11,
+          "natlang-native-turns-s72-render-20261011-v1: missing_tokenizer_twin": 144,
+          "natlang-native-turns-static-lambda-v2-render-20261011-v1: exact_duplicate_document": 104
+        }
+      },
+      "build": {
+        "script": "scripts/neuralese_data/build_native_turn_union.py",
+        "code": {
+          "scripts/neuralese_data/build_native_turn_union.py": "e967297fdb93c659e8cbc5ecf5d32601291b64f1db696b84bde84047cb429fa3",
+          "scripts/neuralese_data/render_native_turn_corpus.py": "bc309126562db69b77f73d5ff0764371182d5223646977a1fc190c9ffc7156c9"
+        },
+        "receipt": "runs/natlang-target-union-20261011-r2/receipt.json"
+      },
+      "notes": "Union of target-set revision natlang-target-set-20261011-r2: one file per rendering and tokenizer, cross-member exact deduplication, held stays held, source-group-disjoint decontamination across all members, tokenizer twins aligned by document id (build_native_turn_union.py). Written by target_set_watcher.py."
+    },
+    {
+      "id": "natlang-target-set-20261011-r2",
+      "owner": "dgx",
+      "path": "runs/natlang-target-set-20261011",
+      "include": [
+        "r2.json"
+      ],
+      "source_class": "shared-natlang-target-training-set-manifest",
+      "admission": "manifest of training-admitted member renders (owner 2026-10-11: expand the target set by everything found that can be integrated); exclusions only protected eval sets, held splits and defect rows under repair",
+      "training_admission": true,
+      "training_admission_reason": "lists training-admitted members; the training input is natlang-target-union-20261011-r2",
+      "members": [
+        "natlang-native-turns-clef-new-render-20261011-v2",
+        "natlang-native-turns-static-lambda-expansion-render-20261011-v1",
+        "natlang-native-turns-clef-pools-20261011-v2-render",
+        "natlang-native-turns-refine-render-20261011-v1",
+        "natlang-native-turns-static-lambda-v2-render-20261011-v1",
+        "natlang-native-turns-misc-admitted-render-20261011-v1",
+        "natlang-native-turns-luna-v17-v9-render-20261011-v2",
+        "natlang-free-provider-v28-render-20261011-v2",
+        "natlang-free-provider-v29-render-20261011-v2",
+        "natlang-free-provider-v73-render-20261011-v2",
+        "natlang-native-turns-pop-v43-static-render-20261011-v1",
+        "natlang-native-turns-s72-render-20261011-v1",
+        "neuralese-foundation-text-input-4962",
+        "harness-bench-swe-rebench-openhands-pi-text-v2"
+      ],
+      "skipped": [
+        {
+          "id": "natlang-native-turns-clef-new-render-20261011-v1",
+          "reason": "not training-admitted"
+        },
+        {
+          "id": "natlang-free-provider-v28-render-20261011-v1",
+          "reason": "not training-admitted"
+        },
+        {
+          "id": "natlang-free-provider-v29-render-20261011-v1",
+          "reason": "not training-admitted"
+        },
+        {
+          "id": "natlang-free-provider-v73-render-20261011-v1",
+          "reason": "not training-admitted"
+        },
+        {
+          "id": "natlang-native-turns-luna-v17-v9-render-20261011-v1",
+          "reason": "not training-admitted"
+        },
+        {
+          "id": "harness-bench-swe-rebench-openhands-pi-wholetraj-bulk-20261011-v1",
+          "reason": "not registered yet: ['harness-bench-swe-rebench-openhands-pi-wholetraj-lfm25-350m-bulk-20261011-v1', 'harness-bench-swe-rebench-openhands-pi-wholetraj-mellum21-12b-bulk-20261011-v1']"
+        }
+      ],
+      "union": "natlang-target-union-20261011-r2",
+      "totals_after_union": {
+        "full": {
+          "lfm25": {
+            "documents": 68851,
+            "by_split": {
+              "test": {
+                "documents": 2704,
+                "supervised_tokens": 312684,
+                "tokens": 27731822
+              },
+              "train": {
+                "documents": 66147,
+                "supervised_tokens": 5682148,
+                "tokens": 287985075
+              }
+            }
+          },
+          "mellum21": {
+            "documents": 68851,
+            "by_split": {
+              "test": {
+                "documents": 2704,
+                "supervised_tokens": 334282,
+                "tokens": 32042322
+              },
+              "train": {
+                "documents": 66147,
+                "supervised_tokens": 6429749,
+                "tokens": 306527708
+              }
+            }
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "documents": 136191,
+            "by_split": {
+              "test": {
+                "documents": 2729,
+                "supervised_tokens": 318078,
+                "tokens": 20175324
+              },
+              "train": {
+                "documents": 133462,
+                "supervised_tokens": 16032340,
+                "tokens": 189831481
+              }
+            }
+          },
+          "mellum21": {
+            "documents": 136191,
+            "by_split": {
+              "test": {
+                "documents": 2729,
+                "supervised_tokens": 339938,
+                "tokens": 24462226
+              },
+              "train": {
+                "documents": 133462,
+                "supervised_tokens": 17556722,
+                "tokens": 211967254
+              }
+            }
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "documents": 76106,
+            "by_split": {
+              "test": {
+                "documents": 123,
+                "supervised_tokens": 10333,
+                "tokens": 50536
+              },
+              "train": {
+                "documents": 75983,
+                "supervised_tokens": 11717655,
+                "tokens": 64603011
+              }
+            }
+          },
+          "mellum21": {
+            "documents": 76106,
+            "by_split": {
+              "test": {
+                "documents": 123,
+                "supervised_tokens": 14477,
+                "tokens": 58150
+              },
+              "train": {
+                "documents": 75983,
+                "supervised_tokens": 15902786,
+                "tokens": 70111508
+              }
+            }
+          }
+        }
+      },
+      "notes": "Written by scripts/neuralese_data/target_set_watcher.py from the living spec runs/natlang-target-set-20261011/spec.json and the registry on origin/main.",
+      "supersedes": [
+        "natlang-target-set-20261011-r1"
+      ]
     }
   ],
   "coverage_backlog": [
