@@ -364,6 +364,14 @@ def newton_schulz(update: torch.Tensor, steps: int = 5, eps: float = 1e-7, varia
     if variant not in ("quintic", "cubic5"):
         raise ValueError(f"unknown Newton-Schulz variant {variant!r}")
     x = update.bfloat16()
+    if (variant == "cubic5" and x.is_cuda and os.environ.get("NATLANG_MUON_NS_TRITON", "1") != "0"
+            and os.environ.get("NATLANG_MUON_NS_FOLDED", "1") != "0"):
+        # The folded step in Triton (train/ns_kernels.py): symmetric Gram, tall latents kept in place.
+        from .ns_kernels import cubic5_steps
+        shape = x.shape
+        x = x.reshape(-1, shape[-2], shape[-1])
+        x = x / (torch.linalg.vector_norm(x.float(), dim=(-2, -1), keepdim=True).to(x.dtype) + eps)
+        return cubic5_steps(x, CUBIC5_COEFFICIENTS).view(shape)
     transposed = x.shape[-2] > x.shape[-1]
     if transposed:
         x = x.transpose(-2, -1)
