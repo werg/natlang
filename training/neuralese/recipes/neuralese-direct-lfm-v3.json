@@ -2,7 +2,7 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-lfm-v3",
  "extends": "neuralese-direct-v3",
- "description": "neuralese-direct-v3 (union r2, three phases: full-prompt warm-up 0.5 epoch, program-header direct_sft 2 epochs, whole-trajectory direct_trajectory 1 epoch) on base LFM2.5-350M (LiquidAI/LFM2.5-350M, revision 9e6c6ccf; heads from the base model), with neuralese-direct-lfm-v2's declared differences unchanged (line-parity.json): fit-only target_tokens 256, batch_tokens 16384 and the cadence; backbone-inherent backbone lr 7.5e-7 and the measured base gate_pass 26/48. Pop owns its launch and may reset the fit-only cadence from measured seconds on the derived update counts. Supersedes neuralese-direct-lfm-v2. History: recipes/HISTORY.md.",
+ "description": "neuralese-direct-v3 (union r2, three phases: full-prompt warm-up 0.5 epoch, program-header direct_sft 1 epoch, whole-trajectory direct_trajectory 1 epoch) on base LFM2.5-350M (LiquidAI/LFM2.5-350M, revision 9e6c6ccf; heads from the base model), with neuralese-direct-lfm-v2's declared differences unchanged (line-parity.json): fit-only target_tokens 256, batch_tokens 16384 and the cadence; backbone-inherent backbone lr 7.5e-7 and the measured base gate_pass 26/48. Pop owns its launch and may reset the fit-only cadence from measured seconds on the derived update counts. Supersedes neuralese-direct-lfm-v2. History: recipes/HISTORY.md.",
  "overrides": {
   "stage_parameter_defaults": {
    "neuralese_direct": {

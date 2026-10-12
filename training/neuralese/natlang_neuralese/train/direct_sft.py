@@ -697,6 +697,10 @@ def main(argv=None):
             spike.load_state_dict(state.get('grad_spike_clip'))
         print(json.dumps({'event': 'continued', 'from': str(a.continue_from), 'predecessor_step': state['step']}),
               flush=True)
+        # The checks above bound views of the mmap'd state in main()'s scope (saved_optimizer is the whole optimizer
+        # state): drop them with the state, or the mapping and its dirtied pages stay alive for the run (v4 2026-10-12:
+        # ~39 GB host anon, the first update refused with 0.16 GB reusable of a 90 GB claim; as the resume path).
+        saved_backbone = saved_projection = saved_optimizer = saved_names = current_optimizer = None
         del state
         if a.save_state:
             archive_predecessor_state(Path(a.continue_from))

@@ -2,7 +2,7 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-v3",
  "extends": "neuralese-direct-v2",
- "description": "Unified shared base for both lines (line parity, coordinator decision 2026-10-12 following Pop's main LFM line, decision pop-2356): neuralese-direct-v2 on the admitted target union natlang-target-union-20261011-r2 (training/corpus-manifests/natlang-target-union-20261011-r2.json) with three phases of one lineage: direct_warmup, 0.5 epoch of the full-prompt rendering; direct_sft, 2 epochs of the program-header rendering (~133k train documents), continuing from the warm-up; direct_trajectory, 1 epoch of the whole-trajectory rendering (~76k documents), continuing from direct_sft. Each later phase continues from its predecessor phase's full state with the lineage's identity check and the base drift reference (recipe.py DIRECT_PHASE_CONTINUATION). The base binds the LFM2.5 renders; a line with another tokenizer binds the same union's twin renders (same document ids, splits and source groups). Everything else is neuralese-direct-v2.",
+ "description": "Unified shared base for both lines (line parity, coordinator decision 2026-10-12 following Pop's main LFM line, decision pop-2356): neuralese-direct-v2 on the admitted target union natlang-target-union-20261011-r2 (training/corpus-manifests/natlang-target-union-20261011-r2.json) with three phases of one lineage: direct_warmup, 0.5 epoch of the full-prompt rendering; direct_sft, 1 epoch of the program-header rendering (owner decision 2026-10-12: one epoch, not two) (~133k train documents), continuing from the warm-up; direct_trajectory, 1 epoch of the whole-trajectory rendering (~76k documents), continuing from direct_sft. Each later phase continues from its predecessor phase's full state with the lineage's identity check and the base drift reference (recipe.py DIRECT_PHASE_CONTINUATION). The base binds the LFM2.5 renders; a line with another tokenizer binds the same union's twin renders (same document ids, splits and source groups). Everything else is neuralese-direct-v2.",
  "overrides": {
   "input_bindings": {
    "direct_text": {
@@ -35,6 +35,13 @@
      }
     }
    }
-  ]
+  ],
+  "stages": {
+   "direct_sft": {
+    "parameters": {
+     "epochs": 1.0
+    }
+   }
+  }
  }
 }
