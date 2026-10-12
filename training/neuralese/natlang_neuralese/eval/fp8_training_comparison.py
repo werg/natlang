@@ -242,10 +242,18 @@ def summarize_run(output: Path) -> dict[str, Any]:
     def median(rows, key):
         vals = [float(row[key]) for row in rows if isinstance(row.get(key), (int, float))]
         return statistics.median(vals) if vals else None
+    aggregate_seconds = sum(float(row['seconds']) for row in warmed
+                            if isinstance(row.get('seconds'), (int, float)))
+    aggregate_tokens = sum(int(row['supervised_tokens']) for row in warmed
+                           if isinstance(row.get('supervised_tokens'), (int, float)))
     evaluations = _read_jsonl(output / 'direct_sft' / 'eval.jsonl')
     return {
         'updates_logged': len(updates),
         'warm_updates_used': len(warmed),
+        'warm_aggregate_wall_seconds': aggregate_seconds,
+        'warm_aggregate_supervised_tokens': aggregate_tokens,
+        'warm_aggregate_supervised_tokens_per_second':
+            aggregate_tokens / aggregate_seconds if aggregate_seconds else None,
         'cold_first_update_seconds': updates[0].get('seconds') if updates else None,
         'first_update_loss': updates[0].get('loss') if updates else None,
         'warm_median_update_seconds': median(warmed, 'seconds'),
@@ -319,66 +327,7 @@ def run_variant(variant: dict[str, Any], output_root: Path, device: str, artifac
     return summary
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--short-recipe', type=Path, required=True,
-                        help='reviewed shared neuralese_direct recipe for the short-context profile')
-    parser.add_argument('--long-recipe', type=Path, required=True,
-                        help='reviewed shared neuralese_direct recipe for the long-context profile')
-    parser.add_argument('--output-root', type=Path, required=True)
-    parser.add_argument('--runtime-image', default=DEFAULT_FP8_IMAGE)
-    parser.add_argument('--artifact-root', type=Path, default=Path('/srv/storage'))
-    parser.add_argument('--hf-hub-cache', type=Path,
-                        help='optional host Hugging Face hub root passed to the container launcher')
-    parser.add_argument('--device', default='cuda')
-    parser.add_argument('--saved-tensor-audit-steps', type=int, default=1)
-    parser.add_argument('--gpu-sample-seconds', type=float, default=1.0)
-    parser.add_argument('--run', action='store_true', help='execute sequential paired recipes; otherwise prepare only')
-    args = parser.parse_args(argv)
-    root = args.output_root.resolve()
-    if root.exists() and any(root.iterdir()):
-        raise ValueError(f'comparison output root must be empty: {root}')
-    if args.saved_tensor_audit_steps < 0 or args.gpu_sample_seconds <= 0:
-        raise ValueError('audit steps must be nonnegative and GPU sampling interval positive')
-    if not args.runtime_image.startswith('sha256:') or len(args.runtime_image) != 71:
-        raise ValueError('comparison requires an image pinned by sha256 digest')
-    root.mkdir(parents=True, exist_ok=True)
-    order = []
-    profiles = {}
-    loaded_templates = [load_recipe(args.short_recipe), load_recipe(args.long_recipe)]
-    for template in loaded_templates:
-        if template.get('schema') != DIRECT_STAGE_SCHEMA or template.get('stage', {}).get('kind') != 'neuralese_direct':
-            raise ValueError('both profiles must use declared neuralese_direct templates')
-        validate_direct_stage_recipe(template)
-        _validate_inputs(template)
-    if _profile_identity(loaded_templates[0]) != _profile_identity(loaded_templates[1]):
-        raise ValueError('short and long profiles may differ only in the declared context-length parameters')
-    for profile, template_path in (('short', args.short_recipe), ('long', args.long_recipe)):
-        variants = build_pair(template_path, root, profile, args.runtime_image,
-                              saved_tensor_audit_steps=args.saved_tensor_audit_steps)
-        profiles[profile] = [{'backend': value['backend'], 'recipe_path': value['recipe_path'],
-                              'recipe_sha256': value['recipe_sha256']} for value in variants]
-        # Alternate ordering across profiles to reduce a systematic clock/time-of-run bias.
-        order.extend(variants if profile == 'short' else list(reversed(variants)))
-    plan = {'schema': 'natlang.neuralese-fp8-direct-comparison/1',
-            'runtime_image': args.runtime_image, 'device': args.device,
-            'templates': {'short': {'path': str(args.short_recipe.resolve()),
-                                    'sha256': sha256_file_hex_cached(args.short_recipe)},
-                          'long': {'path': str(args.long_recipe.resolve()),
-                                   'sha256': sha256_file_hex_cached(args.long_recipe)}},
-            'profiles': profiles, 'execution_order': [v['recipe_path'] for v in order],
-            'timing_policy': 'discard first three updates; report median of remaining updates',
-            'gpu_telemetry': 'nvidia-smi SM/memory clocks, power, temperature and memory sampled each second',
-            'task_quality_scope': 'only the existing declared recipe evaluations; no runtime qualification or admission',
-            'run_requested': args.run}
-    write_json(root / 'comparison-plan.json', plan)
-    if not args.run:
-        print(json.dumps({'prepared': str(root / 'comparison-plan.json'), 'run_requested': False}, indent=2))
-        return 0
-    summaries = []
-    for variant in order:
-        summaries.append(run_variant(variant, root, args.device, args.artifact_root,
-                                     args.hf_hub_cache, args.gpu_sample_seconds))
+def comparison_result(root: Path, plan_path: Path, summaries: list[dict[str, Any]]) -> dict[str, Any]:
     by_profile = {}
     for summary in summaries:
         recipe_id = summary['recipe_id']
@@ -398,6 +347,11 @@ def main(argv: list[str] | None = None) -> int:
         paired[profile] = {
             'warm_median_update_speedup': btime / ftime if btime and ftime else None,
             'warm_median_supervised_tokens_per_second_ratio': ftok / btok if btok and ftok else None,
+            'same_schedule_warm_aggregate_supervised_tokens_per_second_ratio':
+                (f['warm_aggregate_supervised_tokens_per_second'] /
+                 b['warm_aggregate_supervised_tokens_per_second']
+                 if b.get('warm_aggregate_supervised_tokens_per_second') and
+                    f.get('warm_aggregate_supervised_tokens_per_second') else None),
             'incremental_peak_bytes_ratio': (f['peak_observed_incremental_bytes'] /
                                              b['peak_observed_incremental_bytes']
                                              if b['peak_observed_incremental_bytes'] and
@@ -424,8 +378,139 @@ def main(argv: list[str] | None = None) -> int:
                 'te_fp8': sum(bool(row.get('checkpoint_layers')) for row in fp8['execution_plans'])},
         }
     result = {'schema': 'natlang.neuralese-fp8-direct-comparison-result/1',
-              'plan': str(root / 'comparison-plan.json'), 'paired_profiles': paired, 'runs': summaries}
+              'plan': str(plan_path), 'paired_profiles': paired, 'runs': summaries}
     write_json(root / 'comparison-result.json', result)
+    return result
+
+
+def execute_prepared_plan(plan_path: Path, *, artifact_root: Path, hf_hub_cache: Path | None,
+                          device: str | None, sample_seconds: float) -> int:
+    plan_path = plan_path.expanduser().resolve()
+    plan = json.loads(plan_path.read_text(encoding='utf-8'))
+    if plan.get('schema') != 'natlang.neuralese-fp8-direct-comparison/1':
+        raise ValueError('prepared comparison plan has an unsupported schema')
+    root = Path(plan.get('output_root', '')).expanduser().resolve()
+    if root != plan_path.parent:
+        raise ValueError('prepared plan must live at the declared comparison output root')
+    artifact_root = artifact_root.expanduser().resolve()
+    actual_device = device or plan.get('device', 'cuda')
+    image = plan.get('runtime_image')
+    if not isinstance(image, str) or not image.startswith('sha256:') or len(image) != 71:
+        raise ValueError('prepared plan must declare its pinned runtime image')
+    variants = {}
+    for entries in plan.get('profiles', {}).values():
+        for entry in entries:
+            recipe_path = Path(entry['recipe_path']).expanduser().resolve()
+            if sha256_file_hex_cached(recipe_path) != entry['recipe_sha256']:
+                raise ValueError(f'prepared recipe SHA changed: {recipe_path}')
+            recipe = load_recipe(recipe_path)
+            validate_direct_stage_recipe(recipe)
+            _validate_inputs(recipe)
+            if recipe.get('runtime', {}).get('image') != image:
+                raise ValueError(f'prepared recipe runtime differs from plan: {recipe_path}')
+            variants[str(recipe_path)] = {**entry, 'recipe_path': str(recipe_path), 'recipe': recipe}
+    order = plan.get('execution_order')
+    if not isinstance(order, list) or len(order) != len(variants) or set(order) != set(variants):
+        raise ValueError('prepared execution order must name every recipe exactly once')
+    if (root / 'execution-intent.json').exists() or (root / 'comparison-result.json').exists():
+        raise FileExistsError('prepared plan has already been executed or has an execution receipt')
+    intent = {'schema': 'natlang.neuralese-fp8-direct-comparison-execution/1',
+              'plan_path': str(plan_path), 'plan_sha256': sha256_file_hex_cached(plan_path),
+              'runtime_image': image, 'device': actual_device, 'started_at_unix': time.time(),
+              'execution_order': order, 'status': 'running'}
+    write_json(root / 'execution-intent.json', intent)
+    summaries = []
+    for raw_path in order:
+        summaries.append(run_variant(variants[raw_path], root, actual_device, artifact_root,
+                                     hf_hub_cache, sample_seconds))
+    result = comparison_result(root, plan_path, summaries)
+    intent.update(status='complete', completed_at_unix=time.time(),
+                  result_path=str(root / 'comparison-result.json'),
+                  result_sha256=sha256_file_hex_cached(root / 'comparison-result.json'))
+    write_json(root / 'execution-intent.json', intent)
+    print(json.dumps({'result': str(root / 'comparison-result.json'), 'runs': len(summaries)}, indent=2))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--short-recipe', type=Path,
+                        help='reviewed shared neuralese_direct recipe for the short-context profile')
+    parser.add_argument('--long-recipe', type=Path,
+                        help='reviewed shared neuralese_direct recipe for the long-context profile')
+    parser.add_argument('--output-root', type=Path)
+    parser.add_argument('--run-plan', type=Path,
+                        help='execute an immutable prepared comparison plan without rebuilding its recipes')
+    parser.add_argument('--runtime-image', default=DEFAULT_FP8_IMAGE)
+    parser.add_argument('--artifact-root', type=Path, default=Path('/srv/storage'))
+    parser.add_argument('--hf-hub-cache', type=Path,
+                        help='optional host Hugging Face hub root passed to the container launcher')
+    parser.add_argument('--device')
+    parser.add_argument('--saved-tensor-audit-steps', type=int, default=1)
+    parser.add_argument('--gpu-sample-seconds', type=float, default=1.0)
+    parser.add_argument('--run', action='store_true', help='execute sequential paired recipes; otherwise prepare only')
+    args = parser.parse_args(argv)
+    if args.saved_tensor_audit_steps < 0 or args.gpu_sample_seconds <= 0:
+        raise ValueError('audit steps must be nonnegative and GPU sampling interval positive')
+    if args.run_plan is not None:
+        if args.short_recipe or args.long_recipe or args.output_root or args.run:
+            parser.error('--run-plan cannot be combined with recipe templates, --output-root, or --run')
+        return execute_prepared_plan(args.run_plan, artifact_root=args.artifact_root,
+                                     hf_hub_cache=args.hf_hub_cache, device=args.device,
+                                     sample_seconds=args.gpu_sample_seconds)
+    if args.short_recipe is None or args.long_recipe is None or args.output_root is None:
+        parser.error('preparation requires --short-recipe, --long-recipe, and --output-root')
+    if args.device is None:
+        args.device = 'cuda'
+    root = args.output_root.resolve()
+    if root.exists() and any(root.iterdir()):
+        raise ValueError(f'comparison output root must be empty: {root}')
+    if not args.runtime_image.startswith('sha256:') or len(args.runtime_image) != 71:
+        raise ValueError('comparison requires an image pinned by sha256 digest')
+    root.mkdir(parents=True, exist_ok=True)
+    order = []
+    profiles = {}
+    loaded_templates = [load_recipe(args.short_recipe), load_recipe(args.long_recipe)]
+    for template in loaded_templates:
+        if template.get('schema') != DIRECT_STAGE_SCHEMA or template.get('stage', {}).get('kind') != 'neuralese_direct':
+            raise ValueError('both profiles must use declared neuralese_direct templates')
+        validate_direct_stage_recipe(template)
+        _validate_inputs(template)
+    if _profile_identity(loaded_templates[0]) != _profile_identity(loaded_templates[1]):
+        raise ValueError('short and long profiles may differ only in the declared context-length parameters')
+    for profile, template_path in (('short', args.short_recipe), ('long', args.long_recipe)):
+        variants = build_pair(template_path, root, profile, args.runtime_image,
+                              saved_tensor_audit_steps=args.saved_tensor_audit_steps)
+        profiles[profile] = [{'backend': value['backend'], 'recipe_path': value['recipe_path'],
+                              'recipe_sha256': value['recipe_sha256']} for value in variants]
+        # Alternate ordering across profiles to reduce a systematic clock/time-of-run bias.
+        order.extend(variants if profile == 'short' else list(reversed(variants)))
+    plan = {'schema': 'natlang.neuralese-fp8-direct-comparison/1', 'output_root': str(root),
+            'runtime_image': args.runtime_image, 'device': args.device,
+            'templates': {'short': {'path': str(args.short_recipe.resolve()),
+                                    'sha256': sha256_file_hex_cached(args.short_recipe)},
+                          'long': {'path': str(args.long_recipe.resolve()),
+                                   'sha256': sha256_file_hex_cached(args.long_recipe)}},
+            'profiles': profiles, 'execution_order': [v['recipe_path'] for v in order],
+            'timing_policy': 'discard first three updates; report median of remaining updates',
+            'gpu_telemetry': 'nvidia-smi SM/memory clocks, power, temperature and memory sampled each second',
+            'task_quality_scope': 'only the existing declared recipe evaluations; no runtime qualification or admission',
+            'run_requested': args.run}
+    write_json(root / 'comparison-plan.json', plan)
+    if not args.run:
+        print(json.dumps({'prepared': str(root / 'comparison-plan.json'), 'run_requested': False}, indent=2))
+        return 0
+    summaries = []
+    for variant in order:
+        summaries.append(run_variant(variant, root, args.device, args.artifact_root,
+                                     args.hf_hub_cache, args.gpu_sample_seconds))
+    by_profile = {}
+    for summary in summaries:
+        recipe_id = summary['recipe_id']
+        profile = 'short' if '-short-' in recipe_id else 'long'
+        backend = 'te_fp8' if '-te-fp8' in recipe_id else 'bf16'
+        by_profile.setdefault(profile, {})[backend] = summary
+    result = comparison_result(root, root / 'comparison-plan.json', summaries)
     print(json.dumps({'result': str(root / 'comparison-result.json'), 'runs': len(summaries)}, indent=2))
     return 0
 

@@ -7,7 +7,6 @@ alter training: the same recipe and output are used for both invocations.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,14 +18,9 @@ import time
 
 REPO = Path(__file__).resolve().parents[1]
 LAUNCHER = REPO / "scripts" / "run_neuralese_recipe.py"
+sys.path.insert(0, str(REPO / "training" / "neuralese"))
+from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha256
 
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def train_steps(path: Path) -> list[int]:
@@ -53,7 +47,7 @@ def file_signature(path: Path) -> tuple[int, int] | None:
     return stat.st_size, stat.st_mtime_ns
 
 
-def write_json(path: Path, value: dict) -> None:
+def atomic_receipt(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     payload = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
@@ -76,8 +70,8 @@ def start_launcher(args, *, phase: str, resume: bool, wrapper_log: Path):
     if resume:
         command.append("--resume-existing")
     wrapper_log.parent.mkdir(parents=True, exist_ok=True)
-    write_json(args.receipt, {**args.receipt_state, "phase": phase, "command": command,
-                              "started_at_unix": time.time(), "status": "running"})
+    atomic_receipt(args.receipt, {**args.receipt_state, "phase": phase, "command": command,
+                                  "started_at_unix": time.time(), "status": "running"})
     with wrapper_log.open("x", encoding="utf-8") as stream:
         child = subprocess.Popen(command, cwd=REPO, stdin=subprocess.DEVNULL,
                                  stdout=stream, stderr=subprocess.STDOUT)
@@ -89,6 +83,54 @@ def start_launcher(args, *, phase: str, resume: bool, wrapper_log: Path):
         "container_log": str(container_log),
     }
     return child
+
+
+def launch_control(args) -> dict:
+    """Run an uninterrupted same-seed reference whose only recipe difference is its output directory."""
+    recipe = json.loads(args.recipe.read_text(encoding="utf-8"))
+    output = Path(recipe["outputs"]["directory"]).expanduser()
+    if not output.is_absolute():
+        output = REPO / output
+    control_output = (args.receipt.parent / "uninterrupted-output").resolve()
+    try:
+        control_output.relative_to(args.artifact_root)
+    except ValueError:
+        raise ValueError("control output must be under the declared artifact root") from None
+    if control_output.exists():
+        raise FileExistsError(f"refusing to reuse uninterrupted control output: {control_output}")
+    control_output.parent.mkdir(parents=True, exist_ok=True)
+    recipe["outputs"] = {"directory": str(control_output)}
+    control_recipe = args.receipt.parent / "uninterrupted-control.recipe.json"
+    atomic_receipt(control_recipe, recipe)
+    control_stage = control_output / recipe["stage"]["id"]
+    wrapper_log = args.receipt.parent / "launches" / "uninterrupted.wrapper.log"
+    metadata = args.receipt.parent / "launches" / "uninterrupted.launch-metadata.json"
+    container_log = args.receipt.parent / "launches" / "uninterrupted.container.log"
+    command = [str(args.python), str(LAUNCHER), "--recipe", str(control_recipe),
+               "--artifact-root", str(args.artifact_root), "--hf-hub-cache", str(args.hf_hub_cache),
+               "--device", args.device, "--launch-metadata", str(metadata), "--log", str(container_log)]
+    with wrapper_log.open("x", encoding="utf-8") as stream:
+        completed = subprocess.run(command, cwd=REPO, stdin=subprocess.DEVNULL,
+                                   stdout=stream, stderr=subprocess.STDOUT, check=False,
+                                   timeout=args.phase_timeout_seconds)
+    report_path = control_stage / "report.json"
+    train_path = control_stage / "train.jsonl"
+    report = read_report(report_path)
+    steps = train_steps(train_path)
+    return {
+        "recipe_path": str(control_recipe), "recipe_sha256": sha256(control_recipe),
+        "original_recipe_sha256": sha256(args.recipe),
+        "only_recipe_difference": "outputs.directory",
+        "output": str(control_output), "stage_output": str(control_stage),
+        "command": command, "returncode": completed.returncode,
+        "wrapper_log": str(wrapper_log), "wrapper_log_sha256": sha256(wrapper_log),
+        "launch_metadata": str(metadata), "launch_metadata_sha256": sha256(metadata) if metadata.is_file() else None,
+        "container_log": str(container_log), "container_log_sha256": sha256(container_log) if container_log.is_file() else None,
+        "report": report, "report_sha256": sha256(report_path), "train_steps": steps,
+        "checkpoint": str(control_stage / "checkpoint.pt"),
+        "checkpoint_sha256": sha256(control_stage / "checkpoint.pt")
+        if (control_stage / "checkpoint.pt").is_file() else None,
+    }
 
 
 def finish_launcher(args, *, phase: str, child, timeout: float) -> int:
@@ -209,11 +251,13 @@ def main(argv=None) -> int:
         raise ValueError("recipe output must be under the declared artifact root") from None
     if output.exists():
         raise FileExistsError(f"fresh direct-stage output required for first phase: {output}")
+    if not output.is_relative_to(args.artifact_root):
+        raise ValueError("declared training output must be under the artifact root")
     stage_output = output / recipe["stage"]["id"]
     train_log, checkpoint = stage_output / "train.jsonl", stage_output / "checkpoint.pt"
     args.receipt_state = {
         "schema": "natlang.fp8-same-recipe-checkpoint-resume/1",
-        "recipe_path": str(recipe_path), "recipe_sha256": hashlib.sha256(recipe_bytes).hexdigest(),
+        "recipe_path": str(recipe_path), "recipe_sha256": sha256(recipe_path),
         "outputs_directory": str(output), "stage_output": str(stage_output),
         "train_log": str(train_log), "checkpoint": str(checkpoint),
         "declared_steps": parameters["steps"], "checkpoint_every": parameters["checkpoint_every"],
@@ -223,7 +267,7 @@ def main(argv=None) -> int:
         "watcher_script": str(Path(__file__).resolve()), "watcher_sha256": sha256(Path(__file__).resolve()),
         "status": "prepared",
     }
-    write_json(args.receipt, args.receipt_state)
+    atomic_receipt(args.receipt, args.receipt_state)
     print(json.dumps({"event": "resume_exercise_started", "receipt": str(args.receipt),
                       "recipe_sha256": args.receipt_state["recipe_sha256"]}), flush=True)
 
@@ -243,11 +287,11 @@ def main(argv=None) -> int:
     if initial_report.get("status") != "checkpointed_on_signal" or \
             int(initial_report.get("steps", -1)) < args.checkpoint_step:
         args.receipt_state["status"] = "interrupted_without_expected_full_state"
-        write_json(args.receipt, args.receipt_state)
+        atomic_receipt(args.receipt, args.receipt_state)
         raise RuntimeError(f"initial run did not stop on a complete signal checkpoint: {initial_report}")
     if first_code != 0:
         args.receipt_state["status"] = "initial_launcher_failed"
-        write_json(args.receipt, args.receipt_state)
+        atomic_receipt(args.receipt, args.receipt_state)
         raise RuntimeError(f"initial launcher returned {first_code}; refusing resume")
 
     resume_log = args.receipt.parent / "launches" / "resume.wrapper.log"
@@ -265,9 +309,20 @@ def main(argv=None) -> int:
     }
     complete = resume_code == 0 and final_report.get("status") == "complete" and \
         final_report.get("steps") == parameters["steps"] and final_steps == list(range(1, parameters["steps"] + 1))
-    args.receipt_state["status"] = "complete" if complete else "resume_incomplete_or_failed"
+    if not complete:
+        args.receipt_state["status"] = "resume_incomplete_or_failed"
+        atomic_receipt(args.receipt, args.receipt_state)
+        return 1
+    control = launch_control(args)
+    args.receipt_state["uninterrupted_control"] = control
+    control_complete = control["returncode"] == 0 and control["report"].get("status") == "complete" and \
+        control["report"].get("steps") == parameters["steps"] and \
+        control["train_steps"] == list(range(1, parameters["steps"] + 1))
+    complete = control_complete
+    args.receipt_state["status"] = "complete_operational_resume_and_control_ready" if complete \
+        else "uninterrupted_control_failed"
     args.receipt_state["same_recipe_sha256_both_phases"] = True
-    write_json(args.receipt, args.receipt_state)
+    atomic_receipt(args.receipt, args.receipt_state)
     print(json.dumps({"event": "resume_exercise_finished", "status": args.receipt_state["status"],
                       "interrupted_at": initial_report.get("steps"), "final_step": final_report.get("steps"),
                       "receipt": str(args.receipt)}), flush=True)
