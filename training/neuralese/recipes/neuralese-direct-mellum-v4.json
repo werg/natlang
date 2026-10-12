@@ -143,6 +143,12 @@
     "28x16",
     "21x32"
    ]
+  },
+  "backbone": {
+   "model": "JetBrains/Mellum2.1-12B-A2.5B-Thinking",
+   "revision": "local BF16 copy /home/werg/data/models/mellum21-12b-a2.5b-thinking",
+   "applies": "a fresh lineage of this recipe starts from these weights; a resume or handoff keeps its checkpoint",
+   "description": "Owner decision 2026-10-09: Mellum2.1 BF16 student (mellum-backbone). Backbone-inherent per line (line-parity.json)."
   }
  }
 }

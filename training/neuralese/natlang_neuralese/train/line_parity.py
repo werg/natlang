@@ -10,6 +10,7 @@ Effective configuration, flattened to dotted keys:
 - ``parameters.*``: the stage's resolved parameters (recipe defaults merged with the stage's own);
 - ``inputs.<role>``: each data input's sha256 (identity, not location);
 - ``quantization.*``: the quantization component, if any (without its description);
+- ``backbone.*``: the base-model source of a fresh lineage (without its description);
 - ``family.*``: the nested-family component of a stage that trains it (maple/family.py), without its description;
 - ``derived.supervision``: the amount of supervision of a neuralese_direct stage, which must stay equal across lines:
   its ``epochs`` over the target-bearing windows of its (twin) data (the update count is derived from the data and
@@ -118,6 +119,9 @@ def recipe_config(recipe):
         family = recipe.get('family')
         views[stage['id']] = _stage_view(stage['kind'], parameters, inputs, recipe.get('quantization'),
                                          family if family and stage['id'] in family.get('stages', []) else None)
+    if recipe.get('backbone'):  # the base-model source of a fresh lineage (owner 2026-10-12)
+        for view in views.values():
+            _flatten('backbone', {k: v for k, v in recipe['backbone'].items() if k != 'description'}, view)
     flat = (next(iter(views.values())) if len(views) == 1 else
             {f'stages.{sid}.{key}': value for sid, view in views.items() for key, value in view.items()})
     for key in ('e2e_acceptance', 'parent_readiness'):  # the same acceptance and handoff moment on both lines

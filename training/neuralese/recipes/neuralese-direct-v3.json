@@ -48,7 +48,7 @@
   },
   "quantization": {
    "schema": "natlang.neuralese-quantization/1",
-   "description": "Shared QAT component of both lines (owner 2026-10-12: QAT ramps the stages actually reach; light QAT on the LFM line). The curriculum spans the two phases that train the backbone after the BF16 warm-up: direct_sft [0, 0.75], direct_trajectory [0.75, 1.0] (QAT_CURRICULUM_20261012 in plans/neuralese/NEURALESE_DIRECT_V1.md). One point, q4: int4 group 32 (Q4_0-style) on every linear module group a backbone has, ramped in over curriculum 0.15-0.3 (about 20-40% of direct_sft), sampled at weight 0.5 beside BF16 1.0 (one precision per update; BF16 stays the reference of the drift monitor and gate). Light because it is the precision the LFM line deploys (Q4_K_M is the browser default, BROWSER_INFERENCE.md) and costs no extra pass; ternary on a 350M dense model is not a deploy target. A line adds points only where its backbone deploys lower (Mellum: ternary experts, line-parity.json).",
+   "description": "Shared QAT component of both lines (owner 2026-10-12: QAT ramps the stages actually reach; light QAT on the LFM line). The curriculum spans the two phases that train the backbone after the BF16 warm-up: direct_sft [0, 0.75], direct_trajectory [0.75, 1.0] (QAT_CURRICULUM_20261012 in plans/neuralese/NEURALESE_DIRECT_V1.md). One point, q4: int4 group 32 (Q4_0-style) on every linear module group a backbone has, ramped in over curriculum 0.25-0.3 on the QAD base (backbone.model): the QAD weights were distilled to keep their behaviour under quantization, so the q4 view starts close to BF16 and needs no long early ramp; SFT moves the weights away from the QAD point, so q4 joins once they have moved (about a third of direct_sft) and ramps in quickly. Mellum (BF16, not QAD) keeps the longer 0.15-0.3 ramp for the same point, sampled at weight 0.5 beside BF16 1.0 (one precision per update; BF16 stays the reference of the drift monitor and gate). Light because it is the precision the LFM line deploys (Q4_K_M is the browser default, BROWSER_INFERENCE.md) and costs no extra pass; ternary on a 350M dense model is not a deploy target. A line adds points only where its backbone deploys lower (Mellum: ternary experts, line-parity.json).",
    "loss": {
     "mode": "sample",
     "bf16_weight": 1.0,
@@ -70,7 +70,7 @@
      "gate": "required",
      "weight": 0.5,
      "ramp": {
-      "start": 0.15,
+      "start": 0.25,
       "end": 0.3
      },
      "modules": {
@@ -116,6 +116,12 @@
     "direct_sft",
     "direct_trajectory"
    ]
+  },
+  "backbone": {
+   "model": "LiquidAI/LFM2.5-350M-GGUF/qad",
+   "revision": "657e078c",
+   "applies": "a fresh lineage of this recipe starts from these weights (base heads built from them); a resume or handoff keeps its checkpoint",
+   "description": "Owner decision 2026-10-12 (via Pop, pop-7fe7): LiquidAI's quantization-aware-distilled (QAD) full-precision LFM2.5-350M weights for every fresh LFM lineage. Backbone-inherent per line (line-parity.json)."
   }
  }
 }

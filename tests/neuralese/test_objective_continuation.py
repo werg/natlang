@@ -220,6 +220,14 @@ def test_the_mellum_lineage_declares_the_continuation_of_its_running_quantizatio
     shared = ('kl_weight', 'ramp', 'stages', 'seed')
     assert {k: lfm['family'][k] for k in shared} == {k: lineage['family'][k] for k in shared}
     assert sum(lfm['family']['members'].values()) == pytest.approx(sum(lineage['family']['members'].values()))
-    assert lfm['quantization']['points'][0] == lineage['quantization']['points'][0]  # the same q4 point
+    lq, mq = lfm['quantization']['points'][0], lineage['quantization']['points'][0]
+    assert {k: v for k, v in lq.items() if k != 'ramp'} == {k: v for k, v in mq.items() if k != 'ramp'}
+    assert lq['ramp'] == {'start': 0.25, 'end': 0.3}  # QAD base weights: later, shorter ramp
+    assert lfm['backbone']['model'] == 'LiquidAI/LFM2.5-350M-GGUF/qad' and 'backbone' in lineage
     from natlang_neuralese.train import line_parity
     assert line_parity.check() == []
+
+
+def test_a_handoff_ignores_the_fresh_lineage_backbone_source():
+    a = {'id': 'a', 'stages': [], 'backbone': {'model': 'x'}}
+    assert runner._without_operational(a) == runner._without_operational({'id': 'b', 'stages': []})

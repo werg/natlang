@@ -1138,7 +1138,8 @@ def _without_extensions(recipe, extended):
 def _without_operational(recipe):
     """The resolved recipe minus its name, description, ancestry and operational stage parameters."""
     value = json.loads(json.dumps(recipe))
-    for key in ('id', 'description', 'extends'):
+    # ``backbone`` names the base weights of a FRESH lineage (owner 2026-10-12); a handoff keeps its checkpoint.
+    for key in ('id', 'description', 'extends', 'backbone'):
         value.pop(key, None)
     for defaults in value.get('stage_parameter_defaults', {}).values():
         for key in OPERATIONAL_STAGE_PARAMETERS:
