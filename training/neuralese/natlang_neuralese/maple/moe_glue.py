@@ -19,6 +19,7 @@ from __future__ import annotations
 import torch
 import triton
 import triton.language as tl
+from triton.language.extra import libdevice
 
 BLOCK = 512
 
@@ -123,3 +124,64 @@ def routing_permutation(index: torch.Tensor):
     slot_of = torch.empty_like(order)
     slot_of[order] = torch.arange(order.numel(), device=order.device)
     return order, slot_of.to(torch.int32).contiguous()
+
+
+
+@triton.jit
+def _swiglu_forward(h_ptr, out_ptr, F, BLOCK: tl.constexpr):
+    row = tl.program_id(0).to(tl.int64)
+    offs = tl.arange(0, BLOCK)
+    valid = offs < F
+    g = tl.load(h_ptr + row * 2 * F + offs, mask=valid, other=0.0).to(tl.float32)
+    u = tl.load(h_ptr + row * 2 * F + F + offs, mask=valid, other=0.0).to(tl.float32)
+    silu = (g / (1.0 + libdevice.exp(-g))).to(tl.bfloat16).to(tl.float32)
+    tl.store(out_ptr + row * F + offs, (silu * u).to(tl.bfloat16), mask=valid)
+
+
+@triton.jit
+def _swiglu_backward(grad_ptr, h_ptr, out_ptr, F, BLOCK: tl.constexpr):
+    row = tl.program_id(0).to(tl.int64)
+    offs = tl.arange(0, BLOCK)
+    valid = offs < F
+    grad = tl.load(grad_ptr + row * F + offs, mask=valid, other=0.0).to(tl.float32)
+    g = tl.load(h_ptr + row * 2 * F + offs, mask=valid, other=0.0).to(tl.float32)
+    u = tl.load(h_ptr + row * 2 * F + F + offs, mask=valid, other=0.0).to(tl.float32)
+    sig = 1.0 / (1.0 + libdevice.exp(-g))
+    silu = (g / (1.0 + libdevice.exp(-g))).to(tl.bfloat16).to(tl.float32)  # the forward's saved value
+    grad_up = (grad * silu).to(tl.bfloat16)  # mul backward: one rounding each
+    grad_silu = (grad * u).to(tl.bfloat16).to(tl.float32)
+    grad_gate = grad_silu * (sig * (1.0 + g * (1.0 - sig)))  # silu_backward in FP32, one rounding
+    tl.store(out_ptr + row * 2 * F + offs, grad_gate.to(tl.bfloat16), mask=valid)
+    tl.store(out_ptr + row * 2 * F + F + offs, grad_up, mask=valid)
+
+
+class SwiGLU(torch.autograd.Function):
+    """``silu(gate) * up`` of a contiguous BF16 [rows, 2F] (gate | up) projection (unclamped, as Mellum), one pass
+    each way. The eager slices' backward materialized two zero-padded [rows, 2F] gradients and added them; here the
+    gradient's two halves are written in place. Same roundings as eager (the silu rounded, the product rounded; in
+    backward each product rounded, silu_backward in FP32)."""
+
+    @staticmethod
+    def forward(ctx, hidden, ff):
+        hidden = hidden.contiguous()
+        out = torch.empty(hidden.shape[0], ff, device=hidden.device, dtype=hidden.dtype)
+        if hidden.shape[0]:
+            _swiglu_forward[(hidden.shape[0],)](hidden, out, ff, BLOCK=triton.next_power_of_2(ff),
+                                                enable_fp_fusion=False)
+        ctx.save_for_backward(hidden)
+        ctx.ff = ff
+        return out
+
+    @staticmethod
+    def backward(ctx, grad):
+        (hidden,) = ctx.saved_tensors
+        grad = grad.contiguous()
+        out = torch.empty_like(hidden)
+        if hidden.shape[0]:
+            _swiglu_backward[(hidden.shape[0],)](grad, hidden, out, ctx.ff, BLOCK=triton.next_power_of_2(ctx.ff),
+                                                 enable_fp_fusion=False)
+        return out, None
+
+
+def swiglu(hidden: torch.Tensor, ff: int) -> torch.Tensor:
+    return SwiGLU.apply(hidden, ff)

@@ -99,3 +99,25 @@ def test_the_fp8_backend_selects_the_expert_path_only_inside_its_autocast():
     backend.restore_extra_state(backend.extra_state())
     with pytest.raises(ValueError):
         make_backend('triton-experts', SimpleNamespace(config=SimpleNamespace(model_type='lfm2')), device='cuda')
+
+
+
+def test_fused_swiglu_matches_eager():
+    """maple/moe_glue.swiglu: forward and both gradient halves equal the eager slices, silu and product (same
+    roundings; at most a rare one-ulp difference from the exp implementation)."""
+    import torch.nn.functional as F
+    from natlang_neuralese.maple.moe_glue import swiglu
+    torch.manual_seed(3)
+    ff = 96
+    hidden = (torch.randn(333, 2 * ff, device='cuda') * 2).bfloat16()
+    grad = torch.randn(333, ff, device='cuda').bfloat16()
+    h1 = hidden.clone().requires_grad_(True)
+    want = F.silu(h1[:, :ff]) * h1[:, ff:]
+    want.backward(grad)
+    h2 = hidden.clone().requires_grad_(True)
+    got = swiglu(h2, ff)
+    got.backward(grad)
+    for name, a, b in (('out', got, want), ('grad', h2.grad, h1.grad)):
+        diff = (a.float() - b.float()).abs()
+        ulp = b.float().abs().clamp_min(1e-30) * 2 ** -7
+        assert bool((diff <= ulp).all()) and float((diff > 0).float().mean()) < 1e-3, (name, float(diff.max()))

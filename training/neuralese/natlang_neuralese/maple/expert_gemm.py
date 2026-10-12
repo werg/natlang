@@ -19,6 +19,8 @@ BF16 59 (plans/neuralese/TRAINING_SPEED_20261012.md).
 """
 from __future__ import annotations
 
+import os
+
 import torch
 import triton
 import triton.language as tl
@@ -193,8 +195,13 @@ def fp8_dense_experts(x, index, weights, gate_up, down, clamp):
     table = BlockTable(offsets, flat.numel())
     source = (order // top_k).contiguous()
     hidden = Fp8ExpertProjection.apply(x.contiguous(), source, slot_of, top_k, gate_up, table, offsets)
-    gate, up = hidden[:, :ff], hidden[:, ff:]
-    if clamp is not None:
-        gate, up = gate.clamp(max=clamp), up.clamp(-clamp, clamp)
-    out = Fp8ExpertProjection.apply((F.silu(gate) * up).contiguous(), None, None, top_k, down, table, offsets)
+    if clamp is None and os.environ.get('NATLANG_FUSED_SWIGLU', '1') != '0':
+        from .moe_glue import swiglu
+        act = swiglu(hidden, ff)
+    else:
+        gate, up = hidden[:, :ff], hidden[:, ff:]
+        if clamp is not None:
+            gate, up = gate.clamp(max=clamp), up.clamp(-clamp, clamp)
+        act = (F.silu(gate) * up).contiguous()
+    out = Fp8ExpertProjection.apply(act, None, None, top_k, down, table, offsets)
     return Combine.apply(out, slot_of, weights)
