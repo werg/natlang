@@ -311,7 +311,14 @@ class TaskEval:
                     row = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                count = 0 if row.get('eligible') else count + 1
+                # A new held packet or case subset starts a new comparison. Historical
+                # infrastructure failures on a superseded packet cannot exhaust this
+                # packet's retry allowance.
+                if (row.get('packet_sha256') != self.spec['packet']['sha256'] or
+                        row.get('case_indices') != self.spec['cases']):
+                    count = 0
+                else:
+                    count = 0 if row.get('eligible') else count + 1
         return count
 
     def cadence(self, step: int) -> dict:
