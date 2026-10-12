@@ -62033,6 +62033,203 @@
         "luna-clinc-v10-lane03-selected-child-actions-20261012-v1"
       ],
       "notes": "Replaces malformed v1/v2 owner metadata; no parent/writer/recurrence/runtime/new-world admission."
+    },
+    {
+      "id": "native-context-hydration-14-wholetraj-recovery-20261012-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/native-context-hydration-14-wholetraj-recovery-20261012-v1",
+      "include": [
+        "records.jsonl",
+        "provider-context-bindings.jsonl",
+        "source-omissions.jsonl",
+        "root-context-hydration-review.json"
+      ],
+      "source_class": "repaired-authenticated-provider-context-metadata",
+      "split": "inherited-train-only",
+      "training_admission": true,
+      "trace_admission": false,
+      "admission": "Existing root-admitted ordinary SFT targets; exact authenticated context metadata restored via shared binder",
+      "notes": "14 previously admitted targets, zero new decisions/worlds; root verified source hashes, unchanged targets/splits/groups and shared context renderer. Repairs 14 whole-trajectory omissions. No learned writer/recurrence/runtime qualification; not appended to active GPU inputs."
+    },
+    {
+      "id": "natlang-native-turns-luna-clinc-v10-lane01-render-20261012-v3",
+      "owner": "dgx",
+      "path": "runs/natlang-native-turns-luna-clinc-v10-lane01-render-20261012-v3",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: luna-clinc-v10-lane01-selected-child-actions-20261012-v3; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "luna-clinc-v10-lane01-selected-child-actions-20261012-v3"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "667b8a57b38fd055c83e26b7656100b40d82c63c1b96ae4d75fab88dd8e37941",
+            "documents": 1,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1,
+                "supervised_tokens": 72,
+                "tokens": 6719,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 6719,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "32b048ad3ab836be67c2af2336c281b477c4ff6cdeca4fa6e0347311f585c1a9",
+            "documents": 1,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1,
+                "supervised_tokens": 86,
+                "tokens": 6691,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 6691,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "7d27980092de01e2ef5dd41e66755ee3a15c246352b9a286befff0f4be361258",
+            "documents": 25,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 25,
+                "supervised_tokens": 2347,
+                "tokens": 64544,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 2931,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "fd5d2843c1b10de3e48ddded753ddb225d513382373ca470b6bfa8a84dd4670a",
+            "documents": 25,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 25,
+                "supervised_tokens": 2671,
+                "tokens": 63392,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 2934,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "64b5e24d6c990fb9ebf65863e5903929dd25d1e808dbf6e62407cca95cb5a0ef",
+            "documents": 25,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 13312,
+                "documents": 25,
+                "opening_tokens": 10833,
+                "supervised_tokens": 2479,
+                "tokens": 64076,
+                "tool_tokens": 19439
+              }
+            },
+            "max_document_tokens": 2914,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "944925d265a1ca9bde6bf0410470327d5b46b242730d9f20a6bd52e728190238",
+            "documents": 25,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 13825,
+                "documents": 25,
+                "opening_tokens": 10951,
+                "supervised_tokens": 2874,
+                "tokens": 63392,
+                "tool_tokens": 18725
+              }
+            },
+            "max_document_tokens": 2934,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "approved_by_registry_candidate_selection": 25,
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 25,
+        "selected:train": 25,
+        "source_rows": 25
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 24,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 24
+      },
+      "program_header_parity": {
+        "equal_text_serving_token_boundaries": 50,
+        "retokenization_checked": 0
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "699c53bfc3aa7fc248d5877ca6dc8269c9dd6137cc016b183c5eb0334caf598c",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "1f46d0c2d6e876ed7d2a5c00e384283bb805b8e283da617907cab45999bcd59d",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/natlang-native-turns-luna-clinc-v10-lane01-render-20261012-v3/receipt.json",
+        "sources": {
+          "data/neuralese/corpora/luna-clinc-v10-lane01-selected-child-actions-20261012-v3/turns.jsonl": {
+            "bytes": 3618878,
+            "sha256": "b6e151495157dc69e46aaea08009eda0316a0c1f1285aa31f31add4148fd84d6"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": "Luna CLINC V10 lane01 root-approved exact child actions V3 (Pop pop-7eea): strict registered candidate-selection admission gate passed; program-header and whole-trajectory in both twins, full for the 5% warm-up sample."
     }
   ],
   "coverage_backlog": [

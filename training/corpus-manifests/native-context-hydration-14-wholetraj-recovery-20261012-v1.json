@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "native-context-hydration-14-wholetraj-recovery-20261012-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/native-context-hydration-14-wholetraj-recovery-20261012-v1",
+  "files": [
+    {
+      "path": "provider-context-bindings.jsonl",
+      "bytes": 52922,
+      "sha256": "a0e33a4f558f064e8f346b214f5d1ee3372127b8841602486f24784649ead03e",
+      "lines": 27
+    },
+    {
+      "path": "records.jsonl",
+      "bytes": 1756915,
+      "sha256": "fbbf740978036f9b53dbb5c0c8d29ba2a02201166221ac015431c99d22f9ccc6",
+      "lines": 14
+    },
+    {
+      "path": "root-context-hydration-review.json",
+      "bytes": 16137,
+      "sha256": "7e0f4a8ced88c52e5f07bba7f42b387451a4c72393c871f72c1ae536d9769e64"
+    },
+    {
+      "path": "source-omissions.jsonl",
+      "bytes": 4134,
+      "sha256": "bdd7cfc537f3397beb54df78b528e972131b9a47d476b3733305fe12a84a36af",
+      "lines": 14
+    }
+  ],
+  "bytes": 1830108
+}

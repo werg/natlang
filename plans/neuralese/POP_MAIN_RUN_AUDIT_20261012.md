@@ -191,3 +191,34 @@ explicit direct-artifact flags above. The path rejects a missing base snapshot,
 conflicting checkpoint/model overrides, and runtime qualification intended for
 recurrence checkpoints. Restoration remains in the strict shared loader. The
 existing default and recurrence loading paths remain available.
+
+## Step-4000 actual-task candidate and mixed prompt-source resolution
+
+The v2 fixed held-task evaluation uses the reviewed program-header plan
+`/srv/storage/natlang-artifacts/neuralese-direct-held-task-eval-20261012-v2/plan-v4-program-header-v1.json`
+(SHA-256 `530db4d3e3994c359dac943f60d2e0284737e1da012886cb12a175ef7dbdb646`).
+The matched BF16 base queue completed 48/48: 0 task successes, 21 explicit
+budget exhaustions, 27 model-incomplete results, 0 infrastructure errors after
+retrying only the two host-interrupted cases (12 and 22). Original raw results
+were preserved; the retries used the same reviewed plan and inference contract.
+The direct child sanity request reproduced case 23's first response byte-for-byte
+(request SHA-256 `65771c1925fa0aa3e2c99b5d35d324e9f7482b222debf2983685ea3520bed20c`,
+response SHA-256 `4ce62495f5b8b2369e3500a892703c6f6a3502d33644a11092edf9fdd1ec88ad`),
+with stop completion, three generated tokens, and no action. This did not reveal a
+nested-request rendering discrepancy.
+
+The step-4000 strict export initially exposed mixed source declarations rather
+than a checkpoint or loader fault. Shared exporter commit `058a5269` now requires
+an explicit serving policy for mixed text inputs and records the exact selection
+without changing checkpoint identity or source rows. The step-4000 checkpoint
+SHA-256 is `cbd1d607305579ac25bdc704b701d02c706222a9b64ef81be62d4cc44f8e9d82`;
+its text source SHA-256 is
+`27e40b8b0531b1c246fb13541301aa10afd4da0f376520ff01f71cdbd33c6353` (136,191
+rows). It contains 126,241 explicitly declared program-header rows and 9,950
+undeclared rows. The exporter proof preserves effective mode counts and the
+undeclared count, and explicitly labels the choice
+`explicit-serving-policy-on-mixed-training-input` with serving mode
+`program-header`. Of the undeclared rows, 3,843 carry the `List of tools:`
+schema marker; this is recorded as a training/serving audit debt, not as evidence
+that those rows contain generic runtime prose. The selected step-4000 candidate
+is now being evaluated against the same 48-row packet; results are pending.

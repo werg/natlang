@@ -144,7 +144,23 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool) -> li
     if check:
         quick = subprocess.run(['scripts/check-main.sh', '--quick'], cwd=wt, capture_output=True, text=True)
         if quick.returncode:
-            raise Retry('check-main --quick is red on origin/main + this registration:\n' + quick.stdout[-1500:])
+            # Keep one complete failure outside the disposable worktree. Retry
+            # summaries are deliberately short, but must not erase stderr or
+            # the evidence needed to diagnose an interpreter/setup failure.
+            failure_path = LOCK.parent / 'register-corpora-last-check-failure.json'
+            failure_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = failure_path.with_suffix('.tmp')
+            temporary.write_text(json.dumps({
+                'time_unix': time.time(), 'worktree': str(wt),
+                'commit': git('rev-parse', 'HEAD', cwd=wt).stdout.strip(),
+                'corpus_ids': [entry['id'] for entry in changed],
+                'python_override': os.environ.get('NATLANG_PYTHON'),
+                'returncode': quick.returncode,
+                'stdout': quick.stdout, 'stderr': quick.stderr,
+            }, indent=2) + '\n')
+            temporary.replace(failure_path)
+            raise Retry(f'check-main --quick is red; complete latest failure: {failure_path}\n'
+                        + (quick.stdout + quick.stderr)[-1500:])
     candidates = [entry for entry in changed if entry.get('candidate_selection_admission') is not None]
     if candidates:
         # Use the renderer's complete existing gate, including exact owner rows,
