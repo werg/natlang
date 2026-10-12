@@ -1,6 +1,7 @@
 /** Offline source replay evidence is distinct from the original agent's task-success label. */
 import { hexDigest } from '../native/hash.js';
-import { sourceQualityClearanceForProgram, type VerifiedSourceQualityClearance } from './source-quality-clearance.js';
+import { sourceQualityClearanceForProgram, sourceQualityClearanceRefProblems,
+  type VerifiedSourceQualityClearance } from './source-quality-clearance.js';
 type Dict = Record<string, unknown>;
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -95,11 +96,20 @@ export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; 
   const qualityProblems = (!quality && qualityRequired) || quality &&
     (quality.version !== 'natlang.source_quality/1' || quality.status !== 'eligible' ||
      !Array.isArray(quality.checks) || !quality.checks.length || quality.checks.some(item => typeof item !== 'string' || !item)) ? ['source_quality_held'] : [];
-  const qualityClearance = sourceQualityClearanceForProgram(clearance ?? row.source_ref?.source_quality_clearance, program);
+  const sourceClearanceRef = row.source_ref?.source_quality_clearance;
+  const clearanceReference = sourceClearanceRef as Dict | undefined;
+  const referencedSidecar = clearanceReference?.schema === 'natlang.source-quality-clearance-ref/1';
+  let clearanceReferenceProblems: string[] = [];
+  if (referencedSidecar) {
+    clearanceReferenceProblems = sourceQualityClearanceRefProblems(sourceClearanceRef, clearance, program);
+  }
+  const qualityClearance = sourceQualityClearanceForProgram(clearance ??
+    (referencedSidecar ? undefined : sourceClearanceRef), program);
   if (qualityClearance) {
     const heldIndex = qualityProblems.indexOf('source_quality_held');
     if (heldIndex >= 0) qualityProblems.splice(heldIndex, 1);
   }
+  qualityProblems.push(...clearanceReferenceProblems);
   const sourceIdentity = program?.external_source as Dict | undefined;
   if ((program?.generation as Dict | undefined)?.operation_derivative &&
       (typeof sourceIdentity?.source_id !== 'string' ||

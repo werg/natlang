@@ -6,7 +6,7 @@
  */
 import { createHash } from 'node:crypto';
 import { mkdir, open, readFile, readdir, stat } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { materializeNativeRows, nativeRowDigest } from '../ts-host/dist/teacher/native-materializer.js';
 import { nativeDecisionTargetDigest } from '../ts-host/dist/native/decision-review.js';
@@ -21,6 +21,7 @@ const { values } = parseArgs({ options: {
   'results-dir': { type: 'string' }, 'source-cases': { type: 'string' },
   'source-manifest': { type: 'string' }, 'candidate-out': { type: 'string' },
   review: { type: 'string' }, out: { type: 'string' }, 'source-quality-review': { type: 'string' },
+  'semantic-review': { type: 'string' },
   'source-label-corrections': { type: 'string' },
 } });
 if (!values['results-dir'] || !values['source-cases'] || !values['source-manifest'] || !values['candidate-out'])
@@ -28,6 +29,8 @@ if (!values['results-dir'] || !values['source-cases'] || !values['source-manifes
 if (!!values.review !== !!values.out) throw new Error('--review and --out must be supplied together');
 
 const sha = value => createHash('sha256').update(value).digest('hex');
+const resultsRoot = resolve(values['results-dir']);
+const packetResultsPath = path => relative(resultsRoot, path).split('\\').join('/');
 const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` :
   value && typeof value === 'object' ? `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
     .map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`).join(',')}}` : JSON.stringify(value);
@@ -167,6 +170,16 @@ if (values.review) {
   review = JSON.parse(reviewBytes.toString('utf8'));
   if (review.schema !== 'natlang.provider-child-action-review/1' || !Array.isArray(review.approvals))
     throw new Error('review must use natlang.provider-child-action-review/1 with approvals[]');
+}
+let semanticReview = null, semanticReviewBytes = null, semanticReviewSha = null;
+if (values['semantic-review']) {
+  semanticReviewBytes = await readFile(resolve(values['semantic-review']));
+  semanticReviewSha = sha(semanticReviewBytes);
+  semanticReview = JSON.parse(semanticReviewBytes.toString('utf8'));
+  if (semanticReview.schema !== 'natlang.provider-child-semantic-review/1' ||
+      semanticReview.training_admission !== false || semanticReview.trace_admission !== false ||
+      semanticReview.source_cases_sha256 !== sourceSha || !Array.isArray(semanticReview.rows))
+    throw new Error('semantic review must bind the supplied source cases and remain non-admission evidence');
 }
 let sourceQualityClearance = null;
 const sourceQualityReviewPath = values['source-quality-review'] ? resolve(values['source-quality-review']) : null;
@@ -340,6 +353,14 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
       if (approval.item_sha256 !== itemSha || approval.group !== source.group ||
           approval.decision_index !== candidate.decision_index || approval.target_sha256 !== candidate.target_sha256)
         throw new Error(`review/source/target binding mismatch for ${program.id}/${id}`);
+      if (semanticReview) {
+        const semantic = semanticReview.rows.find(value => value.item_id === id);
+        if (!semantic || semantic.semantic_review !== 'clear' || semantic.source_group !== source.group ||
+            semantic.source_row_sha256 !== itemSha || semantic.target_sha256 !== candidate.target_sha256 ||
+            semantic.decision_index !== candidate.decision_index || semantic.invocation_id !== candidate.invocation_id ||
+            semantic.generated_label !== observed || semantic.source_annotation !== expected)
+          throw new Error(`semantic review/source/target binding mismatch for ${program.id}/${id}`);
+      }
       const correction = sourceReview.source_label_correction;
       if (correction) {
         if (approval.source_label_correction?.evidence_sha256 !== correction.evidence_sha256 ||
@@ -359,10 +380,14 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         reason: approval.reason, evidence: approval.evidence,
         ...(correction ? { source_label_correction: approval.source_label_correction } : {}) };
       const approved = materializeNativeRows([row], { failedRuns: true, decisionApprovals: [decisionApproval],
+        candidateSelectionOnly: true,
+        ...(sourceQualityClearance ? { sourceQualityClearanceRef: { sidecar_path: 'source-quality-clearance.json',
+          file_sha256: sourceQualityClearance.review_sha256 } } : {}),
         ...(verifiedLabelCorrections ? { sourceLabelCorrections: verifiedLabelCorrections } : {}),
         ...(qualityBinding ? { sourceQualityClearance } : {}) });
       const selected = approved.turns.filter(value => value.decision.index === turn.decision.index &&
-        value.training_admission?.approved === true);
+        value.candidate_selection?.approved === true && value.training_admission?.approved === false &&
+        value.trace_admission?.admitted === false);
       if (selected.length !== 1) throw new Error(`selected target was not admitted exactly once: ${program.id}/${id}`);
       prepared.push({ candidate, turn: selected[0], approval: decisionApproval });
       approvalsByKey.delete(`${program.id}\0${id}`);
@@ -375,38 +400,92 @@ const candidatePath = resolve(values['candidate-out']);
 await mkdir(dirname(candidatePath), { recursive: true });
 const candidateHandle = await open(candidatePath, 'wx');
 try { await candidateHandle.writeFile(JSON.stringify({ schema: 'natlang.provider-child-action-candidates/1',
-  training_admission: false, created_at: new Date().toISOString(), source_cases: { path: sourceCasesPath, sha256: sourceSha },
-  source_manifest: { path: sourceManifestPath, sha256: sha(sourceManifestBytes) },
-  source_split_reservations: { path: reservationPath, sha256: sha(reservationBytes),
-    test_source_path: reservationSourcePath, test_source_sha256: sha(reservationSourceBytes),
+  candidate_selection: true, training_admission: false, trace_admission: false, created_at: new Date().toISOString(),
+  source_cases: { path: 'source-cases.jsonl', sha256: sourceSha },
+  source_manifest: { path: 'source-manifest.json', sha256: sha(sourceManifestBytes) },
+  source_split_reservations: { path: 'source-split-reservations.json', sha256: sha(reservationBytes),
+    test_source_path: 'reservation-source.json', test_source_sha256: sha(reservationSourceBytes),
     matching_rule: 'case-sensitive; backslashes to spaces; whitespace collapsed; first 60 characters of reserved state searched in full program IR and user context' },
-  results_dir: resolve(values['results-dir']), review_sha256: reviewSha,
+  review_sha256: reviewSha,
   candidates,
-  rejected, counts: { candidate_actions: candidates.length, rejected_items: rejected.length, approved_turns: prepared.length } }, null, 2) + '\n'); }
+  rejected: rejected.map(({ resultsPath, ...entry }) => ({ ...entry,
+    ...(resultsPath ? { results_file: packetResultsPath(resultsPath) } : {}) })),
+  counts: { candidate_actions: candidates.length, rejected_items: rejected.length, selected_children: prepared.length } }, null, 2) + '\n'); }
 finally { await candidateHandle.close(); }
 
 if (values.out) {
   const out = resolve(values.out);
   await mkdir(out, { recursive: true });
   if ((await readdir(out)).length || !(await stat(out)).isDirectory()) throw new Error(`output directory must be empty: ${out}`);
+  if (sourceQualityReviewPath) {
+    const clearanceBytes = await readFile(sourceQualityReviewPath);
+    const clearanceHandle = await open(resolve(out, 'source-quality-clearance.json'), 'wx');
+    try { await clearanceHandle.writeFile(clearanceBytes); }
+    finally { await clearanceHandle.close(); }
+  }
+  const sourceCasesCopy = await open(resolve(out, 'source-cases.jsonl'), 'wx');
+  try { await sourceCasesCopy.writeFile(sourceBytes); }
+  finally { await sourceCasesCopy.close(); }
+  const sourceManifestCopy = await open(resolve(out, 'source-manifest.json'), 'wx');
+  try { await sourceManifestCopy.writeFile(sourceManifestBytes); }
+  finally { await sourceManifestCopy.close(); }
+  if (reviewBytes) {
+    const candidateReviewCopy = await open(resolve(out, 'candidate-selection-review.json'), 'wx');
+    try { await candidateReviewCopy.writeFile(reviewBytes); }
+    finally { await candidateReviewCopy.close(); }
+  }
+  if (semanticReviewBytes) {
+    const semanticReviewCopy = await open(resolve(out, 'semantic-child-review.json'), 'wx');
+    try { await semanticReviewCopy.writeFile(semanticReviewBytes); }
+    finally { await semanticReviewCopy.close(); }
+  }
+  const clearanceEvidence = [];
+  if (sourceQualityClearance) {
+    for (const [index, evidence] of sourceQualityClearance.review.evidence.entries()) {
+      const filename = evidence.role === 'source_quality_review' ? 'source-quality-review.json' :
+        evidence.role === 'source_closure' ? 'source-closure.json' : `source-quality-evidence-${index + 1}.bin`;
+      const bytes = await readFile(resolve(evidence.path));
+      if (sha(bytes) !== evidence.sha256) throw new Error(`source-quality evidence hash mismatch during packet copy: ${evidence.path}`);
+      const handle = await open(resolve(out, filename), 'wx');
+      try { await handle.writeFile(bytes); }
+      finally { await handle.close(); }
+      clearanceEvidence.push({ role: evidence.role, path: filename, sha256: evidence.sha256 });
+    }
+  }
+  const reservationCopy = await open(resolve(out, 'source-split-reservations.json'), 'wx');
+  try { await reservationCopy.writeFile(reservationBytes); }
+  finally { await reservationCopy.close(); }
+  const reservationSourceCopy = await open(resolve(out, 'reservation-source.json'), 'wx');
+  try { await reservationSourceCopy.writeFile(reservationSourceBytes); }
+  finally { await reservationSourceCopy.close(); }
   const outputHandle = await open(resolve(out, 'turns.jsonl'), 'wx');
   try { for (const item of prepared) await outputHandle.writeFile(JSON.stringify(item.turn) + '\n'); }
   finally { await outputHandle.close(); }
-  const manifest = { schema: 'natlang.provider-child-action-packet/1', training_admission: true,
-    created_at: new Date().toISOString(), review_sha256: reviewSha,
-    source_cases: { path: sourceCasesPath, sha256: sourceSha }, source_manifest: { path: sourceManifestPath,
-      sha256: sha(sourceManifestBytes) },
-    source_split_reservations: { path: reservationPath, sha256: sha(reservationBytes),
-      test_source_path: reservationSourcePath, test_source_sha256: sha(reservationSourceBytes) },
-    results_dir: resolve(values['results-dir']),
-    candidate_manifest: candidatePath, candidate_manifest_sha256: sha(await readFile(candidatePath)),
+  const candidateBytes = await readFile(candidatePath);
+  const discoveryCopy = await open(resolve(out, 'candidate-discovery-audit.json'), 'wx');
+  try { await discoveryCopy.writeFile(candidateBytes); }
+  finally { await discoveryCopy.close(); }
+  const manifest = { schema: 'natlang.provider-child-action-packet/2', candidate_selection: true,
+    training_admission: false, trace_admission: false, created_at: new Date().toISOString(), review_sha256: reviewSha,
+    candidate_selection_review: reviewBytes ? { path: 'candidate-selection-review.json', sha256: reviewSha } : null,
+    semantic_review: semanticReviewBytes ? { path: 'semantic-child-review.json', sha256: semanticReviewSha,
+      candidate_audit_sha256: semanticReview.candidate_audit_sha256,
+      counts: semanticReview.counts } : null,
+    source_cases: { path: 'source-cases.jsonl', sha256: sourceSha },
+    source_manifest: { path: 'source-manifest.json', sha256: sha(sourceManifestBytes) },
+    source_quality_clearance: sourceQualityReviewPath ? { path: 'source-quality-clearance.json',
+      file_sha256: sourceQualityClearance.review_sha256,
+      review_canonical_sha256: sourceQualityClearance.review_canonical_sha256, evidence: clearanceEvidence } : null,
+    source_split_reservations: { path: 'source-split-reservations.json', sha256: sha(reservationBytes),
+      test_source_path: 'reservation-source.json', test_source_sha256: sha(reservationSourceBytes) },
+    candidate_manifest: 'candidate-discovery-audit.json', candidate_manifest_sha256: sha(await readFile(candidatePath)),
     turns: prepared.map(item => ({ id: item.turn.id, program_id: item.candidate.program_id,
       trajectory_id: item.candidate.trajectory_id, trajectory_sha256: item.candidate.trajectory_sha256,
       item_id: item.candidate.item_id, item_sha256: item.candidate.item_sha256, source_group: item.candidate.source_group,
       invocation_id: item.candidate.invocation_id, decision_index: item.candidate.decision_index,
       target_sha256: item.candidate.target_sha256, visible_fields: item.candidate.visible_fields,
       approval: item.approval })) };
-  const manifestHandle = await open(resolve(out, 'manifest.json'), 'wx');
+  const manifestHandle = await open(resolve(out, 'materialized-manifest.json'), 'wx');
   try { await manifestHandle.writeFile(JSON.stringify(manifest, null, 2) + '\n'); }
   finally { await manifestHandle.close(); }
 }

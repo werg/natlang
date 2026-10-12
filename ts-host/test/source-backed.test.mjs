@@ -104,6 +104,9 @@ test('source bundle replays, admits, materializes and preserves attribution thro
     assert.equal(turns.unlinked.length, 0);
     const turn = turns.turns.find(t => t.training_admission.approved);
     assert.match(turn.license, /MIT/);
+    const candidates = materializeNativeRows([row], { candidateSelectionOnly: true }).turns;
+    assert.ok(candidates.some(t => t.candidate_selection?.approved === true &&
+      t.training_admission?.approved === false && t.trace_admission?.admitted === false));
     // Deterministic template fixture verifies export metadata without a model/server.
     const render = async messages => messages.map(m => m.role === 'assistant' && m.tool_calls ?
       `assistant:${JSON.stringify(m.tool_calls)}<end>` : `${m.role}:${m.content}`).join('\n') + '\n';

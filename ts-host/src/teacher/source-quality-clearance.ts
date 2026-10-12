@@ -48,6 +48,51 @@ export type VerifiedSourceQualityClearance = {
   review: SourceQualityClearance;
 };
 
+export type SourceQualityClearanceRef = {
+  schema: 'natlang.source-quality-clearance-ref/1';
+  sidecar_path: string;
+  file_sha256: string;
+  review_canonical_sha256: string;
+  review_id: string;
+  program_id: string;
+  program_ir_sha256: string;
+  source_quality_sha256: string;
+  source_snapshot_sha256: string;
+  source_manifest_sha256: string;
+  source_ids: string[];
+  source_groups: string[];
+  scope: 'source-conversion-only';
+  training_admission: false;
+  trace_admission: false;
+};
+
+/** Parse one packet sidecar after verifying its exact bytes and every signed evidence digest. */
+export function verifySourceQualityClearanceSidecar(bytes: Uint8Array, expectedFileSha256: string,
+  evidenceFilesBySha256: ReadonlyMap<string, Uint8Array>): VerifiedSourceQualityClearance {
+  if (!isSha256(expectedFileSha256) || hexDigest(bytes) !== expectedFileSha256)
+    throw new Error('source_quality_clearance_sidecar_file_hash_mismatch');
+  let review: unknown;
+  try { review = JSON.parse(new TextDecoder().decode(bytes)); }
+  catch { throw new Error('source_quality_clearance_sidecar_invalid_json'); }
+  const reviewProblems = sourceQualityClearanceProblems(review);
+  if (reviewProblems.length) throw new Error(`source_quality_clearance_sidecar_invalid:${reviewProblems.join(',')}`);
+  if (!isRecord(review) || !Array.isArray(review.evidence))
+    throw new Error('source_quality_clearance_sidecar_evidence_invalid');
+  for (const evidence of review.evidence) {
+    if (!isRecord(evidence) || !isSha256(evidence.sha256))
+      throw new Error('source_quality_clearance_sidecar_evidence_invalid');
+    const evidenceBytes = evidenceFilesBySha256.get(evidence.sha256);
+    if (!evidenceBytes || hexDigest(evidenceBytes) !== evidence.sha256)
+      throw new Error(`source_quality_clearance_evidence_hash_mismatch:${evidence.sha256}`);
+  }
+  const verified: VerifiedSourceQualityClearance = { schema: 'natlang.verified-source-quality-clearance/1',
+    review_sha256: hexDigest(bytes), review_canonical_sha256: hash(review), evidence_files_verified: true,
+    review: review as SourceQualityClearance };
+  const problems = sourceQualityClearanceProblems(verified);
+  if (problems.length) throw new Error(`source_quality_clearance_sidecar_invalid:${problems.join(',')}`);
+  return verified;
+}
+
 const hash = (value: unknown): string => hexDigest(canonical(value));
 const isSha256 = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const isRecord = (value: unknown): value is Dict => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -146,4 +191,43 @@ export function sourceQualityClearanceForProgram(value: unknown, programValue: u
     source_ids: entry.source_ids, source_groups: entry.source_groups,
     policy_held_source_ids: (policy.held_source_ids as string[]), policy_held_source_groups: (policy.held_source_groups as string[]),
     scope: 'source-conversion-only', training_admission: false, trace_admission: false };
+}
+
+/** Build a small packet-relative reference while retaining the signed clearance in one sidecar. */
+export function sourceQualityClearanceRefForProgram(value: VerifiedSourceQualityClearance, programValue: unknown,
+  sidecarPath: string, fileSha256: string): SourceQualityClearanceRef | undefined {
+  const binding = sourceQualityClearanceForProgram(value, programValue);
+  if (!binding || !isSha256(fileSha256) || fileSha256 !== value.review_sha256 ||
+      !isSha256(value.review_canonical_sha256) || value.review_canonical_sha256 !== hash(value.review) ||
+      typeof sidecarPath !== 'string' || !sidecarPath.trim() || sidecarPath.startsWith('/') ||
+      sidecarPath.includes('\\') || sidecarPath.split('/').some(part => !part || part === '.' || part === '..')) return;
+  return { schema: 'natlang.source-quality-clearance-ref/1', sidecar_path: sidecarPath,
+    file_sha256: value.review_sha256, review_canonical_sha256: value.review_canonical_sha256,
+    review_id: value.review.id, program_id: String(binding.program_id),
+    program_ir_sha256: String(binding.program_ir_sha256), source_quality_sha256: String(binding.source_quality_sha256),
+    source_snapshot_sha256: String(binding.source_snapshot_sha256), source_manifest_sha256: String(binding.source_manifest_sha256),
+    source_ids: [...(binding.source_ids as string[])], source_groups: [...(binding.source_groups as string[])],
+    scope: 'source-conversion-only', training_admission: false, trace_admission: false };
+}
+
+/** A compact reference is trusted only alongside the verified sidecar and the exact pinned program. */
+export function sourceQualityClearanceRefProblems(value: unknown, clearance: VerifiedSourceQualityClearance | undefined,
+  programValue: unknown): string[] {
+  if (!isRecord(value) || value.schema !== 'natlang.source-quality-clearance-ref/1')
+    return ['source_quality_clearance_reference_invalid'];
+  const ref = value as unknown as SourceQualityClearanceRef;
+  if (typeof ref.sidecar_path !== 'string' || !ref.sidecar_path.trim() || ref.sidecar_path.startsWith('/') ||
+      ref.sidecar_path.includes('\\') || ref.sidecar_path.split('/').some(part => !part || part === '.' || part === '..') ||
+      !isSha256(ref.file_sha256) || !isSha256(ref.review_canonical_sha256) || typeof ref.review_id !== 'string' ||
+      !ref.review_id.trim() || typeof ref.program_id !== 'string' || !ref.program_id.trim() ||
+      !isSha256(ref.program_ir_sha256) || !isSha256(ref.source_quality_sha256) ||
+      !isSha256(ref.source_snapshot_sha256) || !isSha256(ref.source_manifest_sha256) ||
+      !stringArray(ref.source_ids) || !stringArray(ref.source_groups) ||
+      ref.scope !== 'source-conversion-only' || ref.training_admission !== false || ref.trace_admission !== false)
+    return ['source_quality_clearance_reference_invalid'];
+  if (!clearance || sourceQualityClearanceProblems(clearance).length)
+    return ['source_quality_clearance_sidecar_unresolved'];
+  const expected = sourceQualityClearanceRefForProgram(clearance, programValue, ref.sidecar_path, clearance.review_sha256);
+  if (!expected || canonical(ref) !== canonical(expected)) return ['source_quality_clearance_reference_mismatch'];
+  return [];
 }
