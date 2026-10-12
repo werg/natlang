@@ -278,7 +278,11 @@ def run_variant(variant: dict[str, Any], output_root: Path, device: str, artifac
         raise ValueError('comparison recipes, outputs, and receipts must be under the declared artifact root') from exc
     metadata = output_root / 'launches' / f"{recipe['id']}.json"
     metadata.parent.mkdir(parents=True, exist_ok=True)
-    launch_log = output_root / 'launches' / f"{recipe['id']}.log"
+    # Keep the coordinator's stdout separate from the declared container log:
+    # the launcher otherwise defaults to metadata.with_suffix('.log'), which
+    # collides with a wrapper log named after the recipe ID.
+    launch_log = output_root / 'launches' / f"{recipe['id']}.wrapper.log"
+    container_log = output_root / 'launches' / f"{recipe['id']}.container.log"
     telemetry = output_root / 'telemetry' / f"{recipe['id']}.jsonl"
     telemetry.parent.mkdir(parents=True, exist_ok=True)
     stop = threading.Event()
@@ -287,7 +291,7 @@ def run_variant(variant: dict[str, Any], output_root: Path, device: str, artifac
     env = os.environ.copy()
     argv = [sys.executable, str(REPOSITORY_ROOT / 'scripts' / 'run_neuralese_recipe.py'),
             '--recipe', str(recipe_path), '--artifact-root', str(artifact_root),
-            '--launch-metadata', str(metadata), '--device', device]
+            '--launch-metadata', str(metadata), '--log', str(container_log), '--device', device]
     if hf_hub_cache is not None:
         argv.extend(['--hf-hub-cache', str(hf_hub_cache)])
     try:
@@ -300,15 +304,18 @@ def run_variant(variant: dict[str, Any], output_root: Path, device: str, artifac
     summary = {'recipe_id': recipe['id'], 'recipe_path': str(recipe_path),
                'recipe_sha256': variant['recipe_sha256'], 'output': str(output),
                'launch_metadata': str(metadata), 'launch_log': str(launch_log),
+               'container_log': str(container_log),
                'telemetry': str(telemetry), 'exit_code': completed.returncode,
                'measurements': summarize_run(output),
                'gpu_telemetry_summary': _telemetry_summary(telemetry),
-               'execution_plans': _execution_plans(launch_log)}
-    if summary['measurements']['warm_updates_used'] < 2:
-        raise RuntimeError(f'comparison variant has fewer than two warmed updates; see {launch_log}')
-    write_json(output_root / 'summaries' / f"{recipe['id']}.json", summary)
+               'execution_plans': _execution_plans(container_log)}
+    summaries = output_root / 'summaries'
+    summaries.mkdir(parents=True, exist_ok=True)
+    write_json(summaries / f"{recipe['id']}.json", summary)
     if completed.returncode:
-        raise RuntimeError(f"comparison variant failed ({completed.returncode}); see {launch_log}")
+        raise RuntimeError(f"comparison variant failed ({completed.returncode}); wrapper={launch_log}; container={container_log}")
+    if summary['measurements']['warm_updates_used'] < 2:
+        raise RuntimeError(f"comparison variant has fewer than two warmed updates; wrapper={launch_log}; container={container_log}")
     return summary
 
 
