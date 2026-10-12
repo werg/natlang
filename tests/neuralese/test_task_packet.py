@@ -3,7 +3,9 @@ from natlang_neuralese.eval.task_packet import TASK_OUTCOMES, classify_case
 
 def test_repeated_exact_empty_eos_is_model_incomplete_not_infrastructure_or_budget():
     result = {"outcome": {"status": "quiesced", "accepted": False,
-                          "detail": "model_incomplete: terminated_without_result (repeated immediate EOS after one recovery turn)"}}
+                          "detail": "source-authored root eval did not finish",
+                          "invocation_ledger": [{"completion_detail": "model_incomplete: terminated_without_result (repeated immediate EOS after one recovery turn)"}],
+                          "action_ledger": [], "scope_failures": []}}
     assert classify_case(result, {"status": "complete", "resource_limit_reason": None}) == "model_incomplete"
     assert "model_incomplete" in TASK_OUTCOMES
 
