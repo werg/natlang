@@ -97,3 +97,11 @@ First window: the first Mellum checkpoint after 2026-10-13 06:00 UTC (DGX traini
     request, but the output-token sizing is one token over the window (prompt estimate or off-by-one). **Bug to fix
     before the teacher-window run**; ts-host model request sizing (`openai-compatible.ts` `serverContextWindow`
     consumer). The other pi definitions have no calls from a model that spent tokens.
+  - Fixed (2026-10-13): it was the prompt estimate, not an off-by-one. The agent sizes a turn from a characters-per-
+    token estimate (1/3.5 until the first reply calibrates it) against a budget of the window minus an eighth; the
+    first writer request's real prompt (25,601) ran well above its estimate, and the overflow recovery only parsed
+    llama.cpp's `exceed_context_size_error`, so vLLM's 400 was thrown. `contextOverflow()` in
+    `ts-host/src/native/agent.ts` now reads llama.cpp and vLLM refusals (prompt size and window); the turn is retried
+    with the calibrated estimate, and once a window is stated every request's `max_tokens` is at most the window
+    minus the calibrated prompt estimate minus 64. Tests: `ts-host/test/compaction.test.mjs` (vLLM refusal then a
+    fitting retry; parser cases).

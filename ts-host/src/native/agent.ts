@@ -149,6 +149,27 @@ const DEFAULT_CONTEXT_TOKENS = 16384;
  * The context budget when none is configured: the model's context window as its server reports it (a driver's
  * `contextWindow()`), less an eighth (at least 2048 tokens) for the reply; DEFAULT_CONTEXT_TOKENS when unknown.
  */
+/** Tokens kept free between the estimated prompt and the reply limit once the window is known. */
+const REPLY_MARGIN = 64;
+
+/**
+ * The prompt size and context window a server states when it refuses a request as longer than its context, for the
+ * servers we run: llama.cpp (`exceed_context_size_error` with `n_prompt_tokens`, `n_ctx`) and vLLM ("maximum context
+ * length is W tokens ... your prompt contains at least P input tokens", or "(P in the messages, C in the completion)").
+ */
+export function contextOverflow(message: string): { promptTokens: number; window: number | null } | undefined {
+  const llama = /exceed_context_size_error[\s\S]*?"n_prompt_tokens":(\d+)/.exec(message);
+  if (llama) {
+    const window = /"n_ctx":(\d+)/.exec(message);
+    return { promptTokens: Number(llama[1]), window: window ? Number(window[1]) : null };
+  }
+  const window = /maximum context length is (\d+) tokens/.exec(message);
+  if (!window) return undefined;
+  const prompt = /prompt contains at least (\d+) input tokens/.exec(message) ?? /\((\d+) in the messages/.exec(message) ??
+    /request has (\d+) input tokens/.exec(message);
+  return prompt ? { promptTokens: Number(prompt[1]), window: Number(window[1]) } : undefined;
+}
+
 export async function defaultContextBudget(driver: unknown): Promise<number> {
   const ask = (driver as { contextWindow?: unknown } | null)?.contextWindow;
   let window: unknown;
@@ -995,6 +1016,9 @@ export class NativeToolAgent {
     let compactedTurn = -1;
     // Requests of this turn the server refused as longer than its context.
     let overflowRetries = 0;
+    // The context window a server stated when it refused a request; once known, no turn asks for more reply tokens
+    // than the window leaves after the (calibrated) prompt estimate.
+    let statedWindow: number | null = null;
     // The current turn's request has streamed deltas to `onDelta` and has not yet returned.
     let streamed = false;
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
@@ -1100,7 +1124,8 @@ export class NativeToolAgent {
           ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'model-turn', turns),
-          max_tokens: limit };
+          max_tokens: statedWindow === null ? limit :
+            Math.max(1, Math.min(limit ?? statedWindow, statedWindow - Math.ceil(estimate(availableTools)) - REPLY_MARGIN)) };
         response = await (turnOptions ? this.driver(turnRequest, session.runtime.signal, turnOptions) :
           this.driver(turnRequest, session.runtime.signal));
         streamed = false;
@@ -1112,10 +1137,11 @@ export class NativeToolAgent {
           error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` });
         // A server that refuses the request as too long says how long it was: learn the true size and take the turn
         // again, which compacts it. Twice at most per turn; beyond that the estimate is not the problem.
-        const measured = /exceed_context_size_error[\s\S]*?"n_prompt_tokens":(\d+)/.exec(error instanceof Error ? error.message : '');
+        const measured = contextOverflow(error instanceof Error ? error.message : '');
         if (measured && overflowRetries < 2 && sentChars > 0) {
           overflowRetries++;
-          tokensPerChar = Math.max(tokensPerChar, Number(measured[1]) / sentChars);
+          tokensPerChar = Math.max(tokensPerChar, measured.promptTokens / sentChars);
+          if (measured.window !== null) statedWindow = measured.window;
           continue;
         }
         throw error;

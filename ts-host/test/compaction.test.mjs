@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NativeToolAgent, collapseHistory } from '../dist/native/agent.js';
+import { NativeToolAgent, collapseHistory, contextOverflow } from '../dist/native/agent.js';
 import { session as open } from './support/natlang.mjs';
 
 const automaticNote = message => message.role === 'user' && /^This conversation reached its context limit/.test(message.content);
@@ -178,6 +178,42 @@ test('a request the server refuses as too long teaches the agent its true size, 
   assert.equal(session.completed, true);
   assert.ok(refused >= 1, 'the server refused at least one request');
   assert.ok(sizes.every(size => size < CONTEXT));
+});
+
+test('a vLLM refusal (prompt plus reply over the window) teaches the prompt size and the window; the retry fits', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Count up.' });
+  // The server's tokenizer makes twice as many tokens per character as the agent's first estimate assumes, and its
+  // window is just below the first request's prompt plus reply (the specializer dry run of 2026-10-12: 25,601 + 7,168
+  // against 32,768).
+  const actual = request => Math.round((JSON.stringify(request.messages).length + JSON.stringify(request.tools).length) / 2);
+  let window = null, refused = 0;
+  const accepted = [];
+  const driver = request => {
+    const prompt = actual(request);
+    window ??= prompt + Math.floor(request.max_tokens / 2);
+    if (prompt + request.max_tokens > window) {
+      refused++;
+      throw new Error(`model HTTP 400: {"error":{"message":"This model's maximum context length is ${window} tokens. However, ` +
+        `you requested ${request.max_tokens} output tokens and your prompt contains at least ${prompt} input tokens, for a ` +
+        `total of at least ${prompt + request.max_tokens} tokens.","type":"BadRequestError","code":400}}`);
+    }
+    accepted.push({ prompt, max: request.max_tokens });
+    return { calls: [['return_result', { status: 'success', value: 1 }]], prompt_tokens: prompt };
+  };
+  await new NativeToolAgent(driver, { contextTokens: 7000, maxTurns: 5 }).run(session);
+  assert.equal(session.completed, true);
+  assert.equal(refused, 1, 'refused once, then sized to the stated window');
+  assert.ok(accepted.every(({ prompt, max }) => prompt + max <= window && max >= 1));
+});
+
+test('context overflow messages of llama.cpp and vLLM give the prompt size and the window', () => {
+  assert.deepEqual(contextOverflow('model HTTP 400: {"error":{"code":400,"type":"exceed_context_size_error","n_prompt_tokens":9000,"n_ctx":8192}}'),
+    { promptTokens: 9000, window: 8192 });
+  assert.deepEqual(contextOverflow("This model's maximum context length is 32768 tokens. However, you requested 7168 output tokens and your prompt contains at least 25601 input tokens, for a total of at least 32769 tokens."),
+    { promptTokens: 25601, window: 32768 });
+  assert.deepEqual(contextOverflow("This model's maximum context length is 4096 tokens. However, you requested 5000 tokens (4000 in the messages, 1000 in the completion)."),
+    { promptTokens: 4000, window: 4096 });
+  assert.equal(contextOverflow('model HTTP 500: internal error'), undefined);
 });
 
 test('a turn is limited to a quarter of the window, and long reasoning leaves the conversation with its turn', async () => {
