@@ -231,3 +231,24 @@ outermost aten op, and Triton launches are not aten ops. Attribution now goes by
 | Newton-Schulz Gram form (Q, R polynomial in G = X0 X0ᵀ) | On real layer-0 gradients (`ns_gram.py`, `grads-layer0.pt`): error vs the FP64 iteration 0.06–0.15 (Gram, BF16 or FP32 small GEMMs) against 0.010–0.031 (current); q_proj singular values reach 3.36 against 1.30. Not faster: gate_up 226 vs 208 ms, q 15.3 vs 14.1 ms. The amplification through Q needs restarts, which eat the saving. | dropped |
 | MXFP4 expert forward (Triton `tl.dot_scaled` e2m1 with E8M0 per-32 scales, through the shared FP8 backend as `triton-experts-mxfp4`; FP8 backward unchanged) | Kernel matches the decoded operands to 1.75e-3; error vs BF16 ~0.16 per 4-bit GEMM. Bench at 2 layers, 8×4000 tokens, beside v4, in one claim: expert fwd 0.142 → 0.126 s and recompute 0.146 → 0.123 s, so −0.04 s of 2.49 s/update (median 2.489 → 2.471, −0.7%). Fixed-batch loss 15.30864 vs 15.31168 (FP8); no NaN. Projected for v4: about −0.4 s of ~22 s (≈ 2%). The expert time is in the backward (4.1 s): its BF16 parameter-layout wgrad plus the FP8 dgrad. A 4-bit forward cannot reach it. | dropped (below the 5% bar; code not kept) |
 | Full NVFP4 training (FP4 dgrad/wgrad, 2D scaling, Hadamard, SR) | Not built. The only 4-bit target left is the FP8 dgrad, about half of 4.1 s. A Triton wgrad already loses 2–5× to the BF16 path in this layout. Even an ideal 1.5× on the dgrad saves ≈ 0.7 s (≈ 3%), while adding the quality risk of a 4-bit gradient. | not worth it now |
+
+## Round 4 (2026-10-12 evening, after round 3 on v4)
+
+**v4 on round-3 code.** Updates 226–245 average 19.1 s, against 24.1 s on FP8-only code (updates 115–216), with ~20% more context per update. Profile 222–224 per update (GPU 19.0 s):
+
+| Component | Seconds | Largest pieces |
+|---|---|---|
+| Expert backward | 4.33 | wgrad 0.69, FP8 dgrad 0.66, gradient quant 0.37, combine bwd 0.34, BF16 add of the slice gradients 0.32, gather 0.29 |
+| Newton-Schulz | 3.95 | GEMMs 2.6, transpose copies 0.55, norms 0.2 |
+| Other MuonSR | 1.42 | apply 0.51, momentum 0.42, randint noise 0.25 |
+| SDPA backward | 1.31 | FlexAttention window 0.72 (21 layers), flash 0.33 (7 layers) |
+| Norm backward | 1.06 | |
+| GPU idle | 0.2 | overlapping the optimizer with the backward has nothing to fill |
+
+| Item | Result | Decision |
+|---|---|---|
+| Newton-Schulz cubic5 in Triton (`train/ns_kernels.py`): symmetric Gram (upper tiles, mirrored), tall latents stepped as O ← O(aI + bOᵀO) without transposes | Isolated on Mellum shapes 1.36× (gate_up 1.32×, down 1.46×, q 1.42×, o 1.25×); output differs from eager by ≤ 2.5e-4 relative | adopted (`NATLANG_MUON_NS_TRITON=0`) |
+| Stochastic-rounding noise drawn in the apply kernel (Philox, one device seed) | Removes the full-size randint and the noise read; unbiased (test); draws change | adopted (`NATLANG_MUON_SR_NOISE=torch`) |
+| Fused SwiGLU forward/backward for the FP8 experts (unclamped) | Same roundings as eager; removes the zero-padded slice gradients and their add | adopted (`NATLANG_FUSED_SWIGLU=0`) |
+| The three together, 2 layers × 4×4000 tokens beside v4 (same claim, interleaved arms) | GPU/update 1.338 → 1.162 s (−13%): Newton-Schulz 0.339 → 0.253, other MuonSR 0.112 → 0.060, expert backward 0.197 → 0.149. Fixed-batch losses equal through update 2, then differ in the 4th–5th digit (new SR draws) | adopted |
+| FlexAttention backward block sizes (8k tokens, window 1024) | Best (32/64/64/32, 4 warps, 2 stages) 16.0 ms vs default 18.4 ms: ≈ −0.09 s/update | not wired (below the bar) |
