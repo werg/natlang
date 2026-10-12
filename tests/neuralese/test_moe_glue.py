@@ -57,3 +57,23 @@ def test_grouped_linear_grads_are_in_parameter_layout_and_fp8_is_close(monkeypat
         assert weight.grad.is_contiguous() and weight.grad.shape == weight.shape
         for a, b in zip([y.detach().float(), rows.grad.float(), weight.grad.float()], expected):
             assert torch.isfinite(a).all() and float((a - b).norm() / b.norm()) < tolerance, fp8
+
+
+@pytest.mark.parametrize('tokens', [5, 700])
+def test_grouped_fp8_experts_track_bf16(monkeypatch, tokens):
+    """maple/expert_gemm.fp8_dense_experts (NATLANG_MOE_FP8=grouped): finite, and within FP8 rounding of the BF16
+    grouped experts in output and every gradient (an idle expert included)."""
+    torch.manual_seed(tokens)
+    experts, top_k, width, ff = 8, 4, 256, 128
+    x = torch.randn(tokens, width, device='cuda').bfloat16()
+    logits = torch.randn(tokens, top_k, device='cuda')
+    index = torch.stack([torch.randperm(experts - 1, device='cuda')[:top_k] for _ in range(tokens)])  # expert 7 idle
+    gate_up = (torch.randn(experts, 2 * ff, width, device='cuda') * 0.05).bfloat16()
+    down = (torch.randn(experts, width, ff, device='cuda') * 0.05).bfloat16()
+    monkeypatch.setenv('NATLANG_MOE_FP8', '0')
+    reference = _run(monkeypatch, True, x, index, logits, gate_up, down)
+    monkeypatch.setenv('NATLANG_MOE_FP8', 'grouped')
+    fp8 = _run(monkeypatch, True, x, index, logits, gate_up, down)
+    for name, a, b in zip(('out', 'grad_x', 'grad_weights', 'grad_gate_up', 'grad_down'), fp8, reference):
+        assert torch.isfinite(a).all() and float((a - b).norm() / b.norm().clamp_min(1e-30)) < 0.1, name
+    assert float(fp8[3][7].abs().max()) == 0.0  # the idle expert gets no gradient
