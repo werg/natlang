@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-target-union-20261011-r2-context-recovery-v1",
+  "owner": "pop",
+  "path": "runs/natlang-target-union-20261011-r2-context-recovery-v1",
+  "files": [
+    {
+      "path": "full/lfm25/text-data.jsonl",
+      "bytes": 2987945423,
+      "sha256": "6533b83521a4a62d9a37c6dd7adec3046fd01dc5991817e13966f78fc6bf1e77",
+      "lines": 68851
+    },
+    {
+      "path": "program-header/lfm25/text-data.jsonl",
+      "bytes": 1988949934,
+      "sha256": "27e40b8b0531b1c246fb13541301aa10afd4da0f376520ff01f71cdbd33c6353",
+      "lines": 136191
+    },
+    {
+      "path": "receipt/derivative-receipt.json",
+      "bytes": 6028,
+      "sha256": "e09d1f1ff035880cd1480e416ce76209dc29882aa8181b968e5e49d2fb684d9d"
+    },
+    {
+      "path": "receipt/replacement-ids.json",
+      "bytes": 5137,
+      "sha256": "88991fa40d523ca4b0d4170bcd45fa17c2ed25d2b8c78c0b7e03fb5acee8121b"
+    }
+  ],
+  "bytes": 4976906522
+}

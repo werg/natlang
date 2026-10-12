@@ -47313,6 +47313,38 @@
         }
       },
       "notes": ""
+    },
+    {
+      "id": "natlang-target-union-20261011-r2-context-recovery-v1",
+      "owner": "pop",
+      "path": "runs/natlang-target-union-20261011-r2-context-recovery-v1",
+      "include": [
+        "receipt/derivative-receipt.json",
+        "receipt/replacement-ids.json",
+        "program-header/lfm25/text-data.jsonl",
+        "full/lfm25/text-data.jsonl"
+      ],
+      "source_class": "replacement-rendering-overlay-for-already-admitted-native-text",
+      "split": "per-row source split and source_groups are retained exactly; only the existing 87 source IDs are replaced by restored-context renders",
+      "admission": "replacement-only overlay over natlang-target-union-20261011-r2; consumers must replace rows by exact ID and must not append these documents or double-count their targets",
+      "training_admission": true,
+      "training_admission_reason": "Owner-authorized context restoration for 87 already-admitted native target rows; no new targets, source IDs, groups, split assignments, or admission decisions are introduced. Apply only as exact-ID replacement over r2.",
+      "derived_from": [
+        "natlang-target-union-20261011-r2",
+        "luna-v17-step5-selected112-native-87-targetbound-text-20261009-v2"
+      ],
+      "license": "inherited unchanged from the exact source rows in r2",
+      "renders": {
+        "full": {
+          "lfm25": "runs/natlang-target-union-20261011-r2-context-recovery-v1/full/lfm25/text-data.jsonl"
+        },
+        "program-header": {
+          "lfm25": "runs/natlang-target-union-20261011-r2-context-recovery-v1/program-header/lfm25/text-data.jsonl"
+        },
+        "whole-trajectory": {
+          "lfm25": "unchanged in natlang-target-union-20261011-r2; no source_record_ids intersect the 87 replacements"
+        }
+      }
     }
   ],
   "coverage_backlog": [
