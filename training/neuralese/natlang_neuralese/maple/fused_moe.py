@@ -347,6 +347,9 @@ def dense_grouped_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.T
     and combine as the loop; only the GEMMs' accumulation order differs (BF16 rounding level)."""
     tokens, top_k = index.shape
     experts, ff = gate_up.shape[0], down.shape[-1]
+    if x.is_cuda and os.environ.get("NATLANG_MOE_FP8", "0") == "grouped":
+        from .expert_gemm import fp8_dense_experts  # one Triton FP8 launch per projection (maple/expert_gemm.py)
+        return fp8_dense_experts(x, index, weights, gate_up, down, clamp)
     flat = index.reshape(-1)
     glue = x.is_cuda and os.environ.get("NATLANG_MOE_GLUE", "1") != "0"
     if glue:  # maple/moe_glue.py: the same permutation without scatters in backward
@@ -359,7 +362,7 @@ def dense_grouped_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.T
     rows = GatherRows.apply(x, order // top_k, slot_of, top_k) if glue else x[order // top_k]
     if glue:  # maple/fp8_experts.py: weight grads in parameter layout; NATLANG_MOE_FP8=1: FP8 forward and dgrad
         from .fp8_experts import GroupedLinear
-        fp8 = os.environ.get("NATLANG_MOE_FP8", "0") != "0"
+        fp8 = os.environ.get("NATLANG_MOE_FP8", "0") == "1"
         project = lambda a, w: GroupedLinear.apply(a, w, offsets, fp8)
     else:
         project = lambda a, w: torch._grouped_mm(a, w.transpose(-2, -1), offs=offsets)
