@@ -46,6 +46,7 @@ async function main(): Promise<void> {
       '         --chat-completions-url URL --api-key-env NAME  explicit external HTTP transport\n' +
       '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide --temperature T (default 0: greedy)\n' +
       '         --execution-plans [--execution-plan-tokens N]  plan before each action and retain it as reasoning\n' +
+      '         --action-max-tokens N  independent per-action output cap (planner cap remains separate)\n' +
       '         --request-retries N (default 1) repeats the same request; --transport-retries N (default 0) retries the whole case\n' +
       '         --retry-delay-ms N --worker-stagger SECONDS --system-file PATH\n' +
       '         --chat-request-config FILE  JSON sampling/template controls retained in provenance\n' +
@@ -92,6 +93,8 @@ async function main(): Promise<void> {
     throw new Error('--judge-model-id needs exactly one of --judge-server or --judge-provider');
   if (flags.has('--execution-plan-tokens') && !flags.has('--execution-plans'))
     throw new Error('--execution-plan-tokens requires --execution-plans');
+  if (flags.has('--action-max-tokens') && integer(flags, '--action-max-tokens', 0) < 1)
+    throw new Error('--action-max-tokens must be a positive integer');
   const adapterPath=flags.get('--execution-adapter');
   let execution:CollectorConfig['execution'];
   if(adapterPath){const path=resolve(adapterPath),loaded=(await import(pathToFileURL(path).href)).default;
@@ -115,6 +118,7 @@ async function main(): Promise<void> {
     retryDelayMs: Number(flags.get('--retry-delay-ms') ?? 5000), systemPrompt,
     cacheStableTools: flags.has('--cache-stable-tools'),
     executionPlans: flags.has('--execution-plans'),
+    ...(flags.has('--action-max-tokens') ? { actionMaxTokens: integer(flags, '--action-max-tokens', 0) } : {}),
     ...(flags.has('--file-tools') ? { fileTools: fileToolSurface(flags.get('--file-tools')!) } : {}),
     ...(flags.has('--execution-plan-tokens') ?
       { executionPlanTokens: integer(flags, '--execution-plan-tokens', 512) } : {}),

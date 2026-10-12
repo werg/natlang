@@ -468,6 +468,10 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             retries = entry['request_retries']
             if type(retries) is not int or retries < 0:
                 raise ValueError(f'entry request_retries must be a nonnegative integer: {entry.get("key")}')
+        if 'action_max_tokens' in entry:
+            action_max_tokens = entry['action_max_tokens']
+            if type(action_max_tokens) is not int or action_max_tokens < 1:
+                raise ValueError(f'entry action_max_tokens must be a positive integer: {entry.get("key")}')
         if 'context_tokens' in entry:
             context_tokens = entry['context_tokens']
             if type(context_tokens) is not int or context_tokens < 1:
@@ -539,6 +543,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                    '--transport-retries', str(transport_retries), '--file-tools', entry.get('surface', 'all')]
         if 'request_retries' in entry:
             command += ['--request-retries', str(entry['request_retries'])]
+        if 'action_max_tokens' in entry:
+            command += ['--action-max-tokens', str(entry['action_max_tokens'])]
         command += ['--provider', provider, '--context-tokens', str(entry.get('context_tokens', 16384)), '--reasoning-effort', reasoning_effort] if provider else [
             '--server', server or 'http://127.0.0.1:8081']
         if external:

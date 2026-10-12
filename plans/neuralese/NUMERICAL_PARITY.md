@@ -225,3 +225,21 @@ Memory was unchanged at 1024 and slightly higher at 6144. These are one-layer
 results, not whole-model speed or quality qualification. Shared direct-stage
 integration and full-model checks are next; serving remains BF16. Probe SHA:
 `f24014803970fc30823919bab3ea0c1e1ceaf11c56ed6483e09b3b5035dd4aa3`.
+
+The shared whole-model wrapper was then exercised on ten identical scheduled
+windows from V16 step 173, with checkpointing off: contexts 1023, 1027, 416,
+1791, 1818, 955, 973, 2164, 1073 and 3071. Native BF16 evaluation was identical
+before training. Warm median update time (steps 2–10) was 0.141 seconds BF16
+versus 0.214 FP8; total update time including startup was 7.944 versus 9.066.
+Only the longest window showed a clear FP8 advantage: 0.367→0.307 seconds.
+After ten updates held CE was 3.934481/3.934944 and value MSE
+0.438815/0.441736; both response guards passed. Run-wide allocation peaks were
+4.907/5.156 GiB, so FP8 did not save memory here. Keep BF16 for this workload;
+a longer checkpointed comparison is pending. TE requires flattened token rows
+padded to multiples of 16 for these backward GEMMs; trim synthetic rows after
+the token-local FFN, leaving real token positions and targets unchanged.
+
+BF16 report (`te-full-model-pair-v4/bf16/direct_sft/report.json`) SHA:
+`a54a55b05bd2abec0b689193b7763c8401355f14a60dbbf6095b5611a13932cb`.
+FP8 report (`te-full-model-pair-v5/fp8-current-scaling-hybrid/direct_sft/report.json`) SHA:
+`1e101496791babf5bb1599af2d0c302e05ca932b056cc2d7c915290d96a62636`.
