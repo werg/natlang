@@ -11,6 +11,9 @@ host sync), E4M3 operands with per-row scales applied in the epilogue, FP32 accu
   summed back per token by the scatter-free glue (maple/moe_glue.py);
 - weight gradient: BF16 grouped GEMM straight into the parameter layout.
 
+Selected by ``maple.model.DENSE_MOE["fp8"] = "grouped"``, which the shared FP8 backend (train/fp8_backend.py,
+``FP8ExpertAdapter``) sets inside its ``autocast()``.
+
 Measured on the GB10 (16k x 2304 x 1792): this kernel's FP8 GEMM 173 TFLOP/s, Triton BF16 97, cuBLASLt FP8 111, cuBLAS
 BF16 59 (plans/neuralese/TRAINING_SPEED_20261012.md).
 """
@@ -20,14 +23,14 @@ import torch
 import triton
 import triton.language as tl
 
-from .fp8_experts import FP8, columnwise_quant_t, rowwise_quant
+from .fp8_experts import FP8, rowwise_quant
 
 BM, BN, BK, WARPS, STAGES = 128, 128, 64, 4, 3
 
 
 @triton.jit
 def _grouped_fp8_mm(a_ptr, rows_ptr, sa_ptr, b_ptr, sb_ptr, c_ptr, block_expert_ptr, block_row_ptr, end_ptr,
-                    N, R, stride_am, stride_be, stride_bn, stride_sbe, stride_cm,
+                    N, R, stride_am, stride_be, stride_bn, stride_br, stride_sbe, stride_cm,
                     HAS_ROWS: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
     """C[m, n] = sa[src(m)] * sb[e, n] * sum_r A[src(m), r] * B[e, n, r] for the rows m of block b (expert e)."""
     pid = tl.program_id(0)
@@ -49,7 +52,7 @@ def _grouped_fp8_mm(a_ptr, rows_ptr, sa_ptr, b_ptr, sb_ptr, c_ptr, block_expert_
     n_mask = offs_n < N
     offs_k = tl.arange(0, BK)
     a_p = a_ptr + src[:, None] * stride_am + offs_k[None, :]
-    b_p = b_ptr + expert.to(tl.int64) * stride_be + offs_n[None, :].to(tl.int64) * stride_bn + offs_k[:, None]
+    b_p = b_ptr + expert.to(tl.int64) * stride_be + offs_n[None, :].to(tl.int64) * stride_bn + offs_k[:, None] * stride_br
     acc = tl.zeros((BM, BN), dtype=tl.float32)
     for k0 in range(0, R, BK):
         k_mask = (k0 + offs_k) < R
@@ -57,12 +60,48 @@ def _grouped_fp8_mm(a_ptr, rows_ptr, sa_ptr, b_ptr, sb_ptr, c_ptr, block_expert_
         b = tl.load(b_p, mask=k_mask[:, None] & n_mask[None, :], other=0.0)
         acc = tl.dot(a, b, acc)
         a_p += BK
-        b_p += BK
+        b_p += BK * stride_br
     sa = tl.load(sa_ptr + src, mask=m_mask, other=0.0)
     sb = tl.load(sb_ptr + expert * stride_sbe + offs_n, mask=n_mask, other=0.0)
     out = acc * sa[:, None] * sb[None, :]
     tl.store(c_ptr + offs_m[:, None].to(tl.int64) * stride_cm + offs_n[None, :], out.to(c_ptr.dtype.element_ty),
              mask=m_mask[:, None] & n_mask[None, :])
+
+
+@triton.jit
+def _scaled_rowwise_quant(x_ptr, col_scale_ptr, end_ptr, q_ptr, scale_ptr, C, E, FMAX: tl.constexpr,
+                          BLOCK: tl.constexpr):
+    """Row p of ``x`` times its expert's column scales (``col_scale[e, :]``, e from the group ends), quantized per row."""
+    row = tl.program_id(0).to(tl.int64)
+    expert = tl.sum((tl.load(end_ptr + tl.arange(0, 128), mask=tl.arange(0, 128) < E, other=2 ** 31 - 1) <= row
+                     ).to(tl.int32), axis=0)
+    amax = tl.zeros((BLOCK,), dtype=tl.float32)
+    for c0 in range(0, C, BLOCK):
+        offs = c0 + tl.arange(0, BLOCK)
+        x = tl.load(x_ptr + row * C + offs, mask=offs < C, other=0.0).to(tl.float32)
+        x = x * tl.load(col_scale_ptr + expert * C + offs, mask=offs < C, other=0.0)
+        amax = tl.maximum(amax, tl.abs(x))
+    scale = tl.maximum(tl.max(amax, axis=0), 1e-30) / FMAX
+    for c0 in range(0, C, BLOCK):
+        offs = c0 + tl.arange(0, BLOCK)
+        x = tl.load(x_ptr + row * C + offs, mask=offs < C, other=0.0).to(tl.float32)
+        x = x * tl.load(col_scale_ptr + expert * C + offs, mask=offs < C, other=0.0)
+        tl.store(q_ptr + row * C + offs, (x / scale).to(q_ptr.dtype.element_ty), mask=offs < C)
+    tl.store(scale_ptr + row, scale)
+
+
+def scaled_rowwise_quant(x, col_scale, ends):
+    """E4M3 rows of ``x * col_scale[expert(row)]`` with per-row FP32 scales (at most 128 experts)."""
+    x = x.contiguous()
+    rows, columns = x.shape
+    if col_scale.shape[0] > 128:
+        raise ValueError('scaled_rowwise_quant supports at most 128 experts')
+    q = torch.empty_like(x, dtype=FP8)
+    scale = torch.empty(rows, device=x.device, dtype=torch.float32)
+    if rows:
+        _scaled_rowwise_quant[(rows,)](x, col_scale.contiguous(), ends, q, scale, columns, col_scale.shape[0],
+                                       FMAX=448.0, BLOCK=min(1024, triton.next_power_of_2(columns)))
+    return q, scale
 
 
 class BlockTable:
@@ -87,14 +126,15 @@ class BlockTable:
 
 
 def grouped_fp8(aq, sa, rows, bq, sb, table: BlockTable, out_rows: int) -> torch.Tensor:
-    """[out_rows, N] BF16: routed row m = (aq[rows[m]] * sa[rows[m]]) @ (bq[e] * sb[e])ᵀ, ``bq`` [E, N, R] E4M3."""
+    """[out_rows, N] BF16: routed row m = (aq[rows[m]] * sa[rows[m]]) @ (bq[e] * sb[e])ᵀ, ``bq`` [E, N, R] E4M3 (any
+    strides: the input gradient passes the forward's [E, N, K] weights transposed), ``sb`` [E, N] (or ones)."""
     E, N, R = bq.shape
     out = torch.empty(out_rows, N, device=aq.device, dtype=torch.bfloat16)
     if out_rows:
         grid = (table.size * triton.cdiv(N, BN),)
         _grouped_fp8_mm[grid](aq, rows if rows is not None else aq, sa, bq, sb, out, table.block_expert,
                               table.block_row, table.ends, N, R, aq.stride(0), bq.stride(0), bq.stride(1),
-                              sb.stride(0), out.stride(0), HAS_ROWS=rows is not None, BM=BM, BN=BN, BK=BK,
+                              bq.stride(2), sb.stride(0), out.stride(0), HAS_ROWS=rows is not None, BM=BM, BN=BN, BK=BK,
                               num_warps=WARPS, num_stages=STAGES)
     return out
 
@@ -109,20 +149,23 @@ class Fp8ExpertProjection(torch.autograd.Function):
         E, N, K = weight.shape
         aq, sa = rowwise_quant(a)
         wq, sw = rowwise_quant(weight.reshape(E * N, K))
+        wq, sw = wq.view(E, N, K), sw.view(E, N)
         out_rows = rows.numel() if rows is not None else a.shape[0]
-        ctx.save_for_backward(a, rows, slot_of, weight, offsets)
+        # The input gradient reuses these FP8 weights (half the bytes of the BF16 latent, kept for one layer).
+        ctx.save_for_backward(a, rows, slot_of, weight, offsets, wq, sw)
         ctx.table, ctx.top_k = table, top_k
-        return grouped_fp8(aq, sa, rows, wq.view(E, N, K), sw.view(E, N), table, out_rows)
+        return grouped_fp8(aq, sa, rows, wq, sw, table, out_rows)
 
     @staticmethod
     def backward(ctx, grad):
-        a, rows, slot_of, weight, offsets = ctx.saved_tensors
+        a, rows, slot_of, weight, offsets, wq, sw = ctx.saved_tensors
         grad = grad.contiguous()
         grad_a = grad_weight = None
         if ctx.needs_input_grad[0]:
-            gq, sg = rowwise_quant(grad)
-            wtq, swt = columnwise_quant_t(weight)  # [E, K, N], scales [E, K]
-            grad_rows = grouped_fp8(gq, sg, None, wtq, swt, ctx.table, grad.shape[0])
+            # grad @ W_e = (grad * sw[e]) @ wq[e]: the forward's row scales fold into the gradient's quantization.
+            gq, sg = scaled_rowwise_quant(grad, sw, ctx.table.ends)
+            ones = torch.ones(1, wq.shape[2], device=wq.device, dtype=torch.float32).expand(wq.shape[0], -1)
+            grad_rows = grouped_fp8(gq, sg, None, wq.transpose(1, 2), ones, ctx.table, grad.shape[0])
             if rows is None:
                 grad_a = grad_rows
             else:
@@ -132,13 +175,13 @@ class Fp8ExpertProjection(torch.autograd.Function):
                     _gather_backward[(a.shape[0],)](grad_rows, slot_of, grad_a, grad_rows.shape[-1],
                                                     TOP_K=ctx.top_k, BLOCK=GLUE_BLOCK)
         if ctx.needs_input_grad[4]:
-            routed = a[rows] if rows is not None else a
-            grad_weight = torch._grouped_mm(grad.t(), routed, offs=offsets)
+            # BF16 grouped GEMM in the parameter layout (a Triton reduction kernel measured 2-5x slower here).
+            grad_weight = torch._grouped_mm(grad.t(), a[rows] if rows is not None else a, offs=offsets)
         return grad_a, None, None, None, grad_weight, None, None
 
 
 def fp8_dense_experts(x, index, weights, gate_up, down, clamp):
-    """``dense_grouped_experts`` with both projections on FP8 tensor cores (NATLANG_MOE_FP8)."""
+    """``dense_grouped_experts`` with both projections on FP8 tensor cores (``--fp8-training triton-experts``: train/fp8_backend.FP8ExpertAdapter)."""
     import torch.nn.functional as F
 
     from .moe_glue import Combine, routing_permutation

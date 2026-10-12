@@ -137,3 +137,42 @@ Keep `NATLANG_MAPLE_COMPILE=0` (no measured gain) and leave `NATLANG_MOE_FP8` un
 3. Attention projections and rope (4 s): fused QKV + rope.
 4. Readout (1.3 s): fused linear + cross-entropy on supervised positions only.
 5. NeuraleseProjection's soft-token mixture over the 98k vocabulary at every span position (0.9 s).
+
+## Round 2 (2026-10-12 afternoon)
+
+- **Profiler fix (48db6d59).** The v4 profile's "AccumulateGrad 1.25 s/update" was MuonSR. The latents step inside
+  post-accumulate-grad hooks, and a record_function entered in a hook is not a cpu_parent of the ops under it. Real
+  AccumulateGrad work is ~19 ms/update. The optimizer is therefore ~6.8 s/update, not 5.4. Scopes are now attributed
+  by time nesting on the launching thread, and each report lists its top kernels per category.
+- **GB10 GEMM rates.** The earlier "38–40 TFLOP/s BF16 ceiling" was contention with v4. Measured on an idle GPU at
+  16k × 2304 × 1792:
+
+  | Kernel | TFLOP/s |
+  |---|---|
+  | Triton FP8, pre-quantized, 128x128x64 | 173 |
+  | cuBLASLt FP8 | 111 |
+  | Triton BF16, 128x256x64, grouped-M swizzle | 97 |
+  | cuBLAS BF16 | 59 |
+  | Triton with in-kernel tile quantization | 57 (dropped) |
+
+- **FP8 expert GEMMs.**
+  - The cuBLASLt per-expert prototype was removed.
+  - `maple/expert_gemm.py` has one Triton launch per projection over all experts.
+  - Activations are quantized per token before the routing gather, and the kernel gathers FP8 rows itself.
+  - Weights are quantized per row. The input gradient reuses the forward's FP8 weights, with their row scales folded
+    into the gradient's quantization.
+  - The weight gradient is a BF16 grouped GEMM in parameter layout. A Triton reduction kernel for it measured 2–5×
+    slower.
+  - Selection goes through the shared FP8 backend (`train/fp8_backend.py`, Pop's 10cc424d):
+    `--fp8-training triton-experts` (`FP8ExpertAdapter`). It runs FP8 inside `autocast()` (training and recompute)
+    and BF16 under `native_modules()` (evaluation).
+  - It is stateless (current scaling), so the trainer and the recipe treat it as an execution choice like
+    `moe_kernel`: a run switches it at a resume.
+  - It is the default for Mellum (recipe neuralese-direct-mellum-v4; line-parity backbone-inherent).
+  - Bench, 2 layers × 32k tokens, interleaved: 3.97 s vs 3.81 s per update (−4%). The MoE expert phase is a minority
+    of a 2-layer update, so the full-model gain is larger in absolute terms.
+  - Fixed-batch loss: 15.22067 vs 15.2217 (BF16). No NaN.
+- **Resume fixes.**
+  - 74a01986: input digests are cached by (realpath, size, mtime_ns), and an archived predecessor takes the digest
+    from its receipt or the archive manifest. A resume never re-reads the 47 GB state.
+  - 00b524d7: the resume identity is content-based (sorted input digests and options without input paths).

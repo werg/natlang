@@ -132,8 +132,9 @@ def parse(argv=None):
                    help='auto accumulates independent windows sequentially and chooses checkpointing from shared '
                         'activation geometry plus live CUDA headroom; packed is a diagnostic override')
     p.add_argument('--quantization')
-    p.add_argument('--fp8-training', choices=('off', 'te-fp8'), default='off',
-                   help='experimental LFM dense-GEMM backend; default keeps the established BF16 path')
+    p.add_argument('--fp8-training', choices=('off', 'te-fp8', 'triton-experts'), default='off',
+                   help='FP8 backend (train/fp8_backend.py): te-fp8 = TE dense linears (LFM); triton-experts = '
+                        'Triton grouped FP8 expert GEMMs (Mellum, composes with QAT); off = BF16')
     p.add_argument('--fp8-recipe', choices=('delayed', 'current'), default='delayed',
                    help='Transformer Engine scaling recipe when --fp8-training=te-fp8')
     p.add_argument('--fp8-amax-history-len', type=int, default=16,
@@ -336,7 +337,10 @@ def same_resume_identity(saved: dict, current: dict) -> bool:
     paths: an input read from a staged NVMe copy, the HDD archive or a symlink is the same input when its SHA-256 is
     (v4 2026-10-12: the archived predecessor's path changed between launches). Diagnostic environment (profiling) is
     never part of the identity."""
-    strip = lambda options: {k: v for k, v in options.items() if k not in INPUT_PATH_OPTIONS}
+    # The stateless FP8 expert backend (current per-row scaling) is an execution choice, like --moe-kernel: a run
+    # switches it on or off at a resume (owner 2026-10-12: v4 onto FP8 experts at a stop/resume).
+    strip = lambda options: {k: v for k, v in options.items() if k not in INPUT_PATH_OPTIONS
+                             and not (k == 'fp8_training' and v in ('off', 'triton-experts'))}
     return (strip(saved['options']) == strip(current['options'])
             and sorted(saved['inputs'].values()) == sorted(current['inputs'].values()))
 
@@ -389,11 +393,11 @@ def main(argv=None):
     quant = load_component(a.quantization, root=path_root('repo'))
     fp8_backend = None
     if a.fp8_training != 'off':
-        if quant is not None:
+        if quant is not None and a.fp8_training == 'te-fp8':
             raise ValueError('experimental TE FP8 training cannot be combined with the separate quantization component')
-        from .fp8_backend import FP8LinearAdapter
-        fp8_backend = FP8LinearAdapter(backbone.hf, device=a.device, recipe=a.fp8_recipe,
-                                       amax_history_len=a.fp8_amax_history_len)
+        from .fp8_backend import make_backend
+        fp8_backend = make_backend(a.fp8_training, backbone.hf, device=a.device, recipe=a.fp8_recipe,
+                                   amax_history_len=a.fp8_amax_history_len)
         # Use TE's checkpoint wrapper for LFM layer recomputation; ordinary torch checkpoint does not promise to
         # preserve TE's FP8 metadata across a recomputed module call.
         backbone.activation_checkpoint = fp8_backend.checkpoint
@@ -696,11 +700,14 @@ def main(argv=None):
                 {'options': current_options, 'inputs': identity['inputs']}):
             raise ValueError('neuralese_direct resume identity changed (options or inputs)')
         saved_fp8 = state.get('fp8_training')
-        if fp8_backend is not None:
+        stateless = lambda envelope: envelope is None or envelope.get('schema') == 'natlang.neuralese-fp8-experts-training/1'
+        if a.fp8_training == 'triton-experts' and stateless(saved_fp8):
+            pass  # current scaling: no scale state to restore, and a BF16 state resumes onto it
+        elif fp8_backend is not None:
             if saved_fp8 is None:
                 raise ValueError('exact FP8 resume checkpoint is missing TE scaling state')
             fp8_backend.restore_extra_state(saved_fp8)
-        elif saved_fp8 is not None:
+        elif saved_fp8 is not None and not stateless(saved_fp8):
             raise ValueError('an FP8 checkpoint cannot resume through the BF16 backend')
         if previous_epochs != current_epochs:
             # The owner may shorten/extend the epoch budget without throwing away trained updates. Reconstruct
@@ -1060,6 +1067,8 @@ def main(argv=None):
                                      target_tokens=min(128, target),
                                      vocab_size=int(backbone.embedding_weight.shape[0]))
             kind = (f'direct-sft-fp8-{a.fp8_recipe}-{mode}-checkpointed-{int(checkpointed)}'
+                    if a.fp8_training == 'te-fp8' else
+                    f'direct-sft-fp8-experts-{mode}-checkpointed-{int(checkpointed)}'
                     if fp8_backend is not None else f'direct-sft-{mode}-checkpointed-{int(checkpointed)}')
             predicted_activation = memory_estimator.predict(kind, context, target, one_raw) * rows
             calibration = memory_estimator.calibration_info(kind, context, target)
