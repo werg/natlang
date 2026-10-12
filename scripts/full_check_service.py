@@ -52,8 +52,9 @@ def save(state: dict) -> None:
 
 
 def unit_live(unit: str) -> bool:
-    if subprocess.run(['systemctl', '--user', 'is-active', '-q', f'{unit}.service']).returncode == 0:
-        return True
+    for name in (f'{unit}.service', f'{unit}-launch.service'):
+        if subprocess.run(['systemctl', '--user', 'is-active', '-q', name]).returncode == 0:
+            return True
     try:
         status = json.loads(subprocess.run(['python3', str(REPO / 'scripts/memory_ledger.py'), 'status'],
                                            capture_output=True, text=True).stdout)
@@ -76,11 +77,15 @@ def launch(state: dict, sha: str) -> None:
     log = BASE / f'{sha[:10]}.log'
     unit = f'natlang-full-check-{sha[:10]}'
     command = f'scripts/check-main.sh > {log} 2>&1; echo exit=$? >> {log}'
-    # `run --wait` blocks until admitted: detached, so the timer's tick returns; the unit name marks the run.
-    subprocess.Popen(['python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '28',
-                      '--priority', 'medium', '--resumable', '--wait', '86400', '--workdir', str(wt), '--',
-                      'sh', '-c', command], start_new_session=True,
-                     stdout=open(BASE / f'{sha[:10]}.ledger.log', 'ab'), stderr=subprocess.STDOUT)
+    # `run --wait` blocks until admitted. It runs as its own transient user unit (the launcher): a child of the timer's
+    # oneshot tick would be in the tick's cgroup and killed when the tick exits (KillMode=control-group), leaving no run.
+    ledger_log = BASE / f'{sha[:10]}.ledger.log'
+    subprocess.run(['systemctl', '--user', 'reset-failed', f'{unit}-launch.service'], capture_output=True)
+    subprocess.run(['systemd-run', '--user', '--collect', '--unit', f'{unit}-launch', f'--working-directory={REPO}',
+                    '-p', f'StandardOutput=append:{ledger_log}', '-p', f'StandardError=append:{ledger_log}',
+                    'python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '28',
+                    '--priority', 'medium', '--resumable', '--wait', '86400', '--workdir', str(wt), '--',
+                    'sh', '-c', command], check=True, capture_output=True)
     state['running'] = {'sha': sha, 'unit': unit, 'worktree': str(wt), 'log': str(log), 'started': time.time(),
                         'command': f'python3 scripts/memory_ledger.py run --unit {unit} --budget-gb 28 --priority '
                                    f'medium --resumable --workdir {wt} -- sh -c "{command}"'}
@@ -126,6 +131,22 @@ def finish(state: dict) -> None:
     text = log.read_text(errors='replace') if log.exists() else ''
     result = failures(text)
     sha = run['sha']
+    if result['exit'] is None:
+        # Incomplete (launcher or unit died before check-main wrote its exit): not a verdict. Answer nothing, keep
+        # last_sha, and run the same commit again (or a newer main) on the next tick; report after 3 attempts.
+        attempts = run.get('attempts', 1)
+        git('worktree', 'remove', '--force', run['worktree'], check=False)
+        state.setdefault('history', []).append({**run, 'exit': None, 'incomplete': True, 'finished': time.time()})
+        state['history'] = state['history'][-50:]
+        state.pop('running')
+        if attempts >= 3:
+            coord('send', '--to', 'pop', '--subject', f'Full main check {sha[:10]}: incomplete {attempts} times',
+                  '--message', f'The full check of {sha[:10]} ended without a result {attempts} times; no verdict. '
+                  f'Log (DGX): {log}. DGX is diagnosing.')
+        else:
+            state['retry'] = {'sha': sha, 'attempts': attempts}
+        save(state)
+        return
     owners = {t: owner_of(t, sha) for t in result['failed_tests']}
     lines = [f'Full main check of {sha[:10]} ({git("log", "-1", "--format=%s", sha)}): '
              + ('PASSED' if result['exit'] == 0 else f'FAILED (exit {result["exit"]})'),
@@ -167,8 +188,12 @@ def tick(args) -> None:
         finish(state)
     subprocess.run(['git', 'fetch', '-q', 'origin'], cwd=REPO, check=False)
     sha = git('rev-parse', 'origin/main')
+    retry = state.pop('retry', None)
     if sha != state.get('last_sha'):
         launch(state, sha)
+        if retry and retry['sha'] == sha:
+            state['running']['attempts'] = retry['attempts'] + 1
+            save(state)
 
 
 def status(args) -> None:
