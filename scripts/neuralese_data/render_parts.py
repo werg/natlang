@@ -23,6 +23,7 @@ parts are skipped.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -33,6 +34,11 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+# io-quiet markers (checkpoint writes in progress); loaded by path so no package import is needed.
+_spec = importlib.util.spec_from_file_location(
+    'io_quiet', REPO / 'training/neuralese/natlang_neuralese/common/io_quiet.py')
+io_quiet = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(io_quiet)
 PART_DECISIONS = 12000
 PROTECTED = 'data/neuralese/corpora/protected-bgkit-20261003/bgkit-benchmarks.protected.json'
 HELD_TEXT = [
@@ -54,7 +60,9 @@ def save(path: Path, value) -> None:
 
 
 def wait_for_disk(path: Path) -> None:
-    """Pause while the NVMe has less than DISK_MIN_GB free (same rule as scripts/disk_guard.sh)."""
+    """Pause while the NVMe has less than DISK_MIN_GB free or a trainer is writing a checkpoint (io-quiet marker);
+    same rule as scripts/disk_guard.sh."""
+    io_quiet.wait_while_quiet()
     said = False
     while shutil.disk_usage(path).free < DISK_MIN_GB * 2**30:
         if not said:

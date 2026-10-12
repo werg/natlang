@@ -45,6 +45,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import render_parts  # noqa: E402
+io_quiet = render_parts.io_quiet
 TS = REPO / 'ts-host'
 # The ts-host scripts need Node >= 22 (util.parseArgs allowNegative); user units see only the system Node 18.
 NODE = os.environ.get('NATLANG_NODE') or next((str(p) for p in (Path.home() / '.local/bin/node',) if p.exists()), 'node')
@@ -57,7 +58,9 @@ DISK_MIN_GB = int(os.environ.get('NATLANG_DISK_MIN_GB', '100'))
 
 
 def wait_for_disk(path: Path) -> None:
-    """Pause while the NVMe has less than DISK_MIN_GB free (same rule as scripts/disk_guard.sh)."""
+    """Pause while the NVMe has less than DISK_MIN_GB free or a trainer is writing a checkpoint (io-quiet marker);
+    same rule as scripts/disk_guard.sh."""
+    io_quiet.wait_while_quiet()
     said = False
     while shutil.disk_usage(path).free < DISK_MIN_GB * 2**30:
         if not said:
