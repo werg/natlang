@@ -1,0 +1,128 @@
+{
+  "active_train_log": {
+    "mutable_while_training": true,
+    "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-union-r2-epoch1-v18/direct_sft/train.jsonl",
+    "selected_exact_jsonl_line_hashes": {
+      "1633": {
+        "calibration_samples": 72,
+        "calibration_source": "adjacent-context",
+        "checkpoint_layers": false,
+        "context_tokens": 4313,
+        "line_bytes": 2425,
+        "observed_incremental_peak_bytes": 4775798272,
+        "predicted_incremental_peak_bytes": 5487257167,
+        "quantile": 0.95,
+        "reusable_cuda_bytes": 6146102272,
+        "row_sha256": "3250e39fddb1241d78b2a5e291462a95e7e231b0d17bb220aea0275ac733693e",
+        "seconds": 1.4469311237335205,
+        "source_bins": [
+          "direct-sft-sequential-checkpointed-0:11:7",
+          "direct-sft-sequential-checkpointed-0:11:8"
+        ],
+        "step": 1633,
+        "supervised_tokens_per_second": 347.632303811468,
+        "target_tokens": 256
+      },
+      "1655": {
+        "calibration_samples": 72,
+        "calibration_source": "adjacent-context",
+        "checkpoint_layers": false,
+        "context_tokens": 4607,
+        "line_bytes": 2429,
+        "observed_incremental_peak_bytes": 5594913280,
+        "predicted_incremental_peak_bytes": 5809589319,
+        "quantile": 0.95,
+        "reusable_cuda_bytes": 6146102272,
+        "row_sha256": "83509ba00019a1e2b42d815eafa54a4503ddde693edf04a7b70c79a2044cfe5a",
+        "seconds": 1.6602489948272705,
+        "source_bins": [
+          "direct-sft-sequential-checkpointed-0:11:7",
+          "direct-sft-sequential-checkpointed-0:11:8"
+        ],
+        "step": 1655,
+        "supervised_tokens_per_second": 328.26401443278746,
+        "target_tokens": 256
+      }
+    },
+    "sha256_at_snapshot": "cff56bb553bdcaf7aa2203867c6dd0b0a3b190617813aac0aa85b3753aa88989",
+    "size_bytes_at_snapshot": 3690808
+  },
+  "checkpoint": {
+    "copy_status": "This verified step-1610 safety copy was pruned after step-1700 checkpoint metadata and optimizer/RNG were validated; its SHA is retained as provenance.",
+    "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-union-r2-epoch1-v18/code-handoff-preparation-v1/checkpoint-step1610.pt",
+    "receipt_path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-union-r2-epoch1-v18/code-handoff-preparation-v1/checkpoint-step1610.pt.receipt.json",
+    "receipt_sha256": "1008faad095e78be020448d56b143f513e524b3f6aa180f20c58fa1528cc4785",
+    "resume_event_observed_step": 1610,
+    "sha256": "7a7d5a93d90e76f5cbf15900d8294aa2b5565acac9d9ceccbedf9f232c920301",
+    "size_bytes": 1159244719,
+    "step": 1610
+  },
+  "claim_scope": "Two successful BF16 no-checkpoint execution plans around 4.3k\u20134.6k context tokens used the qualified adjacent-context calibration and observed incremental peaks below their forecasts. This is estimator/boundary evidence only; it does not establish global speedup, training quality, or model qualification.",
+  "created_utc": "2026-10-12T02:52:07.851709+00:00",
+  "current_safe_checkpoint": {
+    "metadata_inspected_in_pinned_cpu_container": true,
+    "optimizer_present": true,
+    "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-union-r2-epoch1-v18/direct_sft/checkpoint.pt",
+    "rng_state_present": true,
+    "sha256": "491c676c183c935f04d3d9698111c5a96103ee397e51384cfd0223fbe6f5ab7b",
+    "size_bytes": 1159245167,
+    "step": 1700
+  },
+  "execution": {
+    "allocator_config": "expandable_segments:True",
+    "estimator_geometry": "direct-sft-window-v2:fp32-rmsnorm-casts",
+    "frozen_code_file_count": 164,
+    "frozen_code_map_sha256": "4086ed6408e9424b93515b34ec6072b4522343b69ad681baef03d9f360ef06f2",
+    "frozen_repo_commit": "f886dbe0b7483e0c2b15cec8d6c54f6b687205ee",
+    "plan_path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-union-r2-epoch1-v18/direct-stage-plan.json",
+    "plan_sha256": "acde0c0b1ef9b324dc437c5fea3057dd5dae6f8734301c184ccba6f9b67933d2",
+    "recipe_path": "/home/werg/natlang/training/neuralese/recipes/luna-neuralese-direct-lfm-base-20261012-v18-union-r2-epoch1-bf16-auto-resume-step838-standard-rmsnorm.json",
+    "recipe_sha256": "e808b40727a7f56db440e15996ed18f8f4b295c3195dcc1503fd0dcc1de46341",
+    "runtime_image": "sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de"
+  },
+  "interpretation": "The step 1633 and 1655 forecasts are 5,487,257,167 and 5,809,589,319 bytes; observed incremental peaks are 4,775,798,272 and 5,594,913,280 bytes. Both selected no layer checkpointing and completed. No speed or quality conclusion is drawn from these two rows.",
+  "observations": [
+    {
+      "calibration_samples": 72,
+      "calibration_source": "adjacent-context",
+      "checkpoint_layers": false,
+      "context_tokens": 4313,
+      "line_bytes": 2425,
+      "observed_incremental_peak_bytes": 4775798272,
+      "predicted_incremental_peak_bytes": 5487257167,
+      "quantile": 0.95,
+      "reusable_cuda_bytes": 6146102272,
+      "row_sha256": "3250e39fddb1241d78b2a5e291462a95e7e231b0d17bb220aea0275ac733693e",
+      "seconds": 1.4469311237335205,
+      "source_bins": [
+        "direct-sft-sequential-checkpointed-0:11:7",
+        "direct-sft-sequential-checkpointed-0:11:8"
+      ],
+      "step": 1633,
+      "supervised_tokens_per_second": 347.632303811468,
+      "target_tokens": 256
+    },
+    {
+      "calibration_samples": 72,
+      "calibration_source": "adjacent-context",
+      "checkpoint_layers": false,
+      "context_tokens": 4607,
+      "line_bytes": 2429,
+      "observed_incremental_peak_bytes": 5594913280,
+      "predicted_incremental_peak_bytes": 5809589319,
+      "quantile": 0.95,
+      "reusable_cuda_bytes": 6146102272,
+      "row_sha256": "83509ba00019a1e2b42d815eafa54a4503ddde693edf04a7b70c79a2044cfe5a",
+      "seconds": 1.6602489948272705,
+      "source_bins": [
+        "direct-sft-sequential-checkpointed-0:11:7",
+        "direct-sft-sequential-checkpointed-0:11:8"
+      ],
+      "step": 1655,
+      "supervised_tokens_per_second": 328.26401443278746,
+      "target_tokens": 256
+    }
+  ],
+  "run": "/srv/storage/natlang-artifacts/luna-neuralese-direct-lfm-base-20261011-v8/direct-stage-union-r2-epoch1-v18",
+  "schema": "natlang.direct-sft-memory-boundary-observation/1"
+}

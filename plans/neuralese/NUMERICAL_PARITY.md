@@ -320,15 +320,32 @@ the V18 output; SHA-256
 The normal BF16 path resumed from step 838. The unadopted implementation was
 removed. These probes were already uncheckpointed: they do **not** answer
 whether memory savings near the fit boundary can remove whole-layer replay
-and improve throughput. That matched boundary comparison remains useful;
-prepare it before any further training pause.
+and improve throughput. The later adjacent-context observations below exercise
+the estimator at two longer uncheckpointed boundaries; they do not test the
+RMSNorm replay intervention.
 
 The container launcher now supports exact in-place resume and serializes
 launches per output (`a63f0acc`, `939c470e`, `1956a2c9`). A new-corpus
 `continue_from` phase is different: it starts its own schedule/baseline.
 In-place resume restored update 828 and optimizer/RNG, then saved update 838.
 The promised separate update 828 fallback was not copied before the rotating
-slot was overwritten; its bytes are unavailable. Update 838 is safely saved
-and a separate comparison parent was preserved. Before experimental updates,
-copy/verify one bounded fallback first; after deciding, prune unnecessary
-copies. Do not retain every periodic checkpoint.
+slot was overwritten; its bytes are unavailable. The extra step-838 comparison
+checkpoint was deleted after the diagnostic; only the report remains. Before
+experimental updates, copy/verify one bounded fallback first; after deciding,
+prune unnecessary copies. Do not retain every periodic checkpoint.
+
+### Adjacent-context calibration boundary observations (2026-10-12)
+
+The shared estimator's adjacent-context fallback was exercised during the
+BF16-auto continuation from the verified step-1610 full-state checkpoint. Rows
+at steps 1633 and 1655 used context lengths 4313 and 4607, target length 256,
+and selected sequential execution with layer checkpointing off. Both estimates
+used 72 samples from same-mode/checkpoint context-bin 11 target bins 7 and 8,
+at q95 plus the existing margin. Forecasts were 5,487,257,167 and
+5,809,589,319 bytes; observed incremental peaks were 4,775,798,272 and
+5,594,913,280 bytes. Both rows completed without OOM. This is evidence for
+these two estimator decisions only; it is not a global throughput, quality, or
+model qualification claim. The compact digest-bound receipt, including exact
+JSONL line hashes, is
+[`measurement-receipt.json`](../../runs/neuralese-direct-memory-estimator-boundary-v1/measurement-receipt.json)
+(SHA-256 `59fb277cff8bd2ba3ac979cd2ac9d8c3b285901e5ac18adc8646fd585c6511b1`).
