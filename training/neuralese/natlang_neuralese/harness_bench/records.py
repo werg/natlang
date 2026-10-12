@@ -180,16 +180,21 @@ def native_messages(transcript: Normalized, system_piece: str, view_chars: int, 
 
 
 def choose_targets(messages: list[dict], assistants: list[int], targets: str, per_trajectory: int, rng: random.Random) -> list[int]:
-    """Which assistant turns become records. `all`: every turn (whole-trajectory supervision). `sample`: up to
-    `per_trajectory`, first the turns that read a viewed output, then others at random, in trajectory order."""
+    """Which assistant turns become records. `all`: every turn. `sample`: retain the final clean assistant,
+    then prioritize viewed-output readers and random other turns, in trajectory order. The final record's
+    exact prefix lets the shared whole-trajectory renderer supervise the entire clean chain."""
     if targets == 'all':
         return assistants
+    if not assistants or per_trajectory <= 0:
+        return []
+    final = assistants[-1]
     readers = [index for index in assistants
-               if index > 0 and messages[index - 1]['role'] == 'tool' and isinstance(messages[index - 1]['content'], list)]
-    rest = [index for index in assistants if index not in readers]
+               if index != final and index > 0 and messages[index - 1]['role'] == 'tool'
+               and isinstance(messages[index - 1]['content'], list)]
+    rest = [index for index in assistants if index != final and index not in readers]
     rng.shuffle(readers)
     rng.shuffle(rest)
-    return sorted((readers + rest)[:per_trajectory])
+    return sorted([final, *(readers + rest)[:per_trajectory - 1]])
 
 
 def admission(transcript: Normalized, replay: dict[str, Any] | None) -> dict[str, Any]:
@@ -289,7 +294,9 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     summary = {'builder': BUILDER, 'corpus': args.corpus, 'surface_sha256': surface_sha, 'trajectories': 0, 'records': 0,
-               'by_split': {'train': 0, 'validation': 0, 'test': 0}, 'admitted': 0, 'held': {}, 'view_parts': 0}
+               'by_split': {'train': 0, 'validation': 0, 'test': 0}, 'admitted': 0, 'held': {}, 'view_parts': 0,
+               'target_selection': {'mode': args.targets, 'per_trajectory': args.per_trajectory,
+                                    'final_clean_assistant_retained': args.targets == 'all' or args.per_trajectory > 0}}
     def sources() -> Iterable[dict[str, Any]]:
         if args.replayed:
             with open(args.replayed) as lines:

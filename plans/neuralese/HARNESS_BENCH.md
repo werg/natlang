@@ -65,8 +65,12 @@ and they are the part that needs nothing but the recorded trajectory.
    - admission: resolved task, pi-replayed and verified, and exact mapping (`harness-bench-criteria/2`); anything else
      is held with its reason;
    - `pieces.jsonl` holds the system prompt and `prompt:view` (view's body);
-   - by default 8 targets per trajectory: first the turns that read a viewed output, then others; `--targets all`
-     gives whole-trajectory supervision.
+   - by default up to 8 targets per trajectory: always retain the final clean assistant turn, then prioritize
+     viewed-output readers and sample other turns. Its exact prefix preserves the whole clean trajectory for the
+     shared whole-trajectory renderer; sampled program-header documents still supervise only their selected
+     decision suffixes. `--targets all` emits a separate record for every decision, repeating the full prefixes.
+     This is exact mechanical coverage selection, not invented trajectory content. Existing immutable corpora
+     keep their original bytes; new build summaries declare the final-turn coverage rule.
 
 ## 3. Tool-output views: `view(output, intent)`, written for the agent's intent
 
