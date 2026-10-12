@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-target-set-20261011-r3",
+  "owner": "dgx",
+  "path": "runs/natlang-target-set-20261011",
+  "files": [
+    {
+      "path": "r3.json",
+      "bytes": 70946,
+      "sha256": "5a3278a0a10edf3a617271a61a4f57c25fc98c191a837f277235a9dee8179c2e"
+    }
+  ],
+  "bytes": 70946
+}
