@@ -213,6 +213,21 @@ def test_entry_turn_budget_is_passed_and_recorded(tmp_path, monkeypatch):
             run_queue(queue, tmp_path / 'fresh.jsonl', TS_HOST, seconds=1)
 
 
+def test_entry_action_output_cap_is_passed_and_validated(tmp_path, monkeypatch):
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    entry = queue_entry(tmp_path, key='action-cap')
+    entry['action_max_tokens'] = 4096
+    queue.write_text(json.dumps(entry) + '\n')
+    commands = successful_child(monkeypatch)
+    run_queue(queue, journal, TS_HOST, seconds=1)
+    assert commands[0].command[commands[0].command.index('--action-max-tokens') + 1] == '4096'
+    for value in [True, 0, -1, '4096']:
+        entry['action_max_tokens'] = value
+        queue.write_text(json.dumps(entry) + '\n')
+        with pytest.raises(ValueError, match='action_max_tokens'):
+            run_queue(queue, tmp_path / 'fresh.jsonl', TS_HOST, seconds=1)
+
+
 def test_entry_transport_retry_budget_is_passed_and_validated(tmp_path, monkeypatch):
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
     entry = queue_entry(tmp_path, key='retry-budget')

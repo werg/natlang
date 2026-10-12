@@ -43,6 +43,69 @@ test('execution planning is opt-in, conditions the action, and replaces provider
   assert.equal(result.completion_tokens, 12);
 });
 
+test('action output cap is independent of planning and respects a smaller request limit', async () => {
+  const requests = [];
+  const send = async request => {
+    requests.push(structuredClone(request));
+    return request.tools[0].function.name === 'execution_plan' ?
+      { calls: [['execution_plan', { plan: 'Inspect the input, then answer.' }]], completion_tokens: 3 } :
+      { calls: [['return_result', { status: 'success', value: 1 }]], completion_tokens: 2 };
+  };
+  const request = { messages: [{ role: 'user', content: 'Return one.' }], tools: [{ type: 'function', function: {
+    name: 'return_result', parameters: { type: 'object' } } }], seed: 9, max_tokens: null };
+  await withExecutionPlans(send, { maxTokens: 512, actionMaxTokens: 4096 })(request);
+  assert.equal(requests[0].max_tokens, 512, 'the action allowance does not reduce the planner allowance');
+  assert.equal(requests[1].max_tokens, 4096, 'the action gets its own full allowance');
+
+  requests.length = 0;
+  await withExecutionPlans(send, { maxTokens: 512, actionMaxTokens: 4096 })({ ...request, max_tokens: 1200 });
+  assert.equal(requests[0].max_tokens, 512);
+  assert.equal(requests[1].max_tokens, 1200, 'an explicit smaller request cap remains in force');
+});
+
+test('action output cap also applies when planning is unsupported', async () => {
+  const requests = [];
+  const send = async request => {
+    requests.push(structuredClone(request));
+    if (request.tools[0].function.name === 'execution_plan') throw new Error('tool_choice is unsupported');
+    return { calls: [['return_result', { status: 'success', value: 1 }]], completion_tokens: 2 };
+  };
+  const request = { messages: [{ role: 'user', content: 'Return one.' }], tools: [{ type: 'function', function: {
+    name: 'return_result', parameters: { type: 'object' } } }], seed: 9, max_tokens: null };
+  await withExecutionPlans(send, { actionMaxTokens: 4096 })(request);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].max_tokens, 4096);
+});
+
+test('collector applies the per-action cap without planning and pins it in provenance', async () => {
+  let seen;
+  const server = createServer((request, response) => {
+    let body = '';
+    request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      seen = JSON.parse(body);
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '', tool_calls: [
+        { id: 'done', type: 'function', function: { name: 'return_result',
+          arguments: JSON.stringify({ status: 'success', value: 1 }) } }] } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2 } }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-action-cap-'));
+  try {
+    const item = { index: 0, record: record('action-cap') };
+    const options = { ...config(dir), endpoint: `http://127.0.0.1:${server.address().port}`,
+      actionMaxTokens: 4096, maxTurns: 2, transportRetries: 0, toolSurfaceSha256: await defaultToolSurfaceHash() };
+    const result = await collectBatch([item], options, nativeJobRunner(options));
+    assert.equal(result.completed, 1);
+    assert.equal(seen.max_tokens, 4096);
+    const row = JSON.parse((await readFile(options.output, 'utf8')).trim());
+    assert.equal(row.provenance.action_max_tokens, 4096);
+    assert.equal(row.outcome.accepted, true);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
 test('execution planning falls through when required tools are unsupported', async () => {
   const requests = [];
   const send = async request => {

@@ -87,7 +87,7 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   providerActionCycleTimeoutMs?: number;
   request?: Record<string, unknown>; cacheStableTools?: boolean;
   /** Elicit one required execution_plan tool call before every model action and use it as the turn's reasoning. */
-  executionPlans?: boolean; executionPlanTokens?: number;
+  executionPlans?: boolean; executionPlanTokens?: number; actionMaxTokens?: number;
   /** The file tools directory reducers offer (native/prompt.ts); all unless set. */
   fileTools?: FileToolSurface;
   /** Who answered: a model being taught (student), a teacher, or a case's scripted reference solution. */
@@ -213,6 +213,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     ...(options.cacheStableTools ? { cache_stable_tools: true } : {}),
     ...(options.executionPlans ? { execution_plans: { version: EXECUTION_PLAN_VERSION,
       max_tokens: options.executionPlanTokens ?? 512 } } : {}),
+    ...(options.actionMaxTokens === undefined ? {} : { action_max_tokens: options.actionMaxTokens }),
     collection_role: options.collectionRole ?? 'teacher',
     ...(record.handoff && record.semantics.failure_seed ? { seeded_handoff_version: 2 } : {}),
     ...(options.fileTools && options.fileTools !== 'all' ? { file_tools: options.fileTools } : {}),
@@ -747,12 +748,18 @@ const requestTokens = (request: ModelTurnRequest) =>
  * Required tool choice is sent when the backend supports it, and the result is checked here for every backend.
  */
 export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<ModelTurn>,
-  options: { maxTokens?: number; attempts?: number } = {}): (request: ModelTurnRequest) => Promise<ModelTurn> {
+  options: { maxTokens?: number; actionMaxTokens?: number; attempts?: number } = {}): (request: ModelTurnRequest) => Promise<ModelTurn> {
   const planLimit = options.maxTokens ?? 512, attempts = options.attempts ?? 2;
   if (!Number.isInteger(planLimit) || planLimit < 1) throw new RangeError('execution plan token limit must be positive');
+  if (options.actionMaxTokens !== undefined && (!Number.isInteger(options.actionMaxTokens) || options.actionMaxTokens < 1))
+    throw new RangeError('action token limit must be positive');
   if (!Number.isInteger(attempts) || attempts < 1) throw new RangeError('execution plan attempts must be positive');
+  const actionRequest = (request: ModelTurnRequest): ModelTurnRequest => options.actionMaxTokens === undefined ? request :
+    { ...request, max_tokens: request.max_tokens === null || request.max_tokens === undefined ? options.actionMaxTokens :
+      Math.min(options.actionMaxTokens, request.max_tokens) };
   return async request => {
-    const maxTokens = request.max_tokens === null ? planLimit : Math.min(planLimit, request.max_tokens);
+    const maxTokens = request.max_tokens === null || request.max_tokens === undefined ? planLimit :
+      Math.min(planLimit, request.max_tokens);
     let plan = '', planningCompletionTokens = 0;
     let authenticPlanCall: Record<string, unknown> | undefined;
     let retryMessages: unknown[] = [...request.messages, { role: 'user', content: EXECUTION_PLAN_PROMPT }];
@@ -795,7 +802,7 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
         { role: 'user', content: 'The plan was not recorded. Call execution_plan exactly once with a nonempty plan.' }];
     }
     if (!plan) {
-      const action = await send(request);
+      const action = await send(actionRequest(request));
       // Presence of null suppresses an opaque provider reasoning trace in captured IR: this mode retains plans only.
       return { ...action, execution_plan: null, reasoning: undefined,
         completion_tokens: planningCompletionTokens + (action.completion_tokens ?? 0) };
@@ -803,7 +810,11 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
     const planCall = authenticPlanCall ?? { id: 'execution_plan_0', type: 'function',
       function: { name: 'execution_plan', arguments: JSON.stringify({ plan }) } };
     const planCallId = typeof planCall.id === 'string' ? planCall.id : 'execution_plan_0';
-    const actionLimit = request.max_tokens === null ? null : Math.max(1, request.max_tokens - planningCompletionTokens);
+    // A reviewed per-action cap is independent of the planner request; each action can use its full allowance.
+    // Without that setting, retain the legacy aggregate request budget behavior.
+    const actionLimit = options.actionMaxTokens === undefined ?
+      (request.max_tokens === null ? null : Math.max(1, request.max_tokens - planningCompletionTokens)) :
+      actionRequest(request).max_tokens;
     const action = await send({ ...request, max_tokens: actionLimit, messages: [...request.messages,
       { role: 'assistant', content: '', ...(authenticPlanCall ? {} : { natlang_host_generated: true }), tool_calls: [planCall] },
       { role: 'tool', tool_call_id: planCallId, content: 'Plan recorded. Now take the planned next step.' }] });
@@ -815,6 +826,8 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
 }
 
 export function nativeJobRunner(config: CollectorConfig): JobRunner {
+  if (config.actionMaxTokens !== undefined && (!Number.isInteger(config.actionMaxTokens) || config.actionMaxTokens < 1))
+    throw new RangeError('action token limit must be positive');
   if (!config.endpoint && !config.provider) throw new Error('endpoint or Pi provider is required for native teacher collection');
   if (config.endpoint && config.provider) throw new Error('teacher collection cannot use both endpoint and Pi provider');
   if (config.chatCompletionsUrl || config.apiKeyEnv) {
@@ -1058,8 +1071,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         }
         return teacherSend(value, actionSignal, context);
       };
+      const actionMaxTokens = config.actionMaxTokens;
       const action = config.executionPlans ? withExecutionPlans(sendTurn,
-        { maxTokens: config.executionPlanTokens }) : sendTurn;
+        { maxTokens: config.executionPlanTokens, actionMaxTokens }) :
+        actionMaxTokens === undefined ? sendTurn : (request: ModelTurnRequest) => sendTurn({ ...request,
+          max_tokens: request.max_tokens === null || request.max_tokens === undefined ? actionMaxTokens :
+            Math.min(actionMaxTokens, request.max_tokens) });
       return action(request);
     };
     const transport = async (request: ModelTurnRequest, persist: (response: ModelTurn) => Promise<void>) => {
