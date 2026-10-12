@@ -24,6 +24,13 @@ retains *external* tool schemas for pi. Test any change to native schema
 visibility live before adopting it. The base reference for held v3 is 0/16
 under full rendering, so compare the student with that exact rendering and
 the larger LFM reference before attributing failure to optimization.
+The step-13,000 collector itself was using native `full` rendering while the
+student server applied `program-header`; the old server still removed native
+schemas, so the delivered prompt was aligned. Shared serving subsequently
+began retaining externally supplied schemas, which would have exposed the
+collector's native schemas on restart. Commit `4ffd9a4f` passes the declared
+rendering through the queue and native agent, keeping the delivered student
+contract stable. Live old/new measurement remains due.
 
 The active r3 program-header union contains supervised `bash` targets in
 native-sft-v13-r2 (1,846 turns) and harness-bench (3,769 turns), among other
@@ -44,10 +51,13 @@ verified **train-split** cases with fresh seed 52005 across eight shapes:
 `iterate_schedule_repair`, and `relational_late_argmax`. The immutable source
 at `/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/provider-luna-held-shape-remediation-v1/source/held-shapes-s52005-n64.ir.jsonl`
 has SHA-256 `faeb0963e6c0678558543b2bae3575db5a4a63e531eb1f5fc9c4627a05014f7f`.
-A 32-case Luna pilot (four per family) and two additional 16-case lanes
-(two more per family in each lane) are running in the same campaign folder;
-the manifest records their selected indices and queue hashes. The first six
-reviewed cases were exact accepted. This is **not training
+A 32-case Luna pilot (four per family), two 16-case lanes (two more per
+family each), and three 32-case lanes (four more per family each) are running
+in the same campaign folder: 160 distinct selected source rows across six
+workers. The manifest records their selected indices and queue hashes. At the
+first cross-family review, 32/42 finished rows passed the exact oracle;
+contract diagnosis was 13/13, while edit stream was 3/8 and needs failure
+review rather than a looser oracle. This is **not training
 admission**: inspect exact results, semantic fidelity, failure clusters, and
 source-group deduplication before promoting any of its rows. The held seed
 61012 and its evaluation-only packet remain excluded from training.
