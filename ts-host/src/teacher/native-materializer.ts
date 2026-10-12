@@ -1416,6 +1416,16 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       reviewedApprovals.set(approval.decision_index, structuredClone(approval));
     }
 
+    const sourceQualityReview = options.sourceQualityClearance ?? (row.source_ref as Dict | undefined)?.source_quality_clearance;
+    const taskIr = record(row.task.program_ir, `${row.id}.task.program_ir`);
+    const program = taskIr as unknown as ProgramRecord;
+    const sourceQualityBinding = sourceQualityClearanceForProgram(sourceQualityReview, program);
+    const scopedSourceQualityReview = !!sourceQualityReview && typeof sourceQualityReview === 'object' &&
+      !Array.isArray(sourceQualityReview) &&
+      (sourceQualityReview as Dict).schema === 'natlang.verified-source-quality-clearance/1' &&
+      ((sourceQualityReview as Dict).review as Dict | undefined)?.target_scope === 'exact-selected-actions-only' &&
+      Array.isArray(((sourceQualityReview as Dict).review as Dict).programs) &&
+      (((sourceQualityReview as Dict).review as Dict).programs as Dict[]).some(entry => entry.program_id === program.id);
     const conversionProblems = sourceConversionProblems(row, options.sourceQualityClearance);
     // Candidate selection is a review artifact, never training or trace admission. It may need
     // to inspect exact child turns from a source whose quality is still held (for example,
@@ -1424,10 +1434,6 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     const sourceQualityHeldReview = options.candidateSelectionOnly === true &&
       conversionProblems.length === 1 && conversionProblems[0] === 'source_quality_held';
     if (conversionProblems.length && !sourceQualityHeldReview) { rejectedRows++; continue; }
-    const taskIr = record(row.task.program_ir, `${row.id}.task.program_ir`);
-    const program = taskIr as unknown as ProgramRecord;
-    const sourceQualityReview = options.sourceQualityClearance ?? (row.source_ref as Dict | undefined)?.source_quality_clearance;
-    const sourceQualityBinding = sourceQualityClearanceForProgram(sourceQualityReview, program);
     // Direct exports and failed-run pair discovery must honor the same source holds as collection/admission.
     const rowQualityReason = trainingQualityReason(row);
     const hasExactDecisionReview = (options.decisionApprovals ?? []).some(approval => approval.trajectory_id === row.id);
@@ -1790,7 +1796,13 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const authoredGuidancePending = row.collection_guidance && typeof row.collection_guidance === 'object' &&
         (row.collection_guidance as Dict).training_admission === false;
       const authoredGuidanceBlocked = authoredGuidancePending && !semanticApproval;
-      const sourceQualityActionReviewPending = !!sourceQualityBinding && !semanticApproval;
+      const sourceQualityActionBinding = invocation ? sourceQualityClearanceForProgram(sourceQualityReview, program, {
+        trajectory_id: row.id, trajectory_sha256: rowDigest, decision_index: index,
+        invocation_id: invocation, target_sha256: nativeDecisionTargetDigest(target),
+      }) : undefined;
+      const sourceQualityActionReviewPending = scopedSourceQualityReview
+        ? !sourceQualityActionBinding || !semanticApproval
+        : !!sourceQualityBinding && !semanticApproval;
       const decisionApproved = !pendingDecisionCandidateRow && (!authoredRootAction || !!semanticApproval) && !sourceQualityActionReviewPending && !authoredGuidanceBlocked && !semanticHold && !afterChunkCutoff &&
         !invalidSourceLabelCorrectionApproval &&
         (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
@@ -1816,9 +1828,11 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       if (!authoredRootAction || decisionApproved) rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
-          ...(sourceQualityBinding ? { source_quality_clearance: options.sourceQualityClearanceRef ?
+          ...(sourceQualityActionBinding || (sourceQualityBinding && !invocation) ? { source_quality_clearance: options.sourceQualityClearanceRef ?
             sourceQualityClearanceRefForProgram(sourceQualityReview as VerifiedSourceQualityClearance, program,
-              options.sourceQualityClearanceRef.sidecar_path, options.sourceQualityClearanceRef.file_sha256) : sourceQualityReview } : {}),
+              options.sourceQualityClearanceRef.sidecar_path, options.sourceQualityClearanceRef.file_sha256,
+              invocation ? { trajectory_id: row.id, trajectory_sha256: rowDigest, decision_index: index,
+                invocation_id: invocation, target_sha256: nativeDecisionTargetDigest(target) } : undefined) : sourceQualityReview } : {}),
           ...(normalizedActionProvenance ? { action_provenance: normalizedActionProvenance } : {}),
           ...(semanticApproval ? { native_target_sha256: semanticApproval.target_sha256 } : {}),
           ...(invocation ? { invocation_id: invocation, ...(instructionSites.has(invocation) ? { inline_instruction_site: instructionSites.get(invocation) } : {}), ...(parents.has(invocation) ? { parent_invocation_id: parents.get(invocation) } : {}),

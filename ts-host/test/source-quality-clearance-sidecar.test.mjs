@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { canonical } from '../dist/native/canonical-data.js';
 import { hexDigest } from '../dist/native/hash.js';
-import { sourceQualityClearanceProblems, sourceQualityClearanceRefForProgram,
+import { sourceQualityClearanceForProgram, sourceQualityClearanceProblems, sourceQualityClearanceRefForProgram,
   sourceQualityClearanceRefProblems, verifySourceQualityClearanceSidecar } from '../dist/teacher/source-quality-clearance.js';
 import { sourceConversionProblems } from '../dist/teacher/source-conversion.js';
+import { nativeDecisionTargetDigest } from '../dist/native/decision-review.js';
 import { openPacketSourceQualityClearanceResolver, resolvePacketSourceQualityClearance } from '../../scripts/lib/source-quality-clearance-sidecar.mjs';
 
 const sha = value => hexDigest(typeof value === 'string' ? value : canonical(value));
@@ -53,6 +54,13 @@ test('compact clearance ref resolves only against its exact verified sidecar and
   assert.ok(ref);
   assert.equal(JSON.stringify(ref).length < 1000, true);
   assert.deepEqual(sourceQualityClearanceRefProblems(ref, clearance, program), []);
+  const broadAction = { trajectory_id: 'trajectory-1', trajectory_sha256: '7'.repeat(64), decision_index: 3,
+    invocation_id: 'invocation-1', target_sha256: '8'.repeat(64) };
+  const broadActionRef = sourceQualityClearanceRefForProgram(clearance, program, 'source-quality-clearance.json',
+    clearance.review_sha256, broadAction);
+  assert.ok(broadActionRef);
+  assert.equal(broadActionRef.selected_target, undefined);
+  assert.deepEqual(sourceQualityClearanceRefProblems(broadActionRef, clearance, program, broadAction), []);
   const row = { task: { program_ir: program }, provenance: { collection_role: 'teacher' },
     source_ref: { source_quality_clearance: ref } };
   assert.deepEqual(sourceConversionProblems(row), [
@@ -96,4 +104,68 @@ test('packet resolver verifies relative sidecar and evidence paths before using 
     await writeFile(join(root, 'source-quality-clearance.json'), 'tampered');
     await assert.rejects(resolvePacketSourceQualityClearance(root, ref, program), /sidecar_file_hash_mismatch/);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('exact-action clearance cannot authorize an unreviewed sibling action', async () => {
+  const target = { tool_calls: [{ function: { name: 'return_result', arguments: '{"decision":"yes"}' } }] };
+  const targetSha = nativeDecisionTargetDigest(target);
+  const action = { trajectory_id: 'trajectory-1', trajectory_sha256: '7'.repeat(64), decision_index: 3,
+    invocation_id: 'invocation-1', target_sha256: targetSha };
+  const selected = { candidate_id: 'child:reviewed-yes', item_id: 'source-1', item_sha256: '1'.repeat(64),
+    program_source_row_sha256: '1'.repeat(64),
+    ...action };
+  const { evidenceFiles } = verifiedClearance();
+  const review = verifiedClearance().clearance.review;
+  review.target_scope = 'exact-selected-actions-only';
+  review.programs[0].selected_targets = [selected];
+  const { root_approval: _approval, ...payload } = review;
+  review.root_approval.payload_sha256 = sha(payload);
+  const bytes = new TextEncoder().encode(JSON.stringify(review));
+  const fileSha = hexDigest(bytes);
+  const clearance = verifySourceQualityClearanceSidecar(bytes, fileSha, evidenceFiles);
+  const ref = sourceQualityClearanceRefForProgram(clearance, program, 'source-quality-clearance.json', fileSha, action);
+  assert.ok(ref);
+  assert.equal(sourceQualityClearanceForProgram(clearance, program), undefined);
+  assert.ok(sourceQualityClearanceForProgram(clearance, program, action));
+  assert.deepEqual(sourceQualityClearanceRefProblems(ref, clearance, program, action), []);
+  const root = await mkdtemp(join(tmpdir(), 'natlang-scoped-clearance-'));
+  try {
+    await mkdir(root, { recursive: true });
+    await writeFile(join(root, 'source-quality-clearance.json'), bytes);
+    const evidence = [];
+    for (const [index, [digest, evidenceBytes]] of [...evidenceFiles.entries()].entries()) {
+      const filename = `evidence-${index}.json`;
+      await writeFile(join(root, filename), evidenceBytes);
+      evidence.push({ role: index === 0 ? 'source_quality_review' : 'source_closure', path: filename, sha256: digest });
+    }
+    const packetManifest = JSON.stringify({ source_quality_clearance: { path: ref.sidecar_path,
+      file_sha256: ref.file_sha256, review_canonical_sha256: ref.review_canonical_sha256, evidence } });
+    await writeFile(join(root, 'materialized-manifest.json'), packetManifest);
+    const packet = await openPacketSourceQualityClearanceResolver(root, hexDigest(packetManifest));
+    assert.equal(packet.resolve(ref, program, action).review.id, clearance.review.id);
+    assert.throws(() => packet.resolve(ref, program, { ...action, invocation_id: 'sibling-invocation' }),
+      /selected_target_mismatch/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+  assert.equal(sourceQualityClearanceRefForProgram(clearance, program, 'source-quality-clearance.json', fileSha,
+    { ...action, invocation_id: 'sibling-invocation' }), undefined);
+  assert.deepEqual(sourceQualityClearanceRefProblems(ref, clearance, program,
+    { ...action, target_sha256: '8'.repeat(64) }), ['source_quality_clearance_selected_target_mismatch']);
+  const turn = { task: { program_ir: program }, source_ref: { source_quality_clearance: ref,
+    trajectory_id: action.trajectory_id, invocation_id: action.invocation_id }, teacher_trajectory_digest: action.trajectory_sha256,
+    decision: { index: action.decision_index }, target };
+  assert.deepEqual(sourceConversionProblems(turn, clearance), []);
+  assert.deepEqual(sourceConversionProblems({ ...turn, target: { tool_calls: [] } }, clearance), [
+    'source_quality_held',
+    'source_quality_clearance_selected_target_mismatch',
+  ]);
+  assert.deepEqual(sourceConversionProblems({ ...turn,
+    source_ref: { trajectory_id: action.trajectory_id, invocation_id: action.invocation_id } }, clearance), [
+    'source_quality_held',
+    'source_quality_clearance_scoped_reference_required',
+  ]);
+  assert.deepEqual(sourceConversionProblems({ ...turn,
+    source_ref: { ...turn.source_ref, source_quality_clearance: clearance } }, clearance), [
+    'source_quality_held',
+    'source_quality_clearance_scoped_reference_required',
+  ]);
 });
