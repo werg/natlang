@@ -1597,6 +1597,29 @@ Open (routed to Pop, who owns the LFM evaluator and data):
 
 ## Deleted runs (2026-10-11)
 
+## LFM QAD base for a fresh restart (owner, 2026-10-12)
+
+If the LFM training lineage is restarted from base weights, initialize it from
+LiquidAI's full-precision QAD source checkpoint in
+`LiquidAI/LFM2.5-350M-GGUF/qad`, pinned to Hub revision
+`657e078c94084481950a2d555a941481f715536b`. Rebuild the clean-head anchor
+from those weights, bind its exact file inventory and tokenizer in the recipe,
+and measure the step-0 identity and protected Natlang behaviour before training.
+The authenticated download completed on Pop at
+`/srv/storage/natlang-artifacts/hf-cache-lfm25-qad-v1/models--LiquidAI--LFM2.5-350M-GGUF/snapshots/657e078c94084481950a2d555a941481f715536b/qad`;
+`model.safetensors` hashes to `1d90518482c4ec204bebb4820bbaee4f8a38c5a6df72256f86bcd21fe52ad079`.
+The new clean head anchor is
+`/srv/storage/natlang-artifacts/lfm25-qad-clean-head-v1/clean-base-untrained-heads.pt`
+(SHA-256 `19bfa7a304d511fe4813e2625fb2855095bd1a104af4b7d6b2ed77368226483c`);
+it reloads through the shared engine with the QAD base path, raw-token profile
+and raw-identity transport. Before launching a fresh training recipe, replace
+the original LFM monitor gate reference with a measured QAD reference.
+The current Muon lineage resumes its own full weights and optimizer state; a
+checkpoint continuation does not change base weights. The published QAD gains
+are for Q4_0 inference, so use the full-precision QAD source for training and
+measure our own quantized serving result. Pop owns the new LFM initialization;
+DGX was briefed via `coord.py` decision `2026-10-12T16:54:18.472948Z-pop-7fe7`.
+
 Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
 
 - `maple-native-qat-preflight-20261007.sh`: deleted 2026-10-11.

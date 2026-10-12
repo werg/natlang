@@ -16,6 +16,7 @@ import torch
 
 from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex
 from ..common.jsonio import canonical_json_bytes
+from ..model.lfm2_port import DEFAULT_BASE
 
 
 ARTIFACT_SCHEMA = "natlang.neuralese-direct-serving/1"
@@ -25,6 +26,26 @@ DIRECT_PARENT_BINDING_SCHEMA = "natlang.neuralese-direct-parent-binding/1"
 RECURRENCE_PARENT_PROOF_SCHEMA = "natlang.neuralese-direct-recurrence-parent-proof/1"
 LFM2_ADAPTER = "lfm2-hf-dense-layers/1"
 MAPLE_BF16_ADAPTER = "maple-bf16-local-snapshot/1"
+QAD_LFM_REPOSITORY = "LiquidAI/LFM2.5-350M-GGUF"
+
+
+def lfm_snapshot_source(snapshot: Path, hub_cache: Path) -> tuple[str, str]:
+    """Identify either published LFM base from its exact cached model directory."""
+    snapshot = Path(snapshot).resolve(strict=True)
+    hub_cache = Path(hub_cache).resolve(strict=True)
+    if snapshot.name == "qad":
+        revision = snapshot.parent.name
+        expected = (hub_cache / "models--LiquidAI--LFM2.5-350M-GGUF" /
+                    "snapshots" / revision / "qad")
+        model_id = QAD_LFM_REPOSITORY
+    else:
+        revision = snapshot.name
+        expected = hub_cache / "models--LiquidAI--LFM2.5-350M" / "snapshots" / revision
+        model_id = DEFAULT_BASE
+    if (len(revision) != 40 or any(c not in "0123456789abcdef" for c in revision) or
+            snapshot != expected):
+        raise ValueError("LFM base must be an exact cached HF revision (or its qad model directory)")
+    return model_id, revision
 
 
 def _file_inventory(root: Path) -> dict[str, str]:
@@ -39,7 +60,8 @@ def _file_inventory(root: Path) -> dict[str, str]:
             resolved = path.resolve(strict=True)
             # HF Hub snapshots intentionally link files into their sibling
             # ``blobs`` directory. Accept only those cache-internal links.
-            allowed_blob_dirs = {root.parents[2] / "blobs", root.parents[1] / "blobs"}
+            allowed_blob_dirs = {root.parents[3] / "blobs", root.parents[2] / "blobs",
+                                 root.parents[1] / "blobs"}
             if not any(blob_dir in resolved.parents for blob_dir in allowed_blob_dirs):
                 raise ValueError(f"base snapshot contains an external symlink: {path}")
             if resolved.is_file():
@@ -567,12 +589,11 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
         if base_snapshot is None:
             raise ValueError("LFM export requires an explicit HF base snapshot")
         snapshot = Path(base_snapshot).resolve(strict=True)
-        revision = snapshot.name
-        if len(revision) != 40 or any(c not in "0123456789abcdef" for c in revision):
-            raise ValueError("base_snapshot must be an HF snapshot directory named by its immutable revision")
+        hub_cache = Path(base_source_proof.get("hf_hub_cache", "")).resolve(strict=True)
+        model_id, revision = lfm_snapshot_source(snapshot, hub_cache)
         files = _file_inventory(snapshot)
         expected_revision = base_source_proof.get("revision")
-        if expected_base != DEFAULT_BASE or expected_revision != revision:
+        if expected_base != model_id or expected_revision != revision:
             raise ValueError("base source proof must bind the declared LFM base model and exact snapshot revision")
         weights_sha = base_source_proof.get("model_safetensors_sha256")
         if weights_sha not in set(files.values()):
@@ -586,9 +607,7 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
             raise ValueError("base source proof runtime image differs from the launch receipt")
         if launch_receipt.get("hf_hub_cache") != base_source_proof.get("hf_hub_cache"):
             raise ValueError("base source proof HF cache differs from the launch receipt")
-        hub_cache = Path(base_source_proof.get("hf_hub_cache", "")).resolve(strict=True)
-        expected_snapshot = hub_cache / "models--LiquidAI--LFM2.5-350M" / "snapshots" / revision
-        if Path(base_source_proof.get("snapshot_path", "")).resolve() != snapshot or snapshot != expected_snapshot:
+        if Path(base_source_proof.get("snapshot_path", "")).resolve() != snapshot:
             raise ValueError("base source proof does not name the exact explicit snapshot directory")
         source_inputs = launch_receipt.get("inputs") or {}
         anchor_sha = inputs[str(anchor_path)]
@@ -907,8 +926,10 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
     proof = base.get("source_proof") or {}
     if adapter == LFM2_ADAPTER:
         proof_path, proof_sha = proof.get("launch_receipt_path"), proof.get("launch_receipt_sha256")
+        cache = Path(proof.get("hf_hub_cache", "")).resolve(strict=True)
+        model_id, revision = lfm_snapshot_source(snapshot, cache)
         if (proof.get("backbone_adapter", LFM2_ADAPTER) != LFM2_ADAPTER or
-                proof.get("model_id") != DEFAULT_BASE or proof.get("revision") != snapshot.name or
+                proof.get("model_id") != model_id or proof.get("revision") != revision or
                 Path(proof.get("snapshot_path", "")).resolve() != snapshot or
                 not proof_path or not proof_sha or sha256_file_hex(proof_path) != proof_sha):
             raise ValueError("direct artifact LFM source proof is missing or changed")
@@ -916,9 +937,7 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
         if (launch_receipt.get("runtime_image") != proof.get("runtime_image") or
                 launch_receipt.get("hf_hub_cache") != proof.get("hf_hub_cache")):
             raise ValueError("direct artifact launch receipt differs from its LFM source proof")
-        cache = Path(proof["hf_hub_cache"]).resolve(strict=True)
-        expected_snapshot = cache / "models--LiquidAI--LFM2.5-350M" / "snapshots" / snapshot.name
-        if snapshot != expected_snapshot or snapshot.name != base["revision"] or _file_inventory(snapshot) != base["files"]:
+        if revision != base["revision"] or model_id != base["model_id"] or _file_inventory(snapshot) != base["files"]:
             raise ValueError("loaded base snapshot differs from direct artifact's exact file inventory")
     else:
         if str(snapshot) != base.get("model_id") or str(snapshot) != base.get("snapshot_path_at_export"):

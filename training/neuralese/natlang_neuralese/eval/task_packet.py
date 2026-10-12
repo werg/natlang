@@ -238,8 +238,8 @@ def retain_best_checkpoint(checkpoint: str | Path, evaluation: dict[str, Any],
 
 def export_checkpoint(args: argparse.Namespace) -> dict[str, Any]:
     """Build the strict LFM direct-serving artifact from a full training checkpoint."""
-    from ..train.direct_export import LFM2_ADAPTER, _file_inventory, export_direct_checkpoint
-    from ..model.lfm2_port import DEFAULT_BASE
+    from ..train.direct_export import (LFM2_ADAPTER, _file_inventory,
+                                       export_direct_checkpoint, lfm_snapshot_source)
 
     snapshot = Path(args.base_snapshot).resolve(strict=True)
     launch_path = Path(args.launch_receipt).resolve(strict=True)
@@ -249,20 +249,21 @@ def export_checkpoint(args: argparse.Namespace) -> dict[str, Any]:
     launch_bytes = launch_path.read_bytes()
     launch = json.loads(launch_bytes)
     frozen_launch = Path(args.output).with_name(Path(args.output).name + ".launch-receipt.json")
+    hub_cache = Path(launch["hf_hub_cache"]).resolve(strict=True)
+    model_id, revision = lfm_snapshot_source(snapshot, hub_cache)
+    weights = sorted((name, digest) for name, digest in _file_inventory(snapshot).items()
+                     if name.endswith(".safetensors"))
+    if not weights:
+        raise ValueError("base snapshot has no safetensors weights")
     frozen_launch.parent.mkdir(parents=True, exist_ok=True)
     with frozen_launch.open("xb") as stream:
         stream.write(launch_bytes)
         stream.flush()
         os.fsync(stream.fileno())
-    hub_cache = Path(launch["hf_hub_cache"]).resolve(strict=True)
-    weights = sorted((name, digest) for name, digest in _file_inventory(snapshot).items()
-                     if name.endswith(".safetensors"))
-    if not weights:
-        raise ValueError("base snapshot has no safetensors weights")
     proof = {
         "backbone_adapter": LFM2_ADAPTER,
-        "model_id": DEFAULT_BASE,
-        "revision": snapshot.name,
+        "model_id": model_id,
+        "revision": revision,
         "snapshot_path": str(snapshot),
         "hf_hub_cache": str(hub_cache),
         "model_safetensors_sha256": weights[0][1],
