@@ -34,6 +34,7 @@ import { compileModule } from '../runtime/modules.js';
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 import { undeclaredServiceType } from './introspection.js';
 import { NATIVE_TOOL_SCHEMA } from './tool-surface.js';
+import { returnErrorText, returnValueRejection, type ReturnErrorText } from './return-errors.js';
 
 /** Services the invocation kernel provides to an interpreter run. */
 export type NativeRuntimeHooks = {
@@ -84,6 +85,8 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
    */
   serviceScopes?: Record<string, string[]>;
   sharedEpisodeBudget?: { limit?: number; used: number };
+  /** Wording of return_result's value rejections (native/return-errors.ts); default NATLANG_RETURN_ERROR_TEXT, then the adopted one. */
+  returnErrorText?: ReturnErrorText;
   seedPolicy?: { mode: 'derived' | 'backend'; root?: number } };
 
 type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
@@ -528,7 +531,7 @@ function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Pro
 export class NativeRuntime {
   readonly events: HostEvent[] = [];
   readonly trace: NativeTraceRecorder;
-  readonly options: { maxActions?: number; maxToolCalls?: number; runId: string; seedId?: string };
+  readonly options: { maxActions?: number; maxToolCalls?: number; runId: string; seedId?: string; returnErrorText?: ReturnErrorText };
   readonly seedPolicy: { mode: 'derived' | 'backend'; root?: number };
   readonly environment: EvalEnvironment;
   readonly agent?: NativeAgent;
@@ -552,7 +555,8 @@ export class NativeRuntime {
   constructor(options: NativeRuntimeOptions) {
     this.displayLiveId = options.frame ? scopedLiveIdentity(options.frame.task) : createLiveIdentity();
     this.untrusted = options.frame ? scopedUntrusted(options.frame.task) : new UntrustedRegistry(hostUntrusted);
-    this.options = { maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: options.runId ?? 'native-run', seedId: options.seedId };
+    this.options = { maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: options.runId ?? 'native-run', seedId: options.seedId,
+      returnErrorText: options.returnErrorText };
     for (const [name, value] of Object.entries({ maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls }))
       if (value !== undefined && (!Number.isInteger(value) || value < 1)) throw new RangeError(`${name} must be a positive integer`);
     this.episodeBudget = options.sharedEpisodeBudget ?? { used: 0 };
@@ -1516,13 +1520,12 @@ export class NativeSession {
       if (status !== 'success') throw new Reject([{ path: 'status', code: 'bad-action', expected: '"success", "blocked", or "failed"' }]);
       if (this.lam.type.kind !== 'lambda') throw new Reject([{ path: 'value', code: 'bad-action', expected: 'a typed call' }]);
       let value: Value;
+      const wording = returnErrorText(this.runtime.options.returnErrorText);
       if (!Object.hasOwn(args, 'value')) {
-        // A result sent under another argument name (e.g. { status, verdict: {...} }): name the field that carries it.
+        // A result sent under another argument name (e.g. { status, verdict: {...} }) or none at all, nothing staged.
         const misplaced = Object.keys(args).filter(key => !['status', 'value', 'reason'].includes(key));
-        if (this.lam.return === MISSING && misplaced.length) throw new Reject([{ path: 'value', code: 'bad-action',
-          expected: `the result in the value argument (this return_result put it in ${misplaced.map(key => `"${key}"`).join(', ')})` }]);
-        if (this.lam.return === MISSING) throw new Reject([{ path: 'value', code: 'bad-action',
-          expected: `a ${formatType(this.lam.type.returns)} or a complete typed result already staged in this call` }]);
+        if (this.lam.return === MISSING) throw new Reject([returnValueRejection(wording,
+          misplaced.length ? { kind: 'misplaced', fields: misplaced } : { kind: 'missing' }, formatType(this.lam.type.returns))]);
         // Reuse the staged object as-is. finish() below still checks completeness, live holes,
         // pending transactions, and the normal terminal validation path.
         value = this.lam.return;
@@ -1535,7 +1538,7 @@ export class NativeSession {
         }
       }
       this.lam.return = value;
-      if (!this.finish()) throw new Reject([{ path: 'value', code: 'bad-action', expected: `a complete ${formatType(this.lam.type.returns)}` }]);
+      if (!this.finish()) throw new Reject([returnValueRejection(wording, { kind: 'incomplete' }, formatType(this.lam.type.returns))]);
       return { kind: 'completed', text: `Returned ${oneLine(value, undefined, this.runtime.displayLiveId, this.runtime.untrusted)}.`, value };
     }
     throw new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }]);

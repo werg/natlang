@@ -54,3 +54,31 @@ test('a result sent under another argument name is told to use value', async () 
   assert.match(results[0], /the result in the value argument \(this return_result put it in "verdict"\)/);
   assert.equal(value, 'hello');
 });
+
+test('return_result value rejections render in each wording; the sentence wordings carry no diagnostic code', async () => {
+  const { RETURN_ERROR_TEXTS, returnValueRejection, returnErrorText } = await import('../dist/native/return-errors.js');
+  const { Reject } = await import('../dist/native/values.js');
+  const render = (variant, problem) => new Reject([returnValueRejection(variant, problem, 'Judgment')]).message;
+  const misplaced = { kind: 'misplaced', fields: ['verdict'] };
+  assert.equal(render('legacy', misplaced), 'value: bad-action, expected a Judgment or a complete typed result already staged in this call');
+  assert.equal(render('field', misplaced), 'value: bad-action, expected the result in the value argument (this return_result put it in "verdict")');
+  assert.equal(render('sentence', misplaced), 'return_result needs the Judgment itself as its value argument.');
+  assert.equal(render('steps', { kind: 'incomplete' }),
+    'Call return_result again with status "success" and value set to a complete Judgment, every field filled, or return it from an eval.');
+  for (const variant of ['sentence', 'steps'])
+    for (const problem of [misplaced, { kind: 'missing' }, { kind: 'incomplete' }])
+      assert.doesNotMatch(render(variant, problem), /bad-action|verdict|^value:/);
+  assert.deepEqual([...RETURN_ERROR_TEXTS], ['legacy', 'field', 'sentence', 'steps']);
+  assert.throws(() => returnErrorText('loud'), /returnErrorText is one of legacy, field, sentence, steps/);
+  const previous = process.env.NATLANG_RETURN_ERROR_TEXT;
+  process.env.NATLANG_RETURN_ERROR_TEXT = 'sentence';
+  try {
+    const { results, value } = await script([
+      ['return_result', { status: 'success', verdict: 'hello' }],
+      ['return_result', { status: 'success', value: 'hello' }]]);
+    assert.equal(results[0].split('\n')[1], 'return_result needs the string itself as its value argument.');
+    assert.equal(value, 'hello');
+  } finally {
+    if (previous === undefined) delete process.env.NATLANG_RETURN_ERROR_TEXT; else process.env.NATLANG_RETURN_ERROR_TEXT = previous;
+  }
+});

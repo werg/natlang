@@ -44,11 +44,12 @@ export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string,
    * turn's reply is forced to `return_result` with the value written as a block (a Neuralese result) or decoded. */
   readout?: 'decision' | 'template' };
 export type Pending = LambdaNode;
-export type Diagnostic = { path: string; code: string; expected?: string; got?: string };
+/** `text`, when set, is the whole model-facing line (a sentence without the `path: code` prefix); `code` stays for traces. */
+export type Diagnostic = { path: string; code: string; expected?: string; got?: string; text?: string };
 
 export class Reject extends Error {
   constructor(readonly diagnostics: Diagnostic[]) {
-    super(diagnostics.map(d => [ `${d.path}: ${d.code}`, d.expected ? `expected ${d.expected}` : '',
+    super(diagnostics.map(d => d.text ?? [ `${d.path}: ${d.code}`, d.expected ? `expected ${d.expected}` : '',
       d.got ? `got ${d.got}` : '' ].filter(Boolean).join(', ')).join('; '));
   }
 }
