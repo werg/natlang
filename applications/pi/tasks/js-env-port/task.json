@@ -1,0 +1,2 @@
+{ "prompt": "With PORT=8080 in the environment, adminPort() returns \"80801\" instead of 8081. Fix the config loading in src/config.js; don't change the tests.",
+  "check": "git diff --quiet HEAD -- test && node --test test/*.test.js && node --test {task}/hidden/*.test.mjs" }

@@ -111,6 +111,15 @@ test('natlang check reports inline type errors and callable-folder policy violat
   assert.equal(existsSync(join(root, 'dist/app.js')), false, 'check does not emit JavaScript');
 });
 
+test('a nested package (its own natlang.json) is skipped by the enclosing build', () => {
+  const root = project({ ...APP,
+    'tasks/demo/repo/natlang.json': JSON.stringify({ schema: 'natlang.package/v2', name: 'demo', version: '0.1.0' }),
+    'tasks/demo/repo/quote.nl': '---\nargs:\n  order: Order\nreturns: string\n---\nQuote order.\n' });
+  const result = checkProject(root, { runtimeModule: RUNTIME });
+  assert.ok(!result.diagnostics.some(item => item.file.includes('tasks/demo')),
+    result.diagnostics.map(item => `${item.file}:${item.code}`).join('\n'));
+});
+
 test('a virtual project compiles and runs in-process through the same compiler', async () => {
   const model = scriptedModel(opening => opening.includes('Name a color') ? 'return "teal"' : null);
   const compiled = compileVirtualProject({ files: {

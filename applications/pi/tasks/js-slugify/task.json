@@ -1,0 +1,2 @@
+{ "prompt": "slugify in src/slug.js turns 'Crème Brûlée' into 'cr-me-br-l-e'. Accented Latin letters should lose their accents instead ('creme-brulee'); the other rules stay (lowercase a-z and 0-9 runs joined by single hyphens, no hyphen at either end). Don't change the tests.",
+  "check": "git diff --quiet HEAD -- test && node --test test/*.test.js && node --test {task}/hidden/*.test.mjs" }

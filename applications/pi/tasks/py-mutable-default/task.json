@@ -1,0 +1,2 @@
+{ "prompt": "New Cart objects in cart.py share their items with each other (see the failing test in test_cart.py). Fix the bug without changing the tests.",
+  "check": "git diff --quiet HEAD -- test_cart.py && python3 -m unittest -q test_cart && python3 {task}/hidden/check.py" }

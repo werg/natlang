@@ -1,0 +1,2 @@
+{ "prompt": "top_words in words.py mangles non-English text: 'café' is counted as 'caf'. A word should be any run of letters from any script (digits, underscores and punctuation separate words), compared case-insensitively with str.lower(). Add a test for accented words to test_words.py.",
+  "check": "python3 -m unittest -q test_words && test \"$(grep -c 'def test' test_words.py)\" -ge 2 && python3 {task}/hidden/check.py" }

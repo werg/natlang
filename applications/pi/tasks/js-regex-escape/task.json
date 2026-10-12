@@ -1,0 +1,2 @@
+{ "prompt": "highlight() in src/highlight.js throws for search terms like \"c++\" and matches too much for \"a.b\". Treat the term as literal text (still case-insensitive); don't change the tests.",
+  "check": "git diff --quiet HEAD -- test && node --test test/*.test.js && node --test {task}/hidden/*.test.mjs" }

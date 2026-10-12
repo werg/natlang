@@ -1,0 +1,2 @@
+{ "prompt": "Store subscribers miss updates when a one-time subscriber is registered, and unsubscribe() has no effect on one-time subscribers (see the failing tests). Fix the bugs in src/; don't change the tests.",
+  "check": "git diff --quiet HEAD -- test && node --test test/*.test.js && node --test {task}/hidden/*.test.mjs" }

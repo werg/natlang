@@ -1,0 +1,2 @@
+{ "prompt": "Due dates show up one day early for users west of UTC (the tests run in America/Los_Angeles). Make parseDate in src/dates.js read 'YYYY-MM-DD' as a local calendar date at midnight, and make addDays move by calendar days, also across daylight-saving changes. Don't change the tests.",
+  "check": "git diff --quiet HEAD -- test && TZ=America/Los_Angeles node --test test/*.test.js && TZ=America/Los_Angeles node {task}/hidden/check.mjs && TZ=Pacific/Auckland node {task}/hidden/check.mjs && TZ=UTC node {task}/hidden/check.mjs" }

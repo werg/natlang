@@ -1,0 +1,2 @@
+{ "prompt": "`python3 inventory.py stock.csv --below 10` prints the wrong items, and without --below it crashes. Fix inventory.py so it lists, in file order, the items whose quantity is below the threshold (default 5).",
+  "check": "bash {task}/hidden/check.sh" }

@@ -28,7 +28,7 @@ export default async function main(context: TargetContext): Promise<number> {
 
 ## Packages and `natlang run`
 
-A `natlang.json` (`natlang.package/v2`) names the package, its included files, and targets: `{ entry, export?, description, authority, commands }`. The entry module's function (default `main`) receives a `TargetContext`: `args`, `io`, `workspace`, `stateDirectory`, `traceDirectory`, `model`, a configured `runtime`, and package identity.
+A `natlang.json` (`natlang.package/v2`) names the package, its included files, and targets: `{ entry, export?, description, authority, commands }`. The entry module's function (default `main`) receives a `TargetContext`: `args`, `io`, `workspace`, `stateDirectory`, `traceDirectory`, `model`, a configured `runtime`, and package identity. A subdirectory with its own `natlang.json` is a nested package: the enclosing build skips its `.nl` files.
 
 ```sh
 natlang run applications/evidence -- --documents notes/   # build and run a package in place

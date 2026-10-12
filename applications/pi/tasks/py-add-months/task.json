@@ -1,0 +1,2 @@
+{ "prompt": "add_months(date(2023, 1, 31), 1) in dates.py crashes. When the target month is shorter, return that month's last day instead (so monthly billing dates from Jan 31 go Feb 28 or 29, Mar 31, Apr 30, ...). Don't change the tests.",
+  "check": "git diff --quiet HEAD -- test_dates.py && python3 -m unittest -q test_dates && python3 {task}/hidden/check.py" }

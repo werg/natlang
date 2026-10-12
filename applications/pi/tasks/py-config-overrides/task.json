@@ -1,0 +1,2 @@
+{ "prompt": "load_config in app/loader.py leaks overrides from one call into the next, and environment overrides like APP_SERVER__PORT=9000 come out as strings. Make every call return a fresh config that shares no dicts or lists with DEFAULTS, its arguments or earlier results, and convert each environment value to the type of the default it replaces (int; bool from 'true'/'false'; otherwise str). Don't change the tests.",
+  "check": "git diff --quiet HEAD -- test_loader.py && python3 -m unittest -q test_loader && python3 {task}/hidden/check.py" }

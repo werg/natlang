@@ -1,0 +1,2 @@
+{ "prompt": "deepMerge in src/merge.js modifies its first argument and merges arrays element by element. Make it return a new object that shares no objects or arrays with its inputs, leave both inputs untouched, and let an array from the second argument replace the earlier value entirely. Don't change the tests.",
+  "check": "git diff --quiet HEAD -- test && node --test test/*.test.js && node --test {task}/hidden/*.test.mjs" }

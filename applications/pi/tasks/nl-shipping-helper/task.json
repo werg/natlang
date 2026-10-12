@@ -1,0 +1,2 @@
+{ "prompt": "helpers/rates.js is the crisp helper behind the natlang function quote.nl, and it doesn't follow the rules in step 2 of quote.nl. Fix shippingCost to match those rules exactly and add tests for them to test/rates.test.js; don't change quote.nl.",
+  "check": "git diff --quiet HEAD -- quote.nl && node --test test/*.test.js && test \"$(grep -c 'test(' test/rates.test.js)\" -ge 3 && node --test {task}/hidden/*.test.mjs" }

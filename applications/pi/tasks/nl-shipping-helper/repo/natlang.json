@@ -1,0 +1,7 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "shipping-quote",
+  "version": "0.1.0",
+  "description": "Shipping quotes: the natural-language function quote.nl over the crisp helper helpers/rates.js.",
+  "include": ["quote.nl", "quote.d.nl.ts", "helpers", "README.md"]
+}

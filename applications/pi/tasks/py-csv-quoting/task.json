@@ -1,0 +1,2 @@
+{ "prompt": "to_csv in report.py produces broken CSV when a value contains a comma, a double quote or a newline. Wrap such fields in double quotes and double any quotes inside them (other fields stay unquoted); don't change test_report.py.",
+  "check": "git diff --quiet HEAD -- test_report.py && python3 -m unittest -q test_report && python3 {task}/hidden/check.py" }

@@ -140,6 +140,8 @@ function callableFolders(files: ProjectFiles, root: string): { named: string[]; 
       const path = join(dir, entry);
       if (files.isDirectory(path)) {
         if (folders.has(path)) continue;
+        // A nested package (its own natlang.json) is its own project, e.g. a task repository shipped as data.
+        if (files.isFile(join(path, 'natlang.json'))) continue;
         if (entry === 'natlang.d') { contexts.push(path); mark(path); continue; }
         if (files.isFile(`${path}.nl`)) { mark(path); continue; }
         walk(path);
