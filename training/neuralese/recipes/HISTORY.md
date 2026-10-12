@@ -210,3 +210,38 @@ base recipe instead of an inline config, and both lines declare a recipe (no pen
   plans/neuralese/E2E_DATA.md); `steps`/`train` 769 -> 6,003 (one pass over the train records, the v1 rule). The slice
   re-authenticates as one file (unique writer names, 0 missing edges). Later slices of v2 and its successors bind the
   same way.
+
+## neuralese-e2e-v1: task success in the e2e acceptance and readiness (2026-10-12)
+
+- Task success: the e2e stage runs the direct base's in-run task evaluation (task_eval, eval/task_cadence.py, the same
+  16-case held subset) through its own engine at the start (`task_eval-init`, the parent's weights), at its eval
+  cadence and at the end. `e2e_acceptance.task_success` adds `max_success_drop_vs_parent` 0.02 (final against parent
+  on the text transport, same cases). V against T (`max_success_drop_vs_t`) compares only cases with a fused
+  producer->consumer hand-off and stays pending: every case of the 16-case subset hands child results to crisp root
+  code, so no model reads another call's value; it needs held tasks with model-to-model hand-offs and the collector
+  carrying fused edges as Neuralese (runtime/fusion.ts) against the stage's server.
+- Readiness: `parent_readiness.task_success` reads the direct phase's task-eval.jsonl through main's
+  candidate-checkpoint reader (d85c8c88: the latest step's eligible rate against the declared reference_successes;
+  pending while its asynchronous evaluation has not landed or the base is unmeasured).
+- QAT: the shared q4 in the e2e base for both lines landed in 1f1042c3 (lockstep); test_line_parity now also checks
+  that both e2e lines carry the direct base's shared points held at the parent's progress.
+- Collapse dragnet (Pop's LFM e2e arm from u10006, 200 updates: crisp held CE 0.36 -> 2.94, unseen readers 5.1 while
+  the 11 seen readers fit): the TokenChoiceProjection is the token readout and trained at --heads-lr (3e-4, matrices
+  on Muon, the direct stage's projection rate, where the projection never fed the readout). New
+  `--token-choice-lr` / recipe `token_choice_lr` (default heads_lr; 0 keeps the identity) and held crisp CE at every
+  e2e evaluation, to localize where token ability breaks. (lfm2_port.forward_embeds h_cut at
+  cutoff == depth, dropped by 7bbfd00f, was restored on main separately.)
+- Record order (Pop pop-43bc: all 200 updates of the LFM arm were curriculum_decision_extract_chain, train loss ~0 by
+  update 4): trajectories drew train[cursor] in file order. New `--record-order family-interleave` (recipe
+  `record_order`, now in neuralese-e2e-v1 for both lines): a seeded per-epoch permutation (the shared
+  CohortDocumentSampler.epoch) with task families interleaved in proportion, the cursor counting in it and the order
+  recorded in the checkpoint (older checkpoints resume in file order); `--train` keeps a family-balanced subset.
+  Held evaluations report CE per task family (`by_family`).
+- `--token-choice-optimizer muon|adamw` (recipe `token_choice_optimizer`, default muon): the TCP's depthwise taps
+  (first row = the identity path) and its zero-initialised residual MLP take orthogonalized Muon steps by default.
+  Dragnet round 1 (LFM u10006, family-interleaved, 10 updates; held crisp CE 0.599 at start): TCP frozen 0.600, TCP
+  Muon 3e-4 0.768, AdamW 3e-4 1.01, AdamW 3e-5 0.698: the readout projection's update is what breaks token ability.
+- Train records explicitly not admitted (training_admission.approved false; 28 free-provider v28/v30 rows of the
+  union cohort) or reading a producer that is not, are skipped and counted (skipped.unadmitted); gold producer
+  replay refused them at update 13 of every round-1 arm.
+

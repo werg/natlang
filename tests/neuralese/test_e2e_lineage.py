@@ -54,14 +54,40 @@ def test_an_e2e_lineage_needs_its_acceptance_and_runtime_stage(tmp_path):
 def test_acceptance_compares_values_with_tokens_and_keeps_missing_evidence_pending():
     declaration = json.loads((RECIPES / 'neuralese-e2e-v1.json').read_text())['e2e_acceptance']
     held = {'written': 1.0, 'crisp': 1.1, 'shuffled': 1.2, 'zeroed': 1.3, 'n': 40}
-    criteria, _ = e2e_acceptance.evaluate(declaration, {'written-trained': held, 'drift_guard': {'stopped': False}})
+    arm = {'eligible': True, 'case_indices': [0, 3], 'cases': 2}
+    summary = {'written-trained': held, 'drift_guard': {'stopped': False},
+               'task_eval-init': {**arm, 'task_successes': 1, 'task_success_rate': 0.5},
+               'task_eval': {**arm, 'task_successes': 1, 'task_success_rate': 0.5,
+                             'case_successes': {'0': True, '3': False}}}
+    criteria, _ = e2e_acceptance.evaluate(declaration, summary)
     assert {k: c['status'] for k, c in criteria.items()} == {
         'paired_readers': 'pass', 'v_minus_t_ce': 'pass', 'v_margin_over_shuffled': 'pass',
-        'v_margin_over_zeroed': 'pass', 'task_success': 'pending', 'no_drift_stop': 'pass'}
-    criteria, _ = e2e_acceptance.evaluate(declaration, {'written-trained': {**held, 'written': 1.15},
-                                                        'task_success': {'v_success': 0.5, 't_success': 0.5},
-                                                        'drift_guard': {'stopped': False}})
-    assert criteria['v_minus_t_ce']['status'] == 'fail' and criteria['task_success']['status'] == 'pass'
+        'v_margin_over_zeroed': 'pass', 'task_success': 'pending', 'task_success_vs_parent': 'pass',
+        'no_drift_stop': 'pass'}
+    summary['task_eval'] = {**summary['task_eval'], 'task_successes': 0, 'task_success_rate': 0.0}
+    summary['task_eval_neuralese'] = {'fused_cases': [0], 'fused_case_successes': {'0': True}}
+    summary['written-trained'] = {**held, 'written': 1.15}
+    criteria, _ = e2e_acceptance.evaluate(declaration, summary)
+    assert criteria['v_minus_t_ce']['status'] == 'fail' and criteria['task_success_vs_parent']['status'] == 'fail'
+    assert criteria['task_success']['status'] == 'pass'  # V 1/1 against T 1/1 on the fused case
+
+
+def test_readiness_reads_the_direct_phase_task_evaluation(tmp_path):
+    declaration = json.loads((RECIPES / 'neuralese-e2e-v1.json').read_text())['parent_readiness']
+    stage = tmp_path / 'direct_sft'
+    stage.mkdir()
+    rows = [{'step': s, 'ce': c, 'base_ce': 1.5} for s, c in ((400, 1.0), (800, 0.995), (1200, 0.99), (1600, 0.985))]
+    (stage / 'eval.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    (stage / 'drift.jsonl').write_text(json.dumps({'step': 1600, 'behaviour_drift': {'guard': 'ok'}}) + '\n')
+    runs = [{'step': 400, 'task_successes': 2, 'cases': 16, 'eligible': True, 'reference_successes': 4},
+            {'step': 1600, 'task_successes': 3, 'cases': 16, 'eligible': True, 'reference_successes': 4}]
+    (stage / 'task-eval.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in runs))
+    result = e2e_acceptance.readiness(declaration, stage)
+    assert not result['ready'] and result['criteria']['task_success']['status'] == 'fail'
+    runs[-1]['task_successes'] = 4
+    (stage / 'task-eval.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in runs))
+    result = e2e_acceptance.readiness(declaration, stage)
+    assert result['ready'] and result['criteria']['task_success']['status'] == 'pass'
 
 
 def test_readiness_needs_a_held_ce_plateau_on_one_held_set(tmp_path):
@@ -84,3 +110,21 @@ def test_readiness_needs_a_held_ce_plateau_on_one_held_set(tmp_path):
     assert result['ready'] and result['criteria']['task_success']['status'] == 'reported'
     (stage / 'drift.jsonl').write_text(json.dumps({'step': 2000, 'behaviour_drift': {'guard': 'stop'}}) + '\n')
     assert not e2e_acceptance.readiness(declaration, stage)['ready']
+
+
+def test_family_interleaved_order_spreads_families_and_is_seeded():
+    from natlang_neuralese.train.trajectories import family_interleaved_order, record_family
+    records = ([{'id': f'a{i}', 'task_family': 'a'} for i in range(60)] +
+               [{'id': f'b{i}', 'task_family': 'b'} for i in range(20)] +
+               [{'id': f'c{i}', 'task_family': 'c'} for i in range(4)])
+    order = family_interleaved_order(records, 7, 0)
+    assert sorted(r['id'] for r in order) == sorted(r['id'] for r in records)
+    assert order == family_interleaved_order(records, 7, 0) and order != family_interleave_other(records)
+    for start in range(0, len(order) - 20, 10):  # every stretch of 21 updates sees family b, no run is one family
+        assert 'b' in {record_family(r) for r in order[start:start + 21]}
+    assert family_interleaved_order(records, 7, 1) != order  # a new permutation per epoch
+
+
+def family_interleave_other(records):
+    from natlang_neuralese.train.trajectories import family_interleaved_order
+    return family_interleaved_order(records, 8, 0)

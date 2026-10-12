@@ -44,7 +44,8 @@ def clip_finite_gradients(parameters, maximum=1., consumed_norm=None, spike=None
 
 
 def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr, heads_lr, embedding_ids=(),
-                         lora_names=None, latent_lrs=None, lion=(), latent_optimizer='lionsr', latent_options=None):
+                         lora_names=None, latent_lrs=None, lion=(), latent_optimizer='lionsr', latent_options=None,
+                         rates=None):
     """``latent_lrs`` (name → lr): QAT dense latents that get their own AdamW group at that rate (see
     ``adapters.qat_latent_scales``) instead of sharing the Muon rate. ``lion``: the latent policy's partition stepped
     by PortMuonAdamW's latent child (names ``backbone.<name>``): LionSR's (``optim.latent_partition``), or with
@@ -67,7 +68,11 @@ def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr
     if lora:
         groups.append({'params': lora, 'lr': lora_lr})
     if heads:
-        groups.append({'params': heads, 'lr': heads_lr})
+        own = rates or {}
+        shared = [q for q in heads if id(q) not in own]
+        if shared:
+            groups.append({'params': shared, 'lr': heads_lr})
+        groups += [{'params': [q], 'lr': own[id(q)]} for q in heads if id(q) in own]
     if policy == 'adamw':
         groups += [{'params': [q], 'lr': latent_lrs[n]} for n, q in latents]
         return torch.optim.AdamW(groups, weight_decay=0)
@@ -79,7 +84,7 @@ def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr
     named += [(f'heads.{i}', value) for i, value in enumerate(heads)]
     optimizer = PortMuonAdamW(named, lr=lr, vocab_size=vocab_size, embedding_ids=embedding_ids, latent=lion,
                               latent_optimizer=latent_optimizer, latent_options=latent_options)
-    rates = {id(q): group['lr'] for group in groups for q in group['params']}
+    rates = {**{id(q): group['lr'] for group in groups for q in group['params']}, **(rates or {})}
     # Keep each optimizer's partition/schema while preserving the three learning rates.
     for child in [optimizer.muon, optimizer.auxiliary]:
         if child is None:

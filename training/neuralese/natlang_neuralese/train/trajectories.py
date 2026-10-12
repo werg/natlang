@@ -656,6 +656,33 @@ def _progress(records, label: str):
                           "seconds": round(time.time() - began, 2), "elapsed": round(time.time() - start, 1)}),
               file=sys.stderr, flush=True)
 
+def record_family(record: dict) -> str:
+    """The task family a record's sampling and per-family evaluation group it by."""
+    curriculum = record.get('curriculum') if isinstance(record.get('curriculum'), dict) else {}
+    return str(record.get('task_family') or record.get('family') or curriculum.get('family') or 'unknown')
+
+
+def family_interleaved_order(records: list, seed, epoch: int) -> list:
+    """Epoch ``epoch`` of a seeded training order that spreads every task family evenly over the pass.
+
+    The shuffle is the shared sampler's epoch permutation (text_supervision.CohortDocumentSampler.epoch, one record
+    per document); families are then interleaved in proportion (a record's key is its rank within its family over the
+    family's size), so no stretch of updates is one family, as a file-ordered cursor made it (2026-10-12: Pop's LFM
+    e2e arm trained 200 updates of one family and lost unseen readers)."""
+    from .text_supervision import CohortDocumentSampler
+    shuffled = [row for document in CohortDocumentSampler(
+        records, cohort_key=lambda r: 'records', document_key=lambda r: str(r['id'])).epoch(epoch, seed)
+        for row in document]
+    families, first_seen = {}, {}
+    for row in shuffled:
+        family = record_family(row)
+        first_seen.setdefault(family, len(first_seen))
+        families.setdefault(family, []).append(row)
+    keyed = [((rank + 0.5) / len(rows), first_seen[family], row) for family, rows in families.items()
+             for rank, row in enumerate(rows)]
+    return [row for *_, row in sorted(keyed, key=lambda item: item[:2])]
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--records", required=True)
@@ -852,6 +879,24 @@ def main(argv=None):
     # a reference (--monitor data or the quantization component's teacher) are given.
     from .drift_monitor import add_drift_arguments
     add_drift_arguments(parser, drift_rows=0)
+    # The in-run task-success evaluation (eval/task_cadence.py; owner 2026-10-12), as in the direct stage: the fixed
+    # held subset executed for real against this stage's engine (direct writer, TokenChoiceProjection) at the eval
+    # cadence, at the start (the parent's weights) and at the end. The end-to-end acceptance reads it.
+    parser.add_argument('--record-order', choices=('file', 'family-interleave'), default='file',
+                        help='training record order without --cohort-weights: the file order (historical) or a seeded '
+                             'per-epoch permutation that spreads task families evenly (record_family); with '
+                             'family-interleave, --train keeps a family-balanced subset instead of the file prefix')
+    parser.add_argument('--token-choice-lr', type=float, default=None,
+                        help='rate of the TokenChoiceProjection (--direct-artifact), which sits in every token '
+                             'prediction; default --heads-lr; 0 keeps it the identity (frozen)')
+    parser.add_argument('--token-choice-optimizer', choices=('muon', 'adamw'), default='muon',
+                        help='optimizer of the TokenChoiceProjection: muon (its matrices, including the depthwise taps '
+                             'whose first row is the identity path, take orthogonalized steps) or adamw (elementwise)')
+    parser.add_argument('--task-eval', default=None,
+                        help='JSON {"packet": {"path", "sha256"}, "cases", "min_successes", ...} (eval/task_cadence.py)')
+    parser.add_argument('--task-eval-every', type=int, default=0,
+                        help='run it at evaluations whose step is a multiple of this (0: every evaluation), at the '
+                             'start and at the end')
     parser.add_argument('--checkpoint-every', type=int, default=200,
                         help='full-state points: every N updates, a multiple of --eval-every when that is set (the end '
                              'and stops also write the full state); the shared cadence (LINE_PARITY.md): no more '
@@ -983,7 +1028,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'eval_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size', 'direct_parent_proof', 'direct_artifact', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_rows', 'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'gate_held_rows', 'gate_response_kl', 'save_state'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'eval_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size', 'direct_parent_proof', 'direct_artifact', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_rows', 'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'gate_held_rows', 'gate_response_kl', 'save_state', 'task_eval', 'task_eval_every', 'record_order'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -1619,6 +1664,14 @@ def main(argv=None):
     # qualification cohort and the selection below is unchanged; with it, --train caps each cohort's training records,
     # held records of the qualification cohort drive the evaluations and other cohorts' held records are a stratum.
     from .record_cohorts import record_cohort, RecordCohortSampler, trajectory_coverage
+
+    def declared_unadmitted(record):
+        admission = record.get('training_admission')
+        return isinstance(admission, dict) and admission.get('approved') is not True
+
+    def admitted_for_training(record):
+        return not declared_unadmitted(record) and not any(
+            declared_unadmitted(producers[name]) for name in reads(record) if name in producers)
     train, held_pool, skipped = [], [], {"long": 0, "no-target": 0, "native-neuralese-prompt": 0,
                                         "unresolved-authenticated-context": context_review["excluded_context_records"]}
     cohort_held, train_per_cohort = {}, {}
@@ -1634,10 +1687,17 @@ def main(argv=None):
             bucket = held_pool if record.get("split") == "test" else train
             if bucket is held_pool and cohort != args.qualification_cohort:
                 bucket = cohort_held.setdefault(cohort, [])
-            if bucket is train and train_per_cohort.get(cohort, 0) >= args.train:
+            if bucket is train and train_per_cohort.get(cohort, 0) >= args.train and (
+                    (resumed.get('record_order', 'file') if resumed is not None and not new_continuation
+                     else args.record_order) == 'file'):
                 continue
             if native_neuralese_prompt(record):
                 skipped["native-neuralese-prompt"] += 1
+                continue
+            if bucket is train and not admitted_for_training(record):
+                # Gold producer supervision needs admitted training records (gold_replay); a train-split record that is
+                # not admitted, or reads a producer that is not, is skipped and counted, never trained.
+                skipped["unadmitted"] = skipped.get("unadmitted", 0) + 1
                 continue
             if prompt_tokens(record) > args.max_tokens:
                 skipped["long"] += 1
@@ -1645,6 +1705,17 @@ def main(argv=None):
             bucket.append(record)
             if bucket is train:
                 train_per_cohort[cohort] = train_per_cohort.get(cohort, 0) + 1
+    # A resumed run keeps the order its cursor counts in (checkpoints before record_order counted the file order).
+    record_order = (resumed.get('record_order', 'file') if resumed is not None and not new_continuation
+                    else args.record_order)
+    if record_order == 'family-interleave':
+        # --train keeps a family-balanced subset per cohort (the interleaved order's prefix), not the file prefix.
+        by_cohort = {}
+        for record in train:
+            by_cohort.setdefault(record_cohort(record), []).append(record)
+        train = [record for cohort in sorted(by_cohort)
+                 for record in family_interleaved_order(by_cohort[cohort], args.seed, 0)[:args.train]]
+        train_per_cohort = {cohort: min(len(rows), args.train) for cohort, rows in by_cohort.items()}
     if cohort_weights is not None and set(train_per_cohort) != set(cohort_weights):
         raise ValueError('--cohort-weights must name exactly the loaded training cohorts: ' +
                          ', '.join(sorted(train_per_cohort)))
@@ -1822,9 +1893,16 @@ def main(argv=None):
                            (heads.cutoff == backbone.num_layers and name.startswith('feedback.'))))] if args.heads_lr and (args.handover == "written" or args.view == "written") else []
     if direct is not None:
         # The direct writer's own modules (not the raw-token anchor heads, which the direct path does not train).
+        # The TokenChoiceProjection is the token readout (lm_head(norm(TCP(h)))): its rate is its own
+        # (--token-choice-lr; 0 keeps the identity), since a head-rate step on it moves every token prediction.
+        tcp_lr = args.heads_lr if args.token_choice_lr is None else args.token_choice_lr
+        tcp_module = getattr(direct, 'token_choice_projection', None)
+        if tcp_module is not None and not tcp_lr:
+            for p in tcp_module.parameters():
+                p.requires_grad_(False)
         head_named = [(f'{key}.{name}', p) for key, module in (('neuralese_projection', direct.neuralese_projection),
                                                               ('token_choice_projection',
-                                                               getattr(direct, 'token_choice_projection', None)))
+                                                               tcp_module if tcp_lr else None))
                       if module is not None for name, p in module.named_parameters()] if args.heads_lr else []
     head_params = [p for _, p in head_named]
     if args.train_control_rows:
@@ -1877,7 +1955,14 @@ def main(argv=None):
     optimizer = trajectory_optimizer(args.optimizer, params, lora, head_params,
                                      vocab_size=backbone.embedding_weight.shape[0], lr=args.lr,
                                      lora_lr=backbone_lr, heads_lr=args.heads_lr,
-                                     embedding_ids={id(backbone.control_rows), id(getattr(backbone, 'control_head_rows', backbone.control_rows))} | {id(p) for m in heads.modules() if isinstance(m, torch.nn.Embedding) for p in m.parameters()},
+                                     rates=({id(p): tcp_lr for p in tcp_module.parameters()}
+                                            if direct is not None and tcp_module is not None and tcp_lr
+                                            and tcp_lr != args.heads_lr else None),
+                                     embedding_ids={id(backbone.control_rows), id(getattr(backbone, 'control_head_rows', backbone.control_rows))} | {id(p) for m in heads.modules() if isinstance(m, torch.nn.Embedding) for p in m.parameters()}
+                                     # (ids here are kept off Muon: --token-choice-optimizer adamw puts the readout
+                                     # projection on elementwise AdamW steps)
+                                     | ({id(p) for p in tcp_module.parameters()} if direct is not None and tcp_module is not None
+                                        and args.token_choice_optimizer == 'adamw' else set()),
                                      lora_names=lora_names, latent_lrs=latent_lrs, lion=lion,
                                      latent_optimizer='muonsr' if args.latent_optimizer == 'muonsr' else 'lionsr',
                                      latent_options=latent_options)
@@ -2099,14 +2184,18 @@ def main(argv=None):
         return loss
 
     def evaluate(label, leaves, soft=True, records=None):
-        values = []
+        values, families = [], {}
         with torch.no_grad():
             for record in _progress(held if records is None else records, label):
                 try:
-                    values.append(float(loss_of(record, leaves, soft, training_objective=False)))
+                    value = float(loss_of(record, leaves, soft, training_objective=False))
                 except RequestError:
-                    pass
-        return {"label": label, "cross_entropy": sum(values) / max(1, len(values)), "n": len(values)}
+                    continue
+                values.append(value)
+                families.setdefault(record_family(record), []).append(value)
+        return {"label": label, "cross_entropy": sum(values) / max(1, len(values)), "n": len(values),
+                "by_family": {family: {"cross_entropy": sum(v) / len(v), "n": len(v)}
+                              for family, v in sorted(families.items())}}
 
     def evaluate_written(label, leaves, records, accounting):
         """Pure reader CE with own and proven factual-disjoint typed donor blocks.
@@ -2195,7 +2284,26 @@ def main(argv=None):
         return result
 
     leaves = {leaf_ids[name]: p for name, p in params.items()}
+    from ..eval.task_cadence import TaskEval, parse_task_eval
+    task_eval_spec = parse_task_eval(args.task_eval)
+    # Served through this stage's own engine in this process (no second copy of the weights), with the serving prompt
+    # policy the engine was restored with (a direct export binds its prompt rendering).
+    task_eval = (TaskEval(task_eval_spec, out, engine, prompt_rendering=getattr(engine, 'prompt_rendering', None) or 'full')
+                 if task_eval_spec is not None else None)
+
+    def task_eval_report(step):
+        summary = task_eval.run(step)
+        detail = json.loads((Path(summary['run']) / 'task-score.json').read_text()).get('cases_detail', [])
+        # Per case (by packet row index), so two arms or two weights compare on the same cases.
+        successes = {str(index): case.get('outcome') == 'task_success'
+                     for index, case in zip(summary['case_indices'], detail)}
+        return {**{k: summary[k] for k in ('step', 'task_successes', 'cases', 'task_success_rate', 'outcome_counts',
+                                           'eligible', 'complete', 'case_indices', 'reference_successes', 'seconds')},
+                'case_successes': successes}
+
     report = dict(resumed['initial_report']) if resumed is not None else {"crisp": evaluate("crisp", {}, soft=False), "soft-init": evaluate("soft-init", leaves)}
+    if resumed is None and task_eval is not None:
+        report["task_eval-init"] = task_eval_report(0)  # the parent's weights, before any end-to-end update
     if resumed is None and family and args.member_eval:
         report["family-init"] = evaluate_members(backbone, member_eval_windows())
     if resumed is None and cohort_strata_held:
@@ -2225,6 +2333,7 @@ def main(argv=None):
     start_step = 0
     if resumed is not None:
         start_step, cursor, errors, used = resumed['step'], resumed['cursor'], resumed['errors'], set(resumed['used'])
+    epoch_order = [None, None]
     # The anchor decays from where this stage began: a resume keeps its origin, a continuation starts a new one.
     anchor_origin = (resumed.get('anchor_origin', start_step) if resumed is not None and not new_continuation
                      else start_step)
@@ -2379,7 +2488,7 @@ def main(argv=None):
                                  'activation_offload_gb': args.activation_offload_gb,
                                  'geometry_version': geometry_version},
             'artifact_refs': input_roles,
-            'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used), 'best_evaluation': best_evaluation, 'best_evaluation_history': best_history,
+            'step': step, 'cursor': cursor, 'record_order': record_order, 'errors': errors, 'used': sorted(used), 'best_evaluation': best_evaluation, 'best_evaluation_history': best_history,
             'params': {k: v.detach().cpu() for k, v in params.items()}, 'texts': texts,
             **({'direct_parent_binding': direct_parent} if direct_parent is not None else {}),
             **({'direct_parent_migration_proof': direct_parent_migration_proof}
@@ -2471,7 +2580,15 @@ def main(argv=None):
             for _ in range(args.batch):
                 if args.device.startswith("cuda"):
                     torch.cuda.reset_peak_memory_stats()
-                record = train[cursor % len(train)] if sampler is None else sampler.record(cursor)
+                if sampler is not None:
+                    record = sampler.record(cursor)
+                elif record_order == 'family-interleave':
+                    epoch_index = cursor // len(train)
+                    if epoch_order[0] != epoch_index:
+                        epoch_order[:] = [epoch_index, family_interleaved_order(train, args.seed, epoch_index)]
+                    record = epoch_order[1][cursor % len(train)]
+                else:
+                    record = train[cursor % len(train)]
                 step_record_ids.append(record['id'])
                 cursor += 1
                 geometry_phase_started = time.perf_counter()
@@ -2808,6 +2925,12 @@ def main(argv=None):
                 from .trajectory_state import evaluation_state
                 with evaluation_state(write_choice, stop_generator, baseline):
                     evaluation = {'step': step + 1, 'soft': evaluate('periodic-soft', leaves)}
+                    if direct is not None and not args.crisp_weight:
+                        # Held crisp CE (consumers reading tokens through the trained readout) at every evaluation:
+                        # where token ability breaks shows here first.
+                        evaluation['crisp'] = evaluate('periodic-crisp', {}, soft=False)
+                    if task_eval is not None and (not args.task_eval_every or (step + 1) % args.task_eval_every == 0):
+                        evaluation['task_eval'] = task_eval_report(step + 1)
                     if quant is not None:
                         evaluation['quantization'] = {**quant.describe(step + 1), 'precision': step_precision[0],
                                                       'columns': {}}
@@ -2855,6 +2978,8 @@ def main(argv=None):
         print(json.dumps({'status': 'checkpointed_on_signal', 'checkpoint': str(checkpoint_path)}), flush=True)
         return 0
     report["soft-trained"] = evaluate("soft-trained", leaves)
+    if task_eval is not None:
+        report["task_eval"] = task_eval_report(args.steps)
     if drift_monitor is not None:
         # The shared acceptance's behaviour gate on the final weights (the hard criterion) and the guard's record.
         report["behaviour_gate"] = drift_monitor.final_gate(args.steps)

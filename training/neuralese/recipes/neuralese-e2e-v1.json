@@ -89,7 +89,38 @@
     "drift_agreement_stop": 0.0,
     "gate_response_kl": 1.5,
     "drift_gate_every": 300,
-    "gate_held_rows": 48
+    "gate_held_rows": 48,
+    "task_eval": {
+     "packet": {
+      "path": "runs/natlang-held-task-packet-v2-20261012/cases.jsonl",
+      "sha256": "177726732807b96a13739a83bb0a9745a4865196d660ff5de90a652b10955f12"
+     },
+     "cases": [
+      0,
+      5,
+      10,
+      15,
+      16,
+      21,
+      26,
+      31,
+      32,
+      37,
+      42,
+      47,
+      48,
+      53,
+      58,
+      63
+     ],
+     "case_seconds": 600,
+     "max_model_requests": 48,
+     "workers": 4,
+     "min_successes": 0,
+     "noise_successes": 0,
+     "reference_successes": null
+    },
+    "record_order": "family-interleave"
    }
   }
  ],
@@ -113,7 +144,7 @@
     "gate": "required",
     "weight": 0.5,
     "ramp": {
-     "start": 0.15,
+     "start": 0.25,
      "end": 0.3
     },
     "modules": {
@@ -138,7 +169,7 @@
   ]
  },
  "e2e_acceptance": {
-  "description": "NEURALESE_DIRECT_V1.md \"End-to-end stage\" section 4 and its resolved margins; T reads the gold crisp text (teacher-oracle reference); the greedy-T arm, the token-readout regression (eval/direct_token_readout.py) and the behaviour gate are reported.",
+  "description": "NEURALESE_DIRECT_V1.md \"End-to-end stage\" section 4 and its resolved margins; T reads the gold crisp text (teacher-oracle reference); the greedy-T arm, the token-readout regression (eval/direct_token_readout.py) and the behaviour gate are reported. Task success is the shared in-run evaluation (eval/task_cadence.py, the direct stage's 16-case held subset): V against T on cases with a fused hand-off (pending until held tasks have model-to-model hand-offs), and the final weights against the parent's (task_eval-init) on the text transport.",
   "paired_reader": {
    "max_v_minus_t_ce_nats": 0.0,
    "min_v_margin_over_shuffled_nats": 0.05,
@@ -147,7 +178,8 @@
   },
   "task_success": {
    "oracle": "exact",
-   "max_success_drop_vs_t": 0.02
+   "max_success_drop_vs_t": 0.02,
+   "max_success_drop_vs_parent": 0.02
   },
   "drift": {
    "no_drift_stop": true

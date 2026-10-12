@@ -72,7 +72,7 @@ HANDLERS = {
     'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads','direct_artifact_manifest','continue_from','direct_parent_proof'},
                                 'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'backbone_lr', 'backbone_training', 'max_tokens',
                                                'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
-                                               'write_depth', 'tokens_per_vector', 'heads_lr', 'distill',
+                                               'write_depth', 'tokens_per_vector', 'heads_lr', 'token_choice_lr', 'token_choice_optimizer', 'record_order', 'distill',
                                                'crisp_weight', 'memory_gb', 'backward_policy', 'graph_memory_gb',
                                                'graph_headroom_gb', 'checkpoint_layers', 'checkpoint_attention_only',
                                                'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size',
@@ -92,7 +92,7 @@ HANDLERS = {
                                                'latent_lr', 'latent_ns', 'latent_weight_decay', 'grad_spike_clip',
                                                'monitor', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise',
                                                'gate_response_kl', 'drift_warn', 'drift_stop', 'drift_agreement_warn',
-                                               'drift_agreement_stop', 'drift_gate', 'gate_held_rows'},
+                                               'drift_agreement_stop', 'drift_gate', 'gate_held_rows', 'task_eval', 'task_eval_every'},
                                 'result': 'checkpoint.pt'},
     # The view operator gate (eval/view_gate.py; TRAINING_RECIPE.md "The view operator stage") on the exact weights of
     # the view stage it requires (that stage's recurrence checkpoint).

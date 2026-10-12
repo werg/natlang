@@ -142,3 +142,21 @@ def test_line_specific_entries_need_a_date_and_expiry(tmp_path):
     parity_file.write_text(json.dumps(parity))
     with pytest.raises(ValueError, match='expires'):
         line_parity.load_parity(repo)
+
+
+def test_e2e_carries_the_direct_base_qat_on_both_lines():
+    """QAT in every stage, in lockstep: the e2e stage of both lines trains the direct base's shared points, held at
+    the parent's progress; a line drops or changes them only by a declared difference."""
+    from natlang_neuralese.train.recipe import resolve_recipe_data
+    direct = resolve_recipe_data(RECIPES / 'neuralese-direct-v3.json')['quantization']
+    shared = {p['name']: p for p in direct['points']}
+    for line in line_parity.LINES:
+        q = resolve_recipe_data(RECIPES / f'neuralese-e2e-{line}-v1.json')['quantization']
+        assert q['stage_progress'] == {'e2e': [1.0, 1.0]} and q['loss'] == direct['loss']
+        points = {p['name']: p for p in q['points']}
+        assert all(points.get(name) == point for name, point in shared.items()), line
+    parity = line_parity.load_parity()
+    kind, config = line_parity.effective_config({'recipe': 'neuralese-e2e-lfm-v1'})
+    errors, _ = line_parity.compare(parity, 'e2e', 'lfm', kind,
+                                    {k: v for k, v in config.items() if '.quantization.' not in k})
+    assert errors and all('quantization' in e for e in errors)

@@ -35,9 +35,11 @@ def validate_declaration(declaration):
     if not isinstance(paired, dict) or set(paired) != PAIRED or not all(_number(v) for v in paired.values()):
         raise ValueError('e2e_acceptance.paired_reader declares ' + ', '.join(sorted(PAIRED)) + ' as numbers')
     task = declaration['task_success']
-    if (not isinstance(task, dict) or set(task) != {'oracle', 'max_success_drop_vs_t'} or task['oracle'] != 'exact'
-            or not _number(task['max_success_drop_vs_t'])):
-        raise ValueError('e2e_acceptance.task_success is {oracle: "exact", max_success_drop_vs_t: number}')
+    if (not isinstance(task, dict) or set(task) != {'oracle', 'max_success_drop_vs_t', 'max_success_drop_vs_parent'}
+            or task['oracle'] != 'exact' or not _number(task['max_success_drop_vs_t'])
+            or not _number(task['max_success_drop_vs_parent'])):
+        raise ValueError('e2e_acceptance.task_success is {oracle: "exact", max_success_drop_vs_t: number, '
+                         'max_success_drop_vs_parent: number}')
     if declaration['drift'] != {'no_drift_stop': True}:
         raise ValueError('e2e_acceptance.drift is {"no_drift_stop": true}')
     reported = declaration.get('reported', [])
@@ -67,13 +69,33 @@ def evaluate(declaration, summary):
     criterion('v_margin_over_zeroed', None if v is None or zeroed is None else zeroed - v,
               v is not None and zeroed is not None and zeroed - v >= paired['min_v_margin_over_zeroed_nats'],
               min=paired['min_v_margin_over_zeroed_nats'])
-    success = summary.get('task_success') or {}
-    v_rate, t_rate = success.get('v_success'), success.get('t_success')
-    drop = None if v_rate is None or t_rate is None else t_rate - v_rate
-    criterion('task_success', drop, drop is not None and drop <= declaration['task_success']['max_success_drop_vs_t'],
-              max_drop=declaration['task_success']['max_success_drop_vs_t'], oracle='exact',
-              **({} if success else {'pending_reason': 'no exact-oracle consumer task-success evaluation in the stage '
-                                                        'report yet (plans/REVIEW_20261012.md item 1)'}))
+    # Task success (eval/task_cadence.py, the trainer's in-run evaluation, exact host checks). V against T: the same
+    # cases run twice on the final weights, once with fused producer->consumer hand-offs carried as Neuralese blocks
+    # (``task_eval_neuralese``) and once as text (``task_eval``); only cases where a hand-off was fused count.
+    task = declaration['task_success']
+    t_arm, v_arm = summary.get('task_eval') or {}, summary.get('task_eval_neuralese') or {}
+    fused = v_arm.get('fused_cases')
+    if v_arm and fused:
+        v_ok, t_ok = v_arm.get('fused_case_successes', {}), (t_arm.get('case_successes') or {})
+        v_rate = sum(bool(v_ok.get(str(c))) for c in fused) / len(fused)
+        t_rate = sum(bool(t_ok.get(str(c))) for c in fused) / len(fused)
+        criterion('task_success', t_rate - v_rate, t_rate - v_rate <= task['max_success_drop_vs_t'],
+                  max_drop=task['max_success_drop_vs_t'], oracle='exact', fused_cases=len(fused), v=v_rate, t=t_rate)
+    else:
+        criterion('task_success', None, False, max_drop=task['max_success_drop_vs_t'], oracle='exact',
+                  pending_reason='no V-arm task evaluation with a fused hand-off: the held task subset routes every '
+                                 'child result to crisp root code, so no model reads another call\'s value; it needs '
+                                 'held tasks with model-to-model hand-offs and the collector carrying fused edges as '
+                                 'Neuralese (runtime/fusion.ts) against the stage\'s server')
+    # The same cases on the parent's weights (``task_eval-init``) against the final weights: e2e training must not cost
+    # task success on the runtime's text transport.
+    parent = summary.get('task_eval-init') or {}
+    measured = bool(t_arm and parent and t_arm.get('eligible') and parent.get('eligible') and
+                    t_arm.get('case_indices') == parent.get('case_indices'))
+    drop = parent.get('task_success_rate', 0) - t_arm.get('task_success_rate', 0) if measured else None
+    criterion('task_success_vs_parent', drop, measured and drop <= task['max_success_drop_vs_parent'],
+              max_drop=task['max_success_drop_vs_parent'],
+              parent=parent.get('task_successes'), final=t_arm.get('task_successes'), cases=t_arm.get('cases'))
     guard = summary.get('drift_guard')
     criterion('no_drift_stop', None if guard is None else not guard.get('stopped', True),
               guard is not None and guard.get('stopped') is False)
@@ -152,9 +174,10 @@ def readiness(declaration, direct_stage):
     Held CE plateau: over the last ``evaluations`` held evaluations on one held set (a data continuation re-measures
     the base on a new held set; only evaluations sharing the latest base_ce are compared), the relative held CE
     improvement from the first to the last is at most ``max_relative_improvement``. No drift stop: the latest drift
-    record's guard is not ``stop``. Task success: the direct phase's held task-success rate (eval ``task_success``
-    {rate, base_rate}) at least base + ``min_vs_base``; until the phase measures it, ``until_measured`` says whether
-    its absence blocks or is reported."""
+    record's guard is not ``stop``. Task success: the phase's latest eligible in-run task evaluation (task-eval.jsonl,
+    eval/task_cadence.py) at the candidate checkpoint at least the base rate (the line's declared reference_successes)
+    + ``min_vs_base``; a pending asynchronous evaluation or an unmeasured base leaves it pending; until the phase
+    measures it, ``until_measured`` says whether its absence blocks or is reported."""
     validate_readiness(declaration)
     evals = [e for e in _jsonl(Path(direct_stage) / 'eval.jsonl') if _number(e.get('ce'))]
     criteria = {}
@@ -179,7 +202,7 @@ def readiness(declaration, direct_stage):
     measured = (evals[-1].get('task_success') or {}) if evals else {}
     candidate = _task_eval_candidate(direct_stage)
     if candidate is not None:
-        criteria['task_success'] = (candidate if candidate['status'] == 'pending' else
+        criteria['task_success'] = (candidate if candidate.get('status') == 'pending' else
                                     {**candidate, 'status': 'pass' if candidate['rate'] >= candidate['base_rate'] +
                                      task['min_vs_base'] else 'fail', 'min_vs_base': task['min_vs_base']})
     elif _number(measured.get('rate')) and _number(measured.get('base_rate')):

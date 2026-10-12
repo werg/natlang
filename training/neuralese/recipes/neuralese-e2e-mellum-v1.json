@@ -43,7 +43,7 @@
      "gate": "required",
      "weight": 0.5,
      "ramp": {
-      "start": 0.15,
+      "start": 0.25,
       "end": 0.3
      },
      "modules": {
