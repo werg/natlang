@@ -12,6 +12,8 @@ Read `python3 scripts/coord.py inbox --ack` and `python3 scripts/coord.py status
 
 - Storage: removed20 discarded October5 recurrence output directories /14,547,466,597 bytes; reusable inputs and stress cohorts retained. Root filesystem now39GiB free. No active lineage or registered training input was removed.
 
+- Runtime fix: Pyodide could consume a one-shot interrupt while `deque(cycle([1]), maxlen=0)` continued in `_cycle`. Inspector confirmed signal handling enabled / cleared slot, and a second interrupt immediately stopped it. The watchdog now reasserts after its existing deadline until termination; consumed-slot regression and five complete8-test repetitions pass. The interrupted full TypeScript check was tainted by diagnosis, so rerun after rebuilding; do not report it as passing. No deadline was added or lengthened.
+
 ## Shared code and next work
 
 - Use the canonical checkout on each machine and synchronize through `origin/main`. Pop owns Pop jobs; DGX owns DGX jobs.

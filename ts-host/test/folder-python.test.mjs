@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Worker } from 'node:worker_threads';
+import { WATCHDOG_SCRIPT } from '../dist/native/folder-python.js';
 import { Folder, runFolderPython } from '../dist/index.js';
 
 test('Python reads and writes the folder through pathlib and sqlite', async () => {
@@ -62,4 +64,22 @@ test('Python refuses a cell that leaves a writable file open', async () => {
   const folder = Folder.fromFiles({});
   await assert.rejects(runFolderPython(folder, 'f = open("unfinished.txt", "w"); f.write("draft")'),
     /close the Python file or sqlite connection/);
+});
+
+
+test('the watchdog reasserts a consumed interrupt until termination', async () => {
+  const buffer = new SharedArrayBuffer(4);
+  const flag = new Int32Array(buffer);
+  const worker = new Worker(`const { workerData } = require('node:worker_threads');
+    const { buffer, ms } = workerData; ${WATCHDOG_SCRIPT}`, { eval: true, workerData: { buffer, ms: 10 } });
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      Atomics.store(flag, 0, 0);
+      // Poll from another event loop, just as Pyodide consumes its signal slot.
+      const deadline = Date.now() + 1000;
+      while (Atomics.load(flag, 0) !== 2 && Date.now() < deadline)
+        await new Promise(resolve => setTimeout(resolve, 5));
+      assert.equal(Atomics.load(flag, 0), 2, `interrupt request ${attempt}`);
+    }
+  } finally { await worker.terminate(); }
 });

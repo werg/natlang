@@ -31,7 +31,10 @@ async def __natlang_run(source, namespace):
  * installs one on worker_threads.
  */
 export type PythonWatchdog = (buffer: SharedArrayBuffer, ms: number) => { terminate(): Promise<unknown> | unknown } | undefined;
-export const WATCHDOG_SCRIPT = 'const flag = new Int32Array(buffer); setTimeout(() => Atomics.store(flag, 0, 2), ms)';
+// Pyodide consumes and clears the signal slot. Keep requesting interruption
+// after the deadline until the caller terminates this watchdog; a consumed
+// signal must not leave a still-running C iterator without further requests.
+export const WATCHDOG_SCRIPT = 'const flag = new Int32Array(buffer); setTimeout(() => { const interrupt = () => Atomics.store(flag, 0, 2); interrupt(); setInterval(interrupt, Math.max(1, Math.min(25, ms))); }, ms)';
 let startWatchdog: PythonWatchdog = (buffer, ms) => {
   if (typeof Worker === 'undefined') return undefined;
   const workerUrl = URL.createObjectURL(new Blob([`onmessage = ({ data }) => { const { buffer, ms } = data; ${WATCHDOG_SCRIPT}; };`],
