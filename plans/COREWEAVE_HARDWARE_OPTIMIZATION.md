@@ -212,6 +212,8 @@ the GB10).**
   2. CUTLASS 4.6's sm_120 ptr-array grouped GEMM (FP8 tensor/token scaled) through a small extension, only if (1)
      shows the loop is launch-bound;
   3. a Triton grouped wgrad retuned for 188 SMs (it lost 2–5× on the GB10, which may not hold here).
+  4. `triton_kernels` (OpenAI's ragged MoE matmul, shipped in NGC 26.09, the kernel vLLM uses for gpt-oss) as the
+     grouped GEMM for the BF16 wgrad: Triton, so it runs on sm_120. Measure it beside (1)–(3) before writing our own.
 - **Attention GEMMs: stay BF16.**
   - TE FP8 linears exclude QAT (direct_sft refuses `te-fp8` with a quantization component, and every recipe has QAT).
   - Attention projections are ~0.6 s of the expected update.
@@ -362,16 +364,22 @@ Decide after the bench, with the placement program.
 
 ## 4. The image
 
-- **Base:** NGC `pytorch:26.09-py3` (multi-arch; amd64 for CoreWeave). Measured on our arm64 copy: PyTorch 2.14.0a0,
-  CUDA 13.4, Triton 3.8.0, TE 2.19, transformers 5.19.0, arch list `sm_80 sm_86 sm_90 sm_100 sm_110 sm_120
-  compute_120`.
+- **Base:** NGC `pytorch:26.09-py3` (multi-arch; amd64 for CoreWeave). Measured on our arm64 copy (`pip freeze`,
+  2026-10-12, ledger unit cwhw-freeze2):
+  - PyTorch 2.14.0a0+b2c75dd062.nv26.09, CUDA 13.4, Triton 3.8.0, TE (source build, 2.19), torchao 0.19.0;
+  - flash_attn 2.8.3 and flash-attn-4 4.0.0b24, and OpenAI's `triton_kernels` 1.0.0 (ragged/grouped MoE matmul);
+  - our requirements: transformers 5.19.0, peft 0.21.2, kernels 0.17.2, accelerate 1.15.0, safetensors 0.8.0,
+    pytest 9.1.1, py-spy 0.4.2, tree-sitter 0.26.0;
+  - arch flags `sm_80 sm_86 sm_90 sm_100 sm_110 sm_120 compute_120`. The local image predates `boto3>=1.42.5` in
+    requirements; the next build or the bootstrap adds it.
 - **It covers everything the training stack needs on sm_120:**
   - Triton for every custom kernel and FlexAttention;
   - SDPA flash and cuDNN;
   - cuBLASLt FP8 and block-scaled formats;
   - TE FP8.
-- **Nothing to add:** no FlashAttention wheel (FA3 is Hopper-only, FA4-sm120 is FA2-speed, SDPA covers it), no
-  torchao, no DeepGEMM.
+- **Nothing to add.** NGC already ships flash_attn 2.8.3, the FA4 beta and torchao, and we use none of them on the
+  hot path: FA3 is Hopper-only, FA4-sm120 runs at FA2 speed, and SDPA covers attention. DeepGEMM does not run on
+  sm_120. The probe records each version.
 - **Built (`training/neuralese/docker/Dockerfile`, shared with DGX and Pop; one dependency list):**
   - `TORCH_CUDA_ARCH_LIST="8.9 12.0 12.1"` for any JIT extension build;
   - a build-time check that the base's PyTorch carries `sm_120` code (`torch._C._cuda_getArchFlags`, no GPU needed);

@@ -106,7 +106,8 @@ def probe() -> dict:
                         'l2_mb': getattr(props, 'L2_cache_size', 0) / 2 ** 20}
     versions = {'python': sys.version.split()[0], 'torch': torch.__version__, 'cuda': torch.version.cuda,
                 'cudnn': torch.backends.cudnn.version(), 'arch_list': torch.cuda.get_arch_list()}
-    for module in ('triton', 'transformer_engine', 'torchao', 'flash_attn', 'transformers', 'vllm', 'flashinfer'):
+    for module in ('triton', 'triton_kernels', 'transformer_engine', 'torchao', 'flash_attn', 'transformers', 'vllm',
+                   'flashinfer'):
         try:
             versions[module] = getattr(__import__(module), '__version__', 'present')
         except Exception as exc:  # absent or broken: record which
