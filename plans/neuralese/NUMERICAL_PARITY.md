@@ -200,3 +200,28 @@ kernel is integrated in the shared loader, with the invalid Hub revision removed
 It remains disabled pending same-input CUDA forward/backward/update fidelity and
 actual throughput qualification on Pop. Further precision reductions require a
 supported implementation and evidence of a real training throughput benefit.
+
+### Actual update and FP8 checks
+
+Five matched, uncheckpointed BF16 updates from the exact V16 checkpoint used
+context/target sizes 1023/256, 1027/4, 416/161, 1791/256 and 1818/27.
+After the first cold update, median time was 0.17937 seconds with Torch convolution
+and 0.17380 seconds with the compiled kernel. This small difference does not
+establish a sustained training throughput gain. The apparent large first-update
+speedup was dominated by startup. Both modes had the same initial loss; held CE
+after five updates was 3.93810 versus 3.93852, and both drift guards stayed clear.
+Maximum incremental allocation was about 1.906 GiB in both modes; run-wide total
+allocation peaks, including setup/evaluation, were 3.664 and 4.743 GiB. Do not
+report incremental allocation as total VRAM. Comparison SHA:
+`905bab0168d3d828a078fb4dcd41a75688a26f0d940a03907aca93e754a03dc8`.
+
+The isolated feed-forward FP8 CurrentScaling check used the exact V16 first
+layer's actual 1024→4608→1024 geometry, original BF16 parameter objects, unchanged
+SiLU gate and shared LionSR update. Transformer Engine 2.19 was already installed
+in the pinned image. Five warm measurements gave 5.585→4.825 ms at 1024 tokens and
+27.453→19.671 ms at 6144 tokens (about 14% and 28% faster). Output relative L2 was
+about 0.043; gradient relative L2 was 0.073–0.088 with cosine 0.996–0.997.
+Memory was unchanged at 1024 and slightly higher at 6144. These are one-layer
+results, not whole-model speed or quality qualification. Shared direct-stage
+integration and full-model checks are next; serving remains BF16. Probe SHA:
+`f24014803970fc30823919bab3ea0c1e1ceaf11c56ed6483e09b3b5035dd4aa3`.
