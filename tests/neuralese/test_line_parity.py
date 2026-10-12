@@ -35,7 +35,7 @@ def test_unequal_supervision_fails():
 def test_direct_phases_are_compared_stage_by_stage_in_epochs():
     kind, config = line_parity.effective_config({'recipe': 'neuralese-direct-mellum-v4'})
     assert config['stages.direct_warmup.derived.supervision'] == '0.5 epochs'
-    assert config['stages.direct_sft.derived.supervision'] == '2.0 epochs'
+    assert config['stages.direct_sft.derived.supervision'] == '1.0 epochs'
     assert config['stages.direct_trajectory.derived.supervision'] == '1.0 epochs'
     assert 'stages.direct_sft.parameters.steps' not in config
 
