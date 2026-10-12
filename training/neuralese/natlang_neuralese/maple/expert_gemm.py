@@ -141,17 +141,40 @@ def grouped_fp8(aq, sa, rows, bq, sb, table: BlockTable, out_rows: int) -> torch
     return out
 
 
+class GradQuant:
+    """Hand-off of a projection's output-gradient quantization to the kernel that writes that gradient (the combine
+    backward for ``down``, the SwiGLU backward for ``gate_up``): the projection's forward publishes its weight row
+    scales and group ends; the producing backward quantizes while it writes the gradient (``give``); the projection's
+    backward takes the result if it is for the very gradient it received, else quantizes itself."""
+
+    def __init__(self):
+        self.col_scale = self.ends = None
+        self._result = None
+
+    def give(self, grad, q, scale):
+        self._result = (grad.data_ptr(), tuple(grad.shape), q, scale)
+
+    def take(self, grad):
+        result, self._result = self._result, None
+        if result is None or result[0] != grad.data_ptr() or result[1] != tuple(grad.shape):
+            return None
+        return result[2], result[3]
+
+
 class Fp8ExpertProjection(torch.autograd.Function):
     """Routed rows (``rows``: source row of each expert-sorted row, or None when ``a`` is already in that order)
     times each expert's ``weight`` [E, N, K]ᵀ. Backward: the input gradient through FP8 (summed back per source row
     via ``slot_of`` when ``rows`` is given), the weight gradient in BF16 in the parameter layout."""
 
     @staticmethod
-    def forward(ctx, a, rows, slot_of, top_k, weight, table, offsets):
+    def forward(ctx, a, rows, slot_of, top_k, weight, table, offsets, hand=None):
         E, N, K = weight.shape
         aq, sa = rowwise_quant(a)
         wq, sw = rowwise_quant(weight.reshape(E * N, K))
         wq, sw = wq.view(E, N, K), sw.view(E, N)
+        if hand is not None:
+            hand.col_scale, hand.ends = sw, table.ends
+        ctx.hand = hand
         out_rows = rows.numel() if rows is not None else a.shape[0]
         # The input gradient reuses these FP8 weights (half the bytes of the BF16 latent, kept for one layer).
         ctx.save_for_backward(a, rows, slot_of, weight, offsets, wq, sw)
@@ -165,7 +188,8 @@ class Fp8ExpertProjection(torch.autograd.Function):
         grad_a = grad_weight = None
         if ctx.needs_input_grad[0]:
             # grad @ W_e = (grad * sw[e]) @ wq[e]: the forward's row scales fold into the gradient's quantization.
-            gq, sg = scaled_rowwise_quant(grad, sw, ctx.table.ends)
+            given = ctx.hand.take(grad) if ctx.hand is not None else None
+            gq, sg = given if given is not None else scaled_rowwise_quant(grad, sw, ctx.table.ends)
             ones = torch.ones(1, wq.shape[2], device=wq.device, dtype=torch.float32).expand(wq.shape[0], -1)
             grad_rows = grouped_fp8(gq, sg, None, wq.transpose(1, 2), ones, ctx.table, grad.shape[0])
             if rows is None:
@@ -179,7 +203,7 @@ class Fp8ExpertProjection(torch.autograd.Function):
         if ctx.needs_input_grad[4]:
             # BF16 grouped GEMM in the parameter layout (a Triton reduction kernel measured 2-5x slower here).
             grad_weight = torch._grouped_mm(grad.t(), a[rows] if rows is not None else a, offs=offsets)
-        return grad_a, None, None, None, grad_weight, None, None
+        return grad_a, None, None, None, grad_weight, None, None, None
 
 
 def fp8_dense_experts(x, index, weights, gate_up, down, clamp):
@@ -194,14 +218,18 @@ def fp8_dense_experts(x, index, weights, gate_up, down, clamp):
     offsets = torch.searchsorted(flat[order], torch.arange(experts, device=flat.device), right=True).to(torch.int32)
     table = BlockTable(offsets, flat.numel())
     source = (order // top_k).contiguous()
-    hidden = Fp8ExpertProjection.apply(x.contiguous(), source, slot_of, top_k, gate_up, table, offsets)
-    if clamp is None and os.environ.get('NATLANG_FUSED_SWIGLU', '1') != '0':
+    fused = clamp is None and os.environ.get('NATLANG_FUSED_SWIGLU', '1') != '0'
+    # The output gradients' FP8 quantization fused into the kernels that write them (``GradQuant``).
+    handoff = fused and os.environ.get('NATLANG_FUSED_GRAD_QUANT', '1') != '0'
+    hand_up, hand_down = (GradQuant(), GradQuant()) if handoff else (None, None)
+    hidden = Fp8ExpertProjection.apply(x.contiguous(), source, slot_of, top_k, gate_up, table, offsets, hand_up)
+    if fused:
         from .moe_glue import swiglu
-        act = swiglu(hidden, ff)
+        act = swiglu(hidden, ff, hand_up)
     else:
         gate, up = hidden[:, :ff], hidden[:, ff:]
         if clamp is not None:
             gate, up = gate.clamp(max=clamp), up.clamp(-clamp, clamp)
         act = (F.silu(gate) * up).contiguous()
-    out = Fp8ExpertProjection.apply(act, None, None, top_k, down, table, offsets)
-    return Combine.apply(out, slot_of, weights)
+    out = Fp8ExpertProjection.apply(act, None, None, top_k, down, table, offsets, hand_down)
+    return Combine.apply(out, slot_of, weights, hand_down)

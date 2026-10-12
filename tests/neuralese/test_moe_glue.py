@@ -121,3 +121,29 @@ def test_fused_swiglu_matches_eager():
         diff = (a.float() - b.float()).abs()
         ulp = b.float().abs().clamp_min(1e-30) * 2 ** -7
         assert bool((diff <= ulp).all()) and float((diff > 0).float().mean()) < 1e-3, (name, float(diff.max()))
+
+
+@pytest.mark.parametrize('tokens', [5, 700])
+def test_fused_gradient_quantization_is_bit_identical(monkeypatch, tokens):
+    """maple/expert_gemm.GradQuant: the combine and SwiGLU backwards quantize the gradients they write for the FP8
+    input gradients; the result equals the projections quantizing them themselves (NATLANG_FUSED_GRAD_QUANT=0)."""
+    from natlang_neuralese.maple.model import DENSE_MOE
+    torch.manual_seed(tokens)
+    experts, top_k, width, ff = 8, 4, 256, 128
+    x = torch.randn(tokens, width, device='cuda').bfloat16()
+    logits = torch.randn(tokens, top_k, device='cuda')
+    index = torch.stack([torch.randperm(experts - 1, device='cuda')[:top_k] for _ in range(tokens)])
+    gate_up = (torch.randn(experts, 2 * ff, width, device='cuda') * 0.05).bfloat16()
+    down = (torch.randn(experts, width, ff, device='cuda') * 0.05).bfloat16()
+    monkeypatch.setitem(DENSE_MOE, 'fp8', 'grouped')
+    monkeypatch.setenv('NATLANG_FUSED_GRAD_QUANT', '0')
+    separate = _run(monkeypatch, True, x, index, logits, gate_up, down)
+    monkeypatch.setenv('NATLANG_FUSED_GRAD_QUANT', '1')
+    from natlang_neuralese.maple import expert_gemm
+    calls = []
+    original = expert_gemm.scaled_rowwise_quant
+    monkeypatch.setattr(expert_gemm, 'scaled_rowwise_quant', lambda *a: calls.append(1) or original(*a))
+    fused = _run(monkeypatch, True, x, index, logits, gate_up, down)
+    assert not calls  # both projections took the handed-off quantization
+    for name, a, b in zip(('out', 'grad_x', 'grad_weights', 'grad_gate_up', 'grad_down'), fused, separate):
+        assert torch.equal(a, b), (name, float((a - b).abs().max()))

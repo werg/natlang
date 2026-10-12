@@ -59,6 +59,52 @@ def _combine_backward(g_ptr, out_ptr, slot_ptr, w_ptr, grad_out_ptr, grad_w_ptr,
 
 
 @triton.jit
+def _expert_of(end_ptr, row, E):
+    """The expert of expert-sorted row ``row`` from the int32 group ends (at most 128 experts)."""
+    ends = tl.load(end_ptr + tl.arange(0, 128), mask=tl.arange(0, 128) < E, other=2 ** 31 - 1)
+    return tl.sum((ends <= row).to(tl.int32), axis=0).to(tl.int64)
+
+
+@triton.jit
+def _combine_backward_quant(g_ptr, out_ptr, slot_ptr, w_ptr, grad_out_ptr, grad_w_ptr, cs_ptr, end_ptr, q_ptr, s_ptr,
+                            D, E, TOP_K: tl.constexpr, BLOCK: tl.constexpr):
+    """``_combine_backward`` plus each written row's FP8 quantization for the down projection's input gradient
+    (``expert_gemm.scaled_rowwise_quant`` of the row times its expert's column scales), without re-reading the rows."""
+    t = tl.program_id(0).to(tl.int64)
+    ks = tl.arange(0, TOP_K)
+    dots = tl.zeros((TOP_K,), dtype=tl.float32)
+    amax = tl.zeros((TOP_K,), dtype=tl.float32)
+    for d0 in range(0, D, BLOCK):
+        offs = d0 + tl.arange(0, BLOCK)
+        mask = offs < D
+        g = tl.load(g_ptr + t * D + offs, mask=mask, other=0.0).to(tl.float32)
+        for k in tl.static_range(TOP_K):
+            slot = tl.load(slot_ptr + t * TOP_K + k).to(tl.int64)
+            w = tl.load(w_ptr + t * TOP_K + k)
+            row = tl.load(out_ptr + slot * D + offs, mask=mask, other=0.0).to(tl.float32)
+            dots += tl.where(ks == k, tl.sum(g * row, axis=0), 0.0)
+            value = (g * w).to(grad_out_ptr.dtype.element_ty)
+            tl.store(grad_out_ptr + slot * D + offs, value, mask=mask)
+            cs = tl.load(cs_ptr + _expert_of(end_ptr, slot, E) * D + offs, mask=mask, other=0.0)
+            amax = tl.maximum(amax, tl.where(ks == k, tl.max(tl.abs(value.to(tl.float32) * cs), axis=0), 0.0))
+    tl.store(grad_w_ptr + t * TOP_K + ks, dots)
+    scales = tl.maximum(amax, 1e-30) / 448.0
+    for k in tl.static_range(TOP_K):
+        slot = tl.load(slot_ptr + t * TOP_K + k).to(tl.int64)
+        w = tl.load(w_ptr + t * TOP_K + k)
+        expert = _expert_of(end_ptr, slot, E)
+        scale = tl.sum(tl.where(ks == k, scales, 0.0), axis=0)
+        for d0 in range(0, D, BLOCK):
+            offs = d0 + tl.arange(0, BLOCK)
+            mask = offs < D
+            g = tl.load(g_ptr + t * D + offs, mask=mask, other=0.0).to(tl.float32)
+            value = (g * w).to(grad_out_ptr.dtype.element_ty).to(tl.float32)
+            cs = tl.load(cs_ptr + expert * D + offs, mask=mask, other=0.0)
+            tl.store(q_ptr + slot * D + offs, (value * cs / scale).to(q_ptr.dtype.element_ty), mask=mask)
+        tl.store(s_ptr + slot, scale)
+
+
+@triton.jit
 def _gather_backward(grad_rows_ptr, slot_ptr, grad_x_ptr, D, TOP_K: tl.constexpr, BLOCK: tl.constexpr):
     t = tl.program_id(0).to(tl.int64)
     for d0 in range(0, D, BLOCK):
@@ -91,7 +137,7 @@ class GatherRows(torch.autograd.Function):
 
 class Combine(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, out, slot_of, weights):
+    def forward(ctx, out, slot_of, weights, hand=None):
         out = out.contiguous()
         tokens, top_k = weights.shape
         D = out.shape[-1]
@@ -102,6 +148,7 @@ class Combine(torch.autograd.Function):
                                          enable_fp_fusion=False)  # the eager product, then the sum
         ctx.save_for_backward(out, slot_of, w)
         ctx.weights_dtype = weights.dtype
+        ctx.hand = hand
         return y
 
     @staticmethod
@@ -112,9 +159,18 @@ class Combine(torch.autograd.Function):
         g = grad.float().contiguous()
         grad_out = torch.empty_like(out)
         grad_w = torch.empty(tokens, top_k, device=out.device, dtype=torch.float32)
-        if tokens:
+        hand = ctx.hand
+        if hand is not None and hand.col_scale is not None:  # quantize the rows for the down projection's dgrad
+            from .fp8_experts import FP8
+            q = torch.empty_like(out, dtype=FP8)
+            scale = torch.empty(out.shape[0], device=out.device, dtype=torch.float32)
+            if tokens:
+                _combine_backward_quant[(tokens,)](g, out, slot_of, w, grad_out, grad_w, hand.col_scale, hand.ends,
+                                                   q, scale, D, hand.col_scale.shape[0], TOP_K=top_k, BLOCK=BLOCK)
+            hand.give(grad_out, q, scale)
+        elif tokens:
             _combine_backward[(tokens,)](g, out, slot_of, w, grad_out, grad_w, D, TOP_K=top_k, BLOCK=BLOCK)
-        return grad_out, None, grad_w.to(ctx.weights_dtype)
+        return grad_out, None, grad_w.to(ctx.weights_dtype), None
 
 
 def routing_permutation(index: torch.Tensor):
@@ -139,7 +195,8 @@ def _swiglu_forward(h_ptr, out_ptr, F, BLOCK: tl.constexpr):
 
 
 @triton.jit
-def _swiglu_backward(grad_ptr, h_ptr, out_ptr, F, BLOCK: tl.constexpr):
+def _swiglu_backward(grad_ptr, h_ptr, out_ptr, cs_ptr, end_ptr, q_ptr, s_ptr, F, E, QUANT: tl.constexpr,
+                     BLOCK: tl.constexpr):
     row = tl.program_id(0).to(tl.int64)
     offs = tl.arange(0, BLOCK)
     valid = offs < F
@@ -151,8 +208,19 @@ def _swiglu_backward(grad_ptr, h_ptr, out_ptr, F, BLOCK: tl.constexpr):
     grad_up = (grad * silu).to(tl.bfloat16)  # mul backward: one rounding each
     grad_silu = (grad * u).to(tl.bfloat16).to(tl.float32)
     grad_gate = grad_silu * (sig * (1.0 + g * (1.0 - sig)))  # silu_backward in FP32, one rounding
-    tl.store(out_ptr + row * 2 * F + offs, grad_gate.to(tl.bfloat16), mask=valid)
+    grad_gate = grad_gate.to(tl.bfloat16)
+    tl.store(out_ptr + row * 2 * F + offs, grad_gate, mask=valid)
     tl.store(out_ptr + row * 2 * F + F + offs, grad_up, mask=valid)
+    if QUANT:  # the gate_up projection's dgrad operand: (row * its expert's column scales) in FP8, per-row scale
+        expert = _expert_of(end_ptr, row, E)
+        cs_gate = tl.load(cs_ptr + expert * 2 * F + offs, mask=valid, other=0.0)
+        cs_up = tl.load(cs_ptr + expert * 2 * F + F + offs, mask=valid, other=0.0)
+        x_gate = grad_gate.to(tl.float32) * cs_gate
+        x_up = grad_up.to(tl.float32) * cs_up
+        scale = tl.maximum(tl.maximum(tl.max(tl.abs(x_gate), axis=0), tl.max(tl.abs(x_up), axis=0)), 1e-30) / 448.0
+        tl.store(q_ptr + row * 2 * F + offs, (x_gate / scale).to(q_ptr.dtype.element_ty), mask=valid)
+        tl.store(q_ptr + row * 2 * F + F + offs, (x_up / scale).to(q_ptr.dtype.element_ty), mask=valid)
+        tl.store(s_ptr + row, scale)
 
 
 class SwiGLU(torch.autograd.Function):
@@ -162,14 +230,14 @@ class SwiGLU(torch.autograd.Function):
     backward each product rounded, silu_backward in FP32)."""
 
     @staticmethod
-    def forward(ctx, hidden, ff):
+    def forward(ctx, hidden, ff, hand=None):
         hidden = hidden.contiguous()
         out = torch.empty(hidden.shape[0], ff, device=hidden.device, dtype=hidden.dtype)
         if hidden.shape[0]:
             _swiglu_forward[(hidden.shape[0],)](hidden, out, ff, BLOCK=triton.next_power_of_2(ff),
                                                 enable_fp_fusion=False)
         ctx.save_for_backward(hidden)
-        ctx.ff = ff
+        ctx.ff, ctx.hand = ff, hand
         return out
 
     @staticmethod
@@ -177,11 +245,25 @@ class SwiGLU(torch.autograd.Function):
         (hidden,) = ctx.saved_tensors
         grad = grad.contiguous()
         out = torch.empty_like(hidden)
+        hand = ctx.hand
+        quant = hand is not None and hand.col_scale is not None
+        if quant:
+            from .fp8_experts import FP8
+            q = torch.empty_like(hidden, dtype=FP8)
+            scale = torch.empty(hidden.shape[0], device=hidden.device, dtype=torch.float32)
+            cs, ends, experts = hand.col_scale, hand.ends, hand.col_scale.shape[0]
+        else:
+            q = scale = cs = ends = out
+            experts = 0
         if hidden.shape[0]:
-            _swiglu_backward[(hidden.shape[0],)](grad, hidden, out, ctx.ff, BLOCK=triton.next_power_of_2(ctx.ff),
-                                                 enable_fp_fusion=False)
-        return out, None
+            _swiglu_backward[(hidden.shape[0],)](grad, hidden, out, cs, ends, q, scale, ctx.ff, experts, QUANT=quant,
+                                                 BLOCK=triton.next_power_of_2(ctx.ff), enable_fp_fusion=False)
+        if quant:
+            hand.give(out, q, scale)
+        return out, None, None
 
 
-def swiglu(hidden: torch.Tensor, ff: int) -> torch.Tensor:
-    return SwiGLU.apply(hidden, ff)
+def swiglu(hidden: torch.Tensor, ff: int, hand=None) -> torch.Tensor:
+    """``hand``: an ``expert_gemm.GradQuant`` of the projection that produced ``hidden``; the backward then also
+    quantizes the gradient it writes for that projection's input gradient."""
+    return SwiGLU.apply(hidden, ff, hand)
