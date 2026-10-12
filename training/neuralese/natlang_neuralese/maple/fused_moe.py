@@ -357,11 +357,17 @@ def dense_grouped_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.T
     # Group ends from the sorted expert ids.
     offsets = torch.searchsorted(flat[order], torch.arange(experts, device=flat.device), right=True).to(torch.int32)
     rows = GatherRows.apply(x, order // top_k, slot_of, top_k) if glue else x[order // top_k]
-    hidden = torch._grouped_mm(rows, gate_up.transpose(-2, -1), offs=offsets)
+    if glue:  # maple/fp8_experts.py: weight grads in parameter layout; NATLANG_MOE_FP8=1: FP8 forward and dgrad
+        from .fp8_experts import GroupedLinear
+        fp8 = os.environ.get("NATLANG_MOE_FP8", "0") != "0"
+        project = lambda a, w: GroupedLinear.apply(a, w, offsets, fp8)
+    else:
+        project = lambda a, w: torch._grouped_mm(a, w.transpose(-2, -1), offs=offsets)
+    hidden = project(rows, gate_up)
     gate, up = hidden[:, :ff], hidden[:, ff:]
     if clamp is not None:
         gate, up = gate.clamp(max=clamp), up.clamp(-clamp, clamp)
-    out = torch._grouped_mm(F.silu(gate) * up, down.transpose(-2, -1), offs=offsets)
+    out = project(F.silu(gate) * up, down)
     if glue:
         return Combine.apply(out, slot_of, weights)
     out = out[torch.argsort(order)]  # back to (token, slot) order
