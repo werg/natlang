@@ -264,6 +264,7 @@ def export_checkpoint(args: argparse.Namespace) -> dict[str, Any]:
     artifact = export_direct_checkpoint(
         args.checkpoint, args.output, base_snapshot=snapshot, base_source_proof=proof,
         backbone_adapter=LFM2_ADAPTER,
+        serving_prompt_rendering=args.serving_prompt_rendering,
     )
     if sha256_file_hex(args.checkpoint) != checkpoint_sha:
         raise ValueError("source checkpoint changed during strict export")
@@ -278,6 +279,8 @@ def main(argv: list[str] | None = None) -> None:
     exporter.add_argument("--output", type=Path, required=True)
     exporter.add_argument("--base-snapshot", type=Path, required=True)
     exporter.add_argument("--launch-receipt", type=Path, required=True)
+    exporter.add_argument("--serving-prompt-rendering", choices=("full", "program-header"), default=None,
+                          help="explicit serving policy; required when checkpoint text inputs mix rendering modes")
     args = parser.parse_args(argv)
     if args.command == "export":
         print(json.dumps(export_checkpoint(args), indent=2, ensure_ascii=False))

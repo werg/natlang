@@ -230,7 +230,8 @@ def collect_existing(plan: dict, packet: Path, queue_path: Path, journal_path: P
 
 
 def export_in_container(checkpoint: Path, artifact: Path, base_snapshot: Path,
-                        launch_receipt: Path, image: str, log_path: Path) -> None:
+                        launch_receipt: Path, image: str, log_path: Path,
+                        serving_prompt_rendering: str) -> None:
     container_name = "natlang-direct-task-export-" + hashlib.sha256(
         f"{checkpoint.resolve()}:{artifact.resolve()}".encode()).hexdigest()[:12]
     command = [
@@ -245,6 +246,7 @@ def export_in_container(checkpoint: Path, artifact: Path, base_snapshot: Path,
         "-w", str(ROOT), image, "python", "-m", "natlang_neuralese.eval.task_packet", "export",
         "--checkpoint", str(checkpoint), "--output", str(artifact),
         "--base-snapshot", str(base_snapshot), "--launch-receipt", str(launch_receipt),
+        "--serving-prompt-rendering", serving_prompt_rendering,
     ]
     log_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -492,7 +494,7 @@ def run_candidate(args: argparse.Namespace) -> dict:
 
     artifact = run_dir / "direct-artifact"
     export_in_container(copied_checkpoint, artifact, base_snapshot, launch_snapshot, args.image,
-                        run_dir / "direct-export.log")
+                        run_dir / "direct-export.log", plan["prompt_rendering"])
     if available_memory_bytes() < 1024 ** 3:
         raise RuntimeError("host available RAM fell below 1 GiB after strict checkpoint export")
     manifest_path = artifact / "manifest.json"

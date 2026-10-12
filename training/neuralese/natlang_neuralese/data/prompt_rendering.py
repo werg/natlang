@@ -37,11 +37,12 @@ def prompt_rendering_identity(mode: str) -> dict:
     return identity
 
 
-def checkpoint_prompt_rendering(identity: dict) -> tuple[str, dict]:
+def checkpoint_prompt_rendering(identity: dict, *, serving_mode: str | None = None) -> tuple[str, dict]:
     """Resolve serving mode from the exact direct-SFT text input pinned by checkpoint identity.
 
-    New rendered rows declare their mode. Older inputs without a declaration retain the historical full prompt.
-    A declared checkpoint option, when present, must agree with the rows.
+    New rendered rows declare their mode. Older inputs without a declaration historically use the full prompt.
+    Mixed sources require an explicit serving policy; the returned proof keeps declared and undeclared rows
+    separate so the policy choice does not rewrite the training source's provenance.
     """
     import hashlib
     import json
@@ -49,14 +50,18 @@ def checkpoint_prompt_rendering(identity: dict) -> tuple[str, dict]:
 
     options = identity.get("options") or {}
     inputs = identity.get("inputs") or {}
+    if serving_mode is not None and serving_mode not in PROMPT_RENDERINGS:
+        raise ValueError(f"unsupported explicit serving prompt_rendering {serving_mode!r}")
     text_value = options.get("text_data")
     if not isinstance(text_value, str) or not text_value:
         # A direct stage sourced from records/pieces rather than prepared text uses the legacy full prompt.
-        mode = options.get("prompt_rendering", "full")
+        mode = serving_mode or options.get("prompt_rendering", "full")
         if mode not in PROMPT_RENDERINGS:
             raise ValueError(f"checkpoint declares unsupported prompt_rendering {mode!r}")
         return mode, {"schema": "natlang.prompt-rendering-source-proof/1", "source": "legacy-no-text-data",
-                      "mode": mode, "row_count": None, "mode_counts": {mode: None},
+                      "mode": mode, "mode_selection": "explicit-serving-policy" if serving_mode else "legacy-default",
+                      "row_count": None, "mode_counts": {mode: None}, "declared_mode_counts": {},
+                      "undeclared_mode_rows": None,
                       "input_sha256": None}
     path = Path(text_value).resolve(strict=True)
     declared_sha = inputs.get(str(path))
@@ -68,6 +73,10 @@ def checkpoint_prompt_rendering(identity: dict) -> tuple[str, dict]:
         raise ValueError("checkpoint identity does not bind its text_data input")
     digest = hashlib.sha256()
     counts = {}
+    declared_counts = {}
+    system_mode_counts = {}
+    rows_with_tool_schemas = 0
+    undeclared_rows_with_tool_schemas = 0
     row_count = 0
     with path.open("rb") as stream:
         for raw in stream:
@@ -77,23 +86,45 @@ def checkpoint_prompt_rendering(identity: dict) -> tuple[str, dict]:
             row = json.loads(raw)
             row_count += 1
             mode = row.get("prompt_rendering")
-            if mode is None:
+            if mode is not None:
+                if mode not in PROMPT_RENDERINGS:
+                    raise ValueError(f"text_data row {row_count} declares unsupported prompt_rendering {mode!r}")
+                declared_counts[mode] = declared_counts.get(mode, 0) + 1
+            else:
                 mode = "full"
             if mode not in PROMPT_RENDERINGS:
                 raise ValueError(f"text_data row {row_count} declares unsupported prompt_rendering {mode!r}")
             counts[mode] = counts.get(mode, 0) + 1
+            system_mode = row.get("system_prompt_mode")
+            system_mode_key = system_mode if isinstance(system_mode, str) else "absent"
+            system_mode_counts[system_mode_key] = system_mode_counts.get(system_mode_key, 0) + 1
+            if "List of tools:" in str(row.get("text", "")):
+                rows_with_tool_schemas += 1
+                if row.get("prompt_rendering") is None:
+                    undeclared_rows_with_tool_schemas += 1
     actual_sha = digest.hexdigest()
     if actual_sha != declared_sha:
         raise ValueError("checkpoint text_data changed since training")
-    if len(counts) != 1:
-        raise ValueError(f"checkpoint text_data mixes prompt rendering modes: {counts}")
-    mode = next(iter(counts), "full")
+    mixed = len(counts) != 1
+    if mixed and serving_mode is None:
+        raise ValueError(f"checkpoint text_data mixes prompt rendering modes and has no explicit serving policy: {counts}")
+    source_mode = next(iter(counts), "full") if not mixed else None
+    mode = serving_mode or source_mode or "full"
+    if not mixed and serving_mode is not None and serving_mode != source_mode:
+        raise ValueError("explicit serving prompt_rendering differs from homogeneous text_data rows")
     option_mode = options.get("prompt_rendering")
     if option_mode is not None and option_mode != mode:
-        raise ValueError("checkpoint prompt_rendering option differs from its exact text_data rows")
+        raise ValueError("checkpoint prompt_rendering option differs from the selected serving mode")
     proof = {"schema": "natlang.prompt-rendering-source-proof/1", "source": "checkpoint-identity-text-data",
              "path": str(path), "input_sha256": declared_sha, "row_count": row_count,
-             "mode_counts": counts, "mode": mode}
+             "mode_counts": counts, "declared_mode_counts": declared_counts,
+             "undeclared_mode_rows": row_count - sum(declared_counts.values()),
+             "system_prompt_mode_counts": system_mode_counts,
+             "rows_with_tool_schema_marker": rows_with_tool_schemas,
+             "undeclared_rows_with_tool_schema_marker": undeclared_rows_with_tool_schemas,
+             "mode": mode,
+             "mode_selection": ("explicit-serving-policy-on-mixed-training-input" if mixed else
+                                "explicit-serving-policy" if serving_mode else "homogeneous-source")}
     return mode, proof
 
 # Paragraph heads (exact prefixes) that declare a property of THIS call rather than generic runtime behaviour.

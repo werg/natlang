@@ -80,7 +80,7 @@ def test_checkpoint_mode_requires_exact_homogeneous_text_input(tmp_path):
         checkpoint_prompt_rendering(identity)
 
 
-def test_checkpoint_mode_rejects_mixed_rendering_rows(tmp_path):
+def test_checkpoint_mode_requires_explicit_policy_for_mixed_rendering_rows(tmp_path):
     data = tmp_path / "mixed.jsonl"
     raw = (json.dumps({"prompt_rendering": "program-header"}) + "\n" +
            json.dumps({"prompt_rendering": "full"}) + "\n").encode()
@@ -89,3 +89,37 @@ def test_checkpoint_mode_rejects_mixed_rendering_rows(tmp_path):
                 "inputs": {str(data.resolve()): hashlib.sha256(raw).hexdigest()}}
     with pytest.raises(ValueError, match="mixes prompt rendering modes"):
         checkpoint_prompt_rendering(identity)
+
+
+def test_explicit_policy_preserves_mixed_source_counts_and_undeclared_rows(tmp_path):
+    data = tmp_path / "mixed-policy.jsonl"
+    rows = [
+        {"prompt_rendering": "program-header", "system_prompt_mode": "program-header", "text": "header"},
+        {"system_prompt_mode": None, "text": "List of tools: [{\"name\":\"read\"}]"},
+    ]
+    raw = ("\n".join(json.dumps(row) for row in rows) + "\n").encode()
+    data.write_bytes(raw)
+    identity = {"options": {"text_data": str(data)},
+                "inputs": {str(data.resolve()): hashlib.sha256(raw).hexdigest()}}
+
+    mode, proof = checkpoint_prompt_rendering(identity, serving_mode="program-header")
+    assert mode == "program-header"
+    assert proof["mode_selection"] == "explicit-serving-policy-on-mixed-training-input"
+    assert proof["row_count"] == 2
+    assert proof["mode_counts"] == {"program-header": 1, "full": 1}
+    assert proof["declared_mode_counts"] == {"program-header": 1}
+    assert proof["undeclared_mode_rows"] == 1
+    assert proof["system_prompt_mode_counts"] == {"program-header": 1, "absent": 1}
+    assert proof["rows_with_tool_schema_marker"] == 1
+    assert proof["undeclared_rows_with_tool_schema_marker"] == 1
+    assert proof["input_sha256"] == hashlib.sha256(raw).hexdigest()
+
+
+def test_explicit_policy_must_match_homogeneous_training_rows(tmp_path):
+    data = tmp_path / "header-only.jsonl"
+    raw = (json.dumps({"prompt_rendering": "program-header"}) + "\n").encode()
+    data.write_bytes(raw)
+    identity = {"options": {"text_data": str(data)},
+                "inputs": {str(data.resolve()): hashlib.sha256(raw).hexdigest()}}
+    with pytest.raises(ValueError, match="differs from homogeneous"):
+        checkpoint_prompt_rendering(identity, serving_mode="full")
