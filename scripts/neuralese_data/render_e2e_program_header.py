@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Program-header rendering of an e2e cohort (records.jsonl + pieces.jsonl + edges.jsonl), from the same source records.
 
-Each record goes through the shared data/prompt_rendering.program_header_native_record: the leading system message is
+Each record goes through the shared data/e2e_rendering.program_header_native_record: the leading system message is
 reduced to the program header (generic runtime prompt dropped, owner 2026-10-11) and the runtime tool schemas are
 dropped; messages after it, the target and provenance are unchanged. The producer->consumer edges are re-derived with
 train/trajectories.authenticated_recurrence_context_view on the rendered records and must equal the source cohort's
@@ -16,7 +16,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
-from natlang_neuralese.data.prompt_rendering import program_header_native_record, prompt_rendering_identity  # noqa: E402
+from natlang_neuralese.data.e2e_rendering import program_header_native_record  # noqa: E402
+from natlang_neuralese.data.prompt_rendering import prompt_rendering_identity  # noqa: E402
 from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 
@@ -54,7 +55,7 @@ def main():
         'rendering_identity': prompt_rendering_identity('program-header'),
         'derived_from': {'cohort': str(src), 'receipt_sha256': sha(src / 'receipt.json') if (src / 'receipt.json').exists() else None,
                          'records_sha256': sha(src / 'records.jsonl')},
-        'transformation': 'data/prompt_rendering.program_header_native_record per record: system soft pieces resolved to '
+        'transformation': 'data/e2e_rendering.program_header_native_record per record: system soft pieces resolved to '
                           'text and reduced to the program header (system turn dropped when none), tools []; every other '
                           'field unchanged. The full rendering is the source cohort itself.',
         'records': len(rendered), 'system_prompt_mode': Counter(r['system_prompt_mode'] for r in rendered),

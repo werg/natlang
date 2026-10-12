@@ -62,7 +62,7 @@ crisp value (`crisp-value`), crisp tool output. This is the rule that decides ev
 
 The source rendering (full: system soft pieces and the runtime tool schemas) is the training contract today; Pop runs
 the e2e arm with a recipe-declared full rendering. A program-header rendering of the same records is emitted beside it
-by `scripts/neuralese_data/render_e2e_program_header.py` (shared `data/prompt_rendering.program_header_native_record`),
+by `scripts/neuralese_data/render_e2e_program_header.py` (shared `data/e2e_rendering.program_header_native_record`),
 which requires the re-authenticated edges to equal the source edges. The two renderings are compared on the same e2e
 qualification and the better one is adopted for both lines. v1.1 = program-header rendering of v1.
 

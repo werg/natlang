@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training" / "neuralese"))
-from natlang_neuralese.data.prompt_rendering import program_header_native_record  # noqa: E402
+from natlang_neuralese.data.e2e_rendering import program_header_native_record  # noqa: E402
 
 PIECES = [{"id": "g", "scope": "generic", "text": "You are a natlang runtime. Use eval."},
           {"id": "p", "scope": "program", "text": "This call is a directory reducer: fold the files."}]
