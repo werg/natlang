@@ -18,7 +18,7 @@
      "graph_memory_gb": 6.9,
      "graph_headroom_gb": 0.4,
      "checkpoint_layers": true,
-     "backward_policy": "auto",
+     "backward_policy": "joint",
      "monitor": {
       "gate": {
        "reference": {

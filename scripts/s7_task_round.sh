@@ -1,5 +1,6 @@
 #!/bin/bash
-# usage: scripts/s7_task_round.sh RUN_DIR [SHARDS]  (env: RENDER=full|program-header, PORT, SNAP, DIRECT=export dir)
+# usage: scripts/s7_task_round.sh RUN_DIR [SHARDS]  (env: RENDER, PORT, SNAP, DIRECT=export dir,
+#   SERVE_IMAGE + RECEIPT + CONTAINER: serve DIRECT in a container at its source-proof paths)
 # S7 smoke round (plans/neuralese/S7_RL.md §8): serve LFM2.5-350M on GPU, run the group queue through the collector in SHARDS
 # parallel queue runners, merge journals, score.
 set -u
@@ -13,9 +14,30 @@ if [ -n "${DIRECT:-}" ]; then  # a direct-SFT export serves with its own declare
 else
   MODEL=(--base "$SNAP" --prompt-rendering "${RENDER:-full}")
 fi
-$PY -m natlang_neuralese.serve "${MODEL[@]}" --device cuda --dtype bfloat16 --port ${PORT:-8097} > $R/server.log 2>&1 &
+if [ -n "${SERVE_IMAGE:-}" ]; then
+  # A direct export pins its source proof to the exporting machine's paths (hf_hub_cache, launch receipt). Serve it in
+  # a container that mounts the local HF cache and the exact receipt (RECEIPT, hash-checked by the loader) at those
+  # paths; the container is named CONTAINER and must be declared to the ledger unit (--container).
+  PROOF=$(python3 - "$DIRECT/manifest.json" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))["base_binding"]["source_proof"]
+print(p["hf_hub_cache"], p["launch_receipt_path"], p["snapshot_path"])
+PY
+)
+  read -r CACHE_AT RECEIPT_AT SNAP_AT <<<"$PROOF"
+  docker rm -f "$CONTAINER" >/dev/null 2>&1
+  docker run --rm --name "$CONTAINER" --gpus all --network host --user "$(id -u):$(id -g)" \
+    -e HOME=/tmp -e PYTHONPATH=$ROOT/training/neuralese -e HF_HUB_OFFLINE=1 \
+    -v $ROOT:$ROOT:ro -v "$(dirname "$(dirname "$(dirname "$SNAP")")")":"$CACHE_AT":ro -v "$RECEIPT":"$RECEIPT_AT":ro \
+    -v "$DIRECT":"$DIRECT":ro -w $ROOT "$SERVE_IMAGE" python -m natlang_neuralese.serve \
+    --direct-artifact "$DIRECT" --direct-base-snapshot "$SNAP_AT" ${RENDER:+--prompt-rendering $RENDER} \
+    --device cuda --dtype bfloat16 --port ${PORT:-8097} > $R/server.log 2>&1 &
+else
+  $PY -m natlang_neuralese.serve "${MODEL[@]}" --device cuda --dtype bfloat16 --port ${PORT:-8097} > $R/server.log 2>&1 &
+fi
 SP=$!
 for i in $(seq 1 150); do curl -sf http://127.0.0.1:${PORT:-8097}/v1/models >/dev/null && break; sleep 2; done
+curl -sf http://127.0.0.1:${PORT:-8097}/v1/models >/dev/null || { echo "server did not come up; see $R/server.log" >&2; kill $SP; exit 1; }
 mkdir -p $R/shards
 python3 - "$R" "$N" <<'PY'
 import json, sys
@@ -35,3 +57,4 @@ wait "${pids[@]}"
 cat $R/shards/journal-*.jsonl > $R/journal.jsonl
 $PY -m natlang_neuralese.rl.task_rollouts score --run-dir $R > $R/score.log 2>&1
 kill $SP; wait $SP
+[ -n "${SERVE_IMAGE:-}" ] && docker stop "$CONTAINER" >/dev/null 2>&1

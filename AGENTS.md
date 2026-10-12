@@ -180,6 +180,13 @@ afterwards. The rules below are consequences of this one.
 
 # Neuralese training foundation
 
+- LFM fresh-start base (owner, 2026-10-12): any new Pop LFM training lineage
+  started from base weights uses the pinned full-precision LiquidAI
+  LFM2.5-350M QAD source and its QAD clean-head anchor, with a newly measured
+  QAD base task reference. See `plans/neuralese/DECISIONS.md` for revision,
+  paths and hashes. A resume of an existing lineage restores that lineage's
+  exact checkpoint and optimizer state; do not silently substitute QAD weights
+  into a checkpoint resume.
 - New neuralese training lineages use shared declared recipes under
   `training/neuralese/recipes/`; see `plans/neuralese/TRAINING_RECIPE.md`.
 - Token-aligned identity and qualified causal output-state to raw next-token
