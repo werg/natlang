@@ -8,6 +8,7 @@ from torch import nn
 from natlang_neuralese.train.fp8_backend import (
     ROW_MULTIPLE, SavedTensorAudit, _eligible_paths, make_te_linear_preserving_rng,
 )
+from natlang_neuralese.train.direct_sft import direct_sft_calibration_kind
 
 
 class FakeTELinear(nn.Linear):
@@ -99,3 +100,12 @@ def test_non_lfm_model_is_rejected_by_allowlist():
     model.config.model_type = 'qwen3'
     with pytest.raises(ValueError, match='supports LFM2'):
         _eligible_paths(model)
+
+
+def test_activation_calibration_namespaces_do_not_mix_fp8_backends():
+    assert direct_sft_calibration_kind('off', 'delayed', 'sequential', False) == \
+        'direct-sft-sequential-checkpointed-0'
+    assert direct_sft_calibration_kind('te-fp8', 'delayed', 'sequential', False) == \
+        'direct-sft-fp8-delayed-sequential-checkpointed-0'
+    assert direct_sft_calibration_kind('triton-experts', 'delayed', 'sequential', False) == \
+        'direct-sft-fp8-experts-sequential-checkpointed-0'

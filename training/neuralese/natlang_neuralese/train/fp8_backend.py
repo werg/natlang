@@ -57,7 +57,7 @@ def runtime_identity(device: str | torch.device) -> dict[str, Any]:
     except (ImportError, importlib.metadata.PackageNotFoundError) as exc:
         raise RuntimeError('TE FP8 training requested but Transformer Engine is unavailable') from exc
     if not te_version.startswith('2.19.'):
-        raise RuntimeError(f'this experimental backend is validated for TE 2.19.x, found {te_version}')
+        raise RuntimeError(f'this experimental backend currently supports TE 2.19.x, found {te_version}')
     return {
         'backend': BACKEND_VERSION,
         'transformer_engine': te_version,

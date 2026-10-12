@@ -345,6 +345,19 @@ def same_resume_identity(saved: dict, current: dict) -> bool:
             and sorted(saved['inputs'].values()) == sorted(current['inputs'].values()))
 
 
+def direct_sft_calibration_kind(fp8_training: str, fp8_recipe: str, mode: str,
+                                checkpointed: bool) -> str:
+    """Keep activation calibration isolated by execution backend and geometry."""
+    suffix = f'{mode}-checkpointed-{int(checkpointed)}'
+    if fp8_training == 'off':
+        return f'direct-sft-{suffix}'
+    if fp8_training == 'te-fp8':
+        return f'direct-sft-fp8-{fp8_recipe}-{suffix}'
+    if fp8_training == 'triton-experts':
+        return f'direct-sft-fp8-experts-{suffix}'
+    raise ValueError(f'unknown direct-SFT FP8 backend {fp8_training!r}')
+
+
 def main(argv=None):
     stop = StopSignal().install()
     a = parse(argv)
@@ -1066,10 +1079,7 @@ def main(argv=None):
             one_raw = geometry_bytes(context, 0, **layout,
                                      target_tokens=min(128, target),
                                      vocab_size=int(backbone.embedding_weight.shape[0]))
-            kind = (f'direct-sft-fp8-{a.fp8_recipe}-{mode}-checkpointed-{int(checkpointed)}'
-                    if a.fp8_training == 'te-fp8' else
-                    f'direct-sft-fp8-experts-{mode}-checkpointed-{int(checkpointed)}'
-                    if fp8_backend is not None else f'direct-sft-{mode}-checkpointed-{int(checkpointed)}')
+            kind = direct_sft_calibration_kind(a.fp8_training, a.fp8_recipe, mode, checkpointed)
             predicted_activation = memory_estimator.predict(kind, context, target, one_raw) * rows
             calibration = memory_estimator.calibration_info(kind, context, target)
             return one_raw * rows, predicted_activation, calibration
@@ -1281,9 +1291,8 @@ def main(argv=None):
                            plan['fp8_weight_cache_reservation_bytes'])
             observed_activation = max(1, observed_increment - fixed_bytes)
             memory_estimator.observe(
-                (f"direct-sft-fp8-{a.fp8_recipe}-{plan['mode']}-checkpointed-{int(plan['checkpoint_layers'])}"
-                 if fp8_backend is not None else
-                 f"direct-sft-{plan['mode']}-checkpointed-{int(plan['checkpoint_layers'])}"),
+                direct_sft_calibration_kind(a.fp8_training, a.fp8_recipe, plan['mode'],
+                                            plan['checkpoint_layers']),
                 plan['context_tokens'], plan['target_tokens'], plan['activation_geometry_bytes'],
                 observed_activation)
         for key in totals:
