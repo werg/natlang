@@ -83,3 +83,36 @@ def test_budget_exhaustion_is_a_model_outcome_and_infrastructure_errors_are_not(
     assert not accounted({'cases_expected': 16, 'outcome_counts': {**base, 'semantic_mismatch': 11,
                                                                     'infrastructure_error': 1}})
     assert not accounted({'cases_expected': 16, 'outcome_counts': {**base, 'semantic_mismatch': 11, 'unresolved': 1}})
+
+
+def test_a_failed_evaluation_is_recorded_and_retried_and_repeated_failures_stop_the_run(tmp_path):
+    from natlang_neuralese.eval.task_cadence import TaskEval
+    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'noise_repeats': 1,
+                            'max_consecutive_failures': 2})
+    evaluator = TaskEval.__new__(TaskEval)
+    evaluator.spec, evaluator.out, evaluator.root, evaluator.rows = spec, tmp_path, tmp_path / 'task-eval', [{}]
+    evaluator.prompt_rendering = 'full'
+    outcomes = iter(['crash', 'infra', 'ok', 'crash', 'infra'])
+
+    def execute(run):
+        run.mkdir(parents=True, exist_ok=True)
+        kind = next(outcomes)
+        if kind == 'crash':
+            raise OSError('collector runtime missing while ts-host rebuilds')
+        infra = int(kind == 'infra')
+        return {'task_successes': 1 - infra, 'task_success_rate': 0.0, 'complete': True, 'cases': [],
+                'cases_expected': 1, 'outcome_counts': {'task_success': 1 - infra, 'infrastructure_error': infra,
+                                                        'unresolved': 0}}, [0]
+    evaluator._execute = execute
+    first = evaluator.cadence(10)  # an exception: recorded, the run continues
+    assert first['eligible'] is False and 'OSError' in first['error']
+    with pytest.raises(RuntimeError, match='2 times in a row'):
+        evaluator.cadence(20)  # a second ineligible evaluation in a row stops the run
+    assert evaluator.cadence(30)['eligible'] is True  # a resumed run evaluates again; success resets the count
+    assert evaluator.consecutive_failures() == 0
+    assert evaluator.cadence(40)['eligible'] is False
+    with pytest.raises(RuntimeError):
+        evaluator.cadence(50)
+    import json
+    rows = [json.loads(line) for line in (tmp_path / 'task-eval.jsonl').read_text().splitlines()]
+    assert [row['step'] for row in rows] == [10, 20, 30, 40, 50]

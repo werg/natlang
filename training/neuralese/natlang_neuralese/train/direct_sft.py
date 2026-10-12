@@ -2163,10 +2163,14 @@ def main(argv=None):
                     with profile_region('update/save'):
                         policy.save(full_state())
                     saved_step = step
+                # A failed evaluation is recorded and evaluated again at the next cadence; the final one is retried
+                # at once (it gates qualification). Repeated failures raise (task_eval.max_consecutive_failures).
                 with profile_region('update/task_eval'):
-                    task_summary = task_eval.run(step)
-                report['task_eval'] = {k: task_summary[k] for k in
-                                       ('task_successes', 'cases', 'outcome_counts', 'eligible', 'seconds')}
+                    task_summary = task_eval.cadence(step)
+                    while step == end and not task_summary['eligible']:
+                        task_summary = task_eval.cadence(step)
+                report['task_eval'] = {k: task_summary.get(k) for k in
+                                       ('task_successes', 'cases', 'outcome_counts', 'eligible', 'seconds', 'error')}
                 if step == end:
                     final_task_summary = task_summary
             (a.out / 'report.json').write_text(json.dumps({**report, 'status': 'running'}, indent=2) + '\n')

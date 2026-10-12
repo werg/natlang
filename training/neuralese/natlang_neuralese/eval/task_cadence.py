@@ -31,6 +31,10 @@ The pass bar is relative (coordinator 2026-10-12): the final evaluation is eligi
 previous eligible evaluation of the stage minus ``noise_successes``. Every evaluation records the same comparison
 (``regressed``) for monitoring; only the final one gates.
   runtime         TS runtime directory with dist/teacher (default: the live checkout's ts-host, the newest code)
+  max_consecutive_failures  ineligible evaluations in a row (infrastructure errors, unresolved tasks, a collector or
+                  serving exception) before the training run stops (default 3). A single failed evaluation is recorded
+                  in task-eval.jsonl and the next cadence evaluates again: a transient eval failure must not end a
+                  multi-day run, a persistent one must not pass silently (DGX/Pop 2026-10-12).
 """
 from __future__ import annotations
 
@@ -61,7 +65,8 @@ def parse_task_eval(value):
             any(isinstance(i, bool) or not isinstance(i, int) or i < 0 for i in cases)):
         raise ValueError('task_eval.cases must be distinct nonnegative row indices')
     for key, default in (('case_seconds', 600), ('max_model_requests', 48), ('max_turns', 60), ('workers', 4),
-                         ('min_successes', 0), ('noise_successes', 0), ('noise_repeats', 2)):
+                         ('min_successes', 0), ('noise_successes', 0), ('noise_repeats', 2),
+                         ('max_consecutive_failures', 3)):
         spec.setdefault(key, default)
         if isinstance(spec[key], bool) or not isinstance(spec[key], int) or spec[key] < (
                 0 if key in ('min_successes', 'noise_successes') else 1):
@@ -294,9 +299,46 @@ class TaskEval:
         print(json.dumps({'event': 'task_eval', **{k: summary[k] for k in
                           ('step', 'task_successes', 'cases', 'outcome_counts', 'eligible', 'previous_successes',
                            'repeat_noise', 'noise_successes', 'regressed', 'seconds')}}), flush=True)
-        if not eligible:
-            raise RuntimeError(f'task_eval did not complete at step {step}: {score["outcome_counts"]}; '
-                               f'collector exits {codes}; see {run}')
+        return summary
+
+    def consecutive_failures(self) -> int:
+        """Ineligible evaluations at the end of this stage's log (a resumed run continues the count)."""
+        log = self.out / 'task-eval.jsonl'
+        count = 0
+        if log.is_file():
+            for line in log.read_text().splitlines():
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                count = 0 if row.get('eligible') else count + 1
+        return count
+
+    def cadence(self, step: int) -> dict:
+        """One in-run evaluation for the training loop: the summary of ``run``. An ineligible evaluation or an
+        exception from the collector or serving stack is recorded and returned as an ineligible summary, so the next
+        cadence evaluates again; ``max_consecutive_failures`` of them in a row raise and stop the run."""
+        started = time.time()
+        try:
+            summary = self.run(step)
+        except Exception as error:  # noqa: BLE001 - any eval infrastructure failure is recorded, then counted
+            summary = {'schema': SCHEMA, 'step': step, 'task_successes': 0, 'cases': len(self.rows),
+                       'outcome_counts': None, 'eligible': False, 'error': f'{type(error).__name__}: {error}',
+                       'packet_sha256': self.spec['packet']['sha256'], 'case_indices': self.spec['cases'],
+                       'code_commit': _git_head(), 'seconds': time.time() - started,
+                       'run': str(self.root / f'step-{step:07d}')}
+            with (self.out / 'task-eval.jsonl').open('a') as handle:
+                handle.write(json.dumps(summary) + '\n')
+        if summary['eligible']:
+            return summary
+        failures = self.consecutive_failures()
+        print(json.dumps({'event': 'task_eval_failed', 'step': step, 'consecutive_failures': failures,
+                          'max_consecutive_failures': self.spec['max_consecutive_failures'],
+                          'outcome_counts': summary.get('outcome_counts'), 'error': summary.get('error'),
+                          'run': summary.get('run')}), flush=True)
+        if failures >= self.spec['max_consecutive_failures']:
+            raise RuntimeError(f'task_eval failed {failures} times in a row (last at step {step}: '
+                               f'{summary.get("error") or summary.get("outcome_counts")}); see {summary.get("run")}')
         return summary
 
 
@@ -364,7 +406,7 @@ def main(argv=None) -> int:
     spec = parse_task_eval(args.spec)
     summary = TaskEval(spec, args.out, engine, prompt_rendering=args.prompt_rendering).run(args.step)
     print(json.dumps(summary, indent=1))
-    return 0
+    return 0 if summary['eligible'] else 1
 
 
 if __name__ == '__main__':
