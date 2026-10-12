@@ -611,9 +611,30 @@ def main(argv=None):
     step, best, base_eval, history = 0, None, None, []
     if policy.slot.exists():
         state = CheckpointPolicy.load(policy.slot)
-        if state.get('schema') != SCHEMA or state['identity']['options'] != identity['options'] or \
+        previous_options = dict(state.get('identity', {}).get('options') or {})
+        current_options = dict(identity['options'])
+        previous_epochs = previous_options.pop('epochs', None)
+        current_epochs = current_options.pop('epochs', None)
+        if state.get('schema') != SCHEMA or previous_options != current_options or \
                 state['identity']['inputs'] != identity['inputs']:
             raise ValueError('neuralese_direct resume identity changed (options or inputs)')
+        if previous_epochs != current_epochs:
+            # The owner may shorten/extend the epoch budget without throwing away trained updates. Reconstruct
+            # both deterministic schedules and verify every consumed batch, not just an epoch counter. Fractional
+            # final epochs can repack their last bucket, so not every budget change preserves the prefix.
+            if previous_epochs is None or current_epochs is None or quant is not None:
+                raise ValueError('epoch budget handoff requires epoch schedules without a rebased QAT curriculum')
+            old_schedule = epoch_schedule(sampler, seed=a.seed, length=lambda w: len(w['ids']) - 1,
+                                          epochs=previous_epochs, max_tokens=a.batch_tokens, max_items=a.batch)
+            consumed = state['step']
+            if consumed > min(len(old_schedule), len(schedule)) or any(
+                    tuple(map(id, old_schedule[i][0])) != tuple(map(id, schedule[i][0]))
+                    for i in range(consumed)):
+                raise ValueError('epoch budget handoff changes or discards consumed training batches')
+            print(json.dumps({'event': 'epoch_budget_handoff', 'previous_epochs': previous_epochs,
+                              'epochs': current_epochs, 'consumed_updates_verified': consumed,
+                              'updates': len(schedule)}), flush=True)
+            del old_schedule
         from .text_warmup import copy_restored_values
         tensors_by_name = plain_named_tensors(backbone.hf)
         # The shared copy (its own scope): a loop variable left in main() is a view of the mmap'd state and kept the
