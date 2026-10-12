@@ -1638,3 +1638,25 @@ Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exa
 - `maple-text-warmup-policy-ab-20261007.sh`: deleted 2026-10-11.
 - `maple-text-warmup-runtime-20261008-v10`: deleted 2026-10-11.
 - `neuralese-foundation-text-4880-continuation-20261009-v1`: deleted 2026-10-11.
+
+## Pop LFM E2E qualification and handoff corrections (2026-10-12)
+
+The strict update-10006 direct export passed the live direct-runtime replay on Pop
+(`runtime_qualified=true`, producer and public-input gradient deltas zero).
+The first E2E arm failed before update 0: the LFM recipe selected automatic
+backward routing while `latent_step_in_backward` requires joint backward. The
+shared LFM E2E recipe now selects joint. The next arm exposed an input contract
+mismatch: the direct checkpoint serves `program-header` prompts, while all 1,389
+union E2E records have structured soft system pieces and 5–15 tool schemas.
+The E2E stage explicitly switches to `full` rendering after exact direct-artifact
+restore; the direct-runtime stage continues to qualify the original prompt
+contract. The transition is recorded in checkpoint identity, port metadata and
+the launch log. This is a new stage curriculum, not a rewrite of the parent
+checkpoint. Initial qualification and held behaviour comparison are pending.
+
+The Pop outer launcher had duplicated an older shared-recipe handoff rule and
+rejected v3 data continuation before the shared trainer could validate it.
+Outer preflight now calls the shared `lineage_handoff(..., dry_run=True)` policy
+for a handoff, preserving exact input and frozen-code checks. Existing v2 Muon
+weights and optimizer remain on their own checkpoint lineage while these stage
+mechanics are qualified. A fresh LFM start uses the pinned QAD FP32 source.

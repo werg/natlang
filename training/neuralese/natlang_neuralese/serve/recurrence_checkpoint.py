@@ -22,6 +22,12 @@ def load_recurrence_checkpoint(path, *, device='cpu', dtype=None, artifact_overr
     artifacts = ArtifactResolver.from_state(state, overrides=artifact_overrides)
     engine = load_engine(artifacts.path('base'), heads_checkpoint=artifacts.path('heads'), device=device, dtype=dtype,
                          artifacts=artifacts)
+    prompt_mode = state.get('port_config', {}).get('prompt_rendering') or options.get('prompt_rendering')
+    if prompt_mode is not None:
+        from ..data.prompt_rendering import PROMPT_RENDERINGS
+        if prompt_mode not in PROMPT_RENDERINGS:
+            raise ValueError('recurrence checkpoint has unsupported prompt rendering: ' + str(prompt_mode))
+        engine.prompt_rendering = prompt_mode
     engine.heads.set_content_transport(state.get('port_config', {}).get('content_transport', 'learned-residual'))
     engine.heads.load_state_dict(state['heads'])
     capacity = state.get('port_config', {}).get('max_length', engine.heads.max_length)

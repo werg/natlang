@@ -79,7 +79,7 @@ HANDLERS = {
                                                'view', 'view_window', 'context_weight', 'feedback_weight',
                                                'context_coverage', 'cohort_weights', 'qualification_cohort',
                                                'stop_pg', 'purpose_contrast', 'purpose_margin', 'view_tokens_per_vector',
-                                               'optimizer_state', 'optimizer_added', 'direct_base_snapshot', 'curriculum_change',
+                                               'optimizer_state', 'optimizer_added', 'direct_base_snapshot', 'prompt_rendering', 'curriculum_change',
                                                'latent_lr', 'latent_ns', 'latent_weight_decay', 'grad_spike_clip',
                                                'monitor', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise',
                                                'gate_response_kl', 'drift_warn', 'drift_stop', 'drift_agreement_warn',

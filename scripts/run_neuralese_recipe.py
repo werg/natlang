@@ -330,10 +330,11 @@ def validate_existing_shared_resume(output: Path, recipe: dict, recipe_path: Pat
     for resolved in stage_inputs.values():
         for binding in resolved.values():
             inputs[binding["path"]] = binding["sha256"]
-    expected = {"schema": "natlang.neuralese-recipe-plan/1", "inputs": inputs, "device": device}
+    expected = {"schema": "natlang.neuralese-recipe-plan/1", "device": device}
     if not handoff:
+        expected["inputs"] = inputs
         expected["recipe_sha256"] = recipe_identity_sha256(recipe_path)
-    if any("inputs" in stage for stage in recipe["stages"]):
+    if not handoff and any("inputs" in stage for stage in recipe["stages"]):
         expected["stage_inputs"] = stage_inputs
     for key, value in expected.items():
         if plan.get(key) != value:
@@ -341,12 +342,17 @@ def validate_existing_shared_resume(output: Path, recipe: dict, recipe_path: Pat
     recorded_recipe = plan.get("recipe")
     epoch_budget_changes = {}
     if handoff:
-        from natlang_neuralese.train.recipe import recipe_handoff_epoch_changes
-        try:
-            epoch_budget_changes = recipe_handoff_epoch_changes(recorded_recipe, recipe)
-        except ValueError as error:
-            raise ValueError("shared recipe handoff changes more than pinned runtime code, operational parameters, "
-                             "and direct-stage epoch budgets") from error
+        # The trainer owns data, objective and epoch handoff policy. Validate
+        # the same candidate plan here without changing the committed run.
+        from natlang_neuralese.train.recipe import lineage_handoff
+        candidate = {"schema": expected["schema"], "recipe": recipe,
+                     "recipe_sha256": recipe_identity_sha256(recipe_path),
+                     "inputs": inputs, "device": device}
+        if any("inputs" in stage for stage in recipe["stages"]):
+            candidate["stage_inputs"] = stage_inputs
+        checked = lineage_handoff(plan, candidate, frozen, NEURALESE / "natlang_neuralese",
+                                  plan_path, out=output, dry_run=True)
+        epoch_budget_changes = checked["handoffs"][-1].get("epoch_budget_changes", {})
     elif recorded_recipe != recipe:
         raise ValueError("shared recipe resume changes committed recipe")
     recorded_code = plan.get("code")
