@@ -330,3 +330,27 @@ def test_direct_phases_resolve_in_epochs_with_a_derived_quantization_end():
     quant.stage['end'] = 346
     assert quant.progress(346) == pytest.approx(0.35)
     assert stage_quantization(mellum, mellum['stages'][0], {'epochs': 0.5}, []) is None  # the warm-up is BF16
+
+
+def test_a_continued_phase_archives_its_predecessor_state_off_the_nvme(tmp_path, monkeypatch):
+    import importlib.util
+    import os
+    from natlang_neuralese.train import direct_sft
+    spec = importlib.util.spec_from_file_location('archive_to_external', ROOT / 'scripts' / 'archive_to_external.py')
+    mover = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mover)
+    monkeypatch.setattr(mover, 'ROOTS', (tmp_path / 'runs',))
+    monkeypatch.setattr(mover, 'ARCHIVE', tmp_path / 'archive')
+    monkeypatch.setattr(importlib.util, 'module_from_spec', lambda _: mover)
+    monkeypatch.setattr(spec.loader, 'exec_module', lambda _: None)
+    monkeypatch.setattr(importlib.util, 'spec_from_file_location', lambda *_: spec)
+    stage = tmp_path / 'runs' / 'lineage' / 'direct_warmup'
+    stage.mkdir(parents=True)
+    slot = stage / 'checkpoint.pt'
+    slot.write_bytes(os.urandom(1 << 16))
+    os.link(slot, stage / 'best-checkpoint.pt')
+    content = slot.read_bytes()
+    record = direct_sft.archive_predecessor_state(slot)
+    assert slot.is_symlink() and (stage / 'best-checkpoint.pt').is_symlink() and slot.read_bytes() == content
+    assert json.loads((stage / 'checkpoint.pt.archived.json').read_text())['sha256'] == record['sha256']
+    assert direct_sft.archive_predecessor_state(slot) is None  # already archived
