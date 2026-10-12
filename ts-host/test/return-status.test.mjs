@@ -46,3 +46,11 @@ test('read_code says when a name is one of the tools, not a function of the prog
   assert.match(results[0], /^Native tool definition \(not program function source\): read_page/);
   assert.match(results[0], /Invoke this as a separate tool action; it is not callable from eval\./);
 });
+
+test('a result sent under another argument name is told to use value', async () => {
+  const { results, value } = await script([
+    ['return_result', { status: 'success', verdict: 'hello' }],
+    ['return_result', { status: 'success', value: 'hello' }]]);
+  assert.match(results[0], /the result in the value argument \(this return_result put it in "verdict"\)/);
+  assert.equal(value, 'hello');
+});

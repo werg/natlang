@@ -1517,6 +1517,10 @@ export class NativeSession {
       if (this.lam.type.kind !== 'lambda') throw new Reject([{ path: 'value', code: 'bad-action', expected: 'a typed call' }]);
       let value: Value;
       if (!Object.hasOwn(args, 'value')) {
+        // A result sent under another argument name (e.g. { status, verdict: {...} }): name the field that carries it.
+        const misplaced = Object.keys(args).filter(key => !['status', 'value', 'reason'].includes(key));
+        if (this.lam.return === MISSING && misplaced.length) throw new Reject([{ path: 'value', code: 'bad-action',
+          expected: `the result in the value argument (this return_result put it in ${misplaced.map(key => `"${key}"`).join(', ')})` }]);
         if (this.lam.return === MISSING) throw new Reject([{ path: 'value', code: 'bad-action',
           expected: `a ${formatType(this.lam.type.returns)} or a complete typed result already staged in this call` }]);
         // Reuse the staged object as-is. finish() below still checks completeness, live holes,
