@@ -515,6 +515,18 @@ def main(argv=None) -> int:
 
     hf_home = hf_hub_cache.parent
     mounts = [(REPO, REPO, "ro"), (artifact_root, artifact_root, "rw"), (hf_home, hf_home, "rw")]
+    # Task-success cadence launches the TypeScript collector from inside the
+    # training container. Bind the host's native-architecture Node executable
+    # up front, so this dependency is checked before any GPU updates are made.
+    stages_for_node = [recipe["stage"]] if direct else recipe["stages"]
+    needs_node = any((stage.get("parameters", {}).get("task_eval") or
+                      recipe.get("stage_parameter_defaults", {}).get(stage.get("kind"), {}).get("task_eval"))
+                     for stage in stages_for_node)
+    if needs_node:
+        host_node = shutil.which("node")
+        if host_node is None:
+            raise ValueError("task_eval requires a host Node executable")
+        mounts.append((Path(host_node).resolve(), Path("/usr/bin/node"), "ro"))
     for bind in args.bind:
         host, target, mode = bind
         if not host.exists():
@@ -618,6 +630,8 @@ def main(argv=None) -> int:
         "models=sorted(n for n in os.listdir(hub) if n.startswith('models--')); "
         "print(json.dumps({'stage_module':module,'hf_hub_cache':hub,'cached_model_repositories':models}))"
     )
+    if needs_node:
+        preflight_code += "; import subprocess; subprocess.run(['/usr/bin/node','--version'],check=True)"
     preflight_paths = [item["path"] for item in input_bindings.values()] + [item["path"] for item in lineage]
     if resume_binding is not None:
         preflight_paths.append(resume_binding["plan_path"])

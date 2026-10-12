@@ -2135,15 +2135,16 @@ def main(argv=None):
         profiler.update_done(step, seconds, forward_tokens=metrics['forward_tokens'], windows=metrics['windows'],
                              checkpoint_layers=plan['checkpoint_layers'], mode=plan['mode'], precision=point)
         if step % a.eval_every == 0 or step == end:
-            with profile_region('update/eval'):
-                report = evaluate()
-            if task_eval is not None and (not a.task_eval_every or step % a.task_eval_every == 0 or step == end):
-                with profile_region('update/task_eval'):
-                    task_summary = task_eval.run(step)
-                report['task_eval'] = {k: task_summary[k] for k in
-                                       ('task_successes', 'cases', 'outcome_counts', 'eligible', 'seconds')}
-                if step == end:
-                    final_task_summary = task_summary
+            try:
+                with profile_region('update/eval'):
+                    report = evaluate()
+            except BaseException:
+                # Evaluation is outside the optimizer update. Preserve every
+                # completed update even when an evaluator or its dependency fails.
+                if saved_step != step:
+                    policy.save(full_state())
+                    saved_step = step
+                raise
             history.append({k: report[k] for k in ('step', 'ce', 'ce_delta', 'value_relative_mse_delta')})
             improved = best is None or report['ce'] < best['ce']
             if (report.get('behaviour_drift') or {}).get('guard') == 'stop':
@@ -2155,6 +2156,19 @@ def main(argv=None):
                 with profile_region('update/save'):
                     policy.save(full_state(), metric=report['ce'])
                 saved_step = step
+            if task_eval is not None and (not a.task_eval_every or step % a.task_eval_every == 0 or step == end):
+                # The TS collector and serving stack are separate processes.
+                # A failure there must never discard the updates just evaluated.
+                if saved_step != step:
+                    with profile_region('update/save'):
+                        policy.save(full_state())
+                    saved_step = step
+                with profile_region('update/task_eval'):
+                    task_summary = task_eval.run(step)
+                report['task_eval'] = {k: task_summary[k] for k in
+                                       ('task_successes', 'cases', 'outcome_counts', 'eligible', 'seconds')}
+                if step == end:
+                    final_task_summary = task_summary
             (a.out / 'report.json').write_text(json.dumps({**report, 'status': 'running'}, indent=2) + '\n')
         elif a.drift_every and step % a.drift_every == 0 and monitor.active:
             with profile_region('update/drift'):
