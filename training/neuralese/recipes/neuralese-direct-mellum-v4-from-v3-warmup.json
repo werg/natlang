@@ -1,0 +1,38 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-direct-mellum-v4-from-v3-warmup",
+ "extends": "neuralese-direct-mellum-v4",
+ "description": "neuralese-direct-mellum-v4 resumed from the qualified direct_warmup of the neuralese-direct-mellum-v3 lineage (runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup: 333 updates, 0.5 epoch of the 4962-document full-prompt Mellum twin, held CE 2.219 -> 0.438, identity check passed), so the warm-up is not redone (coordinator decision 2026-10-12). The only difference from the parity recipe neuralese-direct-mellum-v4: its direct_warmup stage is replaced by that finished warm-up, bound as direct_sft's declared continuation inputs (full state, identity check, base drift reference; content-pinned), so the warm-up saw the 4962 documents rather than the r2 union's full-prompt rendering. direct_sft (r2 program header, 2 epochs) and direct_trajectory (r2 whole trajectory, 1 epoch) are exactly mellum-v4's.",
+ "overrides": {
+  "input_bindings": {
+   "direct_text": {
+    "$delete": true
+   },
+   "v3_warmup_checkpoint": {
+    "path": "runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup/checkpoint.pt",
+    "sha256": "76632731766c62886e01c1a1e1b0e3ec6224d1bea87c06c05b50de199253a442"
+   },
+   "v3_warmup_identity": {
+    "path": "runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup/identity-check.json",
+    "sha256": "a399ac750c517b780267b3d91992260a7bc8a8513c4b47254a836b329f9ed110"
+   },
+   "v3_warmup_monitor_reference": {
+    "path": "runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup/monitor-reference.pt",
+    "sha256": "83b2fb83274352465507d053e05aca26254c58f0ebce0e251d9e1dc6ff8ecfc5"
+   }
+  },
+  "stages": {
+   "direct_warmup": {
+    "$delete": true
+   },
+   "direct_sft": {
+    "requires": [],
+    "inputs": {
+     "continue_from": "v3_warmup_checkpoint",
+     "continue_identity": "v3_warmup_identity",
+     "continue_monitor_reference": "v3_warmup_monitor_reference"
+    }
+   }
+  }
+ }
+}

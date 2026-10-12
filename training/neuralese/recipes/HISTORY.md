@@ -443,3 +443,7 @@ an exit leaf after its layer was passed is now refused; before, it was dropped s
 Cost: one extra activation-only backward (with checkpointed layers, one more recompute) when cross edges exist; none
 otherwise. Tests: a two-stream tiny-LFM update equals separate backwards plus one step (latents bitwise, context
 gradient); the direct E2E stage moves the child instructions like the separate backward (within 5%).
+
+## neuralese-direct-v3, neuralese-direct-mellum-v4, neuralese-direct-lfm-v3 (2026-10-12)
+
+Shared base moved to the admitted target union r2 (natlang-target-union-20261011-r2) with a third phase, direct_trajectory (whole-trajectory rendering, 1 epoch, continuing from direct_sft), following Pop's main LFM line (pop-2356, agreed pop-86dc). Mellum's v3 lineage keeps its finished 4962-document warm-up: neuralese-direct-mellum-v4-from-v3-warmup binds it as direct_sft's declared continuation inputs (historical one-off, line-parity.json historical_differences). Mellum's QAT curriculum continues over the new phase (direct_trajectory [0.35, 0.5]).
