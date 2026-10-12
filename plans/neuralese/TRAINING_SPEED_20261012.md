@@ -260,3 +260,19 @@ outermost aten op, and Triton launches are not aten ops. Attribution now goes by
 | Output-gradient FP8 quantization fused into the kernels that write the gradients (`expert_gemm.GradQuant`: combine backward for `down`, SwiGLU backward for `gate_up`) | Bit-identical (test, fixed-batch losses equal in all arms). 2 layers × 4×4000 tokens beside v4, two interleaved pairs: expert backward 0.275 → 0.257 s (−7%), GPU/update −1.3% to −4% (noisy under contention). ≈ −0.3 s/update on v4 | adopted (`NATLANG_FUSED_GRAD_QUANT=0`) |
 | Gather folded into the weight-gradient kernel | The `a[rows]` gather is ~10% of expert backward (≈ 0.3 s/update on v4). Folding it needs our own grouped wgrad. Our Triton wgrad measured 2–5× slower than cuBLAS `_grouped_mm` (round 2), which would cost more than the gather | not built |
 | bwd/norm attribution | 0.4–0.5 s of v4's 1.06 s "bwd/norm" was the q/k projection GEMMs (they ran inside the norm scope). Moved to the attention scope. What remains under norm is the RMSNorm and rope backward kernels plus residual adds, ≈ 0.04 s per 2 layers | fixed |
+
+## Final number (v4 on 1d74eabf: rounds 1–5, union r3 continuation)
+
+v4 relaunched as `natlang-neuralese-direct-mellum-v4-161355` and resumed at update 661. Updates 665–694 (30 updates; 662 is the warm-up update at 59.6 s) average **15.96 s/update** at 26.8k context tokens per update: **0.595 s per 1k context tokens** (1,682 tokens/s). Measured from `run-v4/direct_sft/train.jsonl` (`seconds`, `real_tokens`):
+
+| Code | Updates | s/update | Context tokens/update | s per 1k context tokens |
+|---|---|---|---|---|
+| Before this work (round-0 profile) | — | 45.7 | — | — |
+| Rounds 1–2, BF16 | 78–107 | 25.95 | 26,057 | 0.996 |
+| + FP8 experts | 115–216 | 24.12 | 26,958 | 0.895 |
+| + round 3 | 226–245 | 19.10 | 26,729 | 0.715 |
+| + round 3, later window | 632–661 | 21.84 | 26,854 | 0.813 |
+| **+ rounds 4–5, r3 data** | **665–694** | **15.96** | **26,844** | **0.595** |
+
+That is 2.9× over the 45.7 s starting point, and 17–27% below round 3 per 1k context tokens (taking the round-3 range 0.715–0.813). The r3 documents give about the same context per update as r2 (26.8k vs 26.9k), so the per-update and per-token comparisons agree. The later round-3 window (632–661) ran beside other jobs on the machine, so it reads slower than 226–245; the 665–694 window also ran beside the usual queue.
+Speed work stops here (past the knee). The largest remaining items are listed in round 5.
