@@ -148,7 +148,7 @@ def finish(state: dict) -> None:
         state['history'] = state['history'][-50:]
         state.pop('running')
         if attempts % 3 == 0:
-            coord('send', '--to', 'pop', '--subject', f'Full main check {sha[:10]}: incomplete {attempts} times',
+            coord('send', '--force', '--to', 'pop', '--subject', f'Full main check {sha[:10]}: incomplete {attempts} times',
                   '--message', f'The full check of {sha[:10]} ended without a result {attempts} times; no verdict. '
                   f'Log (DGX): {log}. DGX is diagnosing.')
         state['retry'] = {'sha': sha, 'attempts': attempts}
@@ -161,8 +161,8 @@ def finish(state: dict) -> None:
     if owners:
         lines += ['', 'Failing tests (last commit touching the test file):'] + [f'- {t}: {o}' for t, o in owners.items()]
     message = '\n'.join(lines)
-    coord('send', '--to', 'pop', '--subject', f'Full main check {sha[:10]}: '
-          + ('passed' if result['exit'] == 0 else 'failures'), '--message', message)
+    if result['exit'] != 0:  # a pass is a status value, not a note (coordination protocol, owner 2026-10-12)
+        coord('send', '--force', '--to', 'pop', '--subject', f'Full main check {sha[:10]}: failures', '--message', message)
     answered = []
     for rid, body in open_full_check_requests():
         commits = [c for c in COMMIT.findall(body.split('\n', 2)[-1]) if git('cat-file', '-t', c, check=False) == 'commit']
@@ -171,7 +171,7 @@ def finish(state: dict) -> None:
                   f'\n\n{message}')
             answered.append(rid)
     if owners:
-        coord('send', '--to', 'all', '--subject', f'Full main check {sha[:10]}: {len(owners)} failing test file(s), '
+        coord('send', '--force', '--to', 'all', '--subject', f'Full main check {sha[:10]}: {len(owners)} failing test file(s), '
               'owners please fix', '--message', '\n'.join(f'{t}: last touched by {o}' for t, o in owners.items())
               + f'\n\nLog (DGX): {log}')
     if log.exists() and Path(run['worktree']) in log.parents:  # a log inside the worktree is kept beside the others

@@ -183,7 +183,7 @@ def finish_revision(state: dict, build: dict, union: Path) -> None:
              for r, v in union_receipt['renderings'].items()}
     shas = {r: {t: s['text_data_sha256'] for t, s in v['by_tokenizer'].items()}
             for r, v in union_receipt['renderings'].items()}
-    subprocess.run([sys.executable, str(ROOT / 'scripts/coord.py'), '--as', 'dgx-render', 'send', '--to', 'dgx',
+    subprocess.run([sys.executable, str(ROOT / 'scripts/coord.py'), '--as', 'dgx-render', 'send', '--force', '--to', 'dgx',
                     '--subject', f'Target set {set_id}: union {union_id} registered (training input for both lines)',
                     '-m', json.dumps({'union': union_id, 'set': set_id, 'files': files, 'sha256': shas,
                                       'totals': totals, 'members': [m['id'] for m in members]}, indent=1)],

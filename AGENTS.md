@@ -32,6 +32,11 @@ differences from a known-good path. Record what was ruled out and how.
   `python3 scripts/coord.py inbox --ack`. Answer requests with `coord.py reply`
   or `close`; send with `coord.py send --to pop|dgx|all --subject ...`. Keep
   your machine's state in `coord.py status --set`, not in a stream of notes.
+- Coordination is status values plus exact verifiers (owner, 2026-10-12;
+  protocol in `plans/MACHINE_COORDINATION.md`): no per-commit notes, one status
+  page per machine, requests only for actions on the other machine, closure by
+  the shared manifest verifier (`coord.py close-verified`) instead of
+  acknowledgement chains, and one announcer per lineage.
 - Give each concurrently running agent its own coordination reader identity:
   use `coord.py --as <machine>-<agent-role>` or `COORD_AS`. Codex helpers must
   not acknowledge the owner's reader cursor (inspect `coord.py whoami`). Forward
@@ -169,7 +174,9 @@ afterwards. The rules below are consequences of this one.
   container an agent starts gets `--name <ledger unit>` and is declared to the ledger
   (`memory_ledger.py run --container <name>`) so its memory is counted and it is stopped with its unit.
 - Brief the other machine (`coord.py send`) on every owner decision and every
-  shared-code change, with commits and exact semantics.
+  shared-code change, with commits and exact semantics. (2026-10-12: that is one
+  `decision` per change the other machine must adopt; ordinary commits are not
+  announced by notes.)
 
 # Neuralese training foundation
 

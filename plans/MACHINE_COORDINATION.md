@@ -92,6 +92,53 @@ were retired on 2026-10-09. The first `coord.py` run on each machine imports the
 old inbox as read history (`log --legacy`) and keeps the original file under
 `.coordination/archive/`.
 
+## Coordination protocol: status values plus exact verifiers (owner, 2026-10-12)
+
+The owner accepted recommendation 8 of `plans/REVIEW_20261012.md`: coordination
+traffic (about 450 messages a day, three quarters of them `note`s) shrinks to
+state plus exact verifiers. The rules:
+
+1. **No per-commit notes.** A commit on `origin/main` announces itself: the
+   other machine reads `git log`. Do not send a `note` that says a commit
+   landed, a test passed, or a job advanced. Sub-agents and helpers report to
+   their caller and, for running state, to the status page; they do not post
+   notes. `coord.py send --kind note` refuses a subject that only announces a
+   commit or push and refuses a sixth note from one machine within an hour;
+   `--force` overrides when the note is genuinely something the receiver must
+   act on or know now (for example a risk to its running jobs).
+2. **One status page per machine.** `coord.py status --set` is the single
+   overwritten place for what runs, what is next, and what is blocked. Keep it
+   short and current; replace it rather than adding notes.
+3. **Requests only for actions on the other machine.** Send `--kind request`
+   only when the other machine must do something (start, stop or rebase a job,
+   publish or delete data it owns, fix a red check-main step it owns). Requests
+   for information are answered by the status page, git, or the manifests.
+4. **Closure by a shared verifier, not an acknowledgement chain.** A request
+   about data names the manifest(s) it concerns. Either machine closes it by
+   running the same exact verifier and attaching its output:
+   `coord.py close-verified <request-id> --manifest <id> [--manifest <id> ...]`
+   runs `scripts/sync_training_corpora.py verify` for those manifests on this
+   machine and closes the request with the verdict only when every manifest
+   verifies (exit 0); otherwise it prints the failures and leaves the request
+   open. A request about code closes with the commit that is on `origin/main`.
+   No "received", "will do", "done, thanks" replies.
+5. **One announcer per lineage.** Each training lineage has exactly one
+   announcing agent, the owner of the machine that runs it. Only that agent
+   sends `decision` messages about the lineage (launch, stop, rebase, gate
+   result, recipe change); the other machine reads them and does not echo or
+   restate them.
+
+   | Lineage | Announcer |
+   | --- | --- |
+   | Mellum direct and E2E (`neuralese-direct-mellum-*`) | DGX training agent |
+   | LFM direct and E2E (`neuralese-direct-lfm-*`) | Pop training agent |
+   | Shared base recipes (`neuralese-direct-v*`, `line-parity.json`) | the machine that commits the change, one `decision` |
+   | Corpus manifests | the manifest's `owner` field |
+
+6. **Decisions** stay as they were: one `decision` message per owner decision
+   or shared semantic change that the other machine must adopt, pointing at
+   the commit; the commit carries the detail.
+
 ## Code and pipeline additions
 
 1. Commit small coherent changes and publish them often with ordinary git: pull, merge and rebase as usual

@@ -175,6 +175,37 @@ class Store:
         return len(heads)
 
 
+# Coordination protocol (plans/MACHINE_COORDINATION.md, owner 2026-10-12): notes are for what the receiver must act
+# on or know now. Commits announce themselves through git and running state goes on the status page.
+COMMIT_ONLY_SUBJECT = re.compile(r'^\s*(re:\s*)?(pushed|committed|landed|merged|commit|push)\b|^\s*[0-9a-f]{7,40}\s*$', re.I)
+NOTES_PER_HOUR = 5
+
+
+def note_spam(store, subject, messages):
+    """A reason to refuse a note under the coordination protocol, or None."""
+    if COMMIT_ONLY_SUBJECT.search(subject or ''):
+        return ('this note only announces a commit; commits announce themselves on origin/main. '
+                'Put running state on the status page (status --set) or send a decision the receiver must adopt.')
+    cutoff = stamp(now() - datetime.timedelta(hours=1))
+    recent = [m for m in messages if m['kind'] == 'note' and store.machine_of(m['from']) == store.machine
+              and (m.get('sent_at') or '') >= cutoff and not m.get('legacy')]
+    if len(recent) >= NOTES_PER_HOUR:
+        return (f'{len(recent)} notes from {store.machine} in the last hour; update the status page instead '
+                '(status --set), or pass --force if the receiver must act on this now.')
+    return None
+
+
+def verify_manifests(repo, machine, ids):
+    """Run the shared exact manifest verifier; return (ok, transcript)."""
+    command = [sys.executable, str(repo / 'scripts/sync_training_corpora.py'), '--repo', str(repo),
+               '--machine', machine, 'verify']
+    for manifest in ids:
+        command += ['--id', manifest]
+    result = subprocess.run(command, capture_output=True, text=True)
+    transcript = (result.stdout + result.stderr).strip()
+    return result.returncode == 0, transcript
+
+
 def default_identity(machine):
     if os.environ.get('COORD_AS'):
         return os.environ['COORD_AS']
@@ -230,6 +261,7 @@ def main():
     send.add_argument('--kind', choices=('note', 'request', 'decision'), default='note')
     send.add_argument('--subject', required=True)
     send.add_argument('--urgent', action='store_true')
+    send.add_argument('--force', action='store_true', help='send a note the protocol guard would refuse')
     send.add_argument('-m', '--message')
     reply = sub.add_parser('reply', help='answer a message; answering a request resolves it unless --keep-open')
     reply.add_argument('id')
@@ -238,6 +270,9 @@ def main():
     close = sub.add_parser('close', help='resolve a request without further discussion')
     close.add_argument('id')
     close.add_argument('-m', '--message', default='closed')
+    verified = sub.add_parser('close-verified', help='close a data request once the shared manifest verifier passes here')
+    verified.add_argument('id')
+    verified.add_argument('--manifest', action='append', required=True, help='corpus manifest id (repeatable)')
     inbox = sub.add_parser('inbox', help='unread messages for me and open requests to my machine')
     inbox.add_argument('--ack', action='store_true', help='mark the shown messages read')
     inbox.add_argument('--json', action='store_true', help='read-only JSON for programs: unread, open requests and the '
@@ -280,7 +315,25 @@ def main():
             print(f'{me} on {store.machine}; peers: ' + ', '.join(f'{m} via ssh {h}' for m, h in store.peers.items()))
         elif args.command == 'send':
             to = [t.strip() for t in args.to.split(',') if t.strip()]
+            if args.kind == 'note' and not args.force:
+                reason = note_spam(store, args.subject, messages)
+                if reason:
+                    sys.exit('coord: not sent: ' + reason)
             message = make_message(store, me, to, args.kind, args.subject, read_body(args), urgent=args.urgent)
+            store.write(message)
+            failed = store.deliver(message)
+            print(message['id'] + (f'  (queued for {", ".join(failed)})' if failed else ''))
+        elif args.command == 'close-verified':
+            original = find(args.id)
+            ok, transcript = verify_manifests(args.repo, store.machine, args.manifest)
+            if not ok:
+                print(transcript)
+                sys.exit(f"coord: verifier failed on {store.machine}; {original['id']} stays open")
+            body = (f"Verified on {store.machine} by scripts/sync_training_corpora.py verify: "
+                    + ', '.join(args.manifest) + '\n\n' + transcript[-2000:])
+            to = sorted({original['from'], store.machine_of(original['from'])})
+            message = make_message(store, me, to, 'close', 'Re: ' + (original.get('subject') or ''), body,
+                                   reply_to=original['id'])
             store.write(message)
             failed = store.deliver(message)
             print(message['id'] + (f'  (queued for {", ".join(failed)})' if failed else ''))

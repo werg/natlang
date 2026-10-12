@@ -40,3 +40,32 @@ def test_inbox_json_is_read_only_and_lists_recent_and_open_messages(tmp_path, mo
     assert {m['id'] for m in shown['recent']} == {request['id'], note['id']}
     assert [m['id'] for m in shown['open_requests'] + shown['unread'] if m['kind'] == 'request'] == [request['id']]
     assert not list(store.cursors.glob('*.json')), 'a JSON read never writes a cursor'
+
+
+def test_note_guard_refuses_commit_announcements_and_note_floods(tmp_path, monkeypatch):
+    monkeypatch.setenv('COORD_MACHINE', 'dgx')
+    store = coord.Store(tmp_path)
+    assert coord.note_spam(store, 'Pushed 1a2b3c4: trainer fix', []) is not None
+    assert coord.note_spam(store, 'Mellum v4 stopped: drift above 1.5', []) is None
+    notes = [coord.make_message(store, 'dgx-agent', ['pop'], 'note', f'n{i}', 'x') for i in range(coord.NOTES_PER_HOUR)]
+    assert 'status page' in coord.note_spam(store, 'Another update', notes)
+    assert coord.note_spam(store, 'Another update', notes[:-1]) is None
+
+
+def test_close_verified_keeps_request_open_when_verifier_fails(tmp_path, monkeypatch):
+    monkeypatch.setenv('COORD_MACHINE', 'dgx')
+    store = coord.Store(tmp_path)
+    request = coord.make_message(store, 'pop-agent', ['dgx'], 'request', 'Sync corpus x', 'please')
+    store.write(request)
+    monkeypatch.setattr(coord, 'verify_manifests', lambda repo, machine, ids: (False, 'missing file'))
+    monkeypatch.setattr('sys.argv', ['coord.py', '--repo', str(tmp_path), 'close-verified', request['id'][:20],
+                                     '--manifest', 'x'])
+    try:
+        coord.main()
+    except SystemExit as stop:
+        assert 'stays open' in str(stop)
+    assert request['id'] not in coord.resolutions(store.messages())
+    monkeypatch.setattr(coord, 'verify_manifests', lambda repo, machine, ids: (True, 'verified x'))
+    monkeypatch.setattr(coord.Store, 'deliver', lambda self, message: [])
+    coord.main()
+    assert request['id'] in coord.resolutions(store.messages())
