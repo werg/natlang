@@ -1,0 +1,88 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v21-clinc-intent-exact-child-actions-20261012-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/luna-v21-clinc-intent-exact-child-actions-20261012-v1",
+  "files": [
+    {
+      "path": "campaign-launch.json",
+      "bytes": 8655,
+      "sha256": "fab924e9b2c61ca1a8deabf8b6b8253aea73627d7083dcc4be7e4e6634aff339"
+    },
+    {
+      "path": "campaign-plan.json",
+      "bytes": 6237,
+      "sha256": "012372e9c0fd13a29408b0cef2b4adfdb912fba076c8b514fb430ae599c1166e"
+    },
+    {
+      "path": "candidate-audit.json",
+      "bytes": 104964,
+      "sha256": "d3d3323dfdb94620c95486b9a72501da06104b5f9e7e434bf87a58970d5d0030"
+    },
+    {
+      "path": "overlap-audit.json",
+      "bytes": 2254,
+      "sha256": "aa4cd520f81f652307e96f665ef32443d7ccf2e326b45ed922dd12f86970e97b"
+    },
+    {
+      "path": "review.json",
+      "bytes": 106726,
+      "sha256": "fa720e4f662a5d7fb5202687df9b72c6d0c7cf8ee755f0fd6623728396196e63"
+    },
+    {
+      "path": "root-generation-review.json",
+      "bytes": 16156,
+      "sha256": "4898d275431abaa29c9b054c6c8333439d97ae68967de41a0b418cc3950d291a"
+    },
+    {
+      "path": "salvage-receipt.json",
+      "bytes": 180338,
+      "sha256": "eca0c00ee78a0c2ece35321ac9018d007f5eabe65e55a89f048b4daa3dfabae8"
+    },
+    {
+      "path": "source-cases.jsonl",
+      "bytes": 279453,
+      "sha256": "961c381d6bff60f03933d26c4ea52d47fd5b21f1b80697340c483ea82072b52e",
+      "lines": 100
+    },
+    {
+      "path": "source-closure.json",
+      "bytes": 6582,
+      "sha256": "f7134f295e3ef647c8f2e865c969a7f87d1e2ada071632758bf872655b0cdee0"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 78047,
+      "sha256": "8dd03bf8841cf08a244a902e8fcdca9c1c652f980363c593c68ee9f34455b66e"
+    },
+    {
+      "path": "source-quality-clearance.json",
+      "bytes": 52590,
+      "sha256": "a3a2a033bb9a665ff05733298616e849f1466c41451378b35d857340ba1b835e"
+    },
+    {
+      "path": "source-quality-review.json",
+      "bytes": 80746,
+      "sha256": "a55a53d5c1defb76f61f01d81af5acd9f7102a2e34051e5fa6290fbc0b2181de"
+    },
+    {
+      "path": "static-cases.jsonl",
+      "bytes": 1675777,
+      "sha256": "ae6175580677952f3617b994aedb74e33ac6fd0e0e736f0160e28ded15f12898",
+      "lines": 25
+    },
+    {
+      "path": "static-replay.results.jsonl",
+      "bytes": 13726232,
+      "sha256": "e23129117bdb53e4a9d72b46733adbb4c2f3bb13ddf04a3069b1f78a3027b0c7",
+      "lines": 25
+    },
+    {
+      "path": "teacher-turns.jsonl",
+      "bytes": 14751895,
+      "sha256": "382421db91b43f68cabbe1720dab8b61e0f529425e27afa6f39cf213432da462",
+      "lines": 75
+    }
+  ],
+  "bytes": 31076652
+}

@@ -1,8 +1,8 @@
 /**
  * What the model sees for each built-in natlang function (the progress judge, the stopping-condition note, the
  * behavior-comparison judge, view's body and the game policy), captured through public entry points with a
- * recording driver. `test/fixtures/builtin-prompts.json` was generated from this file at the commit where these
- * functions were still string literals in TypeScript; builtin-programs.test.mjs asserts the bytes are unchanged.
+ * recording driver. Their prompt requests remain pinned to the base commit. The prompt-piece registry at the end
+ * tracks its current scope metadata and registered variants for soft substitution and program-header rendering.
  */
 import { createNatlangRuntime, iterateOn } from '../../dist/runtime/node.js';
 import { defineNatlang } from '../../dist/runtime/callable.js';

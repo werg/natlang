@@ -39001,6 +39001,40 @@
       "supersedes": [
         "natlang-target-set-20261011-r1"
       ]
+    },
+    {
+      "id": "luna-v21-clinc-intent-exact-child-actions-20261012-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/luna-v21-clinc-intent-exact-child-actions-20261012-v1",
+      "include": [
+        "teacher-turns.jsonl",
+        "salvage-receipt.json",
+        "review.json",
+        "candidate-audit.json",
+        "source-cases.jsonl",
+        "source-manifest.json",
+        "static-cases.jsonl",
+        "static-replay.results.jsonl",
+        "source-quality-clearance.json",
+        "source-quality-review.json",
+        "source-closure.json",
+        "root-generation-review.json",
+        "campaign-plan.json",
+        "campaign-launch.json",
+        "overlap-audit.json"
+      ],
+      "split": "inherited-source-train-only",
+      "source_class": "provider-generated-source-bound-clinc-intent-child-decisions",
+      "training_admission": true,
+      "trace_admission": true,
+      "admission": "owner-reviewed-exact-source-bound-child-actions; training SFT only",
+      "independent_new_worlds": 0,
+      "review_status": "75 exact completed scalar child targets approved with visible utterance, question, complete 151-label domain, unique runtime case ID and exact source label. 25 of 100 source items are withheld: 17 source-label disagreements and 8 list-valued child outputs despite scalar parent values.",
+      "training_admission_reason": "Each selected target is the exact completed scalar child action bound to the pinned train source item and source group. All complete task fields are visible or scope-bound, runtime case ID binds the item, and exactly one complete child invocation matches. The root-signed source-quality clearance grants conversion only; separate per-child review approves these 75 actions. No source annotation/gold is copied into model-visible input. Selected source IDs/groups pass the canonical quality/JeFF reservation checks and have no overlap with the admitted Luna V19, V20, V43 controller, or V43 suffix 401 decision packets. Full visible context/tools/target keys are unique.",
+      "required_conversion": "shared native chat renderer for full, program-header, and whole-trajectory twins; admission does not imply runtime qualification",
+      "consumable_by_direct_stage": false,
+      "license_provenance": "Source rows record [\"cc-by-3.0\"] for clinc/clinc_oos.",
+      "notes": "Luna generated classification labels over the explicit 151-intent domain. Only exact scalar child targets matching the source label are admitted. Seventeen generated labels disagree with their source labels and are retained as context only. Eight more top-level outputs match the source label, but their child output is a one-element string array and therefore differs from the scalar task contract; no coercion was applied. Static authored references are included for exact replay, but do not receive training admission."
     }
   ],
   "coverage_backlog": [

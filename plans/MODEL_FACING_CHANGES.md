@@ -95,3 +95,9 @@ source for the Python training/serving renderer. Empirical debt: after training,
 compare about 48 held calls per mode on those exact student weights: first-turn
 tool validity, completion rate and held CE. Rendering parity is separately owned
 by DGX; implementation alone does not qualify the checkpoint.
+
+The 2026-10-12 builtin prompt check found the captured full-mode requests still
+byte-identical to the baseline. Its piece-registry snapshot now includes scope
+metadata and read-only variants used by the shared renderer; those registry
+entries do not change the default full prompt. Program-header mode remains
+unqualified until the held comparison above.

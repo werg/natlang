@@ -22,7 +22,15 @@ function refreshToken() {
   headers.Authorization = `Bearer ${oauthToken()}`;
   return true;
 }
-const account = process.env.CLOUDFLARE_ACCOUNT_ID ?? (await (await fetch(`${api}/accounts`, { headers })).json()).result[0].id;
+// The OAuth token is usually stale when this starts (a daily timer, an hour-long token): refresh once on failure.
+async function accountId() {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const body = await (await fetch(`${api}/accounts`, { headers })).json();
+    if (body.result?.length) return body.result[0].id;
+    if (attempt || !refreshToken()) throw new Error(`Cloudflare account lookup failed: ${JSON.stringify(body.errors ?? body).slice(0, 300)}`);
+  }
+}
+const account = process.env.CLOUDFLARE_ACCOUNT_ID ?? await accountId();
 
 const done = new Set(existsSync(outPath) ? readFileSync(outPath, 'utf8').split('\n').filter(Boolean)
   .map(l => JSON.parse(l)).map(a => `${a.seed}:${a.index}:${a.item}`) : []);
