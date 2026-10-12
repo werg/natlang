@@ -42,6 +42,13 @@ def open_lines(path):
             yield from f
 
 
+def read_lines(path):
+    """Lines of a file, dropping its page cache afterwards (page cache counts against a ledger unit's budget)."""
+    with open(path, encoding='utf-8') as f:
+        yield from f
+        os.posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+
+
 def trajectory_of(row):
     ref = row.get('source_ref') or {}
     return ref.get('trajectory_id') or row.get('teacher_trajectory_id') or str(row.get('id', '')).split(':decision')[0]
@@ -107,7 +114,8 @@ def convert_shard(shard: Path, tokenizer, preconverted_pieces=None):
                               cwd=TS_HOST, env=env, capture_output=True, text=True)
         if proc.returncode != 0:
             # The whole shard failed conversion: register every row with the converter's error.
-            reason = 'conversion_failed: ' + (proc.stderr.strip().splitlines() or ['?'])[-1][:300]
+            lines = proc.stderr.strip().splitlines() or ['?']
+            reason = 'conversion_failed: ' + next((l for l in lines if 'Error' in l), lines[-1])[:300]
             for line in open(shard):
                 if line.strip():
                     try: rid = json.loads(line).get('id')
@@ -134,10 +142,12 @@ def derive(stem, records, pieces, conversion, omissions, tokenizer):
     for e in review['excluded']:
         omissions.append({'id': e.get('id'), 'stage': 'authenticate', 'reason': e.get('reason')})
     by_id = {r['id']: r for r in records}
-    edges = []
+    edges, seen = [], set()
     for d in review['decisions']:
         for ref in d.get('references') or []:
-            if ref.get('gradient_edge'):
+            key = (ref.get('writer_record_id'), d['id'], ref.get('name'), ref.get('body_sha256'))
+            if ref.get('gradient_edge') and key not in seen:
+                seen.add(key)
                 w = by_id.get(ref.get('writer_record_id'))
                 edges.append({'writer_record_id': ref.get('writer_record_id'), 'reader_record_id': d['id'],
                               'write_name': ref.get('name'), 'body_sha256': ref.get('body_sha256'),
@@ -204,17 +214,22 @@ def cmd_assemble(a):
     work = Path(a.work)
     out = Path(resolve_str('data_nvme', 'natlang-corpora', a.id))
     staged = out.with_name(out.name + '.building'); staged.mkdir(parents=True, exist_ok=True)
-    held_groups = set()
-    for rend in ('full', 'program-header', 'whole-trajectory'):
-        for path in glob.glob(f'{a.held_union}/{rend}/*/text-data.jsonl')[:1]:
-            for line in open(path):
-                if '"test"' in line:
-                    t = json.loads(line)
-                    if t.get('split') == 'test': held_groups.update(t.get('source_groups') or [])
+    held_cache = work / 'held-groups.json'
+    if held_cache.exists():
+        held_groups = set(json.load(open(held_cache)))
+    else:
+        held_groups = set()
+        for rend in ('full', 'program-header', 'whole-trajectory'):
+            for path in glob.glob(f'{a.held_union}/{rend}/*/text-data.jsonl')[:1]:
+                for line in read_lines(path):
+                    if '"test"' in line:
+                        t = json.loads(line)
+                        if t.get('split') == 'test': held_groups.update(t.get('source_groups') or [])
+        json.dump(sorted(held_groups), open(held_cache, 'w'))
     pieces, piece_conflicts = {}, set()
     shard_stems = sorted(Path(p[:-len('.stats.json')]) for p in glob.glob(str(work / '*' / 'shard-*.stats.json')))
     for stem in shard_stems:
-        for line in open(f'{stem}.pieces.jsonl'):
+        for line in read_lines(f'{stem}.pieces.jsonl'):
             p = json.loads(line)
             if p['name'] in pieces and pieces[p['name']] != p['text']: piece_conflicts.add(p['name'])
             pieces.setdefault(p['name'], p['text'])
@@ -228,12 +243,12 @@ def cmd_assemble(a):
     by_source = collections.defaultdict(collections.Counter)
     for stem in shard_stems:
         source = stem.parent.name
-        for line in open(f'{stem}.omissions.jsonl'):
+        for line in read_lines(f'{stem}.omissions.jsonl'):
             o = json.loads(line); o['source'] = source; omissions.write(json.dumps(o) + '\n'); totals['omitted_' + o['stage']] += 1
         records = {}
-        for line in open(f'{stem}.records.jsonl'):
+        for line in read_lines(f'{stem}.records.jsonl'):
             r = json.loads(line); records[r['id']] = r
-        edges = [json.loads(l) for l in open(f'{stem}.edges.jsonl')]
+        edges = [json.loads(l) for l in read_lines(f'{stem}.edges.jsonl')]
         keep_ids, drop = set(), {}
         for rid, r in records.items():
             if rid in seen_ids:
@@ -244,9 +259,12 @@ def cmd_assemble(a):
             if any(n in piece_conflicts for n in _soft_names(r)):
                 drop[rid] = 'piece_version_conflict'; continue
             keep_ids.add(rid)
-        kept_edges = []
+        kept_edges, edge_keys = [], set()
         for e in edges:
             w, rd = e['writer_record_id'], e['reader_record_id']
+            key = (w, rd, e['write_name'], e['body_sha256'])
+            if key in edge_keys: totals['edges_duplicate_reference'] += 1; continue
+            edge_keys.add(key)
             if w not in keep_ids or rd not in keep_ids: totals['edges_dropped_endpoint'] += 1; continue
             if e['split'] != e['writer_split']: totals['edges_dropped_cross_split'] += 1; continue
             if e['split'] == 'train' and ((set(records[w].get('source_groups') or []) | set(records[rd].get('source_groups') or [])) & held_groups):
@@ -271,6 +289,8 @@ def cmd_assemble(a):
             by_source[source]['chains'] += 1; by_source[source]['records'] += len(ids); by_source[source]['edges'] += len(ces)
             totals['chains'] += 1; totals['records'] += len(ids); totals['edges'] += len(ces)
             totals['edges_' + ces[0]['split']] += len(ces)
+        for h in (rec_out, edge_out):  # written pages count against the unit's budget too: flush and drop them
+            h.flush(); os.fdatasync(h.fileno()); os.posix_fadvise(h.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
     for h in (omissions, rec_out, edge_out, chains_out): h.close()
     with open(staged / 'pieces.jsonl', 'w') as f:
         for n, t in sorted(pieces.items()): f.write(json.dumps({'name': n, 'text': t}, ensure_ascii=False) + '\n')
@@ -286,7 +306,8 @@ def cmd_assemble(a):
         'held_union': a.held_union, 'held_groups': len(held_groups), 'piece_conflicts': sorted(piece_conflicts),
         'totals': totals, 'by_source': by_source,
         'by_family': {f: {**fam[f], 'edge_kinds': fam_kinds[f], 'supervised_tokens_lfm25_shard_kept': tokens[f]} for f in sorted(fam)},
-        'sources': {d.name: json.load(open(d / 'sharded.json')) for d in sorted(work.iterdir()) if (d / 'sharded.json').exists()},
+        'sources': {d.name: {**json.load(open(d / 'sharded.json')), 'shards_done': len(glob.glob(str(d / 'shard-*.stats.json')))}
+                    for d in sorted(work.iterdir()) if (d / 'sharded.json').exists()},
         'files': {n: {'sha256': sha256_file_hex(staged / n), 'bytes': os.path.getsize(staged / n)}
                   for n in ('records.jsonl', 'pieces.jsonl', 'edges.jsonl', 'chains.jsonl', 'omissions.jsonl')},
     }
