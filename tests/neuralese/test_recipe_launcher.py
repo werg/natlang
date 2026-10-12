@@ -65,6 +65,46 @@ def test_resume_requires_handoff_only_for_changed_code(tmp_path):
         LAUNCHER.validate_existing_direct_resume(output, recipe, "cuda", code, True)
 
 
+def test_direct_epoch_budget_change_is_only_allowed_for_exact_epoch_only_direct_handoff(tmp_path):
+    output, recipe, code = resume_fixture(tmp_path)
+    plan_path = output / "direct-stage-plan.json"
+    plan = json.loads(plan_path.read_text())
+    plan["parameters"] = {"epochs": 2.0, "batch": 4}
+    plan_path.write_text(json.dumps(plan))
+    recipe["parameters"] = {"epochs": 1.0, "batch": 4}
+    changed_code = {"train/direct_sft.py": "b" * 64}
+
+    with pytest.raises(ValueError, match="training parameters"):
+        LAUNCHER.validate_existing_direct_resume(output, recipe, "cuda", changed_code, False)
+    binding = LAUNCHER.validate_existing_direct_resume(output, recipe, "cuda", changed_code, True)
+    assert binding["epoch_budget_handoff"] == {
+        "old_epochs": 2.0,
+        "new_epochs": 1.0,
+        "verification": "trainer-reconstructs-exact-schedule-prefix-and-checkpoint-step",
+    }
+
+    recipe["parameters"]["batch"] = 8
+    with pytest.raises(ValueError, match="training parameters"):
+        LAUNCHER.validate_existing_direct_resume(output, recipe, "cuda", changed_code, True)
+    recipe["parameters"] = {"epochs": 1.0, "batch": 4}
+    recipe["stage"]["kind"] = "core_text_warmup"
+    with pytest.raises(ValueError, match="changes stage"):
+        LAUNCHER.validate_existing_direct_resume(output, recipe, "cuda", changed_code, True)
+
+
+@pytest.mark.parametrize("old,new", [(1.0, 1.0), (0.0, 1.0), (2.0, 0.0), ("2", 1.0), (True, 1.0)])
+def test_direct_epoch_budget_change_rejects_invalid_or_unchanged_epochs(old, new):
+    assert recipe_module.direct_epoch_budget_change(
+        "neuralese_direct", {"epochs": old, "batch": 4}, {"epochs": new, "batch": 4}) is None
+
+
+def test_direct_epoch_budget_change_rejects_other_parameter_changes():
+    assert recipe_module.direct_epoch_budget_change(
+        "neuralese_direct", {"epochs": 2.0, "batch": 4}, {"epochs": 1.0, "batch": 8}) is None
+    assert recipe_module.direct_epoch_budget_change(
+        "core_text_warmup", {"epochs": 2.0, "batch": 4}, {"epochs": 1.0, "batch": 4}) is None
+
+
 def test_resume_rejects_missing_checkpoint(tmp_path):
     output, recipe, code = resume_fixture(tmp_path)
     (output / "direct" / "checkpoint.pt").unlink()
@@ -181,6 +221,34 @@ def test_exact_existing_shared_resume_binds_recipe_inputs_device_and_frozen_runt
     assert binding["frozen_code"] == code
     assert binding["plan_sha256"] == LAUNCHER.sha256(output / "recipe-plan.json")
     assert binding["device"] == "cuda"
+    assert binding["frozen_code_changed"] is False
+
+
+def test_shared_resume_code_handoff_allows_only_a_pinned_package_code_change(tmp_path, monkeypatch):
+    output, recipe, recipe_path, heads, stage_inputs, _old_code = shared_resume_fixture(tmp_path, monkeypatch)
+    plan_path = output / "recipe-plan.json"
+    plan = json.loads(plan_path.read_text())
+    new_code = {"train/direct_sft.py": "e" * 64}
+    recipe = json.loads(json.dumps(recipe))
+    recipe["runtime"]["package_code"] = new_code
+
+    binding = LAUNCHER.validate_existing_shared_resume(
+        output, recipe, recipe_path, heads, stage_inputs, "cuda", new_code, handoff=True)
+
+    assert binding["frozen_code_changed"] is True
+    assert binding["frozen_code"] == plan["code"]
+
+    recipe["stages"][0]["parameters"]["learning_rate"] = 0.5
+    with pytest.raises(ValueError, match="changes more than runtime.package_code"):
+        LAUNCHER.validate_existing_shared_resume(
+            output, recipe, recipe_path, heads, stage_inputs, "cuda", new_code, handoff=True)
+
+
+def test_shared_resume_handoff_requires_changed_package_code(tmp_path, monkeypatch):
+    output, recipe, recipe_path, heads, stage_inputs, code = shared_resume_fixture(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="requires changed shared package code"):
+        LAUNCHER.validate_existing_shared_resume(
+            output, recipe, recipe_path, heads, stage_inputs, "cuda", code, handoff=True)
 
 
 @pytest.mark.parametrize("field", ["recipe", "inputs", "device", "stage_inputs"])

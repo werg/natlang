@@ -804,6 +804,27 @@ OPERATIONAL_STAGE_PARAMETERS = frozenset({'eval_every', 'checkpoint_every', 'moe
 RUNNER_STAGE_PARAMETERS = frozenset({'quantization_steps'})
 
 
+def direct_epoch_budget_change(stage_kind, old_parameters, new_parameters):
+    """Return an epoch-only budget change for a direct stage.
+
+    The trainer rebuilds both schedules from the pinned inputs and proves the
+    checkpoint's consumed batches are an exact prefix of the new schedule.
+    This helper only permits that narrowly scoped request to reach the trainer.
+    """
+    old_parameters, new_parameters = dict(old_parameters), dict(new_parameters)
+    old_epochs, new_epochs = old_parameters.pop('epochs', None), new_parameters.pop('epochs', None)
+    if old_parameters != new_parameters:
+        return None
+    if stage_kind != 'neuralese_direct':
+        return None
+    if (type(old_epochs) not in (int, float) or type(new_epochs) not in (int, float) or
+            not math.isfinite(old_epochs) or not math.isfinite(new_epochs) or
+            old_epochs <= 0 or new_epochs <= 0 or new_epochs == old_epochs):
+        return None
+    return {'old_epochs': old_epochs, 'new_epochs': new_epochs,
+            'verification': 'trainer-reconstructs-exact-schedule-prefix-and-checkpoint-step'}
+
+
 def _stage_steps(recipe, stage):
     """(steps, quantization update range) of a stage as declared (no AR fixup offset)."""
     parameters = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
@@ -862,6 +883,15 @@ def _without_operational(recipe):
     return value
 
 
+def _without_package_code(recipe):
+    """Remove only the frozen source-code inventory from a recipe comparison."""
+    value = json.loads(json.dumps(recipe))
+    runtime = value.get('runtime')
+    if isinstance(runtime, dict):
+        runtime.pop('package_code', None)
+    return value
+
+
 def lineage_handoff(existing, plan, frozen, package, plan_path, out=None):
     """Resume a lineage on the newest code and an operationally changed recipe (owner: jobs switch to the newest code
     at once). Inputs and device must be unchanged and the recipes equal apart from operational stage parameters, so
@@ -875,9 +905,35 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None):
     extended = stage_extensions(existing['recipe'], plan['recipe'], out if out is not None else plan_path.parent)
     if (_without_operational(_without_extensions(existing['recipe'], extended)) !=
             _without_operational(_without_extensions(plan['recipe'], extended))):
-        raise ValueError('handoff refused: the recipe changes more than operational stage parameters '
-                         'and stage extensions')
+        old_runtime = existing['recipe'].get('runtime', {})
+        new_runtime = plan['recipe'].get('runtime', {})
+        old_pin = old_runtime.get('package_code') if isinstance(old_runtime, dict) else None
+        new_pin = new_runtime.get('package_code') if isinstance(new_runtime, dict) else None
+        if (not isinstance(old_pin, dict) or not isinstance(new_pin, dict) or
+                _without_operational(_without_extensions(_without_package_code(existing['recipe']), extended)) !=
+                _without_operational(_without_extensions(_without_package_code(plan['recipe']), extended))):
+            raise ValueError('handoff refused: the recipe changes more than operational stage parameters, '
+                             'stage extensions, and runtime.package_code')
     old_code = existing['code']
+    old_runtime = existing['recipe'].get('runtime', {})
+    new_runtime = plan['recipe'].get('runtime', {})
+    old_pin = old_runtime.get('package_code') if isinstance(old_runtime, dict) else None
+    new_pin = new_runtime.get('package_code') if isinstance(new_runtime, dict) else None
+    if old_pin is not None or new_pin is not None:
+        if not isinstance(old_pin, dict) or not isinstance(new_pin, dict):
+            raise ValueError('handoff refused: runtime.package_code must be pinned on both recipe versions')
+        if old_pin != old_code:
+            raise ValueError('handoff refused: old recipe code pin differs from its recorded frozen runtime')
+        if not frozen.is_dir():
+            raise ValueError('handoff refused: old frozen runtime is missing')
+        actual_old = {str(path.relative_to(frozen)): sha(path) for path in sorted(frozen.rglob('*.py'))}
+        if actual_old != old_code:
+            raise ValueError('handoff refused: old frozen runtime differs from its recorded code inventory')
+        actual_new = {str(path.relative_to(package)): sha(path) for path in sorted(package.rglob('*.py'))}
+        if actual_new != new_pin:
+            raise ValueError('handoff refused: new recipe code pin differs from the current shared package')
+        if old_code == actual_new:
+            raise ValueError('handoff refused: runtime.package_code has not changed')
     previous = frozen.parent.parent / ('runtime-superseded-' + time.strftime('%Y%m%dT%H%M%S'))
     frozen.parent.rename(previous)
     shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
@@ -1059,7 +1115,9 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
             for key in OPERATIONAL_STAGE_PARAMETERS:
                 old_parameters.pop(key, None)
                 new_parameters.pop(key, None)
-        if old_parameters != new_parameters:
+        epoch_budget_handoff = (direct_epoch_budget_change(
+            stage['kind'], old_parameters, new_parameters) if handoff else None)
+        if old_parameters != new_parameters and epoch_budget_handoff is None:
             raise ValueError('direct-stage resume changes training parameters')
         if previous['frozen_code'] != actual_code and not handoff:
             raise ValueError('direct-stage code change requires --handoff')
@@ -1076,6 +1134,8 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
                   'previous_plan_path': str(history / 'direct-stage-plan.json'),
                   'previous_plan_sha256': sha(history / 'direct-stage-plan.json'),
                   'code_handoff': previous['frozen_code'] != actual_code}
+        if epoch_budget_handoff is not None:
+            resume['epoch_budget_handoff'] = epoch_budget_handoff
         if resume['code_handoff']:
             (output / 'runtime').rename(history / 'runtime')
     output.mkdir(parents=True, exist_ok=True)
