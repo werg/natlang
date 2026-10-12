@@ -465,8 +465,11 @@ def main(argv=None):
     if not targets:
         raise ValueError('neuralese_direct found no target-bearing train window')
     cohorts = sorted({w.get('cohort', 'native') for w in targets})
+    has_sampling_groups = any(w.get('sampling_group') is not None for w in targets)
     sampler = CohortDocumentSampler(targets, {c: 1 / len(cohorts) for c in cohorts},
-                                    cohort_key=lambda w: w.get('cohort', 'native'), document_key=lambda w: w['document'])
+                                    cohort_key=lambda w: w.get('cohort', 'native'), document_key=lambda w: w['document'],
+                                    sampling_group_key=(lambda w: w.get('sampling_group'))
+                                    if has_sampling_groups else None)
     schedule = epoch_schedule(sampler, seed=a.seed, length=lambda w: len(w['ids']) - 1, epochs=a.epochs,
                               updates=None if a.epochs is not None else a.steps, max_tokens=a.batch_tokens,
                               max_items=a.batch)
@@ -502,6 +505,7 @@ def main(argv=None):
     budget = {'epochs': a.epochs, 'updates': a.steps, 'batch_tokens': a.batch_tokens,
               'train_windows': len(train_windows), 'target_windows': len(targets),
               'documents': sum(len(d) for d in sampler.documents.values()),
+              'sampling': sampler.receipt(),
               'windows_per_update': sum(len(batch) for batch, _ in schedule) / len(schedule),
               'policy': 'epoch-ordered document shuffle without replacement, target-bearing windows, '
                         'length-bucketed right-padded updates (text_supervision.epoch_schedule)'}

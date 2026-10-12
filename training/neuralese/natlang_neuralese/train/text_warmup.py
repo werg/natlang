@@ -957,7 +957,8 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
             windows[split].append({**window,
                 'document':hashlib.sha256(row['text'].encode()).hexdigest(),
                 'cohort':row.get('text_cohort','native'),
-                'groups':row['source_groups']})
+                'groups':row['source_groups'],
+                **({'sampling_group':row['sampling_group']} if row.get('sampling_group') is not None else {})})
     receipt={'enabled':bool(mask_system_prompt and role_start is not None),
              'requested':bool(mask_system_prompt),'role_start_id':role_start,
              'masked_system_tokens':masked_system_tokens,'documents':len(rows),
@@ -1041,6 +1042,9 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
         if any(r.get('split') not in ('train','test') or not isinstance(r.get('text'),str)
                or not r['text'].strip() or not r.get('source_groups') for r in rows):
             raise ValueError('text JSONL needs nonempty text, train/test split and source_groups')
+        if any('sampling_group' in r and (not isinstance(r['sampling_group'],str) or not r['sampling_group'])
+               for r in rows):
+            raise ValueError('sampling_group must be a nonempty string when present')
     else:
         from ..data.text_corpus import gold_text_rows
         records_path=Path(records)
@@ -1077,7 +1081,7 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
     for row in rows:
         if row['split']=='train' and row['text'] in held:excluded+=1;continue
         ids_digest=hashlib.sha256(array('I',row.get('token_ids',[])).tobytes()).digest()
-        key=(row['split'],row['text'],ids_digest,row.get('supervised_suffix_start'))
+        key=(row['split'],row['text'],ids_digest,row.get('supervised_suffix_start'),row.get('sampling_group'))
         if key in dedup and dedup[key].get('text_cohort','native')!=row.get('text_cohort','native'):
             raise ValueError('an identical document belongs to multiple cohorts; resolve ownership before training')
         dedup.setdefault(key,row)
