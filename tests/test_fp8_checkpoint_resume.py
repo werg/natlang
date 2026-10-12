@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 
 import torch
+import pytest
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "run_fp8_checkpoint_resume.py"
@@ -37,6 +38,16 @@ def test_file_signature_requires_complete_file(tmp_path):
     path.write_bytes(b"checkpoint")
     signature = WATCH.file_signature(path)
     assert signature == (10, path.stat().st_mtime_ns)
+
+
+def test_runtime_handoff_is_needed_only_until_plan_pins_current_code(tmp_path):
+    path = tmp_path / "direct-stage-plan.json"
+    path.write_text(json.dumps({"frozen_code": {"train/direct_sft.py": "a" * 64}}))
+    assert WATCH.runtime_handoff_needed(path, {"train/direct_sft.py": "b" * 64})
+    assert not WATCH.runtime_handoff_needed(path, {"train/direct_sft.py": "a" * 64})
+    path.write_text(json.dumps({"frozen_code": []}))
+    with pytest.raises(ValueError, match="frozen code inventory"):
+        WATCH.runtime_handoff_needed(path, {})
 
 
 def test_training_checkpoint_load_allowlists_torch_version_only(tmp_path):

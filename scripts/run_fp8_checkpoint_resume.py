@@ -7,6 +7,7 @@ alter training: the same recipe and output are used for both invocations.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 from pathlib import Path
@@ -54,6 +55,15 @@ def file_signature(path: Path) -> tuple[int, int] | None:
     return stat.st_size, stat.st_mtime_ns
 
 
+def runtime_handoff_needed(plan_path: Path, current_code: dict) -> bool:
+    """Only request --handoff while the committed direct-stage plan still pins older code."""
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    frozen_code = plan.get("frozen_code")
+    if not isinstance(frozen_code, dict) or not frozen_code:
+        raise ValueError("committed direct-stage plan has no frozen code inventory")
+    return frozen_code != current_code
+
+
 def atomic_receipt(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
@@ -65,7 +75,7 @@ def atomic_receipt(path: Path, value: dict) -> None:
     os.replace(temporary, path)
 
 
-def start_launcher(args, *, phase: str, resume: bool, wrapper_log: Path):
+def start_launcher(args, *, phase: str, resume: bool, wrapper_log: Path, handoff: bool = False):
     launch_dir = args.receipt.parent / "launches"
     metadata = launch_dir / f"{phase}.launch-metadata.json"
     container_log = launch_dir / f"{phase}.container.log"
@@ -73,9 +83,14 @@ def start_launcher(args, *, phase: str, resume: bool, wrapper_log: Path):
         raise FileExistsError(f"refusing to reuse {phase} launch evidence")
     command = [str(args.python), str(LAUNCHER), "--recipe", str(args.recipe),
                "--artifact-root", str(args.artifact_root), "--hf-hub-cache", str(args.hf_hub_cache),
-               "--device", args.device, "--launch-metadata", str(metadata), "--log", str(container_log)]
+               "--device", args.device, "--docker", str(args.docker),
+               "--launch-metadata", str(metadata), "--log", str(container_log)]
     if resume:
         command.append("--resume-existing")
+    if handoff:
+        if not resume:
+            raise ValueError("runtime handoff is only valid for an in-place resume")
+        command.append("--handoff")
     wrapper_log.parent.mkdir(parents=True, exist_ok=True)
     atomic_receipt(args.receipt, {**args.receipt_state, "phase": phase, "command": command,
                                   "started_at_unix": time.time(), "status": "running"})
@@ -115,7 +130,8 @@ def launch_control(args) -> dict:
     container_log = args.receipt.parent / "launches" / "uninterrupted.container.log"
     command = [str(args.python), str(LAUNCHER), "--recipe", str(control_recipe),
                "--artifact-root", str(args.artifact_root), "--hf-hub-cache", str(args.hf_hub_cache),
-               "--device", args.device, "--launch-metadata", str(metadata), "--log", str(container_log)]
+               "--device", args.device, "--docker", str(args.docker),
+               "--launch-metadata", str(metadata), "--log", str(container_log)]
     with wrapper_log.open("x", encoding="utf-8") as stream:
         completed = subprocess.run(command, cwd=REPO, stdin=subprocess.DEVNULL,
                                    stdout=stream, stderr=subprocess.STDOUT, check=False,
@@ -213,6 +229,7 @@ def main(argv=None) -> int:
     parser.add_argument("--python", type=Path, default=Path(sys.executable),
                         help="Python 3.12 interpreter used for the shared recipe launcher")
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
+    parser.add_argument("--docker", default="docker", help="Docker CLI or a hash-pinned task wrapper")
     parser.add_argument("--checkpoint-step", type=int, default=3)
     parser.add_argument("--poll-seconds", type=float, default=0.1)
     parser.add_argument("--stable-polls", type=int, default=2)
@@ -266,10 +283,20 @@ def main(argv=None) -> int:
         prior_receipt = json.loads(prior_path.read_text(encoding="utf-8"))
         prior_initial = prior_receipt.get("initial", {})
         prior_report = prior_initial.get("report", {})
+        original_recipe_path = Path(prior_receipt.get("recipe_path", "")).resolve()
         if prior_receipt.get("schema") != "natlang.fp8-same-recipe-checkpoint-resume/1" or \
-                prior_receipt.get("recipe_sha256") != sha256(recipe_path) or \
-                prior_receipt.get("recipe_path") != str(recipe_path):
-            raise ValueError("recovery receipt does not bind this exact declared recipe")
+                not original_recipe_path.is_file() or \
+                prior_receipt.get("recipe_sha256") != sha256(original_recipe_path):
+            raise ValueError("recovery receipt does not bind its original declared recipe")
+        original_recipe = json.loads(original_recipe_path.read_text(encoding="utf-8"))
+        old_identity, new_identity = copy.deepcopy(original_recipe), copy.deepcopy(recipe)
+        old_pin = old_identity.get("runtime", {}).pop("package_code", None)
+        new_pin = new_identity.get("runtime", {}).pop("package_code", None)
+        if old_identity != new_identity or not isinstance(old_pin, dict) or \
+                not isinstance(new_pin, dict) or old_pin == new_pin:
+            raise ValueError("recovery recipe may change runtime.package_code only")
+        if prior_receipt.get("outputs_directory") != str(output):
+            raise ValueError("runtime handoff changed the original output directory")
         if prior_report.get("status") != "checkpointed_on_signal" or \
                 int(prior_report.get("steps", -1)) < args.checkpoint_step or \
                 prior_initial.get("returncode") != 128 + signal.SIGTERM:
@@ -291,6 +318,7 @@ def main(argv=None) -> int:
         "fp8_training": parameters["fp8_training"], "fp8_recipe": parameters.get("fp8_recipe"),
         "artifact_root": str(args.artifact_root), "hf_hub_cache": str(args.hf_hub_cache),
         "python": str(args.python), "device": args.device,
+        "docker_launcher": str(args.docker),
         "watcher_script": str(Path(__file__).resolve()), "watcher_sha256": sha256(Path(__file__).resolve()),
         "status": "prepared",
     }
@@ -299,6 +327,11 @@ def main(argv=None) -> int:
             "path": str(prior_path), "sha256": sha256(prior_path),
             "checkpoint_sha256": prior_initial["checkpoint_sha256_before_resume"],
             "terminal_step": prior_report.get("steps"),
+            "original_recipe_path": str(original_recipe_path),
+            "original_recipe_sha256": prior_receipt["recipe_sha256"],
+            "runtime_only_handoff": True,
+            "original_package_code": old_pin,
+            "resumed_package_code": new_pin,
         }
     atomic_receipt(args.receipt, args.receipt_state)
     print(json.dumps({"event": "resume_exercise_started", "receipt": str(args.receipt),
@@ -334,9 +367,13 @@ def main(argv=None) -> int:
             raise RuntimeError(f"initial launcher returned {first_code}; refusing resume")
         args.receipt_state["initial"]["expected_signal_exit"] = expected_signal_exit
 
-    resume_log = args.receipt.parent / "launches" / "resume.wrapper.log"
-    resume_child = start_launcher(args, phase="resume", resume=True, wrapper_log=resume_log)
-    resume_code = finish_launcher(args, phase="resume", child=resume_child,
+    resume_phase = "recovery-resume-v1" if prior_receipt is not None else "resume"
+    resume_log = args.receipt.parent / "launches" / f"{resume_phase}.wrapper.log"
+    handoff_needed = prior_receipt is not None and runtime_handoff_needed(
+        output / "direct-stage-plan.json", recipe["runtime"]["package_code"])
+    resume_child = start_launcher(args, phase=resume_phase, resume=True, wrapper_log=resume_log,
+                                  handoff=handoff_needed)
+    resume_code = finish_launcher(args, phase=resume_phase, child=resume_child,
                                   timeout=args.phase_timeout_seconds)
     final_report = read_report(stage_output / "report.json")
     final_steps = train_steps(train_log)
@@ -361,7 +398,7 @@ def main(argv=None) -> int:
     complete = control_complete
     args.receipt_state["status"] = "complete_operational_resume_and_control_ready" if complete \
         else "uninterrupted_control_failed"
-    args.receipt_state["same_recipe_sha256_both_phases"] = True
+    args.receipt_state["same_recipe_sha256_resumed_and_control"] = True
     atomic_receipt(args.receipt, args.receipt_state)
     print(json.dumps({"event": "resume_exercise_finished", "status": args.receipt_state["status"],
                       "interrupted_at": initial_report.get("steps"), "final_step": final_report.get("steps"),
