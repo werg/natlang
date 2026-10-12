@@ -143,6 +143,22 @@ prompt-rendering identity; existing frozen training snapshots are unchanged.
 foreign tools under the old and new serving renderings, recording tool validity,
 task success and model requests before adopting a new export identity.
 
+## Collector rendering for in-run student evaluation — 2026-10-13
+
+The held-task collector had always used the native agent's default `full`
+rendering even when the student server and training recipe were declared
+`program-header`. The earlier server stripped native schemas anyway, but the
+new external-tool preservation would have made the collector's native schemas
+visible on the next trainer restart. The collector now accepts an explicit
+`prompt_rendering` in its queue and CLI, passes it to the native agent, and
+records it in provenance. The in-run evaluator supplies the stage's declared
+rendering; teacher queues retain their full default. This preserves the
+program-header student contract through the whole stack. **Measurement debt:**
+compare about 48 live held student requests across the old and corrected path
+after the next checkpoint handoff; verify the delivered system text and schema
+count, tool validity, completion and exact result. The frozen step-13,000 run
+was unaffected by this code change.
+
 ## MuSiQue hop answer phrases — 2026-10-12
 
 The original `musique_hops` child returns a verbatim evidence sentence. Among the

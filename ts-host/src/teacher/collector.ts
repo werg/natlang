@@ -10,6 +10,7 @@ import { createManagedModelSession } from '../model/local-server.js';
 import { resolveModelChoice } from '../model/config.js';
 import { TypeScriptEnvironment } from '../environment.js';
 import { NativeToolAgent } from '../native/agent.js';
+import type { PromptRendering } from '../native/system-prompts.js';
 import { GENERATION_GUIDANCE, TOOLS_PROMPT } from '../native/prompt.js';
 import { NodeNativeRuntime } from '../node-runtime.js';
 import { Folder } from '../native/scoped-fs.js';
@@ -68,6 +69,8 @@ export function collectedInvocationTraceEvents(runId: string, rootEvents: Record
     ...childTraces.flatMap(child => tag(child.events, child.callId, 'child'))];
 }
 export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPrompt: string;
+  /** Native prompt/tool rendering, shared with the serving engine for student rollouts. */
+  promptRendering?: PromptRendering;
   /** The agent's context budget in prompt tokens (see NativeToolAgent contextTokens). */
   contextTokens: number; toolSurfaceSha256: string;
   /** Model turns allowed per call; unlimited unless set. A collection run should set one. */
@@ -190,6 +193,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     counter_loop_policy_version: 2,
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
     system_prompt_sha256: sha256(effectiveSystemPrompt(options)), context_tokens: options.contextTokens,
+    ...(options.promptRendering ? { prompt_rendering: options.promptRendering } : {}),
     ...(options.textNeuraleseEmulation ? { text_neuralese_transport: { mode: TEXT_NEURALESE_EMULATION_VERSION,
       prompt_revision: TEXT_NEURALESE_PROMPT_REVISION,
       dialect: TEXT_NEURALESE_DIALECT, width: TEXT_NEURALESE_WIDTH,
@@ -1326,6 +1330,7 @@ export function programRow(record: ProgramRecord, modelId: string, runId: string
 }
 
 export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
+  promptRendering?: PromptRendering;
   maxTurns?: number; temperature?: number; rootSeed: number; runId: string; signal?: AbortSignal; fileTools?: FileToolSurface;
   /** Explicitly disable or provide the call store for bounded replays; default collection still records normally. */
   calls?: import('../runtime/runtime.js').NatlangRuntimeOptions['calls'];
@@ -1365,6 +1370,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   const environment = new TypeScriptEnvironment({ mode: 'fresh' });
   const effects = effectHarness(record.semantics.effects ?? {});
   const agent = new NativeToolAgent(driver, { systemPrompt: options.systemPrompt, temperature: options.temperature ?? 0,
+    ...(options.promptRendering ? { promptRendering: options.promptRendering } : {}),
     ...(options.fileTools ? { fileTools: options.fileTools } : {}),
     ...(options.neuralese ? { neuralese: options.neuralese } : {}),
     contextTokens: options.contextTokens, maxTurns: options.maxTurns });

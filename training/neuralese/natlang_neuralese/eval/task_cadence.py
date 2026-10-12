@@ -177,6 +177,7 @@ class TaskEval:
                                 'log': str(case / 'collector.log'), 'output': str(case / 'results.jsonl'),
                                 'case_seconds': self.spec['case_seconds'], 'context_tokens': 32768,
                                 'max_model_requests': self.spec['max_model_requests'],
+                                'prompt_rendering': self.prompt_rendering,
                                 'max_turns': self.spec['max_turns'], 'request_retries': 1,
                                 'transport_retries': 0, 'seed': 400000 + self.spec['cases'][index],
                                 'text_neuralese_emulation': False})

@@ -545,6 +545,10 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                    '--root-seed', str(entry['seed']), '--workers', str(count), '--max-turns', str(max_turns),
                    '--model-concurrency', str(model_concurrency), '--max-model-requests', str(entry.get('max_model_requests', 128)),
                    '--transport-retries', str(transport_retries), '--file-tools', entry.get('surface', 'all')]
+        if 'prompt_rendering' in entry:
+            if entry['prompt_rendering'] not in ('full', 'program-header'):
+                raise ValueError('entry prompt_rendering must be full or program-header')
+            command += ['--prompt-rendering', entry['prompt_rendering']]
         if 'request_retries' in entry:
             command += ['--request-retries', str(entry['request_retries'])]
         if 'action_max_tokens' in entry:

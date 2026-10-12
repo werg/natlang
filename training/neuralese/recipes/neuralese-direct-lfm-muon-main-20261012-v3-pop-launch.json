@@ -57,7 +57,7 @@
         "eval/scheduler_throughput.py": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064",
         "eval/self_feedback.py": "064339913cebb5a8253d0fbf09e97956c495fff018f5d84ff06dd2230f4c94dd",
         "eval/stopping_diagnostics.py": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37",
-        "eval/task_cadence.py": "757190df4bae178cc777b56430549de82973d684cd0d78c1171c2b8ac54d3821",
+        "eval/task_cadence.py": "22e7118bfcc9c8615f9010fd10a8bfc1907c18bc60faa65674d2f42f5661a95d",
         "eval/task_packet.py": "df71a2deae7c9dad98b3f394ad71889d82ebdbd681aca967b44f422b5997d35f",
         "eval/text_warmup_runtime.py": "3f44caf9e790b91b0dc6be830c61415502db68da9fdb27daa98b498e42d36c9a",
         "eval/trajectory_execution.py": "82d4032da64cfe39e0e1eda30dd79eeacb24d5f6de495a73b8058b673d18506a",

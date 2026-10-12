@@ -4,6 +4,7 @@ import { chatRequestControls } from './chat-request-controls.js';
 import { providerRequestControls } from './provider-request-controls.js';
 import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
 import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';
+import type { PromptRendering } from '../native/system-prompts.js';
 import { readFile } from 'node:fs/promises';
 import { createReadStream, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -54,6 +55,7 @@ async function main(): Promise<void> {
       '         --provider-request-timeout-ms N --provider-action-cycle-timeout-ms N\n' +
       '           (optional Pi provider collection resource controls; off by default)\n' +
       '         --model-concurrency N --max-model-requests N  (limits include all child calls)\n' +
+      '         --prompt-rendering full|program-header  native prompt and tool surface (default full)\n' +
       '         --cache-stable-tools --collection-role student|teacher\n' +
       '         --text-neuralese-emulation  explicit marker-and-literal text transport for teacher Neuralese calls only\n' +
       '         --execution-adapter MODULE  caller-supplied program execution fixture\n' +
@@ -95,6 +97,9 @@ async function main(): Promise<void> {
     throw new Error('--execution-plan-tokens requires --execution-plans');
   if (flags.has('--action-max-tokens') && integer(flags, '--action-max-tokens', 0) < 1)
     throw new Error('--action-max-tokens must be a positive integer');
+  const promptRendering = flags.get('--prompt-rendering');
+  if (promptRendering && promptRendering !== 'full' && promptRendering !== 'program-header')
+    throw new Error('--prompt-rendering must be full or program-header');
   const adapterPath=flags.get('--execution-adapter');
   let execution:CollectorConfig['execution'];
   if(adapterPath){const path=resolve(adapterPath),loaded=(await import(pathToFileURL(path).href)).default;
@@ -103,6 +108,7 @@ async function main(): Promise<void> {
   const config: CollectorConfig = { jobs, output, ...(execution?{execution}:{}), modelId: flags.get('--model-id')!,
     rootSeed: integer(flags, '--root-seed', 0), workers: integer(flags, '--workers', 6),
     contextTokens: integer(flags, '--context-tokens', 16384),
+    ...(promptRendering ? { promptRendering: promptRendering as PromptRendering } : {}),
     ...(flags.has('--max-turns') ? { maxTurns: integer(flags, '--max-turns', 0) } : {}),
     ...(flags.has('--temperature') ? { temperature: Number(flags.get('--temperature')) } : {}),
     ...(flags.has('--model-concurrency') ? { modelConcurrency: integer(flags, '--model-concurrency', 2) } : {}),
