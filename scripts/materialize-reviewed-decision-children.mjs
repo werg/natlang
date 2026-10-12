@@ -14,7 +14,7 @@ import { ordinalDistanceRecordReview } from '../ts-host/dist/evaluation/oracles.
 import { sourceQualityClearanceForProgram, sourceQualityClearanceProblems } from '../ts-host/dist/teacher/source-quality-clearance.js';
 import { canonical as sharedCanonical } from '../ts-host/dist/adaptation/identity.js';
 import { hexDigest } from '../ts-host/dist/native/hash.js';
-import { visibleTurnText, visibleValue } from './lib/decision-child-visibility.mjs';
+import { providerRenderedTurn, visibleValue } from './lib/decision-child-visibility.mjs';
 import { parentEvalChain, projectDeclaredChildResult } from './lib/decision-child-projection.mjs';
 
 const { values } = parseArgs({ options: {
@@ -332,7 +332,12 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         const invocationTurns = materialized.turns.filter(turn => turn.source_ref?.invocation_id === entry.invocation_id);
         const turn = invocationTurns.at(-1);
         if (!turn) { bindingGaps.push({ invocation_id: entry.invocation_id, reason: 'materializer_has_no_child_turn' }); continue; }
-        const text = visibleTurnText(turn);
+        const providerView = providerRenderedTurn(turn, row);
+        if (!providerView.text) {
+          bindingGaps.push({ invocation_id: entry.invocation_id, reason: providerView.reason });
+          continue;
+        }
+        const text = providerView.text;
         const snapshots = entry.inline_instruction_site?.runtime_capture_snapshots?.captures ?? [];
         const scopeValues = Object.fromEntries(snapshots.map(snapshot => [snapshot.name, snapshot.value]));
         const scopeBound = Object.fromEntries(Object.entries(fields).map(([key, value]) =>
@@ -351,7 +356,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
           continue;
         }
         if (Object.values(visible).every(Boolean)) matches.push({ entry, turn, visible, caseIdBound,
-          scopeBoundFields: Object.keys(scopeBound).filter(key => scopeBound[key]), projection: {
+          scopeBoundFields: Object.keys(scopeBound).filter(key => scopeBound[key]), providerView, projection: {
             kind: projection.projection, declared_return_type: declaredReturnType,
             result_binding: projection.result_binding, parent_invocation_id: entry.parent_invocation_id,
             parent_action_sha256: sha(parentCodes[projection.projection_code_index] ?? ''),
@@ -385,12 +390,15 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
           binding_gaps: bindingGaps.slice(0, 8) });
         continue;
       }
-      const { entry, turn, visible, caseIdBound, scopeBoundFields } = matches[0];
+      const { entry, turn, visible, caseIdBound, scopeBoundFields, providerView } = matches[0];
       const candidate = { program_id: program.id, trajectory_id: row.id, trajectory_sha256: originalDigest,
         item_id: id, item_sha256: itemSha, source_group: source.group, source_role: source.role,
         expected_value: expected, observed_value: observed, invocation_id: entry.invocation_id,
         decision_index: turn.decision.index, target_sha256: nativeDecisionTargetDigest(turn.target),
         target_tool: turn.target?.tool_calls?.[0]?.function?.name ?? null,
+        provider_request_sha256: providerView.requestSha256,
+        provider_rendered_request_sha256: providerView.renderedRequestSha256,
+        provider_rendered_messages_sha256: sha(JSON.stringify(providerView.renderedMessages)),
         visible_fields: Object.keys(visible), scope_bound_fields: scopeBoundFields,
         source_item_id_runtime_bound: caseIdBound,
         typed_output_projection: matches[0].projection,

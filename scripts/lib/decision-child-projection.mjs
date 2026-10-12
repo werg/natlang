@@ -74,7 +74,11 @@ function parentConsumer(code, childSite, childFunction, resultShape) {
   const fnSymbol = symbolOf(checker, childDeclaration.name);
   if (!fnSymbol || fnSymbol.declarations?.length !== 1) return null;
   const awaitCalls = [];
+  const directAwaitCalls = [];
   walk(source, node => {
+    if (ts.isAwaitExpression(node) && ts.isCallExpression(node.expression) &&
+        symbolOf(checker, node.expression.expression) === fnSymbol &&
+        nearestFunction(node) === nearestFunction(childDeclaration)) directAwaitCalls.push(node);
     if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer ||
         !ts.isAwaitExpression(node.initializer) || !ts.isCallExpression(node.initializer.expression)) return;
     const expression = node.initializer.expression.expression;
@@ -97,13 +101,21 @@ function parentConsumer(code, childSite, childFunction, resultShape) {
     });
     if (accepted) return call.name.text;
   }
+  // Some exact callers return or package the awaited child value directly,
+  // rather than first assigning it to a local. Preserve the same AST-proven
+  // consumer requirement for those standard async forms.
+  for (const awaited of directAwaitCalls) {
+    if (isConsumedExpression(awaited, resultShape)) return `${childFunction}()`;
+  }
   return null;
 }
 
 function childFunctionAtSite(code, site) {
   const span = site?.source_span;
   if (!span || span.file !== 'eval' || !Number.isInteger(span.start) || !Number.isInteger(span.end) ||
-      span.start < 0 || span.end > code.length || !code.slice(span.start, span.end).startsWith('nl.with')) return null;
+      span.start < 0 || span.end > code.length) return null;
+  const siteText = code.slice(span.start, span.end);
+  if (!siteText.startsWith('nl.with') && !siteText.startsWith('nl`')) return null;
   const { source, checker } = parse(code);
   let declaration;
   walk(source, node => {
@@ -118,6 +130,39 @@ function awaitedResultBindings(code, functionName, site, shape) {
   if (!functionName) return [];
   const binding = parentConsumer(code, site, functionName, shape);
   return binding ? [binding] : [];
+}
+
+function directAwaitedResultBinding(code, site, shape) {
+  const span = site?.source_span;
+  if (!span || span.file !== 'eval' || !Number.isInteger(span.start) || !Number.isInteger(span.end)) return null;
+  const { source, checker } = parse(code);
+  let selected;
+  walk(source, node => {
+    if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer ||
+        node.initializer.getStart(source) > span.start || node.initializer.end < span.end) return;
+    let awaitedDirectCall = false;
+    walk(node.initializer, child => {
+      if (!ts.isAwaitExpression(child) || child.getStart(source) > span.start || child.end < span.end) return;
+      let expression = child.expression;
+      while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+      if (!ts.isCallExpression(expression)) return;
+      let callee = expression.expression;
+      while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
+      if (ts.isTaggedTemplateExpression(callee) && callee.getStart(source) <= span.start && callee.end >= span.end)
+        awaitedDirectCall = true;
+    });
+    if (!awaitedDirectCall) return;
+    const resultSymbol = symbolOf(checker, node.name);
+    if (!resultSymbol || resultSymbol.declarations?.length !== 1) return;
+    let mutated = false, consumed = false;
+    walk(source, reference => {
+      if (!ts.isIdentifier(reference) || symbolOf(checker, reference) !== resultSymbol || reference === node.name) return;
+      if (isWriteOfSymbol(reference, resultSymbol, checker)) mutated = true;
+      if (nearestFunction(reference) === nearestFunction(node) && isConsumedExpression(reference, shape)) consumed = true;
+    });
+    if (!mutated && consumed) selected = node.name.text;
+  });
+  return selected ?? null;
 }
 
 function identifierText(node, text) { return ts.isIdentifier(node) && node.text === text; }
@@ -281,7 +326,8 @@ export function projectDeclaredChildResult(returnType, value, parentCodes, inlin
 
   if (type === 'string') {
     if (typeof value !== 'string') return { accepted: false, reason: 'declared-string-value-mismatch' };
-    const binding = awaitedResultBindings(code, childFunction, inlineSite, 'string')[0];
+    const binding = awaitedResultBindings(code, childFunction, inlineSite, 'string')[0] ??
+      directAwaitedResultBinding(code, inlineSite, 'string');
     if (!binding) return { accepted: false, reason: 'exact-child-result-not-consumed' };
     return { accepted: true, value, projection: 'declared-string-return', result_binding: binding,
       projection_code_index: 0 };
@@ -318,7 +364,8 @@ export function projectDeclaredChildResult(returnType, value, parentCodes, inlin
   if (hasDecisionString) {
     if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.decision !== 'string')
       return { accepted: false, reason: 'declared-decision-record-value-mismatch' };
-    const binding = awaitedResultBindings(code, childFunction, inlineSite, 'decision')[0];
+    const binding = awaitedResultBindings(code, childFunction, inlineSite, 'decision')[0] ??
+      directAwaitedResultBinding(code, inlineSite, 'decision');
     if (!binding) return { accepted: false, reason: 'parent-does-not-project-exact-child-decision-field' };
     return { accepted: true, value: value.decision, projection: 'declared-record-decision-field',
       result_binding: binding, projection_code_index: 0 };

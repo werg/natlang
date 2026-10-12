@@ -1806,3 +1806,27 @@ its reviewed materialization pass. Fresh V5/V6 derivations retained all hard
 visibility, typed-return, and exact source-label checks. Their source-quality
 hold remains in force pending independent review; these outputs are not
 admitted training data.
+
+The shared projection extractor now recognizes exact compiler-attested `nl`
+tagged-template callable sites and direct awaited child results when the
+caller consumes them through a returned tuple or value. This recovered 93 V5
+and 86 V6 exact source matches from recorded invocation bodies. Rows with
+absent source fields, ambiguous child calls, unsupported return projections,
+or value mismatches remain excluded. Targeted counts and source/result/code
+hashes are in the held artifact
+`luna-clinc-child-context-attribution-v1.json` (SHA-256
+`8a683a44279bb497ae6a1d887d3b919f3ec1c99af35056949dfc9ddacae2df6a`).
+
+The final V5/V6 candidate snapshots bind each selected child to the exact
+same-invocation provider action and check effective source fields against that
+action's recorded `rendered_messages`, including decoded tool-call arguments.
+The earlier interim claim that 29 rows lacked visibility was a false positive:
+that audit read message content but missed fields carried in tool arguments.
+An initial strict matcher also missed three plain assistant string returns;
+the final matcher restores them only on exact role/content equality with the
+materialized target. The final V5 v9 snapshot has 261 candidates and 178 rejects; V6 v9 has 246
+candidates and 195 rejects. Every candidate has exact request/render hashes,
+and both snapshots remain held with training and trace admission false. The
+remaining rejects are 300 incomplete exact-visible children and 73 ambiguous
+child invocations. Exact source, candidate, and code hashes are in
+`/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/luna-clinc-child-context-attribution-v2.json`.
