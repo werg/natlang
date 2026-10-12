@@ -402,19 +402,45 @@ async function main() {
     const labelFile = await lines(path), manifestPath = `${path}.manifest.json`;
     const labelManifest = parse(await readFile(manifestPath, 'utf8'));
     const labelsSha = sha(labelFile.text), manifestSha = sha(await readFile(manifestPath));
-    if (![labelSchema, poolSchema].includes(labelManifest.schema) || labelManifest.cases_sha256 !== casesSha)
-      throw new Error(`${manifestPath}: schema/cases hash mismatch`);
+    if (![labelSchema, poolSchema].includes(labelManifest.schema))
+      throw new Error(`${manifestPath}: unsupported label schema`);
+    let sourceSubset = null, subsetIds = null;
+    if (labelManifest.cases_sha256 !== casesSha) {
+      const subsetPath = resolve(dirname(path), 'cases.jsonl');
+      const subset = await lines(subsetPath);
+      if (sha(subset.text) !== labelManifest.cases_sha256)
+        throw new Error(`${manifestPath}: cases hash does not pin the adjacent subset`);
+      const seen = new Set();
+      for (const item of subset.rows) {
+        const id = item.value?.id;
+        if (!nonempty(id) || seen.has(id) || !cases.has(id) || canonical(item.value) !== canonical(cases.get(id)))
+          throw new Error(`${subsetPath}:${item.line}: not an exact unique projection of the source cases`);
+        seen.add(id);
+      }
+      subsetIds = seen;
+      sourceSubset = { path: subsetPath, sha256: labelManifest.cases_sha256, rows: seen.size };
+    }
     if (labelManifest.schema === labelSchema && (!nonempty(labelManifest.model) || !nonempty(labelManifest.endpoint) || !nonempty(labelManifest.teacher)))
       throw new Error(`${manifestPath}: incomplete natlang.decision-labels/1 provider binding`);
     if (labelManifest.schema === poolSchema && (!Array.isArray(labelManifest.models) || !labelManifest.models.length || !nonempty(labelManifest.endpoint)))
       throw new Error(`${manifestPath}: incomplete natlang.gemini-decision-pool/1 provider binding`);
     const artifact = { path, labels_sha256: labelsSha, label_rows: labelFile.rows.length, schema: labelManifest.schema,
-      manifest_path: manifestPath, manifest_sha256: manifestSha, manifest: labelManifest };
+      manifest_path: manifestPath, manifest_sha256: manifestSha, manifest: labelManifest, source_subset: sourceSubset };
     artifacts.push(artifact);
     for (const row of labelFile.rows) {
-      const binding = verifyManifestBinding(labelManifest, row.value, cases.get(row.value?.id), casesSha);
+      if (subsetIds && !subsetIds.has(row.value?.id)) {
+        reject(rejections, row.value?.id, 'label_id_not_in_pinned_subset', { label_file: path, line: row.line });
+        continue;
+      }
+      const binding = verifyManifestBinding(labelManifest, row.value, cases.get(row.value?.id),
+        labelManifest.cases_sha256);
       if (binding.error) { reject(rejections, row.value?.id, binding.error, { label_file: path, line: row.line,
         detail: binding }); continue; }
+      if (row.value?.answer?.error) {
+        reject(rejections, row.value.id, 'provider_attempt_failed', { label_file: path, line: row.line,
+          provider_error: row.value.answer.error });
+        continue;
+      }
       const label = { value: row.value, row_sha256: sha(row.raw), line: row.line, file: path,
         file_sha256: labelsSha, artifact, binding };
       if (!cases.has(row.value?.id)) { reject(rejections, row.value?.id, 'label_id_not_in_pinned_source', { label_file: path, line: row.line }); continue; }
@@ -571,7 +597,7 @@ async function main() {
     execution_component_verification: executionComponentVerification,
     folder_decision_scaffold_sha256: folderDecisionScaffoldSha,
     folder_decision_scaffold_components: scaffoldDependencyComponents,
-    labels: artifacts.map(item => ({ path: item.path,
+    labels: artifacts.map(item => ({ path: item.path, source_subset: item.source_subset,
       labels_sha256: item.labels_sha256, label_rows: item.label_rows, manifest_path: item.manifest_path, manifest_sha256: item.manifest_sha256,
       manifest: item.manifest })), adapter_sha256: adapterSha,
     decision_contracts: [...new Set(eligible.map(entry => entry.label.value.decision_contract ?? probabilityContract))],
@@ -590,7 +616,7 @@ async function main() {
     source_cases_without_generated_static_row: cases.size - eligible.length,
     label_rejection_records: rejections.length }, null, 2) + '\n');
   await writeExclusive(outDir, 'label-manifest.json', JSON.stringify({ schema: 'natlang.held-static-decision-label-manifest/1',
-    training_admission: false, label_schemas: [...new Set(artifacts.map(item => item.schema))], files: artifacts.map(item => ({ path: item.path,
+    training_admission: false, label_schemas: [...new Set(artifacts.map(item => item.schema))], files: artifacts.map(item => ({ path: item.path, source_subset: item.source_subset,
       sha256: item.labels_sha256, manifest_path: item.manifest_path, manifest_sha256: item.manifest_sha256,
       schema: item.schema, source_cases_sha256: item.manifest.cases_sha256, teacher: item.manifest.teacher ?? null,
       model: item.manifest.model ?? null, models: item.manifest.models ?? null, endpoint: item.manifest.endpoint,

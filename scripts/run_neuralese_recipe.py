@@ -172,7 +172,7 @@ def read_shared_recipe(path: Path) -> dict:
     return recipe
 
 
-def resolve_shared_inputs(recipe: dict) -> tuple[dict, dict]:
+def resolve_shared_inputs(recipe: dict) -> tuple[dict, dict | None]:
     """Resolve every admitted stage's declared inputs through the shared recipe resolver."""
     from natlang_neuralese.train.recipe import resolve_stage_inputs
 
@@ -188,6 +188,11 @@ def resolve_shared_inputs(recipe: dict) -> tuple[dict, dict]:
         stage_inputs[stage["id"]] = resolve_stage_inputs(recipe, stage, stage_defaults, {})
     first = recipe["stages"][0]
     heads = stage_inputs.get(first["id"], {}).get("heads")
+    if first["kind"] == "direct_runtime_qualification":
+        artifact = stage_inputs[first["id"]].get("direct_artifact_manifest")
+        if not isinstance(artifact, dict) or not isinstance(artifact.get("path"), str) or not artifact.get("sha256"):
+            raise ValueError("direct-runtime root stage must bind its exact direct artifact manifest")
+        return stage_inputs, None
     if not isinstance(heads, dict) or not isinstance(heads.get("path"), str) or not heads.get("sha256"):
         raise ValueError("first multi-stage recipe stage must bind its exact heads input")
     return stage_inputs, heads
@@ -310,7 +315,7 @@ def validate_existing_direct_resume(output: Path, recipe: dict, device: str,
             "epoch_budget_handoff": epoch_budget_handoff}
 
 
-def validate_existing_shared_resume(output: Path, recipe: dict, recipe_path: Path, heads: dict,
+def validate_existing_shared_resume(output: Path, recipe: dict, recipe_path: Path, heads: dict | None,
                                     stage_inputs: dict, device: str, package_code: dict,
                                     handoff: bool = False) -> dict:
     """Require exact shared lineage pins, allowing only an explicit shared-code handoff."""
@@ -321,7 +326,7 @@ def validate_existing_shared_resume(output: Path, recipe: dict, recipe_path: Pat
     if not output.is_dir() or not plan_path.is_file():
         raise ValueError("--resume-existing requires an output with a committed recipe-plan.json")
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    inputs = {str(Path(heads["path"]).resolve()): heads["sha256"]}
+    inputs = ({str(Path(heads["path"]).resolve()): heads["sha256"]} if heads else {})
     for resolved in stage_inputs.values():
         for binding in resolved.values():
             inputs[binding["path"]] = binding["sha256"]
@@ -569,10 +574,11 @@ def main(argv=None) -> int:
         if args.handoff:
             child.append("--handoff")
     else:
-        container_heads = map_path(Path(first_stage_heads["path"]).resolve(), mounts)
         child = ["-m", "natlang_neuralese.train.recipe", "--recipe", str(container_recipe),
-                 "--heads", str(container_heads), "--out", str(container_output),
-                 "--launch-metadata", str(container_metadata), "--device", args.device]
+                 "--out", str(container_output), "--launch-metadata", str(container_metadata), "--device", args.device]
+        if first_stage_heads is not None:
+            container_heads = map_path(Path(first_stage_heads["path"]).resolve(), mounts)
+            child += ["--heads", str(container_heads)]
         if args.until:
             child += ["--until", args.until]
         if args.handoff:

@@ -243,7 +243,17 @@ def export_checkpoint(args: argparse.Namespace) -> dict[str, Any]:
 
     snapshot = Path(args.base_snapshot).resolve(strict=True)
     launch_path = Path(args.launch_receipt).resolve(strict=True)
-    launch = json.loads(launch_path.read_text(encoding="utf-8"))
+    # The launcher appends exit status and log hashes to its receipt when a run
+    # stops. Bind the export to a private byte-for-byte snapshot instead of
+    # that mutable path, or an otherwise valid export becomes unrestorable.
+    launch_bytes = launch_path.read_bytes()
+    launch = json.loads(launch_bytes)
+    frozen_launch = Path(args.output).with_name(Path(args.output).name + ".launch-receipt.json")
+    frozen_launch.parent.mkdir(parents=True, exist_ok=True)
+    with frozen_launch.open("xb") as stream:
+        stream.write(launch_bytes)
+        stream.flush()
+        os.fsync(stream.fileno())
     hub_cache = Path(launch["hf_hub_cache"]).resolve(strict=True)
     weights = sorted((name, digest) for name, digest in _file_inventory(snapshot).items()
                      if name.endswith(".safetensors"))
@@ -256,8 +266,8 @@ def export_checkpoint(args: argparse.Namespace) -> dict[str, Any]:
         "snapshot_path": str(snapshot),
         "hf_hub_cache": str(hub_cache),
         "model_safetensors_sha256": weights[0][1],
-        "launch_receipt_path": str(launch_path),
-        "launch_receipt_sha256": sha256_file_hex(launch_path),
+        "launch_receipt_path": str(frozen_launch.resolve()),
+        "launch_receipt_sha256": sha256_file_hex(frozen_launch),
         "runtime_image": launch["runtime_image"],
     }
     checkpoint_sha = sha256_file_hex(args.checkpoint)
