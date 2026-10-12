@@ -51,6 +51,17 @@ step() {
 
 python_setup_error() { printf '%s\n' "$1" >&2; return 2; }
 
+# The Python suite has integration tests that invoke ts-host/dist/teacher/collector.js.
+# In a fresh worktree that output does not exist until the Node build runs, so
+# make the artifact prerequisite explicit before either full suite starts.
+# This is also required for --python; it does not turn a missing build into a
+# skipped test or a passing result.
+node_build_done=0
+if [ $quick = 0 ] && { [ $python = 1 ] || [ $ts = 1 ]; }; then
+  step ts-build-node sh -c 'cd ts-host && npm run --silent build:node'
+  node_build_done=1
+fi
+
 if [ $python = 1 ]; then
   python_error=
   if [ -n "${NATLANG_PYTHON:-}" ]; then
@@ -89,7 +100,9 @@ if [ $ts = 1 ]; then
   if [ $quick = 1 ]; then
     step ts-check sh -c 'cd ts-host && npm run --silent check'
   else
-    step ts-build-node sh -c 'cd ts-host && npm run --silent build:node'
+    if [ $node_build_done = 0 ]; then
+      step ts-build-node sh -c 'cd ts-host && npm run --silent build:node'
+    fi
     # A checkout with a browser build keeps it current (rebuilt only when stale: browser-build-freshness.mjs), so the
     # browser tests run against these sources; without one they skip as before.
     step ts-build-browser sh -c 'cd ts-host && if [ -e dist/browser/natlang.js ]; then node scripts/browser-build-freshness.mjs --rebuild; fi'
