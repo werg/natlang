@@ -6,7 +6,12 @@ Selects both endpoints of every authenticated producer->consumer gradient edge
 sources below, first source wins per id; lines are copied byte-for-byte. Splits are the rows' own; cross-split edges
 and train edges sharing a source group with a held document of the target union are dropped. Writes records.jsonl,
 pieces.jsonl, edges.jsonl and receipt.json to the output directory. Run under the memory ledger (CPU, ~3 GB).
+
+Later cohorts reuse the same rule over more sources: `--sources FILE` (a JSON list of [name, records, pieces], paths
+relative to the repository or absolute; earlier sources win per record id and per piece name) with `--id ID`; the
+default is the v1 union list below. The output directory is natlang-corpora/<ID> under the data_nvme root.
 """
+import argparse
 import json, sys, os
 from collections import Counter
 from pathlib import Path
@@ -31,20 +36,21 @@ SOURCES = [
 ]
 tables = {}
 for name, rp, pp in SOURCES:
-    tables[name] = {json.loads(l)['name']: (l if l.endswith('\n') else l + '\n') for l in open(R+pp)}
-base = {n: json.loads(l)['text'] for n, l in tables['assembly-v3'].items()}
-conflict = {n for name, t in tables.items() if name != 'assembly-v3' for n, l in t.items() if n in base and json.loads(l)['text'] != base[n]}
+    tables[name] = {json.loads(l)['name']: (l if l.endswith('\n') else l + '\n') for l in open(pp if pp.startswith('/') else R+pp)}
+FIRST = SOURCES[0][0]
+base = {n: json.loads(l)['text'] for n, l in tables[FIRST].items()}
+conflict = {n for name, t in tables.items() if name != FIRST for n, l in t.items() if n in base and json.loads(l)['text'] != base[n]}
 lines, origin, held_conflict = {}, {}, []
 for name, rp, pp in SOURCES:
-    for l in open(R+rp):
+    for l in open(rp if rp.startswith('/') else R+rp):
         if not l.strip(): continue
         r = json.loads(l)
         if r['id'] in origin: continue
-        if name != 'assembly-v3' and any(f'"name": "{n}"' in l or f'"name":"{n}"' in l for n in conflict):
+        if name != FIRST and any(f'"name": "{n}"' in l or f'"name":"{n}"' in l for n in conflict):
             held_conflict.append(r['id']); origin[r['id']] = 'held:piece_version_conflict'; continue
         origin[r['id']] = name; lines[r['id']] = l if l.endswith('\n') else l + '\n'
 pieces = dict(base)
-piece_lines = dict(tables['assembly-v3'])
+piece_lines = dict(tables[FIRST])
 for name, t in tables.items():
     for n, l in t.items():
         if n not in pieces: pieces[n] = json.loads(l)['text']; piece_lines[n] = l
@@ -83,8 +89,8 @@ receipt = {
  'format': 'natlang.teacher_training_turn.native/1 records consumed by train/trajectories.py --records/--pieces (--handover written, --direct-artifact); every line byte-identical to its source line; tokenizer-agnostic (the trainer tokenizes per line), so one file serves both lines in lockstep',
  'selection': 'both endpoints of every gradient_edge=true reference of authenticated_recurrence_context_view (train/trajectories.py) over the union of the sources below, first source wins per id; the same rule that selected the 1243 cohort (full-candidate-closure-v1), which this cohort contains byte-identically',
  'splits': 'each record keeps its own split and source_groups (the unions inherit the same rows); cross-split edges dropped; train edges whose endpoints share a source group with any held document of union r3 (all renderings) dropped',
- 'sources': [{'name': n, 'records': rp, 'records_sha256': sha256_file_hex(R+rp), 'pieces': pp, 'pieces_sha256': sha256_file_hex(R+pp)} for n, rp, pp in SOURCES],
- 'piece_policy': f'assembly-v3 piece table (the pinned e2e_pieces) wins every name; {len(conflict)} names differ in a later table ({sorted(conflict)}); later-source records referencing them are held (piece_version_conflict) rather than read with another version',
+ 'sources': [{'name': n, 'records': rp, 'records_sha256': sha256_file_hex(rp if rp.startswith('/') else R+rp), 'pieces': pp, 'pieces_sha256': sha256_file_hex(pp if pp.startswith('/') else R+pp)} for n, rp, pp in SOURCES],
+ 'piece_policy': f'{FIRST} piece table (the first source) wins every name; {len(conflict)} names differ in a later table ({sorted(conflict)}); later-source records referencing them are held (piece_version_conflict) rather than read with another version',
  'held_piece_version_conflict_records': len(held_conflict),
  'review': {k: review[k] for k in ('source_records', 'prepared_records', 'excluded_context_records', 'prepared_by_split', 'excluded_by_split')},
  'excluded_reasons': Counter(e['reason'][:100] for e in review['excluded']),
