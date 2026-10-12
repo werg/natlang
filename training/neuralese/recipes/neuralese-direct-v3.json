@@ -116,12 +116,6 @@
     "direct_sft",
     "direct_trajectory"
    ]
-  },
-  "backbone": {
-   "model": "LiquidAI/LFM2.5-350M-GGUF/qad",
-   "revision": "657e078c",
-   "applies": "a fresh lineage of this recipe starts from these weights (base heads built from them); a resume or handoff keeps its checkpoint",
-   "description": "Owner decision 2026-10-12 (via Pop, pop-7fe7): LiquidAI's quantization-aware-distilled (QAD) full-precision LFM2.5-350M weights for every fresh LFM lineage. Backbone-inherent per line (line-parity.json)."
   }
  }
 }

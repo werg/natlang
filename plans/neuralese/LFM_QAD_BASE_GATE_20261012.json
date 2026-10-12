@@ -1,0 +1,25 @@
+{
+  "full_precision_source_sha256": "1d90518482c4ec204bebb4820bbaee4f8a38c5a6df72256f86bcd21fe52ad079",
+  "gate_checks": {
+    "end": 0.75,
+    "exact_text": 0.333,
+    "no_loop": 0.958,
+    "tool": 0.333
+  },
+  "gate_kinds": {
+    "natlang_test_turn": 0.667,
+    "open_answer": 0.167,
+    "plain_exact_math": 0.333,
+    "tool": 0.333
+  },
+  "gate_pass": 0.375,
+  "heads_sha256": "19bfa7a304d511fe4813e2625fb2855095bd1a104af4b7d6b2ed77368226483c",
+  "model": "LiquidAI/LFM2.5-350M-GGUF/qad",
+  "probe_sha256": "0bce5275646cd95ae36374f41769602995c8587c871275653b26c1cf260c3d52",
+  "report_location": "Pop artifact store: lfm25-qad-base-gate-v1/report.json",
+  "report_sha256": "fe0e303effcf5d961bff9494e9e02b1246284343468d8fbc08dc3c852ad477f3",
+  "revision": "657e078c94084481950a2d555a941481f715536b",
+  "schema": "natlang.lfm-base-gate-receipt/1",
+  "seconds": 44.53772578621283,
+  "training_admission": false
+}

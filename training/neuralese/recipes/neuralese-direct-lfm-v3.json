@@ -2,7 +2,7 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-lfm-v3",
  "extends": "neuralese-direct-v3",
- "description": "neuralese-direct-v3 (union r2, three phases: full-prompt warm-up 0.5 epoch, program-header direct_sft 1 epoch, whole-trajectory direct_trajectory 1 epoch) on base LFM2.5-350M (LiquidAI/LFM2.5-350M, revision 9e6c6ccf; heads from the base model), with neuralese-direct-lfm-v2's declared differences unchanged (line-parity.json): fit-only target_tokens 256, batch_tokens 16384 and the cadence; backbone-inherent backbone lr 7.5e-7 and the measured base gate_pass 26/48. Pop owns its launch and may reset the fit-only cadence from measured seconds on the derived update counts. Supersedes neuralese-direct-lfm-v2. History: recipes/HISTORY.md.",
+ "description": "Fresh LFM2.5-350M direct v3 lineages start from the pinned full-precision LiquidAI QAD source and matching clean heads. Checkpoint resumes and handoffs preserve their existing weights. The LFM base behavior reference is the measured QAD result, 18/48 on the pinned 48 probes. Fit-only context and cadence plus backbone LR remain declared here; history: recipes/HISTORY.md.",
  "overrides": {
   "stage_parameter_defaults": {
    "neuralese_direct": {
@@ -15,8 +15,8 @@
     "monitor": {
      "gate": {
       "reference": {
-       "gate_pass": 0.5416666666666666,
-       "source": "untrained base LFM2.5-350M on the 48 probes, 26/48 (registry luna-direct-untrained-base-behavior-gate-held-20261011-v2, runs/luna-neuralese-direct-base-behavior-20261011-v2/report.json)"
+       "gate_pass": 0.375,
+       "source": "full-precision LiquidAI/LFM2.5-350M-GGUF/qad rev 657e078c, 18/48 on pinned 48 probes; plans/neuralese/LFM_QAD_BASE_GATE_20261012.json"
       }
      }
     },
@@ -25,6 +25,12 @@
      "reference_successes": 1
     }
    }
+  },
+  "backbone": {
+   "model": "LiquidAI/LFM2.5-350M-GGUF/qad",
+   "revision": "657e078c",
+   "applies": "a fresh lineage of this recipe starts from these weights (base heads built from them); a resume or handoff keeps its checkpoint",
+   "description": "Owner decision 2026-10-12 (via Pop, pop-7fe7): LiquidAI's quantization-aware-distilled (QAD) full-precision LFM2.5-350M weights for every fresh LFM lineage. Backbone-inherent per line (line-parity.json)."
   }
  }
 }
