@@ -1,6 +1,6 @@
 # DGX current state
 
-Generated 2026-10-12 16:03 UTC by `python3 scripts/current_state.py --machine dgx`. Do not edit by hand: regenerate.
+Generated 2026-10-12 17:07 UTC by `python3 scripts/current_state.py --machine dgx`. Do not edit by hand: regenerate.
 This page holds the present only. History is in git (`git log -p -- plans/neuralese/HANDOVER.md`), in the
 decision records and in the coordination log. Live processes and the status pages are the authority.
 
@@ -18,24 +18,32 @@ decision records and in the coordination log. Live processes and the status page
 
 ## DGX status page (this machine)
 
-Updated 2026-10-12T14:39:14.872130Z by dgx-claude-d8484b5f.
+Updated 2026-10-12T16:22:53.009574Z by dgx-claude-d8484b5f.
 
-Mellum v4 direct_sft continues on union r3 (data continuation from update 661; budget 31,281 updates; unit v4-161355 on 1d74eabf incl. speed rounds 1-5). First r3 updates run at about 16 s/update, so the phase ETA is about 5.6 days, then direct_trajectory on r3. Union r4 is being prepared (dedup fix, V10, 4962 v2, misc v3, SWE D13 twins compressed). Full check fits beside training (13 GB); main is red only on Pop's 6 serving tests (c1de43eb).
+Mellum v4 direct_sft on r3: update ~970/31,281 at 16.4 s/update. Ledger reserve is now proportional (fc8a892a). Review workstreams running: e2e progression for both lines (lockstep), task-success gate (e7f09db8), nested+QAT, efficiency, revival (harness/memetic/RL/llama.cpp), housekeeping. One combined v4 handoff is pending those. Memory beside v4 is tight (about 5–8 GB headroom), so small jobs queue.
 
 ## POP status page
 
-Updated 2026-10-12T15:33:36.118144Z by pop-luna-salvage-static.
+Updated 2026-10-12T16:50:44.128718Z by pop-codex-01a0e480.
 
-Pop Luna static salvage: owner standing cap 3 actual workers. V14 lane01 stopped (57 finishes, plus one start-only unfinished case preserved); lane02 stopped at verified boundary after 58 finishes. Lanes03–05 remain live. No successor launched. See coordination decision 2026-10-12T15:33:29.135330Z-pop-fbad.
+Pop status 2026-10-12 18:50 CEST
+- Main LFM2.5-350M MuonSR direct SFT saved update 10006, restarting via natlang-pop-muon-main-v2-resume-fp8-v8.service from full checkpoint. Previous step9000 strict direct export remains saved but its external launch receipt hash was invalidated when launcher finalized mutable receipt at stop.
+- Fixed strict exporter locally to freeze an immutable byte snapshot of launch receipt. E2E 200-update mechanics arm blocked before training by that provenance issue; will re-export from current checkpoint and qualify after code publication.
+- Six Luna workers running: V14 lanes01-03, V15 lane6, V16 lanes01-02. V16 lanes03/04 reviewed and sealed as replacements at cap6.
+- Gemini PubMedQA 43/43 successful after seven-case retry; strict static adapter produced 32 eligible labels / 4 cases / 54 turns, held pending admission. Resume and subset bugs fixed locally.
+- Protected CPU candidate task packet paused after 12 complete cases to free host RAM; case12 partial must retry. DGX owns held packet v2.
+- QAD LFM2.5-350M under consideration as quantized deployment and future base candidate; current lineage unchanged pending matched Natlang benchmark.
 
 ## Running on this machine
 
 | Unit | Priority | Budget / used GB | Recipe |
 | --- | --- | --- | --- |
-| `eff-header-stats` | medium | 13.0 / 1.1 |  |
-| `natlang-full-check-852a593c3e` | medium | 13.5 / 1.1 |  |
+| `eff-v4-windowing-plan` | medium | 10.0 / 0.5 |  |
+| `heldv2-base-lfm-repeat` | medium | 5.0 / 2.7 |  |
+| `memetic-author-20261012` | medium | 5.0 / 3.1 |  |
+| `natlang-full-check-e7f09db8b1` | medium | 13.5 / 0.7 |  |
 | `natlang-memory-guard` |  |  |  |
-| `natlang-neuralese-direct-mellum-v4-161355` | high | 101.8 / 68.9 |  |
+| `natlang-neuralese-direct-mellum-v4-161355` | high | 101.8 / 68.8 |  |
 
 ## Declared lineages (training/neuralese/line-parity.json: next launch per line)
 
@@ -46,25 +54,24 @@ Pop Luna static salvage: owner standing cap 3 actual workers. V14 lane01 stopped
 | e2e | lfm | `neuralese-e2e-lfm-v1` | neuralese-e2e-v1 | neuralese-e2e-v1 on LFM2.5-350M (Pop). |
 | e2e | mellum | `neuralese-e2e-mellum-v1` | neuralese-e2e-v1 | neuralese-e2e-v1 on Mellum2.1-12B-A2.5B (DGX). |
 
-Recipes on disk (18): `luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v3`, `luna-neuralese-direct-lfm-base-20261011-v8`, `neuralese-direct-lfm-muon-main-20261012-v1-full`, `neuralese-direct-lfm-muon-main-20261012-v2`, `neuralese-direct-lfm-v1`, `neuralese-direct-lfm-v2`, `neuralese-direct-lfm-v3`, `neuralese-direct-mellum-v1`, `neuralese-direct-mellum-v2`, `neuralese-direct-mellum-v3`, `neuralese-direct-mellum-v4`, `neuralese-direct-mellum-v4-from-v3-warmup`, `neuralese-direct-v1`, `neuralese-direct-v2`, `neuralese-direct-v3`, `neuralese-e2e-lfm-v1`, `neuralese-e2e-mellum-v1`, `neuralese-e2e-v1`
+Recipes on disk (20): `luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v3`, `luna-neuralese-direct-lfm-base-20261011-v8`, `neuralese-direct-lfm-muon-main-20261012-v1-full`, `neuralese-direct-lfm-muon-main-20261012-v2`, `neuralese-direct-lfm-muon-main-20261012-v3`, `neuralese-direct-lfm-v1`, `neuralese-direct-lfm-v2`, `neuralese-direct-lfm-v3`, `neuralese-direct-mellum-v1`, `neuralese-direct-mellum-v2`, `neuralese-direct-mellum-v3`, `neuralese-direct-mellum-v4`, `neuralese-direct-mellum-v4-from-v3-warmup`, `neuralese-direct-v1`, `neuralese-direct-v2`, `neuralese-direct-v3`, `neuralese-e2e-lfm-v1`, `neuralese-e2e-lfm-v1-qual-muon-main-v2-u9000`, `neuralese-e2e-mellum-v1`, `neuralese-e2e-v1`
 
 ## Corpus registry
 
-1370 live entries in `training/neuralese_corpora.json` (111 dgx, 1259 pop); 93 carry training admission.
+1369 live entries in `training/neuralese_corpora.json` (112 dgx, 1257 pop); 93 carry training admission.
 
 ## Open coordination requests to dgx
 
 - `2026-10-12T00:09:18.498511Z-pop-1183`: Coordinate neuralese-learning test split before fixture work
 - `2026-10-12T13:57:24.496893Z-pop-0adb`: Need bounded r3 missing-doc source IDs
-- `2026-10-12T15:53:00.532988Z-dgx-195d`: dgx-nested -> dgx-e2e: one v4 handoff for nested family + QAT rescale + e2e arm
-- `2026-10-12T15:56:23.328917Z-pop-ddb1`: Run bounded full check for Neuralese test-fixture fixes
-- `2026-10-12T16:02:30.954423Z-dgx-ebd6`: dgx-nested -> dgx-e2e: line-parity.json edits collided; please merge, don't overwrite
+- `2026-10-12T16:49:51.773635Z-dgx-5db1`: e2e QAT/family treatment: confirm before I push (shared q4 in neuralese-e2e-v1)
+- `2026-10-12T16:52:14.792718Z-dgx-e1f6`: dgx-nested -> dgx-e2e: e2e QAT now in the shared base (1f1042c3); please check the LFM e2e trainer path
 
 ## Latest decisions (coord)
 
-- 2026-10-12T15:33 pop-luna-salvage-static: Pop Luna generation cap reduced to three
-- 2026-10-12T15:46 dgx-claude-d8484b5f: Owner decisions 2026-10-12: e2e Neuralese arm NOW on both lines; behaviour gate report-only; dormant goals revived
-- 2026-10-12T15:50 dgx-housekeeping: Coordination protocol: status values plus exact verifiers (owner 2026-10-12)
-- 2026-10-12T15:54 dgx-review-accept: Owner review queue accepted on owner's behalf (3721f0eb)
-- 2026-10-12T16:00 dgx-claude-d8484b5f: Owner: one recipe progression for both LFM and Mellum
-- 2026-10-12T16:01 dgx-claude-d8484b5f: Owner: LFM and Mellum in maximal unity and lockstep
+- 2026-10-12T16:08 pop-luna-salvage-static: Pop Luna generation cap raised to six
+- 2026-10-12T16:17 dgx-eval: v4 handoff now also takes task_eval; behaviour gate report-only (e7f09db8)
+- 2026-10-12T16:18 dgx-nested: Shared base neuralese-direct-v3: light QAT (q4) + nested family for LFM; objective continuation handoff (7bbfd00f, f57eb9b6)
+- 2026-10-12T16:54 pop-codex-01a0e480: Owner: fresh LFM restart from QAD source weights
+- 2026-10-12T17:03 dgx-eff: Shared base neuralese-direct-v3: whole-window train supervision + merged decision chains (5a5d8e69)
+- 2026-10-12T17:07 dgx-housekeeping: One recipe lineage: 104 discarded recipes deleted on main (9513c792); delete your copies and run dirs
