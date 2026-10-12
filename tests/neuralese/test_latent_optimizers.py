@@ -308,3 +308,31 @@ def test_muonsr_split_rows_orthogonalizes_each_row_block_separately():
     assert torch.allclose(fused.detach(), torch.cat([gate.detach(), up.detach()], 1), atol=1e-6)
     with pytest.raises(ValueError):
         MuonSR([{'params': [nn.Parameter(torch.randn(7, 4))], 'split_rows': 2}], lr=1e-2)
+
+
+def test_folded_cubic5_newton_schulz_is_at_least_as_close_to_the_fp64_iteration(monkeypatch):
+    """The folded cubic step (M = aI + b X X^T by one baddbmm, then M X) against the same iteration in FP64: no less
+    accurate than the unfolded BF16 form it replaces (wide and tall stacks, split rows as MuonSR passes them)."""
+    from natlang_neuralese.train.optim import CUBIC5_COEFFICIENTS, newton_schulz
+
+    def fp64(update):
+        x = update.double()
+        transposed = x.shape[-2] > x.shape[-1]
+        x = x.transpose(-2, -1) if transposed else x
+        x = x / (torch.linalg.vector_norm(x, dim=(-2, -1), keepdim=True) + 1e-7)
+        for a, b in CUBIC5_COEFFICIENTS:
+            x = a * x + b * ((x @ x.transpose(-2, -1)) @ x)
+        return x.transpose(-2, -1) if transposed else x
+
+    torch.manual_seed(0)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    for shape in ((4, 2, 32, 80), (4, 1, 80, 32)):
+        update = torch.randn(*shape, device=device)
+        reference = fp64(update)
+        monkeypatch.setenv('NATLANG_MUON_NS_FOLDED', '1')
+        folded = newton_schulz(update, variant='cubic5').double()
+        monkeypatch.setenv('NATLANG_MUON_NS_FOLDED', '0')
+        plain = newton_schulz(update, variant='cubic5').double()
+        error = lambda x: float((x - reference).norm() / reference.norm())
+        assert folded.shape == plain.shape == update.shape
+        assert error(folded) <= 1.1 * error(plain) and error(folded) < 0.03, (shape, error(folded), error(plain))

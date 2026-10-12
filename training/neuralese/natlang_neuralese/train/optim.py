@@ -369,6 +369,18 @@ def newton_schulz(update: torch.Tensor, steps: int = 5, eps: float = 1e-7, varia
         x = x.transpose(-2, -1)
     x = x / (torch.linalg.vector_norm(x.float(), dim=(-2, -1), keepdim=True).to(x.dtype) + eps)
     if variant == "cubic5":
+        # Each step folded into two GEMMs: M = a I + b X X^T in one baddbmm (FP32 accumulate, one rounding), then
+        # X <- M X. 1.8-2.3x faster on Mellum's expert stacks than a X + b (X X^T) X (three full-size BF16 passes and
+        # roundings per step), and closer to the FP64 iteration (rel. error 0.0067 vs 0.0095 gaussian, 0.089 vs 0.119
+        # low-rank; plans/neuralese/TRAINING_SPEED_20261012.md). NATLANG_MUON_NS_FOLDED=0: the unfolded form.
+        if os.environ.get("NATLANG_MUON_NS_FOLDED", "1") != "0":
+            shape = x.shape
+            x = x.reshape(-1, shape[-2], shape[-1])
+            eye = torch.eye(shape[-2], device=x.device, dtype=x.dtype).expand(x.shape[0], -1, -1)
+            for a, b in CUBIC5_COEFFICIENTS:
+                x = torch.bmm(torch.baddbmm(eye, x, x.transpose(-2, -1), beta=a, alpha=b), x)
+            x = x.view(shape)
+            return x.transpose(-2, -1) if transposed else x
         for a, b in CUBIC5_COEFFICIENTS:
             x = a * x + b * ((x @ x.transpose(-2, -1)) @ x)
         return x.transpose(-2, -1) if transposed else x
