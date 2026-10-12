@@ -11,6 +11,7 @@ its policy and is never resumed under another one.
 from __future__ import annotations
 
 import math
+import os
 
 import torch
 from torch import nn
@@ -411,6 +412,9 @@ class MuonSR(LionSR):
         state = self.state[p]
         if "momentum" not in state:
             state["momentum"] = torch.zeros_like(p, dtype=torch.bfloat16)
+        if (p.is_cuda and p.dtype == torch.bfloat16 and p.grad.dtype == torch.bfloat16 and p.is_contiguous()
+                and p.grad.is_contiguous() and os.environ.get("NATLANG_MUON_FUSED", "1") != "0"):
+            return self._fused_update(p, group, state)
         beta = group["momentum"]
         g = p.grad.float()
         active = None
@@ -442,6 +446,33 @@ class MuonSR(LionSR):
             stochastic_round_(p, value)
         else:
             p.copy_(value)
+
+    def _fused_update(self, p, group, state):
+        """``_muon_update`` for a BF16 CUDA latent with the elementwise work in two kernels (train/muon_kernels.py),
+        bit-identical: the same FP32 operations, the same stochastic-rounding draws."""
+        from .muon_kernels import apply_update, momentum_nesterov
+        beta = group["momentum"]
+        active = None
+        if p.ndim > 2:  # a stack of matrices (experts): leave idle ones alone
+            norms = torch.linalg.vector_norm(p.grad, dim=(-2, -1), dtype=torch.float32)
+            running = state.get("grad_norm")
+            threshold = group.get("idle_fraction", 0.0) * (running if running is not None else norms)
+            active = (norms > threshold).to(torch.float32)
+            state["grad_norm"] = norms if running is None else torch.where(norms > 0, 0.9 * running + 0.1 * norms,
+                                                                             running)
+        split = group.get("split_rows", 1) or 1
+        rows, cols = p.shape[-2] // split, p.shape[-1]
+        nesterov = momentum_nesterov(p.grad, state["momentum"], beta).view(*p.shape[:-2], split, rows, cols)
+        with region("optim/muonsr.newton_schulz"):
+            direction = newton_schulz(nesterov, group["ns_steps"], variant=getattr(self, "ns", "quintic")).view(p.shape)
+        scale = 0.2 * math.sqrt(max(rows, cols))
+        factor = None
+        if group["weight_decay"]:
+            decay = 1 - group["lr"] * group["weight_decay"]
+            factor = (torch.full((max(1, p[..., 0, 0].numel()),), decay, device=p.device, dtype=torch.float32)
+                      if active is None else (1 - (1 - decay) * active).reshape(-1))
+        apply_update(p, direction.contiguous(), factor, None if active is None else active.reshape(-1).contiguous(),
+                     -group["lr"] * scale)
 
 
 def _adamini_kernel(p, g, m, v, count, active, block_rows: int, lr, beta1, beta2, eps, decay, cautious: bool = False,
