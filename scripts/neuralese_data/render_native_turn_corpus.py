@@ -274,6 +274,10 @@ def registered_candidate_selection_admission(corpus_id, sources):
     registry_path = ROOT / 'training/neuralese_corpora.json'
     registry = json.loads(registry_path.read_text())
     entries = [entry for entry in registry.get('corpora', []) if entry.get('id') == corpus_id]
+    if not entries:
+        # A corpus id with no registry entry (a mixed-source render of several registered sources) has no
+        # candidate-selection admission to verify; its rows go through the ordinary admission checks.
+        return None
     if len(entries) != 1:
         raise ValueError(f'candidate-selection admission needs one registry entry: {corpus_id}')
     entry = entries[0]
