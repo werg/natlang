@@ -11,7 +11,7 @@ Run it under the memory ledger on DGX, e.g.
   python3 scripts/memory_ledger.py run --unit harness-matrix-base --budget-gb 14 --reserve-gb 2 -- \\
     python3 scripts/harness_bench_matrix.py --label lfm-350m-base \\
       --student-base ~/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/<rev> \\
-      --out /home/werg/data/harness-bench/matrix-20261012/lfm-350m-base --minutes 10
+      --out <data_nvme>/harness-bench/matrix-20261012/lfm-350m-base --minutes 10
 
 `--student-artifact DIR` serves a direct export (with --student-base its pinned base snapshot). `--student-endpoint`
 and `--executor-endpoint` use running servers instead of starting them. `--summarize DIR` only rebuilds the tables.
@@ -19,7 +19,6 @@ and `--executor-endpoint` use running servers instead of starting them. `--summa
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import socket
@@ -31,8 +30,12 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "training/neuralese"))
+from natlang_neuralese.common import paths  # noqa: E402
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256  # noqa: E402
+
 TASKS = ROOT / "applications/pi/tasks"
-LLAMA = Path(os.environ.get("NATLANG_LLAMA_SERVER", "/home/werg/llama.cpp-neuralese/build-cuda/bin/llama-server"))
+LLAMA = Path(os.environ.get("NATLANG_LLAMA_SERVER") or paths.resolve("llama_cpp", "build-cuda", "bin", "llama-server"))
 DEFAULT_EXECUTOR = Path.home() / ".cache/huggingface/hub/models--LiquidAI--LFM2.5-2.6B-GGUF/snapshots/84022ce711b28455e8c4fc364ce68c00cf995875/LFM2.5-2.6B-Q6_K.gguf"
 CONFIGS = {"student-alone": [], "student-text-companion": ["--companion"]}
 PENDING = {
@@ -66,14 +69,6 @@ def wait_http(url: str, proc: subprocess.Popen | None, seconds: float, log: Path
 def model_id(endpoint: str) -> str:
     with urllib.request.urlopen(endpoint.rstrip("/") + "/v1/models", timeout=10) as response:
         return json.load(response)["data"][0]["id"]
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def session_stats(path: Path) -> dict:
