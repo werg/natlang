@@ -243,6 +243,38 @@ with a test.
 Storage: the 44 GB full state was written twice at step 1000 (best, then the due point), which split the hard link.
 The two files were byte-identical and are re-linked. Fixed in 32314556.
 
+## Mellum v4: direct_trajectory moves to union r3 (2026-10-12)
+
+Run: `runs/neuralese-direct-mellum-20261011/run-v4`, recipe `neuralese-direct-mellum-v4-from-v3-warmup`, launcher
+`launch-v4.sh <sha8> [--handoff]` (frozen snapshot of the given commit). Phase 1 `direct_sft` (union r2 program header,
+1 epoch = 8,596 updates) is unchanged. Phase 2 `direct_trajectory` (1 epoch) now reads union r3's whole-trajectory
+Mellum rendering (`runs/natlang-target-union-20261011-r3/whole-trajectory/mellum21/text-data.jsonl`, sha256
+`1e3759cd…0d88`: 165,822 train / 1,549 test documents, 50.2M supervised tokens) instead of r2's (75,983 / 123, 15.9M),
+so phase 2 is about 3x longer. Held CE and the drift/behaviour monitors are as declared; the held split is the r3
+file's own test split, which contains all 123 r2 test documents. Coordinator decision; recorded as a historical
+one-off in `line-parity.json` (the parity recipes stay on r2 until the LFM line moves).
+
+Mechanism: `train/recipe.py` `lineage_handoff` now lets a later stage that has **not started** (no `<stage>/` directory
+and no `<stage>-report.json`) take new content for its declared input roles (same roles, same binding names). The
+active or a finished stage's inputs stay fixed, a binding shared with such a stage cannot change, and every other
+recipe difference is refused as before. The handoff record carries `stage_input_changes` and `previous_inputs`;
+reports written before the handoff carry the previous input map, and the runner accepts it. The lineage's
+`recipe_sha256` stays. `--plan-only` resolves and hashes every input and validates the resume or handoff without
+writing or launching.
+
+Proof (unit `natlang-plan-only-mellum-v4-131047`, read-only on the live run directory at about update 265):
+`--handoff --plan-only` on the new commit was accepted. `direct_sft` inputs and lineage hash `fb2f1a7b…` are unchanged,
+`stages_started: [direct_sft]`, and `stage_input_changes` names only `direct_trajectory` (r2 `f92e2f33` → r3
+`1e3759cd`). The `direct_sft` trainer's own resume identity (options plus its input hashes) does not include phase 2.
+
+Takes effect only through a `--handoff` relaunch on this commit or later, made **before `direct_sft` finishes**. The
+running process uses its frozen snapshot and would otherwise enter phase 2 on r2. After phase 2 has started, its
+inputs are fixed.
+
+Leakage check: r3's test split shares two source groups (FOLIO story 265) with 8 r2 program-header train documents
+that `direct_sft` trains on. r3 moved this group to held, which is why 47 r2 train documents are absent from r3. Three of
+the 1,549 r3 test documents are affected; they are kept and noted here.
+
 ## End-to-end stage (design resolved 2026-10-11; implementation in progress)
 
 The owner's decision of 2026-10-11 gives the Neuralese value requirement to this stage. It starts from a qualified

@@ -61,7 +61,11 @@
   {"stage": "direct", "lines": ["mellum"], "phase": "direct_warmup", "kind": "historical-one-off",
    "recipe": "neuralese-direct-mellum-v4-from-v3-warmup",
    "difference": "Mellum's completed warm-up (runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup, 333 updates, 0.5 epoch) used the 4962 full-prompt set (3,258 train documents, Mellum twin) while LFM's warm-up uses the union r2 full rendering (66k train documents)",
-   "reason": "coordinator decision 2026-10-12 (agreed by Pop, pop-86dc): the finished warm-up is not redone; Mellum continues into neuralese-direct-mellum-v4's direct_sft and direct_trajectory on union r2. Not backbone-inherent and not a precedent: the parity recipe neuralese-direct-mellum-v4 keeps the r2 warm-up for the next fresh launch."}
+   "reason": "coordinator decision 2026-10-12 (agreed by Pop, pop-86dc): the finished warm-up is not redone; Mellum continues into neuralese-direct-mellum-v4's direct_sft and direct_trajectory on union r2. Not backbone-inherent and not a precedent: the parity recipe neuralese-direct-mellum-v4 keeps the r2 warm-up for the next fresh launch."},
+  {"stage": "direct", "lines": ["mellum"], "phase": "direct_trajectory", "kind": "historical-one-off",
+   "recipe": "neuralese-direct-mellum-v4-from-v3-warmup",
+   "difference": "Mellum v4's direct_trajectory phase (1 epoch) reads union r3's whole-trajectory rendering (runs/natlang-target-union-20261011-r3/whole-trajectory/mellum21, 165,822 train / 1,549 test documents, 50.2M supervised tokens) while the parity recipes (neuralese-direct-v3, neuralese-direct-mellum-v4) keep union r2's (75,983 / 123, 15.9M)",
+   "reason": "coordinator decision 2026-10-12: union r3 was registered while v4's direct_sft ran; the not-yet-started phase takes it by --handoff (recipe.py unstarted_stage_input_changes). The LFM line moves to r3 by its own decision (briefed to Pop); once both lines read r3, the parity base moves and this entry is removed."}
  ],
  "lineage_keys": {
   "direct": ["inputs.heads"],

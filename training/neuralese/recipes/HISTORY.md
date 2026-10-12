@@ -447,3 +447,11 @@ gradient); the direct E2E stage moves the child instructions like the separate b
 ## neuralese-direct-v3, neuralese-direct-mellum-v4, neuralese-direct-lfm-v3 (2026-10-12)
 
 Shared base moved to the admitted target union r2 (natlang-target-union-20261011-r2) with a third phase, direct_trajectory (whole-trajectory rendering, 1 epoch, continuing from direct_sft), following Pop's main LFM line (pop-2356, agreed pop-86dc). Mellum's v3 lineage keeps its finished 4962-document warm-up: neuralese-direct-mellum-v4-from-v3-warmup binds it as direct_sft's declared continuation inputs (historical one-off, line-parity.json historical_differences). Mellum's QAT curriculum continues over the new phase (direct_trajectory [0.35, 0.5]).
+
+## neuralese-direct-mellum-v4-from-v3-warmup: direct_trajectory on union r3 (2026-10-12)
+
+The running Mellum v4 lineage's second phase, direct_trajectory (1 epoch), binds union r3's whole-trajectory Mellum
+rendering (natlang-target-union-20261011-r3; 165,822 train / 1,549 test documents, 50.2M supervised tokens) in place of
+r2's. direct_sft is unchanged. It is taken by a `--handoff` while direct_sft runs: `lineage_handoff` now allows new input
+content for a stage that has not started (`unstarted_stage_input_changes`). It is a historical one-off in
+line-parity.json, and the parity recipes stay on r2. Details: plans/neuralese/NEURALESE_DIRECT_V1.md "Mellum v4".

@@ -972,19 +972,92 @@ def _without_package_code(recipe):
     return value
 
 
-def lineage_handoff(existing, plan, frozen, package, plan_path, out=None):
+def stage_started(out, stage_id):
+    """A stage has started once its output directory or its report exists; its inputs are then fixed."""
+    out = Path(out)
+    return (out / stage_id).exists() or (out / (stage_id + '-report.json')).exists()
+
+
+def unstarted_stage_input_changes(existing, plan, out):
+    """The stages whose resolved inputs a handoff changes. Only a later stage that has not started may change its
+    inputs (new content for the same roles, e.g. a newer data rendering for a not-yet-reached phase); the active or a
+    finished stage's inputs stay fixed. Returns {stage id: {'old': resolved inputs, 'new': resolved inputs}}."""
+    old_inputs, new_inputs = existing.get('stage_inputs'), plan.get('stage_inputs')
+    if old_inputs == new_inputs:
+        return {}
+    if not isinstance(old_inputs, dict) or not isinstance(new_inputs, dict) or set(old_inputs) != set(new_inputs):
+        raise ValueError('handoff refused: stage_inputs changed; use a new stage lineage')
+    changes = {}
+    for stage_id in sorted(new_inputs):
+        old, new = old_inputs[stage_id], new_inputs[stage_id]
+        if old == new:
+            continue
+        if stage_started(out, stage_id):
+            raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage that '
+                             'has not started may take new inputs')
+        if set(old) != set(new) or any(old[role].get('binding') != new[role].get('binding') for role in new):
+            raise ValueError('handoff refused: ' + stage_id + ' changes its input roles or bindings; only their '
+                             'declared content may change')
+        changes[stage_id] = {'old': old, 'new': new}
+    return changes
+
+
+def _bindings_of(recipe, stage_ids):
+    return {name for stage in recipe.get('stages', []) if stage['id'] in stage_ids
+            for name in (stage.get('inputs') or {}).values()}
+
+
+def _without_unstarted_bindings(old_recipe, new_recipe, changes):
+    """Both recipes minus the input bindings whose content changed for unstarted stages only; refuse a changed
+    binding that a started (or unchanged) stage also reads."""
+    old_catalog, new_catalog = old_recipe.get('input_bindings', {}), new_recipe.get('input_bindings', {})
+    changed = {name for name in set(old_catalog) | set(new_catalog) if old_catalog.get(name) != new_catalog.get(name)}
+    if not changes:
+        return old_recipe, new_recipe
+    others = [stage['id'] for stage in new_recipe.get('stages', []) if stage['id'] not in changes]
+    shared = changed & (_bindings_of(old_recipe, others) | _bindings_of(new_recipe, others))
+    if shared:
+        raise ValueError('handoff refused: changed input binding(s) ' + ', '.join(sorted(shared)) +
+                         ' also feed a started or unchanged stage')
+    if not changed <= _bindings_of(new_recipe, changes) | _bindings_of(old_recipe, changes):
+        raise ValueError('handoff refused: input bindings changed outside the unstarted stages')
+    old_value, new_value = json.loads(json.dumps(old_recipe)), json.loads(json.dumps(new_recipe))
+    for value in (old_value, new_value):
+        for name in changed:
+            value.get('input_bindings', {}).pop(name, None)
+    return old_value, new_value
+
+
+def _inputs_without(inputs, stage_inputs, changes, side):
+    """The plan's input identity map minus files read only by the changed (unstarted) stages."""
+    kept = {value['path'] for stage_id, roles in stage_inputs.items() if stage_id not in changes
+            for value in roles.values()}
+    dropped = {value['path'] for change in changes.values() for value in change[side].values()} - kept
+    return {path: digest for path, digest in inputs.items() if path not in dropped}
+
+
+def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_run=False):
     """Resume a lineage on the newest code and an operationally changed recipe (owner: jobs switch to the newest code
-    at once). Inputs and device must be unchanged and the recipes equal apart from operational stage parameters, so
-    the lineage's identity (``recipe_sha256``, which its stage reports carry) stays; the frozen runtime is replaced,
-    the superseded one kept beside it, and the change appended to the plan's ``handoffs``. Each trainer then checks
-    its own resume identity and logs its code handoff. A handoff may also extend an unqualified mapped warm-up
-    (``stage_extensions``); the extension is recorded under ``extended``."""
-    for key in ('inputs', 'device', 'stage_inputs'):
-        if existing.get(key) != plan.get(key):
-            raise ValueError('handoff refused: ' + key + ' changed; use a new stage lineage')
-    extended = stage_extensions(existing['recipe'], plan['recipe'], out if out is not None else plan_path.parent)
+    at once). Device and the inputs of every started stage must be unchanged and the recipes equal apart from
+    operational stage parameters, so the lineage's identity (``recipe_sha256``, which its stage reports carry) stays;
+    the frozen runtime is replaced, the superseded one kept beside it, and the change appended to the plan's
+    ``handoffs``. Each trainer then checks its own resume identity and logs its code handoff. A handoff may also
+    extend an unqualified mapped warm-up (``stage_extensions``); the extension is recorded under ``extended``. A
+    later stage that has not started may take new content for its declared inputs (``unstarted_stage_input_changes``,
+    recorded under ``stage_input_changes`` with the previous input map, which reports of earlier stages carry).
+    ``dry_run`` validates and returns the updated plan without touching the run directory."""
+    out = Path(out if out is not None else plan_path.parent)
+    if existing.get('device') != plan.get('device'):
+        raise ValueError('handoff refused: device changed; use a new stage lineage')
+    input_changes = unstarted_stage_input_changes(existing, plan, out)
+    if (_inputs_without(existing.get('inputs'), existing.get('stage_inputs') or {}, input_changes, 'old') !=
+            _inputs_without(plan.get('inputs'), plan.get('stage_inputs') or {}, input_changes, 'new')):
+        raise ValueError('handoff refused: inputs changed; use a new stage lineage')
+    extended = stage_extensions(existing['recipe'], plan['recipe'], out)
     old_handoff_recipe = _without_extensions(existing['recipe'], extended)
     new_handoff_recipe = _without_extensions(plan['recipe'], extended)
+    old_handoff_recipe, new_handoff_recipe = _without_unstarted_bindings(
+        old_handoff_recipe, new_handoff_recipe, input_changes)
     epoch_budget_changes = recipe_handoff_epoch_changes(old_handoff_recipe, new_handoff_recipe)
     old_code = existing['code']
     old_runtime = existing['recipe'].get('runtime', {})
@@ -1007,9 +1080,12 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None):
         if old_code == actual_new:
             raise ValueError('handoff refused: runtime.package_code has not changed')
     previous = frozen.parent.parent / ('runtime-superseded-' + time.strftime('%Y%m%dT%H%M%S'))
-    frozen.parent.rename(previous)
-    shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-    new_code = {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')}
+    if dry_run:
+        new_code = {str(path.relative_to(package)): sha(path) for path in package.rglob('*.py')}
+    else:
+        frozen.parent.rename(previous)
+        shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        new_code = {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')}
     record = {'time': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'recipe_id': plan['recipe'].get('id'),
               'recipe_sha256': plan['recipe_sha256'], 'superseded_runtime': previous.name,
               'code_changed': sorted(k for k in old_code.keys() & new_code.keys() if old_code[k] != new_code[k]),
@@ -1021,6 +1097,12 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None):
         record['epoch_budget_changes'] = epoch_budget_changes
     updated = dict(existing, recipe=plan['recipe'], code=new_code,
                    handoffs=list(existing.get('handoffs', [])) + [record])
+    if input_changes:
+        record['stage_input_changes'] = input_changes
+        record['previous_inputs'] = existing['inputs']
+        updated.update(inputs=plan['inputs'], stage_inputs=plan['stage_inputs'])
+    if dry_run:
+        return updated
     write_json(plan_path, updated)
     print(json.dumps({'event': 'lineage_handoff', **{k: v for k, v in record.items() if not k.startswith('code_')},
                       'code_files_changed': len(record['code_changed']) + len(record['code_added'])
@@ -1361,6 +1443,9 @@ def main(argv=None):
                         help='resume an existing lineage on the newest code (the frozen runtime is replaced) and on a '
                              'recipe that differs only in operational stage parameters and schedule-verified '
                              'neuralese_direct epoch budgets; recorded in recipe-plan.json "handoffs"')
+    parser.add_argument('--plan-only', action='store_true',
+                        help='resolve and hash every stage input and validate the resume (or --handoff) against the '
+                             'existing recipe-plan.json, print the resulting plan, and exit without writing or launching')
     args = parser.parse_args(argv)
     recipe = load_recipe(args.recipe)
     if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
@@ -1419,7 +1504,7 @@ def main(argv=None):
     if plan_path.exists():
         existing = json.loads(plan_path.read_text())
         if args.handoff:
-            plan = lineage_handoff(existing, plan, frozen, package, plan_path, args.out)
+            plan = lineage_handoff(existing, plan, frozen, package, plan_path, args.out, dry_run=args.plan_only)
         else:
             if (existing.get('recipe') == plan['recipe'] and existing.get('recipe_sha256') != plan['recipe_sha256'] and
                     'extends' in json.loads(args.recipe.read_text())):
@@ -1435,6 +1520,18 @@ def main(argv=None):
     else:
         if args.out.exists():
             raise ValueError('fresh recipe directory required')
+        if args.plan_only:
+            plan['code'] = {str(path.relative_to(package)): sha(path) for path in package.rglob('*.py')}
+    if args.plan_only:
+        print(json.dumps({'event': 'plan_only', 'fresh': not plan_path.exists(), 'handoff': args.handoff,
+                          'recipe_sha256': plan['recipe_sha256'], 'stage_inputs': plan.get('stage_inputs'),
+                          'stages_started': [stage['id'] for stage in recipe['stages']
+                                             if stage_started(args.out, stage['id'])],
+                          'handoff_record': ({k: v for k, v in plan['handoffs'][-1].items() if k != 'previous_inputs'}
+                                             if args.handoff and plan.get('handoffs') else None)},
+                         indent=1), flush=True)
+        return 0
+    if not plan_path.exists():
         shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         plan['code'] = {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')}
         write_json(plan_path, plan)
@@ -1479,7 +1576,10 @@ def main(argv=None):
             if report_path.exists():
                 report = json.loads(report_path.read_text())
                 require_gate(report['gate'], kind)
-                if report['recipe_sha256'] != plan['recipe_sha256'] or report['inputs'] != inputs:
+                # A report written before a handoff gave unstarted stages new inputs carries the previous input map.
+                lineage_inputs = [inputs] + [record['previous_inputs'] for record in plan.get('handoffs', [])
+                                             if 'previous_inputs' in record]
+                if report['recipe_sha256'] != plan['recipe_sha256'] or report['inputs'] not in lineage_inputs:
                     raise ValueError('stage report belongs to another recipe/input lineage')
                 if sha(report['artifact']) != report['artifact_sha256']:
                     raise ValueError('qualified artifact changed')

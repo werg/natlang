@@ -2,11 +2,15 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-mellum-v4-from-v3-warmup",
  "extends": "neuralese-direct-mellum-v4",
- "description": "neuralese-direct-mellum-v4 resumed from the qualified direct_warmup of the neuralese-direct-mellum-v3 lineage (runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup: 333 updates, 0.5 epoch of the 4962-document full-prompt Mellum twin, held CE 2.219 -> 0.438, identity check passed), so the warm-up is not redone (coordinator decision 2026-10-12). The only difference from the parity recipe neuralese-direct-mellum-v4: its direct_warmup stage is replaced by that finished warm-up, bound as direct_sft's declared continuation inputs (full state, identity check, base drift reference; content-pinned), so the warm-up saw the 4962 documents rather than the r2 union's full-prompt rendering. direct_sft (r2 program header, 1 epoch) and direct_trajectory (r2 whole trajectory, 1 epoch) are exactly mellum-v4's.",
+ "description": "neuralese-direct-mellum-v4 resumed from the qualified direct_warmup of the neuralese-direct-mellum-v3 lineage (runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup: 333 updates, 0.5 epoch of the 4962-document full-prompt Mellum twin, held CE 2.219 -> 0.438, identity check passed), so the warm-up is not redone (coordinator decision 2026-10-12). The only difference from the parity recipe neuralese-direct-mellum-v4: its direct_warmup stage is replaced by that finished warm-up, bound as direct_sft's declared continuation inputs (full state, identity check, base drift reference; content-pinned), so the warm-up saw the 4962 documents rather than the r2 union's full-prompt rendering. direct_sft (r2 program header, 1 epoch) is exactly mellum-v4's. Second difference (coordinator decision 2026-10-12): direct_trajectory (1 epoch) reads union r3's whole-trajectory Mellum rendering (runs/natlang-target-union-20261011-r3, natlang-target-set-20261011-r3: 165,822 train / 1,549 test documents, 50.2M supervised tokens) instead of r2's (75,983 / 123, 15.9M); its held/test split is the r3 file's own test split (a superset of r2's 123 test documents), evaluation unchanged. Taken by a --handoff while direct_sft runs (a not-yet-started phase may take new inputs: recipe.py unstarted_stage_input_changes).",
  "overrides": {
   "input_bindings": {
    "direct_text": {
     "$delete": true
+   },
+   "direct_text_trajectory": {
+    "path": "runs/natlang-target-union-20261011-r3/whole-trajectory/mellum21/text-data.jsonl",
+    "sha256": "1e3759cd1a9bffc9148a79d2960fd5dbbbae97563d5a4226ca7cf73019120d88"
    },
    "v3_warmup_checkpoint": {
     "path": "runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup/checkpoint.pt",

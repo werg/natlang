@@ -932,3 +932,83 @@ def test_lineage_handoff_extends_an_unqualified_text_warmup_with_its_quantizatio
     with pytest.raises(ValueError, match='already qualified'):
         runner.lineage_handoff(_json.loads(_json.dumps(existing)), dict(plan, recipe=extended), frozen, package,
                                plan_path)
+
+
+def test_lineage_handoff_lets_only_an_unstarted_stage_take_new_inputs(tmp_path):
+    """Mellum v4 (2026-10-12): a later phase that has not started may read new content for its declared inputs on a
+    handoff (union r3 for direct_trajectory while direct_sft runs); the active or a finished phase's may not, a binding
+    shared with a started phase may not change, and roles/bindings stay. The previous input map is recorded so the
+    reports of earlier phases keep matching the lineage."""
+    import copy
+    import json as _json
+
+    from natlang_neuralese.train import recipe as runner
+
+    out = tmp_path / 'run'
+    frozen = out / 'runtime' / 'natlang_neuralese'
+    frozen.mkdir(parents=True)
+    (frozen / 'a.py').write_text('x = 1\n')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'a.py').write_text('x = 2\n')
+    (out / 'sft').mkdir()  # the active phase has started
+
+    def recipe(trajectory_sha, header_sha='h'):
+        return {'id': 'r', 'input_bindings': {'header': {'path': 'h.jsonl', 'sha256': header_sha},
+                                              'trajectory': {'path': 't.jsonl', 'sha256': trajectory_sha}},
+                'stages': [{'id': 'sft', 'kind': 'neuralese_direct', 'inputs': {'text_data': 'header'},
+                            'parameters': {'epochs': 1.0}},
+                           {'id': 'traj', 'kind': 'neuralese_direct', 'requires': ['sft'],
+                            'inputs': {'text_data': 'trajectory'}, 'parameters': {'epochs': 1.0}}]}
+
+    def plan_for(trajectory_sha, header_sha='h'):
+        stage_inputs = {'sft': {'text_data': {'binding': 'header', 'path': '/d/h' + header_sha, 'sha256': header_sha}},
+                        'traj': {'text_data': {'binding': 'trajectory', 'path': '/d/t' + trajectory_sha,
+                                               'sha256': trajectory_sha}}}
+        inputs = {'/heads': 'H', '/d/h' + header_sha: header_sha, '/d/t' + trajectory_sha: trajectory_sha}
+        return {'recipe': recipe(trajectory_sha, header_sha), 'recipe_sha256': 'new', 'inputs': inputs,
+                'device': 'cuda', 'stage_inputs': stage_inputs}
+
+    existing = dict(plan_for('r2'), recipe_sha256='lineage', code={'a.py': runner.sha(frozen / 'a.py')})
+    plan_path = out / 'recipe-plan.json'
+    plan_path.write_text(_json.dumps(existing))
+
+    dry = runner.lineage_handoff(copy.deepcopy(existing), plan_for('r3'), frozen, package, plan_path, out,
+                                 dry_run=True)
+    assert dry['stage_inputs']['traj']['text_data']['sha256'] == 'r3'
+    assert (frozen / 'a.py').read_text() == 'x = 1\n' and _json.loads(plan_path.read_text()) == existing
+
+    updated = runner.lineage_handoff(copy.deepcopy(existing), plan_for('r3'), frozen, package, plan_path, out)
+    record = updated['handoffs'][-1]
+    assert updated['recipe_sha256'] == 'lineage' and updated['inputs'] == plan_for('r3')['inputs']
+    assert record['stage_input_changes']['traj']['new']['text_data']['sha256'] == 'r3'
+    assert record['previous_inputs'] == existing['inputs'] and list(record['stage_input_changes']) == ['traj']
+    assert _json.loads(plan_path.read_text()) == updated
+
+    # The active phase's inputs stay fixed.
+    (frozen / 'a.py').write_text('x = 2\n')
+    (package / 'a.py').write_text('x = 3\n')
+    with pytest.raises(ValueError, match='inputs of started stage sft'):
+        runner.lineage_handoff(updated, plan_for('r3', header_sha='h2'), frozen, package, plan_path, out)
+    # Once the later phase has started, its inputs are fixed too.
+    (out / 'traj').mkdir()
+    with pytest.raises(ValueError, match='inputs of started stage traj'):
+        runner.lineage_handoff(updated, plan_for('r4'), frozen, package, plan_path, out)
+    (out / 'traj').rmdir()
+    # A binding shared with a started phase cannot change under it.
+    shared = plan_for('r4')
+    shared['recipe']['stages'][0]['inputs']['trajectory_too'] = 'trajectory'
+    old_shared = copy.deepcopy(updated)
+    old_shared['recipe']['stages'][0]['inputs']['trajectory_too'] = 'trajectory'
+    with pytest.raises(ValueError, match='also feed a started or unchanged stage'):
+        runner.lineage_handoff(old_shared, shared, frozen, package, plan_path, out)
+    # Roles and bindings of the unstarted phase stay; only their content changes.
+    renamed = plan_for('r4')
+    renamed['stage_inputs']['traj']['text_data']['binding'] = 'other'
+    with pytest.raises(ValueError, match='changes its input roles or bindings'):
+        runner.lineage_handoff(updated, renamed, frozen, package, plan_path, out)
+    # Any other recipe change is still refused.
+    objective = plan_for('r4')
+    objective['recipe']['stages'][1]['parameters']['lr'] = 2
+    with pytest.raises(ValueError, match='more than operational'):
+        runner.lineage_handoff(updated, objective, frozen, package, plan_path, out)
