@@ -113,6 +113,11 @@ test('positive skill episode exactly replays through ablations, materializer, an
   let frozen;
   try { frozen = JSON.parse(await readFile(join(runtimePath, 'frozen-runtime.json'))); }
   catch { await rm(root, { recursive: true, force: true }); t.skip(`sealed authoring runtime not available at ${runtimePath}`); return; }
+  for (const name of ['holds.jsonl', 'family-holds.json', 'datasets.json']) {
+    const relative = `training/source-reviews/${name}`;
+    assert.equal(sha(await readFile(join(runtimePath, relative))), frozen.files[relative],
+      `isolated authoring runtime must contain and pin ${relative}`);
+  }
 
   const input = join(root, 'episodes.jsonl'), collectionPath = join(root, 'collection');
   const output = join(root, 'export'), episodeRow = episode();

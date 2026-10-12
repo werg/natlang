@@ -44,13 +44,21 @@ def main():
     parent_files, parent_links = inventory(parent)
     if parent_files != parent_manifest['files'] or parent_links != parent_manifest['symlinks']:
         raise ValueError('parent runtime seal changed')
+    source_trees = {directory: source / directory for directory in ['src', 'dist', 'scripts/skills']}
+    source_trees['training/source-reviews'] = source.parent / 'training/source-reviews'
+    for name in ['holds.jsonl', 'family-holds.json', 'datasets.json']:
+        if not (source_trees['training/source-reviews'] / name).is_file():
+            raise ValueError('source-review registry is missing: ' + name)
     selected = {}
-    for directory in ['src', 'dist', 'scripts/skills']:
-        for path in sorted((source / directory).rglob('*')):
+    source_paths = {}
+    for directory, tree in source_trees.items():
+        for path in sorted(tree.rglob('*')):
             if path.is_file():
                 if path.is_symlink():
                     raise ValueError('source code must be physical files')
-                selected[path.relative_to(source).as_posix()] = digest(path)
+                relative = (Path(directory) / path.relative_to(tree)).as_posix()
+                selected[relative] = digest(path)
+                source_paths[relative] = path
     if 'dist/improvement/skill-authoring.js' not in selected or 'scripts/skills/collect-episodes.mjs' not in selected:
         raise ValueError('build the new authoring runtime before freezing')
     clone_runtime_tree(parent, output)
@@ -58,16 +66,17 @@ def main():
     for path in [output, *output.rglob('*')]:
         if path.is_dir() and not path.is_symlink():
             os.chmod(path, stat.S_IMODE(path.stat().st_mode) | 0o200)
-    for directory in ['src', 'dist', 'scripts/skills']:
+    for directory, tree in source_trees.items():
         target = output / directory
         if target.exists():
             shutil.rmtree(target)
-        shutil.copytree(source / directory, target)
+        shutil.copytree(tree, target)
     (output / 'frozen-runtime.json').unlink()
     copied = {relative: digest(output / relative) for relative in selected}
-    current = {relative: digest(source / relative) for relative in selected}
-    actual_paths = {path.relative_to(source).as_posix() for directory in ['src','dist','scripts/skills']
-                    for path in (source / directory).rglob('*') if path.is_file()}
+    current = {relative: digest(path) for relative, path in source_paths.items()}
+    actual_paths = {(Path(directory) / path.relative_to(tree)).as_posix()
+                    for directory, tree in source_trees.items()
+                    for path in tree.rglob('*') if path.is_file()}
     if set(selected) != actual_paths or selected != copied or selected != current:
         raise ValueError('source changed during runtime preparation; keep failed candidate and use a fresh output')
     files, links = inventory(output)
@@ -78,7 +87,7 @@ def main():
         os.chmod(path, stat.S_IMODE(path.stat().st_mode) & ~0o222)
     manifest = {'schema': 'natlang.skill-authoring-runtime/1', 'files': files, 'symlinks': links,
         'parent_runtime_manifest_sha256': digest(parent / 'frozen-runtime.json'),
-        'derivation': 'Physical sealed parent dependency copy; exact current source/compiled/skill scripts copied without installing dependencies',
+        'derivation': 'Physical sealed parent dependency copy; exact current source/compiled/skill scripts and source-review registry copied without installing dependencies',
         'source_files': selected, 'package_policy': 'Parent dependency versions retained; direct relative authoring entrypoint'}
     manifest_path = output / 'frozen-runtime.json'
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
