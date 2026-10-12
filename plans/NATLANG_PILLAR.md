@@ -42,15 +42,15 @@ First window: the first Mellum checkpoint after 2026-10-13 06:00 UTC (DGX traini
    reference_successes unmeasured" (plans/neuralese/DECISIONS.md, "Held task packet v2"). Command:
 
    ```sh
-   cd /home/werg/natlang && python3 scripts/memory_ledger.py run --unit heldv2-base-mellum --budget-gb 34 --reserve-gb 2 \
+   cd /home/werg/natlang && python3 scripts/memory_ledger.py run --unit heldv3-base-mellum --budget-gb 34 --reserve-gb 2 \
      --priority high --no-resumable --workdir /home/werg/natlang -- sh -c 'HF_HUB_OFFLINE=1 NATLANG_REPO=/home/werg/natlang \
      PYTHONPATH=/home/werg/natlang/training/neuralese .venv-neuralese/bin/python -m natlang_neuralese.eval.task_cadence \
      --heads runs/neuralese-direct-mellum-20261011/heads-raw-token.pt --device cuda --prompt-rendering full \
-     --out runs/heldv2-base-mellum-full --step 0 --spec "{\"packet\":{\"path\":\"runs/natlang-held-task-packet-v3-20261012/cases.jsonl\",\"sha256\":\"535269866aeecc107e3cc8b165790a5b200cdb104884d4994958eee17eb6be95\"},\"cases\":[0,5,10,15,16,21,26,31,32,37,42,47,48,53,58,63],\"workers\":4,\"case_seconds\":600,\"max_model_requests\":48}" \
-     > runs/heldv2-base-mellum-full.log 2>&1'
+     --out runs/heldv3-base-mellum-full --step 0 --spec "{\"packet\":{\"path\":\"runs/natlang-held-task-packet-v3-20261012/cases.jsonl\",\"sha256\":\"535269866aeecc107e3cc8b165790a5b200cdb104884d4994958eee17eb6be95\"},\"cases\":[0,5,10,15,16,21,26,31,32,37,42,47,48,53,58,63],\"workers\":4,\"case_seconds\":600,\"max_model_requests\":48}" \
+     > runs/heldv3-base-mellum-full.log 2>&1'
    ```
 
-   The result is `runs/heldv2-base-mellum-full/task-eval.jsonl`: `task_successes` is the first run, and
+   The result is `runs/heldv3-base-mellum-full/task-eval.jsonl`: `task_successes` is the first run, and
    `repeat_successes`/`repeat_noise` come from the second. Set `task_eval.reference_successes` to the lower count in
    the Mellum direct recipe (`neuralese-direct-mellum-v4.json`, overrides.stage_parameter_defaults.neuralese_direct).
    This is a declared backbone-inherent difference in line-parity.json. The new reference reaches the live run at
