@@ -39061,6 +39061,185 @@
       },
       "note": "Clef-flash-distilled inline-lambda programs over new source pools, day 20261012: 452 cases, 2952 decisions ({'clef_edit_review': 125, 'clef_skill_routing': 144, 'clef_wellbeing_triage': 109, 'clef_clause_risk': 74}). Files: *.skeletons (Clef requests), *.answers (Clef outputs with usage), *.ir (cases), *.rows (trajectories), *.turns (native training turns).",
       "consumable_by_direct_stage": false
+    },
+    {
+      "id": "natlang-native-turns-luna-v21-clinc-render-20261012-v1",
+      "owner": "dgx",
+      "path": "runs/natlang-native-turns-luna-v21-clinc-render-20261012-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: luna-v21-clinc-intent-exact-child-actions-20261012-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "luna-v21-clinc-intent-exact-child-actions-20261012-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "67013c84fbcb0ec81b66f8c006ae576e9207bb2ce87d297db39312f5ba4a71c1",
+            "documents": 7,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 7,
+                "supervised_tokens": 576,
+                "tokens": 47179,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 6786,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "28b25451504616baa2aec62049977e3d9e6f4f1716993d0a30eb655ebbdfd9f1",
+            "documents": 7,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 7,
+                "supervised_tokens": 684,
+                "tokens": 47024,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 6764,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "6556b8bfacf8ead27e1d08c1e2983c73f27203e975bf2ede2f14bdba485f5869",
+            "documents": 75,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 75,
+                "supervised_tokens": 6682,
+                "tokens": 202899,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 3617,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "49b1ba0846469c987528eea91c559d8e741ab783cc01e9c3bc4261f2f5e3feaf",
+            "documents": 75,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 75,
+                "supervised_tokens": 7709,
+                "tokens": 200078,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 3585,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "d042075767c9bc2e92eea81f77432c610045e802f7bf9caea4f99c2dcb8a0c6c",
+            "documents": 75,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 36629,
+                "documents": 75,
+                "opening_tokens": 29603,
+                "supervised_tokens": 7026,
+                "tokens": 201511,
+                "tool_tokens": 68910
+              }
+            },
+            "max_document_tokens": 3571,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "d1ddc7c54a516f27ceabc951837c775bdfe6c43cb7241f7df811104ef288769c",
+            "documents": 75,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 38792,
+                "documents": 75,
+                "opening_tokens": 30542,
+                "supervised_tokens": 8250,
+                "tokens": 200078,
+                "tool_tokens": 66691
+              }
+            },
+            "max_document_tokens": 3585,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 75,
+        "selected:train": 75,
+        "source_rows": 75
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 68,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 68
+      },
+      "program_header_parity": {
+        "equal_text_serving_token_boundaries": 150,
+        "retokenization_checked": 0
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "bc309126562db69b77f73d5ff0764371182d5223646977a1fc190c9ffc7156c9",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "2bb383731743309117be7b5a92534ce9661fc38635dfc9fd5001e0412e6406ce",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "16f5941d4a6ddc876ace120949281ca25aebee5c40581d079a6862490ccfac9c",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/natlang-native-turns-luna-v21-clinc-render-20261012-v1/receipt.json",
+        "sources": {
+          "data/neuralese/corpora/luna-v21-clinc-intent-exact-child-actions-20261012-v1/teacher-turns.jsonl": {
+            "bytes": 14751895,
+            "sha256": "382421db91b43f68cabbe1720dab8b61e0f529425e27afa6f39cf213432da462"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": "Luna CLINC v21 reviewed exact child actions (Pop note pop-aca8): program-header and whole-trajectory in both twins; full kept for the 5% warm-up sample."
     }
   ],
   "coverage_backlog": [
