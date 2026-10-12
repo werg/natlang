@@ -61051,6 +61051,54 @@
         }
       },
       "notes": "Tokenizer-agnostic native records: one file serves both lines (LFM2.5 and Mellum2.1 tokenize at train time), so the lines stay in lockstep. 85 MB plain, not compressed (trajectories.py reads plain JSONL). Pieces: the pinned assembly-v3 table wins every name; later tables only add names. The other union members (s72, v13, bgkit, static-lambda, clef, campaign, SWE) are single whole-program decisions without child calls, so they contribute no producer->consumer pairs."
+    },
+    {
+      "id": "neuralese-e2e-union-cohort-20261012-v1.1",
+      "owner": "dgx",
+      "path": "runs/neuralese-e2e-union-cohort-20261012-v1.1",
+      "include": [
+        "records.jsonl",
+        "pieces.jsonl",
+        "edges.jsonl",
+        "receipt.json"
+      ],
+      "source_class": "native-e2e-producer-consumer-records",
+      "split": "identical to neuralese-e2e-union-cohort-20261012-v1 (same records, same splits and source groups)",
+      "admission": "end-to-end Neuralese stage data, program-header rendering of neuralese-e2e-union-cohort-20261012-v1 for the e2e rendering comparison (full vs program-header from the same source records)",
+      "training_admission": true,
+      "training_admission_reason": "coordinator 2026-10-12 (owner: make e2e work well): both renderings of the e2e corpus are kept from the same source records and compared on the same e2e qualification; the better one is adopted for both lines",
+      "prompt_rendering": "program-header",
+      "derived_from": [
+        "neuralese-e2e-union-cohort-20261012-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "counts": {
+        "records": 1389,
+        "edges": 1137,
+        "system_prompt_mode": {
+          "none": 352,
+          "program-own": 1037
+        }
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_e2e_program_header.py",
+        "receipt": "runs/neuralese-e2e-union-cohort-20261012-v1.1/receipt.json",
+        "files": {
+          "records.jsonl": {
+            "sha256": "c0be01927d4637f6c10411d917abc0ea721d12f8f8798ee22f5b688f6feb1531",
+            "bytes": 78458253
+          },
+          "pieces.jsonl": {
+            "sha256": "90d194c2d029f81ca17f4accaed5bce4840641fdf014431d03dd21f963c6bd2d",
+            "bytes": 495286
+          },
+          "edges.jsonl": {
+            "sha256": "256acd74050b30c8b75ccff15c707eac9d7555b81add3ee942b01479c6331302",
+            "bytes": 363462
+          }
+        }
+      },
+      "notes": "Each record through data/prompt_rendering.program_header_native_record: the system soft pieces resolved and reduced to the program header by the shared renderer (system turn dropped when none remains), runtime tool schemas dropped, every other field unchanged. The 1137 edges were re-derived with authenticated_recurrence_context_view on the rendered records and equal v1's edges.jsonl exactly. pieces.jsonl and edges.jsonl are byte copies of v1's."
     }
   ],
   "coverage_backlog": [
