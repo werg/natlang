@@ -77,10 +77,31 @@ def verify_plan(plan_path: Path) -> tuple[dict, Path, Path]:
     if plan["prompt_rendering"] == "program-header":
         if not isinstance(source_rows, list) or not source_rows:
             raise ValueError("program-header evaluation must pin the training text-data sources")
+        recipe_ref = plan.get("training_recipe") or {}
+        if not isinstance(recipe_ref.get("path"), str) or not recipe_ref.get("sha256"):
+            raise ValueError("program-header evaluation lacks its training recipe pin")
+        recipe_path = Path(recipe_ref["path"]).resolve(strict=True)
+        if sha256_file_hex(recipe_path) != recipe_ref["sha256"]:
+            raise ValueError("program-header training recipe is missing or changed")
+        recipe = json.loads(recipe_path.read_text(encoding="utf-8"))
+        if recipe.get("id") != recipe_ref.get("id"):
+            raise ValueError("program-header training recipe id differs from its pin")
+        recipe_inputs = recipe.get("input_bindings") or {}
+        bindings = set()
         for source in source_rows:
             if (not isinstance(source, dict) or source.get("prompt_rendering") != "program-header" or
-                    not isinstance(source.get("sha256"), str) or len(source["sha256"]) != 64):
+                    not isinstance(source.get("sha256"), str) or len(source["sha256"]) != 64 or
+                    source.get("binding") not in recipe_inputs or
+                    source.get("path") != recipe_inputs[source["binding"]].get("path") or
+                    source.get("sha256") != recipe_inputs[source["binding"]].get("sha256")):
                 raise ValueError("invalid program-header training source binding")
+            if source.get("binding") not in {"program_header", "whole_trajectory"}:
+                raise ValueError("unsupported program-header training source binding")
+            if source["binding"] in bindings:
+                raise ValueError("duplicate program-header training source binding")
+            bindings.add(source["binding"])
+        if bindings != {"program_header", "whole_trajectory"}:
+            raise ValueError("evaluation must cover both pinned program-header training phases")
     packet = Path(plan["derived_packet"]).resolve(strict=True)
     if sha256_file_hex(packet) != plan["derived_packet_sha256"]:
         raise ValueError("derived held-task packet hash changed")
