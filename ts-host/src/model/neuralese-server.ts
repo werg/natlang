@@ -26,7 +26,7 @@ import { assembleChatCompletion, chatCompletionModelTurn, fetchModel, httpChatTr
   type HttpChatOptions } from './chat-completion.js';
 import { coalescingScorer, explicitBatchScoreMany } from './scoring.js';
 import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
-import { activeAdapters, activeRecorder } from '../neuralese/recording.js';
+import { activeAdapters, activeRecorder, type AdapterBinding, type TurnRecorder } from '../neuralese/recording.js';
 import { serves } from './neuralese-info.js';
 import { isContentParts, partsToText, type ContentPart } from '../native/neuralese.js';
 import { constantBlock, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
@@ -254,8 +254,8 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       loras.add(id);
     }
   };
-  const adapterParts = async (bound: readonly { id: string; scale: number }[] = []) => {
-    const adapters = [...activeAdapters(), ...bound];
+  const adapterParts = async (bound: readonly { id: string; scale: number }[] = [], active: readonly AdapterBinding[] = activeAdapters()) => {
+    const adapters = [...active, ...bound];
     if (adapters.length) await uploadLoras(adapters.map(item => item.id));
     return adapters;
   };
@@ -301,9 +301,17 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   // Decision readout: one prompt pass, every option scored from its cache (serve/grad.py `decide`).
   type Item = Parameters<DecisionScorer>[0];
   type Settled = PromiseSettledResult<DecisionScores>;
-  const prepare = async (messages: unknown[], replies: readonly string[], bound: readonly { id: string; scale: number }[] | undefined) => {
-    const adapters = await adapterParts(bound ?? []);
-    activeRecorder()?.record({ messages: structuredClone(messages), reply: { role: 'assistant', content: null }, blocks: [],
+  // A coalesced decision is scored in the batch's flush, whose asynchronous context is another caller's (or none): the
+  // recorder and the dynamically scoped adapters are taken where the decision was asked for (`scope`), so concurrent
+  // objectives each record their own turn and adapters do not leak between batched callers.
+  type Scope = { recorder: TurnRecorder | undefined; adapters: readonly AdapterBinding[] };
+  const scopes = new WeakMap<object, Scope>();
+  const here = (): Scope => ({ recorder: activeRecorder(), adapters: activeAdapters() });
+  const scopeOf = (item: object): Scope => scopes.get(item) ?? here();
+  const prepare = async (messages: unknown[], replies: readonly string[], bound: readonly { id: string; scale: number }[] | undefined,
+      scope: Scope = here()) => {
+    const adapters = await adapterParts(bound ?? [], scope.adapters);
+    scope.recorder?.record({ messages: structuredClone(messages), reply: { role: 'assistant', content: null }, blocks: [],
       decision: { options: [...replies] }, ...(adapters.length ? { adapters: [...adapters] } : {}) });
     return adapters;
   };
@@ -328,12 +336,14 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     Promise.allSettled(items.map(item => decideRequest(item.messages, item.options, (item.adapters ?? []) as { id: string; scale: number }[], signal)));
   const batched = explicitBatchScoreMany({ url: http.endpoint.replace(/\/$/, '') + '/v1/natlang/score', headers: http.headers }, perItem);
   const scoreMany = async (items: Item[], signal?: AbortSignal): Promise<Settled[]> => {
-    if (!serves((await serverInfo()) ?? {}, 'score')) return perItem(items, signal);
+    if (!serves((await serverInfo()) ?? {}, 'score'))
+      return Promise.allSettled(items.map(async item => decideRequest(item.messages, item.options,
+        await prepare(item.messages, item.options, item.adapters, scopeOf(item)), signal)));
     const prepared: ({ index: number; item: Item; key: string } | undefined)[] = [];
     const results: Settled[] = new Array(items.length);
     await Promise.all(items.map(async (item, index) => {
       try {
-        const adapters = await prepare(item.messages, item.options, item.adapters);
+        const adapters = await prepare(item.messages, item.options, item.adapters, scopeOf(item));
         await withRestoredBlocks(remote, store, blockIds(item.messages, adapters), async () => undefined, uploaded);
         prepared[index] = { index, item: { ...item, ...(adapters.length ? { adapters } : {}) }, key: JSON.stringify([item.messages, adapters]) };
       } catch (error) { results[index] = { status: 'rejected', reason: error }; }
@@ -343,5 +353,10 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     order.forEach((entry, position) => { results[entry.index] = scored[position]!; });
     return results;
   };
-  return Object.assign(driver, { neuralese: true as const, blocks: remote, decide: coalescingScorer(Object.assign((...args: Parameters<DecisionScorer>) => decide(...args), { scoreMany })) });
+  const coalesced = coalescingScorer(Object.assign((...args: Parameters<DecisionScorer>) => decide(...args), { scoreMany }));
+  const scoped: DecisionScorer = Object.assign((request: Item, signal?: AbortSignal) => {
+    scopes.set(request, here());
+    return coalesced(request, signal);
+  }, { scoreMany: coalesced.scoreMany });
+  return Object.assign(driver, { neuralese: true as const, blocks: remote, decide: scoped });
 }

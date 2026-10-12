@@ -57,3 +57,35 @@ test('a server without the score endpoint is asked per item through /v1/neurales
     assert.equal(server.posts.filter(post => post.path === '/v1/neuralese/decide').length, 4);
   } finally { await server.close(); }
 });
+
+test('a coalesced decision records its turn and applies its adapters in the caller\'s scope, not the flushing caller\'s', async () => {
+  const { AsyncLocalStorage } = await import('node:async_hooks');
+  const { setRecorderSource, setAdapterSource } = await import('../dist/neuralese/recording.js');
+  const scope = new AsyncLocalStorage();
+  setRecorderSource(() => scope.getStore()?.recorder);
+  setAdapterSource(() => scope.getStore()?.adapters);
+  const server = await fake((path, body, response) => {
+    if (path.startsWith('/v1/neuralese/blocks/')) return json(response, 200, { id: path.split('/')[4] });
+    if (path !== '/v1/natlang/score') return json(response, 404, {});
+    json(response, 200, { results: body.items.map(item => ({ log_probs: item.continuations.map(() => -1), tokens: item.continuations.map(() => 1) })) });
+  });
+  try {
+    const { decide } = neuraleseServerModelTurn({ endpoint: server.endpoint, model: 'm' });
+    const callers = ['a', 'b', 'c'].map(name => ({ name, turns: [], adapters: [{ id: `nz1_adapter_${name}`, scale: 1 }] }));
+    await Promise.all(callers.map(caller => scope.run({ recorder: { record: turn => caller.turns.push(turn) }, adapters: caller.adapters },
+      () => decide({ messages: user(caller.name), options: ['x', 'y'] }))));
+    const scores = server.posts.filter(post => post.path === '/v1/natlang/score');
+    assert.equal(scores.length, 1, 'the three decisions are one batch');
+    for (const caller of callers) {
+      assert.equal(caller.turns.length, 1, `${caller.name} records exactly its own decision turn`);
+      assert.equal(caller.turns[0].messages[0].content, caller.name);
+      assert.deepEqual(caller.turns[0].adapters, caller.adapters);
+      const item = scores[0].body.items.find(entry => entry.messages[0].content === caller.name);
+      assert.deepEqual(item.adapters, caller.adapters, `${caller.name}'s adapters only`);
+    }
+  } finally {
+    setRecorderSource(() => undefined);
+    setAdapterSource(() => undefined);
+    await server.close();
+  }
+});
