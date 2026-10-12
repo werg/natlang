@@ -120,11 +120,9 @@ def test_held_out_readers_compare_their_written_values_with_another_readers(load
         assert got["written"] != got["shuffled"]
 
 
-def test_direct_writer_end_to_end_stage_trains_the_child_write_through_the_neuralese_projection(loaded, tmp_path,
-                                                                                                monkeypatch):
-    """Neuralese direct v1's end-to-end stage (plans/neuralese/NEURALESE_DIRECT_V1.md): with --direct-artifact the
-    child's result is written by the shared direct writer, and the caller's loss reaches the child's write context and
-    the NeuraleseProjection. The restore is the shared load_direct_artifact; here a stand-in over raw-token heads."""
+def _direct_stand_in(loaded, tmp_path, monkeypatch):
+    """The shared load_direct_artifact replaced by a stand-in over raw-token heads; returns (records, pieces,
+    projections) for a direct-writer end-to-end run."""
     from types import SimpleNamespace
     from natlang_neuralese.model.heads import PortHeads
     from natlang_neuralese.model.neuralese_projection import NeuraleseProjection
@@ -147,21 +145,75 @@ def test_direct_writer_end_to_end_stage_trains_the_child_write_through_the_neura
         return SimpleNamespace(engine=engine, neuralese_projection=projection, token_choice_projection=None,
                                manifest={"schema": "test-stand-in"})
     monkeypatch.setattr(direct_export, "load_direct_artifact", restore)
+    # The stand-in has no exported manifest; bind the run to a fixed stand-in parent document.
+    monkeypatch.setattr(direct_export, "direct_parent_binding",
+                        lambda artifact: {"schema": "test-stand-in-parent", "artifact_path": str(artifact),
+                                                  "manifest": {"schema": "test-stand-in"}})
     records, pieces = tmp_path / "records.jsonl", tmp_path / "pieces.jsonl"
     records.write_text("".join(json.dumps(r) + "\n" for r in RECORDS))
     pieces.write_text("".join(json.dumps(p) + "\n" for p in PIECES))
+    return records, pieces, projections
+
+
+def _direct_arguments(records, pieces, out, tmp_path):
+    return ["--records", str(records), "--pieces", str(pieces), "--out", str(out), "--direct-artifact",
+            str(tmp_path), "--direct-base-snapshot", str(tmp_path), "--device", "cpu", "--steps", "1", "--batch", "1",
+            "--eval", "0", "--handover", "written", "--write-depth", "1", "--tokens-per-vector", "1",
+            "--writer-supervision", "native-value", "--writer-length-policy", "native-value",
+            "--stop-supervision", "generated-length", "--writer-text-weight", "0", "--distill", "0", "--lr", "1e-2",
+            "--heads-lr", "1e-2"]
+
+
+def test_direct_writer_end_to_end_stage_trains_the_child_write_through_the_neuralese_projection(loaded, tmp_path,
+                                                                                                monkeypatch):
+    """Neuralese direct v1's end-to-end stage (plans/neuralese/NEURALESE_DIRECT_V1.md): with --direct-artifact the
+    child's result is written by the shared direct writer, and the caller's loss reaches the child's write context and
+    the NeuraleseProjection. The restore is the shared load_direct_artifact; here a stand-in over raw-token heads."""
+    records, pieces, projections = _direct_stand_in(loaded, tmp_path, monkeypatch)
     out = tmp_path / "out"
-    assert main(["--records", str(records), "--pieces", str(pieces), "--out", str(out), "--direct-artifact",
-                 str(tmp_path), "--direct-base-snapshot", str(tmp_path), "--device", "cpu", "--steps", "1", "--batch", "1", "--eval", "0", "--handover",
-                 "written", "--write-depth", "1", "--tokens-per-vector", "1", "--writer-supervision", "native-value",
-                 "--writer-length-policy", "native-value", "--stop-supervision", "generated-length",
-                 "--writer-text-weight", "0", "--distill", "0", "--lr", "1e-2", "--heads-lr", "1e-2"]) == 0
+    assert main(_direct_arguments(records, pieces, out, tmp_path)) == 0
     moved = json.loads((out / "summary.json").read_text())["relative_change"]
     assert moved["instructions@caller"] > 0 and moved["instructions@child"] > 0
     down = projections["neuralese"].stack.blocks[-1].down.weight
     assert down.abs().sum() > 0, "the caller's loss trains the NeuraleseProjection (zero-initialised output)"
     saved = torch.load(out / "heads.pt", weights_only=False)
     assert torch.equal(saved["neuralese_projection"]["stack.blocks.1.down.weight"], down.detach().cpu())
+    # Full state at the end only: never before the first update (a fresh start has nothing to protect).
+    phases = [json.loads(line) for line in (out / "host-phases.jsonl").read_text().splitlines()]
+    assert [p["completed_updates"] for p in phases if p.get("event") == "checkpoint_saved"] == [1]
+
+
+def test_a_smoke_without_saved_state_writes_logs_and_report_only(loaded, tmp_path, monkeypatch):
+    records, pieces, _ = _direct_stand_in(loaded, tmp_path, monkeypatch)
+    out = tmp_path / "out"
+    assert main(_direct_arguments(records, pieces, out, tmp_path) + ["--no-save-state"]) == 0
+    assert (out / "summary.json").exists() and (out / "train.jsonl").exists()
+    for written in ("checkpoint.pt", "best-checkpoint.pt", "heads.pt", "adapter.pt"):
+        assert not (out / written).exists(), written
+
+
+def test_direct_end_to_end_folds_crisp_sft_into_the_routed_backward(loaded, tmp_path, monkeypatch):
+    """The crisp SFT term is one more term of the update's routed backward (the joint attempt, or the staged path
+    after a joint miss), not a separate backward after the gradients exist; under the auto policy its memory is part
+    of the routed estimate."""
+    records, pieces, _ = _direct_stand_in(loaded, tmp_path, monkeypatch)
+    out = tmp_path / "out"
+    assert main(_direct_arguments(records, pieces, out, tmp_path) + [
+        "--no-save-state", "--crisp-weight", "1", "--backward-policy", "auto"]) == 0
+    row = json.loads((out / "train.jsonl").read_text().splitlines()[-1])
+    assert row["crisp_sft_loss"] > 0
+    summary = json.loads((out / "summary.json").read_text())
+    assert summary["relative_change"]["instructions@child"] > 0
+
+
+def test_direct_end_to_end_refuses_the_in_backward_latent_step(loaded, tmp_path, monkeypatch):
+    """Measured: under --latent-step-in-backward the direct writer's child context got no gradient (relative change
+    0.0 against 0.065 with the separate backward), so the combination is refused until that path joins the tape."""
+    records, pieces, _ = _direct_stand_in(loaded, tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="producer context"):
+        main(_direct_arguments(records, pieces, tmp_path / "out", tmp_path) + [
+            "--no-save-state", "--backbone-training", "latent", "--optimizer", "muon", "--latent-optimizer", "muonsr",
+            "--latent-lr", "1e-3", "--latent-step-in-backward", "--backward-policy", "joint"])
 
 
 @pytest.mark.parametrize("feedback", ["token", "value"])
@@ -233,3 +285,53 @@ def test_forced_sequence_write_matches_the_step_by_step_write(loaded):
     ga, = torch.autograd.grad(a.float().square().sum(), down)
     gb, = torch.autograd.grad(b.float().square().sum(), down)
     assert torch.allclose(ga, gb, atol=1e-3, rtol=1e-3)
+
+
+@pytest.mark.parametrize("forced", [True, False])
+def test_direct_write_context_gets_the_same_gradient_under_the_layer_staged_backward(loaded, forced):
+    """--latent-step-in-backward runs every layer on staged leaves (model/layer_staging.py). The direct writer's
+    producer context must receive the same gradient as with the plain backward, through the prefill cache the writer
+    attends to and through the opened top state, for the sequence (forced) and step-by-step writes."""
+    from types import SimpleNamespace
+    from natlang_neuralese.model import layer_staging
+    from natlang_neuralese.model.neuralese_projection import NeuraleseProjection
+    from natlang_neuralese.serve.direct_write import DirectWriter
+    from natlang_neuralese.train.execution import prefill_write_context
+    from natlang_neuralese.write import Opened
+
+    model, tokenizer, backbone = loaded
+    heads = SimpleNamespace(cutoff=backbone.num_layers, read_markers=False)
+    torch.manual_seed(0)
+    projection = NeuraleseProjection(int(model.config.hidden_size), hidden=8)
+    with torch.no_grad():
+        for block in projection.stack.blocks:
+            block.down.weight.normal_(0, 0.05)
+    ids = torch.tensor([tokenizer.encode("The parcel is ready for collection.", add_special_tokens=False)])
+    soft = torch.nn.Parameter(backbone.embed(ids).detach().clone())
+    tokens = tokenizer.encode(" It is ready", add_special_tokens=False)[:3]
+
+    def gradient(staged):
+        soft.grad = None
+        tape = layer_staging.begin() if staged else None
+        try:
+            pre = prefill_write_context(backbone, heads, soft)
+            opened = Opened(pre.cache, pre.state, backbone.logits(pre.top[:, None])[:, -1], pre.top)
+            writer = DirectWriter(backbone, projection, opened, len(tokens), {tokenizer.eos_token_id},
+                                  length=len(tokens), feedback="token", tokens=tokens)
+            if forced:
+                writer.forced_sequence()
+            else:
+                while not writer.step():
+                    pass
+            loss = torch.stack([value.float().pow(2).sum() for value in writer.payloads]).sum()
+            loss.backward()
+            if tape is not None:
+                tape.backward()
+        finally:
+            if tape is not None:
+                layer_staging.end()
+        return soft.grad.detach().clone()
+
+    plain, staged = gradient(False), gradient(True)
+    assert float(plain.abs().sum()) > 0
+    torch.testing.assert_close(staged, plain, rtol=1e-4, atol=1e-6)

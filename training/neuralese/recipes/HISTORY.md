@@ -406,3 +406,26 @@ fixed per update. Changes (shared base, both lines):
 - Quantization: a stage budgeted in epochs passes `end: "derived"`; direct_sft binds it to the derived update count.
 - Line parity: `derived.supervision` (epochs) replaces `derived.supervised_positions`; multi-stage recipes compare per
   stage. The Mellum program-header twin is registered as the tokenizer twin of the LFM program-header set.
+
+## 2026-10-12: E2E stage memory routing, crisp term and state writes (trajectories, shared)
+
+Mellum E2E smoke (2026-10-11) ran out of memory at update 1 in the separate crisp-SFT backward, which had no fallback,
+after the router predicted 39.8 GB for an update that peaked at 72 GB.
+- Crisp SFT is one more term of the update's routed backward (the joint attempt, the staged path after a joint miss,
+  or the in-backward update), so a joint miss falls back with the whole objective; its reader-sized tape is in the
+  routed estimate. Before, it was a second backward taken after the reader's gradients already existed.
+- Router: the fixed part of a joint attempt (resident memory plus this update's gradient buffers; latents stepped in
+  backward excluded) is counted exactly. Only the graph tape is predicted and calibrated (`joint_tape_ratios`, the
+  older whole-peak `joint_ratios` are not reused), and a bin not seen yet borrows every bin's observations. A joint
+  result outside 0.67-1.25x of its estimate prints `memory_estimate_miss`.
+- `--save-state/--no-save-state` (as in the direct stage): smokes write logs and the report only, with no checkpoint,
+  best link, heads.pt or adapter.pt. No full-state write before the first update in any run: a fresh start has
+  nothing to protect, and a resume reads a state already on disk.
+- `--latent-step-in-backward` is refused with `--direct-artifact`: under the layer-staged backward the direct writer's
+  child context received no gradient (relative change 0.0 against 0.065 with the separate backward, CPU test). The
+  writer alone is exact under staging (a new test compares the context gradient with and without it, forced and
+  step-by-step). The loss is in the order: the caller reads the child's value, made from the writer's top layer,
+  at the caller's layer-0 input. The lockstep walk reaches that input edge last, after the writer's layers were
+  passed, so the gradient arriving at the writer's top leaf is never propagated, and the staging check misses it
+  (the leaf was never processed). Open work: a correct order for such cross-stream edges, with each layer's
+  latents still stepping once.
