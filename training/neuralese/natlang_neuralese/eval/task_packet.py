@@ -62,10 +62,24 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
         return "budget_exhaustion"
 
     incomplete_details = [outcome.get("detail")]
+    failed_invocation_details: list[str] = []
     invocations = outcome.get("invocation_ledger")
     if isinstance(invocations, list):
-        incomplete_details.extend(invocation.get("completion_detail") for invocation in invocations
-                                  if isinstance(invocation, dict))
+        for invocation in invocations:
+            if not isinstance(invocation, dict):
+                continue
+            detail = invocation.get("completion_detail")
+            incomplete_details.append(detail)
+            if invocation.get("completion_status") == "failed" and isinstance(detail, str):
+                failed_invocation_details.append(detail.casefold())
+    if any(re.search(r"\b(episode turn, token, or wall-clock budget exhausted|case wall(?:-clock)? budget exhausted|model request budget exhausted)\b",
+                     str(detail).casefold()) for detail in incomplete_details if isinstance(detail, str)):
+        return "budget_exhaustion"
+    # A recovered collector finish can be complete even when a nested runtime
+    # invocation was interrupted by the host memory floor. The invocation ledger
+    # retains the abort while the queue journal records the recovered exact output.
+    if any(detail == "this operation was aborted" for detail in failed_invocation_details):
+        return "infrastructure_error"
     if any(isinstance(detail, str) and
            re.match(r"^model_incomplete:\s*terminated_without_result\b", detail.casefold())
            for detail in incomplete_details):
