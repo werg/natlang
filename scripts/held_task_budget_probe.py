@@ -4,7 +4,7 @@ outcome, against an external OpenAI-compatible server (e.g. llama-server), with 
 value. Used to set task_eval's case_seconds / max_model_requests from measurement (AGENTS.md "No premature limits").
 
   python3 scripts/held_task_budget_probe.py --spec-from training/neuralese/recipes/neuralese-direct-v2.json \
-      --server http://127.0.0.1:8097 --out /home/werg/data/held-budget-probe/run-a --case-seconds 7200 \
+      --server http://127.0.0.1:8097 --out <data_nvme>/held-budget-probe/run-a --case-seconds 7200 \
       --max-model-requests 1000 --max-turns 1000 --workers 8
 
 Same subset, queue entries, collector and exact scorer as the in-run evaluator (eval/task_cadence.py); only the
