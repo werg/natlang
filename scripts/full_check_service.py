@@ -76,20 +76,25 @@ def launch(state: dict, sha: str) -> None:
     git('worktree', 'add', '-q', '--detach', str(wt), sha)
     log = BASE / f'{sha[:10]}.log'
     unit = f'natlang-full-check-{sha[:10]}'
-    command = f'scripts/check-main.sh > {log} 2>&1; echo exit=$? >> {log}'
-    # 22 GB: the full suite peaked at 18.3 GB and was OOM-killed at an 18 GB cap (2026-10-12, 9361c4f989). A 2 GB admission
-    # reserve, since beside a training run at its peak only ~24 GB is obtainable and 28 + 8 never fit (2026-10-12).
+    # The Neuralese TS tests' Python reference server runs on the GPU: on the CPU, beside training, it held 10-16 GB and
+    # neuralese-learning.test.mjs never finished in its 900 s (a timeout in every verdict); its orphaned server then sat
+    # beside neuralese-server.test.mjs's own, which was the 18.3 GB peak and the OOM kill at 18 GB (9361c4f989). On the
+    # GPU the file passes in ~80 s at ~10 GB (host plus CUDA), and test-files.mjs now kills a file's process group.
+    command = f'NATLANG_NEURALESE_DEVICE=cuda scripts/check-main.sh > {log} 2>&1; echo exit=$? >> {log}'
+    # 12 GB: the whole suite measured 10.4 GB at its peak (2026-10-12, a4bf210a, neuralese-learning on the GPU; every
+    # other step below 5.2 GB). A 2 GB admission reserve, since beside Mellum training at its 92-96 GB peak only
+    # 12-16 GB is obtainable.
     # `run --wait` blocks until admitted. It runs as its own transient user unit (the launcher): a child of the timer's
     # oneshot tick would be in the tick's cgroup and killed when the tick exits (KillMode=control-group), leaving no run.
     ledger_log = BASE / f'{sha[:10]}.ledger.log'
     subprocess.run(['systemctl', '--user', 'reset-failed', f'{unit}-launch.service'], capture_output=True)
     subprocess.run(['systemd-run', '--user', '--collect', '--unit', f'{unit}-launch', '--property=Type=exec', f'--working-directory={REPO}',
                     '-p', f'StandardOutput=append:{ledger_log}', '-p', f'StandardError=append:{ledger_log}',
-                    'python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '22', '--reserve-gb', '2',
+                    'python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '12', '--reserve-gb', '2',
                     '--priority', 'medium', '--resumable', '--wait', '86400', '--workdir', str(wt), '--',
                     'sh', '-c', command], check=True, capture_output=True)
     state['running'] = {'sha': sha, 'unit': unit, 'worktree': str(wt), 'log': str(log), 'started': time.time(),
-                        'command': f'python3 scripts/memory_ledger.py run --unit {unit} --budget-gb 22 --reserve-gb 2 --priority '
+                        'command': f'python3 scripts/memory_ledger.py run --unit {unit} --budget-gb 12 --reserve-gb 2 --priority '
                                    f'medium --resumable --workdir {wt} -- sh -c "{command}"'}
     save(state)
 

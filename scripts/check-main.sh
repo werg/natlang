@@ -6,10 +6,12 @@
 #   scripts/check-main.sh --python | --ts    one side only
 #
 # Every step runs even after a failure; the summary lists each step and the exit code is 1 if any failed.
-# On the DGX the full run loads models and node workers, so run it under the memory ledger:
-#   python3 scripts/memory_ledger.py run --unit natlang-check-main-$(date +%H%M%S) --budget-gb 28 --reserve-gb 0 \
+# On the DGX the full run loads models and node workers, so run it under the memory ledger, with the Neuralese TS tests'
+# Python server on the GPU (on the CPU beside training it holds 10-16 GB and does not finish; on the GPU the whole run
+# peaks at ~10.4 GB, 2026-10-12):
+#   python3 scripts/memory_ledger.py run --unit natlang-check-main-$(date +%H%M%S) --budget-gb 12 --reserve-gb 2 \
 #     --oom-policy continue --class experiment --wait 600 --workdir "$PWD" -- \
-#     sh -c 'scripts/check-main.sh > /tmp/check-main.log 2>&1; echo exit=$? >> /tmp/check-main.log'
+#     sh -c 'NATLANG_NEURALESE_DEVICE=cuda scripts/check-main.sh > /tmp/check-main.log 2>&1; echo exit=$? >> /tmp/check-main.log'
 # Environment: NATLANG_PYTHON overrides discovery; otherwise prefer .venv-neuralese, then .venv
 # in this checkout or its main worktree. CHECK_MAIN_TS_CONCURRENCY defaults to 2.
 # Node packages come from `npm install` at the workspace root (never `npm ci` while other sessions run).

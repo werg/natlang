@@ -32,14 +32,19 @@ function runFile(file) {
   return new Promise(done => {
     const started = Date.now();
     const child = spawn(process.execPath, ['--test', '--test-reporter=tap', file], { cwd: root,
-      env: { ...process.env, NATLANG_CALL_STORE: join(scratch, file.replace(/\W+/g, '_')) }, stdio: ['ignore', 'pipe', 'pipe'] });
+      env: { ...process.env, NATLANG_CALL_STORE: join(scratch, file.replace(/\W+/g, '_')) }, stdio: ['ignore', 'pipe', 'pipe'],
+      // Its own process group: a timed-out file's children (the Neuralese tests' Python servers, 10-16 GB on the CPU)
+      // die with it instead of outliving it beside the next file's server (the full check's 18 GB OOM, 2026-10-12).
+      detached: true });
+    const killGroup = () => { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ } };
     let output = '';
     child.stdout.on('data', chunk => { output += chunk; });
     child.stderr.on('data', chunk => { output += chunk; });
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeout);
+    const timer = setTimeout(() => { timedOut = true; killGroup(); }, timeout);
     child.on('close', (code, signal) => {
       clearTimeout(timer);
+      killGroup();  // whatever the file left running
       const count = name => Number(new RegExp(`^# ${name} (\\d+)$`, 'm').exec(output)?.[1] ?? 0);
       const failures = [...output.matchAll(/^not ok \d+ - (.+)$/gm)].map(match => match[1]).filter(name => !name.endsWith('.mjs'));
       const ended = timedOut ? 'timeout' : signal === 'SIGKILL' ? 'killed (out of memory?)' : signal ? `signal ${signal}` : code === 0 ? 'ok' : 'failed';
