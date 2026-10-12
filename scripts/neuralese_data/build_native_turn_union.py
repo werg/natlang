@@ -74,6 +74,13 @@ def _row_identity(row: dict) -> dict:
 def _drop(drop: dict, key: tuple[str, str], reason: str, **details) -> None:
     if key not in drop:
         drop[key] = {'reason': reason, **details}
+        return
+    if drop[key]['reason'] == reason:
+        return
+    additional = drop[key].setdefault('additional_reasons', [])
+    record = {'reason': reason, **details}
+    if record not in additional:
+        additional.append(record)
 
 
 def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
@@ -141,13 +148,23 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
             elif any(candidate['identity']['split'] == 'test' for candidate in observations):
                 # A test copy still controls the split even when that copy has no complete eligible twin. It cannot
                 # claim the ID or be emitted, but an eligible train copy with a conflicting identity is not safe.
+                held_observation = next(candidate for candidate in observations
+                                        if candidate['identity']['split'] == 'test')
                 for candidate in candidates:
-                    held = next(candidate for candidate in observations if candidate['identity']['split'] == 'test')
                     _drop(drop, (candidate['member'], rid), 'conflicting_split_duplicate_id',
-                          held_member=held['member'], held_text_sha256=held['identity']['text_sha256'],
+                          held_member=held_observation['member'],
+                          held_text_sha256=held_observation['identity']['text_sha256'],
                           omitted_split=candidate['identity']['split'],
                           omitted_source_groups=list(candidate['identity']['source_groups']),
                           omitted_text_sha256=candidate['identity']['text_sha256'])
+                for observation in observations:
+                    if observation['identity']['split'] != 'test':
+                        _drop(drop, (observation['member'], rid), 'conflicting_split_duplicate_id',
+                              held_member=held_observation['member'],
+                              held_text_sha256=held_observation['identity']['text_sha256'],
+                              omitted_split=observation['identity']['split'],
+                              omitted_source_groups=list(observation['identity']['source_groups']),
+                              omitted_text_sha256=observation['identity']['text_sha256'])
                 continue
             else:
                 # With no held/test observation, keep the first eligible representation and omit conflicting eligible
@@ -163,6 +180,17 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
                       omitted_split=candidate['identity']['split'],
                       omitted_source_groups=list(candidate['identity']['source_groups']),
                       omitted_text_sha256=candidate['identity']['text_sha256'])
+            for observation in observations:
+                if (observation['member'] != winner['member'] and
+                        (observation['identity']['split'] != winner['identity']['split'] or
+                         observation['identity']['source_groups'] != winner['identity']['source_groups'])):
+                    _drop(drop, (observation['member'], rid), 'conflicting_split_duplicate_id',
+                          kept_member=winner['member'], kept_split=winner['identity']['split'],
+                          kept_source_groups=list(winner['identity']['source_groups']),
+                          kept_text_sha256=winner['identity']['text_sha256'],
+                          omitted_split=observation['identity']['split'],
+                          omitted_source_groups=list(observation['identity']['source_groups']),
+                          omitted_text_sha256=observation['identity']['text_sha256'])
             selected_by_id[rid] = winner
             continue
 
@@ -293,7 +321,9 @@ def main(argv=None):
         (out / 'omissions.jsonl').write_text(''.join(canonical(o) + '\n' for o in omissions))
         rendering_receipt['omissions'] = dict(Counter(f"{o['member']}: {o['reason']}" for o in omissions))
         rendering_receipt['duplicate_id_conflicts'] = [o for o in omissions
-                                                        if o['reason'] == 'conflicting_split_duplicate_id']
+            if o['reason'] == 'conflicting_split_duplicate_id' or any(
+                detail['reason'] == 'conflicting_split_duplicate_id'
+                for detail in o.get('additional_reasons', []))]
         for tok in tokenizer_dirs:
             target = out / tok / 'text-data.jsonl'
             target.parent.mkdir(parents=True, exist_ok=True)

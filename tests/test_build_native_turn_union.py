@@ -69,6 +69,19 @@ def test_incomplete_test_copy_still_prevents_conflicting_train_copy():
     assert omissions[('train', 'doc')]['held_member'] == 'test'
 
 
+def test_split_conflict_is_retained_as_additional_reason_for_other_omission():
+    test = member('test', {tok: {'doc': identity('held text', split='test', groups=('test-group',))}
+                           for tok in TOKENS})
+    train = member('train', {tok: {'doc': identity('train text', split='train', groups=('blocked',))}
+                             for tok in TOKENS})
+    selected, omissions = decide(['test', 'train'], test | train, held_groups={'blocked'})
+    assert selected == {('test', 'doc')}
+    omission = omissions[('train', 'doc')]
+    assert omission['reason'] == 'train_document_shares_held_source_group'
+    assert any(reason['reason'] == 'conflicting_split_duplicate_id'
+               for reason in omission['additional_reasons'])
+
+
 def test_same_id_distinct_payload_keeps_first_unless_later_declares_supersedes():
     first = member('first', {tok: {'doc': identity('old payload')} for tok in TOKENS})
     later = member('later', {tok: {'doc': identity('new payload')} for tok in TOKENS})
