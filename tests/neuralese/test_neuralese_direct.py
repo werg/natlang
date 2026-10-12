@@ -308,6 +308,68 @@ def test_epoch_schedule_sees_every_window_once_per_epoch_without_replacement():
         epoch_schedule(sampler, seed=3, length=length, epochs=1.0, updates=10)
 
 
+def test_sampling_groups_balance_candidate_documents_and_resume_deterministically():
+    from natlang_neuralese.train.text_supervision import CohortDocumentSampler, epoch_schedule
+    windows = [
+        {'document': 'item-a-choice-1', 'sampling_group': 'source-item:a', 'cohort': 'native', 'id': 'a1-w1', 'ids': [1, 2]},
+        {'document': 'item-a-choice-1', 'sampling_group': 'source-item:a', 'cohort': 'native', 'id': 'a1-w2', 'ids': [1, 2, 3]},
+        {'document': 'item-a-choice-2', 'sampling_group': 'source-item:a', 'cohort': 'native', 'id': 'a2-w1', 'ids': [1, 2, 3, 4]},
+        {'document': 'item-b-choice-1', 'sampling_group': 'source-item:b', 'cohort': 'native', 'id': 'b1-w1', 'ids': [1, 2]},
+    ]
+    sampler = CohortDocumentSampler(windows, None, cohort_key=lambda w: w['cohort'],
+                                    document_key=lambda w: w['document'],
+                                    sampling_group_key=lambda w: w.get('sampling_group'))
+    receipt = sampler.receipt()
+    assert receipt['policy'] == 'cohort-then-sampling-group-then-document-then-item/1'
+    assert receipt['sampling_groups'] == {'native': 2}
+    assert receipt['candidate_documents'] == {'native': 3}
+    assert receipt['draws_per_group_per_epoch'] == 1
+    assert receipt['group_draw_weights_equal'] is True
+    assert receipt['candidate_coverage_epochs'] == {'native': 2}
+
+    def group_draws(epoch):
+        docs = sampler.epoch(epoch, seed=23)
+        assert len(docs) == 2  # one candidate document per source item
+        return {doc[0]['sampling_group']: doc[0]['document'] for doc in docs}
+
+    first, second = group_draws(0), group_draws(1)
+    assert set(first) == {'source-item:a', 'source-item:b'}
+    assert set(second) == set(first)
+    assert first['source-item:a'] != second['source-item:a']  # candidate actions rotate across epochs
+    assert first == group_draws(0)  # epoch reconstruction is deterministic
+
+    length = lambda w: len(w['ids'])
+    partial = epoch_schedule(sampler, seed=23, length=length, updates=3)
+    resumed = epoch_schedule(sampler, seed=23, length=length, updates=6)
+    assert [[w['id'] for w in batch] for batch, _ in partial] == \
+        [[w['id'] for w in batch] for batch, _ in resumed[:3]]
+
+    # With one cohort, the draw process chooses the source item before its
+    # candidate document: extra candidate actions do not multiply item weight.
+    import random
+    counts = {'source-item:a': 0, 'source-item:b': 0}
+    rng = random.Random(20261012)
+    for _ in range(20000):
+        counts[sampler.sample(rng)['sampling_group']] += 1
+    assert abs(counts['source-item:a'] - counts['source-item:b']) < 500
+
+    # Untagged corpora preserve the pre-grouped sampler's seeded RNG sequence.
+    legacy_windows = [
+        {'document': 'doc-a', 'cohort': 'native', 'id': 'a1'},
+        {'document': 'doc-a', 'cohort': 'native', 'id': 'a2'},
+        {'document': 'doc-b', 'cohort': 'native', 'id': 'b1'},
+    ]
+    legacy_sampler = CohortDocumentSampler(legacy_windows, None, cohort_key=lambda w: w['cohort'],
+        document_key=lambda w: w['document'])
+    actual_rng, previous_rng = random.Random(91), random.Random(91)
+    actual = [legacy_sampler.sample(actual_rng)['id'] for _ in range(20)]
+    previous = []
+    for _ in range(20):
+        previous_rng.choices(['native'], weights=[1.], k=1)
+        previous.append(previous_rng.choice(previous_rng.choice(legacy_sampler.documents['native']))['id'])
+    assert actual == previous
+
+
 def test_direct_phases_resolve_in_epochs_with_a_derived_quantization_end():
     from natlang_neuralese.train.recipe import resolve_recipe_data, stage_parameter_args, stage_quantization
     from natlang_neuralese.train.quantization import Quantization

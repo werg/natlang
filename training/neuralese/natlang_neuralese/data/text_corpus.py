@@ -1649,6 +1649,8 @@ def bind_ordinary_text_admission(records, receipt, receipt_sha256):
             "source_groups": record.get("source_groups"),
             "cohort": cohort,
         }
+        if "sampling_group" in record:
+            checks["sampling_group"] = record["sampling_group"]
         if (not _sha256_hex(base_digest)
                 or not _sha256_hex(source_ref.get("source_row_sha256"))):
             raise ValueError(f"ordinary-text source/base digest is missing or malformed: {rid}")
@@ -1717,6 +1719,10 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
         if split not in ("train", "test"):
             omitted.append({"id": rid, "reason": "invalid_or_missing_split"})
             continue
+        sampling_group = record.get("sampling_group")
+        if sampling_group is not None and (not isinstance(sampling_group, str) or not sampling_group):
+            omitted.append({"id": rid, "reason": "invalid_sampling_group"})
+            continue
         groups = sorted(set(g for g in (record.get("source_groups") or []) if isinstance(g, str) and g))
         if not groups:
             omitted.append({"id": rid, "reason": "missing_factual_source_groups"})
@@ -1749,6 +1755,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                          "neuralese_context_attestations": [dict(item, reader_record_id=rid)
                                                             for item in context_attestations],
                          "capture_context_augmentation_attestations": capture_augmentation_attestations})
+        if sampling_group is not None:
+            prepared[-1]["sampling_group"] = sampling_group
         if rid in text_admitted:
             prepared[-1]["ordinary_text_admission_bindings"] = [text_admitted[rid]]
 
@@ -1763,7 +1771,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
     excluded_train_held = n_before - len(prepared)
     dedup = {}
     for row in prepared:
-        key = row["split"], row["text"], tuple(row["token_ids"]),row['supervised_suffix_start']
+        key = (row["split"], row["text"], tuple(row["token_ids"]), row['supervised_suffix_start'],
+               row.get("sampling_group"))
         if key not in dedup:
             dedup[key] = {**row, "source_record_ids": [row["id"]]}
         else:
@@ -1795,6 +1804,7 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                    "capture_context_augmentation_attestations": row["capture_context_augmentation_attestations"]}
                   | ({"ordinary_text_admission_bindings": row["ordinary_text_admission_bindings"]}
                      if "ordinary_text_admission_bindings" in row else {})
+                  | ({"sampling_group": row["sampling_group"]} if "sampling_group" in row else {})
                   for row in rows]
     for row,entry in zip(rows,provenance):
         entry['supervised_suffix_start']=row['supervised_suffix_start']

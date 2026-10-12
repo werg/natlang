@@ -109,9 +109,11 @@ class CohortDocumentSampler:
     Keys explicitly identify the cohort and source document. Several windows or
     target records from one document do not multiply its sampling probability.
     """
-    def __init__(self, items, cohort_weights=None, *, cohort_key, document_key):
-        self.documents = {}
+    def __init__(self, items, cohort_weights=None, *, cohort_key, document_key, sampling_group_key=None):
+        grouped = {}
+        self.grouped_sampling = sampling_group_key is not None
         self.cohort_key = cohort_key
+        sampling_group_cohorts = {}
         for item in items:
             cohort = cohort_key(item)
             if not isinstance(cohort, str) or not cohort:
@@ -119,10 +121,18 @@ class CohortDocumentSampler:
             document = document_key(item)
             if not isinstance(document, str) or not document:
                 raise ValueError('document keys must be explicit nonempty strings')
-            self.documents.setdefault(cohort, {}).setdefault(document, []).append(item)
-        if not self.documents:
+            sampling_group = sampling_group_key(item) if sampling_group_key is not None else None
+            if sampling_group is not None and (not isinstance(sampling_group, str) or not sampling_group):
+                raise ValueError('sampling_group keys must be nonempty strings when declared')
+            group = ('sampling', sampling_group) if sampling_group is not None else ('document', document)
+            if sampling_group is not None:
+                previous_cohort = sampling_group_cohorts.setdefault(group, cohort)
+                if previous_cohort != cohort:
+                    raise ValueError('one sampling_group cannot span text cohorts; preserve cohort ownership or resolve duplicates')
+            grouped.setdefault(cohort, {}).setdefault(group, {}).setdefault(document, []).append(item)
+        if not grouped:
             raise ValueError('no training documents')
-        self.cohorts = sorted(self.documents)
+        self.cohorts = sorted(grouped)
         if cohort_weights is None:
             if len(self.cohorts) != 1:
                 raise ValueError('multiple text cohorts require explicit cohort_weights')
@@ -133,7 +143,14 @@ class CohortDocumentSampler:
                for v in cohort_weights.values()) or not math.isclose(sum(cohort_weights.values()), 1., abs_tol=1e-8):
             raise ValueError('cohort fractions must be positive, finite, and sum to one')
         self.weights = [cohort_weights[c] for c in self.cohorts]
-        self.documents = {c: list(d.values()) for c, d in self.documents.items()}
+        self.groups = {cohort: [
+            {'key': group_key, 'documents': [list(rows) for rows in documents.values()]}
+            for group_key, documents in groups.items()]
+            for cohort, groups in grouped.items()}
+        # Preserve the document census for existing logging; grouped draw units
+        # are reported separately and used only to choose an epoch candidate.
+        self.documents = {cohort: [document for group in cohort_groups for document in group['documents']]
+            for cohort, cohort_groups in self.groups.items()}
 
     @staticmethod
     def _window(documents, rng):
@@ -141,20 +158,46 @@ class CohortDocumentSampler:
 
     def sample(self, rng):
         cohort = rng.choices(self.cohorts, weights=self.weights, k=1)[0]
-        return self._window(self.documents[cohort], rng)
+        if not self.grouped_sampling:
+            return self._window(self.documents[cohort], rng)
+        group = rng.choice(self.groups[cohort])
+        document = rng.choice(group['documents'])
+        return rng.choice(document)
 
     def receipt(self):
-        return {'policy': 'cohort-then-document-then-item/1',
+        receipt = {'policy': ('cohort-then-sampling-group-then-document-then-item/1'
+                              if self.grouped_sampling else 'cohort-then-document-then-item/1'),
                 'cohort_weights': dict(zip(self.cohorts, self.weights)),
                 'documents': {c: len(d) for c, d in self.documents.items()},
                 'admission_granted': False}
+        if self.grouped_sampling:
+            receipt.update(sampling_groups={c: len(groups) for c, groups in self.groups.items()},
+                           candidate_documents={c: sum(len(group['documents']) for group in groups)
+                                                for c, groups in self.groups.items()},
+                           draws_per_group_per_epoch=1,
+                           group_draw_weights_equal=True,
+                           candidate_rotation='seeded permutation, cycled by epoch index',
+                           candidate_coverage_epochs={c: max(len(group['documents']) for group in groups)
+                                                      for c, groups in self.groups.items()})
+        return receipt
 
     def epoch(self, index, seed):
-        """Pass ``index`` (0-based) of an epoch-ordered shuffle without replacement: every document of every cohort
-        exactly once, in the order ``Random(f'{seed}:epoch:{index}')`` draws; one document's items stay together in
-        their given order. A pass covers each cohort whole, so cohort weights do not apply to it."""
+        """Pass ``index`` (0-based) of an epoch-ordered shuffle without replacement.
+
+        In grouped mode each source group contributes one candidate document,
+        selected by its seeded rotation; all candidate documents rotate over
+        as many epochs as the largest group. Otherwise each document
+        contributes once. A document's windows stay together in their given order.
+        """
         import random
-        documents = [items for cohort in self.cohorts for items in self.documents[cohort]]
+        documents = []
+        for cohort in self.cohorts:
+            for group in self.groups[cohort]:
+                candidates = list(group['documents'])
+                if self.grouped_sampling and len(candidates) > 1:
+                    random.Random(f'{seed}:sampling-group:{cohort}:{group["key"]}').shuffle(candidates)
+                    candidates = [candidates[index % len(candidates)]]
+                documents.extend(candidates)
         random.Random(f'{seed}:epoch:{index}').shuffle(documents)
         return documents
 

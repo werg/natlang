@@ -37,6 +37,9 @@ const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(
   value && typeof value === 'object' ? `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
     .map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`).join(',')}}` : JSON.stringify(value);
 const same = (a, b) => canonical(a) === canonical(b);
+const childCandidateId = (itemId, invocationId, targetSha256) =>
+  `child:${hexDigest(sharedCanonical({ item_id: itemId, invocation_id: invocationId,
+    target_sha256: targetSha256 }))}`;
 const parseLines = (text, path) => text.split(/\r?\n/).flatMap((line, index) => {
   if (!line.trim()) return [];
   try { return [{ value: JSON.parse(line), line: index + 1, raw: line }]; }
@@ -238,7 +241,11 @@ for (const approval of review?.approvals ?? []) {
       !approval.group || !approval.reason?.trim() || !Array.isArray(approval.evidence) || !approval.evidence.length ||
       approval.evidence.some(item => typeof item !== 'string' || !item.trim()))
     throw new Error(`invalid reviewed source item: ${approval.item_id ?? '(missing ID)'}`);
-  const key = `${approval.program_id}\0${approval.item_id}`;
+  if (approval.candidate_id !== undefined && typeof approval.candidate_id !== 'string')
+    throw new Error(`invalid candidate-specific approval ID: ${approval.item_id}`);
+  const key = approval.candidate_id
+    ? `${approval.program_id}\0candidate\0${approval.candidate_id}`
+    : `${approval.program_id}\0item\0${approval.item_id}`;
   if (approvalsByKey.has(key)) throw new Error(`duplicate review approval: ${approval.item_id}`);
   approvalsByKey.set(key, approval);
 }
@@ -258,17 +265,24 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
     const reservedSourceId = jeffReservationHit(row);
     const rootInvocation = (row.outcome?.invocation_ledger ?? []).find(item => item.parent_invocation_id == null)?.invocation_id;
     if (!rootInvocation) { rejected.push({ id: row.id, reason: 'root-invocation-missing' }); continue; }
-    const qualityBinding = sourceQualityClearance && sourceQualityClearanceForProgram(sourceQualityClearance, program);
-    if (sourceQualityClearance && !qualityBinding)
+    const scopedQuality = sourceQualityClearance?.review?.target_scope === 'exact-selected-actions-only';
+    const qualityBinding = sourceQualityClearance && !scopedQuality
+      ? sourceQualityClearanceForProgram(sourceQualityClearance, program) : undefined;
+    if (sourceQualityClearance && !qualityBinding && !scopedQuality)
       throw new Error(`source-quality clearance does not bind exact program: ${program.id}`);
-    if (qualityBinding && (program.external_source?.source_path !== sourceCasesPath ||
+    if (scopedQuality && !sourceQualityClearance.review.programs.some(entry => entry.program_id === program.id)) {
+      if ([...approvalsByKey.values()].some(approval => approval.program_id === program.id))
+        throw new Error(`source-quality clearance does not authorize selected program: ${program.id}`);
+      continue;
+    }
+    if (sourceQualityClearance && (program.external_source?.source_path !== sourceCasesPath ||
         program.external_source?.snapshot_sha256 !== sourceSha ||
         program.external_source?.source_manifest_sha256 !== sha(sourceManifestBytes)))
       throw new Error(`source-quality clearance is bound to different source bytes: ${program.id}`);
     const materialized = materializeNativeRows([row], { failedRuns: true, pendingDecisionCandidates: true,
       candidateSelectionOnly: true,
       ...(verifiedLabelCorrections ? { sourceLabelCorrections: verifiedLabelCorrections } : {}),
-      ...(qualityBinding ? { sourceQualityClearance } : {}) });
+      ...(sourceQualityClearance ? { sourceQualityClearance } : {}) });
     if (materialized.unlinked.length) { rejected.push({ id: row.id, reason: 'action-ledger-unlinked', unlinked: materialized.unlinked }); continue; }
     const ledger = row.outcome?.invocation_ledger ?? [];
     for (const [path, raw] of Object.entries(semantics.folder_files)) {
@@ -369,56 +383,68 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
           missing_fields: Object.keys(visible).filter(key => !visible[key]),
           scope_capture_names: Object.keys(scopeValues) });
       }
-      const approvalKey = `${program.id}\0${id}`;
-      const approval = approvalsByKey.get(approvalKey);
-      if (matches.length > 1 && approval) {
-        const selected = matches.filter(match => approval.decision_index === match.turn.decision.index &&
-          approval.target_sha256 === nativeDecisionTargetDigest(match.turn.target));
-        if (selected.length === 1) matches = selected;
-      }
-      if (matches.length !== 1) {
+      const itemApprovalKey = `${program.id}\0item\0${id}`;
+      const itemApproval = approvalsByKey.get(itemApprovalKey);
+      const matchingCandidates = matches.map(match => ({ ...match, targetSha256:
+        nativeDecisionTargetDigest(match.turn.target), candidateId: childCandidateId(id,
+          match.entry.invocation_id, nativeDecisionTargetDigest(match.turn.target)) }));
+      let itemApprovalCandidateId = null;
+      if (itemApproval && matchingCandidates.length > 1) {
+        const selected = matchingCandidates.filter(match => itemApproval.decision_index === match.turn.decision.index &&
+          itemApproval.target_sha256 === match.targetSha256);
+        if (selected.length === 1) itemApprovalCandidateId = selected[0].candidateId;
+        else throw new Error(`item-scoped approval does not uniquely bind one child candidate: ${program.id}/${id}`);
+      } else if (itemApproval && matchingCandidates.length === 1)
+        itemApprovalCandidateId = matchingCandidates[0].candidateId;
+      if (!matchingCandidates.length) {
         rejected.push({ program_id: program.id, item_id: id, item_sha256: itemSha, group: source.group,
-          reason: matches.length ? 'ambiguous-exact-child-invocation' : 'no-child-with-complete-exact-visible-inputs',
-          matching_children: matches.length,
-          ...(matches.length ? { matching_candidates: matches.map(match => ({
-            decision_index: match.turn.decision.index,
-            target_sha256: nativeDecisionTargetDigest(match.turn.target),
-            target_tool: match.turn.target?.tool_calls?.[0]?.function?.name ?? null,
-            invocation_id: match.entry.invocation_id,
-          })) } : {}),
+          reason: 'no-child-with-complete-exact-visible-inputs',
+          matching_children: 0,
           expected_value_has_completed_child: bindingGaps.length > 0,
           binding_gaps: bindingGaps.slice(0, 8) });
         continue;
       }
-      const { entry, turn, visible, caseIdBound, scopeBoundFields, providerView } = matches[0];
-      const candidate = { program_id: program.id, trajectory_id: row.id, trajectory_sha256: originalDigest,
+      for (const match of matchingCandidates) {
+      const { entry, turn, visible, caseIdBound, scopeBoundFields, providerView } = match;
+      const candidate = { candidate_id: match.candidateId, program_id: program.id,
+        trajectory_id: row.id, trajectory_sha256: originalDigest,
         item_id: id, item_sha256: itemSha, source_group: source.group, source_role: source.role,
+        source_split: source.role ?? source.split,
         expected_value: expected, observed_value: observed, invocation_id: entry.invocation_id,
-        decision_index: turn.decision.index, target_sha256: nativeDecisionTargetDigest(turn.target),
+        decision_index: turn.decision.index, target_sha256: match.targetSha256,
         target_tool: turn.target?.tool_calls?.[0]?.function?.name ?? null,
         provider_request_sha256: providerView.requestSha256,
         provider_rendered_request_sha256: providerView.renderedRequestSha256,
         provider_rendered_messages_sha256: sha(JSON.stringify(providerView.renderedMessages)),
         visible_fields: Object.keys(visible), scope_bound_fields: scopeBoundFields,
         source_item_id_runtime_bound: caseIdBound,
-        typed_output_projection: matches[0].projection,
+        typed_output_projection: match.projection,
         source_reference_review: sourceReview,
         source_quality_review_only: turn.candidate_selection?.source_quality_review_only === true,
         source_quality_hold_reasons: turn.candidate_selection?.source_quality_hold_reasons ?? [],
         scope_snapshot_sha256: sha(JSON.stringify(entry.inline_instruction_site?.runtime_capture_snapshots ?? null)),
         group_role_closure: [...roles] };
       candidates.push(candidate);
+      const candidateApprovalKey = `${program.id}\0candidate\0${match.candidateId}`;
+      const specificApproval = approvalsByKey.get(candidateApprovalKey);
+      const approval = specificApproval ?? (itemApprovalCandidateId === match.candidateId ? itemApproval : null);
       if (!approval) continue;
       if (approval.item_sha256 !== itemSha || approval.group !== source.group ||
-          approval.decision_index !== candidate.decision_index || approval.target_sha256 !== candidate.target_sha256)
-        throw new Error(`review/source/target binding mismatch for ${program.id}/${id}`);
+          approval.decision_index !== candidate.decision_index || approval.target_sha256 !== candidate.target_sha256 ||
+          (approval.candidate_id && approval.candidate_id !== candidate.candidate_id))
+        throw new Error(`review/source/target binding mismatch for ${program.id}/${id}/${candidate.candidate_id}`);
       if (semanticReview) {
-        const semantic = semanticReview.rows.find(value => value.item_id === id);
+        const exactSemantic = semanticReview.rows.filter(value => value.candidate_id === candidate.candidate_id);
+        const semanticMatches = exactSemantic.length ? exactSemantic : semanticReview.rows.filter(value =>
+          value.candidate_id === undefined && value.item_id === id &&
+          value.target_sha256 === candidate.target_sha256 && value.decision_index === candidate.decision_index &&
+          value.invocation_id === candidate.invocation_id);
+        const semantic = semanticMatches.length === 1 ? semanticMatches[0] : null;
         if (!semantic || semantic.semantic_review !== 'clear' || semantic.source_group !== source.group ||
             semantic.source_row_sha256 !== itemSha || semantic.target_sha256 !== candidate.target_sha256 ||
             semantic.decision_index !== candidate.decision_index || semantic.invocation_id !== candidate.invocation_id ||
             semantic.generated_label !== observed || semantic.source_annotation !== expected)
-          throw new Error(`semantic review/source/target binding mismatch for ${program.id}/${id}`);
+          throw new Error(`semantic review/source/target binding mismatch for ${program.id}/${id}/${candidate.candidate_id}`);
       }
       const correction = sourceReview.source_label_correction;
       if (correction) {
@@ -439,28 +465,43 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         review_sha256: review.supersedes_review_sha256 ?? reviewSha,
         reason: approval.reason, evidence: approval.evidence,
         ...(correction ? { source_label_correction: approval.source_label_correction } : {}) };
+      const selectedAction = { trajectory_id: row.id, trajectory_sha256: originalDigest,
+        decision_index: turn.decision.index, invocation_id: candidate.invocation_id,
+        target_sha256: candidate.target_sha256 };
+      const selectedQualityBinding = sourceQualityClearance
+        ? sourceQualityClearanceForProgram(sourceQualityClearance, program,
+          scopedQuality ? selectedAction : undefined) : undefined;
+      if (sourceQualityClearance && !selectedQualityBinding)
+        throw new Error(`source-quality clearance does not bind exact selected child action: ${program.id}/${candidate.candidate_id}`);
       const approved = materializeNativeRows([row], { failedRuns: true, decisionApprovals: [decisionApproval],
         candidateSelectionOnly: true,
-        ...(sourceQualityClearance ? { sourceQualityClearanceRef: { sidecar_path: 'source-quality-clearance.json',
+        ...(selectedQualityBinding ? { sourceQualityClearanceRef: { sidecar_path: 'source-quality-clearance.json',
           file_sha256: sourceQualityClearance.review_sha256 } } : {}),
         ...(verifiedLabelCorrections ? { sourceLabelCorrections: verifiedLabelCorrections } : {}),
-        ...(qualityBinding ? { sourceQualityClearance } : {}) });
+        ...(selectedQualityBinding ? { sourceQualityClearance } : {}) });
       const selected = approved.turns.filter(value => value.decision.index === turn.decision.index &&
         value.candidate_selection?.approved === true && value.training_admission?.approved === false &&
         value.trace_admission?.admitted === false);
-      if (selected.length !== 1) throw new Error(`selected target was not admitted exactly once: ${program.id}/${id}`);
+      if (selected.length !== 1) throw new Error(`selected target was not admitted exactly once: ${program.id}/${id}/${candidate.candidate_id}`);
+      selected[0].sampling_group = `source-item:${id}`;
       prepared.push({ candidate, turn: selected[0], approval: decisionApproval });
-      approvalsByKey.delete(`${program.id}\0${id}`);
+      approvalsByKey.delete(specificApproval ? candidateApprovalKey : itemApprovalKey);
+      }
     }
   }
 }
 if (approvalsByKey.size) throw new Error(`review names source items without an exact, visible successful child action: ${[...approvalsByKey.values()].map(item => item.item_id).join(', ')}`);
 
+const candidateIds = candidates.map(candidate => candidate.candidate_id);
+if (new Set(candidateIds).size !== candidateIds.length)
+  throw new Error('candidate_id collision across exact child invocations');
+
 const candidatePath = resolve(values['candidate-out']);
 await mkdir(dirname(candidatePath), { recursive: true });
 const candidateHandle = await open(candidatePath, 'wx');
-try { await candidateHandle.writeFile(JSON.stringify({ schema: 'natlang.provider-child-action-candidates/1',
+try { await candidateHandle.writeFile(JSON.stringify({ schema: 'natlang.provider-child-action-candidates/2',
   candidate_selection: true, training_admission: false, trace_admission: false, created_at: new Date().toISOString(),
+  candidate_id_rule: 'child:<sha256(canonical({item_id, invocation_id, target_sha256}))>',
   source_cases: { path: 'source-cases.jsonl', sha256: sourceSha },
   source_manifest: { path: 'source-manifest.json', sha256: sha(sourceManifestBytes) },
   source_split_reservations: { path: 'source-split-reservations.json', sha256: sha(reservationBytes),
@@ -555,9 +596,11 @@ if (values.out) {
     source_split_reservations: { path: 'source-split-reservations.json', sha256: sha(reservationBytes),
       test_source_path: 'reservation-source.json', test_source_sha256: sha(reservationSourceBytes) },
     candidate_manifest: 'candidate-discovery-audit.json', candidate_manifest_sha256: sha(await readFile(candidatePath)),
-    turns: prepared.map(item => ({ id: item.turn.id, program_id: item.candidate.program_id,
+    turns: prepared.map(item => ({ id: item.turn.id, candidate_id: item.candidate.candidate_id,
+      program_id: item.candidate.program_id,
       trajectory_id: item.candidate.trajectory_id, trajectory_sha256: item.candidate.trajectory_sha256,
       item_id: item.candidate.item_id, item_sha256: item.candidate.item_sha256, source_group: item.candidate.source_group,
+      sampling_group: `source-item:${item.candidate.item_id}`,
       invocation_id: item.candidate.invocation_id, decision_index: item.candidate.decision_index,
       target_sha256: item.candidate.target_sha256, visible_fields: item.candidate.visible_fields,
       approval: item.approval })) };
