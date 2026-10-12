@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/ops-retention",
+  "version": "0.1.0",
+  "description": "Storage retention as a pluggable policy (DECOMPOSITION.md): crisp code computes the facts of each large file under the run and data roots; classifyRetention.nl decides its tier. scripts/storage_retention.py selects crisp, nl or shadow.",
+  "include": ["DECOMPOSITION.md", "index.ts", "types.ts", "classifyRetention.nl", "tsconfig.json"],
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}

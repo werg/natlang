@@ -133,3 +133,91 @@ def test_reference_expansion_never_descends_through_symlinked_directories(tmp_pa
     found = retention.expand(tmp_path, 'runs/*/*certificate*.json')
     assert found == [str(real / 'a-certificate.json')]
     assert retention.expand(tmp_path, 'runs/**/*.json') == [str(real / 'a-certificate.json')]
+
+
+# Pluggable classifier (applications/ops-retention/DECOMPOSITION.md) --------------------------------------------------
+def facts_and_crisp(entries, p, text='', active=NO_ACTIVITY, registered=()):
+    pairs = retention.retention_facts(entries, p, registered=set(registered), text=text, active=active)
+    return pairs, [dict(e, tier=t, reason=r) for e, f in pairs for t, r in [retention.crisp_verdict(f, p)]]
+
+
+def test_facts_carry_the_field_names_of_the_natlang_type_and_the_crisp_verdict_reads_only_them(tmp_path):
+    import re
+    block = (ROOT / 'applications/ops-retention/types.ts').read_text().split('export type RetentionFacts = {')[1].split('\n};')[0]
+    declared = set(re.findall(r'^\s+(\w+):', block, re.M))
+    run = tmp_path / 'run-f.failed'
+    p = policy(tmp_path)
+    es = [entry(run / 'step_1.pt'), entry(run / 'step_2.pt'), entry(run / 'x.tmp', size=5, category='other')]
+    pairs, classified = facts_and_crisp(es, p, text=f'see {run}')
+    assert {frozenset(f) for _, f in pairs} == {frozenset(declared)}
+    assert [(e['tier'], e['reason']) for e in classified] == \
+        [(e['tier'], e['reason']) for e in retention.classify(es, p, registered=set(), text=f'see {run}', active=NO_ACTIVITY)]
+    by_name = {Path(e['path']).name: f for e, f in pairs}
+    assert by_name['step_1.pt']['step'] == 1 and by_name['step_1.pt']['latest_step_in_directory'] == 2
+    assert by_name['step_1.pt']['run_marked_stopped'] and by_name['step_1.pt']['directory_named_by_reference']
+    assert by_name['x.tmp']['partial_write'] and by_name['x.tmp']['step'] is None
+    assert {Path(e['path']).name: e['tier'] for e in classified} == \
+        {'step_1.pt': 'PRUNE-ASK', 'step_2.pt': 'PRUNE-ASK', 'x.tmp': 'PRUNE-AUTO'}
+
+
+def fake_bridge(nl_tiers, calls, status=0):
+    """Stands in for ts-host/scripts/retention-classify.mjs: serves crisp in shadow, the given tiers in nl."""
+    def bridge(argv):
+        calls.append(argv)
+        args = dict(zip(argv[::2], argv[1::2]))
+        items = json.loads(Path(args['--input']).read_text())['items']
+        mode = args['--mode']
+        classified = [{'id': i['id'], 'tier': nl_tiers.get(i['id'], i['crisp']['tier']) if mode == 'nl' else i['crisp']['tier'],
+                       'reason': 'nl reason' if mode == 'nl' else i['crisp']['reason'], 'served': 'nl' if mode == 'nl' else 'crisp'}
+                      for i in items]
+        disagree = sum(1 for i in items if nl_tiers.get(i['id'], i['crisp']['tier']) != i['crisp']['tier'])
+        Path(args['--out']).write_text(json.dumps({'mode': mode, 'classifier': 'natlang@test', 'classified': classified,
+                                                    'summary': {'mode': mode, 'items': len(items), 'agree': len(items) - disagree,
+                                                                'disagree': disagree, 'refused': 0, 'errors': 0}}))
+        return status
+    return bridge
+
+
+def test_shadow_keeps_the_crisp_tiers_and_nl_serves_the_natural_language_ones(tmp_path):
+    p = policy(tmp_path)
+    run = tmp_path / 'run-g'
+    pairs, classified = facts_and_crisp([entry(run / 'step_1.pt'), entry(run / 'step_2.pt')], p)
+    before = [(e['tier'], e['reason']) for e in classified]
+    setting = {'mode': 'shadow', 'server': 'http://x', 'model': 'm', 'shadow_log': str(tmp_path / 'shadow.jsonl')}
+    calls = []
+    summary = retention.nl_classify(classified, [f for _, f in pairs], p, setting, bridge=fake_bridge({'0': 'KEEP'}, calls))
+    assert [(e['tier'], e['reason']) for e in classified] == before
+    assert summary['disagree'] == 1 and summary['classifier'] == 'natlang@test'
+    assert calls[0][calls[0].index('--mode') + 1] == 'shadow' and '--model' in calls[0]
+    summary = retention.nl_classify(classified, [f for _, f in pairs], p, dict(setting, mode='nl'),
+                                    bridge=fake_bridge({'0': 'KEEP'}, calls))
+    assert classified[0]['tier'] == 'KEEP' and classified[0]['crisp_tier'] == before[0][0] and classified[0]['served'] == 'nl'
+
+
+def test_a_broken_bridge_leaves_crisp_in_shadow_and_stops_nl_before_anything_is_deleted(tmp_path):
+    import pytest
+    p = policy(tmp_path)
+    pairs, classified = facts_and_crisp([entry(tmp_path / 'r' / 'step_1.pt')], p)
+    before = classified[0]['tier']
+    setting = {'mode': 'shadow', 'shadow_log': str(tmp_path / 's.jsonl')}
+    summary = retention.nl_classify(classified, [f for _, f in pairs], p, setting, bridge=fake_bridge({}, [], status=1))
+    assert 'error' in summary and classified[0]['tier'] == before
+    with pytest.raises(RuntimeError):
+        retention.nl_classify(classified, [f for _, f in pairs], p, dict(setting, mode='nl'), bridge=fake_bridge({}, [], status=1))
+
+
+def test_classifier_setting_flag_over_environment_over_policy(tmp_path, monkeypatch):
+    import argparse
+    import pytest
+    p = dict(policy(tmp_path), classifier={'mode': 'shadow', 'model': 'policy-model'})
+    args = argparse.Namespace(classifier=None, nl_server=None, nl_model=None, nl_shadow_log=None, nl_concurrency=None)
+    monkeypatch.delenv('NATLANG_RETENTION_CLASSIFIER', raising=False)
+    assert retention.classifier_setting(args, p)['mode'] == 'shadow'
+    assert retention.classifier_setting(argparse.Namespace(), {})['mode'] == 'crisp'
+    monkeypatch.setenv('NATLANG_RETENTION_CLASSIFIER', 'natlang')
+    assert retention.classifier_setting(args, p)['mode'] == 'nl'
+    got = retention.classifier_setting(argparse.Namespace(**dict(vars(args), classifier='crisp', nl_model='m2')), p)
+    assert got['mode'] == 'crisp' and got['model'] == 'm2'
+    monkeypatch.setenv('NATLANG_RETENTION_CLASSIFIER', 'bogus')
+    with pytest.raises(SystemExit):
+        retention.classifier_setting(args, p)

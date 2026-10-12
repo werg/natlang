@@ -19,6 +19,11 @@ When in doubt a file is PRUNE-ASK. Symlinks are never followed or deleted on the
 
     python3 scripts/storage_retention.py                 # dry run: report + what --apply would delete
     python3 scripts/storage_retention.py --apply         # delete PRUNE-AUTO (+ approved PRUNE-ASK)
+
+The tier decision is pluggable (applications/ops-retention/DECOMPOSITION.md): ``--classifier crisp`` (default) applies
+``crisp_verdict``; ``nl`` asks applications/ops-retention/classifyRetention.nl through ts-host/scripts/retention-classify.mjs
+(``--nl-server``/``--nl-model``); ``shadow`` runs both, serves crisp and appends disagreements to
+~/.local/state/natlang/storage/retention-classifier-shadow.jsonl.
 """
 from __future__ import annotations
 
@@ -242,9 +247,13 @@ def step_of(path: Path, regex: str) -> int | None:
     return int(digits) if digits else None
 
 
-def classify(entries: list[dict], policy: dict, *, registered: set[str], text: str, active: dict,
-             now: float | None = None) -> list[dict]:
-    """Tier and reason for each large entry (dicts with path, logical, bytes, mtime, category, run)."""
+WEIGHTS = ('checkpoint', 'optimizer-state', 'weights-snapshot')
+
+
+def retention_facts(entries: list[dict], policy: dict, *, registered: set[str], text: str, active: dict,
+                    now: float | None = None) -> list[tuple[dict, dict]]:
+    """(entry, facts) for each entry worth classifying: the exact facts both classifier implementations read
+    (applications/ops-retention/types.ts, RetentionFacts)."""
     now = now or time.time()
     keep = policy['keep']
     ckpt = policy['checkpoint']
@@ -265,42 +274,64 @@ def classify(entries: list[dict], policy: dict, *, registered: set[str], text: s
             continue
         logical = Path(e['logical'])
         name = logical.name.lower()
-        age = (now - e['mtime']) / DAY
-        run_age = (now - run_mtime[e['run']]) / DAY
-        tier, reason = None, None
-        if e['path'] in registered or e['logical'] in registered:
-            tier, reason = 'KEEP', 'registered corpus/artifact file'
-        elif referenced(logical, text) or referenced(Path(e['path']), text):
-            tier, reason = 'KEEP', 'named by a run script, recipe, registry, plan or certificate'
-        elif any(fnmatch.fnmatch(name, p) for p in keep['name_patterns']) or e['category'] == 'logs-metrics':
-            tier, reason = 'KEEP', 'log/receipt/certificate/labels'
-        elif any(fnmatch.fnmatch(e['logical'], p) or fnmatch.fnmatch(e['path'], p) for p in keep['path_patterns']):
-            tier, reason = 'KEEP', 'policy keep path'
-        elif why := active_reason(e, active):
-            tier, reason = 'ACTIVE', why
-        elif run_age < policy['finished_after_days']:
-            tier, reason = 'ACTIVE', f'run changed {run_age:.1f} d ago (< {policy["finished_after_days"]} d)'
-        elif _is_leftover(e, policy) and age >= policy['leftover_after_days']:
-            tier, reason = 'PRUNE-AUTO', 'leftover partial write'
-        elif e['category'] in ('checkpoint', 'optimizer-state', 'weights-snapshot') and \
-                any(m in str(e['run']).lower() or m in str(logical.parent).lower()
-                    for m in policy['aborted_run_markers']) and age >= policy['aborted_after_days']:
-            if dir_referenced(logical, text):
-                tier, reason = 'PRUNE-ASK', 'aborted run checkpoint, but its directory is named in a plan/script'
-            else:
-                tier, reason = 'PRUNE-AUTO', 'checkpoint of an aborted/stopped run'
-        elif e['category'] in ('checkpoint', 'optimizer-state'):
-            step = step_of(logical, ckpt['step_regex'])
-            group = steps.get(str(logical.parent), [])
-            protected = any(fnmatch.fnmatch(name, p) for p in ckpt['best_patterns'] + ckpt['final_patterns'])
-            if step is not None and len(group) > 1 and step < latest[str(logical.parent)] and not protected:
-                tier, reason = 'PRUNE-AUTO', f'intermediate checkpoint (step {step} < latest {latest[str(logical.parent)]})'
-        if tier is None and e['category'] == 'sync-revision':
-            tier, reason = 'PRUNE-ASK', f'superseded sync revision ({age:.0f} d old); approve its revision directory'
-        if tier is None:
-            tier, reason = 'PRUNE-ASK', f'large {e["category"]} file without a keep rule'
-        out.append(dict(e, tier=tier, reason=reason))
+        directory = str(logical.parent)
+        step = step_of(logical, ckpt['step_regex']) if e['category'] in ('checkpoint', 'optimizer-state') else None
+        out.append((e, {
+            'category': e['category'],
+            'age_days': round((now - e['mtime']) / DAY, 3),
+            'run_age_days': round((now - run_mtime[e['run']]) / DAY, 3),
+            'registered': e['path'] in registered or e['logical'] in registered,
+            'named_by_reference': referenced(logical, text) or referenced(Path(e['path']), text),
+            'directory_named_by_reference': dir_referenced(logical, text),
+            'record_file': any(fnmatch.fnmatch(name, p) for p in keep['name_patterns']) or e['category'] == 'logs-metrics',
+            'policy_keep_path': any(fnmatch.fnmatch(e['logical'], p) or fnmatch.fnmatch(e['path'], p)
+                                    for p in keep['path_patterns']),
+            'in_use': active_reason(e, active),
+            'partial_write': _is_leftover(e, policy),
+            'run_marked_stopped': any(m in str(e['run']).lower() or m in directory.lower()
+                                      for m in policy['aborted_run_markers']),
+            'step': step,
+            'latest_step_in_directory': latest.get(directory),
+            'step_files_in_directory': len(steps.get(directory, [])),
+            'best_or_final': any(fnmatch.fnmatch(name, p) for p in ckpt['best_patterns'] + ckpt['final_patterns']),
+        }))
     return out
+
+
+def crisp_verdict(f: dict, policy: dict) -> tuple[str, str]:
+    """The crisp implementation of the retention decision over one file's facts (classifyRetention.nl is the other)."""
+    if f['registered']:
+        return 'KEEP', 'registered corpus/artifact file'
+    if f['named_by_reference']:
+        return 'KEEP', 'named by a run script, recipe, registry, plan or certificate'
+    if f['record_file']:
+        return 'KEEP', 'log/receipt/certificate/labels'
+    if f['policy_keep_path']:
+        return 'KEEP', 'policy keep path'
+    if f['in_use']:
+        return 'ACTIVE', f['in_use']
+    if f['run_age_days'] < policy['finished_after_days']:
+        return 'ACTIVE', f'run changed {f["run_age_days"]:.1f} d ago (< {policy["finished_after_days"]} d)'
+    if f['partial_write'] and f['age_days'] >= policy['leftover_after_days']:
+        return 'PRUNE-AUTO', 'leftover partial write'
+    if f['category'] in WEIGHTS and f['run_marked_stopped'] and f['age_days'] >= policy['aborted_after_days']:
+        if f['directory_named_by_reference']:
+            return 'PRUNE-ASK', 'aborted run checkpoint, but its directory is named in a plan/script'
+        return 'PRUNE-AUTO', 'checkpoint of an aborted/stopped run'
+    if f['category'] in ('checkpoint', 'optimizer-state') and f['step'] is not None and \
+            f['step_files_in_directory'] > 1 and f['step'] < f['latest_step_in_directory'] and not f['best_or_final']:
+        return 'PRUNE-AUTO', f'intermediate checkpoint (step {f["step"]} < latest {f["latest_step_in_directory"]})'
+    if f['category'] == 'sync-revision':
+        return 'PRUNE-ASK', f'superseded sync revision ({f["age_days"]:.0f} d old); approve its revision directory'
+    return 'PRUNE-ASK', f'large {f["category"]} file without a keep rule'
+
+
+def classify(entries: list[dict], policy: dict, *, registered: set[str], text: str, active: dict,
+             now: float | None = None) -> list[dict]:
+    """Tier and reason for each large entry (dicts with path, logical, bytes, mtime, category, run), by the crisp rules."""
+    return [dict(e, tier=tier, reason=reason) for e, f in retention_facts(entries, policy, registered=registered,
+                                                                          text=text, active=active, now=now)
+            for tier, reason in [crisp_verdict(f, policy)]]
 
 
 def _is_leftover(e: dict, policy: dict) -> bool:
@@ -382,6 +413,67 @@ def scan(policy: dict, roots=None, registered: set[str] | None = None,
                      for root, cats in totals.items()}
 
 
+# Classifier modes (applications/ops-retention/DECOMPOSITION.md) ------------------------------------------------------
+CLASSIFIER_MODES = {'crisp': 'crisp', 'nl': 'nl', 'shadow': 'shadow', 'natlang': 'nl', 'natural-language': 'nl'}
+NODE_BRIDGE = REPO / 'ts-host' / 'scripts' / 'retention-classify.mjs'
+
+
+def classifier_setting(args, policy: dict) -> dict:
+    """The classifier setting: --classifier, else $NATLANG_RETENTION_CLASSIFIER, else the policy's classifier.mode,
+    else crisp. The modes are ts-host's pluggable modes (crisp | nl | shadow)."""
+    setting = dict(policy.get('classifier') or {})
+    mode = getattr(args, 'classifier', None) or os.environ.get('NATLANG_RETENTION_CLASSIFIER') or setting.get('mode') \
+        or 'crisp'
+    if mode not in CLASSIFIER_MODES:
+        raise SystemExit(f'classifier mode is "crisp", "nl" or "shadow", not {mode!r}')
+    setting['mode'] = CLASSIFIER_MODES[mode]
+    for key in ('server', 'model', 'shadow_log', 'concurrency'):
+        if getattr(args, f'nl_{key}', None) is not None:
+            setting[key] = getattr(args, f'nl_{key}')
+    setting.setdefault('shadow_log', str(STATE / 'retention-classifier-shadow.jsonl'))
+    return setting
+
+
+def run_bridge(argv: list[str]) -> int:
+    return subprocess.call(['node', str(NODE_BRIDGE), *argv])
+
+
+def nl_classify(classified: list[dict], facts: list[dict], policy: dict, setting: dict, *, bridge=run_bridge) -> dict:
+    """Run the natural-language classifier over the classified entries (in place) through the ts-host pluggable.
+    shadow: the crisp tiers stay; disagreements go to the shadow log. nl: the served (bounded) verdicts replace the
+    crisp ones; each entry keeps its crisp verdict under crisp_tier/crisp_reason. Returns the summary."""
+    import tempfile
+    mode = setting['mode']
+    thresholds = {k: policy[k] for k in ('finished_after_days', 'aborted_after_days', 'leftover_after_days')}
+    items = [{'id': str(i), 'path': e['path'], 'logical': e['logical'], 'bytes': e['bytes'], 'facts': f,
+              'crisp': {'tier': e['tier'], 'reason': e['reason']}} for i, (e, f) in enumerate(zip(classified, facts))]
+    with tempfile.TemporaryDirectory(prefix='retention-classifier-') as work:
+        source, out = Path(work) / 'items.json', Path(work) / 'verdicts.json'
+        source.write_text(json.dumps({'thresholds': thresholds, 'items': items}))
+        argv = ['--input', str(source), '--out', str(out), '--mode', mode, '--shadow-log', str(setting['shadow_log'])]
+        argv += [x for key in ('server', 'model', 'concurrency') if setting.get(key) is not None
+                 for x in (f'--{key}', str(setting[key]))]
+        try:
+            status = bridge(argv)
+            result = json.loads(out.read_text()) if status == 0 else None
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            status, result = repr(error), None
+    if result is None:
+        if mode == 'nl':  # the served implementation failed: stop before anything is deleted
+            raise RuntimeError(f'natural-language retention classifier failed ({status}); nothing was deleted')
+        return {'mode': mode, 'error': f'bridge failed ({status}); the crisp verdicts stand',
+                'shadow_log': str(setting['shadow_log'])}
+    if mode == 'nl':
+        served = {item['id']: item for item in result['classified']}
+        for i, e in enumerate(classified):
+            verdict = served.get(str(i))
+            if verdict is None:
+                raise RuntimeError(f'natural-language retention classifier returned no verdict for {e["path"]}')
+            e['crisp_tier'], e['crisp_reason'] = e['tier'], e['reason']
+            e['tier'], e['reason'], e['served'] = verdict['tier'], verdict['reason'], verdict['served']
+    return dict(result['summary'], classifier=result.get('classifier'), shadow_log=str(setting['shadow_log']))
+
+
 # Apply ---------------------------------------------------------------------------------------------------------------
 def approved_paths(path: Path = APPROVALS) -> set[str]:
     try:
@@ -445,7 +537,12 @@ def run(args) -> dict:
         entries, totals = scan(policy, args.roots, registered, revisions)
     text = reference_text(policy)
     active = active_state(policy['roots']['scan'])
-    classified = classify(entries, policy, registered=registered, text=text, active=active)
+    pairs = retention_facts(entries, policy, registered=registered, text=text, active=active)
+    classified = [dict(e, tier=tier, reason=reason) for e, f in pairs for tier, reason in [crisp_verdict(f, policy)]]
+    setting = classifier_setting(args, policy)
+    classifier = {'mode': 'crisp'}
+    if setting['mode'] != 'crisp':
+        classifier = nl_classify(classified, [f for _, f in pairs], policy, setting)
     approved = approved_paths(Path(args.approvals))
     for e in classified:
         if e['tier'] == 'PRUNE-ASK' and any(e[k] == a or e[k].startswith(a.rstrip('/') + '/')
@@ -475,7 +572,7 @@ def run(args) -> dict:
         tiers[e['tier']]['files'] += 1
         tiers[e['tier']]['bytes'] += e['bytes']
     return {'schema': 'natlang.storage-retention/1', 'time': time.time(), 'applied': args.apply,
-            'totals': totals, 'tiers': dict(tiers), 'entries': classified, 'deleted': deleted,
+            'totals': totals, 'tiers': dict(tiers), 'entries': classified, 'classifier': classifier, 'deleted': deleted,
             'deleted_bytes': sum(r['bytes'] for r in deleted), 'docker': docker,
             'sync_revisions': dict(sorted(revisions.items()))}
 
@@ -490,6 +587,12 @@ def main(argv=None):
     p.add_argument('--out', default=str(STATE / 'retention-latest.json'))
     p.add_argument('--no-docker', action='store_true')
     p.add_argument('--from-report', default=None, help="reuse a report's scan (JSON) instead of walking again")
+    p.add_argument('--classifier', choices=sorted(CLASSIFIER_MODES), default=None,
+                   help='crisp (default) | nl | shadow; else $NATLANG_RETENTION_CLASSIFIER or the policy classifier.mode')
+    p.add_argument('--nl-server', default=None, help='OpenAI-compatible endpoint of the nl classifier')
+    p.add_argument('--nl-model', default=None, help='served model id of the nl classifier')
+    p.add_argument('--nl-shadow-log', default=None, help='JSONL of disagreements (default: state dir)')
+    p.add_argument('--nl-concurrency', type=int, default=None, help='calls in flight (default 4)')
     args = p.parse_args(argv)
     report = run(args)
     out = Path(args.out)
@@ -499,6 +602,7 @@ def main(argv=None):
     print(json.dumps({'tiers': {k: {'files': v['files'], 'gb': round(v['bytes'] / GIB, 1)}
                                 for k, v in report['tiers'].items()},
                       'deleted_gb': round(report['deleted_bytes'] / GIB, 1), 'report': str(out),
+                      'classifier': report['classifier'],
                       'top_ask': [(round(e['bytes'] / GIB, 1), e['path']) for e in ask[:10]]}, indent=1))
 
 
