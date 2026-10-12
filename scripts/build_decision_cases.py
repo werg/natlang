@@ -438,6 +438,10 @@ def build_episodes(cases, per_family):
     episodes = []
     for kind in ('choice', 'noul', 'score'):
         families = sorted(f for f, v in by.items() if v['train'] and v['train'][0]['kind'] == kind)
+        if len(families) < 2:
+            # A single-family source revision can still produce decision cases,
+            # but it cannot support a cross-family transfer episode.
+            continue
         for index, family in enumerate(families):
             other = families[(index + 1) % len(families)]
             for role, split_of in (('train', lambda n: 'train'), ('heldout', lambda n: 'validation' if n % 2 == 0 else 'test')):
