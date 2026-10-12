@@ -581,3 +581,19 @@ def test_the_guard_relaunches_a_requeued_unit_behind_a_head_that_waits_for_room(
                                               'budget': 1 * GIB, 'reserve': 8 * GIB, 'spec': spec}}
     ledger.guard(type('A', (), {'floor_gb': 8, 'overshoot': 1.15, 'interval': 0, 'once': True})())
     assert launched == ['small.service']
+
+
+def test_cancel_drops_a_queue_entry_and_reset_peak_clears_or_sets_a_family_peak(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    with ledger.ledger() as state:
+        state['waiting'] = {'old-bench.service': {'priority': 'low', 'since': 1.0, 'budget': GIB, 'requeued': True}}
+        state['family_peaks'] = {'fam-x': 100 * GIB}
+    assert ledger.cancel(type('A', (), {'unit': 'old-bench'})()) == 0
+    assert ledger.cancel(type('A', (), {'unit': 'old-bench'})()) == 1
+    ledger.reset_peak(type('A', (), {'family': 'fam-x', 'to_gb': 88.0})())
+    with ledger.ledger() as state:
+        assert state['waiting'] == {} and state['family_peaks']['fam-x'] == 88 * GIB
+        assert [e['event'] for e in state['events']] == ['cancelled', 'reset-peak']
+    ledger.reset_peak(type('A', (), {'family': 'fam-x', 'to_gb': None})())
+    with ledger.ledger() as state:
+        assert 'fam-x' not in state['family_peaks']
