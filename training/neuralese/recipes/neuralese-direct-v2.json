@@ -89,7 +89,7 @@
      "max_model_requests": 48,
      "workers": 4,
      "min_successes": 0,
-     "noise_successes": 0,
+     "noise_successes": 1,
      "reference_successes": null
     }
    }

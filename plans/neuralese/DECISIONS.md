@@ -1586,7 +1586,7 @@ fixtures, with a pass bar of one success. It is replaced, for qualification and 
   `noise_successes` and the measured noise. Every evaluation records `regressed`; only the final one gates.
 - **Line references** (base under native full rendering, cadence subset):
   - LFM2.5-350M: 1/16 in each of two complete repeat runs (the same `edit_stream` task; 12 semantic mismatches, 3
-    budget exhaustions), spread 0. Declared `reference_successes` 1 and `noise_successes` 1 in neuralese-direct-lfm-v3.
+    budget exhaustions), spread 0. Declared `reference_successes` 1 in neuralese-direct-lfm-v3 (a declared backbone-inherent line difference in line-parity.json) and a shared `noise_successes` floor of 1 in neuralese-direct-v2.
     The noise floor covers batch-composition nondeterminism of greedy decoding in the concurrent engine; the stage's
     first evaluation measures its own spread.
   - Mellum2.1 base: queued as a 34 GB ledger job (`heldv2-base-mellum`). Until it lands, the Mellum gate reports
