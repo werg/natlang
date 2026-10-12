@@ -22,9 +22,7 @@
     },
     "batch_tokens": 16384,
     "task_eval": {
-     "reference_successes": 1,
-     "noise_successes": 1,
-     "reference_source": "untrained LFM2.5-350M base, native full rendering, CPU BF16, on the v2 cadence subset: 1/16 in each of two complete repeat runs (the same edit_stream task), DGX 2026-10-12 (runs under /home/werg/data/heldtask-v2/base-lfm-full-rep*); noise floor 1 covers batch-composition nondeterminism of greedy decoding in the concurrent engine (the stage's first evaluation measures its own spread; the larger applies)"
+     "reference_successes": 1
     }
    }
   }

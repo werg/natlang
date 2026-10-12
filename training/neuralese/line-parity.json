@@ -63,6 +63,8 @@
    "reason": "Mellum's chat/tool-call convention (<tool_call>{json}); the shared probes default to LFM's pythonic calls"},
   {"stage": "direct", "lines": ["mellum", "lfm"], "key": "parameters.monitor.gate.reference", "kind": "backbone-inherent",
    "reason": "each backbone's own measured base gate_pass on the shared 48 probes"},
+  {"stage": "direct", "lines": ["mellum", "lfm"], "key": "parameters.task_eval.reference_successes", "kind": "backbone-inherent",
+   "reason": "each backbone's own measured base task successes on the shared held packet v2 cadence subset (plans/neuralese/DECISIONS.md)"},
   {"stage": "direct", "lines": ["lfm"], "key": "parameters.target_tokens", "kind": "fit-only",
    "reason": "supervised positions per window that fit Pop's 8 GB GPU at the shared 32768-token context (Mellum 1024)"},
   {"stage": "direct", "lines": ["mellum"], "key": "parameters.window_execution", "kind": "fit-only",
