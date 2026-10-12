@@ -14,3 +14,10 @@ def test_empty_reply_without_explicit_eos_classification_stays_unresolved_or_sem
     result = {"outcome": {"status": "quiesced", "accepted": False, "detail": "empty reply"}}
     assert classify_case(result, {"status": "complete", "resource_limit_reason": None}) == "semantic_mismatch"
     assert classify_case(None, {"status": "timeout", "resource_limit_reason": "case_wall_budget"}) == "budget_exhaustion"
+
+
+def test_model_incomplete_phrase_in_generated_action_text_is_not_protocol_evidence():
+    result = {"outcome": {"status": "quiesced", "accepted": False, "detail": "root eval did not finish",
+                          "invocation_ledger": [],
+                          "action_ledger": [{"arguments": {"code": "return 'model_incomplete: terminated_without_result'"}}]}}
+    assert classify_case(result, {"status": "complete", "resource_limit_reason": None}) == "semantic_mismatch"
