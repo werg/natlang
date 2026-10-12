@@ -156,19 +156,20 @@ Crisp parts, each justified:
   ts-host, run, publish.
 - `setup_client.sh` creates the client venv. `build_image.sh` builds the amd64 image.
 
-Not built yet: the placement program itself, which today is the coordinator's judgment written into
-`placement.reason`. Its DECOMPOSITION:
+**Built: the placement program, `applications/ops-placement/`** (its DECOMPOSITION.md comes first).
 
-| Part | Becomes |
-| - | - |
-| Gather fleet facts | Crisp helper (ledger status, coord status, cwctl records) |
-| Decide | One natlang function with the numbered steps above |
-| Size the request | Instruction in the same function, from measured peaks |
-| Emit the job | Crisp (`job.py` validates) |
-| Launch | Crisp (`cwctl.py`) |
-
-When it becomes hot (many arms a day), it gets the pluggable shape: a crisp rule table as the default and the
-natural-language implementation behind one interface (`ts-host/src/runtime/pluggable.ts` pattern).
+- `placeJob.nl` is six numbered steps over named facts. In order: a Pop-owned lineage goes to Pop; moving an active
+  lineage goes to the owner (ask); a job that needs the teacher goes to DGX; a job that fits DGX headroom with no
+  queue ahead goes to DGX; a job that fits one sandbox GPU, within the parallel limit and the budget, goes to
+  CoreWeave; otherwise the DGX queue, naming the blocker.
+- `scripts/coreweave/placement.py` gathers the facts: the DGX ledger headroom and queue, this machine's launch
+  records, readiness (credential, bucket, a passed GPU smoke), and the budget from `training/coreweave-placement.json`.
+  It also holds the crisp implementation of the same steps.
+- It is pluggable: `crisp` (default), `nl` or `shadow`, through ts-host's `pluggable`, with an exact `refusal()`
+  bound in index.ts and the bridge `ts-host/scripts/placement-decide.mjs`.
+- `cwctl.py place JOB.json [--mode …] [--write]` records the served decision in the job, and `cwctl.py launch`
+  refuses a job whose decision is not `coreweave`.
+- The instructions are model-facing and unmeasured, recorded as debt in plans/MODEL_FACING_CHANGES.md.
 
 **Coordination.** Every launch is recorded locally. `cwctl.py status-line` gives the line for this machine's
 `coord.py status --set` page. Jobs that change shared lineages (a Mellum stage moving to CoreWeave) are briefed to
@@ -300,6 +301,23 @@ s3://<bucket>/
 - **Teacher-dependent jobs cannot move,** because :8082 is not reachable from CoreWeave.
 - **Numerical parity:** different GPU and kernel timings. Compare the first CoreWeave eval against the DGX value for
   the same checkpoint before trusting it (owner rule: an unexplained gap is a bug).
+
+## 4b. Local rehearsal (no keys)
+
+`python3 scripts/coreweave/rehearse.py` runs the whole loop on DGX with a local S3 stand-in, so the first real
+launch tests only CoreWeave itself:
+
+1. Start `moto_server` from the client venv as a ledger unit.
+2. Bundle `git archive HEAD` and a tiny input, and upload them.
+3. `cwctl.local_docker_command` turns exactly the `Sandbox.run` request into a fresh `docker run`: same image,
+   command, env and mounted bootstrap, nothing of the host mounted, and the DGX roots mirrored inside the container.
+4. The job is `rehearsal_job.py`, a CPU stand-in that checkpoints by atomic rename. It runs while `bundle.py watch`
+   publishes.
+5. On the host: `exit.json` and the output pointer, then fetch and verify.
+6. A relaunch with `--resume` and exit status 3 must continue from step 4 to step 8, record status 3, and not restart.
+7. A dry gc plan.
+
+Everything runs as low-priority ledger units, so on a full DGX it waits its turn.
 
 ## 5. Bring-up checklist (when the keys arrive)
 

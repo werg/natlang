@@ -1,0 +1,12 @@
+{
+ "schema": "natlang.coreweave-placement-settings/1",
+ "description": "Settings of the job placement policy (applications/ops-placement, scripts/coreweave/placement.py). mode: crisp (default), nl or shadow; NATLANG_CW_PLACEMENT overrides it, --mode overrides both. server/model: the OpenAI-compatible endpoint for nl/shadow. weekly_budget_usd and gpu_hour_price_usd stay null until the owner sets a budget and CoreWeave quotes the GPU rate (with a budget set and no GPU rate, GPU jobs are not placed on CoreWeave).",
+ "mode": "crisp",
+ "server": "http://127.0.0.1:8082",
+ "model": null,
+ "max_parallel": 10,
+ "weekly_budget_usd": null,
+ "gpu_hour_price_usd": null,
+ "gpu_memory_gb": 96,
+ "fit_margin_gb": 6
+}

@@ -9,7 +9,9 @@ implementation. Which job goes to CoreWeave is the placement policy's decision, 
   cwctl.py plan JOB.json [--gpu-hour-price P]   validated request + cost bound; no API call (the dry run)
   cwctl.py launch JOB.json [--bundle K] [--resume] [--dry-run] [--wait]   start the sandbox, record it
                                           (--resume: continue from <output prefix><dir>/latest.json)
-  cwctl.py smoke [--gpu] [--dry-run]      a 10-minute sandbox that prints nvidia-smi / torch device facts
+  cwctl.py place JOB.json [--mode crisp|nl|shadow] [--write]   placement policy (applications/ops-placement)
+  cwctl.py smoke [--gpu] [--dry-run]      a 15-minute sandbox that prints device facts; waits and checks the log
+                                          (a passed GPU smoke is recorded and makes CoreWeave "ready" for placement)
   cwctl.py records                        sandboxes this machine launched (local state file)
   cwctl.py status-line                    one line for this machine's coord status page
   cwctl.py ls|get|exec|logs|stop|files|snapshots ...   passed to `cwsandbox` (tag filter: --tag natlang)
@@ -151,6 +153,33 @@ def wire_request(request: dict) -> dict | str:
     return wire
 
 
+def local_docker_command(request: dict, name: str, files_dir: Path, extra_env: dict[str, str] | None = None,
+                         image: str | None = None) -> list[str]:
+    """The `docker run` that stands in for a sandbox in the local rehearsal (rehearse.py): same image, command,
+    environment and mounted files as `request`; container filesystem as scratch; host network for the local S3.
+
+    Writes the mounted files under ``files_dir`` (mounted read-only). ``extra_env`` carries what CoreWeave would
+    inject (the object-storage endpoint and credentials; fake ones for the stand-in).
+    """
+    command = ['docker', 'run', '--rm', '--name', name, '--network', 'host', '--ipc', 'host']
+    resources = request.get('resources', {})
+    if 'cpu' in resources:
+        command += ['--cpus', str(jobs.cpu_cores(resources['cpu']))]
+    if 'memory' in resources:
+        command += ['--memory', f"{int(jobs.memory_gib(resources['memory']) * 1024)}m"]
+    if resources.get('gpu'):
+        command += ['--gpus', 'all']
+    for index, (path, content) in enumerate(sorted(request.get('mounted_files', {}).items())):
+        source = files_dir / f'mounted-{index}'
+        source.write_text(content)
+        command += ['-v', f'{source}:{path}:ro']
+    for key, value in sorted({**request.get('environment_variables', {}), **(extra_env or {})}.items()):
+        command += ['-e', f'{key}={value}']
+    command += ['-e', f'CW_SANDBOX_ID=local-{name}', image or request['container_image'], request['command'],
+                *request.get('args', [])]
+    return command
+
+
 def record(event: dict) -> None:
     STATE.mkdir(parents=True, exist_ok=True)
     with (STATE / 'sandboxes.jsonl').open('a') as stream:
@@ -170,17 +199,40 @@ def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None) -
                'cost': jobs.cost_estimate(job, gpu_hour_price), 'request': describe_request(request)}
     if dry_run:
         return {'dry_run': True, **summary, 'wire_request': wire_request(request)}
+    where = job['placement'].get('where')
+    if where not in (None, 'coreweave'):
+        raise ControllerError(f'the placement decision put this job on {where!r} ({job["placement"]["reason"]}); '
+                              'run `cwctl.py place` again when the fleet changes')
     require_key()
     from cwsandbox import AuthStrategy, Sandbox
     sandbox = Sandbox.run(auth=AuthStrategy.COREWEAVE_API_KEY, **request)
     entry = {'event': 'launched', 'sandbox_id': sandbox.sandbox_id, 'job': job['id'], 'kind': job['kind'],
              'lifetime_hours': job['lifetime_hours'], 'resources': job['resources'], 'bucket': job.get('bucket'),
-             'bundle': job.get('bundle'), 'reason': job['placement']['reason']}
+             'bundle': job.get('bundle'), 'reason': job['placement']['reason'], 'cost': summary['cost']}
     record(entry)
     if wait:
         sandbox.wait()
         entry['status'] = str(sandbox.status)
     return {**entry, 'cost': summary['cost']}
+
+
+def place(job_path: Path, mode: str | None, model: str | None, write: bool) -> dict:
+    """Run the placement policy for one job file; with ``write``, record the served decision in its placement."""
+    import placement
+    config = placement.settings()
+    raw = json.loads(job_path.read_text())
+    job = jobs.validate(raw)
+    needs = placement.job_needs(job, config)
+    fleet = {**placement.dgx_facts(job['kind']),
+             **placement.coreweave_facts(config, records(), api_key_name() is not None,
+                                         bool(job.get('bucket') or os.environ.get('NATLANG_CW_BUCKET')))}
+    item = {'id': job['id'], 'job': needs, 'fleet': fleet, 'crisp': placement.crisp_decision(needs, fleet)}
+    served = placement.decide([item], placement.mode_of(config, mode), config, model)[0]
+    if write:
+        raw['placement'] = {'where': served['where'], 'reason': served['reason'], 'served': served['served'],
+                            'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
+        job_path.write_text(json.dumps(raw, indent=1) + '\n')
+    return {'decision': served, 'needs': needs, 'fleet': fleet, 'crisp': item['crisp'], 'written': write}
 
 
 def smoke_job(gpu: bool) -> dict:
@@ -206,6 +258,19 @@ def doctor() -> dict:
         except ImportError:
             facts[module] = None
     return facts
+
+
+def check_smoke(sandbox_id: str, gpu: bool, timeout: float = 1800) -> dict:
+    """Wait for the smoke to complete and check its log; a passed GPU smoke is what makes CoreWeave "ready"."""
+    from cwsandbox import AuthStrategy, Sandbox
+    sandbox = Sandbox.from_id(sandbox_id, auth=AuthStrategy.COREWEAVE_API_KEY).result()
+    sandbox.wait_until_complete(timeout, raise_on_termination=False).result()
+    text = ''.join(sandbox.stream_logs())
+    ok = ('sm_120' in text and '"status":0' in text) if gpu else '"status":0' in text
+    result = {'event': 'gpu_smoke_ok' if gpu and ok else 'smoke_ok' if ok else 'smoke_failed',
+              'sandbox_id': sandbox_id, 'log_tail': text[-2000:]}
+    record({k: v for k, v in result.items() if k != 'log_tail'})
+    return result
 
 
 def status_line() -> str:
@@ -249,6 +314,11 @@ def main(argv=None) -> int:
         if name == 'launch':
             p.add_argument('--dry-run', action='store_true')
             p.add_argument('--wait', action='store_true', help='block until the sandbox is RUNNING')
+    p = sub.add_parser('place', help='decide where the job runs (applications/ops-placement); --write records it')
+    p.add_argument('job', type=Path)
+    p.add_argument('--mode', choices=('crisp', 'nl', 'shadow'))
+    p.add_argument('--model')
+    p.add_argument('--write', action='store_true')
     p = sub.add_parser('smoke')
     p.add_argument('--gpu', action='store_true')
     p.add_argument('--dry-run', action='store_true')
@@ -261,11 +331,13 @@ def main(argv=None) -> int:
         print(json.dumps(launch(load_job(args.job, args.bundle, args.bucket, args.resume), True, False, args.gpu_hour_price), indent=1))
     elif args.command == 'launch':
         print(json.dumps(launch(load_job(args.job, args.bundle, args.bucket, args.resume), args.dry_run, args.wait, args.gpu_hour_price), indent=1))
+    elif args.command == 'place':
+        print(json.dumps(place(args.job, args.mode, args.model, args.write), indent=1))
     elif args.command == 'smoke':
         result = launch(jobs.validate(smoke_job(args.gpu)), args.dry_run, not args.dry_run, None)
         print(json.dumps(result, indent=1))
         if not args.dry_run:
-            print(f'logs: {shlex.quote(sys.argv[0])} logs {result["sandbox_id"]} --follow', file=sys.stderr)
+            print(json.dumps(check_smoke(result['sandbox_id'], args.gpu), indent=1))
     elif args.command == 'records':
         print(json.dumps(records(), indent=1))
     elif args.command == 'status-line':

@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/ops-placement",
+  "version": "0.1.0",
+  "description": "Job placement as a pluggable policy (DECOMPOSITION.md): crisp code gathers the job's needs and the fleet's facts (DGX memory ledger, CoreWeave sandboxes, budget); placeJob.nl decides where the job runs. scripts/coreweave/placement.py selects crisp, nl or shadow; cwctl.py launches.",
+  "include": ["DECOMPOSITION.md", "index.ts", "types.ts", "placeJob.nl", "tsconfig.json"],
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}

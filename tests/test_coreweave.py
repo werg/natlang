@@ -195,7 +195,7 @@ def test_directory_manifest_skips_space_reservations(tmp_path):
     manifest, sources = bundle.directory_manifest(out)
     bundle.close_sources(sources)
     assert [Path(f['path']).name for f in manifest['files']] == ['checkpoint.pt']
-    assert manifest['files'][0]['path'] == str(out.resolve() / 'checkpoint.pt')
+    assert manifest['files'][0]['path'] == str(out / 'checkpoint.pt')
 
 
 def test_env_file_must_be_private_and_never_overrides(tmp_path, monkeypatch):
@@ -326,3 +326,56 @@ def test_gc_keeps_live_outputs_and_recent_inputs_and_drops_the_rest(tmp_path):
     assert bundle.manifest_key(inputs) not in {item['key'] for item in kept['delete']}
     assert bundle.gc_execute(s3, 'b', plan) == len(plan['delete'])
     assert live_key in s3.objects and dead_key not in s3.objects
+
+
+placement = load('placement')
+NEEDS = {'id': 'j', 'kind': 'eval', 'gpu_memory_gb': 34.0, 'hours': 2.0, 'needs_teacher': False, 'lineage_owner': 'dgx',
+         'moves_active_lineage': False, 'coreweave_cost_usd': 12.0}
+FLEET = {'dgx_headroom_gb': 4.0, 'dgx_waiting_ahead': 10, 'coreweave_ready': True, 'coreweave_gpu_memory_gb': 96.0,
+         'coreweave_fit_margin_gb': 6.0, 'coreweave_active': 0, 'coreweave_max_parallel': 10,
+         'coreweave_budget_left_usd': None}
+
+
+@pytest.mark.parametrize('needs, fleet, where', [
+    ({}, {}, 'coreweave'),
+    ({'lineage_owner': 'pop'}, {}, 'pop'),
+    ({'moves_active_lineage': True}, {}, 'ask'),
+    ({'needs_teacher': True}, {}, 'queue-dgx'),
+    ({'needs_teacher': True}, {'dgx_headroom_gb': 40.0}, 'dgx'),
+    ({}, {'dgx_headroom_gb': 40.0, 'dgx_waiting_ahead': 0}, 'dgx'),
+    ({}, {'dgx_headroom_gb': 40.0}, 'coreweave'),  # fits DGX memory but would wait behind 10 units
+    ({}, {'coreweave_ready': False}, 'queue-dgx'),
+    ({'gpu_memory_gb': 91.0}, {}, 'queue-dgx'),
+    ({}, {'coreweave_active': 10}, 'queue-dgx'),
+    ({'coreweave_cost_usd': None}, {'coreweave_budget_left_usd': 100.0}, 'queue-dgx'),
+    ({'coreweave_cost_usd': 50.0}, {'coreweave_budget_left_usd': 100.0}, 'coreweave'),
+])
+def test_crisp_placement_follows_the_numbered_steps(needs, fleet, where):
+    assert placement.crisp_decision({**NEEDS, **needs}, {**FLEET, **fleet})['where'] == where
+
+
+def test_placement_facts_from_ledger_and_records():
+    status = {'headroom_gb': 3.94, 'waiting': [{'priority': 'high'}, {'priority': 'medium'}, {'priority': 'low'}]}
+    assert placement.dgx_facts('eval', status) == {'dgx_headroom_gb': 3.9, 'dgx_waiting_ahead': 2}
+    assert placement.dgx_facts('train', status)['dgx_waiting_ahead'] == 1
+    import calendar, time as _time
+    now = calendar.timegm(_time.strptime('2026-10-12T12:00:00Z', '%Y-%m-%dT%H:%M:%SZ'))
+    records = [
+        {'event': 'gpu_smoke_ok', 'at': '2026-10-12T09:00:00Z'},
+        {'event': 'launched', 'sandbox_id': 'a', 'at': '2026-10-12T11:00:00Z', 'lifetime_hours': 4, 'cost': {'max_total': 30}},
+        {'event': 'launched', 'sandbox_id': 'b', 'at': '2026-10-12T11:00:00Z', 'lifetime_hours': 4, 'cost': {'max_total': 30}},
+        {'event': 'stop', 'at': '2026-10-12T11:30:00Z', 'args': ['b']},
+        {'event': 'launched', 'sandbox_id': 'c', 'at': '2026-10-12T01:00:00Z', 'lifetime_hours': 1, 'cost': {'max_total': 5}},
+    ]
+    config = {**placement.settings(), 'weekly_budget_usd': 100}
+    facts = placement.coreweave_facts(config, records, True, True, now)
+    assert facts['coreweave_ready'] and facts['coreweave_active'] == 1 and facts['coreweave_budget_left_usd'] == 35
+    assert not placement.coreweave_facts(config, records[1:], True, True, now)['coreweave_ready']
+
+
+def test_launch_refuses_a_job_placed_elsewhere(monkeypatch):
+    monkeypatch.setenv('CWSANDBOX_API_KEY', 'x')
+    placed = job.validate(base_job(placement={'where': 'queue-dgx', 'reason': 'CoreWeave is not ready'}))
+    with pytest.raises(cwctl.ControllerError, match="queue-dgx"):
+        cwctl.launch(placed, False, False, None)
+    assert cwctl.launch(placed, True, False, None)['dry_run']  # the dry run still shows the request

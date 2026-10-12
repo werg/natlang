@@ -335,7 +335,9 @@ def directory_manifest(directory: Path, note: str = '', cache: dict | None = Non
 
     The caller closes the sources (close_sources). Files that vanish between listing and opening are skipped.
     """
-    directory = directory.resolve()
+    # abspath, not resolve: in a sandbox the DGX roots are symlinks into scratch, and the manifest must record the
+    # logical path (the one recipes and checkpoints name), not the scratch location behind it.
+    directory = Path(os.path.abspath(directory))
     cache = {} if cache is None else cache
     files, sources = [], {}
     for child in sorted(p for p in directory.rglob('*') if p.is_file() and not _skipped(p)):
@@ -382,7 +384,7 @@ def publish_directory(directory: Path, bucket: str, prefix: str, s3, cache: dict
     pointer_key = output_prefix(prefix, directory) + 'latest.json'
     previous = None if dry_run else read_json(s3, bucket, pointer_key)
     pointer = {'schema': 'natlang.coreweave-output-pointer/1', 'bundle': manifest['id'],
-               'manifest_key': manifest_key(manifest), 'directory': str(directory.resolve()),
+               'manifest_key': manifest_key(manifest), 'directory': os.path.abspath(directory),
                'files': len(manifest['files']), 'bytes': manifest['bytes'], 'at': manifest['created'],
                'previous': previous['manifest_key'] if previous and previous['manifest_key'] != manifest_key(manifest)
                else (previous or {}).get('previous')}

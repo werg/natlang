@@ -40,5 +40,12 @@
   "--spec",
   "{\"packet\":{\"path\":\"runs/natlang-held-task-packet-v2-20261012/cases.jsonl\",\"sha256\":\"177726732807b96a13739a83bb0a9745a4865196d660ff5de90a652b10955f12\"},\"cases\":[0,5,10,15,16,21,26,31,32,37,42,47,48,53,58,63],\"workers\":4,\"case_seconds\":600,\"max_model_requests\":48}"
  ],
- "bundle_plan": "scripts/coreweave/bundle.py plan --code-sha HEAD --extra runs/neuralese-direct-mellum-20261011/heads-raw-token.pt --extra runs/natlang-held-task-packet-v2-20261012 --extra /home/werg/data/models/mellum21-12b-a2.5b-thinking -o /tmp/cw/heldv2-base-mellum.json (the backbone directory is the heads checkpoint's pinned base; it materializes at the same absolute path through the bootstrap's mirror roots)"
+ "needs": {
+  "gpu_memory_gb": 34,
+  "hours": 2,
+  "teacher": false,
+  "lineage_owner": "dgx",
+  "moves_active_lineage": false
+ },
+ "bundle_plan": "scripts/coreweave/bundle.py plan --code-sha origin/main --extra runs/neuralese-direct-mellum-20261011/heads-raw-token.pt --extra runs/natlang-held-task-packet-v2-20261012 --extra /home/werg/data/models/mellum21-12b-a2.5b-thinking -o /tmp/cw/heldv2-base-mellum.json (the backbone directory is the heads checkpoint's pinned base; it materializes at the same absolute path through the bootstrap's mirror roots)"
 }
