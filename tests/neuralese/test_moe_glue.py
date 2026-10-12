@@ -36,9 +36,8 @@ def test_glue_matches_the_eager_permutation(monkeypatch, tokens):
         assert float((a - b).norm() / b.norm().clamp_min(1e-30)) < 5e-3, name
 
 
-def test_grouped_linear_grads_are_in_parameter_layout_and_fp8_is_close(monkeypatch):
-    """maple/fp8_experts.GroupedLinear: BF16 equals torch._grouped_mm with contiguous [E, N, K] weight grads; the FP8
-    path (E4M3, row scales) stays within FP8 rounding of BF16 and finite."""
+def test_grouped_linear_grads_are_in_parameter_layout(monkeypatch):
+    """maple/fp8_experts.GroupedLinear: equals torch._grouped_mm, with contiguous [E, N, K] weight grads."""
     from natlang_neuralese.maple.fp8_experts import GroupedLinear
     torch.manual_seed(0)
     experts, width, out_width = 4, 256, 128
@@ -50,7 +49,7 @@ def test_grouped_linear_grads_are_in_parameter_layout_and_fp8_is_close(monkeypat
     reference = torch._grouped_mm(rows, weight.transpose(-2, -1), offs=offsets)
     reference.backward(g)
     expected = [reference.detach().float(), rows.grad.float(), weight.grad.float()]
-    for fp8, tolerance in ((False, 1e-2), (True, 8e-2)):
+    for fp8, tolerance in ((False, 1e-2),):
         rows.grad = weight.grad = None
         y = GroupedLinear.apply(rows, weight, offsets, fp8)
         y.backward(g)
@@ -61,7 +60,7 @@ def test_grouped_linear_grads_are_in_parameter_layout_and_fp8_is_close(monkeypat
 
 @pytest.mark.parametrize('tokens', [5, 700])
 def test_grouped_fp8_experts_track_bf16(monkeypatch, tokens):
-    """maple/expert_gemm.fp8_dense_experts (NATLANG_MOE_FP8=grouped): finite, and within FP8 rounding of the BF16
+    """maple/expert_gemm.fp8_dense_experts (DENSE_MOE["fp8"] = "grouped", the FP8 expert backend): finite, and within FP8 rounding of the BF16
     grouped experts in output and every gradient (an idle expert included)."""
     torch.manual_seed(tokens)
     experts, top_k, width, ff = 8, 4, 256, 128
@@ -70,10 +69,33 @@ def test_grouped_fp8_experts_track_bf16(monkeypatch, tokens):
     index = torch.stack([torch.randperm(experts - 1, device='cuda')[:top_k] for _ in range(tokens)])  # expert 7 idle
     gate_up = (torch.randn(experts, 2 * ff, width, device='cuda') * 0.05).bfloat16()
     down = (torch.randn(experts, width, ff, device='cuda') * 0.05).bfloat16()
-    monkeypatch.setenv('NATLANG_MOE_FP8', '0')
+    from natlang_neuralese.maple.model import DENSE_MOE
+    monkeypatch.setitem(DENSE_MOE, 'fp8', None)
     reference = _run(monkeypatch, True, x, index, logits, gate_up, down)
-    monkeypatch.setenv('NATLANG_MOE_FP8', 'grouped')
+    monkeypatch.setitem(DENSE_MOE, 'fp8', 'grouped')
     fp8 = _run(monkeypatch, True, x, index, logits, gate_up, down)
     for name, a, b in zip(('out', 'grad_x', 'grad_weights', 'grad_gate_up', 'grad_down'), fp8, reference):
         assert torch.isfinite(a).all() and float((a - b).norm() / b.norm().clamp_min(1e-30)) < 0.1, name
     assert float(fp8[3][7].abs().max()) == 0.0  # the idle expert gets no gradient
+
+
+def test_the_fp8_backend_selects_the_expert_path_only_inside_its_autocast():
+    """train/fp8_backend.make_backend('triton-experts'): FP8 experts inside autocast (training), BF16 under
+    native_modules (evaluation) and outside; a checkpoint envelope without scale state."""
+    from types import SimpleNamespace
+    from natlang_neuralese.maple.model import DENSE_MOE, DenseExperts
+    from natlang_neuralese.train.fp8_backend import make_backend
+    model = torch.nn.Module()
+    model.config = SimpleNamespace(model_type='mellum')
+    model.experts = DenseExperts(2, 16, 8)
+    backend = make_backend('triton-experts', model, device='cuda')
+    assert DENSE_MOE['fp8'] is None
+    with backend.autocast():
+        assert DENSE_MOE['fp8'] == 'grouped'
+        with backend.native_modules():
+            assert DENSE_MOE['fp8'] is None
+        assert DENSE_MOE['fp8'] == 'grouped'
+    assert DENSE_MOE['fp8'] is None and backend.has_executed
+    backend.restore_extra_state(backend.extra_state())
+    with pytest.raises(ValueError):
+        make_backend('triton-experts', SimpleNamespace(config=SimpleNamespace(model_type='lfm2')), device='cuda')

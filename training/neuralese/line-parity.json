@@ -74,6 +74,8 @@
    "reason": "the same documents (union r2 renders) rendered with Mellum's tokenizer and chat template (prepared text carries token ids)"},
   {"stage": "direct", "lines": ["mellum"], "key": "parameters.moe_kernel", "kind": "backbone-inherent",
    "reason": "Mellum's dense trainable MoE experts run as two grouped GEMMs; LFM2.5-350M has no experts"},
+  {"stage": "direct", "lines": ["mellum"], "key": "parameters.fp8_training", "kind": "backbone-inherent",
+   "reason": "Mellum's dense MoE experts run as Triton FP8 grouped GEMMs (train/fp8_backend.py triton-experts; owner 2026-10-12); LFM2.5-350M has no experts"},
   {"stage": "direct", "lines": ["mellum"], "key": "quantization", "kind": "backbone-inherent",
    "reason": "Mellum's QAT component (precision points per module family, owner rule: QAT in every stage); LFM has no component declared yet, a known gap, not a choice"},
   {"stage": "direct", "lines": ["mellum"], "key": "parameters.monitor.gate.output_convention", "kind": "backbone-inherent",

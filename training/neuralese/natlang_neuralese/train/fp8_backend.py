@@ -228,6 +228,97 @@ class FP8LinearAdapter:
                 'eligible_module_paths': sorted(self.linears)}
 
 
+EXPERT_SCHEMA = 'natlang.neuralese-fp8-experts-training/1'
+EXPERT_BACKEND_VERSION = 'triton-grouped-experts-v1'
+
+
+class FP8ExpertAdapter:
+    """The MoE-expert path of the FP8 backend (``--fp8-training triton-experts``; Maple family: Mellum): the dense
+    experts' grouped projections run as one Triton FP8 launch each (maple/expert_gemm.py: E4M3 operands with per-row
+    current scaling, FP32 accumulation; input gradient through FP8, weight gradient BF16 in the parameter layout).
+    Same interface as ``FP8LinearAdapter``: FP8 inside ``autocast()`` (the training update, its recompute included),
+    BF16 under ``native_modules()`` (evaluation). Current scaling keeps no state, so the checkpoint envelope holds only
+    the configuration. Composes with the QAT precision points: FP8 computes the already fake-quantized weights."""
+
+    def __init__(self, model: nn.Module, *, device: str | torch.device):
+        from ..maple.model import DenseExperts
+        if getattr(getattr(model, 'config', None), 'model_type', None) not in {'mellum', 'maple'}:
+            raise ValueError('the FP8 expert backend supports Maple-family (Mellum) dense experts only')
+        if not torch.cuda.is_available() or torch.device(device).type != 'cuda':
+            raise RuntimeError('FP8 expert training requires CUDA')
+        self.model = model
+        self.experts = [name for name, module in model.named_modules() if isinstance(module, DenseExperts)]
+        if not self.experts:
+            raise ValueError('no dense experts found for the FP8 expert backend')
+        capability = tuple(torch.cuda.get_device_capability(torch.device(device)))
+        if capability < (8, 9):
+            raise RuntimeError(f'FP8 expert training requires SM 8.9 or newer, got SM {capability}')
+        self.runtime = {'backend': EXPERT_BACKEND_VERSION, 'torch': torch.__version__,
+                        'compute_capability': list(capability), 'device': str(device)}
+        self.has_executed = False
+        self.row_counts = {'calls': 0, 'rows': 0, 'padded_rows': 0}
+
+    @contextlib.contextmanager
+    def autocast(self):
+        from ..maple.model import DENSE_MOE
+        previous = DENSE_MOE.get('fp8')
+        DENSE_MOE['fp8'] = 'grouped'
+        try:
+            yield
+        finally:
+            DENSE_MOE['fp8'] = previous
+        self.has_executed = True
+
+    def checkpoint(self, function, *args, **kwargs):
+        from torch.utils.checkpoint import checkpoint
+        return checkpoint(function, *args, use_reentrant=False, **kwargs)
+
+    @contextlib.contextmanager
+    def native_modules(self):
+        from ..maple.model import DENSE_MOE
+        previous = DENSE_MOE.get('fp8')
+        DENSE_MOE['fp8'] = None
+        try:
+            yield
+        finally:
+            DENSE_MOE['fp8'] = previous
+
+    def reset_row_counts(self):
+        pass
+
+    def collect_row_counts(self) -> dict[str, int]:
+        return dict(self.row_counts)
+
+    def extra_state(self) -> dict[str, Any]:
+        return {'schema': EXPERT_SCHEMA, 'backend': EXPERT_BACKEND_VERSION, 'module_paths': sorted(self.experts)}
+
+    def restore_extra_state(self, state: dict[str, Any]):
+        if not isinstance(state, dict) or state.get('schema') != EXPERT_SCHEMA or \
+                state.get('module_paths') != sorted(self.experts):
+            raise ValueError('checkpoint has no matching FP8 expert training state')
+
+    def inventory(self) -> dict[str, Any]:
+        return {'schema': EXPERT_SCHEMA, 'runtime': self.runtime, 'recipe': 'current-rowwise',
+                'expert_modules': len(self.experts)}
+
+    def cached_weight_bytes_estimate(self) -> int:
+        return 0  # FP8 weights live only within one layer's projection (saved for its backward)
+
+    def configuration(self) -> dict[str, Any]:
+        return {'enabled': True, 'backend': EXPERT_BACKEND_VERSION, 'recipe': 'current-rowwise',
+                'runtime': self.runtime, 'expert_modules': sorted(self.experts)}
+
+
+def make_backend(kind: str, model: nn.Module, *, device, recipe: str = 'delayed', amax_history_len: int = 16):
+    """The direct trainer's FP8 backend for ``--fp8-training``: ``te-fp8`` (TE dense linears, LFM) or
+    ``triton-experts`` (Triton grouped FP8 expert GEMMs, Mellum)."""
+    if kind == 'te-fp8':
+        return FP8LinearAdapter(model, device=device, recipe=recipe, amax_history_len=amax_history_len)
+    if kind == 'triton-experts':
+        return FP8ExpertAdapter(model, device=device)
+    raise ValueError(f'unknown FP8 training backend {kind!r}')
+
+
 def _tensor_inventory(value: Any) -> dict[str, Any]:
     tensors = []
 

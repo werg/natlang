@@ -405,7 +405,9 @@ class DenseExperts(nn.Module):
 # maple/fused_moe.invariant_dense_experts), "loop" (the per-expert reference) or "grouped" (torch's grouped GEMM).
 # The last two choose cuBLAS kernels by shape (NUMERICAL_PARITY.md, "Mellum batch-row dragnet").
 DENSE_MOE_KERNELS = ("invariant", "loop", "grouped")
-DENSE_MOE = {"kernel": os.environ.get("NATLANG_MAPLE_DENSE_MOE", "invariant")}
+DENSE_MOE = {"kernel": os.environ.get("NATLANG_MAPLE_DENSE_MOE", "invariant"),
+             # "grouped": FP8 grouped expert GEMMs (maple/expert_gemm.py), set by train/fp8_backend.FP8ExpertAdapter
+             "fp8": None}
 
 
 def set_dense_moe_kernel(kernel: str) -> None:

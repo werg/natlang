@@ -31,7 +31,8 @@
      }
     },
     "latent_lr": 1e-05,
-    "window_execution": "packed"
+    "window_execution": "packed",
+    "fp8_training": "triton-experts"
    }
   },
   "quantization": {

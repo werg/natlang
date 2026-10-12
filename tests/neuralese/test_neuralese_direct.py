@@ -502,3 +502,12 @@ def test_the_resume_identity_is_content_not_paths():
     assert same_resume_identity(saved, moved)
     assert not same_resume_identity(saved, {**moved, 'inputs': {**moved['inputs'], '/runs/text.jsonl': 'u'}})
     assert not same_resume_identity(saved, {**moved, 'options': {**moved['options'], 'latent_lr': 3e-6}})
+
+
+def test_the_stateless_fp8_expert_backend_switches_at_a_resume():
+    from natlang_neuralese.train.direct_sft import same_resume_identity
+    saved = {'options': {'latent_lr': 1e-5}, 'inputs': {'/a': 'h'}}
+    assert same_resume_identity(saved, {'options': {'latent_lr': 1e-5, 'fp8_training': 'triton-experts'},
+                                        'inputs': {'/a': 'h'}})
+    assert not same_resume_identity(saved, {'options': {'latent_lr': 1e-5, 'fp8_training': 'te-fp8'},
+                                            'inputs': {'/a': 'h'}})

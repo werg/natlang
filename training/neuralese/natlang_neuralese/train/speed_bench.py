@@ -14,6 +14,7 @@ Arms: ``--checkpoint on|off``, ``--qat <point>:<mix>`` (a precision point of the
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import statistics
@@ -39,6 +40,7 @@ def main(argv=None):
                    help='sequential accumulation (the trainer\'s sequential path): forward/backward this many rows at a '
                         'time, gradients accumulated, one optimizer step; 0: packed with the latents stepping in backward')
     p.add_argument('--qat', default='bf16:0', help='point:mix, e.g. q4:1.0 or ternary-experts:0.5')
+    p.add_argument('--fp8-training', choices=('off', 'triton-experts'), default='off')
     p.add_argument('--latent-optimizer', choices=('muonsr', 'lionsr'), default='muonsr')
     p.add_argument('--ns', default='cubic5')
     p.add_argument('--moe-kernel', default='grouped')
@@ -82,6 +84,10 @@ def main(argv=None):
                               latent_options=latent_options(a.latent_optimizer, weight_decay=0.1, ns=a.ns))
     optimizer.latent.step_in_backward(gated=True)
     backbone.checkpoint_layers = a.checkpoint == 'on'
+    fp8_backend = None
+    if a.fp8_training != 'off':
+        from .fp8_backend import make_backend
+        fp8_backend = make_backend(a.fp8_training, backbone.hf, device=device)
     point, _, mix = a.qat.partition(':')
     mix = float(mix or 0)
     norm_dtypes = sorted({str(m.weight.dtype) for n, m in maple.named_modules() if n.endswith('norm')})
@@ -109,7 +115,8 @@ def main(argv=None):
                 loss.backward()
             return float(loss)
 
-        with quant.context(point, mix), shared_parametrized_weights(backbone.hf) as next_pass:
+        fp8 = fp8_backend.autocast() if fp8_backend is not None else contextlib.nullcontext()
+        with fp8, quant.context(point, mix), shared_parametrized_weights(backbone.hf) as next_pass:
             if a.micro_rows:
                 loss = sum(part(chunk, len(chunk) / a.rows) for chunk in ids.split(a.micro_rows))
             else:
