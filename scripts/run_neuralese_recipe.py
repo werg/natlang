@@ -263,12 +263,16 @@ def validate_existing_direct_resume(output: Path, recipe: dict, device: str,
     current_parameters = dict(recipe.get("parameters", {}))
     current_parameters.pop("text_data", None)
     planned_parameters = dict(plan.get("parameters") or {})
+    epoch_budget_handoff = None
     if handoff:
-        from natlang_neuralese.train.recipe import OPERATIONAL_STAGE_PARAMETERS
+        from natlang_neuralese.train.recipe import (OPERATIONAL_STAGE_PARAMETERS,
+                                                    direct_epoch_budget_change)
         for key in OPERATIONAL_STAGE_PARAMETERS:
             planned_parameters.pop(key, None)
             current_parameters.pop(key, None)
-    if planned_parameters != current_parameters:
+        epoch_budget_handoff = direct_epoch_budget_change(
+            recipe["stage"]["kind"], planned_parameters, current_parameters)
+    if planned_parameters != current_parameters and epoch_budget_handoff is None:
         raise ValueError("direct-stage resume changes training parameters")
     if plan.get("lineage") != recipe.get("lineage"):
         raise ValueError("direct-stage resume changes lineage declaration")
@@ -293,12 +297,14 @@ def validate_existing_direct_resume(output: Path, recipe: dict, device: str,
             "checkpoint_path": str(checkpoint), "checkpoint_sha256": sha256(checkpoint),
             "result_path": str(result_path),
             "result_sha256": sha256(result_path) if result_path.is_file() else None,
-            "frozen_code_changed": code_changed}
+            "frozen_code_changed": code_changed,
+            "epoch_budget_handoff": epoch_budget_handoff}
 
 
 def validate_existing_shared_resume(output: Path, recipe: dict, recipe_path: Path, heads: dict,
-                                    stage_inputs: dict, device: str, package_code: dict) -> dict:
-    """Require the exact shared recipe plan and frozen runtime before auto-resuming it."""
+                                    stage_inputs: dict, device: str, package_code: dict,
+                                    handoff: bool = False) -> dict:
+    """Require exact shared lineage pins, allowing only an explicit shared-code handoff."""
     from natlang_neuralese.train.recipe import recipe_identity_sha256
 
     plan_path = output / "recipe-plan.json"
@@ -310,13 +316,25 @@ def validate_existing_shared_resume(output: Path, recipe: dict, recipe_path: Pat
     for resolved in stage_inputs.values():
         for binding in resolved.values():
             inputs[binding["path"]] = binding["sha256"]
-    expected = {"schema": "natlang.neuralese-recipe-plan/1", "recipe": recipe,
-                "recipe_sha256": recipe_identity_sha256(recipe_path), "inputs": inputs, "device": device}
+    expected = {"schema": "natlang.neuralese-recipe-plan/1", "inputs": inputs, "device": device}
+    if not handoff:
+        expected["recipe_sha256"] = recipe_identity_sha256(recipe_path)
     if any("inputs" in stage for stage in recipe["stages"]):
         expected["stage_inputs"] = stage_inputs
     for key, value in expected.items():
         if plan.get(key) != value:
             raise ValueError(f"shared recipe resume changes committed {key}")
+    recorded_recipe = plan.get("recipe")
+    epoch_budget_changes = {}
+    if handoff:
+        from natlang_neuralese.train.recipe import recipe_handoff_epoch_changes
+        try:
+            epoch_budget_changes = recipe_handoff_epoch_changes(recorded_recipe, recipe)
+        except ValueError as error:
+            raise ValueError("shared recipe handoff changes more than pinned runtime code, operational parameters, "
+                             "and direct-stage epoch budgets") from error
+    elif recorded_recipe != recipe:
+        raise ValueError("shared recipe resume changes committed recipe")
     recorded_code = plan.get("code")
     if not isinstance(recorded_code, dict) or not recorded_code:
         raise ValueError("committed recipe plan has no frozen code inventory")
@@ -326,11 +344,21 @@ def validate_existing_shared_resume(output: Path, recipe: dict, recipe_path: Pat
                    for path in sorted(frozen.rglob("*.py")) if path.is_file()}
     if actual_code != recorded_code:
         raise ValueError("frozen recipe runtime differs from its committed code inventory")
-    if actual_code != package_code:
+    old_runtime = recorded_recipe.get("runtime") if isinstance(recorded_recipe, dict) else None
+    if handoff and (not isinstance(old_runtime, dict) or old_runtime.get("package_code") != recorded_code):
+        raise ValueError("committed recipe package-code pin differs from its frozen runtime")
+    current_runtime = recipe.get("runtime")
+    if handoff and (not isinstance(current_runtime, dict) or current_runtime.get("package_code") != package_code):
+        raise ValueError("new recipe package-code pin differs from current shared package")
+    if handoff and actual_code == package_code:
+        raise ValueError("--handoff requires changed shared package code")
+    if not handoff and actual_code != package_code:
         raise ValueError("frozen recipe runtime differs from the recipe's pinned shared package")
     return {"plan_path": str(plan_path), "plan_sha256": sha256(plan_path),
             "recipe_sha256": plan["recipe_sha256"], "inputs": inputs, "device": device,
-            "frozen_runtime_path": str(frozen), "frozen_code": actual_code}
+            "frozen_runtime_path": str(frozen), "frozen_code": actual_code,
+            "frozen_code_changed": actual_code != package_code,
+            "epoch_budget_changes": epoch_budget_changes}
 
 
 def acquire_output_launch_lock(output: Path) -> tuple[int, Path]:
@@ -361,7 +389,8 @@ def main(argv=None) -> int:
     parser.add_argument("--resume-existing", action="store_true",
                         help="resume an existing output after exact recipe/input/device/runtime validation")
     parser.add_argument("--handoff", action="store_true",
-                        help="record the shared-code handoff required when resuming with changed package code")
+                        help="resume with the pinned current shared code; permits only operational recipe changes and "
+                             "an epoch-only neuralese_direct budget change (the trainer proves schedule continuity)")
     parser.add_argument("--docker", default="docker")
     parser.add_argument("--launch-metadata", type=Path,
                         help="external intent/result receipt; default is beside outputs.directory")
@@ -376,8 +405,8 @@ def main(argv=None) -> int:
     recipe = read_direct_recipe(recipe_path) if direct else read_shared_recipe(recipe_path)
     if direct and args.until:
         parser.error("--until applies only to normal shared multi-stage recipes")
-    if not direct and args.handoff:
-        parser.error("--handoff is only supported by the declared direct-stage resume contract")
+    if args.handoff and not direct and not args.resume_existing:
+        parser.error("--handoff requires --resume-existing")
     if not direct and args.until and args.until not in {stage["id"] for stage in recipe["stages"]}:
         parser.error("--until must name a stage declared by the shared recipe")
     profile_updates = validated_profile_updates(os.environ.get("NATLANG_PROFILE_UPDATES"))
@@ -460,7 +489,7 @@ def main(argv=None) -> int:
         resume_binding = validate_existing_direct_resume(output, recipe, args.device, package_code, args.handoff)
     elif args.resume_existing:
         resume_binding = validate_existing_shared_resume(output, recipe, recipe_path, first_stage_heads,
-                                                          stage_inputs, args.device, package_code)
+                                                          stage_inputs, args.device, package_code, args.handoff)
     else:
         resume_binding = None
 
@@ -521,7 +550,7 @@ def main(argv=None) -> int:
             raise ValueError("committed resume plan or checkpoint changed during preflight")
     elif resume_binding is not None:
         current_resume_binding = validate_existing_shared_resume(
-            output, recipe, recipe_path, first_stage_heads, stage_inputs, args.device, package_code)
+            output, recipe, recipe_path, first_stage_heads, stage_inputs, args.device, package_code, args.handoff)
         if current_resume_binding != resume_binding:
             raise ValueError("committed recipe plan or frozen runtime changed during preflight")
     if direct:
@@ -537,6 +566,8 @@ def main(argv=None) -> int:
                  "--launch-metadata", str(container_metadata), "--device", args.device]
         if args.until:
             child += ["--until", args.until]
+        if args.handoff:
+            child.append("--handoff")
     common_docker = [docker, "run", "--rm", "--pull=never", "--network", "none", "--read-only",
                      "--tmpfs", "/tmp:rw,nosuid,nodev,size=2g",
                      "--user", f"{os.getuid()}:{os.getgid()}", "-w", str(map_path(REPO, mounts))]
@@ -621,10 +652,12 @@ def main(argv=None) -> int:
                 if output.exists() and not args.resume_existing:
                     raise ValueError("output appeared during CPU preflight; refusing to start the stage")
                 if resume_binding is not None:
-                    current_resume_binding = validate_existing_direct_resume(
-                        output, recipe, args.device, package_code, args.handoff)
+                    current_resume_binding = (validate_existing_direct_resume(
+                        output, recipe, args.device, package_code, args.handoff) if direct else
+                        validate_existing_shared_resume(output, recipe, recipe_path, first_stage_heads,
+                                                        stage_inputs, args.device, package_code, args.handoff))
                     if current_resume_binding != resume_binding:
-                        raise ValueError("committed resume plan or checkpoint changed during CPU preflight")
+                        raise ValueError("committed resume plan, runtime, or checkpoint changed during CPU preflight")
                 attached = AttachedProcess()
                 completed_code = attached.run(command, stdout=log, stderr=subprocess.STDOUT)
                 if attached.signal_received is not None:

@@ -776,6 +776,120 @@ def test_lineage_handoff_takes_newest_code_and_operational_recipe_changes_only(t
         runner.lineage_handoff(updated, dict(plan, inputs={'x': '2'}), frozen, package, plan_path)
 
 
+def test_lineage_handoff_allows_only_a_currently_pinned_package_code_change(tmp_path):
+    import json as _json
+
+    from natlang_neuralese.train import recipe as runner
+
+    out = tmp_path / 'run'
+    frozen = out / 'runtime' / 'natlang_neuralese'
+    frozen.mkdir(parents=True)
+    (frozen / 'a.py').write_text('old = 1\n')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'a.py').write_text('new = 1\n')
+    (package / 'b.py').write_text('added = 1\n')
+    old_code = {str(path.relative_to(frozen)): runner.sha(path) for path in frozen.rglob('*.py')}
+    new_code = {str(path.relative_to(package)): runner.sha(path) for path in package.rglob('*.py')}
+    old_recipe = {'id': 'r-v10', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': old_code},
+                  'stages': [{'id': 's', 'parameters': {'lr': 1}}]}
+    new_recipe = {'id': 'r-v10', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': new_code},
+                  'stages': [{'id': 's', 'parameters': {'lr': 1}}]}
+    existing = {'recipe': old_recipe, 'recipe_sha256': 'lineage', 'inputs': {'x': '1'}, 'device': 'cuda',
+                'code': old_code}
+    plan_path = out / 'recipe-plan.json'
+    plan_path.write_text(_json.dumps(existing))
+    plan = {'recipe': new_recipe, 'recipe_sha256': 'new-recipe-hash', 'inputs': {'x': '1'}, 'device': 'cuda'}
+
+    updated = runner.lineage_handoff(existing, plan, frozen, package, plan_path)
+
+    assert updated['recipe_sha256'] == 'lineage'
+    assert updated['recipe']['runtime']['package_code'] == new_code
+    assert updated['code'] == new_code
+
+
+def test_shared_lineage_handoff_allows_direct_stage_epoch_change_with_other_parameters_pinned(tmp_path):
+    import json as _json
+
+    from natlang_neuralese.train import recipe as runner
+
+    out = tmp_path / 'run'
+    frozen = out / 'runtime' / 'natlang_neuralese'
+    frozen.mkdir(parents=True)
+    (frozen / 'a.py').write_text('old = 1\n')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'a.py').write_text('new = 1\n')
+    old_code = {str(path.relative_to(frozen)): runner.sha(path) for path in frozen.rglob('*.py')}
+    new_code = {str(path.relative_to(package)): runner.sha(path) for path in package.rglob('*.py')}
+    old_recipe = {
+        'id': 'direct-lineage', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': old_code},
+        'stage_parameter_defaults': {'neuralese_direct': {'epochs': 2.0}},
+        'stages': [{'id': 'header', 'kind': 'neuralese_direct',
+                    'parameters': {'batch': 4, 'eval_every': 100}}],
+    }
+    new_recipe = {
+        'id': 'direct-lineage', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': new_code},
+        'stage_parameter_defaults': {'neuralese_direct': {'epochs': 1.0}},
+        'stages': [{'id': 'header', 'kind': 'neuralese_direct',
+                    'parameters': {'batch': 4, 'eval_every': 50}}],
+    }
+    existing = {'recipe': old_recipe, 'recipe_sha256': 'lineage', 'inputs': {'x': '1'}, 'device': 'cuda',
+                'code': old_code}
+    plan_path = out / 'recipe-plan.json'
+    plan_path.write_text(_json.dumps(existing))
+    plan = {'recipe': new_recipe, 'recipe_sha256': 'new-recipe-hash', 'inputs': {'x': '1'}, 'device': 'cuda'}
+
+    updated = runner.lineage_handoff(existing, plan, frozen, package, plan_path)
+    assert updated['recipe_sha256'] == 'lineage'
+    assert updated['recipe']['stage_parameter_defaults']['neuralese_direct']['epochs'] == 1.0
+    assert updated['handoffs'][-1]['epoch_budget_changes'] == {
+        'header': {
+            'old_epochs': 2.0,
+            'new_epochs': 1.0,
+            'verification': 'trainer-reconstructs-exact-schedule-prefix-and-checkpoint-step',
+        }
+    }
+
+    changed = _json.loads(_json.dumps(updated['recipe']))
+    changed['stages'][0]['parameters']['batch'] = 8
+    with pytest.raises(ValueError, match='changes more than operational stage parameters'):
+        runner.recipe_handoff_epoch_changes(updated['recipe'], changed)
+
+
+def test_lineage_handoff_rejects_changed_objective_or_stale_frozen_code(tmp_path):
+    import json as _json
+
+    from natlang_neuralese.train import recipe as runner
+
+    out = tmp_path / 'run'
+    frozen = out / 'runtime' / 'natlang_neuralese'
+    frozen.mkdir(parents=True)
+    (frozen / 'a.py').write_text('old = 1\n')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'a.py').write_text('new = 1\n')
+    old_code = {str(path.relative_to(frozen)): runner.sha(path) for path in frozen.rglob('*.py')}
+    new_code = {str(path.relative_to(package)): runner.sha(path) for path in package.rglob('*.py')}
+    old_recipe = {'id': 'r', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': old_code},
+                  'stages': [{'id': 's', 'parameters': {'lr': 1}}]}
+    new_recipe = {'id': 'r', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': new_code},
+                  'stages': [{'id': 's', 'parameters': {'lr': 1}}]}
+    existing = {'recipe': old_recipe, 'recipe_sha256': 'lineage', 'inputs': {'x': '1'}, 'device': 'cuda',
+                'code': old_code}
+    plan_path = out / 'recipe-plan.json'
+    plan_path.write_text(_json.dumps(existing))
+    plan = {'recipe': new_recipe, 'recipe_sha256': 'new-recipe-hash', 'inputs': {'x': '1'}, 'device': 'cuda'}
+    changed = _json.loads(_json.dumps(plan))
+    changed['recipe']['stages'][0]['parameters']['lr'] = 2
+    with pytest.raises(ValueError, match='changes more than operational stage parameters'):
+        runner.lineage_handoff(existing, changed, frozen, package, plan_path)
+
+    (frozen / 'a.py').write_text('tampered = 1\n')
+    with pytest.raises(ValueError, match='old frozen runtime differs'):
+        runner.lineage_handoff(existing, plan, frozen, package, plan_path)
+
+
 def test_lineage_handoff_extends_an_unqualified_text_warmup_with_its_quantization_ramp_held(tmp_path):
     """raw-recurrence-mellum-v12: a handoff may raise an unqualified mapped warm-up's steps when its quantization
     update range stays (quantization_steps = the old steps), so the stage continues from its state at the stage-end
