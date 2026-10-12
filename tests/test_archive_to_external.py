@@ -139,3 +139,21 @@ def test_a_failed_link_removes_the_verified_copy(tmp_path, monkeypatch):
     with pytest.raises(PermissionError):
         archive.archive_file(source, dest, tmp_path / 'hdd' / 'manifest.jsonl')
     assert source.is_file() and not source.is_symlink() and not dest.exists()
+
+
+def test_plan_excludes_cover_recent_plan_paths_and_run_dir(tmp_path):
+    runs = tmp_path / 'runs'
+    run = runs / 'lineage' / 'run-v1'
+    data = tmp_path / 'data' / 'inputs'
+    run.mkdir(parents=True)
+    plan = {'inputs': {str(data / 'text.jsonl'): 'x'}, 'stage_inputs': {'s': {'text_data': {'path': str(data / 'more.jsonl')}}}}
+    (run / 'recipe-plan.json').write_text(json.dumps(plan))
+    old = runs / 'old' / 'recipe-plan.json'
+    old.parent.mkdir(parents=True)
+    old.write_text(json.dumps({'inputs': {str(data / 'stale.jsonl'): 'x'}}))
+    os.utime(old, (time.time() - 30 * 86400,) * 2)
+    found = archive.plan_excludes((runs,), days=14, repo=tmp_path)
+    assert run in found and data / 'text.jsonl' in found and data / 'more.jsonl' in found
+    assert data / 'stale.jsonl' not in found and old.parent not in found
+    big(run / 'checkpoint.pt')
+    assert run_candidates(runs, excludes=found)['checkpoint.pt'].startswith('excluded by')

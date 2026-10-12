@@ -4,7 +4,7 @@
 The NVMe holds latency-critical working data; finished artifacts belong on the external HDD. A candidate is a regular
 file of at least --min-gb under one of the roots, neither modified nor read for --min-age-hours, not open by any process (host
 /proc fds and memory maps, which include container processes), and not excluded (built-in paths, files and out dirs
-named by active memory-ledger claims, the user exclude file, a `.keep-on-nvme` marker in any parent directory).
+named by active memory-ledger claims, the user exclude file, every path in a recipe plan modified within 14 days, a `.keep-on-nvme` marker in any parent directory).
 
 Each move copies to ARCHIVE/<root name>/<path relative to the root> preserving mtime, fsyncs, verifies size and
 SHA-256 against the source, checks the source did not change meanwhile, then atomically replaces the source with a
@@ -32,6 +32,7 @@ from natlang_neuralese.common.paths import resolve  # noqa: E402
 
 GIB = 2**30
 HOME = Path.home()
+REPO = Path(__file__).resolve().parents[1]
 ROOTS = (HOME / 'natlang' / 'runs', HOME / 'data')
 ARCHIVE = resolve('data_hdd', 'natlang-development-data/archive')
 MANIFEST_NAME = 'manifest.jsonl'
@@ -149,6 +150,48 @@ def ledger_excludes(path: Path = LEDGER) -> list[Path]:
                             found.append(Path(piece))
             except (OSError, ValueError, subprocess.SubprocessError):
                 pass
+    return found
+
+
+def _plan_paths(node, repo: Path):
+    """Every string in a plan that names a file or directory: absolute paths, or repo-relative ones that exist."""
+    if isinstance(node, str):
+        if node.startswith('/') and node.count('/') >= 3 and ' ' not in node and len(node) < 1000:
+            yield Path(node)
+        elif '/' in node and len(node) < 400 and '\n' not in node:
+            try:
+                if (repo / node).exists():
+                    yield repo / node
+            except (OSError, ValueError):
+                pass
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            yield from _plan_paths(key, repo)
+            yield from _plan_paths(value, repo)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _plan_paths(value, repo)
+
+
+def plan_excludes(roots=None, *, days=14.0, now=None, repo=REPO) -> list[Path]:
+    """Paths referenced by the recipe plans (recipe-plan.json, direct-stage-plan.json) of recent or active lineages:
+    their inputs, stage inputs, handoffs, heads, gate/monitor inputs and code snapshot, plus the run's own directory.
+    Protects a lineage between runs (a crash awaiting resume, inputs of a later stage)."""
+    now = time.time() if now is None else now
+    found = []
+    for root in roots or ROOTS:
+        for name in ('recipe-plan.json', 'direct-stage-plan.json'):
+            for plan in Path(root).rglob(name):
+                try:
+                    if now - plan.stat().st_mtime > days * 86400:
+                        continue
+                    data = json.loads(plan.read_text())
+                except (OSError, ValueError):
+                    continue
+                found.append(plan.parent)
+                for path in _plan_paths(data, repo):
+                    found.append(path)
+                    found.append(Path(os.path.realpath(path)))
     return found
 
 
@@ -336,7 +379,7 @@ def main(argv=None):
             print(json.dumps({'skipped': 'another archive run is applying'}))
             return 0
     roots = tuple(a.root) if a.root else ROOTS
-    excludes = list(BUILTIN_EXCLUDES) + ledger_excludes() + user_excludes()
+    excludes = list(BUILTIN_EXCLUDES) + ledger_excludes() + user_excludes() + plan_excludes(roots)
     held = open_paths()
     busy = busy_run_dirs(roots, held, process_cwds())
     idle_age = None if a.idle_run_min_age_hours is None else a.idle_run_min_age_hours * 3600
