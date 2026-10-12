@@ -931,6 +931,71 @@ class _TokenWindow(Sequence):
         return NotImplemented
 
 
+class WindowBackingSpool:
+    """Move prepared window token/role arrays to file-backed maps in bounded shards.
+
+    A training corpus can contain hundreds of thousands of short-target windows.
+    Their source arrays need random access during training, but need not all be
+    resident during preparation. The files are unlinked as soon as they are
+    mapped; their storage is released when the training process exits.
+    """
+
+    def __init__(self, directory, *, shard_bytes=32 << 20):
+        import mmap
+        import tempfile
+        self._mmap = mmap
+        self._tempfile = tempfile
+        self.directory = directory
+        self.shard_bytes = shard_bytes
+        self.tokens = bytearray()
+        self.roles = bytearray()
+        self.pending = []
+        self.shards = 0
+
+    def add(self, windows):
+        if not windows:
+            return
+        source = windows[0]['ids']._source
+        token_offset = len(self.tokens) // 4
+        self.tokens.extend(source.tobytes())
+        role_source = windows[0].get('roles')
+        role_offset = len(self.roles)
+        if role_source is not None:
+            self.roles.extend(role_source._source.tobytes())
+        self.pending.append((windows, token_offset, len(source), role_offset,
+                             len(role_source._source) if role_source is not None else 0))
+        if len(self.tokens) + len(self.roles) >= self.shard_bytes:
+            self.flush()
+
+    def flush(self):
+        if not self.pending:
+            return
+
+        def mapped(data):
+            if not data:
+                return None
+            with self._tempfile.TemporaryFile(dir=self.directory) as stream:
+                stream.write(data)
+                stream.flush()
+                return self._mmap.mmap(stream.fileno(), 0, access=self._mmap.ACCESS_READ)
+
+        token_map = mapped(self.tokens)
+        role_map = mapped(self.roles)
+        token_view = memoryview(token_map).cast('I')
+        role_view = memoryview(role_map) if role_map is not None else None
+        for windows, token_offset, token_length, role_offset, role_length in self.pending:
+            tokens = token_view[token_offset:token_offset + token_length]
+            roles = role_view[role_offset:role_offset + role_length] if role_length else None
+            for window in windows:
+                window['ids']._source = tokens
+                if roles is not None:
+                    window['roles']._source = roles
+        self.tokens = bytearray()
+        self.roles = bytearray()
+        self.pending.clear()
+        self.shards += 1
+
+
 def chat_roles(ids, *, start_id, role_ids, think_open=None, think_close=None,
                tool_response_prefixes=()):
     """Per-token chat role of a rendered document: the role named after each ``<|im_start|>``; assistant tokens

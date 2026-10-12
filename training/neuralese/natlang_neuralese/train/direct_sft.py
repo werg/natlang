@@ -664,7 +664,8 @@ def text_engine(heads):
 
 def stage_data(engine, a, text_data):
     """(train windows, target-bearing windows, held windows, held selection, mask receipt, rows) of one data file."""
-    from .text_warmup import load_text_rows, prepare_text_windows, select_held_document_windows
+    from .text_warmup import (WindowBackingSpool, load_text_rows, prepare_text_windows,
+                              select_held_document_windows)
     if text_data is not None and not getattr(a, 'merge_prefix_rows', False):
         # Keep only the token windows needed by training. Holding the raw JSON
         # rows beside their token windows duplicates a multi-gigabyte corpus
@@ -672,12 +673,14 @@ def stage_data(engine, a, text_data):
         windows = {'train': [], 'test': []}
         rows_meta = []
         receipt = None
+        backing = WindowBackingSpool(getattr(a, 'out', None))
         for row in stream_text_rows(text_data, engine.tokenizer):
             one, current = prepare_text_windows(engine, [row], tokens=a.tokens,
                 prefix_tokens=a.prefix_tokens, target_tokens=a.target_tokens,
                 mask_system_prompt=True,
                 train_target_tokens=getattr(a, 'train_target_tokens', None))
             for split in windows:
+                backing.add(one[split])
                 windows[split].extend(one[split])
             if receipt is None:
                 receipt = {**current, 'masked_system_tokens': 0, 'documents': 0}
@@ -688,6 +691,9 @@ def stage_data(engine, a, text_data):
                 meta.update(text=row['text'], context_only_spans=row['context_only_spans'],
                             token_ids=range(len(row.get('token_ids', ()))))
             rows_meta.append(meta)
+        backing.flush()
+        print(json.dumps({'event': 'window_backing_spooled', 'shards': backing.shards,
+                          'documents': len(rows_meta)}), flush=True)
         if receipt is None:
             raise ValueError('text data contains no train or held documents')
         held, held_selection = select_held_document_windows(windows['test'], a.held_documents)
