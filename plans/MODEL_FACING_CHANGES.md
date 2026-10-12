@@ -134,10 +134,20 @@ completion, and task result, and report held CE under the declared E2E rendering
 
 The original `musique_hops` child returns a verbatim evidence sentence. Among the
 first 23 Luna cases, several roots returned that sentence instead of the answer
-entity or value. The `musique_answer_hops` demonstration variant makes the child
-return the short answer phrase and passes those phrases through `known`. It is
-not admitted to the training mix. Its first 48 seed-52001 cases match the
-original by source ID, question, and expected answer, and passed exact reference
-replay. Compare about 48 live completions per variant: accepted answer rate,
-wrong entity versus verbose sentence versus abstention, call structure, and
-model request count. Admit a single version per source group only after review.
+entity or value. The `musique_answer_hops` variant makes the child return the
+short answer phrase and passes those phrases through `known`. Its seed-52001 and
+seed-52002 cases match the original by source ID, question, and expected answer;
+each source passed exact reference replay. In 61 paired live Luna cases across
+the two seeds, the answer variant passed 30/61 exact checks versus 11/61 for
+evidence sentences (22 improved, 3 regressed, 8 passed both). Instrumented
+model requests had median 8 for the answer variant versus 16–17 for the original;
+their means were about 14 versus 62 per case. The answer variant made 313 `eval`
+calls versus 1,488 for the original in these pairs. These request counts are
+collector-side starts, not physical upstream model steps. The answer variant is
+the default for *new* MuSiQue teacher cases. Keep both existing sources for the
+paired audit and admit only one trajectory per source group after exact outcome
+and conservative semantic/source review. The 25 seed-52001 exact rejections with
+returned answers were independently reviewed; seven clear aliases are recorded
+in `conservative-equivalence-review-v1.json` and remain nonadmission evidence
+pending the native source-review route. Do not accept mismatched answer types
+because two models call them equivalent.

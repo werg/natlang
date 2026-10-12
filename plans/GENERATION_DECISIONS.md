@@ -3382,3 +3382,17 @@ frozen workers retain old behavior until their next controlled runtime handoff.
 No labels change or quality gates relax. `npm run build:node` succeeds; no unit
 tests were added or run. V14 also reconciles the 84/85 request counts as distinct
 collector and transport scopes, including one local completion retry.
+
+### 2026-10-12 — MuSiQue child answers use short answer phrases
+
+Adopt `musique_answer_hops` for new teacher cases. Across 61 source-matched
+Luna runs from seeds 52001 and 52002, short answer phrases passed 30 exact
+checks versus 11 for the earlier evidence-sentence child. They also reduced
+median instrumented model requests from 16–17 to 8 and `eval` calls from
+1,488 to 313. The paired measurement and its limits are in
+`plans/MODEL_FACING_CHANGES.md`. The variant affects the child return type and
+root plan, not the question, expected answer, or source identity. Retain the
+earlier completed trajectories for analysis, but select at most one reviewed
+trajectory per source group for training. Exact rejected answers remain held
+until conservative semantic review; seven seed-52001 aliases have nonadmission
+receipts. This change improves both exact acceptance and request efficiency.
