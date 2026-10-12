@@ -14,7 +14,8 @@ predictions on the same windows, the Neuralese value's error against its soft-to
 ``behaviour_drift`` with its guard, and (``--task-eval``) the in-run task-success evaluation: a fixed held subset of
 natlang tasks executed for real against the model being trained (eval/task_cadence.py). At the end: the behaviour
 gate, report-only (texts kept). Qualification (owner decision 2026-10-12): held CE below base, no drift stop, and
-the final task evaluation at least its declared ``min_successes``; the 48-probe behaviour gate is reported only. Full state at declared checkpoint points,
+the final task evaluation passing its relative bar (at least the base, not below the previous evaluation minus
+measured noise; eval/task_cadence.task_gate); the 48-probe behaviour gate is reported only. Full state at declared checkpoint points,
 on a stop and at the end; a restart resumes from it. The default ``--window-execution auto`` accumulates gradients
 sequentially across independent windows and uses shared activation geometry plus live CUDA headroom to choose whether
 to checkpoint layer activations. The packed path remains an explicit diagnostic override.
@@ -184,7 +185,8 @@ def parse(argv=None):
     add_drift_arguments(p)
     p.add_argument('--task-eval', default=None,
                    help='the in-run task-success evaluation (eval/task_cadence.py; owner 2026-10-12): JSON '
-                        '{"packet": {"path", "sha256"}, "cases", "min_successes", ...}; its final result is the '
+                        '{"packet": {"path", "sha256"}, "cases", "reference_successes", "noise_successes", ...}; its final '
+                        'result is the '
                         "stage's qualification criterion with drift")
     p.add_argument('--task-eval-every', type=int, default=0,
                    help='run the task evaluation at evals whose step is a multiple of this (0: every eval) and at '
@@ -2071,8 +2073,8 @@ def main(argv=None):
     status = ('complete' if step >= a.steps else 'stopped_at') if finished else ('checkpointed_on_drift_guard' if drift_stopped else 'checkpointed_on_signal')
     final.update(status=status, completed=step >= a.steps, steps=step, stopped_at=a.stop_at or None, best=best,
                  behaviour_gate=gate, behaviour_gate_report_only=True, task_gate=task_gate,
-                 qualification='held CE below base, no drift stop, final task successes >= min_successes '
-                               '(owner 2026-10-12)', drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
+                 qualification='held CE below base, no drift stop, final task successes at least the base and '
+                               'not below the previous evaluation minus noise (owner/coordinator 2026-10-12)', drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
                  value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta'),
                              'report_only': True, 'moved_to': 'end-to-end stage (owner 2026-10-11)'},
                  seconds=time.time() - started, budget=budget, data_continuation=continuation_summary(continuation),

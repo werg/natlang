@@ -13,14 +13,23 @@ Crisp by design: this is an exact verifier of what the stage produces (task outc
 memory is used beyond the KV cache of the served requests.
 
 The spec (stage parameter ``task_eval``, JSON):
-  packet          {"path", "sha256"}: the derived held packet (authored_root_eval contract rows)
+  packet          {"path", "sha256"}: a registered held task packet (natlang.program records; rows with an
+                  authored_root_eval contract run their authored root, all others run the whole program)
   cases           packet row indices of the fixed subset (default: every third row, 16 of 48)
   prompt_rendering  serving prompt policy; default: the policy the stage's training rows declare
   case_seconds    wall budget per task (collection resource limit, not a model label; default 600)
   max_model_requests / max_turns   per-task request and turn budgets (default 48 / 60)
   workers         tasks executed concurrently (default 4; the engine batches their requests)
-  min_successes   qualification floor on the final evaluation's task successes (default 1)
-  reference_successes  the base model's successes on this subset under its native rendering (report)
+  min_successes   absolute floor on the final evaluation's task successes (default 0)
+  reference_successes  the line's base model's successes on this subset under its native rendering
+  noise_successes  declared run-to-run noise of the success count on this subset (from repeat runs)
+  noise_repeats   runs of the stage's first evaluation (default 2): their spread is the measured noise; the bar
+                  uses the larger of the declared and the measured noise
+
+The pass bar is relative (coordinator 2026-10-12): the final evaluation is eligible, reaches the base
+(``reference_successes``; an unmeasured reference fails the gate) and ``min_successes``, and is not below the
+previous eligible evaluation of the stage minus ``noise_successes``. Every evaluation records the same comparison
+(``regressed``) for monitoring; only the final one gates.
   runtime         TS runtime directory with dist/teacher (default: the live checkout's ts-host, the newest code)
 """
 from __future__ import annotations
@@ -53,10 +62,14 @@ def parse_task_eval(value):
             any(isinstance(i, bool) or not isinstance(i, int) or i < 0 for i in cases)):
         raise ValueError('task_eval.cases must be distinct nonnegative row indices')
     for key, default in (('case_seconds', 600), ('max_model_requests', 48), ('max_turns', 60), ('workers', 4),
-                         ('min_successes', 1)):
+                         ('min_successes', 0), ('noise_successes', 0), ('noise_repeats', 2)):
         spec.setdefault(key, default)
-        if isinstance(spec[key], bool) or not isinstance(spec[key], int) or spec[key] < (0 if key == 'min_successes' else 1):
+        if isinstance(spec[key], bool) or not isinstance(spec[key], int) or spec[key] < (
+                0 if key in ('min_successes', 'noise_successes') else 1):
             raise ValueError(f'task_eval.{key} must be a positive integer')
+    reference = spec.setdefault('reference_successes', None)
+    if reference is not None and (isinstance(reference, bool) or not isinstance(reference, int) or reference < 0):
+        raise ValueError('task_eval.reference_successes must be a nonnegative integer or null (unmeasured)')
     if spec.get('prompt_rendering') not in (None, 'full', 'program-header'):
         raise ValueError('task_eval.prompt_rendering must be full or program-header')
     return spec
@@ -113,15 +126,31 @@ class TaskEval:
             raise ValueError('task_eval.cases index past the packet end')
         self.rows = [rows[i] for i in spec['cases']]
         for row in self.rows:
-            contract = (row.get('curriculum') or {}).get('trajectory_contract') or {}
-            if contract.get('authored_root_eval') is not True:
-                raise ValueError(f'task_eval row lacks the authored_root_eval contract: {row.get("id")}')
+            if row.get('split') != 'test':
+                raise ValueError(f'task_eval row is not a held (test) row: {row.get("id")}')
         self.root = self.out / 'task-eval'
         self.root.mkdir(parents=True, exist_ok=True)
         self.subset = self.root / 'subset.jsonl'
         text = ''.join(json.dumps(row, sort_keys=True, ensure_ascii=False) + '\n' for row in self.rows)
         if not self.subset.exists() or self.subset.read_text(encoding='utf-8') != text:
             self.subset.write_text(text, encoding='utf-8')
+
+    def previous(self, step: int) -> dict | None:
+        """The stage's last eligible evaluation before ``step`` on the same packet and cases (None if none)."""
+        log = self.out / 'task-eval.jsonl'
+        if not log.is_file():
+            return None
+        found = None
+        for line in log.read_text().splitlines():
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (row.get('eligible') and row.get('step', step) < step and
+                    row.get('packet_sha256') == self.spec['packet']['sha256'] and
+                    row.get('case_indices') == self.spec['cases']):
+                found = row
+        return found
 
     def _queues(self, run: Path) -> list[tuple[Path, Path, list[dict]]]:
         workers = min(self.spec['workers'], len(self.rows))
@@ -145,18 +174,17 @@ class TaskEval:
             queues.append((queue, directory / 'journal.jsonl', entries))
         return queues
 
-    def run(self, step: int) -> dict:
+    def _execute(self, run: Path) -> tuple[dict, list[int]]:
+        """Serve the engine and run every subset task once into ``run``; the exact score and collector exit codes."""
         from ..serve.http import serve
         from .task_packet import read_jsonl, score_rows
 
-        run = self.root / f'step-{step:07d}'
         if run.exists():
             shutil.rmtree(run)  # a rerun of the same step (resume) replaces an interrupted attempt
         run.mkdir(parents=True)
         engine, hf = self.engine, getattr(self.engine.backbone, 'hf', None)
         was_training = bool(hf is not None and hf.training)
         previous_mode = engine.prompt_rendering
-        started = time.time()
         server = None
         try:
             if hf is not None:
@@ -204,34 +232,91 @@ class TaskEval:
                 keys[entry['index']] = f'{queue.parent.name}/{entry["key"]}'
                 if Path(entry['output']).is_file():
                     results.extend(read_jsonl(entry['output']))
-        score = score_rows(self.rows, results, finishes, keys)
+        return score_rows(self.rows, results, finishes, keys), codes
+
+    def measured_noise(self) -> int | None:
+        """The largest success-count difference between repeat runs of one model recorded in this stage's log."""
+        log = self.out / 'task-eval.jsonl'
+        values = []
+        if log.is_file():
+            for line in log.read_text().splitlines():
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if row.get('packet_sha256') == self.spec['packet']['sha256'] and row.get('repeat_noise') is not None:
+                    values.append(row['repeat_noise'])
+        return max(values) if values else None
+
+    def run(self, step: int) -> dict:
+        started = time.time()
+        run = self.root / f'step-{step:07d}'
+        score, codes = self._execute(run)
+        eligible = score['eligible_for_best'] and all(code == 0 for code in codes)
+        # Noise from repeat runs (coordinator 2026-10-12): the first evaluation of a stage runs the same model again
+        # (noise_repeats total runs); the spread of the success counts is this stage's measured noise.
+        repeats, repeat_noise = [], None
+        if eligible and self.measured_noise() is None and self.spec.get('noise_repeats', 2) > 1:
+            for index in range(1, self.spec.get('noise_repeats', 2)):
+                again, again_codes = self._execute(run.with_name(run.name + f'-repeat{index}'))
+                if again['eligible_for_best'] and all(code == 0 for code in again_codes):
+                    repeats.append(again['task_successes'])
+            if repeats:
+                counts = [score['task_successes'], *repeats]
+                repeat_noise = max(counts) - min(counts)
+        measured = repeat_noise if repeat_noise is not None else self.measured_noise()
+        noise = max(self.spec['noise_successes'], measured or 0)
+        previous = self.previous(step)
         summary = {'schema': SCHEMA, 'step': step, 'task_successes': score['task_successes'],
                    'cases': len(self.rows), 'task_success_rate': score['task_success_rate'],
                    'outcome_counts': score['outcome_counts'], 'complete': score['complete'],
-                   'eligible': score['eligible_for_best'] and all(code == 0 for code in codes),
+                   'eligible': eligible,
                    'collector_exit_codes': codes, 'prompt_rendering': self.prompt_rendering,
                    'packet_sha256': self.spec['packet']['sha256'], 'case_indices': self.spec['cases'],
                    'reference_successes': self.spec.get('reference_successes'),
-                   'min_successes': self.spec['min_successes'], 'code_commit': _git_head(),
+                   'min_successes': self.spec['min_successes'],
+                   'repeat_successes': repeats or None, 'repeat_noise': repeat_noise,
+                   'noise_successes': noise,
+                   'previous_step': previous.get('step') if previous else None,
+                   'previous_successes': previous.get('task_successes') if previous else None,
+                   'regressed': bool(previous) and score['task_successes'] < previous['task_successes'] - noise,
+                   'code_commit': _git_head(),
                    'seconds': time.time() - started, 'run': str(run)}
         (run / 'task-score.json').write_text(json.dumps({**summary, 'cases_detail': score['cases']}, indent=1) + '\n')
         with (self.out / 'task-eval.jsonl').open('a') as handle:
             handle.write(json.dumps(summary) + '\n')
         print(json.dumps({'event': 'task_eval', **{k: summary[k] for k in
-                          ('step', 'task_successes', 'cases', 'outcome_counts', 'eligible', 'seconds')}}), flush=True)
+                          ('step', 'task_successes', 'cases', 'outcome_counts', 'eligible', 'previous_successes',
+                           'repeat_noise', 'noise_successes', 'regressed', 'seconds')}}), flush=True)
         return summary
 
 
 def task_gate(summary: dict | None, spec: dict | None) -> dict | None:
-    """The qualification criterion on the final in-run task evaluation (None when no task eval is declared)."""
+    """The qualification criterion on the final in-run task evaluation (None when no task eval is declared):
+    eligible, at least the base (``reference_successes``) and ``min_successes``, and not below the previous eligible
+    evaluation minus ``noise_successes``."""
     if spec is None:
         return None
     if summary is None:
         return {'passed': False, 'reason': 'no final task evaluation', 'min_successes': spec['min_successes']}
-    passed = bool(summary.get('eligible')) and summary['task_successes'] >= spec['min_successes']
-    return {'passed': passed, 'task_successes': summary['task_successes'], 'cases': summary['cases'],
-            'min_successes': spec['min_successes'], 'reference_successes': spec.get('reference_successes'),
-            'eligible': summary.get('eligible'), 'step': summary.get('step')}
+    successes, reference = summary['task_successes'], spec.get('reference_successes')
+    reasons = []
+    if not summary.get('eligible'):
+        reasons.append('final task evaluation incomplete or with infrastructure errors')
+    if reference is None:
+        reasons.append('base reference_successes unmeasured for this line')
+    elif successes < reference:
+        reasons.append('below the base model')
+    if successes < spec['min_successes']:
+        reasons.append('below min_successes')
+    if summary.get('regressed'):
+        reasons.append('below the previous evaluation minus noise')
+    return {'passed': not reasons, 'reasons': reasons, 'task_successes': successes, 'cases': summary['cases'],
+            'reference_successes': reference, 'min_successes': spec['min_successes'],
+            'noise_successes': summary.get('noise_successes', spec['noise_successes']),
+            'previous_successes': summary.get('previous_successes'),
+            'previous_step': summary.get('previous_step'), 'eligible': summary.get('eligible'),
+            'step': summary.get('step')}
 
 
 def main(argv=None) -> int:

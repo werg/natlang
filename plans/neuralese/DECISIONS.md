@@ -1549,6 +1549,44 @@ Two different measurements were both reported as "base 0/48":
    The trained step-4000 LFM checkpoint (program-header) already solves 1 of its first 9 resolved tasks. Its
    dominant failure is repeating one identical failing eval at temperature 0 despite the error feedback.
 
+### Held task packet v2 and the relative pass bar (coordinator, 2026-10-12)
+
+The first cadence packet was too narrow to gate on: 48 tasks, all one shape (`decision_extract_chain`), four
+fixtures, with a pass bar of one success. It is replaced, for qualification and the cadence, by
+**`natlang-held-task-packet-v2-20261012`** (registered evaluation-only, `training/corpus-manifests/`;
+`runs/natlang-held-task-packet-v2-20261012/{cases.jsonl,provenance.json}`, cases SHA-256 `17772673...`).
+
+- **Content:** 64 natlang programs, 16 shapes x 4 tasks. The model executes the whole program; there is no authored
+  root. The shapes:
+  - `workbench_tickets`, `edit_stream`;
+  - `logic_entailment_exception`, `logic_proof_verifier`;
+  - `relational_multihop_qualifier`, `relational_late_argmax`, `relational_dynamic_snapshot`;
+  - `actor_route_replan`, `actor_greenhouse`;
+  - `iterate_schedule_repair`, `iterate_frontier`;
+  - `folder_criteria_reducer`, `composed_process`, `live_inventory`, `idempotent_retry`, `contract_diagnosis`.
+- **Generation:** generated with `ts-host/scripts/inline-curriculum/build.mjs --split test --no-hints` at seed 61012,
+  which no training build uses. Every case is verified by replaying its reference solution through the collector
+  execution path, so every scorer is the collector's exact host check (expected value, effects, files, world).
+- **Separation:** checked against the r2, r2-context-recovery, r3 and 4880/4962 foundation unions (every rendering,
+  both tokenizers):
+  - 0 of 566,234 union ids or source groups overlap.
+  - Each case's data strings were grepped exactly over the union texts. Shapes whose data items occur in training
+    were dropped: `claims_desk` (SciFact claims), `contract_desk` (ContractNLI clauses), `inline_review_each` and
+    `inline_structured_extract` (fixed pools), `stateful_dates`, `workbench_reviews`/`applicants`,
+    `relational_policy_inline`, `inline_multi_capture` and `inline_late_binding`.
+  - The remaining hits are shared shape-instruction templates.
+  - Pop runs the same check against its own unions (r4).
+- **Cadence subset:** 16 tasks, one per shape (shape k contributes its (k mod 4)-th task: rows 0, 5, 10, 15, 16, 21,
+  ..., 63).
+- **Relative pass bar** (`eval/task_cadence.task_gate`): the final evaluation must be eligible, at least the line's
+  base (`reference_successes`; unmeasured means the gate fails) and `min_successes`, and not below the stage's
+  previous eligible evaluation minus noise.
+- **Noise:** measured by repeat runs. The first evaluation of every stage runs the same model `noise_repeats` (2)
+  times, and the spread of its success counts is the measured noise. The bar uses the larger of the declared
+  `noise_successes` and the measured noise. Every evaluation records `regressed`; only the final one gates.
+- **Applications:** nldb, pi and the harness bench are not yet in `natlang.program` form with exact scorers. They join
+  as further shapes once adapted (v3), not as separate packets.
+
 Open (routed to Pop, who owns the LFM evaluator and data):
 
 - The held packet is one task shape (`decision_extract_chain`, four fixtures). The cadence subset inherits that

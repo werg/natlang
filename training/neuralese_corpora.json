@@ -1278,6 +1278,17 @@
       "consumable_by_direct_stage": false
     },
     {
+      "id": "natlang-held-task-packet-v2-20261012",
+      "owner": "dgx",
+      "path": "runs/natlang-held-task-packet-v2-20261012",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl",
+        "provenance.json"
+      ],
+      "note": "Held task-success packet v2 (coordinator 2026-10-12): 64 natlang programs over 16 generated shapes (4 each), split test, seed 61012 (used by no training build), every case reference-verified through the collector; executed for real by the in-run task evaluation (eval/task_cadence.py), scored host-exact. Source-group/id separation from r2/r3/foundation unions checked (0 overlap); shapes whose data items occur in training excluded (provenance.json). Supersedes the single-shape decision_extract_chain packet for qualification. Never a training source."
+    },
+    {
       "id": "static-lambda-heldout-20261005-v1",
       "owner": "pop",
       "path": "data/neuralese/corpora/static-lambda-heldout-20261005-v1",
