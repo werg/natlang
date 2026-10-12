@@ -508,6 +508,87 @@ Steps, in order. Each step needs the previous one.
 Policy (`placeJob.nl` step 2): moving the active lineage is the owner's decision, so this step needs the owner's go,
 and the coordinator briefs Pop.
 
-## 8. Measured on CoreWeave
+### What leaves DGX first (proposal, from the ledger on 2026-10-12 20:40Z)
 
-(pending: GPU smoke)
+The ledger at that moment:
+- **Running:** Mellum v4 (102 GB claim, 66 GB used), the s7 RL GRPO round, an LFM base dragnet with its eval, and one
+  e2e dragnet arm.
+- **Waiting (17 units):**
+  - three more e2e dragnet arms (12 GB each);
+  - e2e tests and perf-e2e (10–13 GB);
+  - the harness matrix, the specializer dry run (18 GB), s7 RL round 1, memetic author, the hardware agent's tests;
+  - data mining and assembly (low priority).
+- **Effect:** a 1 GB smoke waited more than an hour.
+
+Order, so that DGX memory pressure goes away:
+
+| Order | Workload | Why it goes early | Needs |
+| - | - | - | - |
+| 1 | e2e dragnet arms (frozen, adamw, head, muon…) | independent arms of 12 GB each: one sandbox per arm, many in parallel | the export and checkpoint they start from, union subsets, heads (API push); outputs collected |
+| 2 | task-success evals and base references (heldv2 Mellum, per-checkpoint evals, noise repeats) | read-only and verifiable against DGX numbers | model by HF URL, ts-host build in the sandbox |
+| 3 | s7 RL rounds (GRPO), memetic author and screens | small to medium GPU, long queue waits | the round's inputs; a teacher only where the round calls one (then step c's sandbox) |
+| 4 | perf-e2e, the harness matrix, the specializer dry run | batchable benchmark-style jobs | code plus small inputs |
+| 5 | teacher serving plus collection lanes (step c) | frees the 59–74 GB vLLM teacher on DGX | vLLM image, HF model, lane inputs |
+| 6 | Mellum v4 itself (step e) | the largest claim (102 GB); last, because it moves the active lineage | owner go, checkpoint upload (47 GB), incremental collect |
+
+What stays on DGX: tests (check-main), investigations, prototyping, data assembly that reads the local corpora, and
+the LFM lines' Pop-side work.
+
+## 8. Measured on CoreWeave (W&B auth, entity `werg`, project `natlang`; 2026-10-12)
+
+**Works:**
+- `Sandbox.list` and `cwsandbox ls`.
+- `snapshots list` (empty).
+- A GPU create is **accepted**, with no `CWSANDBOX_GPU_NOT_ALLOWED`, so the allowlist is not refused at create.
+
+**GPU sandboxes never start.** Two GPU smokes, created one at a time and 61 min apart:
+
+| Sandbox | Image | Timeline | Outcome |
+| - | - | - | - |
+| `8cdea0e6-bafa-4b7f-aca1-ba850c57c28a` | `nvcr.io/nvidia/pytorch:26.09-py3` | `creating` for 61 min | stopped by us; it then showed runner `sandbox-prod-us-east-15a`, container still `creating`, never started |
+| `2c207a7e-d710-4c5f-b0d2-b5178a0ec202` | `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime` (small) | `creating` for 33 min; the control plane then answered `UNAVAILABLE: the sandbox is being reconciled with its runner; retry shortly` | `failed` on runner `sandbox-prod-us-east-15a`; container never left `creating`; no return code |
+
+- The runtime class was `cw-kata-nvidia-gpu`.
+- US-EAST-15A is where the RTX PRO 6000 Standard Memory nodes are.
+
+**`project not found`.** With W&B auth, every call that touches the tenant's CoreWeave-side resources fails with
+"project not found":
+- reading the failed sandbox's logs (`Connect to sandbox data plane failed: project not found`);
+- `get_snapshot_bucket_config`;
+- `Volume.list`.
+
+It happens with or without `WANDB_PROJECT`/`WANDB_ENTITY`, and the W&B project `natlang` exists in entity `werg`.
+So the W&B-billed tenant appears not to be provisioned on the CoreWeave side (no backing project for the data plane,
+snapshots or volumes). That probably also explains why the sandboxes never started. This is for CoreWeave to fix:
+**the owner should send forge-support@coreweave.com the two sandbox ids, the runner, and the "project not found"
+error.**
+
+**Discovery:**
+- `list_runners`: "W&B auth is not allowed for this sandbox operation".
+- `get_runner` requires a CoreWeave `organization_id`.
+
+So runner discovery needs a CoreWeave org token. Nothing in the W&B path exposes it.
+
+**Default egress policy** (`effective_egress` of the sandbox): all public IPv4 (`0.0.0.0/0` minus the private,
+link-local and multicast ranges), so pip, npm, nodejs.org, Hugging Face and GitHub should be reachable. The
+in-sandbox probe has not run yet.
+
+**Open until a GPU sandbox runs:**
+- GPU model, memory, driver and CUDA (`nvidia-smi`);
+- whether exit 0 completes the sandbox;
+- measured egress;
+- start-up time.
+The smoke records all of these: `cwctl.py smoke --gpu`, then `--attach` for an existing one.
+
+**Storage and discovery within the W&B org, the options:**
+1. **File System Snapshots.** CoreWeave manages the bucket by default, so no bucket of ours is needed. This is the
+   W&B-org way to persist and fork a sandbox's directory, e.g. an "inputs" snapshot restored into many sandboxes, or
+   checkpoint suspend and resume. Blocked today by the same "project not found"; retest once support fixes the
+   tenant.
+2. **The sandbox file API** (`write_file_streaming` / `read_file_streaming`). Our `transport: api`. It needs the
+   data plane, so it is blocked by the same error today.
+3. **Public URLs** (HF), verified by sha256. Independent of the tenant.
+4. **W&B Artifacts.** DGX and Pop use the W&B key directly. Inside a sandbox the platform injects a W&B secret
+   (`Secret(store="wandb", name=…)`); the owner creates that secret in W&B, ideally a service-account key scoped to the
+   team, and we never copy a key. This is the W&B-native storage for outputs and checkpoints, and it works across all
+   machines.

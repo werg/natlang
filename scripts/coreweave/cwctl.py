@@ -309,7 +309,12 @@ def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, b
     if wait:
         # GPU sandboxes attach the GPU to a VM and pull the image (NGC PyTorch is ~20 GB): far beyond the client's
         # 300 s default. The first measured GPU start is in plans/COREWEAVE_SANDBOXES.md.
-        sandbox.wait(timeout=float(os.environ.get('NATLANG_CW_START_TIMEOUT', '5400')))
+        try:
+            sandbox.wait(timeout=float(os.environ.get('NATLANG_CW_START_TIMEOUT', '5400')))
+        except Exception as error:  # a transient poll failure must not lose the record of a created sandbox
+            entry['wait_error'] = f'{type(error).__name__}: {error}'
+            record({'event': 'wait_failed', 'sandbox_id': entry['sandbox_id'], 'error': entry['wait_error']})
+            return {**entry, 'cost': summary['cost']}
         entry['status'] = str(sandbox.status)
         entry['seconds_to_running'] = round(time.time() - created, 1)
         record({'event': 'running', 'sandbox_id': entry['sandbox_id'], 'seconds_to_running': entry['seconds_to_running']})
@@ -340,12 +345,17 @@ def place(job_path: Path, mode: str | None, model: str | None, write: bool) -> d
     return {'decision': served, 'needs': needs, 'fleet': fleet, 'crisp': item['crisp'], 'written': write}
 
 
-SMOKE_PROBES = ('echo "== nvidia-smi"; nvidia-smi; '
-                'echo "== egress"; for u in https://pypi.org/simple/boto3/ https://nodejs.org/dist/index.json '
-                'https://registry.npmjs.org/ https://huggingface.co https://github.com https://cwobject.com; do '
-                'printf "%s " "$u"; curl -s -o /dev/null -m 15 -w "%{http_code}\\n" "$u" || echo unreachable; done; '
-                'echo "== env"; env | grep -E "^(AWS_|CW_)" | sed "s/=.*/=<set>/"; '
-                'echo "== disk"; df -h /work; nproc; free -g; ')
+SMOKE_PROBES = ('echo "== nvidia-smi"; nvidia-smi; nvidia-smi --query-gpu=name,memory.total,driver_version,'
+                'compute_cap --format=csv; echo "== disk"; df -h /work; nproc; free -g; ')
+# Egress in Python (urllib), so the probe needs nothing beyond the image's python.
+SMOKE_EGRESS = ("import urllib.request as u\n"
+                "for url in ['https://pypi.org/simple/boto3/', 'https://nodejs.org/dist/index.json',\n"
+                "            'https://registry.npmjs.org/', 'https://huggingface.co', 'https://github.com',\n"
+                "            'https://cwobject.com', 'https://api.wandb.ai']:\n"
+                "    try:\n"
+                "        print('egress', url, u.urlopen(url, timeout=15).status)\n"
+                "    except Exception as e:\n"
+                "        print('egress', url, type(e).__name__, getattr(e, 'code', ''), str(e)[:80])\n")
 
 
 PUSH_CHUNK = 8 * 1024 * 1024
@@ -422,12 +432,12 @@ def collect(sandbox_id: str, scratch: str = '/work', mapping: list[tuple[str, st
     return entry
 
 
-def smoke_job(gpu: bool) -> dict:
-    command = (['sh', '-c', SMOKE_PROBES + 'python -c "$0"', SMOKE_CHECK] if gpu
+def smoke_job(gpu: bool, image: str | None = None) -> dict:
+    command = (['sh', '-c', SMOKE_PROBES + 'python -c "$0"; python -c "$1"', SMOKE_EGRESS, SMOKE_CHECK] if gpu
                else ['sh', '-c', 'uname -a; nproc; free -g; df -h /work'])
     return {'schema': jobs.SCHEMA, 'id': 'smoke-gpu' if gpu else 'smoke-cpu', 'kind': 'smoke',
             'placement': {'reason': 'bring-up smoke: credentials, placement, image pull, GPU visibility'},
-            'image': 'nvcr.io/nvidia/pytorch:26.09-py3' if gpu else 'python:3.11',
+            'image': image or ('nvcr.io/nvidia/pytorch:26.09-py3' if gpu else 'python:3.11'),
             'resources': {'cpu': '4', 'memory': '16Gi', 'gpu': 1} if gpu else {'cpu': '1', 'memory': '2Gi'},
             'lifetime_hours': 2, 'scratch': {'path': '/work', 'size': '20Gi'},
             'env': {'NATLANG_CW_IMAGE_READY': '1'}, 'command': command}
@@ -449,26 +459,54 @@ def doctor() -> dict:
     return facts
 
 
-def check_smoke(sandbox_id: str, gpu: bool, timeout: float = 5400) -> dict:
-    """Wait for the smoke to complete and check its log; a passed GPU smoke is what makes CoreWeave "ready"."""
+def read_sandbox(sandbox_id: str, patience: float = 900):
+    """Sandbox.from_id, retrying transient control-plane answers ("being reconciled with its runner", deadline
+    exceeded) every 30 s for up to ``patience`` seconds. Reads only; creates never retry here."""
     from cwsandbox import Sandbox
-    sandbox = Sandbox.from_id(sandbox_id, auth=sdk_auth()).result()
+    deadline = time.time() + patience
+    while True:
+        try:
+            return Sandbox.from_id(sandbox_id, auth=sdk_auth()).result()
+        except Exception as error:
+            transient = type(error).__name__ in ('SandboxUnavailableError', 'SandboxRequestTimeoutError')
+            if not transient or time.time() > deadline:
+                raise
+            time.sleep(30)
+
+
+TERMINAL = ('completed', 'failed', 'terminated')
+
+
+def check_smoke(sandbox_id: str, gpu: bool, timeout: float = 5400) -> dict:
+    """Poll the smoke until it ends, then check its log; a passed GPU smoke is what makes CoreWeave "ready".
+
+    Records each status change with its time, which is the start-up measurement (creating -> running)."""
     started = time.time()
+    last = None
+    transitions = []
+    while True:
+        sandbox = read_sandbox(sandbox_id)
+        status = str(getattr(sandbox.status, 'value', sandbox.status))
+        if status != last:
+            transitions.append({'status': status, 'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                                'runner_id': sandbox.runner_id})
+            record({'event': 'status', 'sandbox_id': sandbox_id, **transitions[-1]})
+            last = status
+        if status in TERMINAL or time.time() - started > timeout:
+            break
+        time.sleep(30)
+    completed = status in TERMINAL
     try:
-        sandbox.wait_until_complete(timeout, raise_on_termination=False).result()
-        completed = True
-    except Exception as error:  # still running at the timeout: the container may be restarting
-        completed, sandbox_error = False, f'{type(error).__name__}: {error}'
-    text = ''.join(sandbox.stream_logs())
+        text = ''.join(sandbox.stream_logs())
+    except Exception as error:
+        text = f'(logs unavailable: {type(error).__name__}: {error})'
     ok = ('sm_120' in text and '"status":0' in text) if gpu else '"status":0' in text
     result = {'event': 'gpu_smoke_ok' if gpu and ok else 'smoke_ok' if ok else 'smoke_failed',
-              'sandbox_id': sandbox_id, 'completed': completed, 'status': str(sandbox.status),
-              'seconds_waiting_for_completion': round(time.time() - started, 1),
+              'sandbox_id': sandbox_id, 'completed': completed, 'status': status, 'transitions': transitions,
               'bootstrap_starts': text.count('"bootstrap":"start"'), 'log': text[-12000:]}
     if not completed:
-        result['error'] = sandbox_error
         sandbox.stop(graceful_shutdown_seconds=10, missing_ok=True).result()
-        record({'event': 'stop', 'args': [sandbox_id], 'why': 'smoke did not complete'})
+        record({'event': 'stop', 'args': [sandbox_id], 'why': 'smoke did not complete within its timeout'})
     record({k: v for k, v in result.items() if k != 'log'})
     return result
 
@@ -529,6 +567,8 @@ def main(argv=None) -> int:
     p.add_argument('--gpu', action='store_true')
     p.add_argument('--dry-run', action='store_true')
     p.add_argument('--attach', metavar='SANDBOX_ID', help='check an already launched smoke instead of creating one')
+    p.add_argument('--image', help='image for the smoke (default NGC pytorch 26.09; a smaller one separates image pull '
+                   'time from placement)')
     p = sub.add_parser('collect', help='pull and verify a file-API job\'s outputs, then release its sandbox')
     p.add_argument('sandbox_id')
     p.add_argument('--scratch', default='/work')
@@ -550,7 +590,7 @@ def main(argv=None) -> int:
     elif args.command == 'smoke' and args.attach:
         print(json.dumps(check_smoke(args.attach, args.gpu), indent=1))
     elif args.command == 'smoke':
-        result = launch(jobs.validate(smoke_job(args.gpu)), args.dry_run, not args.dry_run, None)
+        result = launch(jobs.validate(smoke_job(args.gpu, args.image)), args.dry_run, not args.dry_run, None)
         print(json.dumps(result, indent=1))
         if not args.dry_run:
             print(json.dumps(check_smoke(result['sandbox_id'], args.gpu), indent=1))
