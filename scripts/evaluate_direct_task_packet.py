@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -196,7 +197,8 @@ def export_in_container(checkpoint: Path, artifact: Path, base_snapshot: Path,
     container_name = "natlang-direct-task-export-" + hashlib.sha256(
         f"{checkpoint.resolve()}:{artifact.resolve()}".encode()).hexdigest()[:12]
     command = [
-        "docker", "run", "--name", container_name, "--pull=never", "--network", "none", "--read-only",
+        "docker", "run", "--name", container_name, "--label", "org.natlang.direct-task-evaluation=held48",
+        "--pull=never", "--network", "none", "--read-only",
         "--tmpfs", "/tmp:rw,nosuid,nodev,size=1g", "--memory=4g", "--memory-swap=4g", "--cpus=2",
         "--user", f"{os.getuid()}:{os.getgid()}",
         "-e", "CUDA_VISIBLE_DEVICES=", "-e", "HOME=/tmp",
@@ -447,7 +449,8 @@ def run_candidate(args: argparse.Namespace) -> dict:
     port = free_port()
     server_name = "natlang-direct-task-eval-" + hashlib.sha256(str(run_dir).encode()).hexdigest()[:12]
     server = [
-        "docker", "run", "-d", "--name", server_name, "--network", "host",
+        "docker", "run", "-d", "--name", server_name, "--label", "org.natlang.direct-task-evaluation=held48",
+        "--network", "host",
         f"--memory={server_memory_gib}g", f"--memory-swap={server_memory_gib}g", "--cpus=2",
         "--user", f"{os.getuid()}:{os.getgid()}",
         "-e", "CUDA_VISIBLE_DEVICES=", "-e", "HOME=/tmp",
@@ -460,8 +463,8 @@ def run_candidate(args: argparse.Namespace) -> dict:
         "--direct-artifact", str(artifact), "--direct-base-snapshot", str(base_snapshot),
         "--device", "cpu", "--dtype", serving_dtype, "--threads", "2", "--port", str(port),
     ]
-    subprocess.run(server, check=True, text=True, capture_output=True)
     try:
+        subprocess.run(server, check=True, text=True, capture_output=True)
         wait_server(server_name, port)
         report = run_reviewed_queue(plan, packet, runtime, run_dir, server_name, port)
         runner_code = report["collector_exit_code"]
@@ -544,7 +547,8 @@ def run_base(args: argparse.Namespace) -> dict:
     port = free_port()
     server_name = "natlang-direct-task-base-" + hashlib.sha256(str(run_dir).encode()).hexdigest()[:12]
     command = [
-        "docker", "run", "-d", "--name", server_name, "--network", "host",
+        "docker", "run", "-d", "--name", server_name, "--label", "org.natlang.direct-task-evaluation=held48",
+        "--network", "host",
         f"--memory={server_memory_gib}g", f"--memory-swap={server_memory_gib}g", "--cpus=2",
         "--user", f"{os.getuid()}:{os.getgid()}",
         "-e", "CUDA_VISIBLE_DEVICES=", "-e", "HOME=/tmp",
@@ -557,8 +561,8 @@ def run_base(args: argparse.Namespace) -> dict:
         "--base", str(base_snapshot), "--device", "cpu", "--dtype", serving_dtype,
         "--threads", "2", "--port", str(port),
     ]
-    subprocess.run(command, check=True, text=True, capture_output=True)
     try:
+        subprocess.run(command, check=True, text=True, capture_output=True)
         wait_server(server_name, port)
         report = run_reviewed_queue(plan, packet, runtime, run_dir, server_name, port)
         report.update({
@@ -796,6 +800,11 @@ def watch_phases(args: argparse.Namespace) -> dict:
 
 
 def main() -> None:
+    def clean_exit(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, clean_exit)
+    signal.signal(signal.SIGINT, clean_exit)
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     candidate = sub.add_parser("evaluate-checkpoint", help="evaluate a strict direct-SFT checkpoint")
