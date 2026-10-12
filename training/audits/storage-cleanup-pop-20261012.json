@@ -1,0 +1,2819 @@
+{
+  "schema": "natlang.storage-cleanup/1",
+  "machine": "pop",
+  "date": "2026-10-12",
+  "authority": "Owner storage cleanup request and AGENTS.md standing storage order.",
+  "deleted_paths": 281,
+  "allocated_bytes_at_paths_before_deletion": 33558700032,
+  "allocation_note": "May include shared hardlinks; free-space change includes concurrent jobs.",
+  "initial_available_gib_rounded": {
+    "main": 27,
+    "extended": 24
+  },
+  "current_filesystems": {
+    "/": {
+      "total_bytes": 871603957760,
+      "used_bytes": 805270540288,
+      "free_bytes": 57449967616
+    },
+    "/srv/storage": {
+      "total_bytes": 99523825664,
+      "used_bytes": 71052353536,
+      "free_bytes": 27437494272
+    }
+  },
+  "deleted": [
+    {
+      "path": "/home/werg/natlang/runs/qwen-prompt-review-20261002/runtime-v32/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1976977,
+      "deleted_at": 1791818161.924545
+    },
+    {
+      "path": "/home/werg/natlang/runs/collector-resource-classification-20261007-v1/runtime/dist/browser",
+      "bytes": 110592,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791368002804314737,
+      "dev": 66311,
+      "ino": 4328752,
+      "deleted_at": 1791818161.9256604
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v6-0d19c05e/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791125527361726817,
+      "dev": 66311,
+      "ino": 5388999,
+      "deleted_at": 1791818161.9289482
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-source-cards-20261006-v20/runtime/dist/browser",
+      "bytes": 106496,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791315134655532592,
+      "dev": 66311,
+      "ino": 2918275,
+      "deleted_at": 1791818161.9310381
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-source-cards-20261006-v21/runtime/dist/browser",
+      "bytes": 106496,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791315134655532592,
+      "dev": 66311,
+      "ino": 2925108,
+      "deleted_at": 1791818161.9322011
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-source-cards-20261006-v22/runtime/dist/browser",
+      "bytes": 106496,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791317284861500894,
+      "dev": 66311,
+      "ino": 2926720,
+      "deleted_at": 1791818161.9331977
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v37-closed-candidate/node_modules",
+      "bytes": 266690560,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949316848585825,
+      "dev": 66311,
+      "ino": 2126558,
+      "deleted_at": 1791818162.193327
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v37-closed-candidate/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 2117114,
+      "deleted_at": 1791818162.194737
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v37-closed-candidate/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949252842656012,
+      "dev": 66311,
+      "ino": 2117793,
+      "deleted_at": 1791818162.2924461
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-v84-text-marker-v2-prompt-guidance-20261007/runtime/dist/browser",
+      "bytes": 110592,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791400941215385229,
+      "dev": 66311,
+      "ino": 5672845,
+      "deleted_at": 1791818162.2937136
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/opencode-step5-preview-free-20261008-v1/runtime/dist/browser",
+      "bytes": 110592,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791489036960421737,
+      "dev": 66307,
+      "ino": 4873763,
+      "deleted_at": 1791818162.2951388
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/opencode-step5-preview-free-20261008-v1/runtime-v2/dist/browser",
+      "bytes": 110592,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791490419589540731,
+      "dev": 66307,
+      "ino": 4870323,
+      "deleted_at": 1791818162.2960432
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/opencode-step5-preview-free-20261008-v1/runtime-v3/dist/browser",
+      "bytes": 110592,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791492256731043335,
+      "dev": 66307,
+      "ino": 4756678,
+      "deleted_at": 1791818162.2967854
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/opencode-step5-preview-free-20261008-v1/runtime-v4-request-retry/dist/browser",
+      "bytes": 139264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791504438719295362,
+      "dev": 66307,
+      "ino": 4872684,
+      "deleted_at": 1791818162.2973852
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/runtime-current/dist/browser",
+      "bytes": 139264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791565524015854805,
+      "dev": 66311,
+      "ino": 7233052,
+      "deleted_at": 1791818162.298576
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-counterfactual-next-five-v26-v24-v25-20261009-v1/source-v3/runtime-current-6f778ada-v1/dist/browser",
+      "bytes": 139264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791567519104304021,
+      "dev": 66311,
+      "ino": 7234359,
+      "deleted_at": 1791818162.2996964
+    },
+    {
+      "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/runtime/dist/browser",
+      "bytes": 139264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791577576247116795,
+      "dev": 66311,
+      "ino": 7239014,
+      "deleted_at": 1791818162.3005884
+    },
+    {
+      "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/runtime-gemini-signature-v3/dist/browser",
+      "bytes": 139264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791578663881599017,
+      "dev": 66311,
+      "ino": 7241614,
+      "deleted_at": 1791818162.301626
+    },
+    {
+      "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/runtime-gemini-signature-v4/dist/browser",
+      "bytes": 139264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791578787589429956,
+      "dev": 66311,
+      "ino": 7242928,
+      "deleted_at": 1791818162.3023658
+    },
+    {
+      "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/runtime-small-teachers-v5/dist/browser",
+      "bytes": 139264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791579935380063170,
+      "dev": 66311,
+      "ino": 7244448,
+      "deleted_at": 1791818162.3031554
+    },
+    {
+      "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/runtime-small-teachers-v6/dist/browser",
+      "bytes": 188416,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791599644571062157,
+      "dev": 66311,
+      "ino": 7251204,
+      "deleted_at": 1791818162.304261
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v10/node_modules",
+      "bytes": 208896,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791614744898094883,
+      "dev": 66307,
+      "ino": 5123541,
+      "deleted_at": 1791818162.3249564
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v11/node_modules",
+      "bytes": 208896,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791617027025840940,
+      "dev": 66307,
+      "ino": 5125575,
+      "deleted_at": 1791818162.3341858
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v38-arm64-closed-candidate-r2/node_modules",
+      "bytes": 288456704,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790964878005556547,
+      "dev": 66311,
+      "ino": 2107210,
+      "deleted_at": 1791818162.6180544
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v38-arm64-closed-candidate-r2/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 2108930,
+      "deleted_at": 1791818162.6190956
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v38-arm64-closed-candidate-r2/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 2108949,
+      "deleted_at": 1791818162.7487864
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17/node_modules",
+      "bytes": 208896,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791700036407891449,
+      "dev": 66307,
+      "ino": 153133,
+      "deleted_at": 1791818162.7590902
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v17/dist/browser",
+      "bytes": 180224,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791700035669892399,
+      "dev": 66307,
+      "ino": 152096,
+      "deleted_at": 1791818162.7602105
+    },
+    {
+      "path": "/home/werg/natlang/runs/code-curriculum-v1/runtime-host/dist/browser",
+      "bytes": 34988032,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790121765737898975,
+      "dev": 66311,
+      "ino": 4491741,
+      "deleted_at": 1791818162.7653935
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v2/dist/browser",
+      "bytes": 60968960,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790592565300325710,
+      "dev": 66311,
+      "ino": 2763642,
+      "deleted_at": 1791818162.770936
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v3/dist/browser",
+      "bytes": 60968960,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790592692360312077,
+      "dev": 66311,
+      "ino": 2770831,
+      "deleted_at": 1791818162.7747762
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime/dist/browser",
+      "bytes": 60997632,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790590294313704142,
+      "dev": 66311,
+      "ino": 1314070,
+      "deleted_at": 1791818162.7837033
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v4/dist/browser",
+      "bytes": 60985344,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790593728850913426,
+      "dev": 66311,
+      "ino": 917884,
+      "deleted_at": 1791818162.788765
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v5/dist/browser",
+      "bytes": 60973056,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790596929915294663,
+      "dev": 66311,
+      "ino": 918557,
+      "deleted_at": 1791818162.7935863
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v6/dist/browser",
+      "bytes": 60993536,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790598892696879582,
+      "dev": 66311,
+      "ino": 919087,
+      "deleted_at": 1791818162.8001575
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v7/dist/browser",
+      "bytes": 60993536,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790598986267719095,
+      "dev": 66311,
+      "ino": 919577,
+      "deleted_at": 1791818162.805778
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v8/dist/browser",
+      "bytes": 61005824,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790603650109365204,
+      "dev": 66311,
+      "ino": 920672,
+      "deleted_at": 1791818162.811795
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v9/dist/browser",
+      "bytes": 61009920,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790604246933179171,
+      "dev": 66311,
+      "ino": 921180,
+      "deleted_at": 1791818162.8166547
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v10/dist/browser",
+      "bytes": 60997632,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790607356537222117,
+      "dev": 66311,
+      "ino": 922893,
+      "deleted_at": 1791818162.8215563
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v28/dist/browser",
+      "bytes": 61018112,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790664666138549909,
+      "dev": 66311,
+      "ino": 927772,
+      "deleted_at": 1791818162.832479
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v29/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790665394082160735,
+      "dev": 66311,
+      "ino": 928346,
+      "deleted_at": 1791818162.8409147
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v30/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666133240582551,
+      "dev": 66311,
+      "ino": 927473,
+      "deleted_at": 1791818162.8476007
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v31/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 927501,
+      "deleted_at": 1791818162.8557782
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v35/dist/browser",
+      "bytes": 61005824,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 926306,
+      "deleted_at": 1791818162.8633637
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v32/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 929885,
+      "deleted_at": 1791818162.872925
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v33/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 931429,
+      "deleted_at": 1791818162.8825696
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v34/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 1313445,
+      "deleted_at": 1791818162.8903365
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v36/dist/browser",
+      "bytes": 61018112,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 947904,
+      "deleted_at": 1791818162.8971484
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v38/dist/browser",
+      "bytes": 61009920,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 1191047,
+      "deleted_at": 1791818162.9036474
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v37/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 950951,
+      "deleted_at": 1791818162.9105432
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v39/dist/browser",
+      "bytes": 61014016,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 1192166,
+      "deleted_at": 1791818162.915393
+    },
+    {
+      "path": "/home/werg/natlang/runs/workflowevals-20260929/runtime/dist/browser",
+      "bytes": 61014016,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 1192854,
+      "deleted_at": 1791818162.921137
+    },
+    {
+      "path": "/home/werg/natlang/runs/workflowevals-20260929/runtime-v2/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 1193445,
+      "deleted_at": 1791818162.929056
+    },
+    {
+      "path": "/home/werg/natlang/runs/workflowevals-visible-20260930/runtime-v3/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1181585,
+      "deleted_at": 1791818162.9334724
+    },
+    {
+      "path": "/home/werg/natlang/runs/workflowevals-visible-20260930/runtime-v4/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1184200,
+      "deleted_at": 1791818162.9379957
+    },
+    {
+      "path": "/home/werg/natlang/runs/file-content-oracle-20260930/runtime-v1/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1185078,
+      "deleted_at": 1791818162.9416049
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v1/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1186047,
+      "deleted_at": 1791818162.9454615
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v2/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1194673,
+      "deleted_at": 1791818162.9484067
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v3/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1195419,
+      "deleted_at": 1791818162.9509933
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v4/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1196354,
+      "deleted_at": 1791818162.9539008
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v5/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1197641,
+      "deleted_at": 1791818162.9567232
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v6/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1198388,
+      "deleted_at": 1791818162.959179
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v7/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1200014,
+      "deleted_at": 1791818162.961459
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v8/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1200741,
+      "deleted_at": 1791818162.9646769
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v9/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1202398,
+      "deleted_at": 1791818162.9675007
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v10/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1203378,
+      "deleted_at": 1791818162.9698853
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v11/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1204411,
+      "deleted_at": 1791818162.9725363
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v12/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1206111,
+      "deleted_at": 1791818162.975061
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v13/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1206940,
+      "deleted_at": 1791818162.9786618
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v14/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1207736,
+      "deleted_at": 1791818162.9809499
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v15/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1208840,
+      "deleted_at": 1791818162.9833665
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v16/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1209649,
+      "deleted_at": 1791818162.9857569
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v17/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1210477,
+      "deleted_at": 1791818162.9879053
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v18/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1212302,
+      "deleted_at": 1791818162.9912913
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v19/dist/browser",
+      "bytes": 61038592,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1215258,
+      "deleted_at": 1791818162.9981651
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v21/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1319502,
+      "deleted_at": 1791818163.004167
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v22/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1321708,
+      "deleted_at": 1791818163.0077255
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v20/dist/browser",
+      "bytes": 61054976,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1217627,
+      "deleted_at": 1791818163.014166
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v23-precycle/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1336636,
+      "deleted_at": 1791818163.017434
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v23-unfinished-cycle/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1445706,
+      "deleted_at": 1791818163.021048
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v23/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1722578,
+      "deleted_at": 1791818163.0247009
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260930-hourly/runtime-v24/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1324899,
+      "deleted_at": 1791818163.028459
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-next-20261002/runtime-v28/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1858085,
+      "deleted_at": 1791818163.0324917
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-20261001/runtime-v25/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1842856,
+      "deleted_at": 1791818163.0356936
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-generation-20261001/runtime-v26/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1845620,
+      "deleted_at": 1791818163.0395882
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-generation-20261001/runtime-v27/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1848467,
+      "deleted_at": 1791818163.0426624
+    },
+    {
+      "path": "/home/werg/natlang/runs/horizon-prompt-review-20261002/runtime-v29/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1877245,
+      "deleted_at": 1791818163.0451906
+    },
+    {
+      "path": "/home/werg/natlang/runs/qwen-prompt-review-20261002/runtime-v30/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1969830,
+      "deleted_at": 1791818163.0495443
+    },
+    {
+      "path": "/home/werg/natlang/runs/qwen-prompt-review-20261002/runtime-v31/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1976087,
+      "deleted_at": 1791818163.0553758
+    },
+    {
+      "path": "/home/werg/natlang/runs/qwen-prompt-review-20261002/runtime-v33/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1997419,
+      "deleted_at": 1791818163.0579653
+    },
+    {
+      "path": "/home/werg/natlang/runs/qwen-prompt-review-20261002/runtime-v35-spacebunny-recovery/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 2005360,
+      "deleted_at": 1791818163.0610058
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v36-spacebunny-recovery/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 2115610,
+      "deleted_at": 1791818163.0643282
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v13/dist/browser",
+      "bytes": 82169856,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 925357,
+      "deleted_at": 1791818163.071023
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v11/dist/browser",
+      "bytes": 82173952,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 924277,
+      "deleted_at": 1791818163.0770571
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v12/dist/browser",
+      "bytes": 82178048,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 924808,
+      "deleted_at": 1791818163.0814648
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v1/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791233241975318185,
+      "dev": 66311,
+      "ino": 2787252,
+      "deleted_at": 1791818163.0861015
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v3/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791277507922760226,
+      "dev": 66311,
+      "ino": 2788919,
+      "deleted_at": 1791818163.0894928
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v4/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791280025591097838,
+      "dev": 66311,
+      "ino": 2790974,
+      "deleted_at": 1791818163.0929139
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v7/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791283350610645490,
+      "dev": 66311,
+      "ino": 2790799,
+      "deleted_at": 1791818163.0970035
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v8/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791284759088262859,
+      "dev": 66311,
+      "ino": 2793560,
+      "deleted_at": 1791818163.1008558
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v10/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791287309720450704,
+      "dev": 66311,
+      "ino": 2885532,
+      "deleted_at": 1791818163.1060045
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v11/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791295753371784804,
+      "dev": 66311,
+      "ino": 2888323,
+      "deleted_at": 1791818163.1099057
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v12/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791295753371784804,
+      "dev": 66311,
+      "ino": 2889999,
+      "deleted_at": 1791818163.11251
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v12/runtime-current/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791297005080370201,
+      "dev": 66311,
+      "ino": 2891207,
+      "deleted_at": 1791818163.114844
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v13/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791297005080370201,
+      "dev": 66311,
+      "ino": 2895358,
+      "deleted_at": 1791818163.117517
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v9/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791285453622032556,
+      "dev": 66311,
+      "ino": 2793452,
+      "deleted_at": 1791818163.1200526
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v14/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791299513622032734,
+      "dev": 66311,
+      "ino": 2903831,
+      "deleted_at": 1791818163.1236012
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v15/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791301192878282557,
+      "dev": 66311,
+      "ino": 2906590,
+      "deleted_at": 1791818163.1279886
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v16/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791304517720995727,
+      "dev": 66311,
+      "ino": 2909348,
+      "deleted_at": 1791818163.1331363
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v17/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791310720613179575,
+      "dev": 66311,
+      "ino": 2912057,
+      "deleted_at": 1791818163.1356883
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-lambdas-20261006-v19/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791313089808143571,
+      "dev": 66311,
+      "ino": 2914421,
+      "deleted_at": 1791818163.1394293
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-source-cards-20261007-v24/runtime/dist/browser",
+      "bytes": 81035264,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791325757048419491,
+      "dev": 66311,
+      "ino": 6853699,
+      "deleted_at": 1791818163.14288
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-v27-case8-cow-replay-exact-v1/runtime/dist/browser",
+      "bytes": 81055744,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791325757048419491,
+      "dev": 66311,
+      "ino": 6598705,
+      "deleted_at": 1791818163.1507807
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-v27-case8-cowfix-diagnostic/runtime/dist/browser",
+      "bytes": 81047552,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791325757048419491,
+      "dev": 66311,
+      "ino": 6596237,
+      "deleted_at": 1791818163.1585875
+    },
+    {
+      "path": "/home/werg/natlang/runs/neuralese-v12-candidate-integrity-incident-20261007-v1/recovery-work/runtime-aacebf22/dist/browser",
+      "bytes": 81051648,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791343191845322051,
+      "dev": 66311,
+      "ino": 4326313,
+      "deleted_at": 1791818163.162363
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v14/dist/browser",
+      "bytes": 92762112,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 925982,
+      "deleted_at": 1791818163.1677222
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v16/dist/browser",
+      "bytes": 92762112,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 926247,
+      "deleted_at": 1791818163.1736171
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v15/dist/browser",
+      "bytes": 92770304,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 946296,
+      "deleted_at": 1791818163.1806977
+    },
+    {
+      "path": "/home/werg/natlang/runs/optimizer-training-slate-v1/runtime-host/dist/browser",
+      "bytes": 93007872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790891623368216069,
+      "dev": 66311,
+      "ino": 1986298,
+      "deleted_at": 1791818163.1848042
+    },
+    {
+      "path": "/home/werg/natlang/runs/optimizer-training-slate-v1/runtime-host-v2/dist/browser",
+      "bytes": 93007872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790891623368216069,
+      "dev": 66311,
+      "ino": 1988075,
+      "deleted_at": 1791818163.1874194
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v17/dist/browser",
+      "bytes": 103350272,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 940844,
+      "deleted_at": 1791818163.195044
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v19/dist/browser",
+      "bytes": 103354368,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 945663,
+      "deleted_at": 1791818163.2019875
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v18/dist/browser",
+      "bytes": 103358464,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 944928,
+      "deleted_at": 1791818163.2127032
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v20/dist/browser",
+      "bytes": 103350272,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 946627,
+      "deleted_at": 1791818163.220486
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v12/node_modules",
+      "bytes": 208896,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791621496734550303,
+      "dev": 66307,
+      "ino": 5127664,
+      "deleted_at": 1791818163.2310896
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v13/node_modules",
+      "bytes": 208896,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791630335187727297,
+      "dev": 66307,
+      "ino": 1685,
+      "deleted_at": 1791818163.2420034
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v24/dist/browser",
+      "bytes": 113909760,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 1219905,
+      "deleted_at": 1791818163.250701
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v21/dist/browser",
+      "bytes": 113942528,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 947454,
+      "deleted_at": 1791818163.2585785
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v22/dist/browser",
+      "bytes": 113946624,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 949822,
+      "deleted_at": 1791818163.2671592
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v23/dist/browser",
+      "bytes": 113942528,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 950436,
+      "deleted_at": 1791818163.2751358
+    },
+    {
+      "path": "/home/werg/natlang/runs/runtime-building-forrmmsa/dist/browser",
+      "bytes": 110592,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791400741302637902,
+      "dev": 66311,
+      "ino": 5670581,
+      "deleted_at": 1791818163.275986
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v25/dist/browser",
+      "bytes": 124518400,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 951590,
+      "deleted_at": 1791818163.2825122
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v26/dist/browser",
+      "bytes": 124526592,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 1186574,
+      "deleted_at": 1791818163.2910016
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v27/dist/browser",
+      "bytes": 135122944,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790611372646775212,
+      "dev": 66311,
+      "ino": 926960,
+      "deleted_at": 1791818163.2991335
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v37-arm64-closed-candidate-r3/node_modules",
+      "bytes": 288460800,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949617332256329,
+      "dev": 66311,
+      "ino": 2264106,
+      "deleted_at": 1791818163.7085762
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v37-arm64-closed-candidate-r3/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 2239159,
+      "deleted_at": 1791818163.7102003
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v37-arm64-closed-candidate-r3/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 2245569,
+      "deleted_at": 1791818163.8683264
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v40-x64-current-candidate-r2/node_modules",
+      "bytes": 288468992,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 3168065,
+      "deleted_at": 1791818164.2334096
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v40-x64-current-candidate-r2/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791010304340931295,
+      "dev": 66311,
+      "ino": 3186651,
+      "deleted_at": 1791818164.2337646
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v40-x64-current-candidate-r2/toolchain/extracted",
+      "bytes": 127307776,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992991896345649,
+      "dev": 66311,
+      "ino": 3187250,
+      "deleted_at": 1791818164.2345612
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v40-x64-current-candidate-r1/node_modules",
+      "bytes": 288468992,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 3146077,
+      "deleted_at": 1791818164.6314185
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v40-x64-current-candidate-r1/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791010304340931295,
+      "dev": 66311,
+      "ino": 3165321,
+      "deleted_at": 1791818164.632064
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v40-x64-current-candidate-r1/toolchain/extracted",
+      "bytes": 127311872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992991896345649,
+      "dev": 66311,
+      "ino": 3165967,
+      "deleted_at": 1791818164.6330128
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-x64-candidate-r1/node_modules",
+      "bytes": 288473088,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 3418628,
+      "deleted_at": 1791818165.0456815
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-x64-candidate-r1/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791014659010774877,
+      "dev": 66311,
+      "ino": 3436014,
+      "deleted_at": 1791818165.0460825
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-x64-candidate-r1/toolchain/extracted",
+      "bytes": 127311872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992991896345649,
+      "dev": 66311,
+      "ino": 3436384,
+      "deleted_at": 1791818165.0471127
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261004/runtime-v42-x64-candidate-r1/node_modules",
+      "bytes": 288550912,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 3827075,
+      "deleted_at": 1791818165.4170876
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261004/runtime-v42-x64-candidate-r1/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791014659010774877,
+      "dev": 66311,
+      "ino": 3844444,
+      "deleted_at": 1791818165.4180093
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261004/runtime-v42-x64-candidate-r1/toolchain/extracted",
+      "bytes": 127311872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992991896345649,
+      "dev": 66311,
+      "ino": 3845043,
+      "deleted_at": 1791818165.42483
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v42-x64-student-recovery-r1/node_modules",
+      "bytes": 288468992,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 5410737,
+      "deleted_at": 1791818165.8205826
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v42-x64-student-recovery-r1/dist/browser",
+      "bytes": 73183232,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791148037005083787,
+      "dev": 66311,
+      "ino": 5519468,
+      "deleted_at": 1791818165.823128
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v42-x64-student-recovery-r1/toolchain/extracted",
+      "bytes": 127311872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992991896345649,
+      "dev": 66311,
+      "ino": 5520022,
+      "deleted_at": 1791818165.8244762
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v43-x64-student-skills-r1/node_modules",
+      "bytes": 288473088,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 5520942,
+      "deleted_at": 1791818166.1812854
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v43-x64-student-skills-r1/dist/browser",
+      "bytes": 73183232,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791148884716473609,
+      "dev": 66311,
+      "ino": 5537801,
+      "deleted_at": 1791818166.18481
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v43-x64-student-skills-r1/toolchain/extracted",
+      "bytes": 127311872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992991896345649,
+      "dev": 66311,
+      "ino": 5538543,
+      "deleted_at": 1791818166.1860545
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v44-x64-student-skills-r2/node_modules",
+      "bytes": 288468992,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 5901327,
+      "deleted_at": 1791818166.5962045
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v44-x64-student-skills-r2/dist/browser",
+      "bytes": 73183232,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791148884716473609,
+      "dev": 66311,
+      "ino": 5919412,
+      "deleted_at": 1791818166.5990713
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v44-x64-student-skills-r2/toolchain/extracted",
+      "bytes": 127311872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992991896345649,
+      "dev": 66311,
+      "ino": 5920154,
+      "deleted_at": 1791818166.599984
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v45-x64-student-skill-application-r1/node_modules",
+      "bytes": 289538048,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 5898509,
+      "deleted_at": 1791818166.997844
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v45-x64-student-skill-application-r1/dist/browser",
+      "bytes": 73195520,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791159843230788236,
+      "dev": 66311,
+      "ino": 5937161,
+      "deleted_at": 1791818167.0000591
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v45-x64-student-skill-application-r1/toolchain/extracted",
+      "bytes": 127311872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992991896345649,
+      "dev": 66311,
+      "ino": 5937903,
+      "deleted_at": 1791818167.001586
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v46-x64-skill-selection-controls-r1/node_modules",
+      "bytes": 289538048,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 5938664,
+      "deleted_at": 1791818167.3616776
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v46-x64-skill-selection-controls-r1/dist/browser",
+      "bytes": 73195520,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791159843230788236,
+      "dev": 66311,
+      "ino": 6052856,
+      "deleted_at": 1791818167.3634665
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v46-x64-skill-selection-controls-r1/toolchain/extracted",
+      "bytes": 127311872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992991896345649,
+      "dev": 66311,
+      "ino": 6053600,
+      "deleted_at": 1791818167.3641188
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v47-x64-chunk-supervision-r1/node_modules",
+      "bytes": 289542144,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 6177305,
+      "deleted_at": 1791818167.7378874
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v47-x64-chunk-supervision-r1/dist/browser",
+      "bytes": 73195520,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791159843230788236,
+      "dev": 66311,
+      "ino": 6293573,
+      "deleted_at": 1791818167.739969
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v47-x64-chunk-supervision-r1/toolchain/extracted",
+      "bytes": 127311872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992991896345649,
+      "dev": 66311,
+      "ino": 6294317,
+      "deleted_at": 1791818167.7407172
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/phase5-reviewed-supply/runtime-v39-x64-current-candidate-r1/node_modules",
+      "bytes": 288473088,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 2665670,
+      "deleted_at": 1791818168.1099336
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/phase5-reviewed-supply/runtime-v39-x64-current-candidate-r1/dist/browser",
+      "bytes": 93007872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790891623368216069,
+      "dev": 66311,
+      "ino": 2666790,
+      "deleted_at": 1791818168.1120152
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/phase5-reviewed-supply/runtime-v39-x64-current-candidate-r1/toolchain/extracted",
+      "bytes": 127307776,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992991896345649,
+      "dev": 66311,
+      "ino": 2769224,
+      "deleted_at": 1791818168.1126769
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/pop-runtime-v2-0619599/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791093922026930267,
+      "dev": 66311,
+      "ino": 4200705,
+      "deleted_at": 1791818168.113941
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/pop-runtime-v3-21b7439/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791095058183627273,
+      "dev": 66311,
+      "ino": 4326497,
+      "deleted_at": 1791818168.114884
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/pop-runtime-v4-fed2a20/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791096129137108975,
+      "dev": 66311,
+      "ino": 4456984,
+      "deleted_at": 1791818168.1156194
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/pop-runtime-v5-5facef5/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791098604670663236,
+      "dev": 66311,
+      "ino": 3014725,
+      "deleted_at": 1791818168.116411
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v37-arm64-closed-candidate-r2/node_modules",
+      "bytes": 267939840,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949552168327785,
+      "dev": 66311,
+      "ino": 2238969,
+      "deleted_at": 1791818168.5011778
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v37-arm64-closed-candidate-r2/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 2231657,
+      "deleted_at": 1791818168.5035386
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v37-arm64-closed-candidate-r2/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949519240363892,
+      "dev": 66311,
+      "ino": 2231654,
+      "deleted_at": 1791818168.6792383
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/adversarial-self-play-20261004/runtime-v2-bd1b590/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791104524273939263,
+      "dev": 66311,
+      "ino": 4621971,
+      "deleted_at": 1791818168.6800926
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/adversarial-self-play-20261004/runtime-v1-cebe9a9/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791104268930900322,
+      "dev": 66311,
+      "ino": 4595758,
+      "deleted_at": 1791818168.6809533
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-v1-7d87127/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791107928961714628,
+      "dev": 66311,
+      "ino": 4868002,
+      "deleted_at": 1791818168.681618
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-v2-46efb05/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791107928961714628,
+      "dev": 66311,
+      "ino": 4874036,
+      "deleted_at": 1791818168.6819801
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v1-4a104e3/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791111582564207887,
+      "dev": 66311,
+      "ino": 4983494,
+      "deleted_at": 1791818168.6825283
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v2-66ad8d8d/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791116269534038989,
+      "dev": 66311,
+      "ino": 5016174,
+      "deleted_at": 1791818168.683344
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v3-dfe17451/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791117465663334190,
+      "dev": 66311,
+      "ino": 5115943,
+      "deleted_at": 1791818168.684669
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v4-d66b3ce7/dist/browser",
+      "bytes": 73728,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791118551104634203,
+      "dev": 66311,
+      "ino": 5246411,
+      "deleted_at": 1791818168.6855464
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v34-closed-r4-20261002/node_modules",
+      "bytes": 502554624,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790509955340051271,
+      "dev": 66311,
+      "ino": 1602888,
+      "deleted_at": 1791818169.095444
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v34-closed-r4-20261002/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 1602217,
+      "deleted_at": 1791818169.096537
+    },
+    {
+      "path": "/home/werg/natlang/runs/data-lineage-20261002/recipe-v32-existing-data-only/runtime-current-policy-v1/node_modules",
+      "bytes": 278188032,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790963557078412312,
+      "dev": 66311,
+      "ino": 1618242,
+      "deleted_at": 1791818169.4875467
+    },
+    {
+      "path": "/home/werg/natlang/runs/data-lineage-20261002/recipe-v32-existing-data-only/runtime-current-policy-v1/dist/browser",
+      "bytes": 93040640,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790891623368216069,
+      "dev": 66311,
+      "ino": 1721430,
+      "deleted_at": 1791818169.4926984
+    },
+    {
+      "path": "/home/werg/natlang/runs/data-lineage-20261002/recipe-v32-existing-data-only/runtime-current-policy-v1/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 1722136,
+      "deleted_at": 1791818169.6354127
+    },
+    {
+      "path": "/home/werg/natlang/runs/data-lineage-20261002/recipe-v33-current-policy-existing-data-only/runtime-current-policy/node_modules",
+      "bytes": 278233088,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790963557078412312,
+      "dev": 66311,
+      "ino": 2385891,
+      "deleted_at": 1791818170.0246062
+    },
+    {
+      "path": "/home/werg/natlang/runs/data-lineage-20261002/recipe-v33-current-policy-existing-data-only/runtime-current-policy/dist/browser",
+      "bytes": 93044736,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790891623368216069,
+      "dev": 66311,
+      "ino": 2405108,
+      "deleted_at": 1791818170.0286105
+    },
+    {
+      "path": "/home/werg/natlang/runs/data-lineage-20261002/recipe-v33-current-policy-existing-data-only/runtime-current-policy/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 2405515,
+      "deleted_at": 1791818170.1645992
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/skill-authoring-transport-runtime-v1/node_modules",
+      "bytes": 288468992,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 6054689,
+      "deleted_at": 1791818170.497443
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/skill-authoring-transport-runtime-v1/dist/browser",
+      "bytes": 73195520,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791159843230788236,
+      "dev": 66311,
+      "ino": 6162573,
+      "deleted_at": 1791818170.4990191
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/skill-authoring-transport-runtime-v1/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 6163247,
+      "deleted_at": 1791818170.625477
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-bonsai-qwen-handoff-20261002/runtime-v39-arm64-current-candidate-r1/node_modules",
+      "bytes": 288464896,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 2641617,
+      "deleted_at": 1791818170.9645777
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-bonsai-qwen-handoff-20261002/runtime-v39-arm64-current-candidate-r1/dist/browser",
+      "bytes": 93007872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790891623368216069,
+      "dev": 66311,
+      "ino": 2642824,
+      "deleted_at": 1791818170.9661345
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-bonsai-qwen-handoff-20261002/runtime-v39-arm64-current-candidate-r1/toolchain/extracted",
+      "bytes": 204070912,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 2641799,
+      "deleted_at": 1791818171.1015122
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v40-arm64-current-candidate-r1/node_modules",
+      "bytes": 288468992,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 3187916,
+      "deleted_at": 1791818171.445424
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v40-arm64-current-candidate-r1/dist/browser",
+      "bytes": 93007872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790891623368216069,
+      "dev": 66311,
+      "ino": 3301705,
+      "deleted_at": 1791818171.4466584
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v40-arm64-current-candidate-r1/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 3302377,
+      "deleted_at": 1791818171.584828
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v40-arm64-current-candidate-r2/node_modules",
+      "bytes": 288468992,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 3310532,
+      "deleted_at": 1791818171.9065862
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v40-arm64-current-candidate-r2/dist/browser",
+      "bytes": 93007872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791011077202961338,
+      "dev": 66311,
+      "ino": 3411558,
+      "deleted_at": 1791818171.908316
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v40-arm64-current-candidate-r2/toolchain/extracted",
+      "bytes": 204070912,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 3412203,
+      "deleted_at": 1791818172.089182
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-arm64-current-candidate-r1-incomplete/node_modules",
+      "bytes": 288468992,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 3020948,
+      "deleted_at": 1791818172.4219215
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-arm64-current-candidate-r1-incomplete/dist/browser",
+      "bytes": 93007872,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791011077202961338,
+      "dev": 66311,
+      "ino": 3439263,
+      "deleted_at": 1791818172.4233453
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-arm64-current-candidate-r1-incomplete/toolchain/extracted",
+      "bytes": 204070912,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 3439908,
+      "deleted_at": 1791818172.5660212
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-arm64-current-candidate-r2-incomplete/node_modules",
+      "bytes": 288473088,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 3446446,
+      "deleted_at": 1791818172.904614
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-arm64-current-candidate-r2-incomplete/dist/browser",
+      "bytes": 93011968,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791011077202961338,
+      "dev": 66311,
+      "ino": 3547803,
+      "deleted_at": 1791818172.907019
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-arm64-current-candidate-r2-incomplete/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 3548448,
+      "deleted_at": 1791818173.0445645
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-arm64-current-candidate-r3/node_modules",
+      "bytes": 288505856,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 3557273,
+      "deleted_at": 1791818173.3917623
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-arm64-current-candidate-r3/dist/browser",
+      "bytes": 93032448,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791011077202961338,
+      "dev": 66311,
+      "ino": 3577642,
+      "deleted_at": 1791818173.3944542
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-arm64-current-candidate-r3/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 3578288,
+      "deleted_at": 1791818173.5385842
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-arm64-current-candidate-r4/node_modules",
+      "bytes": 288522240,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 3670210,
+      "deleted_at": 1791818173.879978
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-arm64-current-candidate-r4/dist/browser",
+      "bytes": 93036544,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791011077202961338,
+      "dev": 66311,
+      "ino": 3688210,
+      "deleted_at": 1791818173.887739
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261003/runtime-v41-arm64-current-candidate-r4/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 3688855,
+      "deleted_at": 1791818174.0400338
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261004/runtime-v42-arm64-candidate-r1/node_modules",
+      "bytes": 288571392,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66311,
+      "ino": 3845775,
+      "deleted_at": 1791818174.4599838
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261004/runtime-v42-arm64-candidate-r1/dist/browser",
+      "bytes": 93044736,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791011077202961338,
+      "dev": 66311,
+      "ino": 3847895,
+      "deleted_at": 1791818174.4649262
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-continuity-20261004/runtime-v42-arm64-candidate-r1/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66311,
+      "ino": 4078928,
+      "deleted_at": 1791818174.6077676
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v34-closed-r3-20261002/node_modules",
+      "bytes": 610693120,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790944987273306202,
+      "dev": 66311,
+      "ino": 1483037,
+      "deleted_at": 1791818175.0554297
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v34-closed-r3-20261002/dist/browser",
+      "bytes": 60981248,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 1484397,
+      "deleted_at": 1791818175.0566695
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v34-closed-20261002/node_modules",
+      "bytes": 610693120,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790944624098702372,
+      "dev": 66311,
+      "ino": 1328934,
+      "deleted_at": 1791818175.484047
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v34-closed-20261002/dist/browser",
+      "bytes": 60981248,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 1330179,
+      "deleted_at": 1791818175.485568
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v34-closed-r2-20261002/node_modules",
+      "bytes": 610693120,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790944856370448473,
+      "dev": 66311,
+      "ino": 1457625,
+      "deleted_at": 1791818175.9311972
+    },
+    {
+      "path": "/home/werg/natlang/runs/bonsai-recovery/runtime-v34-closed-r2-20261002/dist/browser",
+      "bytes": 60981248,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790666975894611412,
+      "dev": 66311,
+      "ino": 1459900,
+      "deleted_at": 1791818175.9323769
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v38-arm64-closed-candidate/node_modules",
+      "bytes": 266698752,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949316848585825,
+      "dev": 66311,
+      "ino": 2099017,
+      "deleted_at": 1791818176.3210506
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v38-arm64-closed-candidate/dist/browser",
+      "bytes": 61022208,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 2106019,
+      "deleted_at": 1791818176.323017
+    },
+    {
+      "path": "/home/werg/natlang/runs/space-bunny-directory-v7-20261002/runtime-v38-arm64-closed-candidate/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949252842656012,
+      "dev": 66311,
+      "ino": 2106038,
+      "deleted_at": 1791818176.4720514
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna1-qualityv4-next-v38-20261002/runtime-v38-x64-private-closed-r1/node_modules",
+      "bytes": 288530432,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790964878005556547,
+      "dev": 66311,
+      "ino": 1742712,
+      "deleted_at": 1791818176.869737
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna1-qualityv4-next-v38-20261002/runtime-v38-x64-private-closed-r1/dist/browser",
+      "bytes": 61054976,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790708899401126431,
+      "dev": 66311,
+      "ino": 2111785,
+      "deleted_at": 1791818176.8725982
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna1-qualityv4-next-v38-20261002/runtime-v38-x64-private-closed-r1/toolchain/extracted",
+      "bytes": 331382784,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790965109232713096,
+      "dev": 66311,
+      "ino": 2376221,
+      "deleted_at": 1791818177.033264
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/temporary-runtime-captures-20261008/pop-runtime-capture-candidate/node_modules",
+      "bytes": 288460800,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66307,
+      "ino": 4466038,
+      "deleted_at": 1791818177.4116616
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/temporary-runtime-captures-20261008/pop-runtime-capture-candidate/dist/browser",
+      "bytes": 61210624,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791095228923270489,
+      "dev": 66307,
+      "ino": 4466061,
+      "deleted_at": 1791818177.4126594
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/temporary-runtime-captures-20261008/pop-runtime-capture-candidate/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66307,
+      "ino": 4483819,
+      "deleted_at": 1791818177.5708437
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/temporary-runtime-captures-20261008/pop-runtime-capture-candidate-v3/node_modules",
+      "bytes": 288456704,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66307,
+      "ino": 4348258,
+      "deleted_at": 1791818177.8799298
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/temporary-runtime-captures-20261008/pop-runtime-capture-candidate-v3/dist/browser",
+      "bytes": 61210624,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791490729779119068,
+      "dev": 66307,
+      "ino": 4348282,
+      "deleted_at": 1791818177.8811111
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/temporary-runtime-captures-20261008/pop-runtime-capture-candidate-v3/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66307,
+      "ino": 4460423,
+      "deleted_at": 1791818178.030762
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/temporary-runtime-captures-20261008/pop-runtime-capture-candidate-v2/node_modules",
+      "bytes": 288460800,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790992089243441416,
+      "dev": 66307,
+      "ino": 4325393,
+      "deleted_at": 1791818178.3796117
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/temporary-runtime-captures-20261008/pop-runtime-capture-candidate-v2/dist/browser",
+      "bytes": 61210624,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1791490729774119075,
+      "dev": 66307,
+      "ino": 4325404,
+      "deleted_at": 1791818178.3805041
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/temporary-runtime-captures-20261008/pop-runtime-capture-candidate-v2/toolchain/extracted",
+      "bytes": 204075008,
+      "reason": "Inactive frozen-runtime regenerable dependency/browser/toolchain build; source, lockfile, teacher dist and seal retained.",
+      "mtime_ns": 1790949614645259275,
+      "dev": 66307,
+      "ino": 4342418,
+      "deleted_at": 1791818178.5324848
+    },
+    {
+      "path": "/home/werg/natlang/runs/self-improvement-learning/local-corrections.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 20480,
+      "mtime_ns": 1790835889310833843,
+      "dev": 66311,
+      "ino": 1312752,
+      "deleted_at": 1791818178.532728
+    },
+    {
+      "path": "/home/werg/natlang/runs/directory-expansion-20260929/verified-v4/sharp.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 100634624,
+      "mtime_ns": 1790666102171750957,
+      "dev": 66311,
+      "ino": 1211478,
+      "deleted_at": 1791818248.9731054
+    },
+    {
+      "path": "/home/werg/natlang/runs/directory-expansion-20260929/verified-final/sharp.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 100540416,
+      "mtime_ns": 1790665064099931443,
+      "dev": 66311,
+      "ino": 1211401,
+      "deleted_at": 1791818248.9802973
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260929-0926/verified-v7/joint.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 167194624,
+      "mtime_ns": 1790674673665314184,
+      "dev": 66311,
+      "ino": 1310851,
+      "deleted_at": 1791818248.9906547
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260929-0926/verified-v7/sharp.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 89432064,
+      "mtime_ns": 1790674542187639963,
+      "dev": 66311,
+      "ino": 1310808,
+      "deleted_at": 1791818248.9950035
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260929-1055/verified-v9/joint.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 166817792,
+      "mtime_ns": 1790680703681135373,
+      "dev": 66311,
+      "ino": 1190406,
+      "deleted_at": 1791818249.0089765
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260929-1055/verified-v9/sharp.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 89067520,
+      "mtime_ns": 1790680553956537217,
+      "dev": 66311,
+      "ino": 1190373,
+      "deleted_at": 1791818249.0131948
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260929-1055/verified-v8/joint.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 167178240,
+      "mtime_ns": 1790679884309334444,
+      "dev": 66311,
+      "ino": 1187551,
+      "deleted_at": 1791818249.0249994
+    },
+    {
+      "path": "/home/werg/natlang/runs/generation-check-20260929-1055/verified-v8/sharp.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 89419776,
+      "mtime_ns": 1790679741339718158,
+      "dev": 66311,
+      "ino": 1187462,
+      "deleted_at": 1791818249.0312457
+    },
+    {
+      "path": "/home/werg/natlang/runs/self-improvement-expansion-20261004/nllb-seed-native-pilot-v1/lfm.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 12222464,
+      "mtime_ns": 1791122258212197320,
+      "dev": 66311,
+      "ino": 5394151,
+      "deleted_at": 1791818249.0345256
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/search-sft-phase-v1/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 162074624,
+      "mtime_ns": 1791163309855922549,
+      "dev": 66311,
+      "ino": 6035072,
+      "deleted_at": 1791818249.0408227
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/online-repair-phase-v1/reference-ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 9560064,
+      "mtime_ns": 1791175558161309438,
+      "dev": 66311,
+      "ino": 6295835,
+      "deleted_at": 1791818249.0421696
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/online-repair-phase-v1/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 159502336,
+      "mtime_ns": 1791175791201046085,
+      "dev": 66311,
+      "ino": 6296080,
+      "deleted_at": 1791818249.044171
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/online-repair-phase-v1/repair-round-v6/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 110592,
+      "mtime_ns": 1791191521636901134,
+      "dev": 66311,
+      "ino": 6571528,
+      "deleted_at": 1791818249.0446606
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/online-repair-phase-v1/repair-round-v7/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 139264,
+      "mtime_ns": 1791193518283893450,
+      "dev": 66311,
+      "ino": 6572848,
+      "deleted_at": 1791818249.045343
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/online-repair-phase-v1/repair-round-v5/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 8192,
+      "mtime_ns": 1791184547225248739,
+      "dev": 66311,
+      "ino": 6564653,
+      "deleted_at": 1791818249.0459955
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/online-repair-phase-v1/repair-round-v4/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 602112,
+      "mtime_ns": 1791180392460111406,
+      "dev": 66311,
+      "ino": 6564336,
+      "deleted_at": 1791818249.0467732
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/online-repair-phase-v1/repair-completed-review-v1/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 962560,
+      "mtime_ns": 1791187795657688416,
+      "dev": 66311,
+      "ino": 6571092,
+      "deleted_at": 1791818249.0473576
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/chunk-rewrite-pilot-v4/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 139264,
+      "mtime_ns": 1791174363374314958,
+      "dev": 66311,
+      "ino": 6295455,
+      "deleted_at": 1791818249.0483525
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/search-sft-render-v1/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 5873664,
+      "mtime_ns": 1791159434870546981,
+      "dev": 66311,
+      "ino": 6034863,
+      "deleted_at": 1791818249.0492368
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/search-sft-render-v1/repaired/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 5873664,
+      "mtime_ns": 1791159968444945643,
+      "dev": 66311,
+      "ino": 6034886,
+      "deleted_at": 1791818249.0514615
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/skill-sft-phase-v1/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 160694272,
+      "mtime_ns": 1791155168227077249,
+      "dev": 66311,
+      "ino": 5922271,
+      "deleted_at": 1791818249.0579734
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/skill-inventory-controls-v1/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 5169152,
+      "mtime_ns": 1791168256096912064,
+      "dev": 66311,
+      "ino": 6169884,
+      "deleted_at": 1791818249.0594895
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261005/skill-balanced-sft-phase-v1/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 165654528,
+      "mtime_ns": 1791168438471686554,
+      "dev": 66311,
+      "ino": 6170125,
+      "deleted_at": 1791818249.0631423
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261004/candidate-render-preview-v1/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 274432,
+      "mtime_ns": 1791143671068918475,
+      "dev": 66311,
+      "ino": 5410740,
+      "deleted_at": 1791818249.064236
+    },
+    {
+      "path": "/home/werg/natlang/runs/student-posttraining-20261004/posttraining-render-v1/ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 9523200,
+      "mtime_ns": 1791154761853821704,
+      "dev": 66311,
+      "ino": 5921952,
+      "deleted_at": 1791818249.065088
+    },
+    {
+      "path": "/home/werg/natlang/runs/modern-adapters-20260928/verified-published/sharp.quality-ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 5681152,
+      "mtime_ns": 1790615280780517393,
+      "dev": 66311,
+      "ino": 924147,
+      "deleted_at": 1791818249.0659661
+    },
+    {
+      "path": "/home/werg/natlang/runs/modern-adapters-20260928/verified-published/sharp.filtered-ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 5681152,
+      "mtime_ns": 1790615370508205140,
+      "dev": 66311,
+      "ino": 924161,
+      "deleted_at": 1791818249.0666642
+    },
+    {
+      "path": "/home/werg/natlang/runs/modern-adapters-20260928/verified-published/sharp.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 5685248,
+      "mtime_ns": 1790615193576636071,
+      "dev": 66311,
+      "ino": 923927,
+      "deleted_at": 1791818249.067459
+    },
+    {
+      "path": "/home/werg/natlang/runs/data-lineage-20261002/recipe-v33-current-policy-existing-data-only/run-v13-group-resplit-r2/joint.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 3245117440,
+      "mtime_ns": 1790977054620692129,
+      "dev": 66311,
+      "ino": 2535959,
+      "deleted_at": 1791818249.0999706
+    },
+    {
+      "path": "/home/werg/natlang/runs/data-quality-v2/general.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 14860288,
+      "mtime_ns": 1790124804740125573,
+      "dev": 66311,
+      "ino": 4492767,
+      "deleted_at": 1791818249.104025
+    },
+    {
+      "path": "/home/werg/natlang/runs/train-lora-cli-diagnostic-20261002/rendered/mini-v2.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 81920,
+      "mtime_ns": 1790967014582599872,
+      "dev": 66311,
+      "ino": 2524014,
+      "deleted_at": 1791818249.1050587
+    },
+    {
+      "path": "/home/werg/natlang/runs/train-lora-cli-diagnostic-20261002/rendered/mini.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 65536,
+      "mtime_ns": 1790966921039703621,
+      "dev": 66311,
+      "ino": 2523962,
+      "deleted_at": 1791818249.1055777
+    },
+    {
+      "path": "/home/werg/natlang/runs/integrated-quality-audit-20260928/verified/sharp.filtered-ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 77758464,
+      "mtime_ns": 1790615429400229444,
+      "dev": 66311,
+      "ino": 924164,
+      "deleted_at": 1791818249.1097836
+    },
+    {
+      "path": "/home/werg/natlang/runs/integrated-quality-audit-20260928/verified/sharp.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 77783040,
+      "mtime_ns": 1790615247403504971,
+      "dev": 66311,
+      "ino": 924090,
+      "deleted_at": 1791818249.115606
+    },
+    {
+      "path": "/home/werg/natlang/runs/integrated-quality-audit-20260928/joint/sharp.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 87265280,
+      "mtime_ns": 1790615729752366251,
+      "dev": 66311,
+      "ino": 924223,
+      "deleted_at": 1791818249.1229773
+    },
+    {
+      "path": "/home/werg/natlang/runs/lfm8b-new-harness/teacher.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 8192,
+      "mtime_ns": 1790126405087193624,
+      "dev": 66311,
+      "ino": 4499884,
+      "deleted_at": 1791818249.1243608
+    },
+    {
+      "path": "/home/werg/natlang/runs/data-quality-v1/general.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 14860288,
+      "mtime_ns": 1790124397094624262,
+      "dev": 66311,
+      "ino": 4492691,
+      "deleted_at": 1791818249.127087
+    },
+    {
+      "path": "/home/werg/natlang/runs/data-quality-v3/coding.ready.jsonl.audit-cache",
+      "reason": "Completed resumable audit scratch; final audited output retained.",
+      "bytes": 65536,
+      "mtime_ns": 1790125238935594399,
+      "dev": 66311,
+      "ino": 4492914,
+      "deleted_at": 1791818249.1275249
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/temporary-quality-build-20261009",
+      "reason": "Unregistered completed CLI reproduction and assembly test scratch from October 8; production corpus snapshots retained.",
+      "bytes": 1690832896,
+      "mtime_ns": 1791419443725984575,
+      "dev": 66307,
+      "ino": 4490443,
+      "deleted_at": 1791818291.8278875
+    }
+  ],
+  "preserved": "Active training and parents, held-task evaluation, Luna workers, registered/reusable/protected data, unresolved FP8 evidence. Runtime sources, lockfiles, seals and teacher code retained; dependency/browser/toolchain builds require regeneration before replay.",
+  "skipped": [
+    {
+      "path": "/home/werg/natlang/runs/luna-v29-source-repairs-and-counterfactuals-20261009-v1/runtime-current-main-v1/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/runtime-small-teachers-v7/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/free-provider-generation-20261009-v1/runtime-small-teachers-v8/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v9/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v10/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v11/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v15/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v15/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v16/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v16/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v18/node_modules",
+      "reason": "recently modified within one day"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v18/dist/browser",
+      "reason": "recently modified within one day"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v19/node_modules",
+      "reason": "recently modified within one day"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v19/dist/browser",
+      "reason": "recently modified within one day"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/runtime-visible-decision-ordinal-v20/node_modules",
+      "reason": "live process reference"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/runtime-visible-decision-ordinal-v20/dist/browser",
+      "reason": "live process reference"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/runtime-visible-decision-ordinal-v20-actioncap-v1/node_modules",
+      "reason": "live process reference"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/runtime-visible-decision-ordinal-v20-actioncap-v1/dist/browser",
+      "reason": "live process reference"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/runtime-held-task-empty-eos-v1/node_modules",
+      "reason": "live process reference"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/runtime-held-task-empty-eos-v1/dist/browser",
+      "reason": "live process reference"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v12/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v13/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v14/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/runtime-small-teachers-v14/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-v65-v67-closed-audit-20261007-v1/runtime/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/luna-semantic-v65-v67-closed-audit-20261007-v1/runtime/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/pop-runtime-v2-0619599/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/pop-runtime-v2-0619599/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/pop-runtime-v3-21b7439/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/pop-runtime-v3-21b7439/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/pop-runtime-v4-fed2a20/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/pop-runtime-v4-fed2a20/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/pop-runtime-v5-5facef5/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/pop-runtime-v5-5facef5/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/adversarial-self-play-20261004/runtime-v2-bd1b590/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/adversarial-self-play-20261004/runtime-v2-bd1b590/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/adversarial-self-play-20261004/runtime-v1-cebe9a9/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/adversarial-self-play-20261004/runtime-v1-cebe9a9/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-v1-7d87127/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-v1-7d87127/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-v2-46efb05/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-v2-46efb05/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v1-4a104e3/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v1-4a104e3/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v2-66ad8d8d/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v2-66ad8d8d/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v3-dfe17451/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v3-dfe17451/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v4-d66b3ce7/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v4-d66b3ce7/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/runtime-v1/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/runtime-v1/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/runtime-v1/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/runtime-v2/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/runtime-v2/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/runtime-v2/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/runtime-v3-0e4c61d/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/runtime-v3-0e4c61d/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/crisp-skill-self-improvement-20261004/runtime-v3-0e4c61d/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v5-c37fac7e/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v5-c37fac7e/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v5-c37fac7e/toolchain/extracted",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-v3-transport-recording/node_modules",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-v3-transport-recording/dist/browser",
+      "reason": "registered manifest path"
+    },
+    {
+      "path": "/home/werg/natlang/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-v3-transport-recording/toolchain/extracted",
+      "reason": "registered manifest path"
+    }
+  ]
+}
