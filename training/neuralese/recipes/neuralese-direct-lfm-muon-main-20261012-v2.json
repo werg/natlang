@@ -1,7 +1,7 @@
 {
   "schema": "natlang.neuralese-training-recipe/1",
   "id": "neuralese-direct-lfm-muon-main-20261012-v2",
-  "description": "Executable Pop main Muon curriculum: program-header 2 epochs then whole-trajectory 1 epoch. Continues clean-base Muon weights and full optimizer state from curtailed full-prompt warmup step393; no Lion state. Automatic phase handoff preserves identity and base drift reference. Generic system prompt removed by the admitted program-header render. Supervised spans are512 tokens to reduce repeated prefix forwards; context capacity remains32768, masks and role weights unchanged; phase metrics rebase. Includes all87 existing approved targets with exact recovered visible context, correcting42 prior conversion omissions; held rows and suffix targets unchanged.",
+  "description": "Executable Pop main Muon curriculum: program-header 1 epoch then whole-trajectory 1 epoch. Continues clean-base Muon weights and full optimizer state from curtailed full-prompt warmup step393; no Lion state. Automatic phase handoff preserves identity and base drift reference. Generic system prompt removed by the admitted program-header render. Supervised spans are512 tokens to reduce repeated prefix forwards; context capacity remains32768, masks and role weights unchanged; phase metrics rebase. Includes all87 existing approved targets with exact recovered visible context, correcting42 prior conversion omissions; held rows and suffix targets unchanged.",
   "identity_qualification": "neuralese_direct_step0_identity",
   "input_bindings": {
     "base_heads": {
@@ -99,7 +99,7 @@
         "continue_monitor_reference": "continue_monitor_reference"
       },
       "parameters": {
-        "epochs": 2.0
+        "epochs": 1.0
       }
     },
     {
@@ -170,7 +170,7 @@
       "eval/scheduler_throughput.py": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064",
       "eval/self_feedback.py": "064339913cebb5a8253d0fbf09e97956c495fff018f5d84ff06dd2230f4c94dd",
       "eval/stopping_diagnostics.py": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37",
-      "eval/task_packet.py": "6f28788186acd8922683c2490cd2b37d46c7895768ea7575240987a36aba10e3",
+      "eval/task_packet.py": "f886460209afa40e4c07dfb731ff0135bd47a04c9b7d7789a47e0eaa5e11c689",
       "eval/text_warmup_runtime.py": "32d55ae89e69d1b2be117c673008c3a18284d5110d273c00193b7da712e78537",
       "eval/trajectory_execution.py": "82d4032da64cfe39e0e1eda30dd79eeacb24d5f6de495a73b8058b673d18506a",
       "eval/view_gate.py": "e48a2268ffa1514a58ef4ce3141d898a5920b1843cafeeb82ca0123061b0b799",
@@ -207,7 +207,7 @@
       "model/causal_feedback.py": "f6ee121957ac075d0722f1970f153ecbb9d34bd5b1418fe175c49c3fef7efdc0",
       "model/dialect.py": "57561646624b75cfa0a0d226b4ba3b24ab212014d364d8a7f65c908cf6785186",
       "model/heads.py": "5717f620e8f11d081d73b2703b59ab1674e2d026236ef404d2e3f5aecba64a8f",
-      "model/hf_port.py": "6acb809675996f51a7ac414e74e93ffa2186c0153033b80b1afef1199378be3d",
+      "model/hf_port.py": "109f490843b074e088572544de02a2802b8617d1af1688012797bff9bd121441",
       "model/input_map.py": "fe4d0665fffe2cf8a284bc84bf9aa0c31e6f7994afe3fa2bd607dd289c1eaaa1",
       "model/isolated_sequence.py": "6422eca9ec074385678754dc964d6cf3228d2402fba68d63ba1fd09647d0815b",
       "model/layer_staging.py": "0f6bae3118c119079e7a8beec3d11da5e4df349d001f92ba037215ad0db015e7",
@@ -222,7 +222,7 @@
       "rl/__init__.py": "177133f12d780bddb16728b0e3a88cb83ecd11534b0f6c309eea1a8929bce5c5",
       "rl/grpo.py": "fb17320ecd4091025a26560715ce1e50fb9392a7d23db5be9695d9d40860a220",
       "serve/__init__.py": "ceff8601aef4da9d63b84e81d67163e32155408020dca94af4844722337bb074",
-      "serve/__main__.py": "2ff00a9a49d846d5f9f192226a5e0b7deee684a701af5849efbd479ab90d3a26",
+      "serve/__main__.py": "5eb24955ab721031f712e251c5e8db2aaf2e72973ca10c2d36a6eb207d3e8b99",
       "serve/batch.py": "9fcc018564f1c4af3df00ca2a39c7722b1a589928ce83e1305ba4ea2502866c7",
       "serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
       "serve/crossing.py": "8381a010f6344fe7862ad08b22cd31c091e714675a6846f6ee9323d65f33650d",
@@ -249,8 +249,8 @@
       "train/decision.py": "57e754f7dae64019310207337238a5f284b7fb8277660a06538089f585a4cb7f",
       "train/delta_e2e.py": "3a5676e1ceb92b5d5ae9ff126be3a13ed2519ad21ffecdadcc116f29792942b5",
       "train/delta_projection.py": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91",
-      "train/direct_export.py": "e63b9808a9fb65885ec5f6c216a6490f4bebb70f8e159a36bbe37737db18d6cd",
-      "train/direct_sft.py": "dc5a1bac3e908a3e5ccd628bb2862fae309a2b824d8c88c59da04f8f1a815cae",
+      "train/direct_export.py": "024194de24e15160c645106c6a384ad106ac354adea429d43e8fd2330a96489c",
+      "train/direct_sft.py": "f751d1b24b9facc4c77e2a5c52012eba903d8505bfe363fd36188e7689eaa576",
       "train/drift_monitor.py": "29cdb01a0363d4c0af417ac8ae66e4b09fb89084033d2c97f201dc7e01faff4e",
       "train/execution.py": "a847a145e5b4e1987f0c69c8cbc7902406754be8b57e2e37bd1139d8756643b3",
       "train/export_trajectory.py": "5bbc545ff603530fbcc5b5930c6f841c70b09f37732b0f26bd088666250fef14",
@@ -268,7 +268,8 @@
       "train/memory.py": "f7d4ed66bc9ff9963f4d9108c4a662871943f87b0c5bc4cf85cbf6f12cddb7ef",
       "train/memory_estimator.py": "4a55b0d650578e9a792e266ec72513910e15da44de4f3f69e217f4e84f9764ab",
       "train/memory_policy.py": "9fb3e7df8848c8fe33959419693e1e066eb67f0a848fcb080ba1053527977521",
-      "train/optim.py": "42bba6067100f46401d21413ce00ece363ea42c1a7e6a939c8db0e4c547487ae",
+      "train/muon_kernels.py": "ab09dbdd42956e05094ec276d2d99e166f596fd8bdbdff51eb601fa315dda871",
+      "train/optim.py": "837b4250c73db9c39ed181ce0cd738fee8c3809f1a08c1e1342bec2b6ea964b4",
       "train/optim_restore.py": "fcffacd150af0c5c38cea7280b87d33e5388f0dbb4bc68448828d42a0a43ec96",
       "train/output_embedding_projection.py": "b3fcc0c902420c7781b1a125c46eb703ff2410fbea55d6f275561cde3c9c8a5b",
       "train/port_handoff.py": "d2af160f9f0c2e93ea6b28ffb23246754640604b99ec2c9af126a91e2e292d37",
@@ -276,7 +277,7 @@
       "train/projection_anchor.py": "300f993e439432faee809694ac3f71a0089cefab9e47142f0ffb4e98caae5ac8",
       "train/projection_e2e.py": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be",
       "train/quantization.py": "a32fd7258683ca51186d6ff2e43b96265d3bbac4c3c38b3330ec86711f21ea01",
-      "train/recipe.py": "41640feacd75a723c87a4571c7db6e18a3bfa510e079345c50986c3810eaacaa",
+      "train/recipe.py": "fe2d84e24f2f6e309252f729c844319c16b212d610edc2258c68418d7736d3fe",
       "train/record_cohorts.py": "7c69d0dfa81869e6dcd6bce45bb7230d51b995ca648a4ca16663bfaea7e99dba",
       "train/recurrence.py": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d",
       "train/staging.py": "d826eee727aae24930ba2ebffb782da71c7d18dafc05575a345a4acbb87ebb19",
