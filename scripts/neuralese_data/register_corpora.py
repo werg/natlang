@@ -145,6 +145,22 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool) -> li
         quick = subprocess.run(['scripts/check-main.sh', '--quick'], cwd=wt, capture_output=True, text=True)
         if quick.returncode:
             raise Retry('check-main --quick is red on origin/main + this registration:\n' + quick.stdout[-1500:])
+    candidates = [entry for entry in changed if entry.get('candidate_selection_admission') is not None]
+    if candidates:
+        # Use the renderer's complete existing gate, including exact owner rows,
+        # evidence and immutable manifest pins, before committing publication.
+        build = subprocess.run(['npm', 'run', '--silent', 'build'], cwd=wt / 'ts-host',
+                               capture_output=True, text=True)
+        if build.returncode:
+            raise Retry('candidate admission verifier build failed: ' + build.stderr[-1500:])
+        for entry in candidates:
+            verified = subprocess.run([
+                sys.executable, str(wt / 'scripts/neuralese_data/render_native_turn_corpus.py'),
+                '--corpus-id', entry['id'], '--source', str(wt / entry['path'] / 'turns.jsonl'),
+                '--verify-admission-only',
+            ], cwd=wt, capture_output=True, text=True)
+            if verified.returncode:
+                raise ValueError(f"candidate admission {entry['id']}: {verified.stderr[-1500:]}")
     git('add', '--', *paths, cwd=wt)
     body = '\n'.join(f"- {e['id']}" for e in changed)
     git('commit', '-q', '-m', message, '-m', 'Registered unattended by scripts/neuralese_data/register_corpora.py:\n'

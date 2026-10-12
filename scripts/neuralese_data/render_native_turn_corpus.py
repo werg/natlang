@@ -989,8 +989,10 @@ def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--corpus-id', required=True)
     p.add_argument('--source', type=Path, nargs='+', required=True)
-    p.add_argument('--tokenizer', action='append', required=True, help='NAME=DIR')
-    p.add_argument('--out-dir', type=Path, required=True)
+    p.add_argument('--tokenizer', action='append', default=[], help='NAME=DIR')
+    p.add_argument('--out-dir', type=Path)
+    p.add_argument('--verify-admission-only', action='store_true',
+                   help='verify the complete registered candidate admission without rendering or model loading')
     p.add_argument('--exclude-programs', type=Path, nargs='*', default=[],
                    help='jsonl rows {id, reason_code?}: programs whose rows are dropped')
     p.add_argument('--program-header-as-full', action='store_true',
@@ -1019,6 +1021,14 @@ def main(argv=None):
                    help='fraction of programs (stratified by family) that also get the full rendering, the warm-up '
                         'share; 1.0 renders full for every program (the old behaviour)')
     a = p.parse_args(argv)
+    if a.verify_admission_only:
+        verified = registered_candidate_selection_admission(a.corpus_id, a.source)
+        if verified is None:
+            p.error('--verify-admission-only requires registered candidate-selection admission')
+        print(json.dumps(verified, sort_keys=True))
+        return
+    if not a.tokenizer or a.out_dir is None:
+        p.error('rendering requires --tokenizer and --out-dir')
     tokenizers = dict(item.split('=', 1) for item in a.tokenizer)
     pieces, piece_bindings = registered_source_pieces(a.source)
     a.candidate_selection_admission = registered_candidate_selection_admission(a.corpus_id, a.source)
