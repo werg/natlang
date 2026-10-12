@@ -180,3 +180,23 @@ Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exa
 
 - `maple-foundation-20261005`: deleted 2026-10-11.
 - `maple-nested-20261005`: deleted 2026-10-11.
+
+## DGX cleanup, round 3 (2026-10-12 ~15:45)
+
+NVMe fell to ~100 GB free (the disk-guard pause line). Deleted under the standing order, exact paths and reasons in
+`/home/werg/.claude/jobs/9c849f00/tmp/storage-20261012T1545.sh` on DGX; df went from 108 GB to 116 GB free (+18 GB, concurrent jobs also write):
+the five `run-v4/runtime-superseded-*` copies, `neuralese-direct-mellum-20261011/{run-v1,run-v2,smoke-1..3}`,
+41 old code snapshots (kept only `natlang-5d212530`, used by live v4; nothing else references a snapshot),
+`~/data/render-smoke`, orphaned `~/data/tmp-port-calls.*` partials, `~/data/{tmp-ckbench,v17-audit}`, the two
+retired-Maple stream render caches `~/data/maple-sft/{,v13-r2/}maple-v13.sft.jsonl.cache` (registered
+`maple-sft-v13-r2` lists only the jsonl, manifest and rejected file), and ten exited diag/test/probe containers.
+No registry entries were removed. The paused round-2 verified offload of Pop's registered inactive model
+candidates (`.local/retained-model-candidates-20261010-v1`, ~27 GB left) was re-queued now that v4 has loaded.
+
+Left on purpose: the live v4 `direct_sft/` (134 GB: `checkpoint.pt` and `best-checkpoint.pt` of 47 GB each plus the
+49 GB `.checkpoint-space.reserve` for the next write), unions r2/r3, registered corpora (nearly every `runs/` dir is
+registered), the call store (51 GB, self-bounded at 50 GB), `~/data/harness-bench` (SWE twins still rendering),
+the pending `natlang-native-turns-view-ask-v4-render-20261011-v1` (in `pending-renders.json`), `bird-sqlite`
+(protected source path in storage-policy.json), staged `vendor/datasets` (live symlink target), and the teacher
+container and images. The rest of `runs/` is registered data; a further big gain needs a decision on superseded
+registered render/proposal versions (e.g. the `neuralese-reviewed-restart-cohort-20261007-v*` series, ~15 GB).
