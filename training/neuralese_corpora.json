@@ -62033,6 +62033,23 @@
         "luna-clinc-v10-lane03-selected-child-actions-20261012-v1"
       ],
       "notes": "Replaces malformed v1/v2 owner metadata; no parent/writer/recurrence/runtime/new-world admission."
+    },
+    {
+      "id": "native-context-hydration-14-wholetraj-recovery-20261012-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/native-context-hydration-14-wholetraj-recovery-20261012-v1",
+      "include": [
+        "records.jsonl",
+        "provider-context-bindings.jsonl",
+        "source-omissions.jsonl",
+        "root-context-hydration-review.json"
+      ],
+      "source_class": "repaired-authenticated-provider-context-metadata",
+      "split": "inherited-train-only",
+      "training_admission": true,
+      "trace_admission": false,
+      "admission": "Existing root-admitted ordinary SFT targets; exact authenticated context metadata restored via shared binder",
+      "notes": "14 previously admitted targets, zero new decisions/worlds; root verified source hashes, unchanged targets/splits/groups and shared context renderer. Repairs 14 whole-trajectory omissions. No learned writer/recurrence/runtime qualification; not appended to active GPU inputs."
     }
   ],
   "coverage_backlog": [
