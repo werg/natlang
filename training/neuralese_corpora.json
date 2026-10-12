@@ -56909,6 +56909,32 @@
         ]
       },
       "notes": "Root-approved exact 244 V6 native SFT child actions; packet selection metadata remains pinned and only listed exact action turns are admitted."
+    },
+    {
+      "id": "luna-authored-execution-integrity-20261012-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/luna-authored-execution-integrity-20261012-v1",
+      "include": [
+        "FILES.sha256.json",
+        "README.md",
+        "decision-approvals.json",
+        "delegation-controls.json",
+        "native-decisions.jsonl",
+        "review.json",
+        "source-programs.jsonl",
+        "teacher-results.jsonl"
+      ],
+      "split": "train",
+      "source_class": "authored-static-execution-integrity-reference",
+      "training_admission": true,
+      "trace_admission": false,
+      "recurrence_admission": false,
+      "admission": "Six exact source-authored native SFT actions: two prebound helper-call tasks, one successful host delivery, and three typed reports derived from captured acknowledgement-loss/rejection outcomes. Three rejected source probes remain context evidence only and are not training targets.",
+      "training_admission_reason": "Every admitted target is an exact authored root eval admitted by shared native-materializer only after exact source-code binding, exact typed output and effect oracle acceptance; review and target hashes are in review.json and decision-approvals.json. All source splits are train, groups are unique, provider requests are zero, trace admission is false.",
+      "review_status": "shared collectBatch/nativeJobRunner/executeProgram/effectHarness replay completed; exact result/effect checks passed for all six admitted rows; rejected host-effect source rows are held as provenance only; no provider calls.",
+      "required_conversion": "render train rows through the shared native turn renderer for program-header and whole-trajectory twins, preserving source splits and masks",
+      "consumable_by_direct_stage": false,
+      "notes": "Ordinary nested NL delegation controls are already in admitted semantic-inline-curriculum-s72-teacher-turns-20261007-v1 (family decision_extract_chain); this corpus references that control family without duplicating its prompts or turns. The acknowledgement-lost report reflects only the actual returned tool error; hidden host delivery state is retained in the source review and is not put in the model-facing input."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,52 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-authored-execution-integrity-20261012-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/luna-authored-execution-integrity-20261012-v1",
+  "files": [
+    {
+      "path": "FILES.sha256.json",
+      "bytes": 1257,
+      "sha256": "b10f1a5465f6f1c3556027c3afbfd824ffd00d6396b3da2f50676fc8ec75b46e"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1100,
+      "sha256": "ec86d03bb9234f41e8b3fb27cfb0e7b01ccb9125ad6ff1c0655c46b244357eda"
+    },
+    {
+      "path": "decision-approvals.json",
+      "bytes": 5070,
+      "sha256": "80aed6c38bcd7a93478490218fbde9727a50207f9da76f416a484de99c62fbad"
+    },
+    {
+      "path": "delegation-controls.json",
+      "bytes": 770,
+      "sha256": "7036cee7737846eca8902e6f065bbca1844742e7d71c42a8077ce62b8a1798dc"
+    },
+    {
+      "path": "native-decisions.jsonl",
+      "bytes": 357794,
+      "sha256": "e401b391a51dec1bab9b14d753cce0657075dd799f0bebf9b88b257dd8525f8d",
+      "lines": 6
+    },
+    {
+      "path": "review.json",
+      "bytes": 14905,
+      "sha256": "1564b1cc0dd09840066a6c9f5fb401524a98843b91d69f3229cfd1c5eac61080"
+    },
+    {
+      "path": "source-programs.jsonl",
+      "bytes": 17791,
+      "sha256": "7cffa22a4db73b47712d343c83da3d64f57792773d29a935acb5003136c22933",
+      "lines": 9
+    },
+    {
+      "path": "teacher-results.jsonl",
+      "bytes": 291476,
+      "sha256": "e3b5fc6c4a5fffe436dcd514e02a865c37cfbb057d35988ffcb52d177afad611",
+      "lines": 9
+    }
+  ],
+  "bytes": 690163
+}
