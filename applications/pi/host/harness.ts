@@ -29,6 +29,11 @@ export type PortOptions = {
   attempts?: number;
   onPhase?: TaskHost['onPhase'];
   now?: () => number;
+  /**
+   * The task kinds: `nl` (default) substitutes the natural-language generation, tool and compaction kinds; `crisp` keeps
+   * pi-durable's built-in TypeScript kinds (BUILTIN_TASKS), for runs whose executor cannot carry the phases.
+   */
+  phases?: 'nl' | 'crisp';
 };
 
 /**
@@ -86,7 +91,7 @@ export function portOptions<T extends HarnessOptions>(options: T, port: PortOpti
   const scheduler = schedulerPolicy(policyHost as never, modes.scheduler);
   const admission = admissionPolicy(policyHost as never, modes.admission);
   return {
-    options: { ...options, registry: substituteTasks(options.registry, tasks),
+    options: { ...options, registry: port.phases === 'crisp' ? options.registry : substituteTasks(options.registry, tasks),
       ...(scheduler ? { schedulerPolicy: scheduler } : {}), ...(admission ? { admission } : {}) },
     bind(opened: Harness) { harness = opened; },
   };

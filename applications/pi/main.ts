@@ -30,6 +30,11 @@
  *                                           names; nl: hints.nl judges)
  *   --pure                                  nl for every point not set explicitly (with --companion, shaping and hints
  *                                           too)
+ *   --phases crisp|nl                       the generation, tool and compaction task kinds: natural-language functions
+ *                                           (nl, default) or pi-durable's built-in TypeScript kinds (crisp), for a run
+ *                                           whose executor cannot carry the phases (a small executor beside a student)
+ *   --tools crisp|nl                        the coding tools likewise: natural-language functions (nl, default) or
+ *                                           pi-durable's TypeScript tools (crisp)
  *   --companion                             run the companion beside the agent (COMPANION.md): background briefings
  *   --executor-context N                    the executor's context budget in tokens (default: natlang's, sized from
  *                                           the window the executor's server reports)
@@ -60,7 +65,7 @@ import { openPi, runPiTask, type Implementations, type RunResult } from './index
 
 const context = BACKGROUND_CONTEXT;
 const VALUED = ['--executor-context', '--agent-endpoint', '--agent-model', '--agent-key-env', '--context-window', '--max-tokens', '--thinking', '--cwd',
-  '--agent-transport', '--agent-reader',
+  '--agent-transport', '--agent-reader', '--tools', '--phases',
   '--session', '--context', '--scheduler', '--admission', '--planning', '--shaping', '--hints', '--out', '--minutes', '--in', '--repos'];
 const option = (args: string[], name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
@@ -105,6 +110,13 @@ export async function agentModels(args: string[], launcher?: { endpoint: string;
 /** The mode a pluggable point's flag names: its value, else nl under --pure, else crisp. */
 const mode = (args: string[], name: string): PluggableMode => pluggableMode(option(args, `--${name}`), args.includes('--pure') ? 'nl' : 'crisp');
 
+/** A crisp|nl setting (no shadow): `--tools` and `--phases`, default nl. */
+function crispOrNl(args: string[], flag: string): 'nl' | 'crisp' {
+  const value = option(args, flag) ?? 'nl';
+  if (value !== 'nl' && value !== 'crisp') throw new Error(`${flag} is crisp or nl, not ${value}`);
+  return value;
+}
+
 function implementations(args: string[]): Implementations {
   return { context: mode(args, 'context'), scheduler: mode(args, 'scheduler'), admission: mode(args, 'admission'), planning: mode(args, 'planning') };
 }
@@ -146,7 +158,7 @@ export async function runTask(target: TargetContext, args: string[], task: strin
   const log = (line: string) => { if (!quiet) target.io.error.write(`${line}\n`); };
   const envs = createEnvs(cwd);
   mkdirSync(join(sessionPath, '..'), { recursive: true });
-  const registry = nodeCodingRegistry(natlang, { cwd });
+  const registry = nodeCodingRegistry(natlang, { cwd, tools: crispOrNl(args, '--tools') });
   let opened: Harness | undefined;
   // The companion (COMPANION.md) watches the agent's work in the background and briefs it each request.
   if (args.includes('--companion')) registry.install(companion(natlang, { harness: () => opened!,
@@ -163,6 +175,7 @@ export async function runTask(target: TargetContext, args: string[], task: strin
     registry,
     env: envs.env,
     implementations: implementations(args),
+    phases: crispOrNl(args, '--phases'),
     onReport: error => log(`  [report] ${error instanceof Error ? error.message : String(error)}`),
     onPhase: event => log(`  ${event.kind}#${event.taskId} ${event.phase}${event.mode === 'abort' ? ' (abort)' : ''}` +
       `${event.attempt > 1 ? ` attempt ${event.attempt}` : ''}: ${event.error ? `failed: ${event.error.slice(0, 300)}` : (event.summary ?? '').slice(0, 200)}`),

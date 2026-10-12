@@ -39,6 +39,8 @@ export type PiOptions = {
   implementations?: Partial<Implementations>;
   /** Runs per phase before the task faults (default 2). */
   attempts?: number;
+  /** The task kinds: natural-language (`nl`, default) or pi-durable's built-in TypeScript kinds (`crisp`). */
+  phases?: 'nl' | 'crisp';
 };
 
 /** Open pi on `options.storage`: a Harness whose built-in task kinds are natural-language functions. */
@@ -54,6 +56,7 @@ export async function openPi(options: PiOptions, context: Context = BACKGROUND_C
     natlang: options.natlang,
     entries: { generation: generation as Entry, tool: tool as Entry, compaction: compaction as Entry },
     implementations: options.implementations,
+    ...(options.phases ? { phases: options.phases } : {}),
     attempts: options.attempts,
     onPhase: options.onPhase,
     now: options.now,

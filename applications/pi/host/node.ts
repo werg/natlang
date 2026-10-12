@@ -15,6 +15,7 @@ export function createEnvs(defaultCwd: string): ExecutionEnvs<NodeExecutionEnv> 
 }
 
 /** pi's coding registry with the Node host's prompt resources. */
-export function nodeCodingRegistry(natlang: NatlangRuntime, options: NodePiPromptOptions & { subagent?: boolean }): Registry {
-  return codingRegistry(natlang, { prompt: nodePiPrompt(options), ...(options.subagent === undefined ? {} : { subagent: options.subagent }) });
+export function nodeCodingRegistry(natlang: NatlangRuntime, options: NodePiPromptOptions & { subagent?: boolean; tools?: 'nl' | 'crisp' }): Registry {
+  return codingRegistry(natlang, { prompt: nodePiPrompt(options), ...(options.subagent === undefined ? {} : { subagent: options.subagent }),
+    ...(options.tools ? { tools: options.tools } : {}) });
 }

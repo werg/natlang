@@ -10,6 +10,7 @@ import { createRegistry } from '../vendor/durable/src/harness/registry.ts';
 import type { EnvTarget, Extension, Registry } from '../vendor/durable/src/harness/types.ts';
 import type { ExecutionEnv } from '../vendor/durable/src/env/index.ts';
 import { codingTools } from './coding-tools/index.ts';
+import { CodingTools } from '../vendor/durable/src/tools/index.ts';
 import { piPrompt, type PiPromptOptions } from './pi-prompt/sections.ts';
 import { subagent } from './subagent/index.ts';
 
@@ -22,12 +23,18 @@ export type CodingRegistryOptions = {
   prompt: Extension | PiPromptOptions;
   /** Install the subagent tool (default true). */
   subagent?: boolean;
+  /**
+   * The coding tools: `nl` (default) runs read/write/edit/bash as natural-language functions on `natlang`; `crisp` installs
+   * pi-durable's own TypeScript tools (vendor/durable/src/tools), the same interface, for runs whose executor cannot
+   * carry the natural-language tools (a small executor beside a student under test).
+   */
+  tools?: 'nl' | 'crisp';
 };
 
 /** A registry with pi's coding tools, system prompt and subagent; their functions run on `natlang`. */
 export function codingRegistry(natlang: NatlangRuntime, options: CodingRegistryOptions): Registry {
   const registry = createRegistry();
-  registry.install(codingTools(natlang));
+  registry.install(options.tools === 'crisp' ? CodingTools : codingTools(natlang));
   registry.install('name' in options.prompt ? options.prompt : piPrompt(options.prompt));
   if (options.subagent !== false) registry.install(subagent(natlang));
   return registry;
