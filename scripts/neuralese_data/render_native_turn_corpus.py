@@ -42,6 +42,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
@@ -264,6 +265,163 @@ def registered_source_pieces(sources):
     return tables, bindings
 
 
+def registered_candidate_selection_admission(corpus_id, sources):
+    """Verify a registry owner's exact admission of a conversion-only candidate packet.
+
+    The packet bytes remain candidate-selection metadata. This returns the exact ID/target/source map which the
+    renderer may promote in memory only because the registry owner admitted this corpus.
+    """
+    registry_path = ROOT / 'training/neuralese_corpora.json'
+    registry = json.loads(registry_path.read_text())
+    entries = [entry for entry in registry.get('corpora', []) if entry.get('id') == corpus_id]
+    if len(entries) != 1:
+        raise ValueError(f'candidate-selection admission needs one registry entry: {corpus_id}')
+    entry = entries[0]
+    admission = entry.get('candidate_selection_admission')
+    if admission is None:
+        return None
+    if (entry.get('training_admission') is not True or entry.get('trace_admission') is True or
+            admission.get('schema') != 'natlang.registry-candidate-selection-admission/1' or
+            admission.get('decision') != 'admit-reviewed-candidate-selection' or
+            admission.get('training_admission') is not True or admission.get('trace_admission') is not False):
+        raise ValueError(f'candidate-selection registry admission is malformed or out of scope: {corpus_id}')
+    corpus_root = (ROOT / entry['path']).resolve(strict=True)
+    if any(path.resolve(strict=True).parent != corpus_root for path in sources):
+        raise ValueError('candidate-selection admission must render directly from the registered packet files')
+    registry_manifest_path = ROOT / 'training/corpus-manifests' / f'{corpus_id}.json'
+    registry_manifest = json.loads(registry_manifest_path.read_text())
+    if registry_manifest.get('id') != corpus_id or registry_manifest.get('path') != entry['path']:
+        raise ValueError('candidate-selection registry manifest identity mismatch')
+    registered = {item['path']: item for item in registry_manifest.get('files', [])}
+
+    def registered_bytes(name):
+        item = registered.get(name)
+        path = corpus_root / name
+        if not item or not path.is_file() or path.stat().st_size != item.get('bytes') or file_sha(path) != item.get('sha256'):
+            raise ValueError(f'candidate-selection file differs from its immutable corpus manifest: {name}')
+        return path.read_bytes()
+
+    packet_bytes = registered_bytes('materialized-manifest.json')
+    packet_sha = file_sha(corpus_root / 'materialized-manifest.json')
+    if packet_sha != admission.get('packet_manifest_sha256'):
+        raise ValueError('registry candidate-selection packet manifest pin mismatch')
+    packet = json.loads(packet_bytes)
+    if (packet.get('candidate_selection') is not True or packet.get('training_admission') is not False or
+            packet.get('trace_admission') is not False):
+        raise ValueError('registry candidate-selection packet has an invalid stage/admission')
+    candidate_ref, semantic_ref = packet.get('candidate_selection_review'), packet.get('semantic_review')
+    clearance_ref = packet.get('source_quality_clearance')
+    if (not candidate_ref or not semantic_ref or not clearance_ref or
+            candidate_ref.get('sha256') != admission.get('candidate_selection_review_sha256') or
+            semantic_ref.get('sha256') != admission.get('semantic_review_sha256') or
+            packet.get('semantic_review_input_audit', {}).get('sha256') != admission.get('historical_audit_sha256') or
+            packet.get('selection_review_pin_correction', {}).get('sha256') != admission.get('selection_review_pin_correction_sha256') or
+            clearance_ref.get('file_sha256') != admission.get('source_quality_clearance_sha256')):
+        raise ValueError('registry candidate-selection review or clearance pin mismatch')
+    registered_bytes(candidate_ref['path'])
+    registered_bytes(semantic_ref['path'])
+    registered_bytes(clearance_ref['path'])
+    owner_path = admission.get('owner_admission_path')
+    owner_sha = admission.get('owner_admission_sha256')
+    if owner_path != 'root-selected-action-admission.json' or not isinstance(owner_sha, str):
+        raise ValueError('registry candidate-selection owner receipt reference is invalid')
+    owner_bytes = registered_bytes(owner_path)
+    if file_sha(corpus_root / owner_path) != owner_sha:
+        raise ValueError('registry candidate-selection owner receipt hash mismatch')
+    owner = json.loads(owner_bytes)
+    if (owner.get('schema') != 'natlang.root-selected-action-admission/1' or
+            owner.get('training_admission') is not True or owner.get('trace_admission') is not False or
+            owner.get('packet_manifest_sha256') != packet_sha or
+            owner.get('review_path') != str((Path(entry['path']) / semantic_ref['path']).as_posix()) or
+            owner.get('review_sha256') != semantic_ref.get('sha256') or
+            owner.get('counts', {}).get('selected_native_actions') != len(owner.get('rows', [])) or
+            owner.get('counts', {}).get('train_actions') != len(owner.get('rows', [])) or
+            owner.get('counts', {}).get('test_actions') != 0 or
+            owner.get('counts', {}).get('whole_trajectories') != 0 or
+            owner.get('counts', {}).get('new_worlds') != 0 or
+            owner.get('qualifications', {}).get('learned_writer') is not False or
+            owner.get('qualifications', {}).get('recurrence') is not False or
+            owner.get('qualifications', {}).get('runtime') is not False or
+            owner.get('integration', {}).get('active_GPU_inputs_changed') is not False or
+            owner.get('review_evidence', {}).get('selection_pin_correction_sha256') !=
+            admission.get('selection_review_pin_correction_sha256')):
+        raise ValueError('root candidate-selection admission receipt is malformed or outside SFT-only scope')
+    prefix = Path(entry['path']).as_posix() + '/'
+    owner_pins = owner.get('input_pins')
+    if not isinstance(owner_pins, dict) or not owner_pins:
+        raise ValueError('root candidate-selection receipt has no input pins')
+    for pinned_path, pin in owner_pins.items():
+        if not pinned_path.startswith(prefix):
+            raise ValueError('root candidate-selection receipt input escapes the registered packet')
+        registered_bytes(pinned_path[len(prefix):])
+        if (pin.get('sha256') != registered[pinned_path[len(prefix):]].get('sha256') or
+                pin.get('bytes') != registered[pinned_path[len(prefix):]].get('bytes')):
+            raise ValueError('root candidate-selection input pin differs from corpus manifest')
+    source_list = {path.resolve(strict=True) for path in sources}
+    if corpus_root / 'turns.jsonl' not in source_list:
+        raise ValueError('candidate-selection admission must include the pinned turns.jsonl source')
+    verified = subprocess.run([
+        'node', str(ROOT / 'scripts/verify_candidate_selection_packet.mjs'), '--root', str(corpus_root),
+        '--manifest-sha256', packet_sha,
+    ], cwd=ROOT, check=True, capture_output=True, text=True)
+    receipt = json.loads(verified.stdout)
+    if (receipt.get('schema') != 'natlang.verified-candidate-selection-packet/1' or
+            receipt.get('manifest_sha256') != packet_sha or
+            receipt.get('candidate_review_sha256') != admission.get('candidate_selection_review_sha256') or
+            receipt.get('semantic_review_sha256') != admission.get('semantic_review_sha256') or
+            receipt.get('historical_audit_sha256') != admission.get('historical_audit_sha256') or
+            receipt.get('selection_review_pin_correction_sha256') != admission.get('selection_review_pin_correction_sha256')):
+        raise ValueError('shared candidate packet verifier returned different pins')
+    turns_path = corpus_root / 'turns.jsonl'
+    turn_rows = [json.loads(line) for line in turns_path.read_text().splitlines() if line.strip()]
+    turns_by_id = {row['id']: row for row in turn_rows}
+    if len(turns_by_id) != len(turn_rows):
+        raise ValueError('registered candidate-selection turn IDs are not unique')
+    owner_rows = owner.get('rows')
+    if not isinstance(owner_rows, list) or not owner_rows:
+        raise ValueError('root candidate-selection receipt has no exact row list')
+    actual_owner_rows = []
+    for row in receipt['rows']:
+        turn = turns_by_id.get(row['id'])
+        if not turn:
+            raise ValueError(f'root candidate-selection receipt turn is missing: {row["id"]}')
+        messages_sha256 = sha(canonical(turn.get('messages')).encode())
+        actual_owner_rows.append({**row, 'messages_sha256': messages_sha256})
+    actual_owner_rows.sort(key=lambda row: row['id'])
+    actual_by_id = {row['id']: row for row in receipt['rows']}
+    declared_owner_rows = [{
+        'id': row.get('native_id'), 'item_id': row.get('item_id'),
+        'item_sha256': actual_by_id.get(row.get('native_id'), {}).get('item_sha256'),
+        'target_sha256': row.get('target_sha256'), 'messages_sha256': row.get('messages_sha256'),
+        'split': row.get('split'), 'source_groups': row.get('source_groups'),
+    } for row in owner_rows]
+    declared_owner_rows.sort(key=lambda row: row['id'])
+    if canonical(actual_owner_rows) != canonical(declared_owner_rows):
+        raise ValueError('root exact native IDs, target/message hashes, splits, or groups differ from verified packet')
+    declared_rows = admission.get('rows')
+    if not isinstance(declared_rows, list) or not declared_rows:
+        raise ValueError('registry candidate-selection admission has no exact row list')
+
+    def identity(row):
+        return {key: row.get(key) for key in ('id', 'item_id', 'item_sha256', 'target_sha256',
+                                               'messages_sha256', 'split', 'source_groups')}
+    actual = {row['id']: identity(row) for row in actual_owner_rows}
+    declared = {row.get('id'): identity(row) for row in declared_rows if isinstance(row, dict)}
+    if (len(declared) != len(declared_rows) or len(actual) != len(actual_owner_rows) or
+            canonical(actual) != canonical(declared)):
+        raise ValueError('registry candidate-selection rows do not equal owner-approved native IDs/targets/messages')
+    rows_sha256 = sha(canonical([actual[row_id] for row_id in sorted(actual)]).encode())
+    if admission.get('rows_sha256') != rows_sha256:
+        raise ValueError('registry candidate-selection exact row-list hash mismatch')
+    return {'corpus_id': corpus_id, 'packet_manifest_sha256': packet_sha,
+            'candidate_selection_review_sha256': admission['candidate_selection_review_sha256'],
+            'semantic_review_sha256': admission['semantic_review_sha256'],
+            'historical_audit_sha256': admission['historical_audit_sha256'],
+            'selection_review_pin_correction_sha256': admission['selection_review_pin_correction_sha256'],
+            'owner_admission_sha256': owner_sha,
+            'source_quality_clearance_sha256': admission['source_quality_clearance_sha256'], 'rows': actual}
+
+
 def select(args, shard_dir: Path):
     """Stream the sources; write selected raw lines to trajectory shards; return omissions and blocked chains."""
     exclude = {}
@@ -321,6 +479,39 @@ def select(args, shard_dir: Path):
                                                  'admitted_through_include_set': [str(x) for x in args.include_ids]}
                     line = json.dumps(row, ensure_ascii=False).encode()
                     counts['approved_through_include_set'] += 1
+                candidate_admission = getattr(args, 'candidate_selection_admission', None)
+                if row.get('candidate_selection', {}).get('approved') is True and candidate_admission is not None:
+                    approved = candidate_admission['rows'].get(rid)
+                    if approved is None:
+                        reason = 'not_in_registry_candidate_selection_admission'
+                    else:
+                        actual_target = sha(canonical(row.get('target')).encode())
+                        actual_messages = sha(canonical(row.get('messages')).encode())
+                        # The packet verifier binds item/source and target provenance; the registered corpus
+                        # manifest binds this exact turns.jsonl file. Recheck fields rendered from the row itself.
+                        if (actual_target != approved['target_sha256'] or row.get('split') != approved['split'] or
+                                actual_messages != approved['messages_sha256'] or
+                                row.get('source_groups') != approved['source_groups']):
+                            raise ValueError(f'registry candidate-selection row changed after packet verification: {rid}')
+                        row['training_admission'] = {
+                            'approved': True, 'kind': 'registry-bound-candidate-selection',
+                            'status': 'admitted-exact-selected-child-action', 'corpus_id': candidate_admission['corpus_id'],
+                            'packet_manifest_sha256': candidate_admission['packet_manifest_sha256'],
+                            'candidate_selection_review_sha256': candidate_admission['candidate_selection_review_sha256'],
+                            'semantic_review_sha256': candidate_admission['semantic_review_sha256'],
+                            'historical_audit_sha256': candidate_admission['historical_audit_sha256'],
+                            'selection_review_pin_correction_sha256': candidate_admission[
+                                'selection_review_pin_correction_sha256'],
+                            'owner_admission_sha256': candidate_admission['owner_admission_sha256'],
+                            'source_quality_clearance_sha256': candidate_admission['source_quality_clearance_sha256'],
+                            'item_id': approved['item_id'], 'item_sha256': approved['item_sha256'],
+                            'target_sha256': approved['target_sha256'], 'split': approved['split'],
+                            'source_groups': approved['source_groups'],
+                        }
+                        row['decision'] = {**(row.get('decision') or {}), 'training_approved': True,
+                                           'registry_candidate_selection_admission': candidate_admission['corpus_id']}
+                        line = json.dumps(row, ensure_ascii=False).encode()
+                        counts['approved_by_registry_candidate_selection'] += 1
                 if row.get('version') != 'natlang.teacher_training_turn.native/1':
                     reason = 'not_a_native_teacher_turn'
                 elif rid in seen_ids:
@@ -765,6 +956,9 @@ def main(argv=None):
     a = p.parse_args(argv)
     tokenizers = dict(item.split('=', 1) for item in a.tokenizer)
     pieces, piece_bindings = registered_source_pieces(a.source)
+    a.candidate_selection_admission = registered_candidate_selection_admission(a.corpus_id, a.source)
+    if a.candidate_selection_admission and a.include_admits:
+        p.error('--include-admits cannot be combined with exact candidate-selection admission')
     explicit_piece_bindings = []
     for path in a.pieces:
         explicit_piece_bindings.append({'path': str(path), 'bytes': path.stat().st_size,

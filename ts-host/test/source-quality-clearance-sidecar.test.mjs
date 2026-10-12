@@ -8,7 +8,7 @@ import { hexDigest } from '../dist/native/hash.js';
 import { sourceQualityClearanceProblems, sourceQualityClearanceRefForProgram,
   sourceQualityClearanceRefProblems, verifySourceQualityClearanceSidecar } from '../dist/teacher/source-quality-clearance.js';
 import { sourceConversionProblems } from '../dist/teacher/source-conversion.js';
-import { resolvePacketSourceQualityClearance } from '../../scripts/lib/source-quality-clearance-sidecar.mjs';
+import { openPacketSourceQualityClearanceResolver, resolvePacketSourceQualityClearance } from '../../scripts/lib/source-quality-clearance-sidecar.mjs';
 
 const sha = value => hexDigest(typeof value === 'string' ? value : canonical(value));
 const sourceRow = { id: 'source-1', row_index: 0, row_sha256: '1'.repeat(64), group: 'group-1', split: 'train' };
@@ -81,9 +81,14 @@ test('packet resolver verifies relative sidecar and evidence paths before using 
       await writeFile(join(root, names[index]), evidenceBytes);
       evidence.push({ role: index === 0 ? 'source_quality_review' : 'source_closure', path: names[index], sha256: digest });
     }
-    await writeFile(join(root, 'materialized-manifest.json'), JSON.stringify({ source_quality_clearance: {
+    const manifestBytes = JSON.stringify({ source_quality_clearance: {
       path: ref.sidecar_path, file_sha256: ref.file_sha256, review_canonical_sha256: ref.review_canonical_sha256,
-      evidence } }));
+      evidence } });
+    await writeFile(join(root, 'materialized-manifest.json'), manifestBytes);
+    const packet = await openPacketSourceQualityClearanceResolver(root, sha(manifestBytes));
+    assert.equal(packet.resolve(ref, program).review.id, clearance.review.id);
+    assert.throws(() => packet.resolve({ ...ref, sidecar_path: '../outside.json' }, program), /manifest-mismatch/);
+    await assert.rejects(openPacketSourceQualityClearanceResolver(root, '0'.repeat(64)), /manifest-file-hash-mismatch/);
     const resolved = await resolvePacketSourceQualityClearance(root, ref, program);
     assert.equal(resolved.review.id, clearance.review.id);
     await assert.rejects(resolvePacketSourceQualityClearance(root, { ...ref, sidecar_path: '../outside.json' }, program),

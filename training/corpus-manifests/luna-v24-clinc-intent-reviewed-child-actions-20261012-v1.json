@@ -1,0 +1,86 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v24-clinc-intent-reviewed-child-actions-20261012-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/luna-v24-clinc-intent-reviewed-child-candidates-20261012-v3",
+  "files": [
+    {
+      "path": "candidate-discovery-audit.json",
+      "bytes": 522582,
+      "sha256": "e4535ee2270a4dffef80c74e343075a74e8a71bf747f09f82ac98018adf7b179"
+    },
+    {
+      "path": "candidate-selection-review.json",
+      "bytes": 471195,
+      "sha256": "d29e22e02b72800c5cd64f423bc407e0fdb8f1124944ae89977bcd4f1dbc574f"
+    },
+    {
+      "path": "historical-candidate-audit-input.json",
+      "bytes": 522995,
+      "sha256": "ee59ea352671a1633da96356bc0ca0fe55741ddd7fe24c56a976b07b75c48bc3"
+    },
+    {
+      "path": "materialized-manifest.json",
+      "bytes": 787484,
+      "sha256": "767350bc04d19f4afd66e05fd0720557894417bc2e7d21472f07d133d02ee74b"
+    },
+    {
+      "path": "reservation-source.json",
+      "bytes": 1244301,
+      "sha256": "2ec7845cd19d9b42c504f2ac7535c3bc23510b913b03f5b76b6da911fd2b84c7"
+    },
+    {
+      "path": "root-selected-action-admission.json",
+      "bytes": 297164,
+      "sha256": "fa9d09a1ff0d8060eac001fe38aa905b622e30daee72cb31e2da63d6261ba3ea"
+    },
+    {
+      "path": "selection-review-pin-correction.json",
+      "bytes": 928,
+      "sha256": "a793fdfa13298bc9c72e3fd34db876ed232c11fbda70c8070ac50334f3d258a6"
+    },
+    {
+      "path": "semantic-child-review.json",
+      "bytes": 441331,
+      "sha256": "ac5d4e613898423c9006c7a6cd3c47f8cdc1cfcd71cb9d20d2b103175a1d7ce5"
+    },
+    {
+      "path": "source-cases.jsonl",
+      "bytes": 1398024,
+      "sha256": "9e808734330824b4c4ccc89b67808cda884697ab403cc83cf064e09f0839a2f6",
+      "lines": 500
+    },
+    {
+      "path": "source-closure.json",
+      "bytes": 34044,
+      "sha256": "217e3391722be9248ae7e0e127770600fb1b9cb5e0103140edba0d28d0a55c02"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 125748,
+      "sha256": "d996b871d0a66b8e50c4003b3f14cf8ff02fda20535c4a1cb94f446ac381b0e0"
+    },
+    {
+      "path": "source-quality-clearance.json",
+      "bytes": 303985,
+      "sha256": "3fd87a6f56c2afe60d2f64e888ba66272d96cb106e2bb8dbfcdc66f02d04c318"
+    },
+    {
+      "path": "source-quality-review.json",
+      "bytes": 705214,
+      "sha256": "a68cc386b9b24cebeb802b4d20eb8dac75b2851347c1874ec91a720fa33ffcc6"
+    },
+    {
+      "path": "source-split-reservations.json",
+      "bytes": 166290,
+      "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+    },
+    {
+      "path": "turns.jsonl",
+      "bytes": 54169058,
+      "sha256": "6b54f45de39c122ba52730754227a212eabf3dda7e1d0c7ea2e680742e49ffcf",
+      "lines": 371
+    }
+  ],
+  "bytes": 61190343
+}
