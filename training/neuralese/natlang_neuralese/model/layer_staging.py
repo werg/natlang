@@ -32,6 +32,12 @@ _ACTIVE: list["LayerStaging"] = []
 
 class LayerStaging:
     def __init__(self):
+        # The pre-pass backpropagates with retain_graph=True. A torch.compile'd function whose backward donates its
+        # saved buffers (the FlexAttention sliding-window kernel, model/hf_port.py) refuses that ("compiled with
+        # non-empty donated buffers"): the first Mellum E2E update under --latent-step-in-backward failed so. Graphs
+        # compiled from here on keep their buffers.
+        import torch._functorch.config as functorch_config
+        functorch_config.donated_buffer = False
         self.outputs: dict[int, list[tuple[torch.Tensor, torch.Tensor]]] = {}  # layer -> [(output, leaf)]
         self.edges: dict[int, list[tuple[torch.Tensor, torch.Tensor]]] = {}  # layer -> [(source, leaf)]
         self.exits: dict[int, int] = {}  # id(exit leaf) -> layer
@@ -110,6 +116,15 @@ class LayerStaging:
                 sent[id(leaf)] = {id(r): rg for r, rg in zip(reads, grads) if rg is not None}
         return sent
 
+    @staticmethod
+    def _same_gradient(a: torch.Tensor, b: torch.Tensor, tolerance: float = 1e-2) -> bool:
+        """Norm-relative agreement of two computations of one gradient. Recomputing an activation-only backward (with
+        checkpointed recompute and BF16 kernels that reduce nondeterministically: flex/SDPA backward, MoE scatter-add)
+        changes elements by ~1e-4 relative, so an elementwise allclose can fail on small entries of the same
+        gradient (measured 2026-10-12 on the 2-layer Mellum bench: round-to-round 7.6e-6 max abs, 2-3e-4 relative)."""
+        a, b = a.float(), b.float()
+        return float(torch.linalg.vector_norm(a - b)) <= tolerance * max(float(torch.linalg.vector_norm(b)), 1e-12)
+
     def backward(self):
         """Backpropagate the recorded layers from the top, after the losses' backward reached their leaves."""
         layers = sorted(set(self.outputs) | set(self.edges), reverse=True)
@@ -127,15 +142,16 @@ class LayerStaging:
             # earlier round. Converge the gradients, not merely the set of edges.
             # The cross-stream graph is acyclic, so each round resolves at least
             # one more dependency; a cap exposes an unexpected cycle.
-            for _ in range(len(cross) + 2):
+            # One cross edge (depth-1 writes) cannot change itself through an acyclic graph: one round is exact.
+            for _ in range(1 if len(cross) == 1 else len(cross) + 2):
                 seeds: dict[int, torch.Tensor] = {}
                 for per_edge in sent.values():
                     for i, g in per_edge.items():
                         seeds[i] = g if i not in seeds else seeds[i] + g
                 reached = self._prepass(cross, seeds)
-                stable = reached.keys() == sent.keys() and all(
+                stable = len(cross) == 1 or reached.keys() == sent.keys() and all(
                     reached[edge].keys() == sent[edge].keys() and all(
-                        torch.allclose(g.float(), sent[edge][read].float(), rtol=1e-4, atol=1e-7)
+                        self._same_gradient(g, sent[edge][read])
                         for read, g in values.items())
                     for edge, values in reached.items())
                 sent = reached
@@ -169,8 +185,8 @@ class LayerStaging:
                     for read in reads:
                         arrived = read.grad if before[id(read)] is None else read.grad - before[id(read)]
                         seed = expected.get(id(read))
-                        if (arrived is None) != (seed is None) or (seed is not None and not torch.allclose(
-                                arrived.float(), seed.float(), rtol=1e-3, atol=1e-6)):
+                        if (arrived is None) != (seed is None) or (seed is not None and
+                                                                    not self._same_gradient(arrived, seed)):
                             delta = (float((arrived.float() - seed.float()).abs().max())
                                      if arrived is not None and seed is not None else None)
                             raise RuntimeError('layer-staged backward: a cross-stream edge sent a different gradient '
