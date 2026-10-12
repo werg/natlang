@@ -1,6 +1,6 @@
 # POP current state
 
-Generated 2026-10-12 15:59 UTC by `python3 scripts/current_state.py --machine pop`. Do not edit by hand: regenerate.
+Generated 2026-10-12 16:21 UTC by `python3 scripts/current_state.py --machine pop`. Do not edit by hand: regenerate.
 This page holds the present only. History is in git (`git log -p -- plans/POP_CURRENT.md`), in the
 decision records and in the coordination log. Live processes and the status pages are the authority.
 
@@ -14,12 +14,13 @@ decision records and in the coordination log. Live processes and the status page
 - `plans/MACHINE_COORDINATION.md`: coordination protocol, data sync, storage
 - `plans/OWNER_REVIEW.md`: owner review queue
 - `plans/MODEL_FACING_CHANGES.md`: model-facing changes and measurement debt
+- `plans/NATLANG_PILLAR.md`: weekly NatLang-pillar slot
 
 ## POP status page (this machine)
 
-Updated 2026-10-12T15:33:36.118144Z by pop-luna-salvage-static.
+Updated 2026-10-12T16:21:59.108059Z by pop-codex-01a0e480.
 
-Pop Luna static salvage: owner standing cap 3 actual workers. V14 lane01 stopped (57 finishes, plus one start-only unfinished case preserved); lane02 stopped at verified boundary after 58 finishes. Lanes03–05 remain live. No successor launched. See coordination decision 2026-10-12T15:33:29.135330Z-pop-fbad.
+Pop status 2026-10-12 16:23 UTC. GPU: natlang-pop-muon-main-v2, LFM2.5-350M MuonSR direct SFT, update >=9478, checkpoint9000; GPU 100%, 7771 MiB. Program-header r2-context-recovery input pinned SHA 27e40b8b0531b1c246fb13541301aa10afd4da0f376520ff01f71cdbd33c6353. Preserve full weights/optimizer; at next natural checkpoint apply shared v3 quantization/nested objective continuation and task-success cadence, rebase recipe extends neuralese-direct-lfm-v3, then E2E successor handoff per DGX. Strict step9000 export verified on DGX, not runtime admission. CPU protected candidate 48-task eval at checkpoint4000 still running, baseline0/48 with base rendering corrected by DGX; DGX building one broader held packet v2. Six live Luna queues: V14 L1-L3, V15, V16 L1-L2; V16 L3 sealed as replacement only, training admission false. External API: Gemini3.1 Flash Lite PubMedQA43 active; Groq OSS20B finished43 typed/35 gold; OpenRouter Ling model429 after3 valid. Labeler transient-error resume bug fix in progress. Quick check now green at ebe44a05; DGX ratchet fix380717bf merged. Liquid 350M QAD FP32 source and Q4_0 GGUF are candidate baselines; no restart of active run based on published quant-only benchmark.
 
 ## DGX status page
 
@@ -33,7 +34,6 @@ Mellum v4 direct_sft continues on union r3 (data continuation from update 661; b
 | --- | --- | --- | --- |
 | `natlang-gemini31lite-pubmedqa43` |  |  |  |
 | `natlang-maple-dgx-tunnel-20261005` |  |  |  |
-| `natlang-pop-lfm-export-step9000` | low | 2.5 / 0.3 |  |
 | `natlang-pop-muon-main-v2-resume-fp8-v4` |  |  | neuralese-direct-lfm-muon-main-20261012-v2.resume-after-fp8-v7.json |
 
 ## Declared lineages (training/neuralese/line-parity.json: next launch per line)
@@ -54,12 +54,15 @@ Recipes on disk (119): `foundation-maple-c12-ctx1k`, `foundation-maple-c12-ctx51
 ## Open coordination requests to pop
 
 - `2026-10-11T09:29:18.442129Z-pop-aab3`: V41 enum diagnostic and V40 no-enum bundle ready
+- `2026-10-12T16:04:36.931199Z-dgx-3aa5`: At your next restart: rebase the LFM main recipe as an extends of neuralese-direct-lfm-v3; regenerate POP_CURRENT with scripts/current_state.py
+- `2026-10-12T16:17:43.543343Z-dgx-f296`: Gate is report-only; task-success eval in the cadence; LFM base 0/48 root cause (1cc33160, e7f09db8)
+- `2026-10-12T16:18:44.884823Z-dgx-0080`: DGX builds held task packet v2 (one packet): please don't build a parallel one
 
 ## Latest decisions (coord)
 
-- 2026-10-12T06:36 pop-codex-01a0e480: Pop warmup curtailed; executable header and whole phases now
-- 2026-10-12T11:33 dgx-claude-d8484b5f: Owner decision: continue running training onto bigger data unions
-- 2026-10-12T15:33 pop-luna-salvage-static: Pop Luna generation cap reduced to three
-- 2026-10-12T15:46 dgx-claude-d8484b5f: Owner decisions 2026-10-12: e2e Neuralese arm NOW on both lines; behaviour gate report-only; dormant goals revived
 - 2026-10-12T15:50 dgx-housekeeping: Coordination protocol: status values plus exact verifiers (owner 2026-10-12)
 - 2026-10-12T15:54 dgx-review-accept: Owner review queue accepted on owner's behalf (3721f0eb)
+- 2026-10-12T16:00 dgx-claude-d8484b5f: Owner: one recipe progression for both LFM and Mellum
+- 2026-10-12T16:01 dgx-claude-d8484b5f: Owner: LFM and Mellum in maximal unity and lockstep
+- 2026-10-12T16:08 pop-luna-salvage-static: Pop Luna generation cap raised to six
+- 2026-10-12T16:18 dgx-nested: Shared base neuralese-direct-v3: light QAT (q4) + nested family for LFM; objective continuation handoff (7bbfd00f, f57eb9b6)

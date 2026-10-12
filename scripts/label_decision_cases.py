@@ -483,8 +483,33 @@ def main():
 
     done = set()
     if os.path.exists(args.out):
+        # A provider timeout or exhausted retry is an attempt, not a label.
+        # Keep the canonical output at one successful row per case so downstream
+        # readers never have to choose between an old error and its recovery.
+        successful = {}
+        failed = []
+        existing_rows = 0
         with open(args.out, encoding='utf-8') as stream:
-            done = {json.loads(line)['id'] for line in stream if line.strip()}
+            for line in stream:
+                if not line.strip():
+                    continue
+                existing_rows += 1
+                row = json.loads(line)
+                if isinstance(row.get('answer'), dict) and row['answer'].get('error'):
+                    failed.append(row)
+                else:
+                    successful[row['id']] = row
+        done = set(successful)
+        if failed or len(successful) != existing_rows:
+            attempts_path = args.out + '.attempts.jsonl'
+            with open(attempts_path, 'a', encoding='utf-8') as attempts:
+                for row in failed:
+                    attempts.write(json.dumps(row, ensure_ascii=False) + '\n')
+            temporary = args.out + '.resume-tmp'
+            with open(temporary, 'w', encoding='utf-8') as stream:
+                for row in successful.values():
+                    stream.write(json.dumps(row, ensure_ascii=False) + '\n')
+            os.replace(temporary, args.out)
 
     if args.backend == 'decider':
         import torch
