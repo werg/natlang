@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep Pop free Gemini generation supplied with reviewed source cases
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=10min
+Persistent=true
+Unit=natlang-pop-free-gemini-replenish.service
+
+[Install]
+WantedBy=timers.target
