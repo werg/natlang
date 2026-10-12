@@ -17,6 +17,8 @@ def main(argv=None):
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0, help="0 picks a free port; the chosen port is printed")
     parser.add_argument("--device", default="cpu", help="cpu, cuda[:N], or auto: cuda when it has room, else cpu")
+    parser.add_argument("--dtype", choices=("float32", "bfloat16"), default=None,
+                        help="model weight and cache dtype (default: float32 on CPU, bfloat16 on CUDA)")
     parser.add_argument("--base", default=None)
     parser.add_argument("--lora", default=None)
     parser.add_argument("--heads", default=None, help="S3 trainer checkpoint with port heads and control rows")
@@ -60,6 +62,8 @@ def main(argv=None):
 
     import torch
 
+    model_dtype = {"float32": torch.float32, "bfloat16": torch.bfloat16}.get(args.dtype)
+
     from natlang_neuralese.devices import auto_device, cap_cuda_memory
 
     torch.set_num_threads(args.threads)
@@ -67,6 +71,8 @@ def main(argv=None):
         args.device = auto_device()
     cap_cuda_memory(args.device, args.memory_gb)
     if args.recurrence_checkpoint:
+        if model_dtype is not None:
+            parser.error('--dtype cannot override a recurrence checkpoint runtime qualification')
         if not args.runtime_qualification or any(value is not None for value in
                 (args.base, args.lora, args.heads, args.cutoff, args.max_block, args.dialect,
                  args.direct_artifact, args.direct_base_snapshot)):
@@ -99,7 +105,7 @@ def main(argv=None):
         from ..common.hashing import sha256_file_hex
         from ..train.direct_export import load_direct_artifact
         restored = load_direct_artifact(args.direct_artifact, base_snapshot=args.direct_base_snapshot,
-                                        device=args.device)
+                                        device=args.device, dtype=model_dtype)
         engine = restored.engine
         manifest_path = Path(args.direct_artifact) / "manifest.json"
         print(json.dumps({"event": "direct_artifact_restored",
@@ -111,7 +117,8 @@ def main(argv=None):
     else:
         if args.runtime_qualification:
             parser.error('runtime qualification requires a recurrence checkpoint')
-        engine = load_engine(args.base, args.lora, args.heads, args.cutoff, args.max_block, args.device, args.dialect)
+        engine = load_engine(args.base, args.lora, args.heads, args.cutoff, args.max_block, args.device,
+                             args.dialect, dtype=model_dtype)
     engine.prefill_padding = args.prefill_padding
     if args.ctx_size:
         engine.context = min(engine.context, args.ctx_size)
@@ -131,7 +138,8 @@ def main(argv=None):
     engine.start()
     server = serve(engine, args.host, args.port)
     print(json.dumps({"listening": f"http://{server.server_address[0]}:{server.server_address[1]}",
-                      "dialect": engine.dialect, "cutoff": engine.heads.cutoff, "device": args.device}), flush=True)
+                      "dialect": engine.dialect, "cutoff": engine.heads.cutoff, "device": args.device,
+                      "model_dtype": str(next(engine.backbone.parameters()).dtype)}), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

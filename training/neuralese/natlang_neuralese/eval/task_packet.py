@@ -64,10 +64,23 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
         "failure_reason": outcome.get("failure_reason"),
         "rejection_reasons": outcome.get("rejection_reasons"),
         "scope_failures": outcome.get("scope_failures"),
+        "action_ledger": outcome.get("action_ledger"),
         "detail": outcome.get("detail"),
         "error": result.get("error"),
         "finish": finish,
     })
+    if re.search(r"(econnrefused|econnreset|connection refused|connection reset|provider request retry exhausted|http 5\d\d|server unavailable)", details):
+        return "infrastructure_error"
+    scope_failures = outcome.get("scope_failures")
+    if isinstance(scope_failures, list):
+        for failure in scope_failures:
+            if not isinstance(failure, dict):
+                continue
+            message = str(failure.get("message", "")).casefold()
+            if message.strip() == "terminated":
+                return "infrastructure_error"
+            if re.search(r"\b(syntaxerror|typeerror|referenceerror|rangeerror|not a function|cannot read properties|undefined variable|unknown identifier)\b", message):
+                return "invalid_action"
     if re.search(r"\b(repeated|repetition|stuck in a loop|same action.*again)\b", details):
         return "repetition"
     actions = outcome.get("action_ledger")
@@ -75,10 +88,11 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
         for action in actions:
             if not isinstance(action, dict):
                 continue
-            if action.get("outcome") in {"invalid", "rejected", "error"} or action.get("diagnostics"):
+            diagnostics = action.get("diagnostics")
+            if action.get("outcome") in {"invalid", "rejected"} or (isinstance(diagnostics, list) and diagnostics):
                 return "invalid_action"
-    if outcome.get("status") in {"failed", "quiesced"} and outcome.get("scope_failures"):
-        return "invalid_action"
+    if outcome.get("status") in {"failed", "quiesced"} and scope_failures:
+        return "unresolved"
     if outcome.get("status") not in {"done", "failed", "quiesced"}:
         return "infrastructure_error"
     if finish and finish.get("status") not in {"complete", "complete_with_skips"}:

@@ -586,8 +586,27 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
         if Path(base_source_proof.get("snapshot_path", "")).resolve() != snapshot or snapshot != expected_snapshot:
             raise ValueError("base source proof does not name the exact explicit snapshot directory")
         source_inputs = launch_receipt.get("inputs") or {}
-        if source_inputs.get("heads", {}).get("sha256") != inputs[str(anchor_path)]:
-            raise ValueError("launch receipt does not bind the checkpoint's clean-head anchor")
+        anchor_sha = inputs[str(anchor_path)]
+        source_matches = []
+        for binding, record in source_inputs.items():
+            if not isinstance(record, dict) or record.get("sha256") != anchor_sha:
+                continue
+            recorded_path = record.get("path")
+            if recorded_path:
+                try:
+                    path_matches = Path(recorded_path).resolve(strict=True) == anchor_path
+                except OSError:
+                    path_matches = False
+            else:
+                # Legacy single-stage receipts keyed the hash under `heads` and the
+                # checkpoint identity independently pins the exact anchor path.
+                path_matches = binding == "heads"
+            if path_matches:
+                source_matches.append((binding, record))
+        source_bindings = {(str(Path(record.get("path", anchor_path)).resolve()), record["sha256"])
+                           for _binding, record in source_matches}
+        if not source_matches or len(source_bindings) != 1:
+            raise ValueError("launch receipt does not uniquely bind the checkpoint's clean-head anchor path and hash")
         source_binding = {"kind": "externally-reconstructed-from-launch-and-snapshot-proof",
                           "backbone_adapter": backbone_adapter, "model_id": expected_base,
                           "revision": revision, "snapshot_path_at_export": str(snapshot),
@@ -596,7 +615,10 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
                           "tokenizer_files": {name: digest for name, digest in files.items()
                                               if "tokenizer" in name or "vocab" in name or name.endswith(".model")
                                               or name == "chat_template.jinja"},
-                          "model_safetensors_sha256": weights_sha, "source_proof": base_source_proof}
+                          "model_safetensors_sha256": weights_sha,
+                          "clean_head_source_input_keys": sorted(binding for binding, _ in source_matches),
+                          "clean_head_source_binding": {"path": str(anchor_path), "sha256": anchor_sha},
+                          "source_proof": base_source_proof}
     else:
         maple = anchor.get("backbone") or {}
         if maple.get("backbone") != "maple" or maple.get("precision") != "bf16" or maple.get("student_state"):
@@ -961,6 +983,12 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
             raise ValueError("Maple anchor initialization receipt is missing or changed")
         del anchor_state
     engine = load_engine(base=str(snapshot), heads_checkpoint=anchor["path"], device=device, dtype=dtype)
+    if adapter == LFM2_ADAPTER and dtype is not None:
+        expected_dtype = dtype
+        actual_dtypes = {parameter.dtype for parameter in engine.backbone.hf.parameters()}
+        if actual_dtypes != {expected_dtype}:
+            raise ValueError(f"direct artifact restore produced backbone dtypes {sorted(map(str, actual_dtypes))}, "
+                             f"expected only {expected_dtype}")
     if engine.heads.read_markers or getattr(engine.heads, "read_adapter", None) is not None:
         raise ValueError("direct-v1 artifact currently requires raw-token heads without a read adapter")
     saved_parameters = payload["student_parameters"]

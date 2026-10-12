@@ -124,12 +124,65 @@ classifies these as verified source cases, not training trajectories. A second
 disjoint held source packet, `decision-skills-heldout-20261005-v1`, has four
 rows; include it only if its task contracts are supported by the same runtime.
 
-No model was loaded and no held tasks were executed during this audit because
-the Pop machine was under memory pressure from Muon training. The direct
-serving artifact is explicitly `direct-writer-pending`; this entry point makes
-its trained backbone available for ordinary text/tool generation, but does not
-qualify or enable a native-latent writer. Held-task results must be scoped to
-that ordinary text/tool path.
+I checked the 48 held rows against the registered paired train source file
+`runs/decision-rich-train-20261005-v2/cases.jsonl` (72 rows; SHA-256
+`6f2a470a8de79d4fb9966fc5a5157ebdf16d3c58a02ae034322a2bdfcde20dca`).
+The held packet has four distinct `source_ids`/`source_groups`; none overlap
+the 72 train rows. Canonical SHA-256 digests of each task's complete
+`semantics.inputs` plus its `services`, `effects`, `folder_files`, and `world`
+payload have zero matches in those 72 train rows; `semantics.inputs` alone
+also has zero matches. I then streamed each r2 training text file and checked
+its `source_record_ids`, `id`, and `source_groups`: all three views have zero
+overlap with the held packet's source IDs/groups. The r2 `receipt.json` SHA is
+`e0d1ba6bc5793b788859a7f8cfdb0c6f77b51f2e9d994c8f3d687e2a4d333018`; its
+pinned LFM text-data SHAs are program-header
+`9ab8e89b447a7ba9397f881fe13cdc20197c6ba4f32a9973a4d5b730d698b883`, full
+`c240dfad4bf326c42d85fd3448fd9fc3615f8defe8dd3e6ed3fe9cbd7ca7bd2a`, and
+whole-trajectory
+`2b6cf2e17e146715a10e7fbc954eab72616f3817694229b88be0ad81952bdec5`.
+
+The direct-serving artifact is explicitly `direct-writer-pending`; this entry
+point makes its trained backbone available for ordinary text/tool generation,
+but does not qualify or enable a native-latent writer. Held-task results must
+be scoped to that ordinary text/tool path. The first FP32 run used a 2 GiB
+server and later exited after 11 real task results; the remaining 37 rows were
+provider connection failures serialized by the collector. The scorer now marks
+those rows `infrastructure_error`, so that run is not a baseline. A fresh 3 GiB
+FP32 server was `OOMKilled` on the second task after the first partial result.
+A 4 GiB FP32 server loaded with 2.436 GiB idle; I stopped it before running
+tasks when host `MemAvailable` fell to 1.9 GiB. The pinned CPU host exposes
+AVX512 BF16 and the pinned PyTorch reports BF16 CPU support. The matched BF16
+plan below keeps the full task context and the existing per-request token
+limit; it uses a hard 4 GiB memory-plus-swap cap.
+
+An immutable 48-row evaluation queue is prepared at
+`/srv/storage/natlang-artifacts/neuralese-direct-held-task-eval-20261012-v1/`.
+Its derived source packet SHA-256 is
+`c5d248a8ee6af62f23b4db2730c40af3f9d2d6b0ebd4c011a283f7768bea65d9`, queue
+SHA-256 `aa601092539ed7b286db43742d106bd7ba61c82b069d207f5d6d6acae9f0516c`,
+and frozen runtime manifest SHA-256
+`5b1486b5b473c6bab9c8613fa481c66c486b0ffacaffe2683849d1d7604b9f3e`.
+The derived rows only add a SHA-bound `authored_root_eval` contract to each
+existing authored root; the expected task values remain evaluator metadata.
+The actual-task scorer and checkpoint runner are shared code at commit
+`da3b9b1d`, with the pending Pop changes extending it to matched BF16 CPU
+serving, cgroup memory telemetry, and a single shared evaluation lock. They
+strictly export each candidate, restore it through the same serve engine, run
+the exact authored queue, check complete collector accounting, and retain the
+highest task-success count only across identical packet/runtime/inference
+contracts. Candidate checkpoints and the mutable outer launch receipt are
+snapshotted and hash-checked before evaluation. The immutable BF16 comparison
+plan is
+`/srv/storage/natlang-artifacts/neuralese-direct-held-task-eval-20261012-v1/plan-v2-bfloat16.json`
+(SHA-256 `e3237a8e32498e79f01da0175868f266b18873b13efdbdad0f80959000e9eab9`).
+Its fixed queue is unchanged. At this audit update, the base run at
+`base-bfloat16-v1` has four complete exact results and the fifth task is
+running; the first case completed in 60.4 s with all expected effects/status
+checks passing and one answer mismatch. Server logs confirm
+`model_dtype=torch.bfloat16`; observed server use was about 2.1 GiB and host
+`MemAvailable` stayed near 5 GiB. This is interim evidence, not the final held
+score. The candidate watcher will use the v2 main outer launch receipt and the
+same plan after the base result completes.
 
 ## Direct artifact serving change
 
