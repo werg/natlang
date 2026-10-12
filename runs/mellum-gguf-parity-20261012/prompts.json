@@ -1,0 +1,47 @@
+[
+ {
+  "name": "code-short",
+  "n_tokens": 23,
+  "gguf_tokenizer": {
+   "n_tokens": 23,
+   "identical": true,
+   "first_mismatch": null
+  }
+ },
+ {
+  "name": "chat-thinking",
+  "n_tokens": 32,
+  "gguf_tokenizer": {
+   "n_tokens": 32,
+   "identical": true,
+   "first_mismatch": null
+  }
+ },
+ {
+  "name": "chat-nothink-tool",
+  "n_tokens": 82,
+  "gguf_tokenizer": {
+   "n_tokens": 82,
+   "identical": true,
+   "first_mismatch": null
+  }
+ },
+ {
+  "name": "code-long",
+  "n_tokens": 2137,
+  "gguf_tokenizer": {
+   "n_tokens": 2137,
+   "identical": true,
+   "first_mismatch": null
+  }
+ },
+ {
+  "name": "chat-long",
+  "n_tokens": 1452,
+  "gguf_tokenizer": {
+   "n_tokens": 1452,
+   "identical": true,
+   "first_mismatch": null
+  }
+ }
+]

@@ -68,7 +68,87 @@ and does acceptably at raw agentic coding in our harness out of the box. If adop
 4. Neuralese markers: Mellum has no unused vocabulary rows; use the spare added tokens `<|extra_token_7|>` and
    `<|extra_token_8|>` (IDs from the tokenizer). `serve.load_engine` and `foundation_heads` currently hard-code
    Qwen/Maple marker IDs (151669/151670) and need a per-tokenizer choice.
-5. GGUF: convert with the fork's converter, then check perplexity/logit parity vs our port (Maple's M0.3 equivalent).
+5. (done 2026-10-12, below) GGUF: convert with the fork's converter, then check logit parity against transformers.
+
+## GGUF and llama.cpp forward parity (2026-10-12, S8 serving revival)
+
+Mellum2.1 converts with the fork's converter and runs in our llama.cpp fork (`werg/llama.cpp-neuralese`, branch
+`neuralese`, 872e4c11a) on CPU with forward parity against transformers. No fork bug was found; the fork only gained
+the measuring tool `llama-logits-dump` (65c52aabb, 872e4c11a).
+
+- GGUFs (NVMe, `/home/werg/data/models/gguf/`, sha256 in `SHA256SUMS` there and in
+  `runs/mellum-gguf-parity-20261012/gguf-SHA256SUMS`):
+  - `mellum21-12b-a2.5b-thinking-bf16.gguf` (24.3 GB) `30312c76d97881fbc3b863773bef418107227727aa8795245bfb9c5c93c66b22`
+  - `mellum21-12b-a2.5b-thinking-q8_0.gguf` (12.9 GB) `bb3dfca6005d08f84224312a34678f16db7cae99170c9f868b05a8a31bcb5446`
+  - Source: `/home/werg/data/models/mellum21-12b-a2.5b-thinking` (HF rev 92ddae9f), the un-finetuned student backbone.
+- Commands (each under the memory ledger; 6–10 GB claims, run beside Mellum v4 training):
+  - `python convert_hf_to_gguf.py MODEL --outtype bf16 --outfile ...-bf16.gguf` (fork root, `.venv-neuralese`
+    python; 3 min); `build-cpu/bin/llama-quantize ...-bf16.gguf ...-q8_0.gguf Q8_0 12` (2 min).
+  - `scripts/mellum_gguf_parity.py prompts | reference | llama | compare | states` (usage in its docstring).
+- Metadata checked in the GGUF: SWA pattern 3 sliding + 1 full (28 flags), window 1024, `rope.freq_base` and
+  `freq_base_swa` 5e5, YaRN factor 16, original context 8192, beta 32/1, `yarn_attn_factor` 1.2773, 64 experts top-8,
+  expert FFN 896, RMS eps 1e-6, `mellum2` pre-tokenizer, BOS 0 / EOS 28, no BOS added.
+  - YaRN attention factor: `llama_context` recomputes it as get_mscale(16) / (1 + 0.1 ln 16) = 1, and ggml's YaRN
+    rope multiplies by 1 + 0.1 ln 16 = 1.2773 on the global layers. The effective value equals transformers'
+    `attention_factor`, and it is not applied twice. Sliding layers call rope with freq_scale 1, ext_factor 0 and
+    attn_factor 1 (plain RoPE), as in transformers.
+- Reference: transformers 5.18 (`.venv-neuralese`), FP32 on CPU, layer-streamed. Each decoder layer is read from the
+  safetensors, run with transformers' own `MellumDecoderLayer`, rotary embedding and mask builders, then freed.
+  The peak is 8 GB (page cache included). A BF16 variant (`--dtype bf16`) measures transformers' own precision floor.
+- Prompts: `code-short` (23 tokens), `chat-thinking` (32), `chat-nothink-tool` (82, tool turn,
+  enable_thinking false), `code-long` (2137) and `chat-long` (1452). The two long prompts exceed the 1024 window.
+  - Tokenizer: the GGUF tokenizer gives identical ids on all five rendered prompts, chat special tokens included.
+- Results against the FP32 reference (`runs/mellum-gguf-parity-20261012/compare-*.json`):
+
+| prompt | GGUF BF16: top-1 / KL mean / KL max | GGUF Q8_0: top-1 / KL mean / KL max | transformers BF16: top-1 / KL mean / KL max |
+|---|---|---|---|
+| code-short | 1.000 / 0.0003 / 0.004 | 1.000 / 0.0005 / 0.005 | 1.000 / 0.0009 / 0.007 |
+| chat-thinking | 0.969 / 0.0063 / 0.136 | 0.969 / 0.0120 / 0.135 | 0.938 / 0.0214 / 0.208 |
+| chat-nothink-tool | 0.927 / 0.0076 / 0.161 | 0.927 / 0.0266 / 0.717 | 0.951 / 0.0374 / 1.065 |
+| code-long | 0.979 / 0.0023 / 0.379 | 0.971 / 0.0067 / 2.214 | 0.964 / 0.0081 / 2.208 |
+| chat-long | 0.990 / 0.0015 / 0.146 | 0.979 / 0.0048 / 0.379 | 0.976 / 0.0058 / 0.396 |
+
+  - Mean |logit diff|: BF16 GGUF 0.12–0.46 (max 16.5, in the low-probability tail); Q8_0 0.35–0.87; transformers BF16
+    0.69–0.98 (max 31).
+  - Next-token CE matches: for example code-long 1.7464 (reference), 1.7452 (BF16), 1.7344 (Q8_0).
+  - Past the window (positions ≥ 1024): BF16 code-long top-1 0.976, KL 0.0024 (before: 0.982 / 0.0022); chat-long
+    0.995 / 0.0010. So the sliding-window cache and the YaRN global layers hold past the window.
+  - With `--ubatch 256` (the long prompts span many ubatches through the SWA cache) the logits are identical to one
+    ubatch.
+- Per layer (`states`, chat-nothink-tool): the GGUF BF16 residual error against FP32 grows smoothly from 0.05%
+  (layer 0) to 5.8% (layer 27). There is no step at the global layers (3, 7, …) and no step at the attention or MoE
+  sublayers. At every layer it is 2–6x below transformers' own BF16 error (0.3% → 12.4%).
+  - The remaining gap is BF16 activation rounding at matmul inputs. llama.cpp's CPU BF16 path accumulates in FP32,
+    so it is closer to FP32 than transformers' BF16 is. It is not a port bug.
+- Greedy (32 tokens, BF16 and Q8_0): coherent continuations. Python continues `fibonacci` correctly; chat prompts
+  open `<think>` and answer on topic; the tool prompt answers from the tool output.
+- Not built or measured yet: the CUDA build at HEAD (build-cuda is from Oct 3–4; Q8_0 is 12.9 GB, so it would need
+  partial offload within a 12 GB claim) and speed.
+
+### What Neuralese serving on Mellum needs next (not built)
+
+- Markers: `<|extra_token_7|>` / `<|extra_token_8|>` (ids 33/34) as the block open/close tokens. These are the
+  projector GGUF's `open/close` token ids, read by `nz_heads_open_token`/`nz_heads_close_token`. They must be
+  rendered as special tokens. The service strips only `<|im_end|>`/`<|endoftext|>`; Mellum's chat template uses
+  `<|im_end|>` too.
+- Read port: soft-token input-embedding injection already exists (`nz_read` decodes embeddings at positions). Direct
+  v1 values live in the input-embedding space, so no reader adapter is needed. Check the interface norm is off, or
+  the identity, for direct-v1 projectors.
+- Write port: direct v1 replaces the legacy sketch/complete/content procedure. value(h) = softmax(lm_head(norm(h)))·E
+  + CausalConvStack(h): 2 residual blocks, each RMS-norm, depthwise causal conv with kernel 4, then SiLU MLP
+  2304→576→2304. This needs:
+  - a projector GGUF format for `neuralese_projection` (and the optional `token_choice_projection`);
+  - a small ggml graph over the final hidden states plus the full-vocab softmax·E product;
+  - a 3-position conv state carried across decode steps.
+  - It does not need `llama_set_layer_range`, which is LFM2-only today (`llama_model_supports_layer_range`).
+- TokenChoiceProjection (when switched on): an identity-initialised conv stack before the final norm. That is an
+  output-side adapter hook in the Mellum graph, or a separate pass on `t_embd`.
+- Weight formats: QAT ternary experts with per-128-column block scales (896 = 7×128, 2304 = 18×128). These need a
+  ggml type or a TQ2_0/I2-style mapping with 128-blocks, plus a converter path from `qat_export` output
+  (`natlang_deployed_ternary`). Re-run this parity with the trained export.
+- `llama-neuralese-server` / `neuralese-service.cpp`: per-family marker and template settings, and direct-v1
+  projector loading. Run parity against the PyTorch reference server (`serve.load_engine`) with
+  `scripts/mellum_gguf_parity.py`-style dumps.
 
 ## Nested family (owner 2026-10-08: same goal as Maple)
 

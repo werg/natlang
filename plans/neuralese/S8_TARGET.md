@@ -167,6 +167,8 @@ Resolved by the owner on 2026-10-03:
 7. Run the full pipeline at target scale (§5).
 8. Assemble the artifact library with metadata and parity results (§6).
 9. Produce GGUF builds, fork releases, the wllama build and the vLLM plugin; run parity.
+   - Mellum2.1 base: BF16 and Q8_0 GGUFs pass forward parity in the llama.cpp fork (2026-10-12; `plans/mellum-port.md`
+     "GGUF and llama.cpp forward parity", `scripts/mellum_gguf_parity.py`). The Neuralese extensions are listed there.
 10. Write model cards and datasheets: architecture, dialects, training data families, evaluation results, known failure categories, intended use.
 11. Prepare upstreaming proposals from the forks.
 12. Release review against the rubric (§8).

@@ -1,0 +1,27 @@
+{
+ "code-short": {
+  "n_tokens": 23,
+  "n_vocab": 98304,
+  "greedy": []
+ },
+ "chat-thinking": {
+  "n_tokens": 32,
+  "n_vocab": 98304,
+  "greedy": []
+ },
+ "chat-nothink-tool": {
+  "n_tokens": 82,
+  "n_vocab": 98304,
+  "greedy": []
+ },
+ "code-long": {
+  "n_tokens": 2137,
+  "n_vocab": 98304,
+  "greedy": []
+ },
+ "chat-long": {
+  "n_tokens": 1452,
+  "n_vocab": 98304,
+  "greedy": []
+ }
+}
