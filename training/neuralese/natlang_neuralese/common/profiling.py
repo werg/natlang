@@ -246,7 +246,7 @@ def analyze(profile, wall: float) -> dict:
                 enclosing[id(event)] = [name for _, name in reversed(stack)]
             if is_scope:
                 stack.append((-negative_end, event.name))
-    by_phase, by_category, by_kernel, intervals = {}, {}, {}, []
+    by_phase, by_category, by_kernel, intervals, kernels_by_category = {}, {}, {}, [], {}
     for event in events:
         if event.device_type == DeviceType.CUDA:
             intervals.append((event.time_range.start, event.time_range.end))
@@ -262,6 +262,8 @@ def analyze(profile, wall: float) -> dict:
             entry = by_kernel.setdefault(kernel.name[:160], [0, 0.0])
             entry[0] += 1
             entry[1] += seconds
+            per = kernels_by_category.setdefault(category, {})
+            per[kernel.name[:100]] = per.get(kernel.name[:100], 0.0) + seconds
     busy = _union_seconds(intervals)
     kernel_total = sum(by_category.values())
 
@@ -291,4 +293,7 @@ def analyze(profile, wall: float) -> dict:
             'by_scope_gpu_seconds': dict(sorted(groups.items(), key=lambda kv: -kv[1])),
             'by_category_gpu_seconds': dict(sorted(by_category.items(), key=lambda kv: -kv[1])),
             'top_kernels': [{'name': n, 'count': c, 'seconds': s} for n, (c, s) in top_kernels],
+            'top_kernels_by_category': {category: dict(sorted(kernels.items(), key=lambda kv: -kv[1])[:6])
+                                        for category, kernels in kernels_by_category.items()
+                                        if sum(kernels.values()) >= 0.01 * max(kernel_total, 1e-9)},
             'unscoped_backward_nodes': dict(sorted(nodes.items(), key=lambda kv: -kv[1])[:30])}

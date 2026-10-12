@@ -344,7 +344,9 @@ def main(argv=None):
     options = {k: str(v) if isinstance(v, Path) else v for k, v in vars(a).items()}
     code = {str(path.relative_to(Path(__file__).parents[1])): sha256_file_hex(path)
             for path in sorted(Path(__file__).parents[1].rglob('*.py'))}
-    inputs = {str(path): sha256_file_hex(path)
+    from ..common.hashing import sha256_file_hex_cached
+    # Inputs by cached digest (never a re-read of an unchanged file, e.g. the HDD-archived predecessor at a resume).
+    inputs = {str(path): sha256_file_hex_cached(path)
               for path in (a.heads, a.records, a.pieces, a.text_data, a.continue_from, a.continue_identity,
                            a.continue_monitor_reference) if path}
     identity = {'schema': SCHEMA, 'options': {k: v for k, v in options.items() if k not in OPERATIONAL

@@ -673,6 +673,32 @@ def status(args):
                                    'blocked_by': non_preemptible(live, w)} for n, (name, w) in enumerate(queue)]}, indent=2))
 
 
+def cancel(args):
+    """Drop a waiting or requeued entry from the queue (a stale bench, test or duplicate waiter)."""
+    unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
+    with ledger() as state:
+        entry = state.get('waiting', {}).pop(unit, None)
+        if entry is not None:
+            state['events'].append({'time': time.time(), 'event': 'cancelled', 'unit': unit,
+                                    'requeued': bool(entry.get('requeued'))})
+    print(json.dumps({'unit': unit, 'cancelled': entry is not None}))
+    return 0 if entry is not None else 1
+
+
+def reset_peak(args):
+    """Clear (or set, with --to-gb) a family's learned peak, e.g. after a memory leak was fixed."""
+    with ledger() as state:
+        peaks = state.setdefault('family_peaks', {})
+        before = peaks.get(args.family)
+        if args.to_gb is None:
+            peaks.pop(args.family, None)
+        else:
+            peaks[args.family] = int(args.to_gb * GIB)
+        state['events'].append({'time': time.time(), 'event': 'reset-peak', 'family': args.family,
+                                'from_gb': None if before is None else round(before / GIB, 1), 'to_gb': args.to_gb})
+    print(json.dumps({'family': args.family, 'from_gb': None if before is None else round(before / GIB, 1), 'to_gb': args.to_gb}))
+
+
 def victim(live, floor_breached, overshoot, pressure=None, grace=None):
     """The unit to stop, only under memory pressure (available below twice the floor; ``pressure`` defaults to
     ``floor_breached``): first the unit most over its budget by the overshoot factor, then, below the floor, the
@@ -957,6 +983,11 @@ def main():
     a.add_argument('--priority', choices=sorted(PRIORITIES, key=PRIORITIES.get))
     a.add_argument('--hold-budget', '--fixed-claim', action='store_true', help='always count the whole unspent budget')
     sub.add_parser('status')
+    c = sub.add_parser('cancel', help='drop a waiting or requeued entry from the queue')
+    c.add_argument('--unit', required=True)
+    rp = sub.add_parser('reset-peak', help="clear or set a family's learned peak (admission claims 1.1x it)")
+    rp.add_argument('--family', required=True)
+    rp.add_argument('--to-gb', type=float, default=None)
     sub.add_parser('release-cache', help='drop clean page cache of large files under the data roots')
     g = sub.add_parser('guard', help='enforce budgets and the free-memory floor')
     g.add_argument('--floor-gb', type=float, default=8)
@@ -971,7 +1002,7 @@ def main():
             args.command = args.command[1:]
         if not args.command:
             parser.error('run needs a command after --')
-    {'run': run, 'adopt': adopt, 'status': status, 'guard': guard,
+    {'run': run, 'adopt': adopt, 'status': status, 'guard': guard, 'cancel': cancel, 'reset-peak': reset_peak,
      'release-cache': lambda _: print(json.dumps(release_cache()))}[args.action](args)
 
 
