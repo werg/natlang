@@ -419,9 +419,15 @@ def registered_candidate_selection_admission(corpus_id, sources):
                 owner_row.get('training_admission') is not True):
             raise ValueError(f'root candidate-selection row is not approved for exact native action SFT: {row["id"]}')
         messages_sha256 = sha(canonical(turn.get('messages')).encode())
-        actual_owner_rows.append({**row, 'messages_sha256': messages_sha256,
-                                  'decision': owner_row['decision'],
-                                  'training_admission': owner_row['training_admission']})
+        # The manifest pins candidate_id and invocation identity. The owner receipt
+        # intentionally authorizes the native ID plus source/target/message tuple;
+        # keep the row projection here identical to that stable receipt schema.
+        actual_owner_rows.append({
+            'id': row.get('id'), 'item_id': row.get('item_id'), 'item_sha256': row.get('item_sha256'),
+            'target_sha256': row.get('target_sha256'), 'messages_sha256': messages_sha256,
+            'split': row.get('split'), 'source_groups': row.get('source_groups'),
+            'decision': owner_row['decision'], 'training_admission': owner_row['training_admission'],
+        })
     actual_owner_rows.sort(key=lambda row: row['id'])
     actual_by_id = {row['id']: row for row in receipt['rows']}
     declared_owner_rows = [{

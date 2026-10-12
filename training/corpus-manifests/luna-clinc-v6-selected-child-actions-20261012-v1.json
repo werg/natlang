@@ -1,0 +1,96 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-clinc-v6-selected-child-actions-20261012-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/luna-clinc-v6-selected-child-actions-20261012-v1",
+  "files": [
+    {
+      "path": "candidate-discovery-audit.json",
+      "bytes": 804063,
+      "sha256": "745c420c05ddde64f12f95d992e899448d9ff307e0d05cf79316f073098ebda2"
+    },
+    {
+      "path": "candidate-selection-review.json",
+      "bytes": 285029,
+      "sha256": "2b58f8648d182161ec342a2c86238c127fa6ae9a95531a9e1f41780689329e20"
+    },
+    {
+      "path": "materialized-manifest.json",
+      "bytes": 431188,
+      "sha256": "d6f2c980ccc90aec0fe2305ca52edc5003d30742ad018c320628d46513e7b3bd"
+    },
+    {
+      "path": "reservation-source.json",
+      "bytes": 1244301,
+      "sha256": "2ec7845cd19d9b42c504f2ac7535c3bc23510b913b03f5b76b6da911fd2b84c7"
+    },
+    {
+      "path": "root-selected-action-admission.json",
+      "bytes": 217893,
+      "sha256": "3c656a3a247f5e27c1982257af1b7c7e267724ce2bda22dc22b31bc173454978"
+    },
+    {
+      "path": "semantic-child-review.json",
+      "bytes": 311096,
+      "sha256": "a9ad7191bd214bdb7b1310f1b9a97a78cc3c6ddde2ed119ee6c65bf98e4aa6af"
+    },
+    {
+      "path": "semantic-source-candidate-audit.json",
+      "bytes": 722400,
+      "sha256": "6d35d55a8268bd82d41cc5a0bf6571cf7e977e7a7d1e6f9a4b869a2c2d7b04cd"
+    },
+    {
+      "path": "source-cases.jsonl",
+      "bytes": 1906182,
+      "sha256": "d0da848cdc54d884a45848625762cfe5304e7d517c1390e1e52336dfd223d7e4",
+      "lines": 500
+    },
+    {
+      "path": "source-closure.json",
+      "bytes": 172029,
+      "sha256": "2ebc251b9e69e73544f875607e967d08888b38bc38f9f1e8d34a228a25695d3e"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 130883,
+      "sha256": "1c99e22d6a59819ebe414e25260059c68ac0faea95198385676b81f7b4811323"
+    },
+    {
+      "path": "source-quality-clearance.json",
+      "bytes": 386035,
+      "sha256": "dde945dbc689636b64c98bf1370c869029cf4d5e81253e5cd4b4bc595fce587c"
+    },
+    {
+      "path": "source-quality-evidence-3.bin",
+      "bytes": 722400,
+      "sha256": "6d35d55a8268bd82d41cc5a0bf6571cf7e977e7a7d1e6f9a4b869a2c2d7b04cd"
+    },
+    {
+      "path": "source-quality-evidence-4.bin",
+      "bytes": 311096,
+      "sha256": "a9ad7191bd214bdb7b1310f1b9a97a78cc3c6ddde2ed119ee6c65bf98e4aa6af"
+    },
+    {
+      "path": "source-quality-evidence-5.bin",
+      "bytes": 130883,
+      "sha256": "1c99e22d6a59819ebe414e25260059c68ac0faea95198385676b81f7b4811323"
+    },
+    {
+      "path": "source-quality-review.json",
+      "bytes": 397176,
+      "sha256": "5c2b3f2b8824811c9752eba532cf2344f4229b4d791eeddff542eebd2f26540c"
+    },
+    {
+      "path": "source-split-reservations.json",
+      "bytes": 166290,
+      "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+    },
+    {
+      "path": "turns.jsonl",
+      "bytes": 35583802,
+      "sha256": "bef63804b6045007c1cf590e8be2e957dd96d600e89e6b23ef9ebbe2e69b083d",
+      "lines": 244
+    }
+  ],
+  "bytes": 43922746
+}
