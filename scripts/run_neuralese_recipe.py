@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run one declared direct-stage recipe in its exact, locally available container image.
+"""Run a declared neuralese recipe in its exact, locally available container image.
 
 This is a launcher for the shared ``natlang_neuralese.train.recipe`` CLI, not a
 second trainer. It verifies every declared input and shared-package file before
@@ -296,6 +296,43 @@ def validate_existing_direct_resume(output: Path, recipe: dict, device: str,
             "frozen_code_changed": code_changed}
 
 
+def validate_existing_shared_resume(output: Path, recipe: dict, recipe_path: Path, heads: dict,
+                                    stage_inputs: dict, device: str, package_code: dict) -> dict:
+    """Require the exact shared recipe plan and frozen runtime before auto-resuming it."""
+    from natlang_neuralese.train.recipe import recipe_identity_sha256
+
+    plan_path = output / "recipe-plan.json"
+    frozen = output / "runtime" / "natlang_neuralese"
+    if not output.is_dir() or not plan_path.is_file():
+        raise ValueError("--resume-existing requires an output with a committed recipe-plan.json")
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    inputs = {str(Path(heads["path"]).resolve()): heads["sha256"]}
+    for resolved in stage_inputs.values():
+        for binding in resolved.values():
+            inputs[binding["path"]] = binding["sha256"]
+    expected = {"schema": "natlang.neuralese-recipe-plan/1", "recipe": recipe,
+                "recipe_sha256": recipe_identity_sha256(recipe_path), "inputs": inputs, "device": device}
+    if any("inputs" in stage for stage in recipe["stages"]):
+        expected["stage_inputs"] = stage_inputs
+    for key, value in expected.items():
+        if plan.get(key) != value:
+            raise ValueError(f"shared recipe resume changes committed {key}")
+    recorded_code = plan.get("code")
+    if not isinstance(recorded_code, dict) or not recorded_code:
+        raise ValueError("committed recipe plan has no frozen code inventory")
+    if not frozen.is_dir():
+        raise ValueError("committed recipe plan is missing its frozen runtime")
+    actual_code = {str(path.relative_to(frozen)): sha256(path)
+                   for path in sorted(frozen.rglob("*.py")) if path.is_file()}
+    if actual_code != recorded_code:
+        raise ValueError("frozen recipe runtime differs from its committed code inventory")
+    if actual_code != package_code:
+        raise ValueError("frozen recipe runtime differs from the recipe's pinned shared package")
+    return {"plan_path": str(plan_path), "plan_sha256": sha256(plan_path),
+            "recipe_sha256": plan["recipe_sha256"], "inputs": inputs, "device": device,
+            "frozen_runtime_path": str(frozen), "frozen_code": actual_code}
+
+
 def acquire_output_launch_lock(output: Path) -> tuple[int, Path]:
     """Keep concurrent fresh launches/resumes from sharing one stage output."""
     lock_path = output.parent / ("." + output.name + ".container-launch.lock")
@@ -322,7 +359,7 @@ def main(argv=None) -> int:
                         help="Docker name for the training container; preflight receives a separate unique name")
     parser.add_argument("--until", help="run a normal shared recipe through this declared stage")
     parser.add_argument("--resume-existing", action="store_true",
-                        help="resume an existing direct-stage output from its committed checkpoint and policy slot")
+                        help="resume an existing output after exact recipe/input/device/runtime validation")
     parser.add_argument("--handoff", action="store_true",
                         help="record the shared-code handoff required when resuming with changed package code")
     parser.add_argument("--docker", default="docker")
@@ -339,8 +376,8 @@ def main(argv=None) -> int:
     recipe = read_direct_recipe(recipe_path) if direct else read_shared_recipe(recipe_path)
     if direct and args.until:
         parser.error("--until applies only to normal shared multi-stage recipes")
-    if not direct and (args.resume_existing or args.handoff):
-        parser.error("--resume-existing and --handoff preserve the declared direct-stage resume contract")
+    if not direct and args.handoff:
+        parser.error("--handoff is only supported by the declared direct-stage resume contract")
     if not direct and args.until and args.until not in {stage["id"] for stage in recipe["stages"]}:
         parser.error("--until must name a stage declared by the shared recipe")
     profile_updates = validated_profile_updates(os.environ.get("NATLANG_PROFILE_UPDATES"))
@@ -419,8 +456,13 @@ def main(argv=None) -> int:
                     for path in sorted(package.rglob("*.py")) if path.is_file()}
     if package_code != recipe["runtime"]["package_code"]:
         raise ValueError("shared Python package differs from pinned runtime.package_code inventory")
-    resume_binding = (validate_existing_direct_resume(output, recipe, args.device, package_code, args.handoff)
-                      if args.resume_existing else None)
+    if args.resume_existing and direct:
+        resume_binding = validate_existing_direct_resume(output, recipe, args.device, package_code, args.handoff)
+    elif args.resume_existing:
+        resume_binding = validate_existing_shared_resume(output, recipe, recipe_path, first_stage_heads,
+                                                          stage_inputs, args.device, package_code)
+    else:
+        resume_binding = None
 
     hf_home = hf_hub_cache.parent
     mounts = [(REPO, REPO, "ro"), (artifact_root, artifact_root, "rw"), (hf_home, hf_home, "rw")]
@@ -472,11 +514,16 @@ def main(argv=None) -> int:
         raise ValueError("shared package changed while freezing the launch snapshot; no container started")
     if output.exists() and not args.resume_existing:
         raise ValueError("output appeared during preflight; refusing to launch")
-    if resume_binding is not None:
+    if resume_binding is not None and direct:
         current_resume_binding = validate_existing_direct_resume(
             output, recipe, args.device, package_code, args.handoff)
         if current_resume_binding != resume_binding:
             raise ValueError("committed resume plan or checkpoint changed during preflight")
+    elif resume_binding is not None:
+        current_resume_binding = validate_existing_shared_resume(
+            output, recipe, recipe_path, first_stage_heads, stage_inputs, args.device, package_code)
+        if current_resume_binding != resume_binding:
+            raise ValueError("committed recipe plan or frozen runtime changed during preflight")
     if direct:
         child = ["-m", "natlang_neuralese.train.recipe", "--recipe", str(container_recipe),
                  "--out", str(container_output), "--launch-metadata", str(container_metadata),
@@ -519,7 +566,12 @@ def main(argv=None) -> int:
     )
     preflight_paths = [item["path"] for item in input_bindings.values()] + [item["path"] for item in lineage]
     if resume_binding is not None:
-        preflight_paths += [resume_binding["plan_path"], resume_binding["checkpoint_path"]]
+        preflight_paths.append(resume_binding["plan_path"])
+        if direct:
+            preflight_paths.append(resume_binding["checkpoint_path"])
+        else:
+            preflight_paths.extend(str(Path(resume_binding["frozen_runtime_path"]) / relative)
+                                   for relative in resume_binding["frozen_code"])
     preflight = [*common_docker, "--name", preflight_container_name, "--gpus", "all", "-e",
                  "CUDA_VISIBLE_DEVICES=", "--entrypoint", "/usr/bin/python3", image, "-c", preflight_code,
                  stage_kind, str(container_hub_cache), *preflight_paths]
