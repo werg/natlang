@@ -149,6 +149,61 @@ def check_file_binding(role: str, binding: dict) -> dict:
     return {"path": str(path), "sha256": actual, "bytes": path.stat().st_size}
 
 
+def validate_existing_direct_resume(output: Path, recipe: dict, device: str,
+                                     package_code: dict, handoff: bool) -> dict:
+    """Bind an exact in-place direct-stage resume to its committed plan/state."""
+    plan_path = output / "direct-stage-plan.json"
+    if not output.is_dir() or not plan_path.is_file():
+        raise ValueError("--resume-existing requires an output with a committed direct-stage plan")
+    plan = json.loads(plan_path.read_text())
+    if plan.get("schema") != "natlang.neuralese-direct-stage-plan/1":
+        raise ValueError("existing output has an unsupported direct-stage plan")
+    if plan.get("recipe_id") != recipe.get("id"):
+        raise ValueError("direct-stage resume changes recipe identity")
+    expected_stage_output = (output / recipe["stage"]["id"]).resolve()
+    if plan.get("stage") != recipe["stage"]:
+        raise ValueError("direct-stage resume changes stage")
+    if plan.get("stage_output") != str(expected_stage_output):
+        raise ValueError("committed direct-stage output path does not match this recipe")
+    if plan.get("device") != device or plan.get("runtime_image") != recipe["runtime"]["image"]:
+        raise ValueError("direct-stage resume changes device or runtime image")
+    planned_inputs = plan.get("inputs")
+    current_inputs = {}
+    for role, binding in recipe["inputs"].items():
+        path = Path(binding["path"]).expanduser().resolve()
+        current_inputs[role] = {"path": str(path), "sha256": binding["sha256"]}
+    if planned_inputs != current_inputs:
+        raise ValueError("direct-stage resume changes pinned inputs")
+    current_parameters = dict(recipe.get("parameters", {}))
+    current_parameters.pop("text_data", None)
+    if plan.get("parameters") != current_parameters:
+        raise ValueError("direct-stage resume changes training parameters")
+    if plan.get("lineage") != recipe.get("lineage"):
+        raise ValueError("direct-stage resume changes lineage declaration")
+    current_lineage = [{"role": item["role"], "path": str(Path(item["path"]).expanduser().resolve()),
+                        "sha256": item["sha256"]}
+                       for item in recipe.get("lineage", {}).get("evidence", [])]
+    if plan.get("lineage_evidence") != current_lineage:
+        raise ValueError("direct-stage resume changes pinned lineage evidence")
+    checkpoint = expected_stage_output / "checkpoint.pt"
+    if not checkpoint.is_file():
+        raise ValueError("direct-stage resume requires the committed handler checkpoint")
+    actual_code = plan.get("frozen_code")
+    if not isinstance(actual_code, dict) or not actual_code:
+        raise ValueError("committed direct-stage plan has no frozen code inventory")
+    code_changed = actual_code != package_code
+    if code_changed and not handoff:
+        raise ValueError("direct-stage code changed; reviewed resume requires --handoff")
+    if handoff and not code_changed:
+        raise ValueError("--handoff is only valid when the shared package code changed")
+    result_path = output / "direct-stage-result.json"
+    return {"plan_path": str(plan_path), "plan_sha256": sha256(plan_path),
+            "checkpoint_path": str(checkpoint), "checkpoint_sha256": sha256(checkpoint),
+            "result_path": str(result_path),
+            "result_sha256": sha256(result_path) if result_path.is_file() else None,
+            "frozen_code_changed": code_changed}
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--recipe", type=Path, required=True)
@@ -159,6 +214,10 @@ def main(argv=None) -> int:
     parser.add_argument("--bind", action="append", type=parse_bind, default=[], metavar="HOST:CONTAINER:ro|rw",
                         help="additional same-path bind for an input outside the default mounts")
     parser.add_argument("--device", default="cuda", choices=("cuda", "cpu"))
+    parser.add_argument("--resume-existing", action="store_true",
+                        help="resume an existing direct-stage output from its committed checkpoint and policy slot")
+    parser.add_argument("--handoff", action="store_true",
+                        help="record the shared-code handoff required when resuming with changed package code")
     parser.add_argument("--docker", default="docker")
     parser.add_argument("--launch-metadata", type=Path,
                         help="external intent/result receipt; default is beside outputs.directory")
@@ -179,9 +238,13 @@ def main(argv=None) -> int:
         raise ValueError(f"artifact root must already exist: {artifact_root}")
     if not under(output, artifact_root) or output == artifact_root:
         raise ValueError("outputs.directory must be a child of the explicit artifact root")
-    if output.exists():
+    if args.resume_existing:
+        if not output.is_dir():
+            raise ValueError(f"--resume-existing requires an existing output directory: {output}")
+    elif output.exists():
         raise ValueError(f"fresh output directory required: {output}")
-    metadata = args.launch_metadata.expanduser().resolve() if args.launch_metadata else output.parent / (output.name + ".container-launch.json")
+    suffix = f"{int(time.time())}-{os.getpid()}" if args.resume_existing else None
+    metadata = args.launch_metadata.expanduser().resolve() if args.launch_metadata else output.parent / (output.name + (f".resume-{suffix}" if suffix else "") + ".container-launch.json")
     if metadata.exists() or under(metadata, output):
         raise ValueError("launch metadata must be a fresh path outside the child output")
     log_path = args.log.expanduser().resolve() if args.log else metadata.with_suffix(".log")
@@ -189,7 +252,7 @@ def main(argv=None) -> int:
         raise ValueError("container log must be a fresh path outside the child output")
     if log_path == metadata:
         raise ValueError("container log and launch receipt must use different paths")
-    child_metadata = output.parent / (output.name + ".recipe-launch.json")
+    child_metadata = metadata.with_name(metadata.stem + ".recipe-launch.json")
     if child_metadata.exists() or under(child_metadata, output) or child_metadata == metadata or child_metadata == log_path:
         raise ValueError("fresh external child recipe metadata path required")
     if not hf_hub_cache.is_dir():
@@ -206,6 +269,8 @@ def main(argv=None) -> int:
                     for path in sorted(package.rglob("*.py")) if path.is_file()}
     if package_code != recipe["runtime"]["package_code"]:
         raise ValueError("shared Python package differs from pinned runtime.package_code inventory")
+    resume_binding = (validate_existing_direct_resume(output, recipe, args.device, package_code, args.handoff)
+                      if args.resume_existing else None)
 
     hf_home = hf_hub_cache.parent
     mounts = [(REPO, REPO, "ro"), (artifact_root, artifact_root, "rw"), (hf_home, hf_home, "rw")]
@@ -255,11 +320,18 @@ def main(argv=None) -> int:
                      for path in sorted(launcher_package.rglob("*.py")) if path.is_file()}
     if launcher_code != package_code:
         raise ValueError("shared package changed while freezing the launch snapshot; no container started")
-    if output.exists():
+    if output.exists() and not args.resume_existing:
         raise ValueError("output appeared during preflight; refusing to launch")
+    if resume_binding is not None:
+        current_resume_binding = validate_existing_direct_resume(
+            output, recipe, args.device, package_code, args.handoff)
+        if current_resume_binding != resume_binding:
+            raise ValueError("committed resume plan or checkpoint changed during preflight")
     child = ["-m", "natlang_neuralese.train.recipe", "--recipe", str(container_recipe),
              "--out", str(container_output), "--launch-metadata", str(container_metadata),
              "--device", args.device]
+    if args.handoff:
+        child.append("--handoff")
     common_docker = [docker, "run", "--rm", "--pull=never", "--network", "none", "--read-only",
                      "--tmpfs", "/tmp:rw,nosuid,nodev,size=2g",
                      "--user", f"{os.getuid()}:{os.getgid()}", "-w", str(map_path(REPO, mounts))]
@@ -288,6 +360,8 @@ def main(argv=None) -> int:
         "print(json.dumps({'stage_module':module,'hf_hub_cache':hub,'cached_model_repositories':models}))"
     )
     preflight_paths = [item["path"] for item in input_bindings.values()] + [item["path"] for item in lineage]
+    if resume_binding is not None:
+        preflight_paths += [resume_binding["plan_path"], resume_binding["checkpoint_path"]]
     preflight = [*common_docker, "--gpus", "all", "-e", "CUDA_VISIBLE_DEVICES=", "--entrypoint", "/usr/bin/python3",
                  image, "-c", preflight_code, recipe["stage"]["kind"], str(container_hub_cache), *preflight_paths]
     command = [*common_docker]
@@ -310,6 +384,8 @@ def main(argv=None) -> int:
               "log": str(log_path), "device": args.device, "mounts": [
                   {"host": str(host), "container": str(target), "mode": mode} for host, target, mode in mounts],
               "child_recipe_metadata": str(child_metadata), "python_executable": "/usr/bin/python3",
+              "resume_existing": args.resume_existing, "resume_binding": resume_binding,
+              "handoff": args.handoff,
               "preflight_argv": preflight, "preflight_scope": "stage_import_and_input_cache_visibility; model_not_loaded",
               "docker_argv": command, "network": "none", "offline": True}
     write_exclusive(metadata, intent)
@@ -325,8 +401,13 @@ def main(argv=None) -> int:
                 completed_code = cpu_preflight
                 phase = "cpu_preflight"
             else:
-                if output.exists():
+                if output.exists() and not args.resume_existing:
                     raise ValueError("output appeared during CPU preflight; refusing to start the stage")
+                if resume_binding is not None:
+                    current_resume_binding = validate_existing_direct_resume(
+                        output, recipe, args.device, package_code, args.handoff)
+                    if current_resume_binding != resume_binding:
+                        raise ValueError("committed resume plan or checkpoint changed during CPU preflight")
                 attached = AttachedProcess()
                 completed_code = attached.run(command, stdout=log, stderr=subprocess.STDOUT)
                 if attached.signal_received is not None:
@@ -336,7 +417,10 @@ def main(argv=None) -> int:
                 else:
                     phase = "training_recipe_cli"
         child_result_path = output / "direct-stage-result.json"
-        child_result = json.loads(child_result_path.read_text()) if child_result_path.is_file() else None
+        child_result_sha = sha256(child_result_path) if child_result_path.is_file() else None
+        previous_result_sha = resume_binding.get("result_sha256") if resume_binding else None
+        child_result = (json.loads(child_result_path.read_text())
+                        if child_result_path.is_file() and child_result_sha != previous_result_sha else None)
         child_metadata_sha = sha256(child_metadata) if child_metadata.is_file() else None
         result = {**intent, "status": "process_succeeded" if completed_code == 0 else "process_failed",
                   "finished_unix": time.time(), "exit_code": completed_code,
