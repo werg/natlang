@@ -6,8 +6,11 @@ same held documents (step 12,000: 1.574). The task cadence uses the disjoint
 64-case held packet v3, sampling one case from each of its 16 shapes. Its first
 step-13,000 pass solved 0/16: four completed with wrong exact answers, eleven
 exhausted the 48-request collection allowance, and one exhausted the 600-second
-case allowance after repeated long completions. The required repeat for measured
-noise is in progress. These are collection limits, not a language deadline or
+case allowance after repeated long completions. The required repeat also
+solved 0/16: the cadence recorded `eligible=true`, `repeat_noise=0`,
+`regressed=false`, with 12 budget exhaustions, three semantic mismatches, one
+invalid action, and zero infrastructure errors. The trainer resumed productive
+updates after the evaluation (step 13,024 observed). These are collection limits, not a language deadline or
 an automatic conclusion that the model cannot learn the task.
 
 The failure traces show distinct problems. One folder case chose `bash` where
@@ -41,8 +44,10 @@ verified **train-split** cases with fresh seed 52005 across eight shapes:
 `iterate_schedule_repair`, and `relational_late_argmax`. The immutable source
 at `/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/provider-luna-held-shape-remediation-v1/source/held-shapes-s52005-n64.ir.jsonl`
 has SHA-256 `faeb0963e6c0678558543b2bae3575db5a4a63e531eb1f5fc9c4627a05014f7f`.
-A 32-case Luna pilot (four per family) is running in the same campaign folder;
-its manifest records selected indices and queue hash. This is **not training
+A 32-case Luna pilot (four per family) and two additional 16-case lanes
+(two more per family in each lane) are running in the same campaign folder;
+the manifest records their selected indices and queue hashes. The first six
+reviewed cases were exact accepted. This is **not training
 admission**: inspect exact results, semantic fidelity, failure clusters, and
 source-group deduplication before promoting any of its rows. The held seed
 61012 and its evaluation-only packet remain excluded from training.
