@@ -22,7 +22,7 @@ from ..serve.store import make_block
 
 def _load_parent(path: Path):
     """The channel's parent: a recurrence-training checkpoint (the LFM lineage), or a runtime-qualified foundation
-    port (`foundation-v1` recipe output, e.g. the Maple lineage, which starts from its student without port LoRA)."""
+    port (the token-foundation recipe output, e.g. the Maple lineage, which starts from its student without port LoRA)."""
     state = torch.load(path, map_location='cpu', weights_only=False, mmap=True)
     if state.get('warmup'):
         from ..serve import load_engine

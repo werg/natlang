@@ -324,19 +324,36 @@ def test_validate_spec_rejects_stages_without_a_trained_backbone():
         q.validate_spec(spec(), {'warm': 'core_text_warmup'})
 
 
-def test_shared_and_mellum_recipes_carry_one_component_and_inject_it_per_stage():
-    from natlang_neuralese.train.recipe import load_recipe, stage_quantization, effective_stage_parameters
-    shared = load_recipe(RECIPES / 'raw-recurrence-v6.json')
-    mellum = load_recipe(RECIPES / 'raw-recurrence-mellum-v5.json')
-    for key in ('loss', 'stage_progress', 'points'):  # unify: one component for both lines
-        assert shared['quantization'][key] == mellum['quantization'][key]
-    # Mellum-tokenized reuse of conversion v3 is declared backbone-inherent: preservation stream, gate, init.
-    assert set(mellum['quantization']) - set(shared['quantization']) == {'preserve', 'gate'}
-    assert mellum['init']['source'] == {'artifact': 'mellum21-convert-v3-latents-20261010', 'file': 'best-weights.pt'}
+def legacy_mellum_lineage():
+    """Neuralese-direct-mellum-v1's quantization component on the inline legacy raw-recurrence lineage, with the
+    stage progress the raw-recurrence Mellum line declared (warm-up, AR fixup from its predecessor's gate, recurrence)."""
+    import legacy_recipes
+    from natlang_neuralese.train.recipe import load_recipe
+    direct = load_recipe(RECIPES / 'neuralese-direct-mellum-v1.json')
+    recipe = legacy_recipes.raw_recurrence()
+    recipe['quantization'] = {**direct['quantization'], 'stage_progress': {
+        'core_text_warmup': [0.0, 0.35], 'autoregressive_text_fixup': [0.35, 0.45], 'recurrence_warmup': [0.45, 1.0]}}
+    return direct, recipe
+
+
+def test_recipes_carry_one_component_and_inject_it_per_stage():
+    from natlang_neuralese.train.recipe import stage_quantization, effective_stage_parameters
+    direct, mellum = legacy_mellum_lineage()
+    # The direct lineage: one stage, its declared update range.
+    sft = direct['stages'][0]
+    injected = stage_quantization(direct, sft, effective_stage_parameters(sft, [], direct), [])
+    assert injected['stage'] == {'id': 'direct_sft', 'progress': [0.0, 0.35], 'start': 0, 'end': 1000}
+    assert q.Quantization(injected).required_points() == ['q4']
+    # A direct stage budgeted in epochs derives its end; it may not also declare steps.
+    assert stage_quantization(direct, sft, {'epochs': 1.0}, [])['stage']['end'] == 'derived'
+    with pytest.raises(ValueError, match='epochs or steps'):
+        stage_quantization(direct, sft, {'epochs': 1.0, 'steps': 10}, [])
+    # A recipe without a component, or a stage without progress, gets none.
+    assert stage_quantization({k: v for k, v in direct.items() if k != 'quantization'}, sft, {}, []) is None
+    # The legacy multi-stage line: warm-up from 0, AR fixup from its predecessor's gate, recurrence from 0.
     stages = {s['id']: s for s in mellum['stages']}
     warm = stages['core_text_warmup']
     parameters = effective_stage_parameters(warm, [], mellum)
-    assert parameters['backbone_training'] == 'latent' and parameters['lr'] == 7.5e-6
     injected = stage_quantization(mellum, warm, parameters, [])
     assert injected['stage'] == {'id': 'core_text_warmup', 'progress': [0.0, 0.35], 'start': 0, 'end': 4096}
     fixup = stages['autoregressive_text_fixup']
@@ -345,18 +362,10 @@ def test_shared_and_mellum_recipes_carry_one_component_and_inject_it_per_stage()
     assert stage_quantization(mellum, fixup, fixup_parameters, reports)['stage'] == {
         'id': 'autoregressive_text_fixup', 'progress': [0.35, 0.45], 'start': 3000, 'end': 4024}
     assert stage_quantization(mellum, stages['embedding_distillation'], {}, []) is None
-    recurrence = stages['recurrence_warmup']['parameters']
-    assert recurrence['backbone_training'] == 'latent' and recurrence['backbone_lr'] == 7.5e-6
-    assert 'member_weight' not in recurrence and 'qat_latent_lr' not in recurrence
-    lfm = {s['id']: s for s in shared['stages']}
-    assert lfm['recurrence_warmup']['parameters']['backbone_training'] == 'auto'  # LFM: auto resolves to full
-    run = q.Quantization(injected)
-    assert run.required_points() == ['q4']
+    assert q.Quantization(injected).required_points() == ['q4']
     assert q.Quantization(stage_quantization(mellum, stages['recurrence_warmup'],
                                              stages['recurrence_warmup']['parameters'], [])).required_points() \
         == ['q4', 'ternary-experts']
-    assert load_recipe(RECIPES / 'foundation-mellum-v2.json')['stages'] == \
-        load_recipe(RECIPES / 'foundation-mellum-v1.json')['stages']
 
 
 # End to end: the text warm-up on a tiny LFM2 with the component --------------------------------------------------------
@@ -452,8 +461,10 @@ def test_tiny_mellum_latent_policy_trains_toward_its_deploy_precisions_and_resto
     named = configure_backbone_training(backbone, 'latent')
     names = {n for n, _ in named}
     assert 'model.layers.0.mlp.experts.gate_up' in names and 'model.layers.0.self_attn.q_proj.weight' in names
-    mellum = load_recipe(RECIPES / 'raw-recurrence-mellum-v5.json')
-    stage = next(s for s in mellum['stages'] if s['id'] == 'recurrence_warmup')
+    mellum = load_recipe(RECIPES / 'neuralese-direct-mellum-v1.json')
+    # The late curriculum span (as a recurrence stage had it), so every deploy point is ramping in.
+    mellum['quantization']['stage_progress'] = {'direct_sft': [0.45, 1.0]}
+    stage = next(s for s in mellum['stages'] if s['id'] == 'direct_sft')
     component = stage_quantization(mellum, stage, {'steps': 40}, [])
     component['loss']['mode'] = 'sum'
     run = q.Quantization(component)

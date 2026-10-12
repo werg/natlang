@@ -61,10 +61,12 @@ def test_sampler_draws_cohorts_by_fraction_and_replays_by_cursor():
 
 def test_trajectory_trainer_accepts_the_declared_cohort_options():
     from natlang_neuralese.train import trajectories
-    from natlang_neuralese.train.recipe import load_recipe, stage_parameter_args
+    from natlang_neuralese.train.recipe import stage_parameter_args
 
-    recipe = load_recipe(REPO / 'training/neuralese/recipes/raw-recurrence-v3.json')
-    declared = recipe['cohorts']['harness_bench']['recurrence']['trajectory_trainer']
+    # The harness cohort's trajectory-trainer options as the raw-recurrence recipes declared them.
+    declared = {'view': 'written', 'view_window': 4096, 'distill': 1.0, 'context_weight': 1.0,
+                'feedback_weight': 0.25, 'context_coverage': 'records',
+                'cohort_weights': {'native': 0.75, 'harness_bench': 0.25}, 'qualification_cohort': 'native'}
     args = stage_parameter_args(declared)
     out = subprocess.run([sys.executable, '-m', 'natlang_neuralese.train.trajectories', '--records', 'r', '--pieces',
                           'p', '--out', 'o', '--inspect-training-config', *args],

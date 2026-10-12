@@ -907,9 +907,8 @@ def stage_quantization(recipe, stage, parameters, reports, init_mix=None):
         end = 'derived'  # direct_sft derives the update count from its data and packing
         return stage_component(spec, stage['id'], start=start, end=end, init_mix=init_mix)
     if 'quantization_steps' in parameters:
-        # The update range the stage's progress span maps onto, when the stage runs longer (an extension, e.g.
-        # raw-recurrence-mellum-v12): updates past it hold the stage-end mixes, so extending a stage never moves its
-        # ramp back.
+        # The update range the stage's progress span maps onto, when the stage runs longer (an extension of a mapped
+        # warm-up): updates past it hold the stage-end mixes, so extending a stage never moves its ramp back.
         span = parameters['quantization_steps']
         if parameters.get('ar_feedback_fixup', False):
             raise ValueError('quantization_steps is not defined for an AR feedback fixup')

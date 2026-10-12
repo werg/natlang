@@ -25,13 +25,6 @@ def test_a_bare_trajectory_trainer_selects_the_same_defaults_as_before(capsys):
         assert effective[name] == value, name
 
 
-def test_the_published_declaration_matches_the_implemented_defaults():
-    declared = json.loads((REPO / 'training/neuralese/recipes/sketch-training-defaults-v1.json').read_text())
-    assert declared['implementation'] == 'natlang_neuralese.train.trajectories.CONSUMER_TRAINING_DEFAULTS'
-    for name, value in RETIRED_SKETCH_DEFAULTS.items():
-        assert declared['defaults'][name] == value, name
-
-
 def test_nothing_imports_the_retired_sketch_modules():
     for module in ('latent_sketch', 'sketch_handoff', 'sketch_defaults'):
         assert not list(PACKAGE.rglob(module + '.py'))

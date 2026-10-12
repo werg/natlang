@@ -77,7 +77,7 @@ def test_v4_preset_keeps_v3_caps():
     assert vc.CONVERTER.endswith("@4")
 
 
-def test_registered_view_v4_supersedes_v3_and_is_pinned_by_the_recipe():
+def test_registered_view_v4_supersedes_v3_and_pins_its_view_stage_records():
     entries = {e["id"]: e for e in json.loads((ROOT / "training/neuralese_corpora.json").read_text())["corpora"]}
     v4, v3 = entries["view-ask-20261010-v4"], entries["view-ask-20261010-v3"]
     # Native record recovery (2b9bba0e) does not qualify the recurrence
@@ -90,10 +90,6 @@ def test_registered_view_v4_supersedes_v3_and_is_pinned_by_the_recipe():
     assert ids == ["cross-corpus-index-s1-full-final-20261003-v1",
                    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1"]
     assert all(entries[i]["kind"] == "cross-corpus-index" for i in ids) and v4["build"]["builder"].endswith("@4")
-    recipe = json.loads((ROOT / "training/neuralese/recipes/raw-recurrence-v4.json").read_text())["overrides"]
-    binding = recipe["input_bindings"]["view-stage-records"]
-    assert binding["path"] == v4["path"] + "/view-stage/records.jsonl"
-    assert binding["sha256"] in v4["build"]["view_stage_conversion"]
     manifest = json.loads((ROOT / "training/corpus-manifests/view-ask-20261010-v4.json").read_text())
-    assert {f["path"]: f["sha256"] for f in manifest["files"]}["view-stage/records.jsonl"] == binding["sha256"]
-    assert recipe["view_operator"]["corpus"]["id"] == v4["id"] and recipe["view_operator"]["admitted"] is False
+    assert {f["path"]: f["sha256"] for f in manifest["files"]}["view-stage/records.jsonl"] in \
+        v4["build"]["view_stage_conversion"]

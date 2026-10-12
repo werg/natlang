@@ -81,12 +81,3 @@ def test_mellum_keeps_history_reasoning():
     assert tokenizer.natlang_history_reasoning == {'policy': 'keep', 'backbone': 'mellum',
                                                    'template_kwargs': {}, 'probe': 'keep'}
     assert 'EARLIER-THOUGHT' in tokenizer.apply_chat_template(HISTORY, tokenize=False)
-
-
-def test_recipe_twins_declare_their_backbone_policy():
-    import json
-    recipe = json.loads((Path(__file__).parents[2] / 'training/neuralese/recipes/raw-recurrence-v3.json').read_text())
-    twins = recipe['overrides']['cohorts']['harness_bench']['twins']
-    backbone = {'lfm2.5-350m': 'lfm2', 'mellum2.1-12b-a2.5b-thinking': 'mellum'}
-    assert {name: twin['history_reasoning'] for name, twin in twins.items()} == \
-        {name: BACKBONE_HISTORY_REASONING[backbone[name]] for name in twins}

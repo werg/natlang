@@ -11,9 +11,18 @@ import pytest
 
 from natlang_neuralese.train.recipe import load_recipe, require_gate, stage_parameter_args
 
+import legacy_recipes
+
 
 def declared():
-    return json.loads((Path(__file__).parents[2] / 'training/neuralese/recipes/foundation-v1.json').read_text())
+    return legacy_recipes.foundation()
+
+
+def legacy_raw_recurrence(tmp_path):
+    """The inline legacy raw-recurrence lineage, loaded through a file (load_recipe reads paths)."""
+    path = tmp_path / 'legacy-raw-recurrence.json'
+    path.write_text(json.dumps(legacy_recipes.raw_recurrence()))
+    return load_recipe(path)
 
 
 def test_shared_recipe_declares_warmup_and_identity_dependency(tmp_path):
@@ -134,7 +143,7 @@ def test_text_warmup_recipe_rejects_malformed_optimizer_restore_controls(tmp_pat
 def test_raw_recurrence_recipe_propagates_named_optimizer_restore_controls(tmp_path):
     from natlang_neuralese.train.recipe import HANDLERS
 
-    recipe = load_recipe(Path(__file__).parents[2] / 'training/neuralese/recipes/raw-recurrence-v1.json')
+    recipe = legacy_raw_recurrence(tmp_path)
     stage = next(stage for stage in recipe['stages'] if stage['kind'] == 'raw_recurrence_training')
     stage['parameters']['optimizer_state'] = 'restore'
     stage['parameters']['optimizer_added'] = ['heads.read_adapter.', 'backbone.control_rows']
@@ -158,7 +167,7 @@ HARNESS_RECURRENCE = {'view': 'written', 'view_window': 4096, 'distill': 1.0, 'c
 
 
 def recurrence_recipe_with(tmp_path, parameters):
-    recipe = load_recipe(Path(__file__).parents[2] / 'training/neuralese/recipes/raw-recurrence-v1.json')
+    recipe = legacy_raw_recurrence(tmp_path)
     stage = next(stage for stage in recipe['stages'] if stage['kind'] == 'raw_recurrence_training')
     stage['parameters'].update(parameters)
     path = tmp_path / 'recurrence-cohort.json'
@@ -173,8 +182,6 @@ def test_raw_recurrence_recipe_carries_the_harness_cohort_trainer_options(tmp_pa
         '--view', 'written', '--view-window', '4096', '--distill', '1.0', '--context-weight', '1.0',
         '--feedback-weight', '0.25', '--context-coverage', 'records',
         '--cohort-weights', '{"harness_bench":0.25,"native":0.75}', '--qualification-cohort', 'native']
-    declared = load_recipe(Path(__file__).parents[2] / 'training/neuralese/recipes/raw-recurrence-v3.json')
-    assert declared['cohorts']['harness_bench']['recurrence']['trajectory_trainer'] == HARNESS_RECURRENCE
 
 
 @pytest.mark.parametrize('bad', [{'view': 'digest'}, {'view_window': 0}, {'view_window': 4096.0},
@@ -189,8 +196,8 @@ def test_raw_recurrence_recipe_rejects_malformed_cohort_trainer_options(tmp_path
         load_recipe(recurrence_recipe_with(tmp_path, bad))
 
 
-def test_raw_recurrence_recipe_hands_fixup_heads_to_runtime_and_recurrence():
-    recipe=load_recipe(Path(__file__).parents[2]/'training/neuralese/recipes/raw-recurrence-v1.json')
+def test_raw_recurrence_recipe_hands_fixup_heads_to_runtime_and_recurrence(tmp_path):
+    recipe=legacy_raw_recurrence(tmp_path)
     by_id={stage['id']:stage for stage in recipe['stages']}
     assert by_id['autoregressive_text_fixup']['requires']==['core_text_warmup']
     assert by_id['autoregressive_text_fixup']['parameters']['ar_feedback_fixup'] is True
@@ -513,7 +520,7 @@ def test_foundation_certificate_survives_verified_directory_relocation(tmp_path)
 
 
 def test_recipe_declares_runtime_without_hardcoded_order_guards_and_completion_is_not_admission(tmp_path):
-    recipe = json.loads((Path(__file__).parents[2] / 'training/neuralese/recipes/raw-recurrence-v1.json').read_text())
+    recipe = legacy_recipes.raw_recurrence()
     path = tmp_path / 'recipe.json'
     path.write_text(json.dumps(recipe))
     assert load_recipe(path)['stages'][3]['requires'] == ['runtime_qualification']
@@ -527,23 +534,9 @@ def test_recipe_declares_runtime_without_hardcoded_order_guards_and_completion_i
     require_gate({'training_stage_completed': True, 'errors': 0, 'semantic_channel_qualified': False}, 'raw_recurrence_training')
 
 
-def test_raw_recipe_declares_full_depth_output_and_native_value_sizing():
-    recipe = load_recipe(Path(__file__).parents[2] / 'training/neuralese/recipes/raw-recurrence-v1.json')
-    parameters = recipe['stages'][-1]['parameters']
-    assert parameters['content_transport'] == 'top-state'
-    assert parameters['writer_length_policy'] == 'native-value'
-    assert parameters['max_write_vectors'] >= 163
-    assert parameters['writer_supervision'] == 'native-value'
-    assert parameters['stop_supervision'] == 'gold-native-boundary'
-    assert 'memory_gb' not in parameters and 'graph_memory_gb' not in parameters
-    assert parameters['sketch_gradient'] == 'local_stage'
-    assert parameters['sketch_target_weight'] == 0.1
-    assert parameters['sketch_target_backbone_scale'] == 0.05
-
-
-def test_shared_text_recipe_uses_one_mapped_graph_and_inherits_common_parameters():
+def test_shared_text_recipe_uses_one_mapped_graph_and_inherits_common_parameters(tmp_path):
     from natlang_neuralese.train.recipe import effective_stage_parameters
-    recipe=load_recipe(Path(__file__).parents[2]/'training/neuralese/recipes/raw-recurrence-v1.json')
+    recipe=legacy_raw_recurrence(tmp_path)
     by_id={stage['id']:stage for stage in recipe['stages']}
     core=effective_stage_parameters(by_id['core_text_warmup'],[],recipe)
     predecessor={'id':'core_text_warmup','kind':'core_text_warmup','artifact':'/run/core/heads.pt',
@@ -584,14 +577,6 @@ def test_active_text_warmup_cli_does_not_expose_legacy_sketch_objectives():
     for obsolete in ('--neuralese-input','--rollout-passes','--rollout-start-passes','--max-sequence-passes'):
         assert obsolete not in help_text
     assert '--ar-feedback-fixup' in help_text
-
-
-def test_raw_recipe_declares_only_mapped_and_ar_feedback_text_stages():
-    recipe=load_recipe(Path(__file__).parents[2]/'training/neuralese/recipes/raw-recurrence-v1.json')
-    warmups=[stage for stage in recipe['stages'] if stage['kind']=='core_text_warmup']
-    assert [stage['id'] for stage in warmups]==['core_text_warmup','autoregressive_text_fixup']
-    assert all('neuralese_input' not in stage['parameters'] for stage in warmups)
-    assert all('rollout_passes' not in stage['parameters'] for stage in warmups)
 
 
 def test_child_signal_forwarder_delivers_sigterm_and_restores_parent_handler(tmp_path):
@@ -891,7 +876,7 @@ def test_lineage_handoff_rejects_changed_objective_or_stale_frozen_code(tmp_path
 
 
 def test_lineage_handoff_extends_an_unqualified_text_warmup_with_its_quantization_ramp_held(tmp_path):
-    """raw-recurrence-mellum-v12: a handoff may raise an unqualified mapped warm-up's steps when its quantization
+    """A handoff may raise an unqualified mapped warm-up's steps when its quantization
     update range stays (quantization_steps = the old steps), so the stage continues from its state at the stage-end
     mixes; a moved ramp, a shorter stage or an extended qualified stage is refused."""
     import json as _json

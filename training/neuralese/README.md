@@ -38,7 +38,6 @@ On the GB10 (sm_121, aarch64) torch's flash and cuDNN SDPA backends work with `e
 .venv-neuralese/bin/python -m pytest -q tests/neuralese
 cd training/neuralese
 ../../.venv-neuralese/bin/python -m natlang_neuralese.train.recipe \
-  --recipe recipes/raw-recurrence-v1.json --heads HEADS.pt \
-  --records RECORDS.jsonl --pieces PIECES.jsonl --out RUN_DIR --device cuda
+  --recipe recipes/neuralese-direct-mellum-v4.json --heads HEADS.pt --out RUN_DIR --device cuda
 ../../.venv-neuralese/bin/python -m natlang_neuralese.eval.bench --prefix 2048 --block 32 --batch 1
 ```

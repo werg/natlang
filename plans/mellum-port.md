@@ -623,7 +623,7 @@ The 1 : 3.6 ratio of q4 to ternary decode cost matches the 784 s : 2,440 s colum
 ## 2026-10-11 — Behaviour gate bug hunt (owner: "retreat to what we know and diagnose")
 
 Data: `runs/mellum-foundation-qat-20261010/diagnostics/{behaviour,null}/`.
-Scripts: `training/neuralese/scripts/{diagnose_behaviour_gate,null_test_latent_optimizer,control_drift_sensitivity,control_gradient_check,control_gradient_check2,sft_positive_test}.py`.
+Scripts: `training/neuralese/scripts/{diagnose_behaviour_gate,null_test_latent_optimizer,control_drift_sensitivity,control_gradient_check,control_gradient_check2,sft_positive_test}.py` (deleted 2026-10-12 with the raw-recurrence recipes they defaulted to; in git before 03339381).
 - v12 was stopped by SIGTERM at step 4266, with full state.
 - The 4096 state is kept as `checkpoint-step4096.pt` / `heads-step4096.pt` (hard links).
 - `best-checkpoint.pt` is the 4096 state, because 4096 was the best eval.

@@ -58,7 +58,7 @@ Classes:
 | gate output convention | (24-probe set: maple) | lfm (declared per probe) | backbone-inherent | gate-level `output_convention` (new shared key); Mellum `maple` | Under the probes' LFM parser, Mellum's well-formed `<tool_call>{json}` calls scored 0/12. That was a checker bug, not behaviour. |
 | gate KL bound | 0.25, response (`held_kl_bound`), overridden by `gate_response_kl` 0.5 | 0.5, combined | accidental (code age) | shared `gate_response_kl` 0.5 on response positions | The accepted direct-v1 rule is response-only (58e901f6, b1cd6632). |
 | moe_kernel | grouped | n/a | backbone-inherent | Mellum only | Dense MoE experts as grouped GEMMs. |
-| quantization component | raw-recurrence-mellum-v11 points | none | backbone-inherent + declared gap | Mellum keeps it; LFM's is a known gap | The owner's QAT rule applies to LFM once a component is declared. |
+| quantization component | Mellum points (from raw-recurrence-mellum-v11, deleted 2026-10-12; now declared in neuralese-direct-mellum-v4) | none | backbone-inherent + declared gap | Mellum keeps it; LFM's is a known gap | The owner's QAT rule applies to LFM once a component is declared. |
 | heads | raw-token-v1 heads from base (`foundation_heads`) | untrained clean-base heads | lineage | each line's own | Both are raw-token heads from the base model. |
 | code | snapshot bc666539 (17:28) | frozen package of bdb6851b (12:52): 18 modules older, incl. before a8972488 (attention latents), 7c6eea80 (drift_every), 58e901f6 (response-only gate KL) | accidental (age) | current main at launch | Newest code always (owner). |
 | held_documents, prefix_tokens, batch, weights, projection shape, optimizer kinds, drift warn/stop, value_margin, seed, gate_held_rows | equal | equal | — | — | — |

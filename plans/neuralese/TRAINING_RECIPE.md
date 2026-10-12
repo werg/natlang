@@ -1,9 +1,15 @@
 # Shared neuralese training recipe
 
-New neuralese training lineages use the shared complete stage graph at
-`training/neuralese/recipes/raw-recurrence-v1.json`. The smaller
-`foundation-v1.json` declares only the initial identity/distillation/transport
-controls; it is not the complete text-adaptation and recurrence curriculum.
+New neuralese training lineages use the shared recipes that
+`training/neuralese/line-parity.json` names: the direct stage's base
+`neuralese-direct-v3` with its line recipes (`neuralese-direct-mellum-v4`,
+`neuralese-direct-lfm-v3`; plans/neuralese/NEURALESE_DIRECT_V1.md) and the
+end-to-end stage (`stages.e2e`). The foundation, gold-text warm-up/input-map,
+sketch-consumer, mapped/AR and raw-recurrence recipes (`foundation-v1`,
+`raw-recurrence-v1` .. `raw-recurrence-mellum-v12` and their siblings) were
+deleted on 2026-10-12 (owner decision, plans/REVIEW_20261012.md rec. 9; history
+in git before 03339381). Sections below that name them describe that history;
+their stage handlers and loader rules remain in `train/recipe.py`.
 Machine-specific experiments bind the shared handlers and exact predecessor
 artifacts. Code moves through `origin/main`; data and
 checkpoints move through the corpus registry and immutable manifests.
@@ -148,15 +154,14 @@ entry points and their old checkpoints are not automatically qualified.
 ## Run and extend
 
 ```sh
-PYTHONPATH=training/neuralese python -m natlang_neuralese.train.recipe \
-  --recipe training/neuralese/recipes/raw-recurrence-v1.json \
-  --heads HEADS.pt --records RECORDS.jsonl --pieces PIECES.jsonl \
-  --text-data TEXT.jsonl \
-  --out runs/NEW-RECIPE-LINEAGE --device cuda
+cd training/neuralese
+../../.venv-neuralese/bin/python -m natlang_neuralese.train.recipe \
+  --recipe recipes/neuralese-direct-mellum-v4.json \
+  --heads HEADS.pt --out ../../runs/NEW-RECIPE-LINEAGE --device cuda
 ```
 
 `--inspect` validates the declaration without starting a model.
-`--until token_identity` stops at an explicit stage boundary. Run the same command
+`--until <stage id>` stops at an explicit stage boundary. Run the same command
 to resume: the runner freezes the Python package, pins recipe/data/code identities,
 checks previously qualified artifacts and restores child optimizer/RNG state.
 SIGTERM is forwarded to the active trainer, which saves at a step boundary.

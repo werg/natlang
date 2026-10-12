@@ -201,10 +201,15 @@ def test_a_direct_lineage_loads_without_warm_up_stages_and_old_lineages_keep_the
     (tmp_path / 'undeclared.json').write_text(json.dumps(undeclared))
     with pytest.raises(ValueError, match='identity_qualification'):
         load_recipe(tmp_path / 'undeclared.json')
-    old = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v12.json')
-    old['stages'] = [s for s in old['stages'] if s['kind'] not in ('token_identity', 'causal_embedding_distillation')]
+    import legacy_recipes
+    old = legacy_recipes.raw_recurrence()
     (tmp_path / 'old.json').write_text(json.dumps(old))
-    with pytest.raises(ValueError):
+    assert load_recipe(tmp_path / 'old.json')['id'] == old['id']
+    # An older lineage that is not all-direct keeps the rule: its identity / embedding gates may not be dropped.
+    old['stages'] = [s for s in old['stages'] if s['kind'] == 'token_identity']
+    old.pop('stage_parameter_defaults')
+    (tmp_path / 'old.json').write_text(json.dumps(old))
+    with pytest.raises(ValueError, match='identity and embedding distillation'):
         load_recipe(tmp_path / 'old.json')
 
 

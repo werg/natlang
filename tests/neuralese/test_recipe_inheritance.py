@@ -12,10 +12,6 @@ from natlang_neuralese.train.recipe import (deep_merge, load_recipe, recipe_iden
 
 ROOT = Path(__file__).parents[2]
 RECIPES = ROOT / 'training/neuralese/recipes'
-CONVERTED = ['c12-ctx512', 'c12-ctx1k', 'c18', 'c18-ctx512', 'c18-ctx1k', 'c21-ctx512', 'c23-ctx512',
-             'c23-ctx1k', 'c23-calibrated-v1']
-# Verbatim pre-conversion copies of the original files (taken at commit 8a96d758).
-ORIGINALS = Path(__file__).parent / 'recipe_originals'
 
 
 def base_recipe():
@@ -121,166 +117,15 @@ def test_hash_is_canonical_over_resolved_content_and_stable(tmp_path):
 
 def test_resolve_cli_prints_recipe_and_hash(tmp_path):
     out = subprocess.run([sys.executable, '-m', 'natlang_neuralese.train.recipe', 'resolve',
-                          'token-preserving-foundation-maple-c18-ctx512'],
+                          'neuralese-direct-mellum-v2'],
                          capture_output=True, text=True, check=True, cwd=ROOT,
                          env={**__import__('os').environ, 'PYTHONPATH': str(ROOT / 'training/neuralese')}).stdout
     lines = out.strip().splitlines()
     summary = json.loads(lines[-1])
     recipe = json.loads('\n'.join(lines[:-1]))
     assert summary['recipe_sha256'] == canonical_json_sha256_hex(recipe) and summary['inherits'] is True
-    assert recipe['stages'][1]['parameters']['cutoff'] == 18
-
-
-@pytest.mark.parametrize('name', CONVERTED)
-def test_converted_recipe_resolves_to_the_original_content(name):
-    original = json.loads((ORIGINALS / f'foundation-maple-{name}.json').read_text())
-    path = RECIPES / f'foundation-maple-{name}.json'
-    assert 'extends' in json.loads(path.read_text())
-    resolved = load_recipe(path)
-    ignore = {'extends', 'overrides', 'description'}
-    assert {k: v for k, v in resolved.items() if k not in ignore} == {k: v for k, v in original.items() if k not in ignore}
-    assert resolved['id'] == original['id']
-
-
-def test_history_keeps_every_original_description():
-    history = (RECIPES / 'HISTORY.md').read_text()
-    for name in CONVERTED:
-        original = json.loads((ORIGINALS / f'foundation-maple-{name}.json').read_text())
-        assert original['description'] in history and original['id'] in history
-
-
-def test_harness_bench_cohort_is_declared_held_and_shared_by_both_lines():
-    """raw-recurrence-v3 / raw-recurrence-mellum-v2 add only the harness_bench cohort to v2 / mellum-v1, plus the text
-    warm-up's cohort/context defaults made explicit (the text_warmup CLI defaults; declared in v3, not v1, so earlier
-    recipes keep their identity)."""
-    ignore = {'id', 'description', 'cohorts', 'stage_parameter_defaults'}
-    explicit = {'context_weight': 1.0, 'feedback_weight': 0.25, 'qualification_cohort': 'native'}
-    for new, old in (('raw-recurrence-v3', 'raw-recurrence-v2'), ('raw-recurrence-mellum-v2', 'raw-recurrence-mellum-v1')):
-        resolved, previous = load_recipe(RECIPES / f'{new}.json'), load_recipe(RECIPES / f'{old}.json')
-        assert {k: v for k, v in resolved.items() if k not in ignore} == \
-            {k: v for k, v in previous.items() if k not in ignore}
-        assert 'cohorts' not in previous
-        defaults = previous['stage_parameter_defaults']
-        assert resolved['stage_parameter_defaults'] == {
-            **defaults, 'core_text_warmup': {**defaults['core_text_warmup'], **explicit}}
-        assert not set(explicit) & set(defaults['core_text_warmup'])
-    lfm, mellum = load_recipe(RECIPES / 'raw-recurrence-v3.json'), load_recipe(RECIPES / 'raw-recurrence-mellum-v2.json')
-    cohort = lfm['cohorts']['harness_bench']
-    assert mellum['cohorts'] == lfm['cohorts']
-    # Owner decision 2026-10-10: admitted, effective per twin and stage as the trainer supports it.
-    assert cohort['admitted'] is True and 'DECISIONS.md 2026-10-10' in cohort['admission']
-    assert cohort['recurrence']['admitted'] is False
-    assert cohort['recurrence']['trajectory_trainer']['view'] == 'written'
-    registry = {c['id']: c for c in json.loads((ROOT / 'training/neuralese_corpora.json').read_text())['corpora']}
-    assert registry[cohort['source']['corpus']]['training_admission'] is False
-    for twin in cohort['twins'].values():
-        entry = registry[twin['corpus']]
-        assert entry['training_admission'] is twin['admitted']
-        assert 'DECISIONS.md 2026-10-10' in entry['admission'] and 'DECISIONS.md 2026-10-10' in twin['admission']
-        assert entry['build']['text_jsonl_sha256'] == twin['text_jsonl_sha256']
-        assert cohort['source']['corpus'] in entry['derived_from']
-
-
-def test_view_operator_stage_is_declared_held_and_shared_by_both_lines():
-    """raw-recurrence-v4 / raw-recurrence-mellum-v3 add only the held view operator stage and its gate to v3 /
-    mellum-v2 (stages_added after adapted_runtime; recurrence_warmup additionally requires the gate)."""
-    added = {'view_operator', 'view_gate'}
-    ignore = {'id', 'description', 'input_bindings', 'view_operator', 'stages', 'cohorts'}
-    for new, old in (('raw-recurrence-v4', 'raw-recurrence-v3'), ('raw-recurrence-mellum-v3', 'raw-recurrence-mellum-v2')):
-        resolved, previous = load_recipe(RECIPES / f'{new}.json'), load_recipe(RECIPES / f'{old}.json')
-        assert {k: v for k, v in resolved.items() if k not in ignore} == \
-            {k: v for k, v in previous.items() if k not in ignore}
-        # The harness cohort's recurrence gains only the declared view length (an addition).
-        recurrence = copy.deepcopy(previous['cohorts']['harness_bench']['recurrence'])
-        recurrence['trajectory_trainer']['view_tokens_per_vector'] = 4
-        recurrence['view_length'] = resolved['cohorts']['harness_bench']['recurrence']['view_length']
-        expected = copy.deepcopy(previous['cohorts'])
-        expected['harness_bench']['recurrence'] = recurrence
-        assert resolved['cohorts'] == expected
-        assert 'view_operator' not in previous and 'input_bindings' not in previous
-        old_stages = {s['id']: s for s in previous['stages']}
-        new_stages = [s for s in resolved['stages'] if s['id'] not in added]
-        assert [s['id'] for s in new_stages] == [s['id'] for s in previous['stages']]
-        for stage in new_stages:
-            expected = dict(old_stages[stage['id']])
-            if stage['id'] == 'recurrence_warmup':
-                expected['requires'] = expected['requires'] + ['view_gate']
-            assert stage == expected
-        ids = [s['id'] for s in resolved['stages']]
-        assert ids.index('adapted_runtime') + 1 == ids.index('view_operator') == ids.index('view_gate') - 1
-        view = next(s for s in resolved['stages'] if s['id'] == 'view_operator')
-        gate = next(s for s in resolved['stages'] if s['id'] == 'view_gate')
-        assert view['admitted'] is False and gate['admitted'] is False and resolved['view_operator']['admitted'] is False
-        assert view['kind'] == 'raw_recurrence_training' and gate['kind'] == 'view_operator_gate'
-        assert view['parameters']['view'] == 'written' and view['parameters']['purpose_contrast'] > 0
-        assert view['parameters']['distill'] == 1.0 and view['parameters']['stop_pg'] > 0
-        assert gate['inputs']['records'] == view['inputs']['records']
-    lfm, mellum = load_recipe(RECIPES / 'raw-recurrence-v4.json'), load_recipe(RECIPES / 'raw-recurrence-mellum-v3.json')
-    assert lfm['view_operator'] == mellum['view_operator'] and lfm['input_bindings'] == mellum['input_bindings']
-    lfm_view = next(s for s in lfm['stages'] if s['id'] == 'view_operator')['parameters']
-    mellum_view = next(s for s in mellum['stages'] if s['id'] == 'view_operator')['parameters']
-    mellum_rec = next(s for s in mellum['stages'] if s['id'] == 'recurrence_warmup')['parameters']
-    lfm_rec = next(s for s in lfm['stages'] if s['id'] == 'recurrence_warmup')['parameters']
-    # The only differences between the lines' view stages are the Mellum line's declared recurrence overrides.
-    assert {k: v for k, v in mellum_view.items() if lfm_view.get(k) != v} == \
-        {k: v for k, v in mellum_rec.items() if lfm_rec.get(k) != v}
-
-
-def test_harness_bench_cohort_repinned_to_s1_placed_records_v4():
-    """raw-recurrence-v5 / raw-recurrence-mellum-v4 change only the harness_bench pins of v4 / mellum-v3: records v4
-    (splits follow S1's cross-corpus placement) and its v2 twins, with the Mellum twin admitted for the text stages."""
-    v4_records = 'harness-bench-swe-rebench-openhands-pi-records-20261010-v4'
-    registry = {c['id']: c for c in json.loads((ROOT / 'training/neuralese_corpora.json').read_text())['corpora']}
-    changed = {'id', 'description', 'input_bindings', 'view_operator', 'stages', 'cohorts'}
-    pairs = (('raw-recurrence-v5', 'raw-recurrence-v4'), ('raw-recurrence-mellum-v4', 'raw-recurrence-mellum-v3'))
-    for new, old in pairs:
-        resolved, previous = load_recipe(RECIPES / f'{new}.json'), load_recipe(RECIPES / f'{old}.json')
-        assert {k: v for k, v in resolved.items() if k not in changed} == \
-            {k: v for k, v in previous.items() if k not in changed}
-        bindings = dict(previous['input_bindings'])
-        del bindings['harness-bench-records-v3'], bindings['harness-bench-pieces-v3']
-        assert {k: v for k, v in resolved['input_bindings'].items() if not k.startswith('harness-bench-')} == bindings
-        assert resolved['input_bindings']['harness-bench-records-v4']['path'].endswith(f'{v4_records}/records.jsonl')
-        manifest = {f['path']: f['sha256'] for f in
-                    json.loads((ROOT / f'training/corpus-manifests/{v4_records}.json').read_text())['files']}
-        assert resolved['input_bindings']['harness-bench-records-v4']['sha256'] == manifest['records.jsonl']
-        assert resolved['input_bindings']['harness-bench-pieces-v4']['sha256'] == manifest['pieces.jsonl']
-        gate = copy.deepcopy(previous['view_operator'])
-        gate['gate']['metrics'] = [m.replace('harness-bench v3', 'harness-bench v4') for m in gate['gate']['metrics']]
-        assert resolved['view_operator'] == gate
-        for stage, before in zip(resolved['stages'], previous['stages']):
-            if stage['id'] == 'view_gate':
-                before = {**before, 'inputs': {**before['inputs'], 'harness_records': 'harness-bench-records-v4',
-                                               'harness_pieces': 'harness-bench-pieces-v4'}}
-            assert stage == before
-        cohort, before = resolved['cohorts']['harness_bench'], previous['cohorts']['harness_bench']
-        assert cohort['source'] == {**before['source'], 'corpus': v4_records}
-        assert cohort['recurrence'] == {**before['recurrence'], 'inputs': {**before['recurrence']['inputs'],
-                                                                           'records': v4_records, 'pieces': v4_records}}
-        assert cohort['recurrence']['admitted'] is False and cohort['admitted'] is True
-        assert cohort['text_stages'] == before['text_stages'] and cohort['backbone_inherent_differences'] == before['backbone_inherent_differences']
-        for name, twin in cohort['twins'].items():
-            entry = registry[twin['corpus']]
-            assert twin['admitted'] is True and entry['training_admission'] is True
-            assert entry['derived_from'] == [v4_records] and entry['build']['text_jsonl_sha256'] == twin['text_jsonl_sha256']
-            assert entry['build']['tokenizer_sha256'] == twin['tokenizer_sha256'] == before['twins'][name]['tokenizer_sha256']
-            assert entry['build']['history_reasoning']['policy'] == twin['history_reasoning'] == before['twins'][name]['history_reasoning']
-            assert twin['tokens'] == {split: entry['tokens'][split]['tokens'] for split in ('train', 'test')}
-            # Same documents, other splits: the token total is the v1 twin's.
-            assert sum(twin['tokens'].values()) == sum(before['twins'][name]['tokens'].values())
-            assert registry[before['twins'][name]['corpus']]['superseded_by'] == twin['corpus']
-        assert registry[before['source']['corpus']]['superseded_by'] == v4_records
-        # Held-data recovery admitted the native records (2b9bba0e); this does
-        # not qualify the recipe's recurrence stage, checked separately above.
-        assert registry[v4_records]['training_admission'] is True
-    lfm, mellum = load_recipe(RECIPES / 'raw-recurrence-v5.json'), load_recipe(RECIPES / 'raw-recurrence-mellum-v4.json')
-    assert lfm['cohorts'] == mellum['cohorts'] and lfm['input_bindings'] == mellum['input_bindings']
-    # The Mellum line's differences from the shared recipe are mellum-v3's, unchanged.
-    v4, mellum_v3 = load_recipe(RECIPES / 'raw-recurrence-v4.json'), load_recipe(RECIPES / 'raw-recurrence-mellum-v3.json')
-    assert json.loads((RECIPES / 'raw-recurrence-mellum-v4.json').read_text())['overrides'] == \
-        json.loads((RECIPES / 'raw-recurrence-mellum-v3.json').read_text())['overrides']
-    assert [s for s in mellum['stages'] if s not in lfm['stages']] != [] and \
-        len([s for s in mellum['stages'] if s not in lfm['stages']]) == len([s for s in mellum_v3['stages'] if s not in v4['stages']])
+    assert recipe['id'] == 'neuralese-direct-mellum-v2' and 'extends' not in recipe
+    assert recipe['stages'] == load_recipe(RECIPES / 'neuralese-direct-mellum-v2.json')['stages']
 
 
 def test_stages_added_insert_after_a_named_stage(tmp_path):
@@ -300,50 +145,46 @@ def test_stages_added_insert_after_a_named_stage(tmp_path):
             resolve_recipe_data(tmp_path / 'child.json')
 
 
-def test_v6_line_declares_its_evaluation_and_checkpoint_points_in_steps():
-    """Owner 2026-10-10: every write point is an evaluation point and the stage end is the last one (its gate)."""
-    from natlang_neuralese.train.loop import check_declared_points
-    from natlang_neuralese.train.recipe import resolve_recipe_data
-    for name in ('raw-recurrence-v6', 'raw-recurrence-mellum-v5', 'raw-recurrence-mellum-v6', 'raw-recurrence-v7', 'raw-recurrence-mellum-v7', 'raw-recurrence-v8', 'raw-recurrence-mellum-v8', 'raw-recurrence-mellum-v9', 'raw-recurrence-mellum-v10', 'raw-recurrence-mellum-v11', 'raw-recurrence-mellum-v12'):
-        path = RECIPES / f'{name}.json'
-        if not path.exists():
-            continue
-        recipe = resolve_recipe_data(path)
-        defaults = recipe.get('stage_parameter_defaults', {})
-        for stage in recipe['stages']:
-            effective = {**defaults.get(stage['kind'], {}), **stage.get('parameters', {})}
-            if 'eval_every' in effective:
-                check_declared_points(effective['steps'], effective['eval_every'], effective.get('checkpoint_every'))
-                assert 'checkpoint_minutes' not in effective and 'eval_minutes' not in effective
+def legacy_lineage(tmp_path, name='legacy'):
+    import legacy_recipes
+    path = write(tmp_path, name, legacy_recipes.raw_recurrence())
+    return resolve_recipe_data(path)
 
 
-def test_mellum_v11_runs_dense_experts_as_grouped_gemms_in_every_trainer():
-    from natlang_neuralese.train.recipe import resolve_recipe_data
-    recipe = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v11.json')
-    defaults = recipe['stage_parameter_defaults']
-    assert defaults['core_text_warmup']['moe_kernel'] == 'grouped'
-    assert defaults['core_text_warmup']['latent_step_in_backward'] is True  # v10 kept
-    assert defaults['raw_recurrence_training']['moe_kernel'] == 'grouped'
+def test_operational_stage_parameters_do_not_change_the_training_semantics(tmp_path):
+    from natlang_neuralese.train.recipe import _without_operational
+    old = legacy_lineage(tmp_path)
+    new = copy.deepcopy(old)
+    new['id'], new['description'] = 'legacy-operational', 'an operational handoff'
+    new['stage_parameter_defaults']['core_text_warmup'].update(moe_kernel='grouped', eval_every=256)
+    next(s for s in new['stages'] if s['id'] == 'recurrence_warmup')['parameters']['checkpoint_every'] = 50
+    assert old != new and _without_operational(old) == _without_operational(new)
+    changed = copy.deepcopy(new)
+    changed['stage_parameter_defaults']['core_text_warmup']['lr'] = 1e-4
+    assert _without_operational(changed) != _without_operational(old)
 
 
-
-def test_mellum_v11_is_an_operational_handoff_from_v10():
-    from natlang_neuralese.train.recipe import _without_operational, resolve_recipe_data
-    v10 = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v10.json')
-    v11 = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v11.json')
-    assert v10 != v11 and _without_operational(v10) == _without_operational(v11)
-
-
-def test_mellum_v12_extends_core_text_warmup_with_its_quantization_range_held():
-    from natlang_neuralese.train.recipe import (_without_extensions, _without_operational, resolve_recipe_data,
-                                                stage_extensions)
-    v11 = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v11.json')
-    v12 = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v12.json')
-    warm = next(stage for stage in v12['stages'] if stage['id'] == 'core_text_warmup')
-    assert warm['parameters']['steps'] == 6144 and warm['parameters']['quantization_steps'] == 4096
-    assert v12['stage_parameter_defaults']['core_text_warmup']['report_column_fraction'] == 0.25
-    extended = stage_extensions(v11, v12, RECIPES / 'no-lineage')
+def test_a_handoff_extends_an_unqualified_warmup_with_its_quantization_range_held(tmp_path):
+    from natlang_neuralese.train.recipe import _without_extensions, _without_operational, stage_extensions
+    old = legacy_lineage(tmp_path)
+    new = copy.deepcopy(old)
+    warm = next(stage for stage in new['stages'] if stage['id'] == 'core_text_warmup')
+    warm['parameters'].update(steps=6144, quantization_steps=4096)
+    new['stage_parameter_defaults']['core_text_warmup']['report_column_fraction'] = 0.25
+    out = tmp_path / 'lineage'
+    out.mkdir()
+    extended = stage_extensions(old, new, out)
     assert extended == {'core_text_warmup': [4096, 6144]}
-    assert (_without_operational(_without_extensions(v11, extended)) ==
-            _without_operational(_without_extensions(v12, extended)))
-
+    assert (_without_operational(_without_extensions(old, extended)) ==
+            _without_operational(_without_extensions(new, extended)))
+    del warm['parameters']['quantization_steps']
+    with pytest.raises(ValueError, match='quantization ramp'):
+        stage_extensions(old, new, out)
+    warm['parameters']['quantization_steps'] = 4096
+    (out / 'core_text_warmup-report.json').write_text('{}')
+    with pytest.raises(ValueError, match='already qualified'):
+        stage_extensions(old, new, out)
+    shorter = copy.deepcopy(old)
+    next(stage for stage in shorter['stages'] if stage['id'] == 'core_text_warmup')['parameters']['steps'] = 2048
+    with pytest.raises(ValueError, match='only a mapped text warm-up'):
+        stage_extensions(old, shorter, tmp_path / 'other')

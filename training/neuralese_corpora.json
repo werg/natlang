@@ -8310,19 +8310,6 @@
       "notes": "Canonical full native/text output files at the exact paths named by the root action45 integration admission are included so they are immediately available on DGX without reconstruction. The compact action45 proposal entry separately provides nonduplicative delta/provenance. Full facets contain 5,290 native rows and 4,544 text documents; the exact45 new action/text delta is covered by root admission. V24 native/text prefixes and V9 recurrence/pieces remain byte exact. Two visible-context holds are excluded. No recurrence additions, runtime/trajectory/foundation qualification, or active training-input change."
     },
     {
-      "id": "neuralese-lfm-input-map-action45-refinement-recipe-20261008-v1",
-      "owner": "pop",
-      "path": "training/neuralese/recipes",
-      "include": [
-        "gold-text-input-map-lfm-action45-refinement-v1.json"
-      ],
-      "admission": "immutable-active-refinement-recipe-provenance-only",
-      "derived_from": [
-        "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1"
-      ],
-      "notes": "Immutable recipe used by the separately registered action45 refinement launch. Recipe SHA256 265711c532e7123b1e1e93fb4b72caa7aa5804e57a5936caf8a6544b97813cf5. The source code identity is runtime source commit e3198f93d07f63ce54eb0bb08b665cf39aa15829; launch declaration commit d7585f582680377b679a75fd8ea3ca34e439193f. Recipe/provenance only; active run outputs are excluded."
-    },
-    {
       "id": "verified-reasoning-pools-v19-luna-v3-v5-paired-closeout-20261008-v1",
       "owner": "pop",
       "path": "runs/verified-reasoning-pools-20261008-v19-answer-key-v2",
@@ -32170,22 +32157,6 @@
       "training_admission": false,
       "admission": "held GPU/runtime diagnostic evidence only; no training admission, no task qualification, and no autonomous stopping qualification",
       "notes": "Selected closed V8 nonfinite failure and same-case token-driven update, token-writer setup/runtime qualification receipts, long-gradient diagnostic, frozen runtime source snapshots, and direct artifact manifest. Model weights, checkpoints, kernel caches, active epoch-v2 outputs, and bulky source inputs are excluded. Recipe and source input hashes are preserved in the stage/launch receipts."
-    },
-    {
-      "id": "luna-neuralese-direct-lfm-v8-failing-context-recipe-20261011-v1",
-      "owner": "pop",
-      "path": "training/neuralese/recipes",
-      "include": [
-        "luna-direct-lfm-native-e2e-failing-context-diagnostic-20261011-v2.json"
-      ],
-      "source_class": "recipe-provenance",
-      "split": "held-diagnostic-no-independent-world-credit",
-      "training_admission": false,
-      "admission": "held recipe provenance only; no training admission or qualification",
-      "derived_from": [
-        "luna-neuralese-direct-lfm-v8-held-gpu-evidence-20261011-v1"
-      ],
-      "notes": "Exact v2 recipe file referenced by the immutable failed-context stage plan; its SHA-256 is a6f949a92e43ff1d332f48bedc879c5a5139f3b7db7d6e45fae610a7fc489bdd."
     },
     {
       "id": "quality-review-choice-enum-paired-probe-v15-accounting-held-20261011-v1",

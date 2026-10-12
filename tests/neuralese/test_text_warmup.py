@@ -406,15 +406,16 @@ def test_qualification_requires_every_nonempty_stratum_to_pass():
 
 def test_raw_recurrence_recipe_requires_text_warmup_and_runtime(tmp_path):
     import json
-    from pathlib import Path
     from natlang_neuralese.train.recipe import load_recipe
 
-    recipe_path = Path(__file__).resolve().parents[2] / 'training' / 'neuralese' / 'recipes' / 'raw-recurrence-v1.json'
-    recipe = json.loads(recipe_path.read_text())
+    import legacy_recipes
+    recipe = legacy_recipes.raw_recurrence()
+    recipe_path = tmp_path / 'legacy-raw-recurrence.json'
+    recipe_path.write_text(json.dumps(recipe))
     stages = {stage['id']: stage for stage in recipe['stages']}
     assert 'autoregressive_text_fixup' in stages['adapted_runtime']['requires']
     assert {'autoregressive_text_fixup', 'adapted_runtime'} <= set(stages['recurrence_warmup']['requires'])
-    assert load_recipe(recipe_path)['id'] == 'raw-recurrence-v1'
+    assert load_recipe(recipe_path)['id'] == recipe['id']
 
     recipe['stages'] = [stage for stage in recipe['stages'] if stage['id'] != 'core_text_warmup']
     modified = tmp_path / 'without-text-warmup.json'
