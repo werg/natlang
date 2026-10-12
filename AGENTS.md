@@ -161,6 +161,11 @@ afterwards. The rules below are consequences of this one.
 - When resolving a merge conflict, keep both sides unless you know a side was
   removed on purpose; a dropped section of AGENTS.md or a plan is lost silently.
 - Stop processes by systemd unit name or an explicit PID, never by pattern.
+- Containers started by our agents may be stopped by the machine's coordinating agent without asking (owner
+  authorization, 2026-10-12), e.g. an orphan left running after its ledger unit stopped, or one starving training.
+  Stop it by its explicit container name. Every container an agent starts gets `--name <ledger unit>` and is
+  declared to the ledger (`memory_ledger.py run --container <name>`) so its memory is counted and it is stopped
+  with its unit.
 - Brief the other machine (`coord.py send`) on every owner decision and every
   shared-code change, with commits and exact semantics.
 
