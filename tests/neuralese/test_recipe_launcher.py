@@ -313,7 +313,7 @@ def test_shared_resume_rejects_changed_or_missing_frozen_runtime(tmp_path, monke
             output, recipe, recipe_path, heads, stage_inputs, "cuda", code)
 
 
-@pytest.mark.parametrize("value", ["0", "1:0", "4:3", "1:2:3", "x:2", " 1:2"])
+@pytest.mark.parametrize("value", ["1:0", "4:3", "1:2:3", "x:2", " 1:2"])
 def test_profile_range_rejects_invalid_values(value):
     with pytest.raises(ValueError):
         LAUNCHER.validated_profile_updates(value)

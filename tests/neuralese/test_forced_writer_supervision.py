@@ -9,10 +9,11 @@ from natlang_neuralese.train.trajectory_state import validate_continuation
 
 
 def test_value_ce_scores_body_after_exact_forced_prefix_without_boundary_merging(monkeypatch):
-    monkeypatch.setattr(grad, 'render_messages', lambda *args, **kwargs: SimpleNamespace(segments=['prompt'], blocks=[], escape_nonce='nonce'))
+    rendered = SimpleNamespace(segments=['prompt'], blocks=[], escape_nonce='nonce')
     session = object.__new__(grad.GradSession)
     tokens = {'value=': [10, 11], '{"x": 1}': [12, 13], 'value={"x": 1}': [10, 99, 13]}
-    session.engine = SimpleNamespace(_template=None, specials=None, block_value_type=None, _tokens=tokens.__getitem__)
+    session.engine = SimpleNamespace(render_request=lambda *args, **kwargs: rendered,
+                                     _tokens=tokens.__getitem__)
     session._items = lambda *args: [('tok', 5), ('block', 'leaf')]
     logp = torch.tensor([-1., -2.], requires_grad=True)
     leaves = {'leaf': torch.tensor([1.], requires_grad=True)}
@@ -29,9 +30,10 @@ def test_value_ce_scores_body_after_exact_forced_prefix_without_boundary_merging
 
 
 def test_empty_continuation_is_not_admitted(monkeypatch):
-    monkeypatch.setattr(grad, 'render_messages', lambda *args, **kwargs: SimpleNamespace(segments=[], blocks=[], escape_nonce='nonce'))
+    rendered = SimpleNamespace(segments=[], blocks=[], escape_nonce='nonce')
     session = object.__new__(grad.GradSession)
-    session.engine = SimpleNamespace(_template=None, specials=None, block_value_type=None, _tokens=lambda text: [] if not text else [1])
+    session.engine = SimpleNamespace(render_request=lambda *args, **kwargs: rendered,
+                                     _tokens=lambda text: [] if not text else [1])
     session._items = lambda *args: []
     with pytest.raises(RequestError, match='target tokens'):
         session.supervised_continuation_loss([], None, '=', '', {})
@@ -47,9 +49,10 @@ def test_writer_boundary_supervision_and_horizon_changes_are_explicit():
 
 
 def test_gold_stop_boundary_has_terminal_label_on_last_consumed_value_state(monkeypatch):
-    monkeypatch.setattr(grad, 'render_messages', lambda *args, **kwargs: SimpleNamespace(segments=[], blocks=[], escape_nonce='nonce'))
+    rendered = SimpleNamespace(segments=[], blocks=[], escape_nonce='nonce')
     session = object.__new__(grad.GradSession)
-    session.engine = SimpleNamespace(_template=None, specials=None, block_value_type=None, _tokens=lambda text: [1, 2] if text == 'body' else [3])
+    session.engine = SimpleNamespace(render_request=lambda *args, **kwargs: rendered,
+                                     _tokens=lambda text: [1, 2] if text == 'body' else [3])
     session._items = lambda *args: []
     states = torch.randn(1, 2, 4, requires_grad=True)
     logits = torch.zeros(1, 2, requires_grad=True)
