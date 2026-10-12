@@ -33,6 +33,7 @@ from pathlib import Path
 import torch
 
 from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_training_rng_state
+from ..common.hashing import canonical_json_sha256_hex
 from ..common.profiling import UpdateProfiler, backward_phase, region as profile_region, scope as profile_scope
 from .checkpoint_policy import CheckpointPolicy
 
@@ -52,11 +53,12 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
                   'latent_ns': 'quintic', 'latent_weight_decay': 0.0, 'grad_spike_clip': 0.0,
                   'epochs': None, 'batch_tokens': 0, 'continue_from': None,
                   'fp8_training': 'off', 'fp8_recipe': 'delayed', 'fp8_amax_history_len': 16,
-                  'gradient_audit_steps': 0, 'saved_tensor_audit_steps': 0}
+                  'gradient_audit_steps': 0, 'saved_tensor_audit_steps': 0,
+                  'gradient_digest_steps': 0, 'state_hash_steps': 0, 'sdpa_backend': 'default'}
 OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
-                         'continue_monitor_reference'})
+                         'continue_monitor_reference', 'gradient_digest_steps', 'state_hash_steps'})
 
 
 def parse(argv=None):
@@ -144,6 +146,12 @@ def parse(argv=None):
                         'window_execution=sequential and at least two windows per update')
     p.add_argument('--saved-tensor-audit-steps', type=int, default=0,
                    help='diagnostic: inventory autograd saved tensors for this many initial updates')
+    p.add_argument('--gradient-digest-steps', type=int, default=0,
+                   help='diagnostic: SHA-256 each named gradient tensor for this many initial updates')
+    p.add_argument('--state-hash-steps', type=int, default=0,
+                   help='diagnostic: save exact named parameter/optimizer/RNG/FP8 state hashes around initial updates')
+    p.add_argument('--sdpa-backend', choices=('default', 'math'), default='default',
+                   help='diagnostic attention backend; math forces PyTorch SDPBackend.MATH for direct-SFT forwards')
     from .drift_monitor import add_drift_arguments
     # The drift guard (owner 2026-10-11; train/drift_monitor.py, shared with the end-to-end stage): response KL or
     # agreement past warn runs the behaviour gate and stops when the gate falls below its reference minus
@@ -169,8 +177,10 @@ def parse(argv=None):
         p.error('positive bounds required')
     if a.checkpoint_every < 0 or a.neuralese_weight < 0:
         p.error('invalid checkpoint cadence or Neuralese weight')
-    if min(a.gradient_audit_steps, a.saved_tensor_audit_steps) < 0:
+    if min(a.gradient_audit_steps, a.saved_tensor_audit_steps, a.gradient_digest_steps, a.state_hash_steps) < 0:
         p.error('diagnostic audit step counts must be nonnegative')
+    if a.gradient_digest_steps and a.window_execution == 'packed':
+        p.error('--gradient-digest-steps requires sequential windows so in-backward hooks do not consume gradients')
     if a.text_data is None and a.records is None:
         p.error('give the stage its data: --text-data, or --records with --pieces')
     return a
@@ -642,7 +652,12 @@ def main(argv=None):
 
     def span_states(ids, index):
         """The final hidden states that predict each span token, [B, S, width] (one forward over ``ids[:, :-1]``)."""
-        hidden = backbone.forward_ids(ids[:, :-1], cutoff=engine.heads.cutoff, logits=False)['h_final']
+        if a.sdpa_backend == 'math':
+            from torch.nn.attention import SDPBackend, sdpa_kernel
+            with sdpa_kernel(backends=[SDPBackend.MATH]):
+                hidden = backbone.forward_ids(ids[:, :-1], cutoff=engine.heads.cutoff, logits=False)['h_final']
+        else:
+            hidden = backbone.forward_ids(ids[:, :-1], cutoff=engine.heads.cutoff, logits=False)['h_final']
         return hidden.gather(1, index[..., None].expand(-1, -1, hidden.shape[-1]))
 
     def forward(rows_, *, gradients, accumulation=None):
@@ -1027,6 +1042,47 @@ def main(argv=None):
                            'finite': bool(torch.isfinite(value).all())})
         return result
 
+    def tensor_sha256(value):
+        """Digest exact logical tensor bytes plus dtype/shape metadata (including BF16 tensors)."""
+        tensor = value.detach().contiguous().cpu()
+        raw = tensor.reshape(-1).view(torch.uint8).numpy().tobytes()
+        return {'shape': list(value.shape), 'dtype': str(value.dtype),
+                'sha256': hashlib.sha256(raw).hexdigest()}
+
+    def tree_sha256(value):
+        """Canonical digest for nested optimizer/TE/RNG state without serializing it to a side file."""
+        if isinstance(value, torch.Tensor):
+            return {'tensor': tensor_sha256(value)}
+        if isinstance(value, bytes):
+            return {'bytes_sha256': hashlib.sha256(value).hexdigest(), 'length': len(value)}
+        if isinstance(value, dict):
+            return {str(key): tree_sha256(value[key]) for key in sorted(value, key=lambda item: str(item))}
+        if isinstance(value, (list, tuple)):
+            return [tree_sha256(item) for item in value]
+        if value is None or type(value) in (bool, int, float, str):
+            return value
+        raise TypeError(f'unsupported state-hash value: {type(value).__module__}.{type(value).__qualname__}')
+
+    def state_hashes(named):
+        parameters = {}
+        seen = set()
+        for name, parameter in named:
+            if id(parameter) in seen:
+                continue
+            seen.add(id(parameter))
+            parameters[name] = tensor_sha256(parameter)
+        rng = {'torch_cpu': tensor_sha256(torch.get_rng_state())}
+        if torch.cuda.is_available():
+            rng['torch_cuda'] = [tensor_sha256(value) for value in torch.cuda.get_rng_state_all()]
+        rng['python'] = hashlib.sha256(json.dumps(random.getstate(), separators=(',', ':')).encode()).hexdigest()
+        optimizer_tree = tree_sha256(optimizer.state_dict())
+        fp8_tree = tree_sha256(fp8_backend.extra_state()) if fp8_backend is not None else None
+        return {'parameters_sha256': canonical_json_sha256_hex(parameters), 'parameters': parameters,
+                'optimizer': {'sha256': canonical_json_sha256_hex(optimizer_tree), 'state': optimizer_tree},
+                'rng': {'sha256': canonical_json_sha256_hex(rng), 'states': rng},
+                'fp8': None if fp8_tree is None else {'sha256': canonical_json_sha256_hex(fp8_tree),
+                                                      'state': fp8_tree}}
+
     cuda_active = torch.cuda.is_available() and str(a.device).startswith('cuda')
 
     cache_released = []
@@ -1171,6 +1227,8 @@ def main(argv=None):
                                                  'fp32_norm_transient_bytes_per_token')}}
 
     for step_index in loop:
+        diagnostic_state_before = (state_hashes(direct_trainables)
+                                   if step_index < a.state_hash_steps else None)
         if fp8_backend is not None:
             fp8_backend.reset_row_counts()
         batch, covered = schedule[step_index]
@@ -1183,6 +1241,8 @@ def main(argv=None):
             plan = execution_plan(batch)
         if step_index < a.gradient_audit_steps and (plan['mode'] != 'sequential' or len(batch) < 2):
             raise ValueError('--gradient-audit-steps requires multi-window sequential gradient accumulation')
+        if step_index < a.gradient_digest_steps and (plan['mode'] != 'sequential' or len(batch) < 2):
+            raise ValueError('--gradient-digest-steps requires multi-window sequential gradient accumulation')
         print(json.dumps({'event': 'execution_plan', 'step': step_index + 1,
                           'source_documents': [window['document'] for window in batch], **plan}), flush=True)
         backbone.checkpoint_layers = plan['checkpoint_layers']
@@ -1197,6 +1257,11 @@ def main(argv=None):
                 scope.enter_context(quant.context(point, mix))
             if fp8_backend is not None:
                 scope.enter_context(fp8_backend.autocast())
+            if a.sdpa_backend == 'math':
+                # Keep this active through backward too: activation-checkpoint recomputation happens after the
+                # forward returns, and must use the same declared attention backend as the original forward.
+                from torch.nn.attention import SDPBackend, sdpa_kernel
+                scope.enter_context(sdpa_kernel(backends=[SDPBackend.MATH]))
             if plan['mode'] == 'sequential' and len(batch) > 1:
                 _, _, _, valid_all, weights_all, _, _ = tensors(batch)
                 valid_positions = valid_all.sum().clamp_min(1)
@@ -1266,6 +1331,15 @@ def main(argv=None):
         gradient_metrics = None
         if step_index < a.gradient_audit_steps:
             gradient_metrics = gradient_audit(head_named + backbone_named)
+        gradient_digests = None
+        if step_index < a.gradient_digest_steps:
+            gradient_digests = {}
+            seen_gradient_parameters = set()
+            for name, parameter in head_named + backbone_named:
+                if id(parameter) in seen_gradient_parameters:
+                    continue
+                seen_gradient_parameters.add(id(parameter))
+                gradient_digests[name] = (None if parameter.grad is None else tensor_sha256(parameter.grad))
         # The global gradient norm: the latents' (stepped in backward, spike-clipped by the norm so far) with the
         # others' (spike-clipped exactly here with --grad-spike-clip).
         if armed is not None:
@@ -1281,6 +1355,12 @@ def main(argv=None):
             optimizer.step()  # routers, norms and projections (the latents stepped in backward)
             optimizer.zero_grad(set_to_none=True)
         step = step_index + 1
+        if diagnostic_state_before is not None or gradient_digests is not None:
+            diagnostic = {'schema': 'natlang.neuralese-direct-step-diagnostic/1', 'step': step,
+                          'sdpa_backend': a.sdpa_backend, 'gradient_sha256_by_name': gradient_digests,
+                          'state_before': diagnostic_state_before,
+                          'state_after': state_hashes(direct_trainables) if diagnostic_state_before is not None else None}
+            (a.out / f'diagnostic-step-{step:06d}.json').write_text(json.dumps(diagnostic, indent=2) + '\n')
         if reserve is not None and step_index == start_index:  # optimizer slots exist now: size the next write
             try:
                 reserve.grow_to(next_write_bytes())

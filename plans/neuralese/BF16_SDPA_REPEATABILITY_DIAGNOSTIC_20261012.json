@@ -1,0 +1,48 @@
+{
+  "schema": "natlang.neuralese-diagnostic-pair/1",
+  "id": "bf16-lfm-sdpa-repeatability-20261012-v1",
+  "status": "declared-profile-not-launched",
+  "purpose": "Separate native BF16 repeated-update gradient drift from the attention backend choice.",
+  "base_profile": {
+    "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/recipes/a.json",
+    "sha256": "4688852cbc226e9c27d706acabb8a72e5b4c1091f3516a2de1c390f960bd504c",
+    "note": "Reuse the same declared short-run geometry, masks, schedule, optimizer and held monitor; freeze a fresh runtime package before launch."
+  },
+  "inputs": {
+    "text_data": {
+      "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/input-32k-r2-subpack-v1/text-data.jsonl",
+      "sha256": "825fc187cf71320f4864087a3b910def36234797d548aa790ffc14147b5ce4d7"
+    },
+    "heads": {
+      "path": "/srv/storage/natlang-artifacts/luna-neuralese-direct-clean-base-monitor-20261011-v2/artifact/clean-base-untrained-heads.pt",
+      "sha256": "3853846b8d69798382fb3b6341aed8b1ac6277ba7eea795ec460c19d1c208fe1"
+    }
+  },
+  "common_parameter_overrides": {
+    "fp8_training": "off",
+    "gradient_digest_steps": 1,
+    "state_hash_steps": 1
+  },
+  "arms": [
+    {"id": "default", "sdpa_backend": "default"},
+    {"id": "math", "sdpa_backend": "math"}
+  ],
+  "comparison": {
+    "same_seed_and_update_windows": true,
+    "compare": [
+      "step-1 exact gradient hashes by parameter name",
+      "step-1 pre/post parameter hashes",
+      "step-1 pre/post optimizer hashes",
+      "step-1 RNG hashes",
+      "step-1 loss and cross-entropy",
+      "selected SDPA backend"
+    ],
+    "interpretation": "This controls native BF16 only. It cannot attribute TE scaling behavior."
+  },
+  "te_followup_hypothesis": {
+    "question": "Does TE DelayedScaling first-update amax calibration explain any repeat drift after native BF16 and SDPA controls?",
+    "future_arms": ["delayed", "current"],
+    "status": "hypothesis-only",
+    "prohibited_inference": "Do not attribute drift to delayed scaling, SDPA, or nondeterministic kernels until the corresponding controls distinguish them."
+  }
+}
