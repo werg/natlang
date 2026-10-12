@@ -597,3 +597,154 @@ def test_cancel_drops_a_queue_entry_and_reset_peak_clears_or_sets_a_family_peak(
     ledger.reset_peak(type('A', (), {'family': 'fam-x', 'to_gb': None})())
     with ledger.ledger() as state:
         assert 'fam-x' not in state['family_peaks']
+
+
+def test_a_unit_backfills_only_behind_a_head_that_preemption_cannot_help():
+    live = {'train.service': running('experiment', 100, 80, priority='high', gpu=True),
+            'render.service': running('collection', 8, 0, priority='low', age=10)}
+    head = {'priority': 'medium', 'budget': 12 * GIB, 'reserve': 8 * GIB}
+    assert not ledger.head_blocked(live, 30 * GIB, head)  # fits: the room is the head's
+    assert not ledger.head_blocked(live, 15 * GIB, head)  # preempting the render makes it fit
+    assert ledger.head_blocked({'train.service': live['train.service']}, 15 * GIB, head)  # only a high unit to blame
+
+
+def test_a_backfilled_unit_is_not_preempted_for_the_same_head_within_its_hold():
+    now = 10000.0
+    fresh = dict(running('collection', 8, 0, priority='low'), admitted=now - 10, backfilled_behind='bench.service')
+    head = {'priority': 'medium', 'budget': 12 * GIB, 'reserve': 8 * GIB}
+    live = {'render.service': fresh}
+    assert ledger.preemption_plan(live, 18 * GIB, head, head='bench.service', now=now) == []  # held for its head
+    assert ledger.preemption_plan(live, 18 * GIB, head, head='other.service', now=now) == ['render.service']  # new head
+    later = now + ledger.BACKFILL_HOLD + 1
+    assert ledger.preemption_plan(live, 18 * GIB, head, head='bench.service', now=later) == ['render.service']
+    assert ledger.victim(live, True, 1.15)[0] == 'render.service'  # floor pressure ignores the hold
+
+
+def guard_env(monkeypatch, tmp_path, available, usage):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'CHECKPOINT_WRITES', str(tmp_path / 'none'))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'reclaimable', lambda: 0)
+    monkeypatch.setattr(ledger, 'mem_available', lambda: available[0])
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None: usage.get(unit))
+    monkeypatch.setattr(ledger, 'container_running', lambda n: False)
+    monkeypatch.setattr(ledger, 'unit_containers', lambda unit, command=None, extra=(): [])
+    calls = []
+    monkeypatch.setattr(ledger, 'terminate', lambda unit, container: calls.append(('term', unit)))
+    monkeypatch.setattr(ledger, 'kill', lambda unit, container: calls.append(('kill', unit)))
+    monkeypatch.setattr(ledger, 'forget_failure', lambda unit: calls.append(('forget', unit)))
+    monkeypatch.setattr(ledger, 'stop_containers', lambda containers, seconds=10: None)
+    return calls
+
+
+def test_a_swinging_trainer_does_not_livelock_backfill_and_preemption(monkeypatch, tmp_path):
+    # 2026-10-12: Mellum v4 (high, 99.5 GB) swung between 60 and 90 GB; renders backfilled behind a medium bench
+    # were preempted for it and relaunched again and again, neither making progress.
+    available, usage = [20 * GIB], {}
+    calls = guard_env(monkeypatch, tmp_path, available, usage)
+    launched = []
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec['unit']) or 0)
+    active = set()
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('active' if unit in active else 'inactive', ''))
+    now = [10000.0]
+    monkeypatch.setattr(ledger, 'time', type('T', (), {'time': staticmethod(lambda: now[0]),
+                                                       'sleep': staticmethod(lambda s: None)}))
+    usage['train.service'] = 90 * GIB
+    spec = {'unit': 'render.service', 'budget': 4 * GIB, 'cls': 'collection', 'command': ['x'], 'priority': 'low',
+            'resumable': True, 'reserve': 8 * GIB}
+    with ledger.ledger() as state:
+        state['claims']['train.service'] = dict(running('experiment', 100, 0, priority='high', gpu=True), admitted=1.0,
+                                                resumable=False)
+        state['waiting'] = {
+            'bench.service': {'priority': 'medium', 'since': 9000.0, 'seen': now[0], 'budget': 12 * GIB, 'reserve': 8 * GIB},
+            'render.service': {'priority': 'low', 'since': 9000.0, 'requeued': True, 'not_before': now[0] - 1,
+                               'budget': 4 * GIB, 'reserve': 8 * GIB, 'spec': spec}}
+    args = type('A', (), {'floor_gb': 8, 'overshoot': 1.15, 'interval': 0, 'once': True})()
+    # trainer at 90 GB: the bench cannot fit and nothing it may preempt helps, so the render backfills
+    ledger.guard(args)
+    assert launched == ['render.service'] and calls == []
+    active.add('render.service')
+    usage['render.service'] = 0
+    with ledger.ledger() as state:
+        assert state['claims']['render.service']['backfilled_behind'] == 'bench.service'
+        state['waiting']['bench.service']['seen'] = now[0]
+    # trainer drops to 70 GB (19 GiB free after reservations, 23 without the ramping render, the bench needs 20):
+    # stopping the fresh render would let the bench fit, but the render is held for that head
+    available[0], usage['train.service'] = 38 * GIB, 70 * GIB
+    for _ in range(5):
+        now[0] += 30
+        with ledger.ledger() as state:
+            state['waiting']['bench.service']['seen'] = now[0]
+        ledger.guard(args)
+    assert calls == []
+    # after its hold the head's situation still says preempt: now it is preempted
+    now[0] += ledger.BACKFILL_HOLD
+    available[0] = 35 * GIB  # 19 GiB free, 20 without the (ramped-up) render
+    with ledger.ledger() as state:
+        state['waiting']['bench.service']['seen'] = now[0]
+    ledger.guard(args)
+    assert calls == [('term', 'render.service')]
+
+
+def test_run_does_not_backfill_into_room_the_head_is_about_to_get(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'reclaimable', lambda: 0)
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 30 * GIB)
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None: 0)
+    launched = []
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec['unit']) or 0)
+    now = ledger.time.time()
+    with ledger.ledger() as state:  # the head (12 + 8 reserve) fits in 30 GiB: a backfill would only take its room
+        state['waiting'] = {'bench.service': {'priority': 'medium', 'since': now - 60, 'seen': now,
+                                              'budget': 12 * GIB, 'reserve': 8 * GIB}}
+
+    def args(unit, budget):
+        return type('A', (), {'budget_gb': budget, 'reserve_gb': 8, 'unit': unit, 'priority': 'low', 'cls': 'collection',
+                              'wait': 0, 'resumable': True, 'host_max_gb': None, 'oom_policy': 'stop', 'workdir': '.',
+                              'env': [], 'stop_seconds': None, 'command': ['x'], 'hold_budget': False,
+                              'container': []})()
+    with pytest.raises(SystemExit):
+        ledger.run(args('render', 8))
+    assert launched == []
+    with ledger.ledger() as state:  # a head that needs more than the machine can give: the render backfills
+        state['waiting'] = {'bench.service': {'priority': 'medium', 'since': now - 60, 'seen': ledger.time.time(),
+                                              'budget': 90 * GIB, 'reserve': 8 * GIB}}
+    ledger.run(args('render', 8))
+    assert launched == ['render.service']
+    with ledger.ledger() as state:
+        assert state['claims']['render.service']['backfilled_behind'] == 'bench.service'
+
+
+def test_a_preempted_unit_killed_after_its_grace_is_not_left_as_a_failure(monkeypatch, tmp_path):
+    available, usage = [30 * GIB], {'render.service': 0}
+    calls = guard_env(monkeypatch, tmp_path, available, usage)
+    monkeypatch.setattr(ledger, 'launch', lambda spec: 0)
+    active = {'render.service'}
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('active' if unit in active else 'inactive', ''))
+    now = [10000.0]
+    monkeypatch.setattr(ledger, 'time', type('T', (), {'time': staticmethod(lambda: now[0]),
+                                                       'sleep': staticmethod(lambda s: steps.pop(0)())}))
+    spec = {'unit': 'render.service', 'budget': 8 * GIB, 'cls': 'collection', 'command': ['x'], 'priority': 'low',
+            'resumable': True, 'reserve': 8 * GIB}
+    with ledger.ledger() as state:
+        state['claims']['render.service'] = dict(ledger.claim_for(spec, now=now[0] - 3), used=0)
+        state['waiting'] = {'bench.service': {'priority': 'medium', 'since': 9000.0, 'seen': now[0],
+                                              'budget': 20 * GIB, 'reserve': 8 * GIB}}
+
+    def advance():
+        now[0] += 10  # past the 5 s minimum grace: the guard kills it
+
+    def exited():
+        now[0] += 2
+        active.discard('render.service')
+
+    def done():
+        raise StopIteration
+    steps = [advance, exited, done]
+    args = type('A', (), {'floor_gb': 8, 'overshoot': 1.15, 'interval': 0, 'once': False, 'emergency_gb': 3})()
+    with pytest.raises(StopIteration):
+        ledger.guard(args)
+    assert calls == [('term', 'render.service'), ('kill', 'render.service'), ('forget', 'render.service')]

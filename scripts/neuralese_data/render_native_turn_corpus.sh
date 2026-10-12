@@ -5,6 +5,12 @@
 #     scripts/neuralese_data/render_native_turn_corpus.sh OUT_DIR --corpus-id ID --source F ... [--workers N]
 # The LFM2.5 and Mellum2.1 tokenizers are the pinned snapshots of the existing twin builders.
 set -euo pipefail
+# A stop (ledger preemption, systemctl stop) is a clean resumable stop: the container is stopped and the wrapper
+# exits 0, so the unit ends with Result=success and the ledger requeues it; the relaunch resumes finished shards.
+# Trapped before anything else: a stop seconds after launch, before the container exists, is also a clean stop (the
+# handler's `docker stop` of a missing container failed under set -e and the unit ended with status 1, 2026-10-12).
+stopped=0
+trap 'stopped=1; docker stop -t 30 "${NAME:-}" >/dev/null 2>&1 || true' TERM INT
 REPO=/home/werg/natlang
 LFM=$REPO/models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f
 MELLUM=/home/werg/data/models/mellum21-12b-a2.5b-thinking
@@ -18,13 +24,10 @@ NAME="render-$(basename "$OUT")-$(printf %s "$OUT" | sha1sum | cut -c1-10)"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 ERRLOG=$(mktemp "${TMPDIR:-/tmp}/render-stderr.XXXXXX")
 trap 'rm -f "$ERRLOG"' EXIT
-# A stop (ledger preemption, systemctl stop) is a clean resumable stop: the container is stopped and the wrapper
-# exits 0, so the unit ends with Result=success and the ledger requeues it; the relaunch resumes finished shards.
-stopped=0
-trap 'stopped=1; docker stop -t 30 "$NAME" >/dev/null 2>&1' TERM INT
 # The image has no Node; candidate-selection admission runs scripts/verify_candidate_selection_packet.mjs (needs a
 # built ts-host/dist), so the host's Node binary is mounted in.
 NODE_BIN=$(readlink -f "$(command -v node || echo /home/werg/.local/bin/node)")
+[ $stopped = 1 ] && exit 0  # stopped before the container started: do not start it
 docker run --rm --name "$NAME" --network none --user "$(id -u):$(id -g)" --memory "${MEM:-24g}" --cpus "${CPUS:-16}" \
   -v "$NODE_BIN:/usr/local/bin/node:ro" \
   -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1 -e CUDA_VISIBLE_DEVICES= -e TOKENIZERS_PARALLELISM=false -e HOME=/tmp \

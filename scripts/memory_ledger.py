@@ -31,7 +31,8 @@ waiting queue (higher first, then earlier; only the head is admitted), (2) the k
 medium 600, low 900: user units cannot go below the user manager's own 100, and with no systemd-oomd the kernel is the
 instant safety net), (3) the guard's victim order under pressure (lowest priority first; a unit over its own budget
 goes first), and (4) preemption: when the head of the queue does not fit, the guard gracefully stops the lowest-priority
-resumable units until it does. Units are resumable by default (tests, checks and data jobs are rerunnable; `--no-resumable` only for long non-checkpointed jobs; services and adopted units are protected); a
+resumable units until it does. Others backfill behind a head only while it is blocked even with preemption, and a
+backfilled unit is not preempted for that same head within BACKFILL_HOLD (no backfill/preemption livelock). Units are resumable by default (tests, checks and data jobs are rerunnable; `--no-resumable` only for long non-checkpointed jobs; services and adopted units are protected); a
 stopped resumable unit (preemption or pressure, not an over-budget stop) re-enters the queue with the spec it was
 launched from and the guard relaunches it when room returns. `status` lists claims with priority, budget, use and
 reservation, and the queue with the units that would be preempted for each entry and the non-preemptible units blocking it (`blocked_by`). A stopped unit's docker containers (named by the command, `run --container`, a `docker run --name` client in its cgroup, or the unit name) are stopped by name too, and a requeued unit is not relaunched while one still runs. The guard's kill threshold is still
@@ -68,6 +69,8 @@ PRIORITY_OOM = {'high': 200, 'medium': 600, 'low': 900}
 DEFAULT_PRIORITY = {'experiment': 'medium', 'collection': 'medium', 'service': 'high'}
 WAITER_TTL = 90  # a waiting `run` refreshes its queue entry every 30 s; older entries are abandoned
 REQUEUE_DELAY = 120  # seconds after a preemption/pressure stop before the unit may be relaunched
+# A unit backfilled behind a waiting head is not preempted for that same head for this long (see backfill_hold).
+BACKFILL_HOLD = RAMP_SECONDS
 # A guard stop gives the victim its declared grace (``run --stop-seconds``) to write its full checkpoint (latents and
 # optimizer: ~4 min for Mellum's 47 GB state), and kills at once only below this emergency level (under the floor).
 EMERGENCY_GB = 3
@@ -442,8 +445,29 @@ def waiting_order(state, now=None):
 def may_start(order, unit, can_backfill, fit):
     """Whether a waiting job may start now. The head starts when it fits. Others backfill when they fit by real headroom
     and are resumable (so they are preemptible if the head needs the room): a big waiting head must not starve the queue
-    behind it (2026-10-12: a 1 GB watcher waited behind a 75 GB high job while 17 GB was free)."""
+    behind it (2026-10-12: a 1 GB watcher waited behind a 75 GB high job while 17 GB was free). ``can_backfill`` also
+    requires the head to be blocked (head_blocked), so a backfill never takes room the head is about to get."""
     return fit and (order[0][0] == unit or can_backfill)
+
+
+def head_blocked(live, free, wanted, head=None):
+    """Whether a waiting head can neither start nor be helped by preemption now: it does not fit, and stopping every
+    unit it may preempt would not make it fit. Only then may a unit backfill behind it. Otherwise the room is the head's
+    (it fits, or the guard is about to make it fit), and a backfill would only take that room until the guard preempts
+    it again (2026-10-12: renders admitted by `run` between two polls of the head were preempted a second later)."""
+    return not fits(free, wanted['budget'], wanted['reserve']) and not preemption_plan(live, free, wanted, head=head)
+
+
+def backfill_held(claim, head, now=None):
+    """Hysteresis against a backfill/preemption livelock (2026-10-12: renders backfilled behind a non-fitting bench were
+    preempted for it, relaunched, preempted again, for 15 minutes, as Mellum v4's use swung by 30 GB around the head's
+    threshold; neither made progress). A unit backfills only while its head is blocked (head_blocked); a later swing
+    that would let the head fit if the backfilled unit stopped does not preempt it for that same head until it has run
+    BACKFILL_HOLD seconds. Each launch then does real work, and the head waits at most that long longer. A different
+    head (a new, higher job) is not held off, and the floor-pressure stops (victim) ignore the hold. Simpler than
+    tracking each head's shortfall: the fluctuation is in other units' use, which no recorded shortfall predicts."""
+    return bool(head and claim.get('backfilled_behind') == head
+                and (now or time.time()) - claim['admitted'] < BACKFILL_HOLD)
 
 
 def plan_launch(state, head, wanted, backfill, free):
@@ -461,21 +485,23 @@ def fits(free, budget, reserve):
     return free - budget >= reserve
 
 
-def preemption_plan(live, free, wanted, graces=None):
+def preemption_plan(live, free, wanted, graces=None, head=None, now=None):
     """The running units to stop (in order) so a waiting job of ``wanted`` = {priority, budget, reserve} fits: only
     resumable units of strictly lower priority, the lowest priority first, within it the one freeing the most per
-    second of stop grace. Empty when it already fits or when stopping every candidate would not make it fit."""
+    second of stop grace. Empty when it already fits or when stopping every candidate would not make it fit. With
+    ``head`` (the waiting job's unit), units backfilled behind it within their hold are left out (backfill_held)."""
     need = wanted['budget'] + wanted['reserve'] - free
     if need <= 0:
         return []
     graces = graces or {}
-    candidates = sorted((u for u, c in live.items() if resumable(c) and priority_of(c) < PRIORITIES[wanted['priority']]),
+    candidates = sorted((u for u, c in live.items() if resumable(c) and priority_of(c) < PRIORITIES[wanted['priority']]
+                         and not backfill_held(c, head, now)),
                         key=lambda u: (priority_of(live[u]), -(live[u]['used'] / (graces.get(u, GRACE_MIN) + 1)),
                                        -live[u]['admitted']))
     plan, freed = [], 0
     for unit in candidates:
         plan.append(unit)
-        freed += live[unit]['used'] + outstanding(live[unit])
+        freed += live[unit]['used'] + outstanding(live[unit], now)
         if freed >= need:
             return plan
     return []
@@ -588,7 +614,8 @@ def run(args):
             head = order[0][0]
             # The head of the priority queue starts when it fits (the guard preempts lower units for it when real
             # headroom is short); others backfill when they fit and are resumable.
-            backfill = args.resumable if args.resumable is not None else args.cls != 'service'
+            backfill = (args.resumable if args.resumable is not None else args.cls != 'service') \
+                and head != unit and head_blocked(live, free, order[0][1], head)
             if may_start(order, unit, backfill, fits(free, budget, reserve)):
                 spec = {'unit': unit, 'budget': budget, 'host_max_gb': args.host_max_gb, 'cls': args.cls,
                         'oom_policy': args.oom_policy, 'workdir': os.path.abspath(args.workdir), 'env': args.env,
@@ -596,6 +623,8 @@ def run(args):
                         'resumable': args.resumable if args.resumable is not None else args.cls != 'service',
                         'hold_budget': args.hold_budget, 'reserve': reserve, 'containers': args.container}
                 state['claims'][unit] = claim_for(spec)
+                if head != unit:
+                    state['claims'][unit]['backfilled_behind'] = head
                 waiting.pop(unit, None)
                 state['events'].append({'time': now, 'event': 'admitted', 'unit': unit, 'budget': budget,
                                         'free': free, 'priority': priority})
@@ -775,6 +804,12 @@ def terminate(unit, container):
     subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGTERM', unit])
 
 
+def forget_failure(unit):
+    """A preempted (requeued) unit is a planned, resumable stop, not a failure: clear the failed state its SIGTERM exit
+    code or the kill after its grace left (a render preempted seconds after launch showed up as a failed unit)."""
+    subprocess.run(['systemctl', '--user', 'reset-failed', unit], capture_output=True)
+
+
 def kill(unit, container):
     for name in as_list(container):
         subprocess.Popen(['docker', 'kill', name], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
@@ -885,7 +920,7 @@ def guard(args):
                     # A waiting higher priority job: stop the lowest priority resumable units (one graceful stop at a
                     # time; the next cycle re-plans with what that stop freed).
                     plan = preemption_plan({u: c for u, c in live.items() if u not in stopped or
-                                            time.time() - stopped[u] > 60}, free, wanted, graces)
+                                            time.time() - stopped[u] > 60}, free, wanted, graces, head=head)
                     if plan:
                         unit, reason = plan[0], f'preempted for {head} ({wanted["priority"]})'
                 if not unit and not fits(free, wanted['budget'], wanted['reserve']):
@@ -897,16 +932,20 @@ def guard(args):
                             backfill = (name, entry)
                             break
                 if not unit and plan_launch(state, head, wanted, backfill, free):
+                    behind = head
                     head, wanted = backfill if backfill else (head, wanted)
                     state['claims'][head] = claim_for(wanted['spec'])
+                    if backfill:
+                        state['claims'][head]['backfilled_behind'] = behind
                     state['waiting'].pop(head)
                     state['events'].append({'time': time.time(), 'event': 'relaunched', 'unit': head, 'free': free})
                     to_launch = wanted['spec']
             command = state['claims'].get(unit, {}).get('command') if unit else None
             state_claim_containers = state['claims'].get(unit, {}).get('spec', {}).get('containers', ()) if unit else ()
             containers = unit_containers(unit, command, state_claim_containers) if unit else []
+            requeued = False
             if unit and (reason.startswith('preempted') or reason.startswith('free memory below floor')):
-                requeue_spec(state, unit, containers=containers)  # a resumable unit comes back when room returns
+                requeued = requeue_spec(state, unit, containers=containers)  # a resumable unit comes back when room returns
             grace = graces.get(unit, GRACE_MIN) if unit else 0
             if unit:
                 state['events'].append({'time': time.time(), 'event': 'stopped', 'unit': unit, 'reason': reason,
@@ -924,21 +963,28 @@ def guard(args):
             # its memory. Signal the job inside, then give it its grace to write its full state.
             container = containers
             terminate(unit, container)
-            pending[unit] = {'deadline': time.time() + grace, 'container': container}
+            pending[unit] = {'deadline': time.time() + grace, 'container': container, 'requeued': requeued}
             stopped[unit] = time.time()
         for name in list(pending):
-            action = escalation(pending[name], time.time(), mem_available(), emergency,
-                                unit_state(name)[0] in ('active', 'activating', 'deactivating'))
+            active = unit_state(name)[0] in ('active', 'activating', 'deactivating')
+            if pending[name].get('killed'):
+                # Killed: watch it until it has ended, so a requeued unit's stop is cleared below (bounded wait).
+                action = 'wait' if active and time.time() < pending[name]['deadline'] + 60 else 'done'
+            else:
+                action = escalation(pending[name], time.time(), mem_available(), emergency, active)
             if action == 'wait':
                 continue
-            if action == 'done':
-                stop_containers(pending[name]['container'])  # the unit ended; a detached container may live on
             if action == 'kill':
                 kill(name, pending[name]['container'])
                 with ledger() as state:
                     state['events'].append({'time': time.time(), 'event': 'killed after grace', 'unit': name,
                                             'available': mem_available(),
                                             'reason': 'emergency' if mem_available() < emergency else 'grace over'})
+                pending[name]['killed'] = True
+                continue
+            stop_containers(pending[name]['container'])  # the unit ended; a detached container may live on
+            if pending[name].get('requeued'):
+                forget_failure(name)
             pending.pop(name)
         if args.once:
             return
