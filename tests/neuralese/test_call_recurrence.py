@@ -94,6 +94,9 @@ def test_a_callers_loss_trains_its_childs_write_and_nested_writes_to_the_depth(l
 def test_held_out_readers_compare_their_written_values_with_another_readers(loaded, latent_sketch_heads, tmp_path):
     other = "Line 7 is a late fee under clause 9."
     records = [
+        # The child consumes this exact writer. Omitting it correctly holds the
+        # child under authenticated context selection, leaving no paired donor.
+        {**RECORDS[0], "split": "train"},
         {**RECORDS[1], "split": "train"},
         {"id": "child2", "split": "train", "source_groups": ["child2-facts"],
          "messages": [{"role": "system", "content": "You run one call."}, opening("child2", "", body_name="child")],
