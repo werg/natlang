@@ -4,7 +4,8 @@ import { canonical } from '../advisory-file.mjs';
 
 /** Shared directory-reducer scaffold used by annotation replay and provider labels. */
 export function folderDecisionScaffold({ contract, entries, sourceSha, sourceSnapshot, sourceGroups,
-  curriculumFamily, recordFamily, variant = 'strict-top-label-v2-ordinal-source-mapping', splitGroup }) {
+  curriculumFamily, recordFamily, variant = 'strict-top-label-v2-ordinal-source-mapping', splitGroup,
+  choiceGuidance }) {
   const rows = entries.map(entry => entry.source ?? entry.task ?? entry);
   const decisions = Object.fromEntries(entries.map((entry, index) => [rows[index].id,
     entry.decision ?? entry.task?.gold ?? entry.gold]));
@@ -52,7 +53,8 @@ export function folderDecisionScaffold({ contract, entries, sourceSha, sourceSna
     hasLevels
       ? 'Levels are shared from task.json unless an item supplies its own levels; an explicit empty task levels list means no levels are supplied.'
       : 'Choose from the supplied options; only levels read from an item or task file are part of the answer domain.',
-    'Bind this item’s available fields before creating its inline natural-language function. Create that function inside the item’s callback so its question interpolation uses the bound question, and pass only supplied fields as separate arguments.'
+    'Bind this item’s available fields before creating its inline natural-language function. Create that function inside the item’s callback so its question interpolation uses the bound question, and pass only supplied fields as separate arguments.',
+    ...(choiceGuidance ? [choiceGuidance] : [])
   ].join(' ');
   const controller = `const task = await folder.file('task.json').readJson();
 const decisions: ${outputType} = {};

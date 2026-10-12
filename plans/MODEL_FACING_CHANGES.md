@@ -101,3 +101,15 @@ byte-identical to the baseline. Its piece-registry snapshot now includes scope
 metadata and read-only variants used by the shared renderer; those registry
 entries do not change the default full prompt. Program-header mode remains
 unqualified until the held comparison above.
+
+## Full-domain intent choice guidance — 2026-10-12
+
+The V25 CLINC 151-option source case exhausted 384 requests after the teacher
+expanded the task into per-option Boolean judgments. A new source-builder variant
+adds positive guidance to compare the complete options against each item's state
+and question in one typed choice, with the full inputs passed separately. It keeps
+the exact source IDs, groups, option domain, and labels. The prompt variant is
+unmeasured and is not adopted for training; first compare about 48 live items on
+the existing and guided task text, reporting exact label accuracy, output type,
+model request count, and source-group coverage. Use a fresh, source-disjoint train
+sample for the guided run; the V25 failure remains the concrete repair reference.

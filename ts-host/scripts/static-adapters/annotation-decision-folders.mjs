@@ -130,11 +130,14 @@ function captureVisibility(row, record) {
 async function main() {
   const { values } = parseArgs({ options: { help: { type: 'boolean' }, cases: { type: 'string' }, out: { type: 'string' },
     'items-per-family': { type: 'string', default: '12' }, 'batch-size': { type: 'string', default: '4' },
-    'exclude-cases': { type: 'string' } } });
-  const usage = 'usage: annotation-decision-folders.mjs --cases SOURCE_CASES.jsonl --out NEW_DIR [--items-per-family N] [--batch-size N] [--exclude-cases PRIOR_CASES.jsonl]';
+    'exclude-cases': { type: 'string' }, 'clinc-intent-choice-guidance': { type: 'string', default: 'legacy' } } });
+  const usage = 'usage: annotation-decision-folders.mjs --cases SOURCE_CASES.jsonl --out NEW_DIR [--items-per-family N] [--batch-size N] [--exclude-cases PRIOR_CASES.jsonl] [--clinc-intent-choice-guidance legacy|full-domain-single-choice]';
   if (values.help) { console.log(usage); return; }
   if (!values.cases || !values.out) throw new Error(usage);
   const itemsPerFamily = Number(values['items-per-family']), batchSize = Number(values['batch-size']);
+  const clincIntentChoiceGuidance = values['clinc-intent-choice-guidance'];
+  requireValue(['legacy', 'full-domain-single-choice'].includes(clincIntentChoiceGuidance),
+    'clinc-intent-choice-guidance must be legacy or full-domain-single-choice');
   requireValue(Number.isSafeInteger(itemsPerFamily) && itemsPerFamily >= 2, 'items-per-family must be an integer >= 2');
   requireValue(Number.isSafeInteger(batchSize) && batchSize >= 2, 'batch-size must be an integer >= 2');
   const casesPath = resolve(values.cases), out = resolve(values.out);
@@ -333,6 +336,10 @@ async function main() {
         sourceSnapshot: sha(sourceManifestBytes), sourceGroups: originalGroups,
         curriculumFamily: `annotation_decision_folders_${String(family).toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
         recordFamily: `curriculum_annotation_decision_folders_${String(family).toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+        ...(family === 'decision:clinc-intent' && clincIntentChoiceGuidance === 'full-domain-single-choice' ? {
+          variant: 'strict-top-label-v3-full-option-choice',
+          choiceGuidance: 'For each item, compare the complete options together against that item’s state and question, then choose one declared option in a single typed semantic decision; pass the full state, question, options, and any supplied levels as separate inputs.'
+        } : {}),
         splitGroup: JSON.stringify([...new Set(originalGroups)].sort()) });
       record.source = info.source;
       record.source_ids = group.map(entry => entry.sourceRow.id);
@@ -463,6 +470,7 @@ async function main() {
     selection: { families: familySummary, family_availability: familySelectionSummary,
       selected_annotations: selected.length, programs: records.length,
       requested_items_per_family: itemsPerFamily, batch_size_limit: batchSize,
+      clinc_intent_choice_guidance: clincIntentChoiceGuidance,
       source_groups_preserved: sourceGroups.size,
       note: 'Annotations appear only in hidden semantics.expected/reference outputs. Visible task files and typed item inputs contain no answer/gold property. No provider-authored labels, no independent semantic adjudication, no admission.' },
     replay: { attempts: replay.length,
