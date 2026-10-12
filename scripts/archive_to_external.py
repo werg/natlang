@@ -280,9 +280,21 @@ def archive_file(path: Path, dest: Path, manifest: Path) -> dict:
     partial = dest.with_name(dest.name + '.archiving')
     source_hash = hashlib.sha256()
     with open(path, 'rb') as src, open(partial, 'wb') as out:
+        copied = 0
         while block := src.read(8 << 20):
             source_hash.update(block)
             out.write(block)
+            copied += len(block)
+            if copied % (512 << 20) == 0:
+                # Keep the copy out of the page cache: on unified memory (DGX GB10) cached pages of a 47 GB state
+                # are taken from the same RAM as CUDA allocations of a run training beside the copy.
+                out.flush()
+                os.fdatasync(out.fileno())
+                for handle in (src, out):
+                    try:
+                        os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+                    except (AttributeError, OSError):
+                        pass
         out.flush()
         os.fsync(out.fileno())
     os.utime(partial, ns=(before.st_atime_ns, before.st_mtime_ns))
