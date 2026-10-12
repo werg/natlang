@@ -23,13 +23,17 @@ cd "$ROOT/training/neuralese"
 TOTAL=$("$PY" -c "import pyarrow.parquet as pq,sys; print(pq.ParquetFile(sys.argv[1]).metadata.num_rows)" "$CORPORA/nebius-swe-rebench-openhands-trajectories-20261009-v1/trajectories.parquet")
 mkdir -p "$OUT/prepared"
 START=$OFFSET
+# Once the shards are split the row-group parts are deleted (below), so a resumed run must not prepare them again: that
+# redid every row group and truncated their summaries on a stop (2026-10-12).
+[ -e "$OUT/shards/.split" ] && START=$TOTAL
 while [ "$START" -lt "$TOTAL" ]; do
   END=$(( (START / 4096 + 1) * 4096 ))
   PART="$OUT/prepared/$(printf %06d "$START").jsonl"
   if [ ! -e "$PART" ]; then
     nice -n 10 "$PY" -m natlang_neuralese.harness_bench.prepare --trajectories "$CORPORA/nebius-swe-rebench-openhands-trajectories-20261009-v1/trajectories.parquet" \
       --tasks "$CORPORA/nebius-swe-rebench-tasks-20261009-v1" --workspace "$WORKSPACE" --resolved-only \
-      --offset "$START" --limit $((END - START)) --out "$PART.tmp" > "$PART.summary.json"
+      --offset "$START" --limit $((END - START)) --out "$PART.tmp" > "$PART.summary.json.tmp"
+    mv "$PART.summary.json.tmp" "$PART.summary.json"
     mv "$PART.tmp" "$PART"
   fi
   START=$END
