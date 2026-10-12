@@ -135,7 +135,8 @@ export type ConversionOptions = {
    * prints. The corpus pass indexes unique producer records/invocations; repeated equal values
    * remain exact unless their producer can be identified. Without an index results stay exact. */
   childResults?: ReadonlyMap<string, { returned: readonly string[]; read: ReadonlySet<string>;
-    producers?: readonly { id: string; invocation: string; value: string; field?: string; parent?: string; renderings?: readonly string[] }[];
+    producers?: readonly { id: string; invocation: string; value: string; field?: string; parent?: string; renderings?: readonly string[];
+      host_result?: true }[];
     readers?: readonly { invocation: string; tool_call_id?: string; value: string; producer_id: string }[];
     observed_host_contexts?: readonly { invocation: string; tool_call_id: string; value: string; producer_id: string;
       body_sha256: string; capture_sha256: string; result_type: string }[] }>;
@@ -218,7 +219,7 @@ function directTypedResultEventName(blockId: string, trajectoryId: string, write
 }
 
 type ChildResultProducer = { id: string; invocation: string; value: string; field?: string; parent?: string;
-  renderings: string[]; order?: number };
+  renderings: string[]; order?: number; host_result?: true };
 type ChildResultOutput = { invocation: string; parent?: string; tool_call_id: string; text: string; argument: boolean; order?: number };
 type ObservedHostResult = { id: string; invocation: string; parent?: string; value: string; body_sha256: string;
   capture_sha256: string; result_type: string; order?: number };
@@ -389,9 +390,13 @@ function relayedEvalValue(record: Record<string, unknown>, returned: string, val
 }
 
 /** One corpus-pass index for child results. It records only explicit successful return_result targets;
- * host captures and finish:true actions are observations, never synthesized model targets. */
+ * host captures and finish:true actions are observations, never synthesized model targets.
+ * `admitHostResults` (owner 2026-10-12, e2e data: include everything): a child's return_result whose value the host
+ * computed (an observed host capture) is still the child's own approved return action, so it is admitted as a
+ * producer too, marked `host_result` so consumers can weight or filter that class; without it nothing changes. */
 export class ChildResultIndexBuilder {
   private readonly runs = new Map<string, ChildResultRun>();
+  constructor(private readonly options: { admitHostResults?: boolean } = {}) {}
 
   add(record: Record<string, unknown> & { messages?: Message[] }, render: (value: unknown) => string = renderValueForChild): void {
     if (!Array.isArray(record.messages)) return;
@@ -409,7 +414,8 @@ export class ChildResultIndexBuilder {
       const call = target?.tool_calls?.find(item => item.function.name === 'return_result');
       const args = call ? parseArguments(call.function.arguments) : undefined;
       const value = args?.value;
-      const hostResult = observedHostReturn(record, returned, value);
+      const observed = observedHostReturn(record, returned, value);
+      const hostResult = this.options.admitHostResults ? undefined : observed;
       if (hostResult) run.observed_host_results.push({ ...hostResult, ...(order !== undefined ? { order } : {}) });
       if (!hostResult) {
         run.returned.add(returned);
@@ -418,12 +424,14 @@ export class ChildResultIndexBuilder {
         run.producers.push({ id, invocation, value: returned, ...(typeof parent === 'string' ? { parent } : {}),
           // A text value is also listed JSON-escaped inside a quoted argument (`known: string[] = ["... \"quoted\" ..."]`).
           renderings: value === undefined ? [returned] : [...new Set([render(value), JSON.stringify(value),
-            ...(typeof value === 'string' ? [JSON.stringify(value).slice(1, -1)] : [])])], order });
+            ...(typeof value === 'string' ? [JSON.stringify(value).slice(1, -1)] : [])])], order,
+          ...(observed ? { host_result: true as const } : {}) });
         if (value && typeof value === 'object' && !Array.isArray(value)) for (const [field, text] of Object.entries(value))
           if (typeof text === 'string' && text.length >= MIN_CHILD_RESULT_CHARS && text !== returned) {
             run.returned.add(text);
             run.producers.push({ id: `${id}#${field}`, invocation, field, value: text,
-              ...(typeof parent === 'string' ? { parent } : {}), renderings: [JSON.stringify(text).slice(1, -1)], order });
+              ...(typeof parent === 'string' ? { parent } : {}), renderings: [JSON.stringify(text).slice(1, -1)], order,
+              ...(observed ? { host_result: true as const } : {}) });
           }
       }
     }
@@ -1419,6 +1427,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
               const producer = typeof text === 'string' ? run?.producers?.find(p => p.field === field && p.value === text && p.invocation === invocation) : undefined;
               if (!producer || !run?.readers?.some(r => r.producer_id === producer.id)) return [field, text];
               count('child-result-write');
+              if (producer.host_result) count('child-result-write-host-result');
               return [field, { $write: { name: resultName(text as string, producer.id), type: 'Neuralese<string>', source: text } }];
             });
             if (fields.some(([, text]) => text && typeof text === 'object' && '$write' in (text as object))) {
@@ -1433,6 +1442,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
           if (run.producers && (!ownProducer || (run.readers && !run.readers.some(r => r.producer_id === ownProducer.id)))) return call;
           changed = true;
           count('child-result-write');
+          if (ownProducer?.host_result) count('child-result-write-host-result');
           return { ...call, function: { ...call.function, arguments: JSON.stringify({ ...args,
             value: { $write: { name: resultName(value, ownProducer?.id), type: typeof args.value === 'string' ? 'Neuralese<string>' : 'Neuralese<unknown>', source: value } } }) } };
         }

@@ -24,7 +24,7 @@ import { materializedActionProjection, validateSoftStateConversionEvidence } fro
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   'audit-only': { type: 'boolean', default: false }, out: { type: 'string' }, pieces: { type: 'string' }, summary: { type: 'string' }, limit: { type: 'string' },
   'instructions-reuse': { type: 'string' }, 'instructions-share': { type: 'string' },
-  'soft-state-result': { type: 'string' }, 'soft-state-review': { type: 'string' }, 'soft-state-proof-out': { type: 'string' },
+  'soft-state-result': { type: 'string' }, 'admit-host-results': { type: 'boolean', default: false }, 'soft-state-review': { type: 'string' }, 'soft-state-proof-out': { type: 'string' },
 } });
 if ((!values['audit-only'] && (!values.out || !values.pieces)) || !positionals.length) {
   console.error('usage: neuralese-convert-trajectories.mjs --out FILE --pieces FILE [--summary FILE] [--instructions-reuse N] [--instructions-share F] [--limit N] input.jsonl...');
@@ -40,7 +40,8 @@ if (values['soft-state-proof-out'] && !values['soft-state-result'])
 // First pass: the distinct calls each instructions text serves (every turn of a call is its own record).
 const callsByInstructions = new Map();
 // Per run: explicit child returns and causally later tool outputs, indexed by the shared compiler helper.
-const childIndex = new ChildResultIndexBuilder();
+// --admit-host-results: host-computed child returns are producers too (marked host_result; e2e data, owner 2026-10-12).
+const childIndex = new ChildResultIndexBuilder({ admitHostResults: values['admit-host-results'] });
 const inlineSiteRows=[];
 let counted = 0;
 outer0: for (const input of positionals) {
