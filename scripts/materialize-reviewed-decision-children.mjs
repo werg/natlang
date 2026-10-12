@@ -454,7 +454,10 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         if (!semantic || semantic.semantic_review !== 'clear' || semantic.source_group !== source.group ||
             semantic.source_row_sha256 !== itemSha || semantic.target_sha256 !== candidate.target_sha256 ||
             semantic.decision_index !== candidate.decision_index || semantic.invocation_id !== candidate.invocation_id ||
-            semantic.generated_label !== observed || semantic.source_annotation !== expected)
+            // The review is about this independently completed child action.
+            // `observed` is the aggregate parent value and can be wrong even
+            // when the child's exact typed result is correct.
+            semantic.generated_label !== match.childValue || semantic.source_annotation !== expected)
           throw new Error(`semantic review/source/target binding mismatch for ${program.id}/${id}/${candidate.candidate_id}`);
       }
       const correction = sourceReview.source_label_correction;
@@ -553,9 +556,13 @@ if (values.out) {
   }
   const clearanceEvidence = [];
   if (sourceQualityClearance) {
+    const evidenceNames = new Set();
     for (const [index, evidence] of sourceQualityClearance.review.evidence.entries()) {
-      const filename = evidence.role === 'source_quality_review' ? 'source-quality-review.json' :
-        evidence.role === 'source_closure' ? 'source-closure.json' : `source-quality-evidence-${index + 1}.bin`;
+      const preferred = evidence.role === 'source_quality_review' ? 'source-quality-review.json' :
+        evidence.role === 'source_closure' ? 'source-closure.json' : null;
+      const filename = preferred && !evidenceNames.has(preferred)
+        ? preferred : `source-quality-evidence-${index + 1}.bin`;
+      evidenceNames.add(filename);
       const bytes = await readFile(resolve(evidence.path));
       if (sha(bytes) !== evidence.sha256) throw new Error(`source-quality evidence hash mismatch during packet copy: ${evidence.path}`);
       const handle = await open(resolve(out, filename), 'wx');
