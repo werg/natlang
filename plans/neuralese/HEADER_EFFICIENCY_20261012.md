@@ -94,10 +94,40 @@ train-window geometry and makes a windowing continuation through the data-contin
 
 direct_trajectory has not started, so it takes the new geometry as an ordinary parameter change of an unstarted stage.
 
+## Exact plan for v4 (plan-only against its checkpoint)
+
+Command: `runs/header-efficiency-20261012/v4-windowing-plan.sh`. It runs `direct_sft --plan-only` with v4's own
+arguments plus `--train-target-tokens 31744 --merge-prefix-rows`, on origin/main 5a5d8e69, against
+`run-v4/direct_sft/checkpoint.pt` at update 1020. Output: `v4-windowing-plan.log`.
+
+- `mode: continue`, `resume_accepted: true`. The r3 plan (31,281 updates, through the r2 → r3 record) rebuilt under
+  the saved geometry and matched its record's hash.
+- Seen: 14,386 documents (15,680 windows). Unseen under the new geometry: 198,496 target windows of 198,156 documents
+  (6,734 merged documents matched as seen).
+- New budget: **14,500 updates; 13,480 remain after update 1020**. The current plan has 30,261 remaining.
+- QAT progress continues from 0.0307 at update 1020 to 0.35 at update 14,500, so the same data fraction gets each
+  precision as before. It is reached in fewer updates.
+
 ## Expected ETA
 
-See "Exact plan" below for the plan-only numbers. Estimate from the data stats:
-- direct_sft remaining: from about 30.4k updates at 16.5 s (about 5.8 days) to about 16k updates at about 18 s
-  (about 3.3 days).
-- direct_trajectory: from about 36.6k updates (about 7.0 days) to about 9.9k updates (about 2.1 days).
-- v4 total remaining: from about 12.8 days to about 5.5 days.
+direct_sft:
+- Current: 30,261 remaining updates at about 16.5 s, about **5.8 days**.
+- New: 13,480 updates. They are fuller, about 31k real tokens per update (about 424M remaining tokens over 13,480)
+  against 27k now. Cost is 0.595 s per 1k context tokens (v4 measured) plus about 2–2.5 s readout over all positions,
+  so about 19–21 s per update: about **3.0–3.3 days**.
+
+direct_trajectory (not started; takes the new geometry as an ordinary parameter of an unstarted stage):
+- Current: about 982M forward tokens, about 36.6k updates, about 7.0 days.
+- New: about 265M forward tokens, about 8.5k updates at about 21 s, about **2.1 days**.
+
+Total for v4's remaining direct phases: from about 12.8 days to about 5.3 days.
+
+## Next
+
+1. Tree batching of the prefix trie (a2): 439M → 280M forward on direct_sft (about −1 day). It needs an
+   ancestor-mask FlexAttention path for the full-attention layers too, per-token rope positions through the fused
+   q/k-norm + rope kernel, and a tree packer.
+2. Document-masked varlen packing (d): removes the 7% padding.
+3. Readout over all positions is now the largest added cost (about 0.08–0.1 ms per position). Supervised positions
+   that are exact duplicates across rows (shared headers of different programs) could carry a reduced weight instead
+   of a full readout.
