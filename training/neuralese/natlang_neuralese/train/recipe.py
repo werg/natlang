@@ -217,6 +217,45 @@ def missing_stage_inputs(kind, roles):
     return missing
 
 
+# A later neuralese_direct phase (its ``requires`` names a neuralese_direct stage of the same lineage) continues from
+# that predecessor phase: its final full state plus the two sidecars direct_sft requires with --continue-from (the
+# lineage's step-0 identity qualification, which the phase inherits, and the base model's drift reference). These
+# roles are bound implicitly from the predecessor's output directory, never declared as recipe inputs; one map serves
+# the plan check (load_recipe) and the child argv (main).
+DIRECT_PHASE_CONTINUATION = {'continue_from': 'checkpoint.pt', 'continue_identity': 'identity-check.json',
+                             'continue_monitor_reference': 'monitor-reference.pt'}
+
+
+def direct_phase_predecessor(recipe, stage):
+    """The id of the neuralese_direct phase ``stage`` continues from, or None."""
+    if stage.get('kind') != 'neuralese_direct':
+        return None
+    kinds = {other.get('id'): other.get('kind') for other in recipe['stages']}
+    phases = [name for name in stage.get('requires', []) if kinds.get(name) == 'neuralese_direct']
+    if len(phases) > 1:
+        raise ValueError('a neuralese_direct stage continues from at most one direct predecessor: ' + stage['id'])
+    return phases[0] if phases else None
+
+
+def direct_phase_continuation(directory):
+    """The continuation inputs of a later direct phase, resolved in its predecessor phase's output directory."""
+    return {role: {'binding': None, 'path': str(Path(directory) / name)}
+            for role, name in DIRECT_PHASE_CONTINUATION.items()}
+
+
+def check_direct_phase_continuation(recipe, stage):
+    """Plan check: a continued direct phase has every input its handler needs once the implicit roles are bound."""
+    if direct_phase_predecessor(recipe, stage) is None:
+        return
+    declared = set(stage.get('inputs', {}))
+    if declared & {'continue_from', 'continue_identity', 'continue_monitor_reference'}:
+        raise ValueError('a continued direct phase binds its continuation from its predecessor phase, not from '
+                         'declared inputs: ' + stage['id'])
+    missing = missing_stage_inputs(stage['kind'], declared | set(DIRECT_PHASE_CONTINUATION))
+    if missing:
+        raise ValueError('continued direct phase ' + stage['id'] + ' lacks input(s): ' + ', '.join(sorted(missing)))
+
+
 def parse_input_binding_overrides(values):
     overrides = {}
     for value in values or []:
@@ -277,10 +316,18 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
     return result
 
 
+def _staged_inputs(resolved):
+    """Inputs resolving to the external HDD are read from a verified NVMe copy (common/hdd_guard.py)."""
+    from ..common import hdd_guard
+    return {role: ({**value, 'path': hdd_guard.stage_input(value['path'], value.get('sha256'))}
+                   if isinstance(value, dict) and 'path' in value and role != 'direct_artifact_manifest' else value) for role, value in resolved.items()}
+
+
 def stage_input_args(resolved, kind):
     """Serialize already-validated file roles to the shared handler CLIs."""
     args = []
     supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
+    resolved = _staged_inputs(resolved)
     for role in ('records', 'pieces', 'text_data', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
@@ -480,6 +527,7 @@ def load_recipe(path):
         required = stage.get('requires')
         if not isinstance(required, list) or len(set(required)) != len(required) or not set(required) <= complete:
             raise ValueError('stage dependencies must precede the stage')
+        check_direct_phase_continuation(recipe, stage)
         parameters = stage.get('parameters')
         refuse_retired_parameters(parameters)
         if not isinstance(parameters, dict) or not set(parameters) <= HANDLERS[kind]['parameters']:
@@ -961,6 +1009,8 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     """
     validate_direct_stage_recipe(recipe)
     output = Path(output).resolve()
+    from ..common import hdd_guard
+    hdd_guard.require_nvme(output)
     declared_output = Path(recipe['outputs']['directory']).resolve()
     if output != declared_output:
         raise ValueError('direct-stage output differs from its declaration')
@@ -1042,7 +1092,7 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     handler = HANDLERS[stage['kind']]
     command = [sys.executable, '-m', handler['module']]
     if 'heads' in inputs:
-        command += ['--heads', inputs['heads']['path']]
+        command += ['--heads', hdd_guard.stage_input(inputs['heads']['path'], inputs['heads']['sha256'])]
     command += stage_input_args(inputs, stage['kind'])
     command += ['--out', str(stage_output), '--device', device]
     parameters = dict(recipe['parameters'])
@@ -1056,6 +1106,8 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
             'parameters': parameters, 'child_argv': command, 'stage_output': str(stage_output),
             'lineage': recipe['lineage'], 'lineage_evidence': lineage_evidence,
             'lineage_gate_verifications': lineage_gate_verifications}
+    if hdd_guard.RECORDS:
+        plan['hdd_staged_inputs'] = list(hdd_guard.RECORDS)
     if resume is not None:
         plan['resume'] = resume
     write_json(output / 'direct-stage-plan.json', plan)
@@ -1195,6 +1247,8 @@ def main(argv=None):
                      'relocate a declared file with --input-binding NAME=PATH (its sha256 must match)')
     args.out = args.out.resolve()
     args.heads = args.heads.resolve()
+    from ..common import hdd_guard
+    hdd_guard.require_nvme(args.out)
     overrides = parse_input_binding_overrides(args.input_binding)
     defaults = {'records': args.records, 'pieces': args.pieces, 'text_data': args.text_data}
     stage_inputs = {}
@@ -1323,16 +1377,20 @@ def main(argv=None):
                         stage_heads=predecessor['artifact']
                 command = [sys.executable, '-m', HANDLERS[kind]['module']]
                 if not direct_artifact_stage:
-                    command += ['--heads', str(stage_heads)]
+                    command += ['--heads', hdd_guard.stage_input(stage_heads)]
                 command += stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
                            str(output if kind == 'token_identity' else directory), '--device', args.device]
-                if kind == 'neuralese_direct':
-                    # A later phase of a direct lineage continues from its predecessor phase's final full state.
-                    phases = [r for r in reports if r['id'] in stage['requires'] and r['kind'] == 'neuralese_direct']
-                    if len(phases) > 1:
-                        raise ValueError('a neuralese_direct stage continues from at most one direct predecessor')
-                    if phases:
-                        continuation_checkpoint = str(Path(phases[0]['artifact']).parent / 'checkpoint.pt')
+                previous_phase = direct_phase_predecessor(recipe, stage)
+                if previous_phase is not None:
+                    # A later phase of a direct lineage continues from its predecessor phase's final full state and
+                    # sidecars (DIRECT_PHASE_CONTINUATION); refuse before the child loads anything if one is absent.
+                    predecessor = next(r for r in reports if r['id'] == previous_phase)
+                    continuation = direct_phase_continuation(Path(predecessor['artifact']).parent)
+                    absent = sorted(value['path'] for value in continuation.values() if not Path(value['path']).is_file())
+                    if absent:
+                        raise ValueError('continued direct phase ' + stage['id'] + ' lacks predecessor output(s): ' +
+                                         ', '.join(absent))
+                    command += stage_input_args(continuation, kind)
                 if continuation_checkpoint:
                     command += ['--continue-from', continuation_checkpoint]
                 if kind == 'raw_runtime_qualification':
@@ -1354,6 +1412,8 @@ def main(argv=None):
                     command += ['--quantization', json.dumps(component, sort_keys=True, separators=(',', ':'))]
                 environment = dict(os.environ)
                 environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
+                if hdd_guard.RECORDS:
+                    write_json(args.out / 'hdd-staged-inputs.json', hdd_guard.RECORDS)
                 print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
                 result = signal_forwarder.run(command, env=environment)
                 code = result.returncode

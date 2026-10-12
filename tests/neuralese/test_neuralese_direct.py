@@ -354,3 +354,33 @@ def test_a_continued_phase_archives_its_predecessor_state_off_the_nvme(tmp_path,
     assert slot.is_symlink() and (stage / 'best-checkpoint.pt').is_symlink() and slot.read_bytes() == content
     assert json.loads((stage / 'checkpoint.pt.archived.json').read_text())['sha256'] == record['sha256']
     assert direct_sft.archive_predecessor_state(slot) is None  # already archived
+
+
+def test_a_continued_direct_phase_binds_both_sidecars_and_the_plan_check_requires_them(tmp_path, monkeypatch):
+    """direct_sft refuses --continue-from without --continue-identity and --continue-monitor-reference (the v3p
+    direct_sft failure, 2026-10-12): the runner binds all three from the predecessor phase, and load_recipe refuses a
+    plan whose implicit continuation would lack one."""
+    from natlang_neuralese.train import recipe as recipe_module
+    from natlang_neuralese.train.recipe import (DIRECT_PHASE_CONTINUATION, direct_phase_continuation,
+                                                direct_phase_predecessor, load_recipe, stage_input_args)
+    for name in ('neuralese-direct-mellum-v3.json', 'neuralese-direct-lfm-v2.json'):
+        recipe = load_recipe(RECIPES / name)
+        first, second = recipe['stages']
+        assert direct_phase_predecessor(recipe, first) is None
+        assert direct_phase_predecessor(recipe, second) == first['id']
+    args = stage_input_args(direct_phase_continuation(tmp_path / 'direct_warmup'), 'neuralese_direct')
+    assert args == ['--continue-from', str(tmp_path / 'direct_warmup/checkpoint.pt'),
+                    '--continue-identity', str(tmp_path / 'direct_warmup/identity-check.json'),
+                    '--continue-monitor-reference', str(tmp_path / 'direct_warmup/monitor-reference.pt')]
+    path = RECIPES / 'neuralese-direct-mellum-v3.json'
+    for dropped in ('continue_identity', 'continue_monitor_reference'):
+        monkeypatch.setattr(recipe_module, 'DIRECT_PHASE_CONTINUATION',
+                            {k: v for k, v in DIRECT_PHASE_CONTINUATION.items() if k != dropped})
+        with pytest.raises(ValueError, match='lacks input.*' + dropped):
+            load_recipe(path)
+    monkeypatch.setattr(recipe_module, 'DIRECT_PHASE_CONTINUATION', DIRECT_PHASE_CONTINUATION)
+    declared = recipe_module.resolve_recipe_data(path)
+    declared['stages'][1]['inputs']['continue_from'] = 'direct_text'
+    (tmp_path / 'declared.json').write_text(json.dumps(declared))
+    with pytest.raises(ValueError, match='continuation from its predecessor'):
+        load_recipe(tmp_path / 'declared.json')
