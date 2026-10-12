@@ -10,8 +10,9 @@ whole trajectory (the chain). Exclusions: held/protected eval groups, exact dupl
 records, so one corpus serves both lines.
 
 Stages (each resumable; run every stage under the memory ledger):
-  e2e_mine.py shard SOURCE_NAME FILE [FILE...] --work DIR [--target-mb 150]
-      split a source by trajectory into shards (plain or .zst JSONL), so a trajectory's rows stay together.
+  e2e_mine.py shard SOURCE_NAME FILE [FILE...] --work DIR [--target-mb 150] [--pieces P [P...]]
+      split a source by trajectory into shards (plain or .zst JSONL), so a trajectory's rows stay together. With
+      --pieces the source is already converted (records + piece tables): conversion is skipped, edges are derived.
   e2e_mine.py convert --work DIR [--source NAME]
       convert each unconverted shard and keep the records of trajectories with at least one edge.
   e2e_mine.py assemble --work DIR --id CORPUS_ID [--held-union DIR]
@@ -70,7 +71,8 @@ def cmd_shard(a):
             i = int(hashlib.sha256(traj.encode()).hexdigest()[:8], 16) % n
             handles[i].write(line if line.endswith('\n') else line + '\n'); rows += 1
     for h in handles: h.close()
-    json.dump({'source': a.name, 'files': a.files, 'shards': n, 'rows': rows, 'unparseable_lines': bad},
+    json.dump({'source': a.name, 'files': a.files, 'shards': n, 'rows': rows, 'unparseable_lines': bad,
+               **({'preconverted_pieces': a.pieces} if a.pieces else {})},
               open(out / 'sharded.json', 'w'), indent=1)
     print(json.dumps({'source': a.name, 'shards': n, 'rows': rows, 'unparseable_lines': bad}))
 
@@ -84,16 +86,25 @@ def target_text(row):
     return '\n'.join(p for p in parts if p)
 
 
-def convert_shard(shard: Path, tokenizer):
+def convert_shard(shard: Path, tokenizer, preconverted_pieces=None):
     from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view
     stem = shard.with_suffix('')
+    omissions = []
+    if preconverted_pieces:
+        records = [json.loads(l) for l in open(shard) if l.strip()]
+        pieces = {}
+        for path in preconverted_pieces:
+            for l in open(path):
+                if l.strip():
+                    p = json.loads(l); pieces.setdefault(p['name'], p['text'])
+        conversion = {'sites': {}, 'preconverted': True}
+        return derive(stem, records, pieces, conversion, omissions, tokenizer)
     with tempfile.TemporaryDirectory(dir=shard.parent) as tmp:
         conv, pieces_path, summary = Path(tmp) / 'records.jsonl', Path(tmp) / 'pieces.jsonl', Path(tmp) / 'conversion.json'
         env = dict(os.environ, NODE_OPTIONS=os.environ.get('NODE_OPTIONS', '--max-old-space-size=6144'))
         proc = subprocess.run(['node', 'scripts/neuralese-convert-trajectories.mjs', '--admit-host-results', '--out', str(conv),
                                '--pieces', str(pieces_path), '--summary', str(summary), str(shard)],
                               cwd=TS_HOST, env=env, capture_output=True, text=True)
-        omissions = []
         if proc.returncode != 0:
             # The whole shard failed conversion: register every row with the converter's error.
             reason = 'conversion_failed: ' + (proc.stderr.strip().splitlines() or ['?'])[-1][:300]
@@ -110,7 +121,16 @@ def convert_shard(shard: Path, tokenizer):
             if l.strip():
                 p = json.loads(l); pieces[p['name']] = p['text']
         conversion = json.load(open(summary))
-    _, review = authenticated_recurrence_context_view(records, pieces)
+    return derive(stem, records, pieces, conversion, omissions, tokenizer)
+
+
+def derive(stem, records, pieces, conversion, omissions, tokenizer):
+    from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view
+    try:
+        _, review = authenticated_recurrence_context_view(records, pieces)
+    except (ValueError, KeyError) as error:  # the whole shard fails authentication: register every row
+        for r in records: omissions.append({'id': r.get('id'), 'stage': 'authenticate', 'reason': f'shard_failed: {error}'[:300]})
+        return write_shard(stem, [], {}, [], omissions, {'converted': False, 'error': str(error)[:300]})
     for e in review['excluded']:
         omissions.append({'id': e.get('id'), 'stage': 'authenticate', 'reason': e.get('reason')})
     by_id = {r['id']: r for r in records}
@@ -168,7 +188,9 @@ def cmd_convert(a):
     for shard in sorted(glob.glob(pattern)):
         stem = Path(shard).with_suffix('')
         if Path(f'{stem}.stats.json').exists(): continue
-        convert_shard(Path(shard), tok)
+        meta = json.load(open(Path(shard).parent / 'sharded.json'))
+        convert_shard(Path(shard), tok, meta.get('preconverted_pieces'))
+        os.remove(shard)  # the shard is an intermediate copy of its source; outputs and omissions are kept
         s = json.load(open(f'{stem}.stats.json'))
         print(json.dumps({'shard': shard, **{k: s.get(k) for k in ('rows', 'kept_records', 'edges', 'chains', 'error')}}), flush=True)
 
@@ -293,6 +315,7 @@ def main():
     sub = ap.add_subparsers(dest='cmd', required=True)
     s = sub.add_parser('shard'); s.add_argument('name'); s.add_argument('files', nargs='+'); s.add_argument('--work', required=True)
     s.add_argument('--target-mb', type=int, default=150)
+    s.add_argument('--pieces', nargs='*')
     c = sub.add_parser('convert'); c.add_argument('--work', required=True); c.add_argument('--source')
     m = sub.add_parser('assemble'); m.add_argument('--work', required=True); m.add_argument('--id', required=True)
     m.add_argument('--held-union', default=resolve_str('repo', 'runs/natlang-target-union-20261011-r3'))
