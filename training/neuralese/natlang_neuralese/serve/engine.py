@@ -231,7 +231,8 @@ class Sequence:
 class Engine:
     def __init__(self, backbone: PortBackbone, heads: PortHeads, tokenizer, store: TensorStore, dialect: str,
                  max_block: int = 64, model_name: str = "natlang-neuralese", device: str = "cpu",
-                 prefill_tokens: int = 8192, prefill_padding: bool = False, context: int | None = None):
+                 prefill_tokens: int = 8192, prefill_padding: bool = False, context: int | None = None,
+                 prompt_rendering: str = "full"):
         from .chat import bind_history_reasoning
         # Serving renders history as the backbone's training text does (its declared chat.BACKBONE_HISTORY_REASONING).
         tokenizer = bind_history_reasoning(tokenizer, model_type=getattr(getattr(backbone, "config", None), "model_type", None))
@@ -243,6 +244,10 @@ class Engine:
         # packing additionally changes mask layout and remains opt-in.
         self.prefill_padding = prefill_padding
         self.dialect, self.max_block, self.model_name, self.device = dialect, max_block, model_name, device
+        from ..data.prompt_rendering import PROMPT_RENDERINGS
+        if prompt_rendering not in PROMPT_RENDERINGS:
+            raise ValueError(f"unknown prompt_rendering {prompt_rendering!r}; expected one of {PROMPT_RENDERINGS}")
+        self.prompt_rendering = prompt_rendering
         self.width = backbone.config.hidden_size
         # The served context (spec: info `context`): positions one request's prompt and reply may span. Default the
         # model's training context (max_position_embeddings); the fork's equivalent is min(n_ctx_train, -c). View plans
@@ -335,6 +340,15 @@ class Engine:
     def _template(self, messages, tools):
         return self.tokenizer.apply_chat_template(messages, tools=tools or None, tokenize=False,
                                                   add_generation_prompt=True)
+
+    def render_request(self, messages, tools=None, template=None):
+        """Render one request with the same generic/program header policy used by direct SFT."""
+        from ..data.prompt_rendering import apply_prompt_rendering
+        from .chat import render_messages
+
+        messages, tools = apply_prompt_rendering(messages, tools, self.prompt_rendering)
+        return render_messages(messages, tools, template or self._template, self.specials,
+                               block_type=self.block_value_type)
 
     def _tokens(self, text: str) -> list[int]:
         cache = getattr(self, '_token_cache', None)
@@ -443,7 +457,7 @@ class Engine:
 
     def _prompt_plan(self, messages, tools) -> list:
         """Render and tokenize on the caller's CPU thread; preserve segment boundaries."""
-        rendered = render_messages(messages, tools, self._template, self.specials, block_type=self.block_value_type)
+        rendered = self.render_request(messages, tools)
         return [("tokens", self._template_tokens(segment, rendered.escape_nonce)) if isinstance(segment, str)
                 else ("block", rendered.blocks[segment]) for segment in rendered.segments]
 

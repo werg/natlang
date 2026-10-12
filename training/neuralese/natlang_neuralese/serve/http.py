@@ -4,7 +4,7 @@
 | --- | --- |
 | `POST /v1/chat/completions` | OpenAI-style chat completion with Neuralese parts. With `"stream": true` (as the fork), answers server-sent `chat.completion.chunk` events: text deltas until a tool call opens (`<|tool_call_start|>` or `<tool_call>`; the markup is held back), a `[{"type": "neuralese", "id": …}]` content delta per written block (with `neuralese.block`, its metadata), the parsed calls as one `tool_calls` delta, and a final chunk whose `x_natlang_message` is the complete parsed message (with `usage`, `neuralese` and, with guidance, `x_natlang_guidance`). |
 | `GET /v1/models`, `GET /health`, `GET /v1/health` | Model listing and liveness. |
-| `GET /v1/neuralese/info` | `dialects`, `width`, `dtype`, `max_block_length`, `cutoff`, `grad` (true), `grad_order` (2), `adapters` (kinds applied directly), `projections` (adapter-code decoders) and `stream` (true: chat completions stream; clients stream only to servers that declare it). |
+| `GET /v1/neuralese/info` | `dialects`, `width`, `dtype`, `max_block_length`, `cutoff`, `grad` (true), `grad_order` (2), `adapters` (kinds applied directly), `projections` (adapter-code decoders), `prompt_rendering` and its content identity, and `stream` (true: chat completions stream; clients stream only to servers that declare it). |
 | `PUT /v1/neuralese/blocks/{id}` | Store a block (safetensors body); the ID is checked against the content. |
 | `GET /v1/neuralese/blocks/{id}` | Fetch a block (safetensors body). |
 | `GET /v1/neuralese/blocks/{id}/meta` | Block metadata as JSON. |
@@ -167,6 +167,8 @@ def make_handler(engine: Engine):
             if self.path == "/v1/models":
                 return self._json(200, {"object": "list", "data": [{"id": engine.model_name, "object": "model"}]})
             if self.path == "/v1/neuralese/info":
+                from ..data.prompt_rendering import prompt_rendering_identity
+                prompt_identity = prompt_rendering_identity(engine.prompt_rendering)
                 return self._json(200, {"dialects": [engine.dialect], "width": engine.width, "dtype": "f32",
                                         "store": {"owners": True, "persistent": engine.store.directory is not None},
                                         "max_block_length": engine.max_block, "context": engine.context, "grad": True, "grad_order": 2, "stream": True,
@@ -174,6 +176,8 @@ def make_handler(engine: Engine):
                                         "projections": {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
                                                         for name, p in engine.projections.items()},
                                         "server": "reference",
+                                        "prompt_rendering": engine.prompt_rendering,
+                                        "prompt_rendering_identity_sha256": prompt_identity["identity_sha256"],
                                         # Owner-scoped holds only once the store implements them.
                                         "capabilities": [c for c in CAPABILITIES
                                                          if c != "store.owners" or hasattr(engine.store, "hold")]})
@@ -313,12 +317,11 @@ def make_handler(engine: Engine):
                             return self._json(201, {"reason": verdict[0], "offset": verdict[1], "end": end})
                     return self._json(201, {"reason": None})
                 if self.path == "/v1/neuralese/render":
-                    from .chat import render_messages, split_escaped
+                    from .chat import split_escaped
 
                     body = self._object()
                     # As prefill renders it: a stored block typed Neuralese<unknown> defaults to value_type "unknown".
-                    rendered = render_messages(body.get("messages") or [], body.get("tools"), engine._template, engine.specials,
-                                               block_type=engine.block_value_type)
+                    rendered = engine.render_request(body.get("messages") or [], body.get("tools"))
                     prompt = "".join("<block>" if isinstance(segment, int) else
                                      "".join(run for run, _ in split_escaped(segment, rendered.escape_nonce))
                                      for segment in rendered.segments)

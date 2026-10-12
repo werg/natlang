@@ -70,6 +70,9 @@ def verify_plan(plan_path: Path) -> tuple[dict, Path, Path]:
     plan["plan_path"] = str(plan_path)
     if plan.get("schema") != "natlang.direct-held-task-evaluation/1":
         raise ValueError("unsupported direct held-task evaluation plan")
+    plan["prompt_rendering"] = plan.get("prompt_rendering", "full")
+    if plan["prompt_rendering"] not in {"full", "program-header"}:
+        raise ValueError("plan declares an unsupported prompt_rendering mode")
     packet = Path(plan["derived_packet"]).resolve(strict=True)
     if sha256_file_hex(packet) != plan["derived_packet_sha256"]:
         raise ValueError("derived held-task packet hash changed")
@@ -105,6 +108,7 @@ def verify_plan(plan_path: Path) -> tuple[dict, Path, Path]:
 def comparison_key(plan: dict, image: str) -> str:
     """Bind best-checkpoint comparisons to one packet/runtime/inference contract."""
     threads = int(plan.get("server_threads", 2))
+    from natlang_neuralese.data.prompt_rendering import prompt_rendering_identity
     contract = {
         "schema": "natlang.direct-task-comparison/1",
         "derived_packet_sha256": plan["derived_packet_sha256"],
@@ -121,6 +125,7 @@ def comparison_key(plan: dict, image: str) -> str:
         "queue_entries": plan["queue_entries"],
         "max_case_seconds": plan["max_case_seconds"],
         "execution_plans": plan["execution_plans"],
+        "prompt_rendering": prompt_rendering_identity(plan["prompt_rendering"]),
     }
     encoded = json.dumps(contract, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     return hashlib.sha256(encoded).hexdigest()
@@ -264,6 +269,16 @@ def wait_server(name: str, port: int) -> None:
                     return
         except Exception:
             time.sleep(2)
+
+
+def verify_server_rendering(port: int, mode: str) -> None:
+    from natlang_neuralese.data.prompt_rendering import prompt_rendering_identity
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/v1/neuralese/info", timeout=5) as response:
+        info = json.loads(response.read())
+    if (info.get("prompt_rendering") != mode or
+            info.get("prompt_rendering_identity_sha256") !=
+            prompt_rendering_identity(mode)["identity_sha256"]):
+        raise RuntimeError("serving prompt-rendering contract differs from the reviewed evaluation plan")
 
 
 def available_floor_monitor(process: subprocess.Popen, floor_bytes: int,
@@ -452,6 +467,9 @@ def run_candidate(args: argparse.Namespace) -> dict:
         raise RuntimeError("host available RAM fell below 1 GiB after strict checkpoint export")
     manifest_path = artifact / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    prompt_binding = manifest.get("prompt_rendering") or {}
+    if prompt_binding.get("mode") != plan["prompt_rendering"]:
+        raise ValueError("checkpoint text source rendering mode differs from evaluation plan")
     port = free_port()
     server_name = "natlang-direct-task-eval-" + hashlib.sha256(str(run_dir).encode()).hexdigest()[:12]
     server = [
@@ -472,6 +490,7 @@ def run_candidate(args: argparse.Namespace) -> dict:
     try:
         subprocess.run(server, check=True, text=True, capture_output=True)
         wait_server(server_name, port)
+        verify_server_rendering(port, plan["prompt_rendering"])
         report = run_reviewed_queue(plan, packet, runtime, run_dir, server_name, port)
         runner_code = report["collector_exit_code"]
         report.update({
@@ -482,6 +501,7 @@ def run_candidate(args: argparse.Namespace) -> dict:
             "base_snapshot": str(base_snapshot),
             "base_snapshot_revision": base_snapshot.name,
             "serving_precision": f"{serving_dtype.upper()} on CPU",
+            "prompt_rendering": prompt_binding.get("mode"),
             "runtime_image": args.image,
             "threads": server_threads,
             "server_cpu_count": server_cpu_count,
@@ -571,10 +591,12 @@ def run_base(args: argparse.Namespace) -> dict:
         "-w", str(ROOT), args.image, "python", "-m", "natlang_neuralese.serve",
         "--base", str(base_snapshot), "--device", "cpu", "--dtype", serving_dtype,
         "--threads", str(server_threads), "--port", str(port),
+        "--prompt-rendering", plan["prompt_rendering"],
     ]
     try:
         subprocess.run(command, check=True, text=True, capture_output=True)
         wait_server(server_name, port)
+        verify_server_rendering(port, plan["prompt_rendering"])
         report = run_reviewed_queue(plan, packet, runtime, run_dir, server_name, port)
         report.update({
             "evaluation_kind": "pinned-base-fixed-held-task-packet",
@@ -582,6 +604,7 @@ def run_base(args: argparse.Namespace) -> dict:
             "base_snapshot": str(base_snapshot),
             "base_snapshot_revision": base_snapshot.name,
             "serving_precision": f"{serving_dtype.upper()} on CPU",
+            "prompt_rendering": plan["prompt_rendering"],
             "runtime_image": args.image,
             "threads": server_threads,
             "server_cpu_count": server_cpu_count,

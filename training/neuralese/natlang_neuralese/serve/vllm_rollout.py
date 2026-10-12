@@ -28,7 +28,7 @@ import uuid
 
 import torch
 
-from .chat import build_message, placeholder, render_messages
+from .chat import build_message, placeholder
 from .grad import GradSession
 from .engine import derive_seed
 from .store import make_block
@@ -102,7 +102,7 @@ class VllmNeuralese:
     # Prompts ---------------------------------------------------------------------------------
     def _prompt_items(self, request: dict) -> list:
         engine = self.engine
-        rendered = render_messages(request.get("messages") or [], request.get("tools"), engine._template, engine.specials)
+        rendered = engine.render_request(request.get("messages") or [], request.get("tools"))
         return self.session._items(rendered.segments, rendered.blocks, rendered.escape_nonce)
 
     def _vllm_prompt(self, items: list):

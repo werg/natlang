@@ -30,6 +30,8 @@ def main(argv=None):
                         help="strictly restored direct-SFT serving artifact for ordinary HF chat/tool generation")
     parser.add_argument("--direct-base-snapshot", default=None,
                         help="exact base snapshot pinned by --direct-artifact")
+    parser.add_argument("--prompt-rendering", choices=("full", "program-header"), default=None,
+                        help="serving prompt policy (direct artifacts bind this in their manifest; base default: full)")
     parser.add_argument("--cutoff", type=int, default=None)
     parser.add_argument("--max-block", type=int, default=None)
     parser.add_argument("--dialect", default=None)
@@ -107,6 +109,8 @@ def main(argv=None):
         restored = load_direct_artifact(args.direct_artifact, base_snapshot=args.direct_base_snapshot,
                                         device=args.device, dtype=model_dtype)
         engine = restored.engine
+        if args.prompt_rendering is not None and args.prompt_rendering != engine.prompt_rendering:
+            parser.error("--prompt-rendering conflicts with the direct artifact's bound mode")
         manifest_path = Path(args.direct_artifact) / "manifest.json"
         print(json.dumps({"event": "direct_artifact_restored",
                           "artifact": str(Path(args.direct_artifact).resolve()),
@@ -118,7 +122,7 @@ def main(argv=None):
         if args.runtime_qualification:
             parser.error('runtime qualification requires a recurrence checkpoint')
         engine = load_engine(args.base, args.lora, args.heads, args.cutoff, args.max_block, args.device,
-                             args.dialect, dtype=model_dtype)
+                             args.dialect, dtype=model_dtype, prompt_rendering=args.prompt_rendering or "full")
     engine.prefill_padding = args.prefill_padding
     if args.ctx_size:
         engine.context = min(engine.context, args.ctx_size)
@@ -137,9 +141,13 @@ def main(argv=None):
             engine.projections[name] = AdapterProjection.load(path, map_location=args.device).to(args.device).eval()
     engine.start()
     server = serve(engine, args.host, args.port)
+    from ..data.prompt_rendering import prompt_rendering_identity
     print(json.dumps({"listening": f"http://{server.server_address[0]}:{server.server_address[1]}",
                       "dialect": engine.dialect, "cutoff": engine.heads.cutoff, "device": args.device,
-                      "model_dtype": str(next(engine.backbone.parameters()).dtype)}), flush=True)
+                      "model_dtype": str(next(engine.backbone.parameters()).dtype),
+                      "prompt_rendering": engine.prompt_rendering,
+                      "prompt_rendering_identity_sha256":
+                          prompt_rendering_identity(engine.prompt_rendering)["identity_sha256"]}), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

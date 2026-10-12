@@ -73,7 +73,7 @@ if deterministic_requested():
 
 from ..model.heads import PayloadSample, payload_kl, payload_log_prob
 from ..model.lfm2_port import PortCache
-from .chat import RequestError, opens_thinking, render_messages, render_with_empty_thought
+from .chat import RequestError, opens_thinking, render_with_empty_thought
 from .store import Block, make_block
 
 
@@ -127,7 +127,7 @@ class GradSession:
     def _target_items(self, messages, tools, target) -> tuple[list, list]:
         """(prompt items, target items) with the target teacher-forced after the generation prompt."""
         engine = self.engine
-        prompt = render_messages(messages, tools, engine._template, engine.specials, block_type=engine.block_value_type)
+        prompt = engine.render_request(messages, tools)
 
         thinking = opens_thinking(engine._template([{"role": "user", "content": "x"}], None))
 
@@ -136,7 +136,7 @@ class GradSession:
                                                                      add_generation_prompt=False)
             return render_with_empty_thought(render, msgs) if thinking else render(msgs)
 
-        full = render_messages(list(messages) + [target], tools, full_template, engine.specials, block_type=engine.block_value_type)
+        full = engine.render_request(list(messages) + [target], tools, template=full_template)
         before = self._items(prompt.segments, prompt.blocks, prompt.escape_nonce)
         after = self._items(full.segments, full.blocks, full.escape_nonce)
         # The prompt is scored exactly as inference rendered it; the template may render earlier turns differently
@@ -628,8 +628,7 @@ class GradSession:
         Tokenize prefix and value separately, as the writer does. Whole native
         replies can merge their boundary token and supervise a different state.
         """
-        prompt = render_messages(messages, tools, self.engine._template, self.engine.specials,
-                                 block_type=self.engine.block_value_type)
+        prompt = self.engine.render_request(messages, tools)
         before = self._items(prompt.segments, prompt.blocks, prompt.escape_nonce)
         before += [("tok", t) for t in self.engine._tokens(prefix)]
         target = [("tok", t) for t in self.engine._tokens(continuation)]
@@ -794,7 +793,7 @@ class GradSession:
         for key in ("messages", "teacher_messages"):
             messages = term.get(key)
             if messages:
-                rendered = render_messages(messages, term.get("tools"), self.engine._template, self.engine.specials, block_type=self.engine.block_value_type)
+                rendered = self.engine.render_request(messages, term.get("tools"))
                 found.extend(rendered.blocks)
         target = term.get("target")
         if isinstance(target, dict) and term.get("messages"):
@@ -1116,7 +1115,7 @@ def encode_text(engine, text: str, type: str | None = None, context: list | None
     if not ids:
         raise RequestError("neuralese-encode", "empty text")
     if context:
-        prompt = render_messages(context, None, engine._template, engine.specials, block_type=engine.block_value_type)
+        prompt = engine.render_request(context, None)
         if prompt.blocks:
             raise RequestError("neuralese-encode", "the encoding context may not hold blocks")
         prefix = [i for segment in prompt.segments for i in engine._template_tokens(segment, prompt.escape_nonce)]

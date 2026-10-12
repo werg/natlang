@@ -6,7 +6,7 @@ from __future__ import annotations
 
 def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoint: str | None = None,
                 cutoff: int | None = None, max_block: int | None = None, device: str = "cpu", dialect: str | None = None,
-                dtype=None, artifacts=None):
+                dtype=None, artifacts=None, prompt_rendering: str = "full"):
     """Load the backbone (optionally merging a LoRA), the port heads (untrained unless a trainer checkpoint is
     given) and an empty store.
 
@@ -128,7 +128,8 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     if not heads.read_markers:
         heads.configure_frozen_reference()
     port_dialect = DIALECT if heads.read_markers else heads.dialect
-    engine = Engine(backbone, heads, tokenizer, TensorStore(), dialect or port_dialect, max_block=max_block, device=device)
+    engine = Engine(backbone, heads, tokenizer, TensorStore(), dialect or port_dialect, max_block=max_block,
+                    device=device, prompt_rendering=prompt_rendering)
     engine.foundation = foundation if not heads.read_markers else None
     engine.base_dir = base  # the HF base, for exports (adapter LoRAs)
     return engine

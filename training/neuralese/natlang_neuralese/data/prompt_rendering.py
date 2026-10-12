@@ -14,6 +14,88 @@ from __future__ import annotations
 
 PROMPT_RENDERINGS = ("full", "program-header")
 
+
+def prompt_rendering_identity(mode: str) -> dict:
+    """Content identity for the serving/training prompt transformation contract."""
+    if mode not in PROMPT_RENDERINGS:
+        raise ValueError(f"unknown prompt_rendering {mode!r} (declared: {PROMPT_RENDERINGS})")
+    import hashlib
+    import json
+    from pathlib import Path
+
+    source = Path(__file__).resolve()
+    package_root = source.parents[1]
+    pieces_path = source.parents[4] / "training" / "prompt-pieces" / "pieces.json"
+    implementation = {name: hashlib.sha256((package_root / name).read_bytes()).hexdigest()
+                       for name in ("data/prompt_rendering.py", "serve/engine.py", "serve/chat.py")}
+    pieces_sha = hashlib.sha256(pieces_path.read_bytes()).hexdigest()
+    identity = {"schema": "natlang.prompt-rendering-identity/1", "mode": mode,
+                "implementation_sha256": implementation, "pieces_sha256": pieces_sha}
+    identity["identity_sha256"] = hashlib.sha256(
+        (identity["schema"] + "\0" + mode + "\0" + json.dumps(implementation, sort_keys=True) +
+         "\0" + pieces_sha).encode()).hexdigest()
+    return identity
+
+
+def checkpoint_prompt_rendering(identity: dict) -> tuple[str, dict]:
+    """Resolve serving mode from the exact direct-SFT text input pinned by checkpoint identity.
+
+    New rendered rows declare their mode. Older inputs without a declaration retain the historical full prompt.
+    A declared checkpoint option, when present, must agree with the rows.
+    """
+    import hashlib
+    import json
+    from pathlib import Path
+
+    options = identity.get("options") or {}
+    inputs = identity.get("inputs") or {}
+    text_value = options.get("text_data")
+    if not isinstance(text_value, str) or not text_value:
+        # A direct stage sourced from records/pieces rather than prepared text uses the legacy full prompt.
+        mode = options.get("prompt_rendering", "full")
+        if mode not in PROMPT_RENDERINGS:
+            raise ValueError(f"checkpoint declares unsupported prompt_rendering {mode!r}")
+        return mode, {"schema": "natlang.prompt-rendering-source-proof/1", "source": "legacy-no-text-data",
+                      "mode": mode, "row_count": None, "mode_counts": {mode: None},
+                      "input_sha256": None}
+    path = Path(text_value).resolve(strict=True)
+    declared_sha = inputs.get(str(path))
+    if not isinstance(declared_sha, str):
+        # Some checkpoints record the same path before a symlink was resolved.
+        declared_sha = next((value for key, value in inputs.items()
+                             if Path(key).resolve() == path), None)
+    if not isinstance(declared_sha, str):
+        raise ValueError("checkpoint identity does not bind its text_data input")
+    digest = hashlib.sha256()
+    counts = {}
+    row_count = 0
+    with path.open("rb") as stream:
+        for raw in stream:
+            digest.update(raw)
+            if not raw.strip():
+                continue
+            row = json.loads(raw)
+            row_count += 1
+            mode = row.get("prompt_rendering")
+            if mode is None:
+                mode = "full"
+            if mode not in PROMPT_RENDERINGS:
+                raise ValueError(f"text_data row {row_count} declares unsupported prompt_rendering {mode!r}")
+            counts[mode] = counts.get(mode, 0) + 1
+    actual_sha = digest.hexdigest()
+    if actual_sha != declared_sha:
+        raise ValueError("checkpoint text_data changed since training")
+    if len(counts) != 1:
+        raise ValueError(f"checkpoint text_data mixes prompt rendering modes: {counts}")
+    mode = next(iter(counts), "full")
+    option_mode = options.get("prompt_rendering")
+    if option_mode is not None and option_mode != mode:
+        raise ValueError("checkpoint prompt_rendering option differs from its exact text_data rows")
+    proof = {"schema": "natlang.prompt-rendering-source-proof/1", "source": "checkpoint-identity-text-data",
+             "path": str(path), "input_sha256": declared_sha, "row_count": row_count,
+             "mode_counts": counts, "mode": mode}
+    return mode, proof
+
 # Paragraph heads (exact prefixes) that declare a property of THIS call rather than generic runtime behaviour.
 PROGRAM_SPECIFIC_HEADS = (
     'This call is a directory reducer:',
