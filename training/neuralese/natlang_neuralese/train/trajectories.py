@@ -743,6 +743,8 @@ def main(argv=None):
                         help="explicit immutable stage-plan/launch proof for resuming a legacy direct recurrence checkpoint "
                              "that predates its embedded direct-parent binding")
     parser.add_argument("--direct-base-snapshot", default=None, help="the base snapshot the direct export binds")
+    parser.add_argument("--prompt-rendering", choices=("full", "program-header"), default=None,
+                        help="declared E2E input rendering; may transition from the exported direct stage")
     parser.add_argument("--base", default=None)
     parser.add_argument("--bank", default=None, help="system-prompt bank to initialise current pieces from")
     parser.add_argument("--steps", type=int, default=500)
@@ -894,6 +896,8 @@ def main(argv=None):
     if args.direct_artifact and not args.direct_base_snapshot:
         parser.error('--direct-artifact restores into its pinned base model: pass --direct-base-snapshot '
                      '(the export manifest base_binding model path)')
+    if args.prompt_rendering and not args.direct_artifact:
+        parser.error('--prompt-rendering is a declared transition from a direct artifact')
     if args.direct_artifact:
         args.sketch_target_weight = 0.0  # a sketch-recurrence term; the direct writer has no sketch
         args.content_transport = 'raw-identity'  # the anchor's raw-token transport; the direct writer owns content
@@ -1065,6 +1069,12 @@ def main(argv=None):
         if direct_parent is None or direct.manifest != direct_parent['manifest']:
             raise ValueError('loaded direct artifact differs from the parent manifest pinned for this recurrence run')
         engine = direct.engine
+        if args.prompt_rendering is not None:
+            previous_prompt_rendering = engine.prompt_rendering
+            engine.prompt_rendering = args.prompt_rendering
+            print(json.dumps({'event': 'direct_e2e_prompt_rendering',
+                              'from': previous_prompt_rendering,
+                              'to': engine.prompt_rendering}), flush=True)
         if direct.token_choice_projection is None:
             # Direct SFT deliberately has no TCP. The end-to-end stage enables
             # its distinct identity readout projection from its first update.
@@ -2374,7 +2384,8 @@ def main(argv=None):
                if direct_parent_migration_proof is not None else {}),
             'control_rows': backbone.control_rows.detach().cpu(),
             **({'control_head_rows': backbone.control_head_rows.detach().cpu()} if not getattr(backbone, 'tied', True) else {}),
-            'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
+            'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config(),
+                            'prompt_rendering': engine.prompt_rendering},
             'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
             **(direct_projection_state() if direct is not None else {}),
             **({'grad_spike_clip': spike.state_dict()} if spike is not None else {}),
@@ -2895,7 +2906,8 @@ def main(argv=None):
             **(direct_projection_state() if direct is not None else {}),
             **({'direct_artifact_manifest': direct.manifest} if direct is not None else {}),
             'port_config': {**source_metadata.get('port_config', {}), 'cutoff': heads.cutoff,
-                            'max_length': heads.max_length, **heads.port_config()},
+                            'max_length': heads.max_length, **heads.port_config(),
+                            'prompt_rendering': engine.prompt_rendering},
             'control_rows': backbone.control_rows.detach().cpu(),
             **({'control_head_rows': backbone.control_head_rows.detach().cpu()} if not getattr(backbone, 'tied', True) else {}), 'lora': lora_state(backbone),
             'lora_layers': adapter_layers(backbone), 'lora_rank': next(iter(ranks), 0),

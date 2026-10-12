@@ -35,6 +35,26 @@ First window: the first Mellum checkpoint after 2026-10-13 06:00 UTC (DGX traini
 
 ### Window order
 
+0. **Mellum base task-success reference (first, before the teacher starts; it gates the Mellum task bar).** The
+   untrained Mellum base (raw-token heads, native full rendering, GPU) on the 16-task cadence subset of
+   `natlang-held-task-packet-v2-20261012`, with two runs (`noise_repeats` 2). About 34 GB, so it runs while training is
+   paused and before `scripts/ensure_teacher.sh`. Until it lands, Mellum's task gate fails with "base
+   reference_successes unmeasured" (plans/neuralese/DECISIONS.md, "Held task packet v2"). Command:
+
+   ```sh
+   cd /home/werg/natlang && python3 scripts/memory_ledger.py run --unit heldv2-base-mellum --budget-gb 34 --reserve-gb 2 \
+     --priority high --no-resumable --workdir /home/werg/natlang -- sh -c 'HF_HUB_OFFLINE=1 NATLANG_REPO=/home/werg/natlang \
+     PYTHONPATH=/home/werg/natlang/training/neuralese .venv-neuralese/bin/python -m natlang_neuralese.eval.task_cadence \
+     --heads runs/neuralese-direct-mellum-20261011/heads-raw-token.pt --device cuda --prompt-rendering full \
+     --out runs/heldv2-base-mellum-full --step 0 --spec "{\"packet\":{\"path\":\"runs/natlang-held-task-packet-v2-20261012/cases.jsonl\",\"sha256\":\"177726732807b96a13739a83bb0a9745a4865196d660ff5de90a652b10955f12\"},\"cases\":[0,5,10,15,16,21,26,31,32,37,42,47,48,53,58,63],\"workers\":4,\"case_seconds\":600,\"max_model_requests\":48}" \
+     > runs/heldv2-base-mellum-full.log 2>&1'
+   ```
+
+   The result is `runs/heldv2-base-mellum-full/task-eval.jsonl`: `task_successes` is the first run, and
+   `repeat_successes`/`repeat_noise` come from the second. Set `task_eval.reference_successes` to the lower count in
+   the Mellum direct recipe (`neuralese-direct-mellum-v4.json`, overrides.stage_parameter_defaults.neuralese_direct).
+   This is a declared backbone-inherent difference in line-parity.json. The new reference reaches the live run at
+   its next handoff. Wall time is about 16 tasks x up to 600 s across 4 workers, so under 45 minutes for both runs.
 1. Specializer dry run with the real executor on nldb and pi (`--profile dgx-qwen`), then without `--dry-run` if
    the dry run accepts groups. (The 2026-10-12 plumbing run used a small model, see "Log".)
 2. Measurement batches with an existing harness: evidence (`ts-host/test/evidence-atlas.test.mjs` live), publisher

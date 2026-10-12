@@ -116,3 +116,14 @@ unmeasured and is not adopted for training; first compare about 48 live items on
 the existing and guided task text, reporting exact label accuracy, output type,
 model request count, and source-group coverage. Use a fresh, source-disjoint train
 sample for the guided run; the V25 failure remains the concrete repair reference.
+
+## E2E structured prompt rendering transition — 2026-10-12
+
+The direct LFM artifact uses `program-header` rendering for its prior training
+cohort. The shared E2E union cohort carries structured soft system pieces; its
+1,389 records all have a list-valued system content and 5–15 tool schemas. The
+E2E recipe explicitly chooses `full` rendering after restoring the exact direct
+artifact, and records the choice in the checkpoint. This input transition is
+unmeasured on the live executor. Before accepting the E2E arm as qualified,
+compare about 48 held calls with the direct and E2E renderings for tool validity,
+completion, and task result, and report held CE under the declared E2E rendering.
