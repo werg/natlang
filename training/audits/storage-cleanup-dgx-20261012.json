@@ -1,0 +1,171 @@
+{
+  "schema": "natlang.storage-cleanup/1",
+  "machine": "dgx",
+  "hostname": "mltick",
+  "date": "2026-10-12",
+  "authorization": "Owner requested freeing internal and external disk, with past-week focus; standing discarded-work deletion order.",
+  "receipts_root": "/home/werg/.local/state/natlang/storage/cleanup-20261012",
+  "internal_cleanup": {
+    "pytest": {
+      "time": 1791791945.7094364,
+      "allocated_bytes": 122382815232,
+      "paths": 35,
+      "references": {
+        "open_fds": [],
+        "live_job_references": [],
+        "inaccessible_fd_directories": 363
+      },
+      "all_absent": true
+    },
+    "orphan_blobs": {
+      "before": {
+        "calls": 806307,
+        "pinned": 72
+      },
+      "after": {
+        "calls": 806307,
+        "pinned": 72
+      },
+      "unreferenced_blobs": 349578,
+      "freed_logical_bytes": 10315941581,
+      "mechanism": "existing CallStore.collectHashes, under write lock, rechecking call and compilation references per blob"
+    },
+    "pytest_paths": [
+      "/tmp/pytest-of-werg/pytest-228",
+      "/tmp/pytest-of-werg/pytest-234",
+      "/tmp/pytest-of-werg/pytest-237",
+      "/tmp/pytest-of-werg/pytest-290",
+      "/tmp/pytest-of-werg/pytest-292",
+      "/tmp/pytest-of-werg/pytest-303",
+      "/tmp/pytest-of-werg/pytest-333",
+      "/tmp/pytest-of-werg/pytest-337",
+      "/tmp/pytest-of-werg/pytest-413",
+      "/tmp/pytest-of-werg/pytest-427",
+      "/tmp/pytest-of-werg/pytest-432",
+      "/tmp/pytest-of-werg/pytest-476",
+      "/tmp/pytest-of-werg/pytest-619",
+      "/tmp/pytest-of-werg/pytest-641",
+      "/tmp/pytest-of-werg/pytest-690",
+      "/tmp/pytest-of-werg/pytest-700",
+      "/tmp/pytest-of-werg/pytest-767",
+      "/tmp/pytest-of-werg/pytest-784",
+      "/tmp/pytest-of-werg/pytest-797",
+      "/tmp/pytest-of-werg/pytest-803",
+      "/tmp/pytest-of-werg/pytest-815",
+      "/tmp/pytest-of-werg/pytest-825",
+      "/tmp/pytest-of-werg/pytest-832",
+      "/tmp/pytest-of-werg/pytest-837",
+      "/tmp/pytest-of-werg/pytest-838",
+      "/tmp/pytest-of-werg/pytest-843",
+      "/tmp/pytest-of-werg/pytest-849",
+      "/tmp/pytest-of-werg/pytest-881",
+      "/tmp/pytest-of-werg/pytest-882",
+      "/tmp/pytest-of-werg/pytest-883",
+      "/tmp/pytest-of-werg/pytest-900",
+      "/tmp/pytest-of-werg/pytest-901",
+      "/tmp/pytest-of-werg/pytest-910",
+      "/tmp/pytest-of-werg/pytest-920",
+      "/tmp/pytest-of-werg/pytest-922"
+    ]
+  },
+  "external_cleanup": {
+    "archive": {
+      "time": 1791792353.1223178,
+      "allocated_bytes": 102449319936,
+      "paths": 39,
+      "references": {
+        "open_fds": [],
+        "live_job_references": [],
+        "inaccessible_fd_directories": 377
+      },
+      "all_absent": true
+    },
+    "additional_mirrors": {
+      "time": 1791792482.3141806,
+      "paths": 8,
+      "all_absent": true
+    },
+    "deleted_archive_paths": [
+      "/mnt/external/natlang-development-data/archive/runs/luna-ar-feedback-prefix-4962-best23936-20261009-v1",
+      "/mnt/external/natlang-development-data/archive/runs/luna-ar-native-harness-8805-final28793-20261010-v1",
+      "/mnt/external/natlang-development-data/archive/runs/luna-ar-native-harness-gateref-29466-20261010-v2",
+      "/mnt/external/natlang-development-data/archive/runs/luna-ar-native-harness-gentle-29696-20261010-v4",
+      "/mnt/external/natlang-development-data/archive/runs/luna-ar-native-harness-splitfixed-28793-20261010-v5",
+      "/mnt/external/natlang-development-data/archive/runs/maple-foundation-20261005",
+      "/mnt/external/natlang-development-data/archive/runs/maple-member-warmup-smoke-20261008",
+      "/mnt/external/natlang-development-data/archive/runs/maple-native-text-warmup-20261008-v10",
+      "/mnt/external/natlang-development-data/archive/runs/maple-qat-latent-smoke-20261009",
+      "/mnt/external/natlang-development-data/archive/runs/maple-raw-recurrence-20261008-v1",
+      "/mnt/external/natlang-development-data/archive/runs/maple-raw-recurrence-20261009-ablation-m0",
+      "/mnt/external/natlang-development-data/archive/runs/maple-raw-recurrence-20261009-v2",
+      "/mnt/external/natlang-development-data/archive/runs/maple-raw-recurrence-20261009-v3",
+      "/mnt/external/natlang-development-data/archive/runs/maple-raw-recurrence-20261009-v4",
+      "/mnt/external/natlang-development-data/archive/runs/mellum-foundation-qat-20261010",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-ar-matched-final24960-evidence-20261009-v2",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-foundation-text-4880-continuation-20261009-v1",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-gold-text-warmup-20261006-v1",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-gold-text-warmup-20261006-v2",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-gold-text-warmup-20261006-v3",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-gold-text-warmup-20261007-v4",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-gold-text-warmup-20261007-v5",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-gold-text-warmup-20261007-v6",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-gold-text-warmup-20261007-v7",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-gold-text-warmup-20261007-v8",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-gold-text-warmup-20261007-v9",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-map-v5-ar-state-evidence-20261009-v1",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-native-text-input-map-lfm-20261008-v1",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-native-text-input-map-lfm-refinement-20261008-v2",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-native-text-warmup-20261007-v10r2",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-native-text-warmup-20261007-v11",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-native-text-warmup-20261007-v12",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-native-text-warmup-20261007-v13",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-native-text-warmup-20261007-v14",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-native-text-warmup-20261007-v15",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-native-text-warmup-20261007-v21",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-native-text-warmup-20261008-v22",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-native-text-warmup-lfm-stage4-8-20261008-v4",
+      "/mnt/external/natlang-development-data/archive/runs/neuralese-v19-preservation-20261007-v1"
+    ],
+    "deleted_mirror_paths": [
+      "/mnt/external/natlang-development-data/runs/maple-nested-20261005",
+      "/mnt/external/natlang-development-data/runs/maple-preview-evaluation-20261005",
+      "/mnt/external/natlang-development-data/runs/neuralese-local-recurrence-20261005",
+      "/mnt/external/natlang-development-data/runs/neuralese-s3-pilot-20261003",
+      "/mnt/external/natlang-development-data/runs/neuralese-s3-pilot-20261003-v2",
+      "/mnt/external/natlang-development-data/runs/neuralese-s3-stream-muon-smoke-20261004",
+      "/mnt/external/natlang-development-data/runs/neuralese-s3-stream-muon-smoke-20261004-b768",
+      "/mnt/external/natlang-development-data/runs/neuralese-s3-stream-muon-smoke-20261004-cpu"
+    ],
+    "archive_manifest": {
+      "removed_rows": 67,
+      "remaining_rows": 63
+    }
+  },
+  "retained": [
+    "Active Mellum direct v4 checkpoint reservation and live code snapshot",
+    "Direct v3 warm-up parent checkpoint and training input corpora",
+    "Registered retained-model backups and canonical source/held evaluation data",
+    "All referenced CallStore blobs, calls, pins and compilations",
+    "Recent pytest scratch and active processes"
+  ],
+  "internal_inventory_gib": {
+    "natlang": 234.93,
+    "data": 141.52,
+    "natlang_runs": 155.67,
+    "natlang_retained_models_and_checkpoints": 50.39,
+    "runtime_call_store": 42.33,
+    "docker_storage": 53.83,
+    "bird_sqlite": 31.57,
+    "model_base_weights": 24.07,
+    "code_snapshots": 6.8
+  },
+  "inventory_note": "Allocated bytes, symlinks not followed; hardlinks counted once across each scan. Directory totals and the root audit were taken at different times while active training and archiving changed files. Child rows overlap parent rows.",
+  "disk_snapshot": "Filesystem         1B-blocks          Used    Available Use% Mounted on\n/dev/nvme0n1p2  982819848192  793282465792 179523956736  82% /\n/dev/sda1      3936818806784 3323493122048 573301059584  86% /mnt/external\n",
+  "followup": [
+    "Clean completed pytest scratch at completion: checkpoint fixtures accumulated 114 GiB despite ordinary cache cleanup.",
+    "Clean unreachable CallStore blobs periodically with the existing reference-checked garbage collector; preserve recorded-call/compilation references.",
+    "Check discarded mirrors as well as logical run paths when deleting a lineage.",
+    "Registered inactive model backups use 41 GiB; storage placement can be changed without discarding reusable models.",
+    "Warm-up parent was automatically archived again by existing archiver during this audit; active stage retains its checkpoint reservation."
+  ]
+}
