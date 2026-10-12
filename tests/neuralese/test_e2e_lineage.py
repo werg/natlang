@@ -34,7 +34,7 @@ def test_a_launch_recipe_binding_an_export_validates(tmp_path, line):
     assert [s['kind'] for s in recipe['stages']] == ['direct_runtime_qualification', 'raw_recurrence_training']
     e2e = recipe['stages'][1]['parameters']
     assert e2e['latent_optimizer'] == 'muonsr' and e2e['latent_step_in_backward'] is True and e2e['monitor']['gate']
-    assert ('quantization' in recipe) == (line == 'mellum')
+    assert 'quantization' in recipe  # lockstep QAT in the shared base for both lines (1f1042c3)
 
 
 def test_a_mid_lineage_snapshot_holds_its_qat_progress(tmp_path):
