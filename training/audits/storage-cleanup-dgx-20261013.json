@@ -1,0 +1,165 @@
+{
+  "schema": "natlang.storage-cleanup/1",
+  "machine": "dgx",
+  "time_utc": "2026-10-12T22:44:54.157432+00:00",
+  "authorization": "Owner returned asking for more cleanup after local disk filled again. Prior authorization includes abandoned unfinished work, obsolete older-project builds/logs/envs/downloads, and irrelevant tmp; active work excluded.",
+  "disk_before": {
+    "internal_available_GiB_approx": 28,
+    "internal_used_GiB_approx": 879,
+    "external_available_GiB_approx": 510
+  },
+  "disk_after": {
+    "internal": {
+      "size_bytes": 982819848192,
+      "used_bytes": 891154558976,
+      "available_bytes": 81651863552
+    },
+    "external": {
+      "size_bytes": 3936818806784,
+      "used_bytes": 3360091959296,
+      "available_bytes": 536702222336
+    }
+  },
+  "deleted_scratch": [
+    {
+      "category": "dead-pytest",
+      "allocated_bytes_estimate": 25629958144,
+      "paths": [
+        "/tmp/pytest-of-werg/pytest-1245",
+        "/tmp/pytest-of-werg/pytest-1263",
+        "/tmp/pytest-of-werg/pytest-1217",
+        "/tmp/pytest-of-werg/pytest-1006",
+        "/tmp/pytest-of-werg/pytest-1117",
+        "/tmp/pytest-of-werg/pytest-1112",
+        "/tmp/pytest-of-werg/pytest-1272",
+        "/tmp/pytest-of-werg/pytest-1218",
+        "/tmp/pytest-of-werg/pytest-1193",
+        "/tmp/pytest-of-werg/pytest-1171",
+        "/tmp/pytest-of-werg/pytest-1164",
+        "/tmp/pytest-of-werg/pytest-1104",
+        "/tmp/pytest-of-werg/pytest-1183",
+        "/tmp/pytest-of-werg/pytest-1281",
+        "/tmp/pytest-of-werg/pytest-1106",
+        "/tmp/pytest-of-werg/pytest-1266",
+        "/tmp/pytest-of-werg/pytest-1264",
+        "/tmp/pytest-of-werg/pytest-1185",
+        "/tmp/pytest-of-werg/pytest-1151",
+        "/tmp/pytest-of-werg/pytest-1172",
+        "/tmp/pytest-of-werg/pytest-1271"
+      ],
+      "verification": {
+        "time": 1791844314.4881785,
+        "paths": 21,
+        "allocated_bytes": 25629958144,
+        "all_absent": true
+      }
+    },
+    {
+      "category": "old-test-tmp",
+      "allocated_bytes_estimate": 556838912,
+      "paths": [
+        "/tmp/natlang-cli-mHw7jm",
+        "/tmp/natlang-test-files-8zodnU",
+        "/tmp/pi-replay-nWI8ms",
+        "/tmp/natlang-package-adaptation-In6tjS",
+        "/tmp/pi-replay-GP0pcl",
+        "/tmp/natlang-cli-zVYdmC",
+        "/tmp/natlang-package-adaptation-deJq7u",
+        "/tmp/natlang-package-adaptation-ev3RRC",
+        "/tmp/natlang-cli-dZ1lye",
+        "/tmp/pi-replay-DoxGF4",
+        "/tmp/natlang-cli-tOwofn",
+        "/tmp/natlang-test-files-25IVYZ",
+        "/tmp/natlang-cli-HoVhRx",
+        "/tmp/natlang-cli-ehoBuK",
+        "/tmp/pi-replay-Oaz8RC",
+        "/tmp/natlang-test-files-4aNTWQ",
+        "/tmp/natlang-package-adaptation-crwmf5",
+        "/tmp/natlang-cli-fGOLcx",
+        "/tmp/natlang-cli-F5T183",
+        "/tmp/natlang-test-files-oIpOch",
+        "/tmp/pi-replay-RT14Ej",
+        "/tmp/pi-replay-PBdh44",
+        "/tmp/natlang-cli-SkRx8k",
+        "/tmp/pi-replay-nEPRiv",
+        "/tmp/natlang-cli-He1Sb4",
+        "/tmp/pi-replay-adCj4d",
+        "/tmp/pi-replay-eTEmzc",
+        "/tmp/natlang-cli-B3RtWe",
+        "/tmp/natlang-package-adaptation-2TuVdM",
+        "/tmp/pi-replay-uMmSt4",
+        "/tmp/natlang-test-files-HygQn3",
+        "/tmp/natlang-cli-LipJ7A",
+        "/tmp/pi-replay-1XfFmg",
+        "/tmp/natlang-cli-U4Qum7",
+        "/tmp/natlang-cli-kvWqNs",
+        "/tmp/natlang-test-files-57Eppq",
+        "/tmp/pi-replay-D840Ba",
+        "/tmp/natlang-cli-OvLq7k",
+        "/tmp/natlang-cli-lDgeNb",
+        "/tmp/natlang-test-files-ljCuP9",
+        "/tmp/natlang-cli-B6fV3m"
+      ],
+      "verification": {
+        "paths": 41,
+        "allocated_bytes": 556838912,
+        "all_absent": true
+      }
+    }
+  ],
+  "deleted_retired_docker": {
+    "container": "natlang-qwen36-nvfp4-server",
+    "image_id": "666307b207f9",
+    "unique_image_bytes_estimate": 24620000000,
+    "reason": "Retired Qwen NVFP4 model server exited five days ago. No active/queued ledger references; obsolete model-serving build under owner-authorized old-project build cleanup.",
+    "verified_container_and_image_absent": true
+  },
+  "orphan_blob_cleanup": {
+    "before": {
+      "calls": 1062760,
+      "pinned": 72
+    },
+    "after": {
+      "calls": 1062761,
+      "pinned": 72
+    },
+    "unreferenced_blobs": 103589,
+    "freed_logical_bytes": 825434501,
+    "mechanism": "existing CallStore.collectHashes, under write lock, rechecking call and compilation references per blob"
+  },
+  "orphan_exact_paths": "/home/werg/.local/state/natlang/storage/cleanup-20261013/delete-orphan-blobs.paths.gz",
+  "physical_reclaimed_notes": "Scratch allocated totals and Docker unique image size are estimates. CallStore orphan receipt reports logical bytes; snapshot hardlinks can retain those bytes physically. Concurrent jobs alter df independently.",
+  "current_large_allocations": {
+    "active_mellum_v4": {
+      "checkpoint_GiB": 43.65,
+      "best_checkpoint_GiB": 43.65,
+      "checkpoint_write_reserve_GiB": 45.83,
+      "decision": "Preserve current latest/best, write reserve, active lineage and required parents."
+    },
+    "swe_rebench_bulk_GiB": 50.65,
+    "e2e_source_data_GiB": 27.2,
+    "callstore_snapshot": {
+      "apparent_GiB": 50.13,
+      "decision": "Preserved for assigned real-model E2E exporter; immutable blob files already hardlink to live store, so its nominal size is mostly shared, not another50GiB allocation. SQLite database independent."
+    }
+  },
+  "preserved": [
+    "running/queued jobs and their resources",
+    "active Mellum latest/best/reservation and lineage parents",
+    "reusable training/source data and held/protected evaluation data",
+    "running/queued Docker images/containers",
+    "current environments and live service state"
+  ],
+  "active_placement_work": "Existing e2edata-move-external.service remains owned by its execution agent. No competing external-disk transfer launched by cleanup.",
+  "mechanisms": {
+    "scratch": "Dead lock PID, no live FD/map/cwd, no recent writes. Generic test scratch additionally checked against process commands. Exact paths written to scripts before deletion.",
+    "docker": "Explicit retired container and image IDs, checked against active/queued ledger references before removal.",
+    "callstore": "Existing CallStore.collectHashes under write transactions; rechecks every call/compilation reference, preserves all call records and72pins."
+  },
+  "receipts_directory": "/home/werg/.local/state/natlang/storage/cleanup-20261013",
+  "validation": "Deletions verified by absence; orphan collector receipt confirms calls retained (one concurrent new record),72pins unchanged. All probes/actions ran in low-priority memory-ledger units. One too-small detail inventory was OOM-killed within its own cgroup; retried successfully with1GiB. Root system inventory readonly.",
+  "check_main": {
+    "unit": "storage-audit-quick-20261013",
+    "result": "16 ratchets passed and TypeScript typecheck passed"
+  }
+}
