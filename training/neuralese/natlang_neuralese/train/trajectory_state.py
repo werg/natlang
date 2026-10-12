@@ -10,6 +10,7 @@ from pathlib import Path
 
 import torch
 
+from ..common.io_quiet import io_quiet
 from .optim import PortMuonAdamW
 
 
@@ -128,6 +129,12 @@ def record_checkpoint_write(path, nbytes, seconds):
 
 
 def atomic_checkpoint(path, state):
+    """Write ``state`` atomically; data jobs pause (io-quiet marker) while the bytes are going out."""
+    with io_quiet(f'checkpoint write {Path(path).name}'):
+        _atomic_checkpoint(path, state)
+
+
+def _atomic_checkpoint(path, state):
     path = Path(path)
     pending = path.with_suffix('.pending')
     started = time.monotonic()
