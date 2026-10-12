@@ -203,3 +203,29 @@ Keep `NATLANG_MAPLE_COMPILE=0` (no measured gain) and leave `NATLANG_MOE_FP8` un
   - Readout 1.3 s.
   - NeuraleseProjection 0.9 s. It recomputes the span logits that the readout already computed; sharing them would
     save about half.
+
+## Round 3 (2026-10-12, after FP8 experts)
+
+**FP8 baseline.** v4 updates 112–114 run on 80b27a10 at ~21–25 s/update. The figures below are the re-analysis with
+the trace-based profiler (aace0136): `runs/training-speed-20261012/v4-112-114-retrace.json`. Per update:
+
+| Component | Seconds |
+|---|---|
+| MoE experts | 6.9 (fwd 1.4, recompute 1.4, bwd 4.1) |
+| Attention projections and rope | 4.5 |
+| Newton-Schulz | 4.0 |
+| SDPA | 2.6 |
+| Other MuonSR | 1.4 |
+| Norms | 1.0 |
+| Readout + projection | 0.7 |
+| Routing | 0.4 |
+| GPU idle | 0.26 |
+
+The earlier "AccumulateGrad" bucket was the in-backward MuonSR step. Two causes hid it: kernels were attached to the
+outermost aten op, and Triton launches are not aten ops. Attribution now goes by launch time.
+
+| Item | Result | Decision |
+|---|---|---|
+| Fused readout + shared mixture (34fa536f) | Bench at 32k supervised positions: readout GPU 4.1 → 2.7 s/update. Fixed-batch loss 15.28664 in both. On v4, whose spans are ~1–3k positions, ≈ −0.25 s/update. | adopted |
+| Fused q/k norm + rope + layout (e08b9399) | Forward bit-identical. Bench at 2 layers: attention + norm GPU 0.78 → 0.48 s (−38%), ≈ −2 s/update projected for v4. Fixed-batch loss 15.22515 in both. | adopted |
+| Newton-Schulz Gram form (Q, R polynomial in G = X0 X0ᵀ) | On real layer-0 gradients (`ns_gram.py`, `grads-layer0.pt`): error vs the FP64 iteration 0.06–0.15 (Gram, BF16 or FP32 small GEMMs) against 0.010–0.031 (current); q_proj singular values reach 3.36 against 1.30. Not faster: gate_up 226 vs 208 ms, q 15.3 vs 14.1 ms. The amplification through Q needs restarts, which eat the saving. | dropped |
