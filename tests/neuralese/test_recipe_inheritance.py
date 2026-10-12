@@ -270,7 +270,9 @@ def test_harness_bench_cohort_repinned_to_s1_placed_records_v4():
             assert sum(twin['tokens'].values()) == sum(before['twins'][name]['tokens'].values())
             assert registry[before['twins'][name]['corpus']]['superseded_by'] == twin['corpus']
         assert registry[before['source']['corpus']]['superseded_by'] == v4_records
-        assert registry[v4_records]['training_admission'] is False
+        # Held-data recovery admitted the native records (2b9bba0e); this does
+        # not qualify the recipe's recurrence stage, checked separately above.
+        assert registry[v4_records]['training_admission'] is True
     lfm, mellum = load_recipe(RECIPES / 'raw-recurrence-v5.json'), load_recipe(RECIPES / 'raw-recurrence-mellum-v4.json')
     assert lfm['cohorts'] == mellum['cohorts'] and lfm['input_bindings'] == mellum['input_bindings']
     # The Mellum line's differences from the shared recipe are mellum-v3's, unchanged.

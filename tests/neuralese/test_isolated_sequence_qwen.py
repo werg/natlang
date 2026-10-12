@@ -106,10 +106,19 @@ def test_left_padding_and_history_independent_of_replacements(backbone):
     with torch.no_grad():
         a = backbone.isolated_sequence(fixed, torch.randn(2, 5, dim), cache, cutoff=2)
         b = backbone.isolated_sequence(fixed, torch.randn(2, 5, dim), cache, cutoff=2)
-        torch.testing.assert_close(a["history_shallow"], b["history_shallow"], atol=0, rtol=0)
+        # Routed MoE batches can change GEMM geometry when replacements change,
+        # producing FP32 roundoff in otherwise independent history rows.
+        eps = torch.finfo(a["history_shallow"].dtype).eps
+        torch.testing.assert_close(a["history_shallow"], b["history_shallow"], atol=eps, rtol=eps)
         assert not torch.allclose(a["final"], b["final"])
         _, ordinary = backbone.run_layers(fixed, range(backbone.num_layers), cache)
         _compare_caches(a["cache"], ordinary)
         replacements = torch.randn(2, 5, dim)
         _compare_outputs(backbone.isolated_sequence(fixed, replacements, cache, cutoff=2),
                          _literal_position_branches(backbone, fixed, replacements, cache, 2))
+    # Preserve exact mathematical isolation rather than requiring bitwise GEMM
+    # equality: no gradient from the history may reach replacement positions.
+    replacements.requires_grad_(True)
+    history = backbone.isolated_sequence(fixed, replacements, cache, cutoff=2)["history_shallow"]
+    gradient, = torch.autograd.grad(history.sum(), replacements, allow_unused=True)
+    assert gradient is None or not gradient.any()

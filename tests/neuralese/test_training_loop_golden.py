@@ -113,8 +113,24 @@ def test_text_warmup_matches_the_golden_run_through_a_resume(tmp_path, monkeypat
     assert summary.keys() == golden.keys()
     for label in golden:
         got, want = summary[label], golden[label]
-        for key in ('steps_logged', 'phases', 'sequence_passes', 'checkpoint_step', 'schedule', 'updates'):
+        for key in ('steps_logged', 'phases', 'sequence_passes', 'checkpoint_step', 'updates'):
             assert got[key] == want[key], (label, key)
+        # Schedule decisions remain exact; measured floating-point errors in
+        # its history have the same cross-stack tolerance as the loss below.
+        def compare_schedule(actual, expected):
+            if isinstance(expected, dict):
+                assert actual.keys() == expected.keys()
+                for name in expected:
+                    compare_schedule(actual[name], expected[name])
+            elif isinstance(expected, list):
+                assert len(actual) == len(expected)
+                for a, e in zip(actual, expected):
+                    compare_schedule(a, e)
+            elif isinstance(expected, float) and not exact:
+                assert actual == pytest.approx(expected, rel=1e-5, abs=1e-6)
+            else:
+                assert actual == expected
+        compare_schedule(got['schedule'], want['schedule'])
         assert got['losses'] == pytest.approx(want['losses'], rel=1e-5)
         for key in ('student_parameters', 'heads', 'optimizer', 'rng', 'export'):
             assert got[key]['elements'] == want[key]['elements'], (label, key)

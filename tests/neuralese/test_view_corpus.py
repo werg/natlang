@@ -129,6 +129,10 @@ def _git(repo: Path, *args):
 
 @pytest.fixture()
 def fixtures(tmp_path, monkeypatch):
+    # These synthetic repositories have no published cross-corpus placement.
+    # Exercise fallback split placement without depending on machine data mirrors.
+    from natlang_neuralese.harness_bench import records as harness_records
+    monkeypatch.setattr(harness_records, "PLACED_BY", [])
     raw = tmp_path / "raw"
     hf = tmp_path / "hf"
     cnn = hf / "datasets--cnn_dailymail/snapshots/rev1/3.0.0"

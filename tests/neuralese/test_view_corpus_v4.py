@@ -80,7 +80,9 @@ def test_v4_preset_keeps_v3_caps():
 def test_registered_view_v4_supersedes_v3_and_is_pinned_by_the_recipe():
     entries = {e["id"]: e for e in json.loads((ROOT / "training/neuralese_corpora.json").read_text())["corpora"]}
     v4, v3 = entries["view-ask-20261010-v4"], entries["view-ask-20261010-v3"]
-    assert v4["training_admission"] is False and v4["supersedes"] == "view-ask-20261010-v3"
+    # Native record recovery (2b9bba0e) does not qualify the recurrence
+    # recipe, whose independent admission assertion remains below.
+    assert v4["training_admission"] is True and v4["supersedes"] == "view-ask-20261010-v3"
     assert v3["admission"].startswith("superseded-by-view-ask-20261010-v4")
     held = " ".join(str(v4.get(k, "")) for k in ("admission", "training_admission_reason")).lower()
     assert "licen" not in held or "facts only" in held

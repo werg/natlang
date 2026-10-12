@@ -333,8 +333,10 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
     repeated["source_ref"]["provider_expanded_read_contexts"][0]["context_occurrences"] = 2
     repeated["neuralese_conversion"]["external_context_inputs"][0]["context_occurrences"] = 2
     repeated["messages"].append({"role": "assistant", "content": None, "tool_calls": [{"id": "scope_0",
-        "type": "function", "function": {"name": "scope", "arguments": json.dumps([
-            {"type": "neuralese", "id": block_id}])}}]})
+        "type": "function", "function": {"name": "scope", "arguments": [
+            {"type": "text", "text": '["'},
+            {"type": "neuralese", "id": block_id},
+            {"type": "text", "text": '"]'}]}}]})
     repeated_rows, _, repeated_omissions, repeated_provenance = gold_text_rows(
         [repeated, anchor], [], tokenizer=_Tokenizer())
     assert not repeated_omissions

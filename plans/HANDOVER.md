@@ -2,6 +2,16 @@
 
 Read `python3 scripts/coord.py inbox --ack` and `python3 scripts/coord.py status` first. Coordination status is the authority for live jobs. Keep this document focused on current work; discarded run history is removed under the standing storage order.
 
+## Current Pop monitoring update (2026-10-12)
+
+- V18 full r2 epoch is beyond update4,300/19,668. BF16 remains active, with FP32 buffers and standard RMSNorm. GPU95% /7,635MiB at the latest check. Last held measurement3730: CE3.10230 versus phase baseline3.69151, response KL0.21964 warning; runtime/transport remain unqualified.
+- Lower-precision speed policy: avoid checkpointing when measured memory permits. Updates1611–3004 ran92.1% of sequential steps without checkpointing. Sparse exact-bin q80 missed the tail at3005; shared direct-SFT calibration now uses q95 plus existing5% margin (`e9b3edc1`). Exact optimizer/RNG resume from3000 completed3005 checkpointed. Current launcher recipe is `luna-neuralese-direct-lfm-base-20261012-v18-union-r2-epoch1-bf16-auto-resume-step3000-q95.json`; no FP32 parameter fallback or whole-workload FP8 change.
+- Five Luna V5 lanes are live; V6 root-approved plan SHA `695a1dccc56765676a6f3597f7fe0b7985d4d7964194f7eade4a1cf138eb854f` is waiting for exact per-lane V5 predecessor exits and terminal accounting. Global maximum five. V4 completed125 programs /500 decisions:448 source-label matches,52 disagreements independently classified31 clear model errors /14 unresolved /7 likely source-annotation errors. These classifications are review, not relabeling or admission.
+- Twenty additional source-exact V24 child SFT targets are registered and synced as `luna-v24-clinc-intent-reviewed-child-actions-20261012-v2-exact20` (`3a194666`), independently visible and actual-call-site bound. Native SFT only; no writer, recurrence, whole-parent or runtime admission. Historical assistant tool arguments are valid visible context; current target is excluded.
+- General CPU Python suite:825 passed /2 skipped. Fixed host-memory test isolation, interrupted supervisor mock and real inventory crash on native string task descriptions (`ca94c162`, `4edaded5`). Broad neuralese CPU recheck:922 passed /307 skipped (GPU and model-dependent fixtures included among skips); no full-check/runtime certificate. Test-only fixes retain exact schedule decisions and gradient isolation while tolerating measured cross-stack FP32 rounding, use valid JSON-fragment arguments and synthetic placement fixtures, and reflect explicit native-record recovery without qualifying recurrence. CPU-only pinned container must include node/docker binaries for mocked subprocess tests; do not treat absent harness binaries as product regressions.
+
+- Storage: removed20 discarded October5 recurrence output directories /14,547,466,597 bytes; reusable inputs and stress cohorts retained. Root filesystem now39GiB free. No active lineage or registered training input was removed.
+
 ## Shared code and next work
 
 - Use the canonical checkout on each machine and synchronize through `origin/main`. Pop owns Pop jobs; DGX owns DGX jobs.
