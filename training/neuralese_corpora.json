@@ -47600,6 +47600,304 @@
         }
       },
       "notes": ""
+    },
+    {
+      "id": "natlang-native-turns-4962-wholetraj-render-20261012-v1",
+      "owner": "dgx",
+      "path": "runs/natlang-native-turns-4962-wholetraj-render-20261012-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "08249f7ffe3d3041ea4013b6bba397fee6d8d788428d320f87dc69ac69934dd3",
+            "documents": 28,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 27042,
+                "documents": 28,
+                "opening_tokens": 19082,
+                "supervised_tokens": 7960,
+                "tokens": 73657,
+                "tool_tokens": 9063
+              }
+            },
+            "max_document_tokens": 5400,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "a296dab589f63ef66d7baf7690de5ab7f573a10e57044dc5e50f95018955e4de",
+            "documents": 28,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 27382,
+                "documents": 28,
+                "opening_tokens": 18268,
+                "supervised_tokens": 9114,
+                "tokens": 73639,
+                "tool_tokens": 9362
+              }
+            },
+            "max_document_tokens": 5265,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "approved_through_include_set": 483,
+        "not_in_include_set": 196,
+        "omitted:duplicate_source_row_id": 6250,
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 5733,
+        "selected:test": 2035,
+        "selected:train": 3698,
+        "source_rows": 12179
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 0,
+        "lfm25/whole-trajectory/native_chat_render_failed": 14,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 0,
+        "mellum21/whole-trajectory/native_chat_render_failed": 14
+      },
+      "program_header_parity": {},
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "4686a8f232a2f2ea13d370c105bf63e69b4e9e35ce074e7de5ff7243250d13fb",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "2bb383731743309117be7b5a92534ce9661fc38635dfc9fd5001e0412e6406ce",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "16f5941d4a6ddc876ace120949281ca25aebee5c40581d079a6862490ccfac9c",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/natlang-native-turns-4962-wholetraj-render-20261012-v1/receipt.json",
+        "sources": {
+          "runs/luna-authored-root-microgrid-multilambda-20261009-v1/evidence/compact-31-native-text-proposal-v1/inputs/delta-native-records.jsonl": {
+            "bytes": 4069533,
+            "sha256": "9d79433f7c8cbba0f9c35cd5cb8e9214804311662cb12d3cd87a11e68c49f1cb"
+          },
+          "runs/luna-authored-root-microgrid-multilambda-20261009-v1/evidence/compact-31-native-text-proposal-v1/native-proposal-v2/delta-native-records.jsonl": {
+            "bytes": 4076012,
+            "sha256": "ebd4d0b92bef47ef7083973b1435b019dd43d18689279ec9db9a2ef3f991a27c"
+          },
+          "runs/luna-authored-root-microgrid-multilambda-20261009-v1/evidence/compact-31-native-text-proposal-v1/root-independent-composition-review-v1/native/delta-native-records.jsonl": {
+            "bytes": 4076012,
+            "sha256": "ebd4d0b92bef47ef7083973b1435b019dd43d18689279ec9db9a2ef3f991a27c"
+          },
+          "runs/luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/derived-native-v2/delta-derived-native-records-v2.jsonl": {
+            "bytes": 424590,
+            "sha256": "31958af4b259518bd5e797a9ec042c9f1c8e1fceb51a81315ecac68dc4396971"
+          },
+          "runs/luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/native-proposal-v1/delta-native-records.jsonl": {
+            "bytes": 425670,
+            "sha256": "e365720e61375e54faf61c5a036084c993bb69b13a11b425d1979cede27a7eb2"
+          },
+          "runs/luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/native-replay/delta-native-records.jsonl": {
+            "bytes": 425670,
+            "sha256": "e365720e61375e54faf61c5a036084c993bb69b13a11b425d1979cede27a7eb2"
+          },
+          "runs/luna-authored-root-remaining-four-multilambda-20261009-v1/evidence/compact-62-luna-1-step-native-text-proposal-v1/compact-112-expanded-v1/inputs/bridge-emergency-49-delta-records.jsonl": {
+            "bytes": 6470921,
+            "sha256": "69678dce1eaaa89aa9bb697f2a8b744f45b362aff904ee589eeebd64db440750"
+          },
+          "runs/luna-authored-root-remaining-four-multilambda-20261009-v1/evidence/compact-62-luna-1-step-native-text-proposal-v1/compact-112-expanded-v1/inputs/delta-native-records.jsonl": {
+            "bytes": 14696623,
+            "sha256": "88d2538d51c91af65f519942fb0af3763afc01468eaea187b39631ec53747b3b"
+          },
+          "runs/luna-authored-root-remaining-four-multilambda-20261009-v1/evidence/compact-62-luna-1-step-native-text-proposal-v1/compact-112-expanded-v1/native-approved-overlay-proposal-v1/delta-native-records.jsonl": {
+            "bytes": 14720031,
+            "sha256": "e6a38764bb1dc47bf0599fb5464e446379fdb4172627c23cccac085088a2fb98"
+          },
+          "runs/luna-authored-root-remaining-four-multilambda-20261009-v1/evidence/compact-62-luna-1-step-native-text-proposal-v1/compact-112-expanded-v1/native-proposal-v1/delta-native-records.jsonl": {
+            "bytes": 14720031,
+            "sha256": "e6a38764bb1dc47bf0599fb5464e446379fdb4172627c23cccac085088a2fb98"
+          },
+          "runs/luna-authored-root-remaining-four-multilambda-20261009-v1/evidence/compact-62-luna-1-step-native-text-proposal-v1/compact-112-expanded-v1/root-independent-targetbound-replay-v1/native-v2/delta-native-records.jsonl": {
+            "bytes": 14720031,
+            "sha256": "e6a38764bb1dc47bf0599fb5464e446379fdb4172627c23cccac085088a2fb98"
+          },
+          "runs/luna-authored-root-remaining-four-multilambda-20261009-v1/evidence/compact-62-luna-1-step-native-text-proposal-v1/compact-112-expanded-v1/targetbound-tokenizer-audit-v2/hydrated-delta-records.jsonl": {
+            "bytes": 14894951,
+            "sha256": "1072542094bff6ff0a75436476cf1f2d3433d47aaedc46c3cadc4f437145ac46"
+          },
+          "runs/luna-authored-root-remaining-four-multilambda-20261009-v1/evidence/compact-62-luna-1-step-native-text-proposal-v1/inputs/delta-native-records.jsonl": {
+            "bytes": 8225702,
+            "sha256": "e7451586d8a7e2319d96d710f7a8ee305de7e39b16d162ae9f64fc3f38a6e0d9"
+          },
+          "runs/luna-authored-root-remaining-four-multilambda-20261009-v1/evidence/compact-62-luna-1-step-native-text-proposal-v1/inputs/luna-62-delta-records.jsonl": {
+            "bytes": 8079252,
+            "sha256": "414b71e00b182ddc609001448e12f4840f6b3f884ec5e17d76aada42348ad776"
+          },
+          "runs/luna-authored-root-remaining-four-multilambda-20261009-v1/evidence/compact-62-luna-1-step-native-text-proposal-v1/inputs/step-1-delta-records.jsonl": {
+            "bytes": 146450,
+            "sha256": "326b7903e721cb31f7c97ae2168ac4d8f9425cef5dac31e6399f36ca61dbc7af"
+          },
+          "runs/luna-authored-root-remaining-four-multilambda-20261009-v1/evidence/compact-62-luna-1-step-native-text-proposal-v1/native-proposal-v1/delta-native-records.jsonl": {
+            "bytes": 8238869,
+            "sha256": "320237f6c05a60d319a73417f9537028709244b113d08abe8317e70ffc460c57"
+          },
+          "runs/luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/native-approved-overlay-v1/delta-native-records.jsonl": {
+            "bytes": 7243203,
+            "sha256": "679defdc3597bdb9d2bc4908b0af1b112bccfaf30bd9b76aab452ab7494904c0"
+          },
+          "runs/luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/selected-50-current-held.jsonl": {
+            "bytes": 7232753,
+            "sha256": "e6d4e5842747408297d2a4aceb967b805ade08e871fe6850370bfe55dc6294ea"
+          },
+          "runs/luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/selected-50-held-native-actions.jsonl": {
+            "bytes": 7193355,
+            "sha256": "84e3d7d8402716924be54155deac8aac3ec8fc0cc974484fd450f5de98e82707"
+          },
+          "runs/luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/eleven-readout-native-text-proposal-v1/native-compact-proposal-v3/delta-native-records.jsonl": {
+            "bytes": 1329420,
+            "sha256": "1cef78e039ca90e2dee1a2cd7c56cfaf524094a44038d4db467c71c96e8571f0"
+          },
+          "runs/luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/delta-derived-native-records-v2.jsonl": {
+            "bytes": 1587676,
+            "sha256": "70b9d77d811a6b05fea4391bdb30ebe6cf17d205b425dfb63173d0dae21f5085"
+          },
+          "runs/luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/native-compact-proposal-v2/delta-native-records.jsonl": {
+            "bytes": 1590907,
+            "sha256": "5df984e49dc5da13a8a466d21fa86e42d6044f760530be048c17f2572af2d179"
+          },
+          "runs/luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-replacement-records-v2.jsonl": {
+            "bytes": 132073,
+            "sha256": "2b70c7be18f2e2adea707e17d04c4e0320a0b9f1e3a18e7a4ffd0f6f9564588d"
+          },
+          "runs/luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/inputs/delta-native-records.jsonl": {
+            "bytes": 1535336,
+            "sha256": "cc8278c81ac6414fe51c6c10d0c86dc5bdf0696351e09dc67ba0644e494ffaea"
+          },
+          "runs/luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/native-compact-proposal-v1/delta-native-records.jsonl": {
+            "bytes": 1538009,
+            "sha256": "f7dfb8c0893f247ee03a79be23484d16a66643e85f8460f5066fc81c59f5578f"
+          },
+          "runs/luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/inputs/delta-native-records.jsonl": {
+            "bytes": 1324963,
+            "sha256": "3b57efaddab0f4f329647f136ef2ece1994a66b531459df351c2f1dce717360d"
+          },
+          "runs/luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/native-compact-proposal-v1/delta-native-records.jsonl": {
+            "bytes": 1327284,
+            "sha256": "b151c7086287e3bc1861b3ee636577a3063137086d8ae936ed1db3024f51d2f9"
+          },
+          "runs/luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/native-approved-overlay-v1/delta-native-records.jsonl": {
+            "bytes": 3342784,
+            "sha256": "db75232a793b91f579b4cfac17c487367a7e52cd6f6bd4c0d1fb0f54937c2fb6"
+          },
+          "runs/luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/selected-22-held-native-actions.jsonl": {
+            "bytes": 3337508,
+            "sha256": "2a8567c9bdafde4fe3e07dfa3969f3c48fc24b0b30664157c6bafaf36d446d66"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v4/native-proposal/delta-native-records.jsonl": {
+            "bytes": 1201695,
+            "sha256": "4c069161ec9e2ff690b17deb6fb2f94f168c9700f8b56e25e4c8f7824d861a42"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/inputs-v3/delta-native-records-v1.jsonl": {
+            "bytes": 1358488,
+            "sha256": "c4d3f92f185ae292e4ca1063d5e7fc757215f23c2efb8d68a694e40baa5f40d0"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/native-admitted-view-v2/delta-native-records.jsonl": {
+            "bytes": 1362156,
+            "sha256": "dd463c6176020ad782c124443684531c60893947cca336efedf7ab389f6994c8"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/selected-native-records.jsonl": {
+            "bytes": 286974,
+            "sha256": "a3c063de95f8b5ee6e47918ba06a151f6a34aff5d2be34f0c23ba06c5b20582e"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/native-compact-proposal-v2/delta-native-records.jsonl": {
+            "bytes": 787048,
+            "sha256": "85c441f66d130591705a94e9fde8dd11a07ce429af096c413f22daeec2b80c5e"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-inputs-v1/delta-native-records.jsonl": {
+            "bytes": 99432,
+            "sha256": "58ed06419b55455082e54c963d7c1a878f6d111d59fd660cfb6039d1ee3b84d2"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-inputs-v1/delta-native-records.jsonl": {
+            "bytes": 296519,
+            "sha256": "b7dafc4f3687a7033f651a34780983fc22094404711c5a92d3e681dd2a1cd2f1"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-inputs-v1/delta-native-records.jsonl": {
+            "bytes": 196262,
+            "sha256": "b905959d21a588925b53429bfac1c919e3abf4cbcf1e623ad0bf0f5be834b341"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-inputs-v1/delta-native-records.jsonl": {
+            "bytes": 194835,
+            "sha256": "b544d4465296a66d7a4947e8bcae12f6c53f148cf16b7edd43bd6b75495847ca"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/fresh00-02-compact-5-delta-v1/native-compact-proposal-v1/delta-native-records.jsonl": {
+            "bytes": 485273,
+            "sha256": "8dfee4e7b12aaf193712c1d134d813659c490e17703252010831527a2313511c"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/native-proposal/delta-native-records.jsonl": {
+            "bytes": 289490,
+            "sha256": "bd75ac5b8d54703acf1476e411c340bf10202cb7834a7876c371be0ad05bfc13"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/inputs-v2/delta-native-records-held.jsonl": {
+            "bytes": 677429,
+            "sha256": "8450b0d37c62d3c47c82dff70fdc445951686f81fa2ccc496ed85c728348ce26"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/native-admission-overlay-v1/delta-native-records.jsonl": {
+            "bytes": 679325,
+            "sha256": "71734f1bd858add58fc19e7eb11021c1a661ea4a7b6908e27ee21a676abd009f"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-inputs-v1/case01-three/delta-native-records.jsonl": {
+            "bytes": 293601,
+            "sha256": "99f0aad7b6d75b6911383f5084c62b464661df33fb3208e74782d04e0d52af21"
+          },
+          "runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-inputs-v1/simple-four/delta-native-records.jsonl": {
+            "bytes": 383828,
+            "sha256": "914ca9544c970835fc8a6f51db2efbcbe8aa0fd255653b9a44eb6c8dd3d831ef"
+          },
+          "runs/step5-preview-free-clinic-row0-corrected-20261009-v1/evidence/approved-17-action-delta-v1/delta-native-records-v1.jsonl": {
+            "bytes": 2426241,
+            "sha256": "28f326c702577c066caa761c6bdea6bee57483c521673212097f1eb8832482ec"
+          },
+          "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/native-records.jsonl": {
+            "bytes": 340218429,
+            "sha256": "eeb6510955af3538f778fc970c5e6c2c3ac52c7c98f05a0babda786fcd2bbe12"
+          },
+          "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/native-records.jsonl": {
+            "bytes": 341868507,
+            "sha256": "badcefe122c2ddf8adb2298c185e2f226233e39d0e261f081280587631aaeda8"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": ""
     }
   ],
   "coverage_backlog": [
