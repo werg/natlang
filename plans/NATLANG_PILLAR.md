@@ -85,3 +85,15 @@ First window: the first Mellum checkpoint after 2026-10-13 06:00 UTC (DGX traini
   12 GB, `runs/specializer-dryrun-20261012/`): within 12 GB beside Mellum only a small executor fits
   (Qwen3.5-0.8B on :8084, profile `dgx-small`), so this run checks the plumbing (per-group writers, the
   `contextWindow` fix c5fc0302) and does not judge case quality; the real dry run is window item 1.
+- 2026-10-12/13: plumbing dry run completed (attempt 10, `runs/specializer-dryrun-20261012/`, unit
+  `natlang-specializer-dryrun`, about 16 GB with the executor). Earlier attempts failed in the run script (vLLM
+  entrypoint, HF blob links into the archive disk, page cache, KV share, memory-profiling race; one preemption by a
+  high-priority E2E unit). Findings:
+  - nldb `translate` (named explicitly: its stored decline makes the target policy skip it silently): the per-group
+    writer path ran end to end; 0 of 1 groups got a case because `chooseCondition` exhausted its action budget on the
+    0.8B executor (expected for a model that small; not a plumbing fault).
+  - pi `generation`: the writer request failed with HTTP 400, prompt at least 25,601 tokens plus 7,168 requested
+    output tokens = 32,769 against the server's 32,768 window. The `contextWindow` path (c5fc0302) reaches the
+    request, but the output-token sizing is one token over the window (prompt estimate or off-by-one). **Bug to fix
+    before the teacher-window run**; ts-host model request sizing (`openai-compatible.ts` `serverContextWindow`
+    consumer). The other pi definitions have no calls from a model that spent tokens.
