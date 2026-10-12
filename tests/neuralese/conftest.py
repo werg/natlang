@@ -14,6 +14,22 @@ torch = pytest.importorskip("torch")
 pytest.importorskip("transformers")
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "gpu_heavy: needs several GB of CUDA memory; scripts/check-main.sh runs these in "
+                            "a pytest process of their own after the rest, so their peak is not added to the suite's")
+
+
+@pytest.fixture(autouse=True)
+def _release_cuda_cache():
+    """Return a test's cached CUDA blocks after it: on unified memory (the DGX) the caching allocator otherwise keeps
+    the largest test's peak for the rest of the session, which the full check's memory claim pays for."""
+    yield
+    if torch.cuda.is_initialized() and torch.cuda.memory_reserved() > 2**30:
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+
+
 @pytest.fixture(scope="session")
 def loaded():
     from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone, load_backbone, resolve_base

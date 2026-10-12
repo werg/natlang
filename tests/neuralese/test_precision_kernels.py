@@ -61,6 +61,7 @@ def test_q4_scales_reproduce_the_reference_reduction():
     assert torch.equal(ternary.q4_scales(w.float(), 32), reference)
 
 
+@pytest.mark.gpu_heavy  # ~8.6 GB of CUDA memory
 @pytest.mark.skipif(not (MELLUM / 'config.json').is_file(), reason='Mellum checkpoint not present')
 def test_fused_ramp_is_bit_identical_on_real_mellum_layers():
     from natlang_neuralese.maple.model import load_maple

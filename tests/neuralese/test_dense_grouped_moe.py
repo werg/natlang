@@ -8,8 +8,9 @@ import torch
 from natlang_neuralese.maple import ternary
 from natlang_neuralese.maple.model import DENSE_MOE, MapleConfig, SparseMoE
 
-pytestmark = pytest.mark.skipif(not (torch.cuda.is_available() and hasattr(torch, '_grouped_mm')),
-                                reason='grouped GEMM needs CUDA and torch._grouped_mm')
+pytestmark = [pytest.mark.skipif(not (torch.cuda.is_available() and hasattr(torch, '_grouped_mm')),
+                                 reason='grouped GEMM needs CUDA and torch._grouped_mm'),
+              pytest.mark.gpu_heavy]  # up to ~6.4 GB of CUDA memory
 
 
 def layer(experts, hidden, ff, seed=0):

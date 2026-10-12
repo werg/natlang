@@ -8,8 +8,8 @@
 # Every step runs even after a failure; the summary lists each step and the exit code is 1 if any failed.
 # On the DGX the full run loads models and node workers, so run it under the memory ledger, with the Neuralese TS tests'
 # Python server on the GPU (on the CPU beside training it holds 10-16 GB and does not finish; on the GPU the whole run
-# peaks at ~10.4 GB, 2026-10-12):
-#   python3 scripts/memory_ledger.py run --unit natlang-check-main-$(date +%H%M%S) --budget-gb 12 --reserve-gb 2 \
+# peaks at ~12.2 GB, in python-neuralese-gpu, 2026-10-12):
+#   python3 scripts/memory_ledger.py run --unit natlang-check-main-$(date +%H%M%S) --budget-gb 13 --reserve-gb 2 \
 #     --oom-policy continue --class experiment --wait 600 --workdir "$PWD" -- \
 #     sh -c 'NATLANG_NEURALESE_DEVICE=cuda scripts/check-main.sh > /tmp/check-main.log 2>&1; echo exit=$? >> /tmp/check-main.log'
 # Environment: NATLANG_PYTHON overrides discovery; otherwise prefer .venv-neuralese, then .venv
@@ -95,7 +95,10 @@ if [ $python = 1 ]; then
   else
     # Two processes: one pytest over everything grows past 18 GB.
     step python-tests env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider tests --ignore=tests/neuralese
-    step python-neuralese env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider tests/neuralese
+    # The gpu_heavy tests (several GB of CUDA memory each) in a process of their own after the rest, so the suite's peak
+    # is the larger of the two rather than their sum (2026-10-12: 13.5 GB in one process).
+    step python-neuralese env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider -m 'not gpu_heavy' tests/neuralese
+    step python-neuralese-gpu env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider -m gpu_heavy tests/neuralese
   fi
 fi
 if [ $ts = 1 ]; then
