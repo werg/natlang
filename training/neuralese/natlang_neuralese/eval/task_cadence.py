@@ -252,14 +252,14 @@ class TaskEval:
         started = time.time()
         run = self.root / f'step-{step:07d}'
         score, codes = self._execute(run)
-        eligible = score['eligible_for_best'] and all(code == 0 for code in codes)
+        eligible = accounted(score)
         # Noise from repeat runs (coordinator 2026-10-12): the first evaluation of a stage runs the same model again
         # (noise_repeats total runs); the spread of the success counts is this stage's measured noise.
         repeats, repeat_noise = [], None
         if eligible and self.measured_noise() is None and self.spec.get('noise_repeats', 2) > 1:
             for index in range(1, self.spec.get('noise_repeats', 2)):
                 again, again_codes = self._execute(run.with_name(run.name + f'-repeat{index}'))
-                if again['eligible_for_best'] and all(code == 0 for code in again_codes):
+                if accounted(again):
                     repeats.append(again['task_successes'])
             if repeats:
                 counts = [score['task_successes'], *repeats]
@@ -289,6 +289,15 @@ class TaskEval:
                           ('step', 'task_successes', 'cases', 'outcome_counts', 'eligible', 'previous_successes',
                            'repeat_noise', 'noise_successes', 'regressed', 'seconds')}}), flush=True)
         return summary
+
+
+def accounted(score: dict) -> bool:
+    """Every task has an exact terminal outcome from the collector: a result row or explicit budget exhaustion (a
+    task that ran out of its wall or request budget is a model outcome, and the queue runner exits non-zero for it).
+    Infrastructure errors and unresolved tasks make the evaluation ineligible."""
+    counts = score['outcome_counts']
+    return (counts['infrastructure_error'] == 0 and counts['unresolved'] == 0 and
+            sum(counts.values()) == score['cases_expected'])
 
 
 def task_gate(summary: dict | None, spec: dict | None) -> dict | None:

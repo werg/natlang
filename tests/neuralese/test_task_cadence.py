@@ -62,8 +62,10 @@ def test_the_first_evaluation_repeats_to_measure_noise_and_later_ones_reuse_it(t
         run.mkdir(parents=True, exist_ok=True)
         calls.append(run.name)
         n = next(counts)
-        return {'task_successes': n, 'task_success_rate': n / 16, 'outcome_counts': {}, 'complete': True,
-                'eligible_for_best': True, 'cases': []}, [0]
+        return {'task_successes': n, 'task_success_rate': n / 16, 'complete': True, 'eligible_for_best': True,
+                'cases': [], 'cases_expected': 16,
+                'outcome_counts': {'task_success': n, 'infrastructure_error': 0, 'unresolved': 0,
+                                   'semantic_mismatch': 16 - n}}, [0]
     evaluator._execute = execute
     first = evaluator.run(10)
     assert calls == ['step-0000010', 'step-0000010-repeat1', 'step-0000010-repeat2']
@@ -71,3 +73,13 @@ def test_the_first_evaluation_repeats_to_measure_noise_and_later_ones_reuse_it(t
     second = evaluator.run(20)  # 3 successes: within noise of 4, no repeat
     assert calls[-1] == 'step-0000020' and second['repeat_noise'] is None
     assert second['noise_successes'] == 2 and second['previous_successes'] == 4 and second['regressed'] is False
+
+
+def test_budget_exhaustion_is_a_model_outcome_and_infrastructure_errors_are_not():
+    from natlang_neuralese.eval.task_cadence import accounted
+    base = {'task_success': 1, 'budget_exhaustion': 3, 'semantic_mismatch': 12, 'infrastructure_error': 0,
+            'unresolved': 0}
+    assert accounted({'cases_expected': 16, 'outcome_counts': base})
+    assert not accounted({'cases_expected': 16, 'outcome_counts': {**base, 'semantic_mismatch': 11,
+                                                                    'infrastructure_error': 1}})
+    assert not accounted({'cases_expected': 16, 'outcome_counts': {**base, 'semantic_mismatch': 11, 'unresolved': 1}})
