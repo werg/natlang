@@ -1585,8 +1585,21 @@ fixtures, with a pass bar of one success. It is replaced, for qualification and 
   times, and the spread of its success counts is the measured noise. The bar uses the larger of the declared
   `noise_successes` and the measured noise. Every evaluation records `regressed`; only the final one gates.
 - **Line references** (base under native full rendering, cadence subset):
-  - LFM2.5-350M: 1/16 in each of two complete repeat runs (the same `edit_stream` task; 12 semantic mismatches, 3
-    budget exhaustions), spread 0. Declared `reference_successes` 1 in neuralese-direct-lfm-v3 (a declared backbone-inherent line difference in line-parity.json) and a shared `noise_successes` floor of 1 in neuralese-direct-v2.
+  - LFM2.5-350M: 1/16 on v2 in each of two complete repeat runs (the same `edit_stream` task; 12 semantic mismatches, 3
+    budget exhaustions), spread 0. That success was the v2 oracle false positive (reply `ok`, see "Packet v3"). **On v3
+    the base scores 0/16** (2026-10-12 dragnet, CPU, full rendering: 14 semantic mismatches, 2 wall-budget
+    exhaustions; the replies are identical to the v2 run, deterministic greedy). Declared `reference_successes` 0 in
+    neuralese-direct-lfm-v3 (a declared backbone-inherent line difference in line-parity.json) and a shared
+    `noise_successes` floor of 1 in neuralese-direct-v2.
+  - LFM base dragnet (2026-10-12): the 15 v2 failures are the model's. The 350M never issues an `eval` in 16 tasks
+    (only `return_result` calls and text answers that guess or fabricate the result from the declared inputs); its
+    first-token probability of `<|tool_call_start|>` is 0.7-2% on the text-answer cases. Ruled out: rendering (serving
+    Engine bf16 and fp32 reproduce a plain transformers fp32 greedy reply on the HF chat template token for token on
+    cases 0, 5, 14), chat template, stop handling, parsing (every emitted call parsed), scorer (the larger LFM2.5-2.6B
+    GGUF, same collector and scorer, scores 7/16 on v3 with real `eval`/`read_code` work, including a legitimately
+    edited `edit_stream` text; 7 of its 9 failures are 600 s / 48-request budget exhaustions). Two fixes: the
+    `edit_stream` oracle (packet v3) and the return_result misplaced-argument error (a776223e; the 350M still loops,
+    reading `value: bad-action` as a value).
     The noise floor covers batch-composition nondeterminism of greedy decoding in the concurrent engine; the stage's
     first evaluation measures its own spread.
   - Mellum2.1 base: queued as a 34 GB ledger job (`heldv2-base-mellum`). Until it lands, the Mellum gate reports
