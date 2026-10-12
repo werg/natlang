@@ -14,6 +14,7 @@ from torch import nn
 
 from .lfm2_port import AttentionState, ControlTokens, PortBackbone, PortCache, _left_pad_mask, append_kv
 from .layer_staging import staged_layers
+from ..common.profiling import scope as profile_scope
 
 # Unused rows of the shared Qwen3/Maple vocabulary (151,669..151,935 have no token): the marker IDs are the same
 # in every model of the shared Neuralese space (MAPLE_QWEN_JOINT §1).
@@ -164,6 +165,8 @@ class QwenPortBackbone(PortBackbone):
             layer = self.layers[i]
             attn = layer.self_attn
             hd = attn.head_dim
+            attention_scope = profile_scope("attention")
+            attention_scope.__enter__()
             x = layer.input_layernorm(h)
             q = attn.q_norm(attn.q_proj(x).view(batch, steps, -1, hd)).transpose(1, 2)
             k = attn.k_norm(attn.k_proj(x).view(batch, steps, -1, hd)).transpose(1, 2)
@@ -177,6 +180,8 @@ class QwenPortBackbone(PortBackbone):
                     torch.cat([prev.k, k], 2), torch.cat([prev.v, v], 2))
             window = self.window(i)
             total = state.k.shape[2]
+            sdpa_scope = profile_scope("attention.sdpa")
+            sdpa_scope.__enter__()
             if window is not None and total > window and pad is None and padding is None:
                 out = _attend_window(attn, q, state.k, state.v, steps, window)
             elif window is not None and total > window:
@@ -190,9 +195,12 @@ class QwenPortBackbone(PortBackbone):
                                                      enable_gqa=True)
             else:
                 out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding, pad, pad_offsets)
+            sdpa_scope.__exit__(None, None, None)
             states[i] = state
             h = h + attn.o_proj(out.transpose(1, 2).reshape(batch, steps, -1))
-            h = self._feed_forward(layer, h)
+            attention_scope.__exit__(None, None, None)
+            with profile_scope("moe"):
+                h = self._feed_forward(layer, h)
             lengths[i] = start + steps
         return h, PortCache(tuple(states), tuple(lengths), pad, pad_offsets)
 

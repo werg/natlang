@@ -33,6 +33,7 @@ from pathlib import Path
 import torch
 
 from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_training_rng_state
+from ..common.profiling import UpdateProfiler, backward_phase, region as profile_region, scope as profile_scope
 from .checkpoint_policy import CheckpointPolicy
 
 SCHEMA = 'natlang.neuralese-direct/1'
@@ -554,7 +555,8 @@ def main(argv=None):
 
     def forward(rows_, *, gradients, accumulation=None):
         """(weighted CE, metrics, predictions, token losses) of one padded batch at the active precision."""
-        ids, span, index, valid, weights, segments, suffix = tensors(rows_)
+        with profile_region('update/data'):
+            ids, span, index, valid, weights, segments, suffix = tensors(rows_)
         usable = float(weights.sum()) > 0  # a window made only of failed assistant turns teaches nothing
         if accumulation is None:
             if not usable:
@@ -567,16 +569,18 @@ def main(argv=None):
         hidden = span_states(ids, index)
         # Project once over the whole turn so every chunk sees its full causal history, then keep the
         # vocabulary-sized readout chunked as before.
-        read = project_token_states(hidden, token_choice, segments)
-        _, training_ce, prediction, _, token_losses = chunked_readout(
-            backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights)
+        with profile_scope('readout'):
+            read = project_token_states(hidden, token_choice, segments)
+            _, training_ce, prediction, _, token_losses = chunked_readout(
+                backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights)
         real = valid.sum().clamp_min(1)
         training_ce = training_ce * (span.numel() / real)  # the token mean over real positions (padding excluded)
         ce = (token_losses * valid).sum() / real
-        mixture = soft_token_mixture(backbone.logits, table, hidden.detach())
-        value = neuralese(hidden.detach(), mixture.to(hidden.dtype), segments)
-        target = table[span]
-        value_error = relative_mse(value, target, weights)
+        with profile_scope('projection'):
+            mixture = soft_token_mixture(backbone.logits, table, hidden.detach())
+            value = neuralese(hidden.detach(), mixture.to(hidden.dtype), segments)
+            target = table[span]
+            value_error = relative_mse(value, target, weights)
         metrics = {'ce': float(ce), 'gold_accuracy': float(((prediction == span) & valid).sum() / real),
                    'value_relative_mse': float(value_error)}
         if not torch.is_grad_enabled():
@@ -822,6 +826,8 @@ def main(argv=None):
     cuda_active = torch.cuda.is_available() and str(a.device).startswith('cuda')
 
     cache_released = []
+    # NATLANG_PROFILE_UPDATES=a:b (common/profiling.py): torch.profiler over updates a..b, breakdown and trace in --out.
+    profiler = UpdateProfiler(a.out)
 
     def execution_plan(batch):
         """Pick sequential accumulation and the least checkpointing that fits live device memory."""
@@ -951,8 +957,10 @@ def main(argv=None):
     for step_index in loop:
         batch, covered = schedule[step_index]
         point, mix = ('bf16', 0.0) if quant is None else quant.sampled(step_index)[:2]
+        profiler.begin(step_index + 1)
         tick = time.time()
-        plan = execution_plan(batch)
+        with profile_region('update/plan'):
+            plan = execution_plan(batch)
         print(json.dumps({'event': 'execution_plan', 'step': step_index + 1,
                           'source_documents': [window['document'] for window in batch], **plan}), flush=True)
         backbone.checkpoint_layers = plan['checkpoint_layers']
@@ -975,11 +983,13 @@ def main(argv=None):
                 # other parameters, and the shared optimizer updates every partition exactly once below.
                 with shared_parametrized_weights(backbone.hf):
                     for window in batch:
-                        part, part_metrics, _, _, part_stats = forward(
-                            [window], gradients=True, accumulation=normalizers)
+                        with profile_region('update/forward'):
+                            part, part_metrics, _, _, part_stats = forward(
+                                [window], gradients=True, accumulation=normalizers)
                         if not torch.isfinite(part):
                             raise RuntimeError('nonfinite neuralese_direct loss')
-                        part.backward()
+                        with profile_region('update/backward'), backward_phase():
+                            part.backward()
                         loss_value += float(part.detach())
                         metrics_rows.append((part_metrics, part_stats))
                         del part
@@ -1019,10 +1029,12 @@ def main(argv=None):
                 with shared_parametrized_weights(backbone.hf) as next_pass:
                     next_pass()
                     with in_backward.in_backward() as armed:
-                        loss, metrics, _, _, _ = forward(batch, gradients=True)
+                        with profile_region('update/forward'):
+                            loss, metrics, _, _, _ = forward(batch, gradients=True)
                         if not torch.isfinite(loss):
                             raise RuntimeError('nonfinite neuralese_direct loss')
-                        loss.backward()
+                        with profile_region('update/backward'), backward_phase():
+                            loss.backward()
                 latent_norm = armed.norm()
         # The global gradient norm: the latents' (stepped in backward, spike-clipped by the norm so far) with the
         # others' (spike-clipped exactly here with --grad-spike-clip).
@@ -1035,8 +1047,9 @@ def main(argv=None):
             grad_clip = armed.clip_record(global_norm)
             if spike is not None:
                 spike.observe(grad_clip['global_norm'])
-        optimizer.step()  # routers, norms and projections (the latents stepped in backward)
-        optimizer.zero_grad(set_to_none=True)
+        with profile_region('update/optimizer'):
+            optimizer.step()  # routers, norms and projections (the latents stepped in backward)
+            optimizer.zero_grad(set_to_none=True)
         step = step_index + 1
         if reserve is not None and step_index == start_index:  # optimizer slots exist now: size the next write
             try:
@@ -1069,8 +1082,11 @@ def main(argv=None):
                             'cuda_peak_allocated_gb': torch.cuda.max_memory_allocated(a.device) / 2 ** 30
                             if cuda_active else None,
                             'grad_clip': grad_clip, 'seconds': seconds})
+        profiler.update_done(step, seconds, forward_tokens=metrics['forward_tokens'], windows=metrics['windows'],
+                             checkpoint_layers=plan['checkpoint_layers'], mode=plan['mode'], precision=point)
         if step % a.eval_every == 0 or step == end:
-            report = evaluate()
+            with profile_region('update/eval'):
+                report = evaluate()
             history.append({k: report[k] for k in ('step', 'ce', 'ce_delta', 'value_relative_mse_delta')})
             improved = best is None or report['ce'] < best['ce']
             if (report.get('behaviour_drift') or {}).get('guard') == 'stop':
@@ -1079,21 +1095,26 @@ def main(argv=None):
                 stop.request()
             if improved and not stop.requested:
                 best = {'step': step, 'ce': report['ce']}
-                policy.save(full_state(), metric=report['ce'])
+                with profile_region('update/save'):
+                    policy.save(full_state(), metric=report['ce'])
                 saved_step = step
             (a.out / 'report.json').write_text(json.dumps({**report, 'status': 'running'}, indent=2) + '\n')
         elif a.drift_every and step % a.drift_every == 0 and monitor.active:
-            drift = monitor.check(step, end)
-            if base_eval is not None and 'drift_ce' not in base_eval:
-                base_eval['drift_ce'] = None  # a lineage resumed from before the measure has no base value
-            log('drift.jsonl', {'step': step, 'held_ce_subset': drift_ce(), 'base_held_ce_subset':
-                                base_eval.get('drift_ce') if base_eval else None, 'behaviour_drift': drift})
+            with profile_region('update/drift'):
+                drift = monitor.check(step, end)
+                if base_eval is not None and 'drift_ce' not in base_eval:
+                    base_eval['drift_ce'] = None  # a lineage resumed from before the measure has no base value
+                log('drift.jsonl', {'step': step, 'held_ce_subset': drift_ce(), 'base_held_ce_subset':
+                                    base_eval.get('drift_ce') if base_eval else None, 'behaviour_drift': drift})
             if drift['guard'] == 'stop':
                 print(json.dumps({'event': 'behaviour_drift_stop', 'step': step}), flush=True)
                 stop.request()
         if (policy.due(step) or stop.requested) and saved_step != step:  # never a second write of one step:
-            policy.save(full_state())  # it would replace the slot and break best-checkpoint.pt's hard link
+            with profile_region('update/save'):
+                policy.save(full_state())  # it would replace the slot and break best-checkpoint.pt's hard link
             saved_step = step
+        profiler.maybe_finish(step)
+    profiler.close(step)
     finished = step >= end
     gate = monitor.final_gate(step) if finished else None
     final = json.loads((a.out / 'report.json').read_text()) if (a.out / 'report.json').exists() else {}

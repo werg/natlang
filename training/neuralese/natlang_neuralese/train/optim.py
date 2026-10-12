@@ -14,6 +14,7 @@ import math
 
 import torch
 from torch import nn
+from ..common.profiling import region
 
 POLICIES = ("adamw", "muon")
 FORMAT = "natlang.port-muon-adamw/1"
@@ -118,11 +119,14 @@ class PortMuonAdamW(torch.optim.Optimizer):
     def step(self, closure=None):
         if closure is not None:
             raise ValueError("PortMuonAdamW does not support closures")
-        self.muon.step()
+        with region("optim/port_muon"):
+            self.muon.step()
         if self.auxiliary is not None:
-            self.auxiliary.step()
+            with region("optim/adamw"):
+                self.auxiliary.step()
         if self.latent is not None:
-            self.latent.step()
+            with region("optim/latent"):
+                self.latent.step()
 
     def state_dict(self):
         state = {"format": FORMAT, "schema": self.schema, "muon": self.muon.state_dict(),
@@ -400,6 +404,10 @@ class MuonSR(LionSR):
 
     @torch.no_grad()
     def _update(self, p, group):
+        with region("optim/muonsr"):
+            self._muon_update(p, group)
+
+    def _muon_update(self, p, group):
         state = self.state[p]
         if "momentum" not in state:
             state["momentum"] = torch.zeros_like(p, dtype=torch.bfloat16)
@@ -420,7 +428,8 @@ class MuonSR(LionSR):
         split = group.get("split_rows", 1) or 1
         rows, cols = p.shape[-2] // split, p.shape[-1]
         nesterov = g.add_(m, alpha=beta).view(*p.shape[:-2], split, rows, cols)
-        direction = newton_schulz(nesterov, group["ns_steps"], variant=getattr(self, "ns", "quintic")).view(p.shape)
+        with region("optim/muonsr.newton_schulz"):
+            direction = newton_schulz(nesterov, group["ns_steps"], variant=getattr(self, "ns", "quintic")).view(p.shape)
         if active is not None:
             direction = direction * active.to(direction.dtype)
         scale = 0.2 * math.sqrt(max(rows, cols))

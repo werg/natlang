@@ -155,10 +155,12 @@ def precision_value(weight: torch.Tensor, group: str) -> torch.Tensor:
         return weight
     if layer and options.get("layers") is not None and int(layer) not in options["layers"]:
         return weight
-    if PRECISION["fused"] and weight.is_cuda and weight.dtype == torch.bfloat16 and (
-            fmt == "int4" or (fmt == "ternary" and not options.get("nested_group"))):
-        return _FusedPrecisionRamp.apply(weight, fmt, options, float(mix))
-    return _PrecisionRamp.apply(weight, quantized_value(weight, fmt, options), float(mix))
+    from ..common.profiling import scope
+    with scope("qat"):
+        if PRECISION["fused"] and weight.is_cuda and weight.dtype == torch.bfloat16 and (
+                fmt == "int4" or (fmt == "ternary" and not options.get("nested_group"))):
+            return _FusedPrecisionRamp.apply(weight, fmt, options, float(mix))
+        return _PrecisionRamp.apply(weight, quantized_value(weight, fmt, options), float(mix))
 
 
 class _FusedPrecisionRamp(torch.autograd.Function):

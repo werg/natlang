@@ -30,6 +30,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ..common.profiling import scope as _profile_scope
 from .ternary import ternary_codes, ternarize
 
 SWIGLU_CLAMP = 7.0
@@ -86,6 +87,10 @@ class RMSNorm(nn.Module):
         self.private = nn.ParameterDict()  # per family member: additive gain correction, zero-initialised
 
     def forward(self, x):
+        with _profile_scope("norm"):
+            return self._forward(x)
+
+    def _forward(self, x):
         from .ternary import STATE
 
         weight = self.weight
@@ -465,9 +470,14 @@ class SparseMoE(nn.Module):
     def forward(self, h):
         shape = h.shape
         x = h.reshape(-1, shape[-1])
-        index, weights = self.route(x)
+        with _profile_scope("moe.route"):
+            index, weights = self.route(x)
         if self.statistics is not None:
             self._record(index, weights)
+        with _profile_scope("moe.experts"):
+            return self._experts(h, x, index, weights, shape)
+
+    def _experts(self, h, x, index, weights, shape):
         projections = self._fused(x)
         if projections is not None:
             from .fused_moe import fused_experts
