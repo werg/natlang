@@ -39037,6 +39037,43 @@
       "notes": "Luna generated classification labels over the explicit 151-intent domain. Only exact scalar child targets matching the source label are admitted. Seventeen generated labels disagree with their source labels and are retained as context only. Eight more top-level outputs match the source label, but their child output is a one-element string array and therefore differs from the scalar task contract; no coercion was applied. Static authored references are included for exact replay, but do not receive training admission."
     },
     {
+      "id": "luna-v24-clinc-intent-reviewed-child-candidates-20261012-v2",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/luna-v24-clinc-intent-reviewed-child-candidates-20261012-v2",
+      "include": [
+        "teacher-turns.jsonl",
+        "materialized-manifest.json",
+        "salvage-receipt.json",
+        "review.json",
+        "candidate-audit.json",
+        "candidate-discovery-audit.json",
+        "source-quality-review.json",
+        "source-quality-clearance.json",
+        "source-closure.json",
+        "source-semantic-triage.json",
+        "source-cases.jsonl",
+        "source-manifest.json",
+        "static-reference-cases.jsonl"
+      ],
+      "split": "inherited-source-train-only",
+      "source_class": "provider-generated-source-bound-clinc-intent-child-candidates",
+      "training_admission": false,
+      "trace_admission": false,
+      "admission": "source-conversion-cleared candidate packet; no training or trace admission",
+      "independent_new_worlds": 0,
+      "review_status": "372 unique completed source-bound child actions selected: 357 unambiguous children and 15 explicitly reviewed alternatives. 54 exact parent outputs have no completed child action with complete visible-input binding and are excluded. 74 source/provider label disagreements are excluded with independent semantic triage; no source labels were corrected. No exact item, group, or visible-input-plus-annotation overlap with admitted V19/V20/V21 packets.",
+      "training_admission_reason": "Not admitted. The root-signed source-quality clearance grants conversion only. This registry entry preserves the exact reviewed conversion candidate and source evidence; separate source-quality/admission gates must approve training use.",
+      "required_conversion": "shared native chat renderer for full, program-header, and whole-trajectory twins; packet publication and source-quality clearance do not imply training admission or runtime qualification",
+      "consumable_by_direct_stage": false,
+      "license_provenance": "Source rows record [\"cc-by-3.0\"] for clinc/clinc_oos.",
+      "build": {
+        "script": "scripts/materialize-reviewed-decision-children.mjs",
+        "code_commit": "a715edf8",
+        "visibility_helper": "scripts/lib/decision-child-visibility.mjs"
+      },
+      "notes": "The source pool has 500 train items across the explicit 151-label domain. 372 exact generated labels have complete exact child actions, inherited train-only groups and explicit per-child target hashes. Fifteen repeated source items had two completed exact actions; one semantic action per source ID was selected. The 54 unlinked or incomplete child actions and 74 label disagreements remain excluded. The packet uses conversion-only clearance and has training_admission=false and trace_admission=false."
+    },
+    {
       "id": "clef-pools-20261012-v1",
       "owner": "dgx",
       "path": "data/neuralese/corpora/clef-pools-20261012-v1",

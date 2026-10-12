@@ -1,0 +1,77 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v24-clinc-intent-reviewed-child-candidates-20261012-v2",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/luna-v24-clinc-intent-reviewed-child-candidates-20261012-v2",
+  "files": [
+    {
+      "path": "candidate-audit.json",
+      "bytes": 522995,
+      "sha256": "ee59ea352671a1633da96356bc0ca0fe55741ddd7fe24c56a976b07b75c48bc3"
+    },
+    {
+      "path": "candidate-discovery-audit.json",
+      "bytes": 519386,
+      "sha256": "cbb69157d59ff48e68504de1df01e4f7c452e2dbde2f0c292cc8ecdc6a5b249e"
+    },
+    {
+      "path": "materialized-manifest.json",
+      "bytes": 707786,
+      "sha256": "e3a8ff6ac374fe2ee4d724897b214caf6ad2d7eb34d8635d56e19321dfb27fe1"
+    },
+    {
+      "path": "review.json",
+      "bytes": 390138,
+      "sha256": "cacddbf72af4e2e7101608a49b01e64c3677d61b601150435e3a3b96866022a0"
+    },
+    {
+      "path": "salvage-receipt.json",
+      "bytes": 6585,
+      "sha256": "549168570d253e661c292f2571e2150148a6de47ad2a08c62ccab819f8a387cb"
+    },
+    {
+      "path": "source-cases.jsonl",
+      "bytes": 1398024,
+      "sha256": "9e808734330824b4c4ccc89b67808cda884697ab403cc83cf064e09f0839a2f6",
+      "lines": 500
+    },
+    {
+      "path": "source-closure.json",
+      "bytes": 34044,
+      "sha256": "217e3391722be9248ae7e0e127770600fb1b9cb5e0103140edba0d28d0a55c02"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 125748,
+      "sha256": "d996b871d0a66b8e50c4003b3f14cf8ff02fda20535c4a1cb94f446ac381b0e0"
+    },
+    {
+      "path": "source-quality-clearance.json",
+      "bytes": 303985,
+      "sha256": "3fd87a6f56c2afe60d2f64e888ba66272d96cb106e2bb8dbfcdc66f02d04c318"
+    },
+    {
+      "path": "source-quality-review.json",
+      "bytes": 705214,
+      "sha256": "a68cc386b9b24cebeb802b4d20eb8dac75b2851347c1874ec91a720fa33ffcc6"
+    },
+    {
+      "path": "source-semantic-triage.json",
+      "bytes": 52795,
+      "sha256": "24b8904f733cf73f8b1bae3dacae336a7e588d262d294d1aa916f99ef6d36777"
+    },
+    {
+      "path": "static-reference-cases.jsonl",
+      "bytes": 8381557,
+      "sha256": "4f49e28d4a011754d239aa15335d5e5609e09073dba16ddcab556357c674160b",
+      "lines": 125
+    },
+    {
+      "path": "teacher-turns.jsonl",
+      "bytes": 143360561,
+      "sha256": "c5d2a513a4d1b9b49c628813eb38d853b05fb94f4e2061e758cfd94fc1e385eb",
+      "lines": 372
+    }
+  ],
+  "bytes": 156508818
+}
