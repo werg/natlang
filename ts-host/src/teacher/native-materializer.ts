@@ -1416,7 +1416,14 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       reviewedApprovals.set(approval.decision_index, structuredClone(approval));
     }
 
-    if (sourceConversionProblems(row, options.sourceQualityClearance).length) { rejectedRows++; continue; }
+    const conversionProblems = sourceConversionProblems(row, options.sourceQualityClearance);
+    // Candidate selection is a review artifact, never training or trace admission. It may need
+    // to inspect exact child turns from a source whose quality is still held (for example,
+    // annotation-reference-only data). Keep that hold on the source and output turn; allow no
+    // other conversion problem through this review-only path.
+    const sourceQualityHeldReview = options.candidateSelectionOnly === true &&
+      conversionProblems.length === 1 && conversionProblems[0] === 'source_quality_held';
+    if (conversionProblems.length && !sourceQualityHeldReview) { rejectedRows++; continue; }
     const taskIr = record(row.task.program_ir, `${row.id}.task.program_ir`);
     const program = taskIr as unknown as ProgramRecord;
     const sourceQualityReview = options.sourceQualityClearance ?? (row.source_ref as Dict | undefined)?.source_quality_clearance;
@@ -1861,6 +1868,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           ...(row.outcome.oracle ? { oracle: row.outcome.oracle } : {}) },
         ...(options.candidateSelectionOnly ? { candidate_selection: { approved: decisionApproved,
           kind: semanticApproval ? 'reviewed-native-decision-candidate' : 'exact-native-runtime-oracle-candidate',
+          ...(sourceQualityHeldReview ? { source_quality_review_only: true,
+            source_quality_hold_reasons: conversionProblems } : {}),
           ...(semanticApproval ? { semantic_review: semanticApproval } : {}),
           ...(decisionApproved ? {} : { reason: 'the child is not selected by the exact reviewed candidate gate' }) } } : {}),
         training_admission: { kind: options.candidateSelectionOnly ? 'candidate-selection-pending-corpus-admission' :
@@ -1871,7 +1880,9 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           approved: options.candidateSelectionOnly ? false : decisionApproved,
           ...(semanticApproval && !options.candidateSelectionOnly ? { semantic_review: semanticApproval } : {}),
           ...(semanticHold ? { semantic_review: semanticHold } : {}),
-          ...(options.candidateSelectionOnly ? { reason: 'exact child target selected for review; corpus admission remains false' } : {}),
+          ...(options.candidateSelectionOnly ? { reason: sourceQualityHeldReview ?
+            'source quality remains held; exact child target is materialized for review only; corpus admission remains false' :
+            'exact child target selected for review; corpus admission remains false' } : {}),
           ...(sourceQualityActionReviewPending ? { reason: 'source-quality clearance permits conversion only; this exact target awaits native decision approval' } : {}),
           ...(authoredGuidanceBlocked ? { reason: 'authored-root-guided sample awaits separate root training approval' } : {}),
           ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
