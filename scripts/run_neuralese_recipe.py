@@ -178,7 +178,13 @@ def validate_existing_direct_resume(output: Path, recipe: dict, device: str,
         raise ValueError("direct-stage resume changes pinned inputs")
     current_parameters = dict(recipe.get("parameters", {}))
     current_parameters.pop("text_data", None)
-    if plan.get("parameters") != current_parameters:
+    planned_parameters = dict(plan.get("parameters") or {})
+    if handoff:
+        from natlang_neuralese.train.recipe import OPERATIONAL_STAGE_PARAMETERS
+        for key in OPERATIONAL_STAGE_PARAMETERS:
+            planned_parameters.pop(key, None)
+            current_parameters.pop(key, None)
+    if planned_parameters != current_parameters:
         raise ValueError("direct-stage resume changes training parameters")
     if plan.get("lineage") != recipe.get("lineage"):
         raise ValueError("direct-stage resume changes lineage declaration")

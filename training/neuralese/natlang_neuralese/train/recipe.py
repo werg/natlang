@@ -751,6 +751,7 @@ def write_json(path, value):
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
 OPERATIONAL_STAGE_PARAMETERS = frozenset({'eval_every', 'checkpoint_every', 'moe_kernel', 'checkpoint_layers', 'window_execution', 'report_column_fraction', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl',
                                           'drift_gate_now',  # retired by drift_gate_rise (b1cd6632); a lineage that declared it hands off
+                                          'recompute_rmsnorm',  # retired after an isolated diagnostic; old plans may declare it
                                           'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop'})
 # Stage parameters the runner consumes itself (never passed to a trainer).
 RUNNER_STAGE_PARAMETERS = frozenset({'quantization_steps'})
