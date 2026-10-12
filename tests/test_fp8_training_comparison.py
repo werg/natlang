@@ -70,3 +70,17 @@ def test_warm_aggregate_rate_uses_same_updates_and_actual_supervised_count(tmp_p
     assert measured["warm_aggregate_wall_seconds"] == 5
     assert measured["warm_aggregate_supervised_tokens"] == 400
     assert measured["warm_aggregate_supervised_tokens_per_second"] == 80
+
+
+def test_profile_identity_allows_only_declared_context_geometry_and_batch_token_budget():
+    left = {"id": "short", "outputs": {"directory": "/a"}, "runtime": {"image": "a"},
+            "parameters": {"tokens": 6144, "target_tokens": 256, "prefix_tokens": 32,
+                           "batch_tokens": 12288, "seed": 0, "batch": 2},
+            "lineage": {"scope": "short", "evidence": [{"path": "same"}]}}
+    right = {"id": "long", "outputs": {"directory": "/b"}, "runtime": {"image": "b"},
+             "parameters": {"tokens": 32768, "target_tokens": 256, "prefix_tokens": 32,
+                            "batch_tokens": 65536, "seed": 0, "batch": 2},
+             "lineage": {"scope": "long", "evidence": [{"path": "same"}]}}
+    assert COMPARISON._profile_identity(left) == COMPARISON._profile_identity(right)
+    right["parameters"]["seed"] = 1
+    assert COMPARISON._profile_identity(left) != COMPARISON._profile_identity(right)

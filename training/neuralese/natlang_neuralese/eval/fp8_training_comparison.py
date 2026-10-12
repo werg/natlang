@@ -68,7 +68,7 @@ def _normalized_pair(recipe: dict[str, Any]) -> dict[str, Any]:
 def _profile_identity(recipe: dict[str, Any]) -> dict[str, Any]:
     """Ensure short/long profiles share data, optimizer, and objective identity."""
     value = _normalized_pair(recipe)
-    for key in ('tokens', 'target_tokens', 'prefix_tokens'):
+    for key in ('tokens', 'target_tokens', 'prefix_tokens', 'batch_tokens'):
         value['parameters'].pop(key, None)
     value['lineage'].pop('scope', None)
     return value
