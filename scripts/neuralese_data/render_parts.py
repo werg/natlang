@@ -104,34 +104,51 @@ def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, c
     part.parent.mkdir(parents=True, exist_ok=True)
     # A part unit left from an interrupted run (preempted and requeued by the ledger) is waited for, not duplicated.
     prefix = f'{unit_prefix}-p{k:02d}-'
+    # Its decompressed input is kept until the part has a receipt (a requeued unit reads it when relaunched), and a
+    # complete one is reused after a restart of this process.
+    plain = out / f'.p{k:02d}.turns.jsonl'
+    if not plain.exists():
+        tmp = plain.with_name(plain.name + '.tmp')
+        with open(tmp, 'wb') as f:
+            for i, line in enumerate(stream(sources)):
+                if i >= stop:
+                    break
+                if i >= start:
+                    f.write(line)
+        tmp.rename(plain)
     while pending_units(prefix) and not (part / 'receipt.json').exists():
         time.sleep(60)
     if (part / 'receipt.json').exists():
-        return
-    plain = out / f'.p{k:02d}.turns.jsonl'
-    with open(plain, 'wb') as f:
-        for i, line in enumerate(stream(sources)):
-            if i >= stop:
-                break
-            if i >= start:
-                f.write(line)
-    unit = f'{prefix}{int(time.time()) % 100000}'
-    cmd = ['python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', str(budget_gb),
-           '--priority', 'low', '--resumable', '--wait', '86400', '--workdir', str(REPO), '--',
-           'env', f'MEM={docker_gb}g', f'CPUS={cpus}', 'nice', '-n', '10',
-           'scripts/neuralese_data/render_native_turn_corpus.sh', str(part), '--corpus-id', corpus_id,
-           '--source', str(plain), '--workers', str(cpus), '--shards', '32', '--full-sample', '0.05',
-           '--protected', str(REPO / PROTECTED), '--reserved', str(REPO / 'training/source-split-reservations.json'),
-           '--held-text', *[str(REPO / p) for p in HELD_TEXT]]
-    try:
-        subprocess.run(cmd, check=True)
-        # The ledger unit runs asynchronously: wait for it to finish.
-        while subprocess.run(['systemctl', '--user', 'is-active', '-q', f'{unit}.service']).returncode == 0:
-            time.sleep(30)
-    finally:
         plain.unlink(missing_ok=True)
-    if not (part / 'receipt.json').exists():
-        raise RuntimeError(f'render of {corpus_id} part {k} failed; see journalctl --user -u {unit}')
+        return
+    try:
+        # A preempted part unit ends cleanly and waits in the ledger queue to be relaunched (it resumes its finished
+        # shards): keep waiting, and keep its decompressed input, until it finishes; relaunch one that failed.
+        for attempt in range(5):
+            unit = f'{prefix}{int(time.time()) % 100000}'
+            cmd = ['python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb',
+                   str(budget_gb), '--priority', 'low', '--resumable', '--wait', '86400', '--workdir', str(REPO), '--',
+                   'env', f'MEM={docker_gb}g', f'CPUS={cpus}', 'nice', '-n', '10',
+                   'scripts/neuralese_data/render_native_turn_corpus.sh', str(part), '--corpus-id', corpus_id,
+                   '--source', str(plain), '--workers', str(cpus), '--shards', '32', '--full-sample', '0.05',
+                   '--protected', str(REPO / PROTECTED),
+                   '--reserved', str(REPO / 'training/source-split-reservations.json'),
+                   '--held-text', *[str(REPO / p) for p in HELD_TEXT]]
+            if subprocess.run(cmd).returncode == 0:
+                time.sleep(30)
+                while pending_units(unit):
+                    time.sleep(60)
+            if (part / 'receipt.json').exists():
+                break
+            print(json.dumps({'part': k, 'attempt': attempt, 'unit': unit, 'result': 'no receipt; relaunching'}),
+                  flush=True)
+            time.sleep(300)
+        else:
+            raise RuntimeError(f'render of {corpus_id} part {k} failed 5 times; see journalctl --user -u {prefix}*')
+    except Exception:
+        plain.unlink(missing_ok=True)  # a real failure; an interruption (TERM) keeps the input for the requeued unit
+        raise
+    plain.unlink(missing_ok=True)
     # The full rendering is the 5% warm-up sample (--full-sample, shared rule); it is still stored compressed (~50x).
     for path in sorted((part / 'full').glob('*/*.jsonl')):
         subprocess.run(['zstd', '-q', '-3', '--long=27', '-T4', '--rm', '-f', str(path)], check=True)

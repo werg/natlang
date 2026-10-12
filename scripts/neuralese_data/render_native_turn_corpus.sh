@@ -12,9 +12,14 @@ OUT=$(realpath "$1"); shift
 mkdir -p "$OUT"
 # Named container, stopped with the unit: a ledger preemption (or systemctl stop) must not leave an orphan
 # writing into OUT. A relaunch with the same OUT resumes from the finished shards.
-NAME="render-$(basename "$OUT")"
+# The name carries a hash of OUT: parts of different corpora share basenames (parts/p01), and `docker rm -f` of a
+# same-named container would kill another corpus's running render (2026-10-12).
+NAME="render-$(basename "$OUT")-$(printf %s "$OUT" | sha1sum | cut -c1-10)"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
-trap 'docker stop -t 30 "$NAME" >/dev/null 2>&1' TERM INT
+# A stop (ledger preemption, systemctl stop) is a clean resumable stop: the container is stopped and the wrapper
+# exits 0, so the unit ends with Result=success and the ledger requeues it; the relaunch resumes finished shards.
+stopped=0
+trap 'stopped=1; docker stop -t 30 "$NAME" >/dev/null 2>&1' TERM INT
 docker run --rm --name "$NAME" --network none --user "$(id -u):$(id -g)" --memory "${MEM:-24g}" --cpus "${CPUS:-16}" \
   -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1 -e CUDA_VISIBLE_DEVICES= -e TOKENIZERS_PARALLELISM=false -e HOME=/tmp \
   -e PYTHONDONTWRITEBYTECODE=1 \
@@ -22,6 +27,7 @@ docker run --rm --name "$NAME" --network none --user "$(id -u):$(id -g)" --memor
   -w "$REPO" --entrypoint python3 natlang-neuralese:26.09 \
   scripts/neuralese_data/render_native_turn_corpus.py \
   --tokenizer lfm25="$LFM" --tokenizer mellum21="$MELLUM" --out-dir "$OUT" "$@" &
-wait $!; status=$?
+wait $! && status=0 || status=$?  # (set -e must not end the script here)
 wait $! 2>/dev/null || true
+[ $stopped = 1 ] && exit 0
 exit $status
