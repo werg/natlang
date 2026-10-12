@@ -24,7 +24,7 @@ all_twins() {
 }
 until all_twins; do
   UNIT=swe-norm-twins-$(date +%s)
-  python3 scripts/memory_ledger.py run --unit "$UNIT" --budget-gb 12 --host-max-gb 24 --priority low --resumable \
+  python3 scripts/memory_ledger.py run --unit "$UNIT" --budget-gb 12 --reserve-gb 2 --host-max-gb 24 --priority low --resumable \
     --class collection --wait 86400 --workdir "$ROOT" -- \
     .venv-neuralese/bin/python scripts/neuralese_data/swe_bulk_twins.py --bulk "$BULK" --twin-root "$TWINS" \
     --tokenizer lfm25="$LFM" --tokenizer mellum21="$MELLUM" --parallel 1
