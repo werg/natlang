@@ -28,7 +28,8 @@ HANDLERS = {
     # pieces rendered by gold_text_rows: missing_stage_inputs() states that alternative.
     'neuralese_direct': {'module':'natlang_neuralese.train.direct_sft', 'required_inputs':set(),
                          'optional_inputs':{'records','pieces','text_data','heads','continue_from',
-                                            'continue_identity','continue_monitor_reference'},
+                                            'continue_identity','continue_monitor_reference',
+                                            'continued_text_data'},
                          'parameters':{'steps','epochs','batch_tokens','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
                            'checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
                            'latent_optimizer','latent_lr','head_lr','neuralese_weight','projection_blocks',
@@ -217,6 +218,8 @@ def missing_stage_inputs(kind, roles):
         missing = missing | {'text_data or records'}
     if kind == 'neuralese_direct' and 'continue_from' in roles:
         missing |= {'continue_identity', 'continue_monitor_reference'} - set(roles)
+    if kind == 'neuralese_direct' and 'continued_text_data' in roles and 'text_data' not in roles:
+        missing |= {'text_data (a data continuation moves text_data)'}
     return missing
 
 
@@ -332,7 +335,7 @@ def stage_input_args(resolved, kind):
     args = []
     supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
     resolved = _staged_inputs(resolved)
-    for role in ('records', 'pieces', 'text_data', 'continue_from', 'continue_identity',
+    for role in ('records', 'pieces', 'text_data', 'continued_text_data', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
                  'direct_parent_proof'):
@@ -979,10 +982,33 @@ def stage_started(out, stage_id):
     return (out / stage_id).exists() or (out / (stage_id + '-report.json')).exists()
 
 
+def stage_finished(out, stage_id):
+    return (Path(out) / (stage_id + '-report.json')).exists()
+
+
+DATA_CONTINUATION_ROLE = 'continued_text_data'
+
+
+def _data_continuation(old, new):
+    """Whether a started stage's new inputs are a declared data continuation of its old ones: the stage now reads new
+    ``text_data`` and declares ``continued_text_data`` as exactly the text data it trained on (content), every other
+    role unchanged."""
+    if 'text_data' not in old or 'text_data' not in new or DATA_CONTINUATION_ROLE not in new:
+        return False
+    if new[DATA_CONTINUATION_ROLE].get('sha256') != old['text_data'].get('sha256'):
+        return False
+    if new['text_data'].get('sha256') == old['text_data'].get('sha256'):
+        return False
+    rest = lambda roles: {k: v for k, v in roles.items() if k not in ('text_data', DATA_CONTINUATION_ROLE)}
+    return rest(old) == rest(new)
+
+
 def unstarted_stage_input_changes(existing, plan, out):
-    """The stages whose resolved inputs a handoff changes. Only a later stage that has not started may change its
-    inputs (new content for the same roles, e.g. a newer data rendering for a not-yet-reached phase); the active or a
-    finished stage's inputs stay fixed. Returns {stage id: {'old': resolved inputs, 'new': resolved inputs}}."""
+    """The stages whose resolved inputs a handoff changes. A later stage that has not started may take new content for
+    its declared input roles (e.g. a newer data rendering for a not-yet-reached phase). The active (started,
+    unfinished) stage may change its inputs only by a declared data continuation (``continued_text_data`` naming the
+    text data it trained on; direct_sft continues its update counter, weights and optimizer on the new data, the seen
+    documents counted as seen). A finished stage's inputs stay fixed. Returns {stage id: {'kind', 'old', 'new'}}."""
     old_inputs, new_inputs = existing.get('stage_inputs'), plan.get('stage_inputs')
     if old_inputs == new_inputs:
         return {}
@@ -994,12 +1020,16 @@ def unstarted_stage_input_changes(existing, plan, out):
         if old == new:
             continue
         if stage_started(out, stage_id):
-            raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage that '
-                             'has not started may take new inputs')
+            if stage_finished(out, stage_id) or not _data_continuation(old, new):
+                raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage '
+                                 'that has not started may take new inputs, and the active stage only by a declared '
+                                 'data continuation (' + DATA_CONTINUATION_ROLE + ' = the text data it trained on)')
+            changes[stage_id] = {'kind': 'data_continuation', 'old': old, 'new': new}
+            continue
         if set(old) != set(new) or any(old[role].get('binding') != new[role].get('binding') for role in new):
             raise ValueError('handoff refused: ' + stage_id + ' changes its input roles or bindings; only their '
                              'declared content may change')
-        changes[stage_id] = {'old': old, 'new': new}
+        changes[stage_id] = {'kind': 'unstarted_stage', 'old': old, 'new': new}
     return changes
 
 
@@ -1009,8 +1039,8 @@ def _bindings_of(recipe, stage_ids):
 
 
 def _without_unstarted_bindings(old_recipe, new_recipe, changes):
-    """Both recipes minus the input bindings whose content changed for unstarted stages only; refuse a changed
-    binding that a started (or unchanged) stage also reads."""
+    """Both recipes minus the input bindings that changed for the changed stages only (and a data continuation's role
+    map); refuse a changed binding that another started or unchanged stage also reads."""
     old_catalog, new_catalog = old_recipe.get('input_bindings', {}), new_recipe.get('input_bindings', {})
     changed = {name for name in set(old_catalog) | set(new_catalog) if old_catalog.get(name) != new_catalog.get(name)}
     if not changes:
@@ -1026,6 +1056,9 @@ def _without_unstarted_bindings(old_recipe, new_recipe, changes):
     for value in (old_value, new_value):
         for name in changed:
             value.get('input_bindings', {}).pop(name, None)
+        for stage in value.get('stages', []):
+            if changes.get(stage['id'], {}).get('kind') == 'data_continuation':
+                stage.pop('inputs', None)  # its role map moves text_data and declares continued_text_data
     return old_value, new_value
 
 
@@ -1044,8 +1077,10 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
     the frozen runtime is replaced, the superseded one kept beside it, and the change appended to the plan's
     ``handoffs``. Each trainer then checks its own resume identity and logs its code handoff. A handoff may also
     extend an unqualified mapped warm-up (``stage_extensions``); the extension is recorded under ``extended``. A
-    later stage that has not started may take new content for its declared inputs (``unstarted_stage_input_changes``,
-    recorded under ``stage_input_changes`` with the previous input map, which reports of earlier stages carry).
+    later stage that has not started may take new content for its declared inputs, and the active stage new text data
+    by a declared data continuation (``unstarted_stage_input_changes``; recorded under ``stage_input_changes`` with
+    the previous input map, which reports of earlier stages carry; the trainer records the seen documents and the new
+    budget in its data-continuation.json and the stage report).
     ``dry_run`` validates and returns the updated plan without touching the run directory."""
     out = Path(out if out is not None else plan_path.parent)
     if existing.get('device') != plan.get('device'):
@@ -1531,12 +1566,11 @@ def main(argv=None):
                           'handoff_record': ({k: v for k, v in plan['handoffs'][-1].items() if k != 'previous_inputs'}
                                              if args.handoff and plan.get('handoffs') else None)},
                          indent=1), flush=True)
-        return 0
-    if not plan_path.exists():
+    elif not plan_path.exists():
         shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         plan['code'] = {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')}
         write_json(plan_path, plan)
-    if args.launch_metadata is not None:
+    if args.launch_metadata is not None and not args.plan_only:
         metadata = args.launch_metadata.resolve()
         if metadata == args.out or args.out in metadata.parents:
             raise ValueError('--launch-metadata must be outside the recipe output directory')
@@ -1660,6 +1694,14 @@ def main(argv=None):
                     environment.pop('NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE', None)
                 environment.update(declared_environment)
                 environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
+                if args.plan_only:
+                    # The next stage's own data plan on the current code (budget, data continuation, QAT range, held
+                    # set), from its exact child arguments; a trainer without a plan-only mode is listed only.
+                    print(json.dumps({'stage': stage['id'], 'plan_only_command': command}), flush=True)
+                    if kind != 'neuralese_direct':
+                        return 0
+                    environment['PYTHONPATH'] = str(package.parent) + os.pathsep + os.environ.get('PYTHONPATH', '')
+                    return subprocess.run(command + ['--plan-only'], env=environment).returncode
                 if hdd_guard.RECORDS:
                     write_json(args.out / 'hdd-staged-inputs.json', hdd_guard.RECORDS)
                 print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
@@ -1696,6 +1738,8 @@ def main(argv=None):
                             raise ValueError('bootstrap checkpoint backbone identity differs')
                 report = {'id': stage['id'], 'kind': kind, 'recipe_sha256': plan['recipe_sha256'],
                           'inputs': inputs, 'gate': gate, 'artifact': str(output), 'artifact_sha256': sha(output)}
+                if kind == 'neuralese_direct' and gate.get('data_continuation') is not None:
+                    report['data_continuation'] = gate['data_continuation']  # previous data, seen count, new budget
                 write_json(args.out / (stage['id'] + '-attempt.json'), report)
                 require_gate(gate, kind)
                 write_json(report_path, report)

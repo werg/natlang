@@ -65,7 +65,11 @@
   {"stage": "direct", "lines": ["mellum"], "phase": "direct_trajectory", "kind": "historical-one-off",
    "recipe": "neuralese-direct-mellum-v4-from-v3-warmup",
    "difference": "Mellum v4's direct_trajectory phase (1 epoch) reads union r3's whole-trajectory rendering (runs/natlang-target-union-20261011-r3/whole-trajectory/mellum21, 165,822 train / 1,549 test documents, 50.2M supervised tokens) while the parity recipes (neuralese-direct-v3, neuralese-direct-mellum-v4) keep union r2's (75,983 / 123, 15.9M)",
-   "reason": "coordinator decision 2026-10-12: union r3 was registered while v4's direct_sft ran; the not-yet-started phase takes it by --handoff (recipe.py unstarted_stage_input_changes). The LFM line moves to r3 by its own decision (briefed to Pop); once both lines read r3, the parity base moves and this entry is removed."}
+   "reason": "coordinator decision 2026-10-12: union r3 was registered while v4's direct_sft ran; the not-yet-started phase takes it by --handoff (recipe.py unstarted_stage_input_changes). The LFM line moves to r3 by its own decision (briefed to Pop); once both lines read r3, the parity base moves and this entry is removed."},
+  {"stage": "direct", "lines": ["mellum"], "phase": "direct_sft", "kind": "historical-one-off",
+   "recipe": "neuralese-direct-mellum-v4-from-v3-warmup",
+   "difference": "Mellum v4's direct_sft moves from union r2's program-header rendering to r3's (runs/natlang-target-union-20261011-r3/program-header/mellum21) by a data continuation (continued_text_data = the r2 file): it keeps its update counter, weights, MuonSR and QAT state; the r2 documents of its consumed updates count as seen and the rest of its 1 epoch is r3 minus them; held windows come from r3's test split. The parity recipes start direct_sft fresh on r2",
+   "reason": "owner decision 2026-10-12 (\"continue our training from what we have with more data\"). The mechanism is shared (neuralese_direct handler role continued_text_data, direct_sft data_continuation; plans/neuralese/NEURALESE_DIRECT_V1.md), and the LFM line can take it the same way; a lineage-specific declaration, not a parity default."}
  ],
  "lineage_keys": {
   "direct": ["inputs.heads"],

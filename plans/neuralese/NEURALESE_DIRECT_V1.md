@@ -267,13 +267,90 @@ Proof (unit `natlang-plan-only-mellum-v4-131047`, read-only on the live run dire
 `stages_started: [direct_sft]`, and `stage_input_changes` names only `direct_trajectory` (r2 `f92e2f33` → r3
 `1e3759cd`). The `direct_sft` trainer's own resume identity (options plus its input hashes) does not include phase 2.
 
-Takes effect only through a `--handoff` relaunch on this commit or later, made **before `direct_sft` finishes**. The
+Takes effect only through a `--handoff` relaunch on this commit or later, made **before `direct_sft` finishes** (the
+data continuation below is taken by the same handoff). The
 running process uses its frozen snapshot and would otherwise enter phase 2 on r2. After phase 2 has started, its
 inputs are fixed.
 
 Leakage check: r3's test split shares two source groups (FOLIO story 265) with 8 r2 program-header train documents
 that `direct_sft` trains on. r3 moved this group to held, which is why 47 r2 train documents are absent from r3. Three of
 the 1,549 r3 test documents are affected; they are kept and noted here.
+
+### Mellum v4: direct_sft continues on union r3's program header (data continuation, 2026-10-12)
+
+Owner decision 2026-10-12: "Of course we want to continue our training from what we have with more data." v4's
+active phase `direct_sft` moves from r2's program-header rendering to r3's
+(`runs/natlang-target-union-20261011-r3/program-header/mellum21/text-data.jsonl`, sha256 `3a3b52c4…6836`). It keeps its
+update counter, weights, MuonSR optimizer state, QAT state and RNG. It is not restarted.
+
+**Declaration (one name).** The stage input role `continued_text_data` is declared by the shared `neuralese_direct`
+handler and passed to direct_sft as `--continued-text-data`. It names the text data the stage trained on. The
+recipe binds `text_data` → `direct_text_program_header_r3` and `continued_text_data` → `direct_text_program_header`
+(r2).
+- The handoff (`recipe.py unstarted_stage_input_changes`) accepts a change to the active stage's inputs only in this
+  form:
+  - the new `continued_text_data` has the content hash of the old `text_data`;
+  - `text_data` is new;
+  - every other role is unchanged;
+  - the stage has no report yet.
+- Without the declaration, the handoff refuses as before.
+- The record (`stage_input_changes.<stage>.kind = data_continuation`, `previous_inputs`) goes into the plan's
+  `handoffs`.
+- The trainer writes the seen count, the new budget and the rebases to `direct_sft/data-continuation.json`, its
+  checkpoint (`data_continuation`), the stage `report.json` and the recipe stage report (`data_continuation`).
+
+**Data (direct_sft.py `data_continuation`).**
+- The previous plan is rebuilt exactly from the previous data, with the same seed and packing.
+- The documents of its first k updates count as seen, matched by content hash or document id. A partly consumed
+  document counts as seen. Both renders of an id that r3 renders twice count as seen.
+- The rest of the epoch is r3's target-bearing windows minus the seen documents. It uses the same
+  cohort-then-(sampling group-)then-document-then-item sampler, seed and packing (`direct_schedule`).
+- Updates 1..k are placeholders and the counter continues at k+1.
+- `epochs_covered` counts seen windows plus r3 windows so far, over seen plus unseen windows.
+- A continuation must start inside the first pass of a whole-epoch budget.
+- Continuations chain: a later one rebuilds this plan from its record.
+
+**Schedules.**
+- direct_sft has no LR schedule and no warm-up: the LRs are constant, so nothing jumps.
+- The QAT progress is rebased: p(t) = p_k + (0.35 − p_k)(t − k)/(N − k) for t ≥ k. Here p_k is the old progress at
+  k and N is the new total. The value at k is unchanged and the slope flattens.
+
+**Held.**
+- Held windows come from r3's test split (the same selection policy). The 8 selected documents differ from r2's
+  (one is shared).
+- So, once at the continuation launch, the stage's base is re-measured on the new held set before the saved state is
+  restored. The base is the stage's update-0 weights: the declared predecessor, here the v3 warm-up.
+- `ce_delta` and base agreement then stay against base. The best checkpoint is chosen on the new held set from then
+  on (`held.previous_best` is recorded).
+- FOLIO story 265 is affected through direct_sft's r2 history only. It was r2 train (8 program-header documents
+  direct_sft could see) and is r3 held. Of its r3 test documents, 3 whole-trajectory and 7 program-header documents
+  share those groups.
+
+**Memory and process.**
+- The record is computed by a `--plan-only` child of the trainer before the model loads. It streams both corpora
+  (`stream_text_rows`, `stage_plan_data`: light window descriptors, about 2 GB peak).
+- The trainer rebuilds the plan from its own windows and checks the per-update document hash
+  (`plan_documents_sha256`).
+- r3's program header has 808M tokens against r2's 236M, so the trainer's resident windows grow by about 3–4 GB.
+
+**Proof** (unit `natlang-planstream-mellum-v4-143102`, read-only on the live run-v4 at checkpoint update 400):
+- `recipe --handoff --plan-only` was accepted (`kind: data_continuation`; lineage hash `fb2f1a7b…` kept).
+- direct_sft `--plan-only`:
+
+| quantity | value |
+|---|---|
+| mode | continue |
+| consumed / previous total | 400 / 8,596 updates (0.047 of the r2 epoch) |
+| seen | 6,298 documents, 6,813 windows (7,255 r3 documents matched) |
+| r3 target windows / documents | 394,281 / 357,632 (350,377 unseen) |
+| new total | **31,314 updates** (30,914 remaining; 32k forward tokens per update) |
+| QAT progress | [0.01629, 0.35] over updates 400..31,314 (was [0, 0.35] over 0..8,596) |
+| held | rebased (r3 test selection) |
+
+- The rebuilt 400 consumed r2 updates have exactly the documents the live run trained, update by update (sha256
+  `35cdd6ff…` against the `execution_plan` events in `run-v4.log`).
+- The total is higher than the supervised-token ratio suggests (about 24.6k): updates are packed by forward tokens,
+  and r3's program header has 3.4x r2's tokens.
 
 ## End-to-end stage (design resolved 2026-10-11; implementation in progress)
 

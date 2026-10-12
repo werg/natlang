@@ -26,6 +26,7 @@ import json
 import math
 import os
 import random
+import sys
 import time
 from array import array
 from pathlib import Path
@@ -58,7 +59,8 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
 OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
-                         'continue_monitor_reference', 'gradient_digest_steps', 'state_hash_steps'})
+                         'continue_monitor_reference', 'gradient_digest_steps', 'state_hash_steps',
+                         'continued_text_data', 'plan_only', 'plan_out'})
 
 
 def parse(argv=None):
@@ -80,6 +82,14 @@ def parse(argv=None):
                    help='the predecessor stage identity-check.json, pinned separately from a relocated checkpoint')
     p.add_argument('--continue-monitor-reference', type=Path,
                    help='the predecessor stage monitor-reference.pt, pinned separately from a relocated checkpoint')
+    p.add_argument('--continued-text-data', type=Path,
+                   help='data continuation (owner 2026-10-12): the --text-data this stage trained on before; a resume '
+                        'whose checkpoint read it continues on --text-data with the same update counter, weights and '
+                        'optimizer state, the seen documents counted as seen (data_continuation)')
+    p.add_argument('--plan-only', action='store_true',
+                   help='print the data plan (budget, data continuation, QAT range, held set) and exit: no model, no '
+                        'writes to --out')
+    p.add_argument('--plan-out', type=Path, help='--plan-only: also write the plan and continuation record here')
     p.add_argument('--tokens', type=int, default=8192, help='window capacity: the whole preceding document, system '
                    'prompt included, up to this many tokens')
     p.add_argument('--target-tokens', type=int, default=1024, help='supervised (Neuralese) positions per window')
@@ -368,9 +378,330 @@ def direct_sft_calibration_kind(fp8_training: str, fp8_recipe: str, mode: str,
     raise ValueError(f'unknown direct-SFT FP8 backend {fp8_training!r}')
 
 
+CONTINUATION_SCHEMA = 'natlang.neuralese-direct-data-continuation/1'
+
+
+def target_bearing(window):
+    """A window whose span holds decision-target tokens, or assistant positions in a document without a declared
+    suffix (data audit 2026-10-11, DATA_INVENTORY_20261011.md E); context-only windows are not trained."""
+    from .text_supervision import ROLE_CODES
+    size = len(window['ids']) - window['prefix']
+    if window.get('supervised_suffix_start') is not None:
+        return window['supervised_suffix_start'] < size
+    roles = window.get('roles')
+    assistant = (ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply'))
+    return roles is None or any(roles[i] in assistant for i in range(window['prefix'], len(window['ids'])))
+
+
+def direct_sampler(targets):
+    """The shared cohort-then-(sampling group-)then-document-then-item sampler, equal cohort weights."""
+    from .text_supervision import CohortDocumentSampler
+    cohorts = sorted({w.get('cohort', 'native') for w in targets})
+    grouped = any(w.get('sampling_group') is not None for w in targets)
+    return CohortDocumentSampler(targets, {c: 1 / len(cohorts) for c in cohorts},
+                                 cohort_key=lambda w: w.get('cohort', 'native'), document_key=lambda w: w['document'],
+                                 sampling_group_key=(lambda w: w.get('sampling_group')) if grouped else None)
+
+
+def _window_length(window):
+    return len(window['ids']) - 1
+
+
+def continued_unseen(targets, continuation):
+    """The target windows of documents a data continuation has not seen (by content hash or document id)."""
+    hashes, ids = set(continuation['seen_document_sha256']), set(continuation['seen_document_ids'])
+    return [w for w in targets if w['document'] not in hashes and w.get('document_id') not in ids]
+
+
+def direct_schedule(targets, a, continuation=None):
+    """The stage's whole update plan, a pure function of the data, the seed, the packing and the continuation.
+
+    Without a continuation: ``text_supervision.epoch_schedule`` over the target-bearing windows. After a data
+    continuation (``--continued-text-data``) at update k: k placeholder entries (the updates trained on the previous
+    data), then the rest of the first pass on this data's unseen documents (same sampler policy, same seed and
+    packing), then the remaining whole passes over all of this data. ``epochs_covered`` counts seen windows plus this
+    data's windows trained so far, over seen plus unseen windows. Returns (sampler, plan)."""
+    from .text_supervision import epoch_schedule
+    sampler = direct_sampler(targets)
+    pack = dict(seed=a.seed, length=_window_length, max_tokens=a.batch_tokens, max_items=a.batch)
+    if continuation is None:
+        return sampler, epoch_schedule(sampler, epochs=a.epochs, updates=None if a.epochs is not None else a.steps,
+                                       **pack)
+    if a.epochs is None or not float(a.epochs).is_integer():
+        raise ValueError('a data continuation continues a whole-epoch budget (--epochs 1, 2, ...)')
+    consumed, seen = continuation['consumed_updates'], continuation['seen_windows']
+    unseen = continued_unseen(targets, continuation)
+    total = seen + len(unseen)
+    plan = [([], seen / total * (i + 1) / consumed) for i in range(consumed)]
+    if unseen:
+        plan += [(batch, (seen + covered * len(unseen)) / total)
+                 for batch, covered in epoch_schedule(direct_sampler(unseen), epochs=1.0, **pack)]
+    if a.epochs > 1:
+        plan += [(batch, 1.0 + covered) for batch, covered in epoch_schedule(sampler, epochs=a.epochs - 1, **pack)]
+    return sampler, plan
+
+
+def held_documents(held):
+    return sorted({w['document'] for w in held})
+
+
+def data_continuation(previous_targets, previous_held, targets, held, *, consumed, previous, quantization_stage, a):
+    """Continue the stage's epoch budget on new data after ``consumed`` updates (owner 2026-10-12: "continue our
+    training from what we have with more data"). The previous plan is rebuilt exactly (from the previous data and its
+    own continuation, if any); the documents of its consumed updates count as seen, and the rest of the epoch is this
+    data minus the seen documents, matched by content hash or document id (a partly consumed document counts as
+    seen). The update counter, weights and optimizer state continue. The QAT progress is rebased so it continues from
+    its value at update k to the stage's end over the new total: progress(t) = p_k + (p1 - p_k) (t - k) / (N - k).
+    Learning rates are constant in this trainer (no schedule, no warm-up), so nothing else is rebased. Returns
+    (record, plan)."""
+    _, previous_plan = direct_schedule(previous_targets, a, previous)
+    offset = previous['consumed_updates'] if previous else 0
+    if not offset <= consumed <= len(previous_plan):
+        raise ValueError(f'data continuation at update {consumed} lies outside the previous plan '
+                         f'({offset}..{len(previous_plan)})')
+    if consumed and previous_plan[consumed - 1][1] > 1:
+        raise ValueError('a data continuation must start inside the first pass of the previous data')
+    batches = [batch for batch, _ in previous_plan[offset:consumed]]
+    hashes = set(previous['seen_document_sha256'] if previous else ())
+    ids = set(previous['seen_document_ids'] if previous else ())
+    hashes |= {w['document'] for batch in batches for w in batch}
+    ids |= {w['document_id'] for batch in batches for w in batch if w.get('document_id') is not None}
+    seen_windows = (previous['seen_windows'] if previous else 0) + sum(len(batch) for batch in batches)
+    p0, p1 = quantization_stage['progress'] if quantization_stage else (0.0, 0.0)
+    start = quantization_stage['start'] if quantization_stage else 0
+    previous_end = len(previous_plan)
+    progress_k = p0 + (p1 - p0) * min(1.0, max(0.0, (consumed - start) / max(1, previous_end - start)))
+    consumed_documents = [[w['document'] for w in batch] for batch in batches]
+    record = {'schema': CONTINUATION_SCHEMA, 'consumed_updates': consumed, 'previous_updates': previous_end,
+              # The rebuilt consumed updates (their documents, in order): checkable against the run's execution_plan
+              # log events.
+              'consumed_documents_sha256': hashlib.sha256(json.dumps(consumed_documents).encode()).hexdigest(),
+              'previous_epochs_covered': previous_plan[consumed - 1][1] if consumed else 0.0,
+              'seen_documents': len(hashes), 'seen_windows': seen_windows,
+              'seen_document_sha256': sorted(hashes), 'seen_document_ids': sorted(ids),
+              'previous': ({k: v for k, v in previous.items() if not k.startswith('seen_document_')}
+                           if previous else None)}
+    _, plan = direct_schedule(targets, a, record)
+    unseen = continued_unseen(targets, record)
+    record.update(updates=len(plan), plan_documents_sha256=plan_documents_sha256(plan, consumed),
+                  unseen_target_windows=len(unseen),
+                  unseen_documents=len({w['document'] for w in unseen}),
+                  matched_seen_documents=len({w['document'] for w in targets} - {w['document'] for w in unseen}),
+                  lr_schedule='constant (direct_sft has no LR schedule or warm-up): unchanged',
+                  quantization_rebase=None if quantization_stage is None else {
+                      'previous': {'start': start, 'end': previous_end, 'progress': [p0, p1]},
+                      'start': consumed, 'end': len(plan), 'progress': [progress_k, p1]},
+                  held={'previous_documents': held_documents(previous_held), 'documents': held_documents(held),
+                        'rebased': held_documents(previous_held) != held_documents(held)})
+    return record, plan
+
+
+def continuation_summary(record):
+    """The record without its seen-document lists (stage report, plan, logs)."""
+    return None if record is None else {k: v for k, v in record.items() if not k.startswith('seen_document_')}
+
+
+def text_engine(heads):
+    """The tokenizer side of serve.load_engine (no weights): what load_text_rows and prepare_text_windows read, for
+    a data-only plan (--plan-only)."""
+    from types import SimpleNamespace
+    from transformers import AutoConfig, AutoTokenizer
+    from ..model.hf_port import family_controls
+    from ..model.lfm2_port import ControlTokens, resolve_base
+    saved = dict((torch.load(heads, map_location='cpu', weights_only=False, mmap=True) or {}).get('backbone') or {})
+    if saved.get('backbone') == 'maple':
+        tokenizer = AutoTokenizer.from_pretrained(saved['base'], trust_remote_code=False)
+        controls = family_controls(SimpleNamespace(config=AutoConfig.from_pretrained(saved['base'])), tokenizer)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(saved.get('student_lora') or resolve_base(saved.get('base')))
+        controls = ControlTokens.from_tokenizer(tokenizer)
+    import functools
+    tokens = functools.lru_cache(maxsize=64)(lambda text: tuple(tokenizer(text, add_special_tokens=False)['input_ids']))
+    return SimpleNamespace(tokenizer=tokenizer, backbone=SimpleNamespace(controls=controls),
+                           _tokens=lambda text: list(tokens(text)))
+
+
+def stage_data(engine, a, text_data):
+    """(train windows, target-bearing windows, held windows, held selection, mask receipt, rows) of one data file."""
+    from .text_warmup import load_text_rows, prepare_text_windows, select_held_document_windows
+    rows, _ = load_text_rows(a.records, a.pieces, text_data, tokenizer=engine.tokenizer)
+    windows, mask_receipt = prepare_text_windows(engine, rows, tokens=a.tokens, prefix_tokens=a.prefix_tokens,
+                                                 target_tokens=a.target_tokens, mask_system_prompt=True)
+    held, held_selection = select_held_document_windows(windows['test'], a.held_documents)
+    targets = [w for w in windows['train'] if target_bearing(w)]
+    return windows['train'], targets, held, held_selection, mask_receipt, rows
+
+
+def stream_text_rows(text_data, tokenizer):
+    """``text_warmup.load_text_rows(text_data=...)`` as a stream, for a data-only plan: the same validation, train/held
+    source-group check, exclusion of train rows that duplicate a held text and exact-duplicate dedup (first row
+    kept), with content hashes in place of texts; two passes over the file, one row in memory at a time."""
+    from ..data.text_corpus import tokenizer_fingerprint
+    fingerprint, vocab_size = None, len(tokenizer)
+    groups, held_texts = {'train': set(), 'test': set()}, set()
+    with Path(text_data).open() as source:
+        for line in source:
+            row = json.loads(line)
+            if (row.get('split') not in ('train', 'test') or not isinstance(row.get('text'), str)
+                    or not row['text'].strip() or not row.get('source_groups')):
+                raise ValueError('text JSONL needs nonempty text, train/test split and source_groups')
+            if 'sampling_group' in row and (not isinstance(row['sampling_group'], str) or not row['sampling_group']):
+                raise ValueError('sampling_group must be a nonempty string when present')
+            if not isinstance(row.get('text_cohort', 'native'), str) or not row.get('text_cohort', 'native'):
+                raise ValueError('text_cohort must be a nonempty string')
+            if 'supervised_suffix_start' in row and 'token_ids' not in row:
+                raise ValueError('supervised suffix requires native token IDs')
+            if 'token_ids' in row:
+                ids = row['token_ids']
+                fingerprint = fingerprint or tokenizer_fingerprint(tokenizer)
+                if (row.get('tokenizer_sha256') != fingerprint or not isinstance(ids, list) or not ids or
+                        any(type(i) is not int or i < 0 or i >= vocab_size for i in ids)):
+                    raise ValueError('gold token IDs or tokenizer fingerprint mismatch')
+                if 'supervised_suffix_start' in row and (type(row['supervised_suffix_start']) is not int or
+                                                         not 0 <= row['supervised_suffix_start'] < len(ids)):
+                    raise ValueError('gold supervised suffix coordinate is invalid')
+            groups[row['split']].update(row['source_groups'])
+            if row['split'] == 'test':
+                held_texts.add(hashlib.sha256(row['text'].encode()).digest())
+    if groups['train'] & groups['test']:
+        raise ValueError('text warm-up factual source groups cross train/test')
+    seen = {}
+    with Path(text_data).open() as source:
+        for line in source:
+            row = json.loads(line)
+            text = hashlib.sha256(row['text'].encode()).digest()
+            if row['split'] == 'train' and text in held_texts:
+                continue
+            if 'token_ids' in row:
+                row['token_ids'] = array('I', row['token_ids'])
+            key = (row['split'], text, hashlib.sha256(array('I', row.get('token_ids', [])).tobytes()).digest(),
+                   row.get('supervised_suffix_start'), row.get('sampling_group'))
+            cohort = row.get('text_cohort', 'native')
+            if key in seen:
+                if seen[key] != cohort:
+                    raise ValueError('an identical document belongs to multiple cohorts; resolve ownership before '
+                                     'training')
+                continue
+            seen[key] = cohort
+            yield row
+
+
+def stage_plan_data(engine, a, text_data):
+    """The plan-relevant part of ``stage_data`` (target-bearing and held windows as light descriptors: document,
+    document id, cohort, sampling group, source groups, offsets and length), streamed row by row (a data-only plan
+    holds no text or token arrays). Returns (targets, held, held selection); ``direct_schedule`` over these targets
+    equals the one over ``stage_data``'s windows (the trainer checks the plan's hash)."""
+    from .text_warmup import prepare_text_windows, select_held_document_windows
+
+    def light(window):
+        value = {'ids': range(len(window['ids'])), 'prefix': window['prefix'], 'document': window['document'],
+                 'document_id': window.get('document_id'), 'cohort': window.get('cohort', 'native'),
+                 'groups': window.get('groups'), 'offset': window.get('offset', 0)}
+        if window.get('sampling_group') is not None:
+            value['sampling_group'] = window['sampling_group']
+        return value
+    targets, tests = [], []
+    for row in stream_text_rows(text_data, engine.tokenizer):
+        windows, _ = prepare_text_windows(engine, [row], tokens=a.tokens, prefix_tokens=a.prefix_tokens,
+                                          target_tokens=a.target_tokens, mask_system_prompt=True)
+        targets += [light(w) for w in windows['train'] if target_bearing(w)]
+        tests += [light(w) for w in windows['test']]
+    held, held_selection = select_held_document_windows(tests, a.held_documents)
+    return targets, held, held_selection
+
+
+def plan_documents_sha256(plan, start=0):
+    """The documents of each update of ``plan[start:]``, in order, hashed (plan identity across code paths)."""
+    return hashlib.sha256(json.dumps([[w['document'] for w in batch] for batch, _ in plan[start:]]).encode()).hexdigest()
+
+
+def continuation_inputs(a, inputs):
+    """The identity inputs the previous data would have had: --text-data's hash replaced by --continued-text-data's."""
+    from ..common.hashing import sha256_file_hex_cached
+    return {**inputs, str(a.text_data): sha256_file_hex_cached(a.continued_text_data)}
+
+
+def continuation_mode(a, state, inputs):
+    """How the stage continues its saved state (None: a fresh stage): ('none', None), ('resume', record) for a data
+    continuation recorded earlier, or ('continue', previous record or None) when the checkpoint trained on
+    --continued-text-data and this launch reads --text-data (the record is computed now). Anything else is left to
+    the resume identity check, which refuses it."""
+    if state is None:
+        return 'none', None
+    recorded = state.get('data_continuation')
+    saved = (state.get('identity') or {}).get('inputs') or {}
+    if sorted(saved.values()) == sorted(inputs.values()):
+        return ('resume', recorded) if recorded is not None else ('none', None)
+    if a.continued_text_data is not None and sorted(saved.values()) == sorted(continuation_inputs(a, inputs).values()):
+        return 'continue', recorded
+    return 'none', None
+
+
+def compute_continuation(a, state, engine, targets, held, recorded, quantization_stage):
+    """The data continuation record at the saved state's update (data_continuation), from the previous data file."""
+    previous_targets, previous_held, _ = stage_plan_data(engine, a, a.continued_text_data)
+    if recorded is not None and quantization_stage is not None:
+        quantization_stage = {**quantization_stage, **{k: recorded['quantization_rebase'][k]
+                                                       for k in ('start', 'progress')}}
+    record, _ = data_continuation(previous_targets, previous_held, targets, held, consumed=state['step'],
+                                  previous=recorded, quantization_stage=quantization_stage, a=a)
+    return record
+
+
+def identity_inputs(a):
+    """The stage's input identity: each data/state file by its cached digest (never a re-read of an unchanged file)."""
+    from ..common.hashing import sha256_file_hex_cached
+    return {str(path): sha256_file_hex_cached(path)
+            for path in (a.heads, a.records, a.pieces, a.text_data, a.continue_from, a.continue_identity,
+                         a.continue_monitor_reference) if path}
+
+
+def plan_only(a):
+    """--plan-only: the stage's data plan from its data and saved state, without loading the model or writing to
+    --out: the update budget, the data continuation it would make (or has made), the QAT range and the held set.
+    With --plan-out, the continuation record (seen lists included) is written there."""
+    inputs = identity_inputs(a)
+    slot = a.out / 'checkpoint.pt'
+    state = CheckpointPolicy.load(slot) if slot.exists() else None
+    mode, recorded = continuation_mode(a, state, inputs)
+    resumable = state is None or mode != 'none' or sorted(
+        ((state.get('identity') or {}).get('inputs') or {}).values()) == sorted(inputs.values())
+    quantization_stage = (json.loads(a.quantization).get('stage') if a.quantization else None)
+    engine = text_engine(a.heads)
+    targets, held, held_selection = stage_plan_data(engine, a, a.text_data)
+    record = (compute_continuation(a, state, engine, targets, held, recorded, quantization_stage)
+              if mode == 'continue' else recorded)
+    _, plan = direct_schedule(targets, a, record)
+    step = state['step'] if state is not None else 0
+    if quantization_stage is not None:
+        quantization_stage = dict(quantization_stage, end=len(plan))
+        if record is not None and record.get('quantization_rebase'):
+            quantization_stage.update(start=record['quantization_rebase']['start'],
+                                      progress=record['quantization_rebase']['progress'])
+    summary = {'event': 'direct_plan_only', 'mode': mode, 'resume_accepted': resumable, 'step': step,
+               'updates': len(plan), 'remaining_updates': len(plan) - step, 'epochs': a.epochs,
+               'batch_tokens': a.batch_tokens, 'target_windows': len(targets),
+               'documents': len({w['document'] for w in targets}),
+               'epochs_covered_at_step': plan[step - 1][1] if step else 0.0,
+               'next_update_documents': [[w['document'] for w in batch] for batch, _ in plan[step:step + 2]],
+               'held_documents': held_documents(held), 'held_policy': held_selection.get('policy'),
+               'quantization_stage': quantization_stage,
+               'lr_schedule': 'constant (no schedule, no warm-up)',
+               'data_continuation': continuation_summary(record)}
+    print(json.dumps(summary, indent=1), flush=True)
+    if a.plan_out is not None:
+        pending = a.plan_out.with_name(a.plan_out.name + '.pending')
+        pending.write_text(json.dumps({'summary': summary, 'record': record}) + '\n')
+        pending.replace(a.plan_out)
+    return 0 if resumable else 2
+
+
 def main(argv=None):
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    a = parse(raw_argv)
+    if a.plan_only:
+        return plan_only(a)
     stop = StopSignal().install()
-    a = parse(argv)
     from ..common.hashing import sha256_file_hex
     from ..model.neuralese_projection import (NeuraleseProjection, TokenChoiceProjection,
                                                project_token_states, soft_token_mixture)
@@ -399,14 +730,29 @@ def main(argv=None):
     options = {k: str(v) if isinstance(v, Path) else v for k, v in vars(a).items()}
     code = {str(path.relative_to(Path(__file__).parents[1])): sha256_file_hex(path)
             for path in sorted(Path(__file__).parents[1].rglob('*.py'))}
-    from ..common.hashing import sha256_file_hex_cached
     # Inputs by cached digest (never a re-read of an unchanged file, e.g. the HDD-archived predecessor at a resume).
-    inputs = {str(path): sha256_file_hex_cached(path)
-              for path in (a.heads, a.records, a.pieces, a.text_data, a.continue_from, a.continue_identity,
-                           a.continue_monitor_reference) if path}
+    inputs = identity_inputs(a)
     identity = {'schema': SCHEMA, 'options': {k: v for k, v in options.items() if k not in OPERATIONAL
                                               and not (k in LATER_DEFAULTS and v == LATER_DEFAULTS[k])},
                 'inputs': inputs, 'code': code}
+    # Data continuation (--continued-text-data): decided from the saved state before the model loads; the record is
+    # computed by a --plan-only child (both corpora in memory only there), then the plan is rebuilt here from it.
+    policy = CheckpointPolicy(a.out, every_steps=a.checkpoint_every)
+    resume_state = CheckpointPolicy.load(policy.slot) if policy.slot.exists() else None
+    continuation_launch, continuation = continuation_mode(a, resume_state, inputs)
+    resume_state = None
+    if continuation_launch == 'continue':
+        import subprocess
+        planned = a.out / 'data-continuation.plan.json'
+        subprocess.run([sys.executable, '-m', 'natlang_neuralese.train.direct_sft', *raw_argv, '--plan-only',
+                        '--plan-out', str(planned)], check=True)
+        continuation = json.loads(planned.read_text())['record']
+        planned.unlink()
+        print(json.dumps({'event': 'data_continuation_planned', **continuation_summary(continuation)}), flush=True)
+    elif a.continued_text_data is not None and continuation is None:
+        print(json.dumps({'event': 'data_continuation_unused', 'reason': 'no checkpoint trained on the previous data'
+                          if not policy.slot.exists() else 'the checkpoint does not read --continued-text-data'}),
+              flush=True)
 
     engine = load_engine(heads_checkpoint=str(a.heads), device=a.device)
     backbone = engine.backbone
@@ -508,44 +854,29 @@ def main(argv=None):
         snapshot_latents(a.weight_drift_base, latent_named)
 
     # Windows: the whole preceding document (system prompt included) up to --tokens, --target-tokens supervised.
-    rows, receipt = load_text_rows(a.records, a.pieces, a.text_data, tokenizer=engine.tokenizer)
-    windows, mask_receipt = prepare_text_windows(engine, rows, tokens=a.tokens, prefix_tokens=a.prefix_tokens,
-                                                 target_tokens=a.target_tokens, mask_system_prompt=True)
-    train_windows = windows['train']
-    held, held_selection = select_held_document_windows(windows['test'], a.held_documents)
+    train_windows, targets, held, held_selection, mask_receipt, rows = stage_data(engine, a, a.text_data)
     if not train_windows or not held:
         raise ValueError('neuralese_direct needs train and held windows')
     # The budget (data audit 2026-10-11, DATA_INVENTORY_20261011.md E): epochs over the target-bearing train windows
-    # (a window whose span holds decision-target tokens, or assistant positions in a document without a declared
-    # suffix), sampled by document without replacement through the shared CohortDocumentSampler, packed into updates
-    # of up to --batch-tokens forward tokens. Context-only windows (history repeated by later decision documents)
-    # are not trained.
-    from .text_supervision import CohortDocumentSampler, epoch_schedule
-    assistant_codes = {ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply')}
-
-    def target_bearing(window):
-        size = len(window['ids']) - window['prefix']
-        if window.get('supervised_suffix_start') is not None:
-            return window['supervised_suffix_start'] < size
-        roles = window.get('roles')
-        return roles is None or any(roles[i] in assistant_codes for i in range(window['prefix'], len(window['ids'])))
-
-    targets = [w for w in train_windows if target_bearing(w)]
+    # (target_bearing), sampled by document without replacement through the shared CohortDocumentSampler, packed into
+    # updates of up to --batch-tokens forward tokens (direct_schedule); after a data continuation, the rest of the
+    # budget on the unseen documents. Context-only windows (history repeated by later decision documents) are not
+    # trained.
+    from .text_supervision import epoch_schedule
     if not targets:
         raise ValueError('neuralese_direct found no target-bearing train window')
-    cohorts = sorted({w.get('cohort', 'native') for w in targets})
-    has_sampling_groups = any(w.get('sampling_group') is not None for w in targets)
-    sampler = CohortDocumentSampler(targets, {c: 1 / len(cohorts) for c in cohorts},
-                                    cohort_key=lambda w: w.get('cohort', 'native'), document_key=lambda w: w['document'],
-                                    sampling_group_key=(lambda w: w.get('sampling_group'))
-                                    if has_sampling_groups else None)
-    schedule = epoch_schedule(sampler, seed=a.seed, length=lambda w: len(w['ids']) - 1, epochs=a.epochs,
-                              updates=None if a.epochs is not None else a.steps, max_tokens=a.batch_tokens,
-                              max_items=a.batch)
+    sampler, schedule = direct_schedule(targets, a, continuation)
+    if continuation is not None and (continuation['updates'] != len(schedule) or plan_documents_sha256(
+            schedule, continuation['consumed_updates']) != continuation['plan_documents_sha256']):
+        raise ValueError('the data continuation record does not rebuild its plan on this data')
     if a.epochs is not None:
         a.steps = len(schedule)  # derived: the stage's schedules (QAT ramps, cadence ends) follow it
     if quant is not None and quant.stage['end'] == 'derived':
         quant.stage['end'] = a.steps
+    if quant is not None and continuation is not None and continuation.get('quantization_rebase'):
+        # The QAT progress continues from its value at the continuation update to the stage end over the new total.
+        rebase = continuation['quantization_rebase']
+        quant.stage.update(start=rebase['start'], end=a.steps, progress=list(rebase['progress']))
     from .memory_estimator import (AdaptiveGraphMemory, DIRECT_SFT_ADJACENT_CONTEXT_DISTANCE,
                                   DIRECT_SFT_ADJACENT_MIN_SAMPLES, DIRECT_SFT_ADJACENT_QUANTILE,
                                   backbone_memory_layout, geometry_bytes)
@@ -575,9 +906,11 @@ def main(argv=None):
               'train_windows': len(train_windows), 'target_windows': len(targets),
               'documents': sum(len(d) for d in sampler.documents.values()),
               'sampling': sampler.receipt(),
-              'windows_per_update': sum(len(batch) for batch, _ in schedule) / len(schedule),
+              'windows_per_update': (sum(len(batch) for batch, _ in schedule) /
+                                     max(1, sum(1 for batch, _ in schedule if batch))),
               'policy': 'epoch-ordered document shuffle without replacement, target-bearing windows, '
-                        'length-bucketed right-padded updates (text_supervision.epoch_schedule)'}
+                        'length-bucketed right-padded updates (text_supervision.epoch_schedule)',
+              'data_continuation': continuation_summary(continuation)}
     totals = {'supervised_tokens': 0, 'target_tokens': 0, 'windows': 0}
     print(json.dumps({'event': 'windows', 'train': len(train_windows), 'held': len(held), 'budget': budget,
                       'held_selection': {k: held_selection.get(k) for k in ('policy', 'limit_documents')},
@@ -719,21 +1052,50 @@ def main(argv=None):
         return (loss if usable else loss * 0.0), metrics, prediction, token_losses, loss_stats
 
     # Resume.
-    policy = CheckpointPolicy(a.out, every_steps=a.checkpoint_every)
     if not a.save_state:
         policy.save = lambda state, **_: None  # a smoke: logs and report only, never a full state
     step, best, base_eval, history = 0, None, None, []
     archive = None
+    pending_restore = None  # a data continuation with a new held set restores after the base is re-measured
+
+    def restore(state):
+        nonlocal step, best, base_eval, history, memory_estimator
+        from .text_warmup import copy_restored_values
+        tensors_by_name = plain_named_tensors(backbone.hf)
+        # The shared copy (its own scope): a loop variable left in main() is a view of the mmap'd state and kept the
+        # whole mapping plus the dirtied pages alive for the run (v2 resume: 39 GB host anon, as text_warmup 085713c7).
+        copy_restored_values({'backbone.' + n: t for n, t in tensors_by_name.items()}, state['student_parameters'])
+        for key, module in projections.items():
+            module.load_state_dict(state[key])
+        from .optim_restore import own_host_tensors
+        optimizer.load_state_dict(state['optimizer'])
+        own_host_tensors(optimizer)  # no view of the mmap'd state outlives the restore
+        optimizer.param_groups = optimizer._groups()
+        step, best, base_eval, history = state['step'], state.get('best'), state['base_eval'], state['history']
+        monitor.restore(state)  # the update of the guard's last gate and its response KL
+        if spike is not None:
+            spike.load_state_dict(state.get('grad_spike_clip'))
+        memory_estimator = restored_memory_estimator(state)
+        restore_training_rng_state(state['rng'], a.device)
+        print(json.dumps({'event': 'resumed', 'step': step, 'code_changed': sorted(
+            k for k in code if state['identity']['code'].get(k) != code[k])}), flush=True)
+
     if policy.slot.exists():
         state = CheckpointPolicy.load(policy.slot)
         previous_options = dict(state.get('identity', {}).get('options') or {})
         current_options = dict(identity['options'])
         previous_epochs = previous_options.pop('epochs', None)
         current_epochs = current_options.pop('epochs', None)
+        # A data continuation's checkpoint read --continued-text-data in --text-data's place (continuation_mode).
+        expected_inputs = (continuation_inputs(a, identity['inputs']) if continuation_launch == 'continue'
+                           else identity['inputs'])
         if state.get('schema') != SCHEMA or not same_resume_identity(
                 {'options': previous_options, 'inputs': state['identity']['inputs']},
-                {'options': current_options, 'inputs': identity['inputs']}):
-            raise ValueError('neuralese_direct resume identity changed (options or inputs)')
+                {'options': current_options, 'inputs': expected_inputs}):
+            raise ValueError('neuralese_direct resume identity changed (options or inputs); a stage that moves to '
+                             'new data continues only with --continued-text-data naming the data it trained on')
+        if continuation_launch == 'continue' and state['step'] != continuation['consumed_updates']:
+            raise ValueError('the checkpoint moved since the data continuation was planned')
         saved_fp8 = state.get('fp8_training')
         stateless = lambda envelope: envelope is None or envelope.get('schema') == 'natlang.neuralese-fp8-experts-training/1'
         if a.fp8_training == 'triton-experts' and stateless(saved_fp8):
@@ -761,25 +1123,10 @@ def main(argv=None):
                               'epochs': current_epochs, 'consumed_updates_verified': consumed,
                               'updates': len(schedule)}), flush=True)
             del old_schedule
-        from .text_warmup import copy_restored_values
-        tensors_by_name = plain_named_tensors(backbone.hf)
-        # The shared copy (its own scope): a loop variable left in main() is a view of the mmap'd state and kept the
-        # whole mapping plus the dirtied pages alive for the run (v2 resume: 39 GB host anon, as text_warmup 085713c7).
-        copy_restored_values({'backbone.' + n: t for n, t in tensors_by_name.items()}, state['student_parameters'])
-        for key, module in projections.items():
-            module.load_state_dict(state[key])
-        from .optim_restore import own_host_tensors
-        optimizer.load_state_dict(state['optimizer'])
-        own_host_tensors(optimizer)  # no view of the mmap'd state outlives the restore
-        optimizer.param_groups = optimizer._groups()
-        step, best, base_eval, history = state['step'], state.get('best'), state['base_eval'], state['history']
-        monitor.restore(state)  # the update of the guard's last gate and its response KL
-        if spike is not None:
-            spike.load_state_dict(state.get('grad_spike_clip'))
-        memory_estimator = restored_memory_estimator(state)
-        restore_training_rng_state(state['rng'], a.device)
-        print(json.dumps({'event': 'resumed', 'step': step, 'code_changed': sorted(
-            k for k in code if state['identity']['code'].get(k) != code[k])}), flush=True)
+        if continuation_launch == 'continue' and continuation['held']['rebased']:
+            pending_restore = state  # mmap'd; restored once the base is measured on the new held set
+        else:
+            restore(state)
         del state
         if a.continue_from is not None and a.save_state and not Path(a.continue_from).is_symlink():
             archive = PredecessorArchive(Path(a.continue_from))  # an archive a stop interrupted resumes
@@ -878,6 +1225,7 @@ def main(argv=None):
                 'best': best, 'base_eval': base_eval, 'history': history, **monitor.state(),
                 'grad_spike_clip': spike.state_dict() if spike is not None else None,
                 'direct_memory_estimator': memory_estimator.state_dict(),
+                'data_continuation': continuation,
                 'fp8_training': fp8_backend.extra_state() if fp8_backend is not None else None}
 
     def log(name, value):
@@ -885,7 +1233,7 @@ def main(argv=None):
             handle.write(json.dumps(value) + '\n')
 
 
-    def evaluate():
+    def evaluate(log_name='eval.jsonl', check_monitor=True):
         nonlocal base_eval
         sums, count, agreement = {}, 0, []
         predictions = []
@@ -909,9 +1257,9 @@ def main(argv=None):
             agree = [float((p == torch.tensor(b)).float().mean()) for p, b in zip(predictions, base_eval['predictions'])]
             report.update(base_ce=base_eval['ce'], ce_delta=report['ce'] - base_eval['ce'],
                           base_agreement=sum(agree) / len(agree))
-            if monitor.active:
+            if monitor.active and check_monitor:
                 report['behaviour_drift'] = monitor.check(step, min(a.stop_at or a.steps, a.steps))
-        log('eval.jsonl', report)
+        log(log_name, report)
         return report
 
     def drift_ce():
@@ -927,6 +1275,39 @@ def main(argv=None):
             for window in held[:a.drift_ce_windows]:
                 total += forward([window], gradients=False)[1]['ce']
         return total / len(held[:a.drift_ce_windows])
+
+    if continuation_launch == 'continue':
+        if pending_restore is not None:
+            # The held set changed (held windows come from --text-data's test split): the stage's base, its update-0
+            # weights (the declared predecessor's, else the base model with identity projections), is measured on
+            # the new held windows before the saved state is restored, so ce_delta and agreement stay against base.
+            if a.continue_from is not None:
+                from .text_warmup import copy_restored_values
+                predecessor = CheckpointPolicy.load(a.continue_from)
+                tensors_by_name = plain_named_tensors(backbone.hf)
+                copy_restored_values({'backbone.' + n: t for n, t in tensors_by_name.items()},
+                                     predecessor['student_parameters'])
+                for key, module in projections.items():
+                    module.load_state_dict(predecessor[key])
+                predecessor = tensors_by_name = None
+            base_eval = None
+            evaluate(log_name='continuation-base-eval.jsonl', check_monitor=False)
+            base_eval['drift_ce'] = drift_ce()
+            rebased = base_eval
+            restore(pending_restore)
+            pending_restore = None
+            continuation['held'].update(
+                previous_base_ce=base_eval['ce'], base_ce=rebased['ce'], base_gold_accuracy=rebased['gold_accuracy'],
+                base_drift_ce=rebased['drift_ce'], previous_best=best,
+                base_weights='continue_from' if a.continue_from is not None else 'base model')
+            base_eval, best = rebased, None
+            policy.best_metric = None  # the best checkpoint is chosen on the new held set from here on
+            (a.out / 'checkpoint-policy.json').write_text(json.dumps({'best_metric': None}) + '\n')
+        continuation['time'] = time.strftime('%Y-%m-%dT%H:%M:%S%z')
+        sidecar = a.out / 'data-continuation.json'
+        sidecar.with_suffix('.pending').write_text(json.dumps(continuation) + '\n')
+        sidecar.with_suffix('.pending').replace(sidecar)
+        print(json.dumps({'event': 'data_continuation', **continuation_summary(continuation)}), flush=True)
 
     # Disk: hold the blocks of the next full-state write (its tensors, 5% margin; at least the last write's size) so a
     # write never meets a full disk. The reserve is released just for a write and taken back after it; a run that
@@ -1457,7 +1838,7 @@ def main(argv=None):
                  behaviour_gate=gate, drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
                  value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta'),
                              'report_only': True, 'moved_to': 'end-to-end stage (owner 2026-10-11)'},
-                 seconds=time.time() - started, budget=budget,
+                 seconds=time.time() - started, budget=budget, data_continuation=continuation_summary(continuation),
                  epochs_covered=schedule[step - 1][1] if step else 0.0, this_run=dict(totals),
                  cuda_peak_allocated_gb=torch.cuda.max_memory_allocated(a.device) / 2 ** 30 if cuda_active else None,
                  scope='Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md)')

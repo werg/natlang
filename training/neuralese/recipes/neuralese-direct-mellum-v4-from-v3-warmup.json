@@ -2,7 +2,7 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-mellum-v4-from-v3-warmup",
  "extends": "neuralese-direct-mellum-v4",
- "description": "neuralese-direct-mellum-v4 resumed from the qualified direct_warmup of the neuralese-direct-mellum-v3 lineage (runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup: 333 updates, 0.5 epoch of the 4962-document full-prompt Mellum twin, held CE 2.219 -> 0.438, identity check passed), so the warm-up is not redone (coordinator decision 2026-10-12). The only difference from the parity recipe neuralese-direct-mellum-v4: its direct_warmup stage is replaced by that finished warm-up, bound as direct_sft's declared continuation inputs (full state, identity check, base drift reference; content-pinned), so the warm-up saw the 4962 documents rather than the r2 union's full-prompt rendering. direct_sft (r2 program header, 1 epoch) is exactly mellum-v4's. Second difference (coordinator decision 2026-10-12): direct_trajectory (1 epoch) reads union r3's whole-trajectory Mellum rendering (runs/natlang-target-union-20261011-r3, natlang-target-set-20261011-r3: 165,822 train / 1,549 test documents, 50.2M supervised tokens) instead of r2's (75,983 / 123, 15.9M); its held/test split is the r3 file's own test split (a superset of r2's 123 test documents), evaluation unchanged. Taken by a --handoff while direct_sft runs (a not-yet-started phase may take new inputs: recipe.py unstarted_stage_input_changes).",
+ "description": "neuralese-direct-mellum-v4 resumed from the qualified direct_warmup of the neuralese-direct-mellum-v3 lineage (runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup: 333 updates, 0.5 epoch of the 4962-document full-prompt Mellum twin, held CE 2.219 -> 0.438, identity check passed), so the warm-up is not redone (coordinator decision 2026-10-12). First difference from the parity recipe neuralese-direct-mellum-v4: its direct_warmup stage is replaced by that finished warm-up, bound as direct_sft's declared continuation inputs (full state, identity check, base drift reference; content-pinned), so the warm-up saw the 4962 documents rather than the r2 union's full-prompt rendering. Second difference (owner decision 2026-10-12, \"continue our training from what we have with more data\"): direct_sft continues on union r3's program-header rendering by a data continuation (continued_text_data = the r2 program-header file it trained on): update counter, weights, MuonSR and QAT state continue; the r2 documents of its consumed updates count as seen and the rest of its 1 epoch is r3 minus them; the QAT progress [0, 0.35] continues from its value at the continuation update over the new total; held windows come from r3's test split, with the base re-measured on the stage's update-0 weights (direct_sft.py data_continuation). Third difference (coordinator decision 2026-10-12): direct_trajectory (1 epoch) reads union r3's whole-trajectory Mellum rendering (runs/natlang-target-union-20261011-r3, natlang-target-set-20261011-r3: 165,822 train / 1,549 test documents, 50.2M supervised tokens) instead of r2's (75,983 / 123, 15.9M); its held/test split is the r3 file's own test split (a superset of r2's 123 test documents), evaluation unchanged. Both are taken by one --handoff while direct_sft runs (recipe.py unstarted_stage_input_changes).",
  "overrides": {
   "input_bindings": {
    "direct_text": {
@@ -23,6 +23,10 @@
    "v3_warmup_monitor_reference": {
     "path": "runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup/monitor-reference.pt",
     "sha256": "83b2fb83274352465507d053e05aca26254c58f0ebce0e251d9e1dc6ff8ecfc5"
+   },
+   "direct_text_program_header_r3": {
+    "path": "runs/natlang-target-union-20261011-r3/program-header/mellum21/text-data.jsonl",
+    "sha256": "3a3b52c47a3f184a719df90d05de28a3abf69b60719200a8185c9d3441826836"
    }
   },
   "stages": {
@@ -34,7 +38,9 @@
     "inputs": {
      "continue_from": "v3_warmup_checkpoint",
      "continue_identity": "v3_warmup_identity",
-     "continue_monitor_reference": "v3_warmup_monitor_reference"
+     "continue_monitor_reference": "v3_warmup_monitor_reference",
+     "text_data": "direct_text_program_header_r3",
+     "continued_text_data": "direct_text_program_header"
     }
    }
   }

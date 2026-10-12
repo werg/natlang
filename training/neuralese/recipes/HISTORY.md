@@ -455,3 +455,12 @@ rendering (natlang-target-union-20261011-r3; 165,822 train / 1,549 test document
 r2's. direct_sft is unchanged. It is taken by a `--handoff` while direct_sft runs: `lineage_handoff` now allows new input
 content for a stage that has not started (`unstarted_stage_input_changes`). It is a historical one-off in
 line-parity.json, and the parity recipes stay on r2. Details: plans/neuralese/NEURALESE_DIRECT_V1.md "Mellum v4".
+
+## neuralese-direct-mellum-v4-from-v3-warmup: direct_sft data continuation onto union r3 (2026-10-12)
+
+Owner decision: v4's active direct_sft continues on r3's program-header rendering from its current state, not from
+scratch. The recipe binds `text_data` to r3 and declares `continued_text_data` as the r2 file it trained on. This is a
+shared `neuralese_direct` handler role and the one declaration under which a `--handoff` may change an active stage's
+inputs. direct_sft keeps its counter, weights, optimizer and QAT state, and trains r3 minus the seen r2 documents for
+the rest of its epoch. The QAT progress continues from its value at the continuation update over the new total
+(31,314 updates at update 400). The base is re-measured on r3's held set. Details: plans/neuralese/NEURALESE_DIRECT_V1.md.

@@ -1012,6 +1012,7 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
                 window['roles']=_TokenWindow(labels,window['start'],window['start']+len(window['ids']))
             windows[split].append({**window,
                 'document':hashlib.sha256(row['text'].encode()).hexdigest(),
+                'document_id':row.get('id'),  # the producer's document id (a data continuation matches by it too)
                 'cohort':row.get('text_cohort','native'),
                 'groups':row['source_groups'],
                 **({'sampling_group':row['sampling_group']} if row.get('sampling_group') is not None else {})})
