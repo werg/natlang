@@ -60952,6 +60952,23 @@
         "natlang-native-turns-misc-admitted-render-20261011-v2",
         "natlang-native-turns-misc-admitted-render-20261011-v1"
       ]
+    },
+    {
+      "id": "native-context-hydration-126-wholetraj-recovery-20261012-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/native-context-hydration-126-wholetraj-recovery-20261012-v1",
+      "include": [
+        "records.jsonl",
+        "provider-context-bindings.jsonl",
+        "source-omissions.jsonl",
+        "root-context-hydration-review.json"
+      ],
+      "source_class": "repaired-authenticated-provider-context-metadata",
+      "split": "inherited-train-only",
+      "training_admission": true,
+      "trace_admission": false,
+      "admission": "Existing root-admitted ordinary SFT targets; exact authenticated context metadata restored via shared binder",
+      "notes": "126 previously admitted train targets, zero new decisions/worlds; root verified unchanged original fields except authenticated external-context metadata, 146 provider-read bindings and shared context renderer. Six original omissions remain explicit; full-source overlay render needed. No learned writer/recurrence/runtime qualification; active GPU inputs unchanged."
     }
   ],
   "coverage_backlog": [
