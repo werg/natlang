@@ -57,9 +57,14 @@ def main(argv=None) -> int:
     parser.add_argument('--max-turns', type=int, default=1000)
     parser.add_argument('--workers', type=int, default=8)
     parser.add_argument('--model-concurrency', type=int, default=2)
+    parser.add_argument('--cases', help='comma-separated packet row indices instead of the spec subset (e.g. the '
+                        'tasks a stopped probe did not finish)')
+    parser.add_argument('--report-only', action='store_true', help='rescore an existing --out without running')
     args = parser.parse_args(argv)
 
     spec = json.loads(args.spec) if args.spec else recipe_spec(args.spec_from)
+    if args.cases:
+        spec['cases'] = [int(index) for index in args.cases.split(',')]
     spec.update(case_seconds=args.case_seconds, max_model_requests=args.max_model_requests,
                 max_turns=args.max_turns, workers=args.workers)
     spec = task_cadence.parse_task_eval(spec)
@@ -70,7 +75,7 @@ def main(argv=None) -> int:
     env = task_cadence.node_path_env()
     started = time.time()
     children = []
-    for queue, journal, _ in queues:
+    for queue, journal, _ in ([] if args.report_only else queues):
         log = (queue.parent / 'supervisor.log').open('a')
         children.append((subprocess.Popen(
             [sys.executable, str(ROOT / 'scripts' / 'run_bonsai_queue.py'), str(queue), str(journal),
@@ -96,12 +101,17 @@ def main(argv=None) -> int:
             if Path(entry['output']).is_file():
                 results.extend(read_jsonl(entry['output']))
     score = score_rows(evaluation.rows, results, finishes, keys)
+    def request_count(row):
+        starts = (row.get('request_telemetry') or {}).get('starts')
+        return len(starts) if isinstance(starts, list) else starts
+    requests_by_id = {row['task']['program_ir']['id']: request_count(row) for row in results}
     tasks = []
     for index, case in enumerate(score['cases']):
         finish = finishes.get(keys[index], {})
+        requests = requests_by_id.get(case['id'])
         tasks.append({'case_index': spec['cases'][index], 'id': case['id'], 'family': case['family'],
                       'outcome': case['outcome'], 'seconds': finish.get('elapsed_seconds'),
-                      'model_requests': finish.get('fresh_model_replies'), 'turns': finish.get('saved_turns'),
+                      'model_requests': requests if requests is not None else finish.get('fresh_model_replies'), 'turns': finish.get('saved_turns'),
                       'completion_tokens': finish.get('completion_tokens'),
                       'resource_limit_reason': finish.get('resource_limit_reason'),
                       'status': finish.get('status')})
