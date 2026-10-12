@@ -853,7 +853,8 @@ def main() -> None:
         result = score_existing(args)
     else:
         result = watch_phases(args)
-    print(json.dumps({"out": str(args.out), "task_successes": result.get("task_successes"),
+    output_path = getattr(args, "out", result.get("state_path", result.get("event_path")))
+    print(json.dumps({"out": str(output_path), "task_successes": result.get("task_successes"),
                       "outcome_counts": result.get("outcome_counts"),
                       "best_checkpoint_update": result.get("best_checkpoint_update")}, ensure_ascii=False))
 
