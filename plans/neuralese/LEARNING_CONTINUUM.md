@@ -358,7 +358,39 @@ In both new arms the best individual is author guidance plus a soft skill and an
 
 The bug found and fixed (45255079): the first run failed in `refine` with `learning-no-decision`. The coalescing decision scorer flushes a batch in the timer's async context, which belongs to the first caller. So `scoreMany` recorded every batched decision turn into that one caller's recorder and applied that caller's `withAdapters` scope to every item. Concurrent `objectives.decision` calls (`lossOn`, 4 in flight) then found no turn of their own, or silently took another case's turn. The fix captures the recorder and the adapters when the decision is asked for. Servers without the score endpoint now record decision turns too. The test is in `neuralese-score-many.test.mjs`. 9d106d05 (the typed choice/confidence contract) changes only Gemini label generation and scoring, not runtime readouts, so `decision-lib` is unaffected. Raw outputs: `/home/werg/data/memetic-20261012/` (not in git).
 
-*Next milestone:* run the memetic population on natlang task success instead of decision families. An individual is a program state: crisp instruction text, soft values (bodies, skills) and adapters. Fitness is the task verifier on held cases, and the operators are the same with `propose` given failing trajectories. Its kept improvement steps, and its refined soft values and adapters, then become training and initialisation data for the end-to-end Neuralese stage: soft values that consumers read in place of tokens, recorded as `natlang.improvement-step/1` with whole trajectories. Before that: pick decision families where the seed beats `query.uniform` (screen all families' bare readouts first), rerun there on Muon-main and on Mellum when its export exists, and report accuracy next to quality.
+*Screen and rerun 2026-10-12 (Muon-main v2 step 10006).* The first family screen exposed a second client bug (361f216d). `decision-lib` `readoutOf` took the first decision readout appended to the shared trace list after the call started. Under `bounded(cases, 4, …)`, which memetic `evaluateOn` uses, concurrent calls interleave, so a case could be scored with another case's distribution. The screen first showed base ag-news at accuracy .25 with a single prediction.
+
+Localising it:
+- The reference server's `decide` and its batched `score` (batches of 1, 4 and 12) agree to three decimals with HF fp32 on the identical prompts, and give accuracy .5 (`compare-base.log`, `compare2-base.log`).
+- So the fault was in the client. Each readout now runs on its own runtime (same driver and store) with its own trace sink.
+- The sms-spam numbers above are unaffected, because there every case's readout was the same. Earlier memetic runs on families with input-dependent readouts are suspect.
+
+`memetic-decision.mjs` also records argmax accuracy, and asks a reasoning author again when its reply is empty.
+
+Bare-seed screen after the fix (12 stratified held-out cases per family, `screen-*.jsonl`):
+
+| Student | Above `uniform` | Rest |
+| --- | --- | --- |
+| Muon 10006 | trec-question +.199 (acc .667, majority .167), ag-news +.142 (acc .583 vs .25), yahoo-topic +.056, yelp-stars +.037, sst5 +.005 | At or below uniform; every yes/no family gives one prediction for all cases |
+| Base | trec-question +.044, sst5 ±0 | Below uniform |
+| v8 | trec-question +.041 | Below uniform |
+
+SFT on natlang (Muon) raised topic and question-type discrimination above the base.
+
+Memetic rerun on Muon 10006, same settings (in-context init, adapters on), trec-question and ag-news, each used as the other's transfer family:
+
+| Family | Query: best / seed / soft-gold / uniform | Query accuracy: best / seed / soft-gold | Validation: best / seed (accuracy) | Transfer: best / seed | Search |
+| --- | --- | --- | --- | --- | --- |
+| ag-news | .838 / .770 / .774 / .625 | .750 / .667 / .667 | .859 / .763 (.875 / .500) | .791 / .799 | 440 s |
+| trec-question | .799 / .799 / .771 / .583 | .750 / .750 / .750 | .697 / .570 (.500 / .125) | .770 / .770 | 326 s |
+
+On ag-news the best individual (Lamarckian soft refinement of the generic seed, no guidance or adapter) beats both seed and soft-gold on held-out cases, in quality and accuracy. It does not transfer to trec-question.
+
+On trec-question the selected best came from `refine-baldwin`. Its fitness was measured with the refined block, but it carries the unrefined block, so on query it is exactly the seed. Final scoring of a Baldwinian winner should use its refinement (open issue).
+
+Author proposals (LFM2.5-2.6B) lowered fitness every time. These are 12-case query sets, so read the differences as indications only.
+
+*Next milestone:* run the memetic population on natlang task success instead of decision families. An individual is a program state: crisp instruction text, soft values (bodies, skills) and adapters. Fitness is the task verifier on held cases, and the operators are the same with `propose` given failing trajectories. Its kept improvement steps, and its refined soft values and adapters, then become training and initialisation data for the end-to-end Neuralese stage: soft values that consumers read in place of tokens, recorded as `natlang.improvement-step/1` with whole trajectories. Before that: fix Baldwinian final scoring, use larger query sets (≥48) on ag-news and trec-question, and get a better author (propose has not helped yet). Then Mellum when its export exists.
 
 **M4: adapters.**
 8. `Adapter<Base, Kind>` export in `.nz`, base identity, scoping rules, crossing test.

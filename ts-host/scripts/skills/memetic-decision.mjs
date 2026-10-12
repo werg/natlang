@@ -78,6 +78,8 @@ async function author(prompt, attempt = 0) {
   // The author server can restart under a long run; wait for it rather than lose the run.
   try { return await authorOnce(prompt); }
   catch (error) {
+    // An empty reply (a reasoning author that spent its tokens thinking) is asked again at once, a few times.
+    if (error?.emptyGuidance && attempt < 4) return author(prompt, attempt + 1);
     if (attempt >= 60) throw error;  // about an hour: a model server restart includes loading its weights
     await new Promise(done => setTimeout(done, 60_000));
     return author(prompt, attempt + 1);
@@ -91,7 +93,9 @@ async function authorOnce(prompt) {
   const text = (await response.json()).choices[0].message.content ?? '';
   const match = /<guidance>([\s\S]*?)<\/guidance>/.exec(text);
   // A small model is distracted by long guidance: keep at most the asked-for number of words.
-  return (match ? match[1] : text).trim().split(/\s+/).slice(0, options['guidance-words']).join(' ');
+  const guidance = (match ? match[1] : text).trim().split(/\s+/).filter(Boolean).slice(0, options['guidance-words']).join(' ');
+  if (!guidance) throw Object.assign(Error('author returned no guidance'), { emptyGuidance: true });
+  return guidance;
 }
 const excerpt = text => String(text).length > 600 ? String(text).slice(0, 600) + '…' : String(text);
 function describeCase(c, predicted) {
