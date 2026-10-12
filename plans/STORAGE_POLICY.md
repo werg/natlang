@@ -192,6 +192,11 @@ retired-Maple stream render caches `~/data/maple-sft/{,v13-r2/}maple-v13.sft.jso
 `maple-sft-v13-r2` lists only the jsonl, manifest and rejected file), and ten exited diag/test/probe containers.
 No registry entries were removed. The paused round-2 verified offload of Pop's registered inactive model
 candidates (`.local/retained-model-candidates-20261010-v1`, ~27 GB left) was re-queued now that v4 has loaded.
+It completed at 16:07 (unit `storage-cold-model-offload-resume-20261012`, all 45 rows, SHA-256-verified moves to
+`/mnt/external/natlang-development-data/archive/.local/` with symlinks at the logical paths; receipt
+`~/.local/state/natlang/storage/cleanup-20261012-round2/cold-model-offload-receipt.jsonl`): ~31 GB more off NVMe.
+At 16:08 df showed 194 GB free, but ~49 GB of that is the v4 trainer's `.checkpoint-space.reserve`, which was consumed by
+the 15:45 checkpoint write and not yet re-reserved. Steady state is about 145 GB free.
 
 Left on purpose: the live v4 `direct_sft/` (134 GB: `checkpoint.pt` and `best-checkpoint.pt` of 47 GB each plus the
 49 GB `.checkpoint-space.reserve` for the next write), unions r2/r3, registered corpora (nearly every `runs/` dir is
