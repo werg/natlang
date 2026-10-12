@@ -21,11 +21,12 @@ import time
 from pathlib import Path
 
 import torch
+from ..common.paths import resolve
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--model', default='/home/werg/data/models/mellum21-12b-a2.5b-thinking')
+    p.add_argument('--model', default=str(resolve('models', 'mellum21-12b-a2.5b-thinking')))
     p.add_argument('--recipe', default='recipes/neuralese-direct-mellum-v3.json')
     p.add_argument('--layers', type=int, default=4)
     p.add_argument('--rows', type=int, default=6)
