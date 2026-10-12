@@ -5,7 +5,8 @@ resume) with ``torch.profiler`` and writes ``<out>/profile-<a>-<b>.json`` (the b
 ``<out>/profile-<a>-<b>.trace.json.gz`` (a Chrome/Perfetto trace). Unset, every hook here is a constant no-op: the
 scopes return one shared ``nullcontext`` and nothing is recorded.
 
-Attribution of GPU (kernel) time:
+Attribution of GPU (kernel) time (``analyze_trace``, from the exported trace: each kernel by its launch time to the
+scopes open on the launching thread):
 
 - trainer regions ``update/<name>`` (plan, data, forward, backward, optimizer, eval, drift, save): the outermost one
   that encloses a kernel's launching op is its phase;
@@ -79,29 +80,7 @@ def parse_range(value: str | None):
     return a, b
 
 
-def _labels(event):
-    chain = []
-    while event is not None:
-        chain.append(event.name)
-        event = event.cpu_parent
-    return chain  # innermost first
-
-
 _MODEL_PREFIXES = ('fwd/', 'recompute/')
-
-
-def _category(chain, backward_scope):
-    """(phase, category) of a kernel launched by the op whose ancestor names (innermost first) are ``chain``."""
-    phase = next((n for n in reversed(chain) if n.startswith('update/')), 'outside')
-    for name in chain:
-        if name.startswith(_MODEL_PREFIXES) or name.startswith('optim/'):
-            return phase, name
-        if name.startswith('update/'):
-            break
-    for name in chain:
-        if name.startswith('autograd::engine::evaluate_function'):
-            return phase, backward_scope(name)
-    return phase, 'other'
 
 
 class UpdateProfiler:
@@ -163,22 +142,19 @@ class UpdateProfiler:
         self.profile.stop()
         profile, self.profile, self.done = self.profile, None, True
         stem = f'profile-{self.first}-{update}'
-        try:
-            report = analyze(profile, wall)
-        except Exception as error:  # the breakdown must never stop a training run
-            report = {'error': repr(error)}
-        report.update(schema='natlang.update-profile/1', updates=self.updates, first=self.first, last=update,
-                      requested=list(self.range), wall_seconds=wall)
-        (self.out / f'{stem}.json').write_text(json.dumps(report, indent=1) + '\n')
         trace = self.out / f'{stem}.trace.json'
         try:
             profile.export_chrome_trace(str(trace))
+            report = analyze_trace(json.loads(trace.read_text()), wall)
             with trace.open('rb') as source, gzip.open(str(trace) + '.gz', 'wb') as target:
                 shutil.copyfileobj(source, target)
-        except Exception as error:
-            print(json.dumps({'event': 'profile_trace_failed', 'error': repr(error)}), flush=True)
+        except Exception as error:  # the breakdown must never stop a training run
+            report = {'error': repr(error)}
         finally:
             trace.unlink(missing_ok=True)
+        report.update(schema='natlang.update-profile/2', updates=self.updates, first=self.first, last=update,
+                      requested=list(self.range), wall_seconds=wall)
+        (self.out / f'{stem}.json').write_text(json.dumps(report, indent=1) + '\n')
         print(json.dumps({'event': 'profile_written', 'path': str(self.out / f'{stem}.json'),
                           'summary': report.get('summary')}), flush=True)
 
@@ -195,75 +171,73 @@ def _union_seconds(intervals):
     return total / 1e6
 
 
-def analyze(profile, wall: float) -> dict:
-    from torch.autograd import DeviceType
-    events = profile.events()
-    # Forward ops by (thread, sequence number) -> their innermost model scope, for the backward attribution.
-    forward_scope = {}
+def analyze_trace(trace: dict, wall: float) -> dict:
+    """The breakdown from the exported Chrome trace: each kernel is attributed by its launch (the runtime call that
+    enqueued it) to the scopes open on the launching thread at that moment, innermost first. Event-tree parents miss
+    scopes entered inside autograd hooks (the latents' in-backward optimizer step) and launches outside any aten op
+    (Triton kernels). A backward kernel outside any scope goes to the forward scope of the autograd node it runs
+    (matched by sequence number), as ``bwd/<scope>``."""
+    events = trace.get('traceEvents', [])
+    kernels = {}
     for event in events:
-        if event.device_type != DeviceType.CPU or getattr(event, 'sequence_nr', -1) < 0:
-            continue
-        if event.name.startswith('autograd::engine'):
-            continue
-        for name in _labels(event):
-            if name.startswith(_MODEL_PREFIXES):
-                forward_scope.setdefault((event.thread, event.sequence_nr), name.split('/', 1)[1])
-                break
-    nodes = {}
-
-    def backward_scope_of(event):
-        node = event
-        while node is not None and not node.name.startswith('autograd::engine::evaluate_function'):
-            node = node.cpu_parent
-        if node is None:
-            return 'other'
-        key = (getattr(node, 'fwd_thread', None) or node.thread, node.sequence_nr)
-        scope_name = forward_scope.get(key)
-        if scope_name is not None:
-            return 'bwd/' + scope_name
-        label = node.name.split(':', 1)[-1].strip()
-        nodes[label] = nodes.get(label, 0) + 1
-        return 'bwd/unscoped:' + label
-
-    # Scopes by time containment on the launching thread, innermost first: a record_function entered inside an
-    # autograd hook (the latents' in-backward optimizer step) is not a cpu_parent of the ops under it in the event tree.
-    enclosing = {}
+        if event.get('cat') in ('kernel', 'gpu_memcpy', 'gpu_memset') and 'correlation' in event.get('args', {}):
+            kernels[event['args']['correlation']] = event
+    launches, spans = {}, {}
+    for event in events:
+        cat = event.get('cat')
+        if cat in ('cuda_runtime', 'cuda_driver') and event.get('args', {}).get('correlation') in kernels:
+            launches.setdefault(event['tid'], []).append(event)
+        elif cat in ('cpu_op', 'user_annotation') and 'dur' in event:
+            spans.setdefault(event['tid'], []).append(event)
     marks = ('update/', 'optim/') + _MODEL_PREFIXES
-    by_thread = {}
-    for event in events:
-        if event.device_type != DeviceType.CPU:
-            continue
-        is_scope = event.name.startswith(marks)
-        if is_scope or event.kernels:
-            by_thread.setdefault(event.thread, []).append((event.time_range.start, -event.time_range.end, is_scope, event))
-    for items in by_thread.values():
-        items.sort(key=lambda item: (item[0], item[1]))
+    forward_scope, attributed = {}, []
+    for tid, items in spans.items():
+        timeline = [(e['ts'], 1, e) for e in items] + [(e['ts'], 2, e) for e in launches.get(tid, [])]
+        timeline.sort(key=lambda item: (item[0], item[1], -item[2].get('dur', 0)))
         stack = []
-        for start, negative_end, is_scope, event in items:
-            while stack and stack[-1][0] <= start:
+        for ts, kind, event in timeline:
+            while stack and stack[-1]['ts'] + stack[-1]['dur'] < ts:
                 stack.pop()
-            if event.kernels:
-                enclosing[id(event)] = [name for _, name in reversed(stack)]
-            if is_scope:
-                stack.append((-negative_end, event.name))
-    by_phase, by_category, by_kernel, intervals, kernels_by_category = {}, {}, {}, [], {}
-    for event in events:
-        if event.device_type == DeviceType.CUDA:
-            intervals.append((event.time_range.start, event.time_range.end))
-            continue
-        if event.device_type != DeviceType.CPU or not event.kernels:
-            continue
-        chain = enclosing.get(id(event), []) + _labels(event)
-        phase, category = _category(chain, lambda _name, e=event: backward_scope_of(e))
-        for kernel in event.kernels:
-            seconds = kernel.duration / 1e6
-            by_phase[phase] = by_phase.get(phase, 0.0) + seconds
-            by_category[category] = by_category.get(category, 0.0) + seconds
-            entry = by_kernel.setdefault(kernel.name[:160], [0, 0.0])
-            entry[0] += 1
-            entry[1] += seconds
-            per = kernels_by_category.setdefault(category, {})
-            per[kernel.name[:100]] = per.get(kernel.name[:100], 0.0) + seconds
+            if kind == 1:
+                stack.append(event)
+                sequence = event.get('args', {}).get('Sequence number')
+                if sequence is not None and not event['name'].startswith('autograd::'):
+                    scope = next((s['name'] for s in reversed(stack) if s['name'].startswith(_MODEL_PREFIXES)), None)
+                    if scope is not None:
+                        forward_scope.setdefault(sequence, scope.split('/', 1)[1])  # one forward thread
+            else:
+                attributed.append((list(reversed(stack)), event, tid))
+    by_phase, by_category, by_kernel, kernels_by_category, intervals = {}, {}, {}, {}, []
+    for event in kernels.values():
+        intervals.append((event['ts'], event['ts'] + event.get('dur', 0)))
+    nodes = {}
+    for chain, launch, tid in attributed:
+        kernel = kernels[launch['args']['correlation']]
+        seconds = kernel.get('dur', 0) / 1e6
+        names = [e['name'] for e in chain]
+        phase = next((n for n in reversed(names) if n.startswith('update/')), 'outside')
+        category = next((n for n in names if n.startswith(_MODEL_PREFIXES) or n.startswith('optim/')), None)
+        if category is not None and any(n.startswith('update/') for n in names[:names.index(category)]):
+            category = None  # an update region inside the scope: not this scope's work
+        if category is None:
+            node = next((e for e in chain if e.get('args', {}).get('Sequence number') is not None
+                         and (e['name'].startswith('autograd::engine') or 'Backward' in e['name'])), None)
+            if node is not None:
+                args = node['args']
+                scope = forward_scope.get(args['Sequence number'])
+                label = node['name'].split(':')[-1].strip()
+                if scope is None:
+                    nodes[label] = nodes.get(label, 0) + 1
+                category = 'bwd/' + scope if scope else 'bwd/unscoped:' + label
+            else:
+                category = 'other'
+        by_phase[phase] = by_phase.get(phase, 0.0) + seconds
+        by_category[category] = by_category.get(category, 0.0) + seconds
+        entry = by_kernel.setdefault(kernel['name'][:160], [0, 0.0])
+        entry[0] += 1
+        entry[1] += seconds
+        per = kernels_by_category.setdefault(category, {})
+        per[kernel['name'][:100]] = per.get(kernel['name'][:100], 0.0) + seconds
     busy = _union_seconds(intervals)
     kernel_total = sum(by_category.values())
 
@@ -284,16 +258,15 @@ def analyze(profile, wall: float) -> dict:
     groups = {}
     for key, value in by_category.items():
         base = key.split('/', 1)[-1] if key.startswith(('fwd/', 'recompute/', 'bwd/')) else key
-        if base.startswith('unscoped:'):
-            base = 'unscoped'
+        base = 'unscoped' if base.startswith('unscoped:') else base
         groups[base] = groups.get(base, 0.0) + value
-    top_kernels = sorted(by_kernel.items(), key=lambda kv: -kv[1][1])[:40]
+    top = sorted(by_kernel.items(), key=lambda kv: -kv[1][1])[:40]
     return {'summary': summary,
             'by_phase_gpu_seconds': dict(sorted(by_phase.items(), key=lambda kv: -kv[1])),
             'by_scope_gpu_seconds': dict(sorted(groups.items(), key=lambda kv: -kv[1])),
             'by_category_gpu_seconds': dict(sorted(by_category.items(), key=lambda kv: -kv[1])),
-            'top_kernels': [{'name': n, 'count': c, 'seconds': s} for n, (c, s) in top_kernels],
-            'top_kernels_by_category': {category: dict(sorted(kernels.items(), key=lambda kv: -kv[1])[:6])
-                                        for category, kernels in kernels_by_category.items()
-                                        if sum(kernels.values()) >= 0.01 * max(kernel_total, 1e-9)},
+            'top_kernels': [{'name': n, 'count': c, 'seconds': t} for n, (c, t) in top],
+            'top_kernels_by_category': {c: dict(sorted(k.items(), key=lambda kv: -kv[1])[:6])
+                                        for c, k in kernels_by_category.items()
+                                        if sum(k.values()) >= 0.01 * max(kernel_total, 1e-9)},
             'unscoped_backward_nodes': dict(sorted(nodes.items(), key=lambda kv: -kv[1])[:30])}
