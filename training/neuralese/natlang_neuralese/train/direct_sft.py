@@ -313,6 +313,19 @@ class PredecessorArchive:
         self.thread.join()
 
 
+INPUT_PATH_OPTIONS = ('heads', 'records', 'pieces', 'text_data')
+
+
+def same_resume_identity(saved: dict, current: dict) -> bool:
+    """A resume continues the same training: the same semantic options and the same input contents. Content, not
+    paths: an input read from a staged NVMe copy, the HDD archive or a symlink is the same input when its SHA-256 is
+    (v4 2026-10-12: the archived predecessor's path changed between launches). Diagnostic environment (profiling) is
+    never part of the identity."""
+    strip = lambda options: {k: v for k, v in options.items() if k not in INPUT_PATH_OPTIONS}
+    return (strip(saved['options']) == strip(current['options'])
+            and sorted(saved['inputs'].values()) == sorted(current['inputs'].values()))
+
+
 def main(argv=None):
     stop = StopSignal().install()
     a = parse(argv)
@@ -651,8 +664,9 @@ def main(argv=None):
         current_options = dict(identity['options'])
         previous_epochs = previous_options.pop('epochs', None)
         current_epochs = current_options.pop('epochs', None)
-        if state.get('schema') != SCHEMA or previous_options != current_options or \
-                state['identity']['inputs'] != identity['inputs']:
+        if state.get('schema') != SCHEMA or not same_resume_identity(
+                {'options': previous_options, 'inputs': state['identity']['inputs']},
+                {'options': current_options, 'inputs': identity['inputs']}):
             raise ValueError('neuralese_direct resume identity changed (options or inputs)')
         if previous_epochs != current_epochs:
             # The owner may shorten/extend the epoch budget without throwing away trained updates. Reconstruct
