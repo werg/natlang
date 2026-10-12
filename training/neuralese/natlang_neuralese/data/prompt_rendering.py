@@ -1,7 +1,7 @@
 """Prompt rendering modes of native training and serving documents (plans/neuralese/NO_SYSTEM_PROMPT_RENDERING_DECOMPOSITION.md).
 
 ``full``: the runtime's system message and tool schemas, as recorded.
-``program-header``: the GENERIC runtime instructions and the tool schemas are dropped (owner decision 2026-10-11:
+``program-header``: the GENERIC runtime instructions and native tool schemas are dropped (owner decision 2026-10-11:
 distil the prompt into the weights after a warm-up); the system paragraphs that declare a property of THIS call
 are kept verbatim as a short system turn, the program header. A call with none of them has no system turn.
 
@@ -157,9 +157,10 @@ def default_pieces() -> list:
     return _PIECES
 
 
-def apply_prompt_rendering(messages, tools, prompt_rendering: str = "full", pieces=None):
+def apply_prompt_rendering(messages, tools, prompt_rendering: str = "full", pieces=None, *, keep_supplied_tools=False):
     """``(messages, tools)`` for ``prompt_rendering``. ``full`` returns them unchanged; ``program-header`` renders the
-    system message with ts-host's renderSystemPrompt algorithm (render_system_prompt) and passes no tool schemas."""
+    system message with ts-host's renderSystemPrompt algorithm (render_system_prompt). Native training drops schemas;
+    serving may retain externally supplied tools because ts-host already sends none of its native schemas in this mode."""
     if prompt_rendering not in PROMPT_RENDERINGS:
         raise ValueError(f"unknown prompt_rendering {prompt_rendering!r} (declared: {PROMPT_RENDERINGS})")
     if prompt_rendering == "full":
@@ -173,7 +174,7 @@ def apply_prompt_rendering(messages, tools, prompt_rendering: str = "full", piec
         out = ([{**out[0], "content": header}] if header else []) + out[1:]
     if any(isinstance(m, dict) and m.get("role") == "system" for m in out[1:]):
         raise ValueError("program-header rendering found a system message after the first turn")
-    return out, None
+    return out, tools if keep_supplied_tools else None
 
 
 # --- Port of ts-host renderSystemPrompt (src/native/system-prompts.ts, 18dda11d) over the exported piece table. ---

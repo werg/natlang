@@ -43,7 +43,9 @@ Use `promptRendering: "program-header"` in the model profile (or runtime `model`
 settings) for students trained beyond the full-prompt warm-up. Match the checkpoint's
 `prompt_rendering` declaration. Other models default to `"full"`.
 Program-header requests retain the signature, types, instructions, inputs, skills,
-call-specific declarations and trajectory. They omit generic interpreter prose and
-wire tool schemas; the same tool calls still execute. Custom application instructions
+call-specific declarations and trajectory. Native natlang calls omit generic interpreter
+prose and native tool schemas; the same native tool calls still execute. When another
+client calls the student directly with its own tool schemas, serving retains those
+schemas so the student can discover and call them. Custom application instructions
 remain. Training and serving use the scope table exported by
 `node ts-host/scripts/neuralese-prompt-pieces.mjs` after building ts-host.

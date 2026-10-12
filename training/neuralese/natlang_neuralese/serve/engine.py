@@ -346,7 +346,10 @@ class Engine:
         from ..data.prompt_rendering import apply_prompt_rendering
         from .chat import render_messages
 
-        messages, tools = apply_prompt_rendering(messages, tools, self.prompt_rendering)
+        # In program-header mode the natlang runtime sends no generic tools. A separate
+        # client (for example an app or harness) can still supply its own tool schemas.
+        messages, tools = apply_prompt_rendering(messages, tools, self.prompt_rendering,
+                                                 keep_supplied_tools=True)
         return render_messages(messages, tools, template or self._template, self.specials,
                                block_type=self.block_value_type)
 

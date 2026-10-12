@@ -9,6 +9,8 @@ You are the capable program author; the interpreter may be a small model. Put th
 
 Natlang is TypeScript with natural-language functions. Ordinary TypeScript owns exact computation, I/O, and orchestration. A natural-language function owns a judgment: interpretation, planning, semantic merging, choosing among options, explaining. Choose the boundary deliberately. A host that computes everything and asks natlang to approve wastes it; making the model do arithmetic by hand wastes its context.
 
+For a student served with `program-header` rendering, native natlang calls omit their generic tool schemas because that tool surface was trained into the student. A separate application calling the student directly should still supply schemas for its own tools; serving retains those schemas in this mode.
+
 ## Establish the contract
 
 Locate the natlang checkout or installed `@natlang/node` / `@natlang/browser` version first. Use its declarations (`dist/index.d.ts`), tests, and `natlang check` as the authority; if prose here disagrees with executable behavior, flag the disagreement rather than inventing behavior. Outside a checkout, rely on these bundled references and the installed package.

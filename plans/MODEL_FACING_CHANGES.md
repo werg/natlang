@@ -130,6 +130,18 @@ unmeasured on the live executor. Before accepting the E2E arm as qualified,
 compare about 48 held calls with the direct and E2E renderings for tool validity,
 completion, and task result, and report held CE under the declared E2E rendering.
 
+## External tools under program-header serving — 2026-10-12
+
+Shared serving now retains tool schemas supplied by an external client while
+native natlang training and requests continue to omit their generic schemas
+under `program-header`. The pi harness exposed the failure: the student could
+call `read_file` only from prior memory, and the server rejected it because its
+schema had been removed from the request. The implementation changes the
+prompt-rendering identity; existing frozen training snapshots are unchanged.
+**Measurement debt:** run about 48 live student calls with representative
+foreign tools under the old and new serving renderings, recording tool validity,
+task success and model requests before adopting a new export identity.
+
 ## MuSiQue hop answer phrases — 2026-10-12
 
 The original `musique_hops` child returns a verbatim evidence sentence. Among the

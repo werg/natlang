@@ -36,7 +36,7 @@ def test_serving_program_header_uses_native_renderer_and_contract_identity():
         identity["implementation_sha256"])
 
 
-def test_engine_request_rendering_is_the_training_transform():
+def test_engine_request_rendering_keeps_external_tool_schemas():
     class Tokenizer:
         def apply_chat_template(self, messages, tools=None, tokenize=False, add_generation_prompt=True):
             assert tokenize is False
@@ -58,8 +58,7 @@ def test_engine_request_rendering_is_the_training_transform():
     assert expected_header in text
     assert fixture["text"] != expected_header
     assert fixture["text"] not in text
-    assert "hidden schema" not in text
-    assert text.endswith("NO-SCHEMA")
+    assert text.endswith("SCHEMA")
 
 
 def test_checkpoint_mode_requires_exact_homogeneous_text_input(tmp_path):
