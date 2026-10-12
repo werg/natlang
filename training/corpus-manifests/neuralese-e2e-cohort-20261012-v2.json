@@ -1,0 +1,44 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-cohort-20261012-v2",
+  "owner": "dgx",
+  "path": "runs/neuralese-e2e-cohort-20261012-v2",
+  "files": [
+    {
+      "path": "chains.jsonl",
+      "bytes": 13359911,
+      "sha256": "1b762736f46cdc626dacd1a1e3808bded8e62507f711ecf3583ac21a85d471c1",
+      "lines": 24141
+    },
+    {
+      "path": "edges.jsonl",
+      "bytes": 42834042,
+      "sha256": "60f8b107e60c7ecf3a65a46a0731e25b49af2207fef6060c94139bd484a344c0",
+      "lines": 95106
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 7331778,
+      "sha256": "b65dbf2910a281006f3a8965839ef81828a5cb66e3c026388d67db7cbb7eab8d",
+      "lines": 38745
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 1929022,
+      "sha256": "8f420dcd79ee6044012d2323ef06557706989d02dbdc07aa6108d7c9949a7a9a",
+      "lines": 3181
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 38532,
+      "sha256": "6f72faf7f3f12aa266a5b341e604518b1e69e16c23051a6d4b87ca7d9eef2e43"
+    },
+    {
+      "path": "records.jsonl",
+      "bytes": 11065656724,
+      "sha256": "40d608d47714d31e54f027e2f7d38e07ac9b764d0df6185f42187b4f844c9c08",
+      "lines": 174608
+    }
+  ],
+  "bytes": 11131150009
+}
