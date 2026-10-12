@@ -337,3 +337,59 @@ def test_shared_backbone_memory_layouts(kind, expected_width, expected_intermedi
         2, expected_shallow_kv, 3)
     assert empty['layers'] == empty['kv_width'] == 0
     assert empty['dtype_bytes'] == 2
+
+
+GIB = 2 ** 30
+
+
+def test_ledger_claim_caps_reusable_bytes_below_device_free():
+    from natlang_neuralese.train.memory_policy import ledger_reusable_bytes
+    # Mellum v3 at step 39: 80 GB claim, 84 GB reserved of which ~35 GB reusable, ~2 GB host; device-free said 60.7 GB.
+    reusable = ledger_reusable_bytes(80 * GIB, 2 * GIB, 84 * GIB, 49 * GIB)
+    assert reusable == 80 * GIB - 4 * GIB - 2 * GIB - 49 * GIB  # margin max(4 GiB, 5%) = 4 GiB
+    assert ledger_reusable_bytes(80 * GIB, 2 * GIB, 84 * GIB, 49 * GIB, inactive_split_bytes=5 * GIB) == reusable - 5 * GIB
+    assert ledger_reusable_bytes(10 * GIB, 8 * GIB, 0, 0) == 0  # never negative
+
+
+def test_ledger_claim_reads_unit_budget_from_ledger_state(tmp_path, monkeypatch):
+    import json
+    from natlang_neuralese.train import memory_policy
+    state = tmp_path / 'memory-ledger.json'
+    state.write_text(json.dumps({'claims': {'natlang-x.service': {'budget': 80 * GIB}}}))
+    ledger = memory_policy._ledger_module()
+    monkeypatch.setattr(ledger, 'STATE', str(state))
+    monkeypatch.setattr(ledger, 'own_host_usage', lambda pid='self': 3 * GIB)
+    monkeypatch.setenv('NATLANG_LEDGER_UNIT', 'natlang-x')
+    assert memory_policy.ledger_claim() == {'unit': 'natlang-x', 'budget_bytes': 80 * GIB,
+                                            'host_bytes': 3 * GIB, 'source': 'ledger-state'}
+    monkeypatch.setenv('NATLANG_LEDGER_UNIT', 'natlang-unknown')
+    monkeypatch.setenv('NATLANG_CUDA_MEMORY_GB', '20')
+    assert memory_policy.ledger_claim()['budget_bytes'] == 20 * GIB
+    monkeypatch.delenv('NATLANG_LEDGER_UNIT')
+    assert memory_policy.ledger_claim() is None  # no ledger: device-free behaviour
+
+
+def _estimates(no_checkpoint_samples):
+    table = {False: (40 * GIB, 58 * GIB, {'sample_count': no_checkpoint_samples}),
+             True: (10 * GIB, 12 * GIB, {'sample_count': 5})}
+    return lambda checkpointed: table[checkpointed]
+
+
+def test_checkpointing_follows_ledger_cap_not_device_free():
+    from natlang_neuralese.train.memory_policy import choose_layer_checkpointing, ledger_reusable_bytes
+    estimate = _estimates(no_checkpoint_samples=8)
+    device = 61 * GIB
+    claim = ledger_reusable_bytes(80 * GIB, 2 * GIB, 84 * GIB, 49 * GIB)
+    assert choose_layer_checkpointing(estimate, 1 * GIB, device)[0] is False
+    assert choose_layer_checkpointing(estimate, 1 * GIB, min(device, claim))[0] is True
+
+
+def test_uncalibrated_no_checkpoint_bin_checkpoints_until_measured():
+    from natlang_neuralese.train.memory_policy import choose_layer_checkpointing
+    # The v3 step-39 case: 58.4 GB forecast from a bin with 0 samples fits 60.7 GB nominally, yet must checkpoint.
+    assert choose_layer_checkpointing(_estimates(0), 1 * GIB, 61 * GIB)[0] is True
+    assert choose_layer_checkpointing(_estimates(2), 1 * GIB, 61 * GIB)[0] is True
+    assert choose_layer_checkpointing(_estimates(3), 1 * GIB, 61 * GIB)[0] is False
+    # Uncalibrated, but with twice the room: running without checkpoints measures the bin.
+    assert choose_layer_checkpointing(_estimates(0), 1 * GIB, 120 * GIB)[0] is False
+    assert choose_layer_checkpointing(_estimates(8), 1 * GIB, None)[0] is True  # no memory figure (CPU)

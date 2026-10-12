@@ -203,6 +203,98 @@ def effective_cuda_free_bytes(device_free_bytes: int, total_bytes: int,
     return min(total_bytes, device_free_bytes + reclaimable_cache)
 
 
+GIB = 2 ** 30
+
+
+def ledger_claim_margin_bytes(budget_bytes: int) -> int:
+    """Slack kept below a ledger claim: CUDA context, allocator rounding and host spikes the plan does not model."""
+    return max(4 * GIB, budget_bytes // 20)
+
+
+def ledger_reusable_bytes(budget_bytes: int, host_bytes: int, allocator_reserved_bytes: int,
+                          allocator_allocated_bytes: int, inactive_split_bytes: int | None = None,
+                          margin_bytes: int | None = None) -> int:
+    """Bytes a new allocation may use inside this process's ledger claim.
+
+    On unified memory (DGX GB10) device-free memory is the whole machine's: sizing an update against it lets a job
+    outgrow its claim, and the ledger guard stops it under pressure. The claim minus a margin, minus what the job holds
+    now (host memory as the guard counts it, plus PyTorch's reserved pool), plus the reusable part of that pool
+    (exactly as in ``effective_cuda_free_bytes``) is what the job may still allocate.
+    """
+    values = (budget_bytes, host_bytes, allocator_reserved_bytes, allocator_allocated_bytes)
+    if any(type(value) is not int or value < 0 for value in values):
+        raise ValueError('ledger and allocator byte counts must be nonnegative integers')
+    margin = ledger_claim_margin_bytes(budget_bytes) if margin_bytes is None else margin_bytes
+    reclaimable_cache = max(0, allocator_reserved_bytes - allocator_allocated_bytes)
+    if inactive_split_bytes is not None:
+        reclaimable_cache -= min(reclaimable_cache, inactive_split_bytes)
+    return max(0, budget_bytes - margin - host_bytes - allocator_reserved_bytes + reclaimable_cache)
+
+
+_LEDGER_MODULE = []
+
+
+def _ledger_module():
+    """scripts/memory_ledger.py, loaded once: its own claim and cgroup readers (one implementation per concept)."""
+    if not _LEDGER_MODULE:
+        import importlib.util
+        import os
+        from pathlib import Path
+        from ..common.paths import root
+        script = Path(os.environ.get('NATLANG_REPO') or root('repo')) / 'scripts' / 'memory_ledger.py'
+        module = None
+        if script.is_file():
+            spec = importlib.util.spec_from_file_location('natlang_memory_ledger', script)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        _LEDGER_MODULE.append(module)
+    return _LEDGER_MODULE[0]
+
+
+def ledger_claim(unit: str | None = None):
+    """``{'unit', 'budget_bytes', 'host_bytes', 'source'}`` for this process's ledger claim, or None without a ledger.
+
+    The unit is ``NATLANG_LEDGER_UNIT`` (set by ``memory_ledger.py run``). The budget is the claim's current budget in
+    the ledger state (the guard may raise it); if the state cannot be read, the ``NATLANG_CUDA_MEMORY_GB`` the job was
+    launched with. Host usage is the guard's own cgroup reading for this process (0 when unreadable)."""
+    import os
+    unit = unit or os.environ.get('NATLANG_LEDGER_UNIT')
+    if not unit:
+        return None
+    ledger = _ledger_module()
+    budget = ledger.claimed_budget(unit) if ledger is not None else None
+    source = 'ledger-state'
+    if budget is None and os.environ.get('NATLANG_CUDA_MEMORY_GB'):
+        budget, source = int(float(os.environ['NATLANG_CUDA_MEMORY_GB']) * GIB), 'NATLANG_CUDA_MEMORY_GB'
+    if budget is None:
+        return None
+    host = (ledger.own_host_usage() if ledger is not None else None) or 0
+    return {'unit': unit, 'budget_bytes': int(budget), 'host_bytes': int(host), 'source': source}
+
+
+# Activation ratios need this many measurements before a prediction uses them (AdaptiveGraphMemory.predict).
+CALIBRATED_SAMPLES = 3
+# An uncalibrated no-checkpoint forecast is raw geometry; it is trusted only with this much room to spare.
+UNCALIBRATED_NO_CHECKPOINT_FACTOR = 2.0
+
+
+def choose_layer_checkpointing(estimate, floor_bytes: int, available_bytes: int | None):
+    """Least checkpointing that fits ``available_bytes``: ``(checkpointed, raw, predicted, calibration)``.
+
+    ``estimate(checkpointed)`` returns ``(raw, predicted, calibration)`` with ``calibration['sample_count']``. Without
+    a memory figure (CPU) layers are checkpointed. Running without checkpoints needs a calibrated forecast that fits;
+    an uncalibrated one (its bin never measured, e.g. sized from another bin's ratio or raw geometry) must fit
+    ``UNCALIBRATED_NO_CHECKPOINT_FACTOR`` times over, else the update checkpoints until that bin is measured.
+    """
+    if available_bytes is not None:
+        raw, predicted, calibration = estimate(False)
+        need = predicted if calibration['sample_count'] >= CALIBRATED_SAMPLES else int(
+            predicted * UNCALIBRATED_NO_CHECKPOINT_FACTOR)
+        if need + floor_bytes <= available_bytes:
+            return False, raw, predicted, calibration
+    return (True, *estimate(True))
+
+
 @dataclass(frozen=True)
 class SavedActivationPlan:
     """A targeted offload budget and whether it should fit within headroom."""

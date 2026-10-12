@@ -440,7 +440,8 @@ def main(argv=None):
     if quant is not None and quant.stage['end'] == 'derived':
         quant.stage['end'] = a.steps
     from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout, geometry_bytes
-    from .memory_policy import effective_cuda_free_bytes
+    from .memory_policy import (choose_layer_checkpointing, effective_cuda_free_bytes, ledger_claim,
+                                ledger_reusable_bytes)
     memory_estimator = AdaptiveGraphMemory(geometry_version=DIRECT_MEMORY_GEOMETRY_VERSION)
 
     def restored_memory_estimator(state):
@@ -832,12 +833,22 @@ def main(argv=None):
                 stats = torch.cuda.memory_stats(a.device)
                 value = stats.get('inactive_split_bytes.all.current')
                 inactive_split = int(value) if value is not None else None
-            available = effective_cuda_free_bytes(int(free), int(total), allocator_reserved,
-                                                  allocator_allocated,
-                                                  inactive_split_bytes=inactive_split)
+            device_available = effective_cuda_free_bytes(int(free), int(total), allocator_reserved,
+                                                         allocator_allocated,
+                                                         inactive_split_bytes=inactive_split)
+            available = device_available
+            # Under the memory ledger the job's claim, not the shared device (on unified memory: the whole
+            # machine), bounds what it may allocate; the guard stops a unit that outgrows its claim under pressure.
+            claim = ledger_claim()
+            claim_available = None
+            if claim is not None:
+                claim_available = ledger_reusable_bytes(claim['budget_bytes'], claim['host_bytes'],
+                                                        allocator_reserved, allocator_allocated,
+                                                        inactive_split_bytes=inactive_split)
+                available = min(device_available, claim_available)
         else:
             free = total = allocator_reserved = allocator_allocated = None
-            available = None
+            available = device_available = claim = claim_available = None
             allocator_backend = None
             inactive_split = None
 
@@ -855,14 +866,12 @@ def main(argv=None):
             checkpointed = bool(a.checkpoint_layers)
             raw, predicted, calibration = estimate(checkpointed)
         else:
-            checkpointed = available is None
-            raw, predicted, calibration = estimate(checkpointed)
-            if cuda_active and predicted + floor > available:
-                checkpointed = not checkpointed
-                raw, predicted, calibration = estimate(checkpointed)
+            checkpointed, raw, predicted, calibration = choose_layer_checkpointing(
+                estimate, floor, available if cuda_active else None)
         incremental = predicted + floor
         fits = available is None or incremental <= available
-        if not fits and cuda_active and not cache_released:
+        device_bound = claim_available is None or device_available < claim_available
+        if not fits and cuda_active and device_bound and not cache_released:
             # On unified memory (DGX GB10) CUDA allocations only use MemFree: stale page cache of read-once
             # checkpoints and corpora hides reusable memory. Drop it once (the ledger's shared release) and re-measure.
             import subprocess
@@ -893,13 +902,19 @@ def main(argv=None):
                               'own_files_advised_gb': advised / 2 ** 30}), flush=True)
             return execution_plan(batch)
         if not fits:
-            raise MemoryError('neuralese_direct estimated update exceeds reusable CUDA memory: '
+            bound = 'reusable CUDA memory' if device_bound else f"the ledger claim of {claim['unit']}"
+            raise MemoryError(f'neuralese_direct estimated update exceeds {bound}: '
                               f'{incremental} bytes required, {available} available; no forward was started')
         layout = backbone_memory_layout(backbone, checkpointed=checkpointed)
         return {'mode': mode, 'checkpoint_layers': checkpointed, 'context_tokens': context,
                 'target_tokens': target, 'activation_geometry_bytes': raw,
                 'predicted_activation_bytes': predicted, 'gradient_optimizer_floor_bytes': floor,
                 'estimated_incremental_peak_bytes': incremental, 'reusable_cuda_bytes': available,
+                'device_reusable_bytes': device_available, 'ledger_claim_reusable_bytes': claim_available,
+                'ledger_unit': claim['unit'] if claim else None,
+                'ledger_budget_bytes': claim['budget_bytes'] if claim else None,
+                'ledger_host_bytes': claim['host_bytes'] if claim else None,
+                'ledger_budget_source': claim['source'] if claim else None,
                 'device_free_bytes': int(free) if free is not None else None,
                 'device_total_bytes': int(total) if total is not None else None,
                 'allocator_backend': allocator_backend,

@@ -301,6 +301,30 @@ def ledger():
         os.replace(tmp, STATE)
 
 
+def claimed_budget(unit, state_path=None):
+    """The current budget (bytes) of ``unit``'s claim, read without modifying the ledger (the guard may have raised it
+    since admission); None when the ledger or the claim is absent. Jobs read their own claim with this
+    (``NATLANG_LEDGER_UNIT``) to size their memory plans to it."""
+    path = state_path or STATE
+    unit = unit if unit.endswith('.service') else unit + '.service'
+    try:  # no lock: writers replace the file atomically, and the guard may hold the lock for seconds
+        with open(path) as stream:
+            state = json.load(stream)
+    except (OSError, ValueError):
+        return None
+    claim = state.get('claims', {}).get(unit)
+    return int(claim['budget']) if claim and claim.get('budget') is not None else None
+
+
+def own_host_usage(pid='self'):
+    """Host memory the guard counts for the cgroup of ``pid`` (cgroup_usage without CUDA); None outside cgroup v2."""
+    try:
+        line = next(l for l in open(f'/proc/{pid}/cgroup') if l.startswith('0::'))
+    except (OSError, StopIteration):
+        return None
+    return cgroup_usage('/sys/fs/cgroup' + line.split('::', 1)[1].strip(), {})
+
+
 def container_name(command):
     """The container a unit's command attaches to or runs (``docker start -a NAME`` or ``docker run --name NAME``):
     stopping the unit only ends the docker client, so the container must be stopped by name."""
