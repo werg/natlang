@@ -61,7 +61,7 @@ def runtime_identity(device: str | torch.device) -> dict[str, Any]:
     return {
         'backend': BACKEND_VERSION,
         'transformer_engine': te_version,
-        'torch': torch.__version__,
+        'torch': str(torch.__version__),
         'cuda': torch.version.cuda,
         'device_name': properties.name,
         'compute_capability': list(capability),
@@ -256,7 +256,7 @@ class FP8ExpertAdapter:
         capability = tuple(torch.cuda.get_device_capability(torch.device(device)))
         if capability < (8, 9):
             raise RuntimeError(f'FP8 expert training requires SM 8.9 or newer, got SM {capability}')
-        self.runtime = {'backend': EXPERT_BACKEND_VERSION, 'torch': torch.__version__,
+        self.runtime = {'backend': EXPERT_BACKEND_VERSION, 'torch': str(torch.__version__),
                         'compute_capability': list(capability), 'device': str(device)}
         self.has_executed = False
         self.row_counts = {'calls': 0, 'rows': 0, 'padded_rows': 0}

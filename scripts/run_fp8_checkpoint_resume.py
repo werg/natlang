@@ -39,6 +39,13 @@ def train_steps(path: Path) -> list[int]:
     return steps
 
 
+def expected_checkpoint_interrupt(returncode: int, report: dict, requested_step: int) -> bool:
+    """True only for the declared SIGTERM exit after a durable checkpoint."""
+    return (returncode == 128 + signal.SIGTERM and
+            report.get("status") == "checkpointed_on_signal" and
+            int(report.get("steps", -1)) >= requested_step)
+
+
 def file_signature(path: Path) -> tuple[int, int] | None:
     try:
         stat = path.stat()
@@ -211,6 +218,8 @@ def main(argv=None) -> int:
     parser.add_argument("--stable-polls", type=int, default=2)
     parser.add_argument("--phase-timeout-seconds", type=float, default=7200)
     parser.add_argument("--receipt", type=Path, required=True)
+    parser.add_argument("--resume-interrupted-receipt", type=Path,
+                        help="recover only from a prior receipt with a verified signal checkpoint")
     args = parser.parse_args(argv)
     args.active_process = None
     args.launch_context = {}
@@ -249,12 +258,30 @@ def main(argv=None) -> int:
         output.relative_to(args.artifact_root)
     except ValueError:
         raise ValueError("recipe output must be under the declared artifact root") from None
-    if output.exists():
+    stage_output = output / recipe["stage"]["id"]
+    train_log, checkpoint = stage_output / "train.jsonl", stage_output / "checkpoint.pt"
+    prior_receipt = None
+    if args.resume_interrupted_receipt is not None:
+        prior_path = args.resume_interrupted_receipt.expanduser().resolve()
+        prior_receipt = json.loads(prior_path.read_text(encoding="utf-8"))
+        prior_initial = prior_receipt.get("initial", {})
+        prior_report = prior_initial.get("report", {})
+        if prior_receipt.get("schema") != "natlang.fp8-same-recipe-checkpoint-resume/1" or \
+                prior_receipt.get("recipe_sha256") != sha256(recipe_path) or \
+                prior_receipt.get("recipe_path") != str(recipe_path):
+            raise ValueError("recovery receipt does not bind this exact declared recipe")
+        if prior_report.get("status") != "checkpointed_on_signal" or \
+                int(prior_report.get("steps", -1)) < args.checkpoint_step or \
+                prior_initial.get("returncode") != 128 + signal.SIGTERM:
+            raise ValueError("recovery receipt does not contain the expected signal-checkpoint outcome")
+        if not checkpoint.is_file() or sha256(checkpoint) != prior_initial.get("checkpoint_sha256_before_resume"):
+            raise ValueError("terminal checkpoint changed since the failed watcher receipt")
+        if not output.is_dir():
+            raise FileNotFoundError("recovery output directory is missing")
+    elif output.exists():
         raise FileExistsError(f"fresh direct-stage output required for first phase: {output}")
     if not output.is_relative_to(args.artifact_root):
         raise ValueError("declared training output must be under the artifact root")
-    stage_output = output / recipe["stage"]["id"]
-    train_log, checkpoint = stage_output / "train.jsonl", stage_output / "checkpoint.pt"
     args.receipt_state = {
         "schema": "natlang.fp8-same-recipe-checkpoint-resume/1",
         "recipe_path": str(recipe_path), "recipe_sha256": sha256(recipe_path),
@@ -267,32 +294,45 @@ def main(argv=None) -> int:
         "watcher_script": str(Path(__file__).resolve()), "watcher_sha256": sha256(Path(__file__).resolve()),
         "status": "prepared",
     }
+    if prior_receipt is not None:
+        args.receipt_state["recovered_from_receipt"] = {
+            "path": str(prior_path), "sha256": sha256(prior_path),
+            "checkpoint_sha256": prior_initial["checkpoint_sha256_before_resume"],
+            "terminal_step": prior_report.get("steps"),
+        }
     atomic_receipt(args.receipt, args.receipt_state)
     print(json.dumps({"event": "resume_exercise_started", "receipt": str(args.receipt),
                       "recipe_sha256": args.receipt_state["recipe_sha256"]}), flush=True)
 
-    first_log = args.receipt.parent / "launches" / "initial.wrapper.log"
-    first_child = start_launcher(args, phase="initial", resume=False, wrapper_log=first_log)
-    requested_reached = wait_for_checkpoint_and_interrupt(args, train_log, checkpoint)
-    first_code = finish_launcher(args, phase="initial", child=first_child,
-                                 timeout=args.phase_timeout_seconds)
-    initial_report = read_report(stage_output / "report.json")
-    args.receipt_state["initial"] = {
-        "returncode": first_code, "report": initial_report,
-        "report_sha256": sha256(stage_output / "report.json"),
-        "train_steps": train_steps(train_log), "watcher_step_when_signaled": requested_reached,
-        "interrupt_observed_step": initial_report.get("steps"),
-        "checkpoint_sha256_before_resume": sha256(checkpoint) if checkpoint.is_file() else None,
-    }
-    if initial_report.get("status") != "checkpointed_on_signal" or \
-            int(initial_report.get("steps", -1)) < args.checkpoint_step:
-        args.receipt_state["status"] = "interrupted_without_expected_full_state"
-        atomic_receipt(args.receipt, args.receipt_state)
-        raise RuntimeError(f"initial run did not stop on a complete signal checkpoint: {initial_report}")
-    if first_code != 0:
-        args.receipt_state["status"] = "initial_launcher_failed"
-        atomic_receipt(args.receipt, args.receipt_state)
-        raise RuntimeError(f"initial launcher returned {first_code}; refusing resume")
+    if prior_receipt is not None:
+        initial_report = prior_report
+        args.receipt_state["initial"] = prior_initial
+    else:
+        first_log = args.receipt.parent / "launches" / "initial.wrapper.log"
+        first_child = start_launcher(args, phase="initial", resume=False, wrapper_log=first_log)
+        requested_reached = wait_for_checkpoint_and_interrupt(args, train_log, checkpoint)
+        first_code = finish_launcher(args, phase="initial", child=first_child,
+                                     timeout=args.phase_timeout_seconds)
+        initial_report = read_report(stage_output / "report.json")
+        args.receipt_state["initial"] = {
+            "returncode": first_code, "report": initial_report,
+            "report_sha256": sha256(stage_output / "report.json"),
+            "train_steps": train_steps(train_log), "watcher_step_when_signaled": requested_reached,
+            "interrupt_observed_step": initial_report.get("steps"),
+            "checkpoint_sha256_before_resume": sha256(checkpoint) if checkpoint.is_file() else None,
+        }
+        if initial_report.get("status") != "checkpointed_on_signal" or \
+                int(initial_report.get("steps", -1)) < args.checkpoint_step:
+            args.receipt_state["status"] = "interrupted_without_expected_full_state"
+            atomic_receipt(args.receipt, args.receipt_state)
+            raise RuntimeError(f"initial run did not stop on a complete signal checkpoint: {initial_report}")
+        expected_signal_exit = expected_checkpoint_interrupt(
+            first_code, initial_report, args.checkpoint_step)
+        if first_code != 0 and not expected_signal_exit:
+            args.receipt_state["status"] = "initial_launcher_failed"
+            atomic_receipt(args.receipt, args.receipt_state)
+            raise RuntimeError(f"initial launcher returned {first_code}; refusing resume")
+        args.receipt_state["initial"]["expected_signal_exit"] = expected_signal_exit
 
     resume_log = args.receipt.parent / "launches" / "resume.wrapper.log"
     resume_child = start_launcher(args, phase="resume", resume=True, wrapper_log=resume_log)

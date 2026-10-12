@@ -23,12 +23,30 @@ def test_train_steps_ignores_partial_or_malformed_jsonl(tmp_path):
     assert WATCH.train_steps(path) == [1, 3]
 
 
+def test_expected_signal_exit_requires_the_durable_requested_step():
+    complete = {"status": "checkpointed_on_signal", "steps": 4}
+    assert WATCH.expected_checkpoint_interrupt(143, complete, 3)
+    assert not WATCH.expected_checkpoint_interrupt(143, {"status": "failed", "steps": 4}, 3)
+    assert not WATCH.expected_checkpoint_interrupt(143, {"status": "checkpointed_on_signal", "steps": 2}, 3)
+    assert not WATCH.expected_checkpoint_interrupt(0, complete, 3)
+
+
 def test_file_signature_requires_complete_file(tmp_path):
     path = tmp_path / "checkpoint.pt"
     assert WATCH.file_signature(path) is None
     path.write_bytes(b"checkpoint")
     signature = WATCH.file_signature(path)
     assert signature == (10, path.stat().st_mtime_ns)
+
+
+def test_training_checkpoint_load_allowlists_torch_version_only(tmp_path):
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    path = tmp_path / "training.pt"
+    torch.save({"version": torch.torch_version.TorchVersion("2.14.0"),
+                "weight": torch.tensor([1.0])}, path)
+    state = CheckpointPolicy.load(path)
+    assert str(state["version"]) == "2.14.0"
+    assert torch.equal(state["weight"], torch.tensor([1.0]))
 
 
 def test_watcher_receipt_write_is_atomic_and_replaces_progress(tmp_path):
