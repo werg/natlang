@@ -33,6 +33,7 @@ import { editStream } from './edit-stream.mjs';
 import { knowledgeEvidence, knowledgeResearch } from './knowledge-desk.mjs';
 import { digestDesk, repoAnswer } from './bgkit-desk.mjs';
 import { peopleChain, peopleLookup } from './people-desk.mjs';
+import { musiqueHops } from './musique-hops.mjs';
 import { citanceSummary, memoryAnswer, storyAnswer, storyChoice, webResearch } from './teacher-desk.mjs';
 
 export const FAMILIES = {
@@ -122,6 +123,8 @@ export const FAMILIES = {
   knowledge_research: { build: knowledgeResearch, weight: 2, externalData: true, contentIdentity: true, source: 'hotpotqa' },
   digest_desk: { build: digestDesk, weight: 2, externalData: true, contentIdentity: true, source: 'bgkit' },
   repo_answer: { build: repoAnswer, weight: 2, externalData: true, contentIdentity: true, source: 'bgkit' },
+  // MuSiQue decompositions as named calls: each hop's fact sentence is a written value later calls read (E2E edges).
+  musique_hops: { build: musiqueHops, weight: 1, externalData: true, contentIdentity: true, source: 'musique' },
   people_lookup: { build: peopleLookup, weight: 1, externalData: true, contentIdentity: true, source: 'schnitzeljagd-synth-people' },
   people_chain: { build: peopleChain, weight: 2, externalData: true, contentIdentity: true, source: 'schnitzeljagd-synth-people' },
   // Teacher collection only (generation.collection 'teacher'): minimal references, intermediate answers unknown.

@@ -179,6 +179,15 @@ export const SOURCES = {
       sha256: '713661628434fbb19fff7392e2e321e4ed107e3c7c7784d0690946e5f722763f' }],
     url: (revision, path) => `https://huggingface.co/datasets/hotpotqa/hotpot_qa/resolve/${revision}/${path}`,
   },
+  musique: {
+    name: 'MuSiQue answerable', homepage: 'https://huggingface.co/datasets/dgslibisey/MuSiQue', license: 'CC-BY-4.0',
+    release: 'dgslibisey/MuSiQue musique_ans_v1.0 train and dev', revision: 'c8f4f8c9465fb69d31a8eae894c3fd509c4ca321',
+    files: [{ path: 'musique_ans_v1.0_train.jsonl', split: 'train',
+      sha256: '83a75b1e11e4e9bb8f8308e72ac40ca617ae4431b3a0d955b61cab259248490a' },
+    { path: 'musique_ans_v1.0_dev.jsonl', split: 'dev',
+      sha256: '15fa63794d18a94ce12411aca6e2327e65b6e83b0b1490efab3f1962e48abf3b' }],
+    url: (revision, path) => `https://huggingface.co/datasets/dgslibisey/MuSiQue/resolve/${revision}/${path}`,
+  },
   cuad: {
     name: 'CUAD v1', homepage: 'https://huggingface.co/datasets/theatticusproject/cuad', license: 'CC-BY-4.0',
     release: 'CUAD v1 SQuAD-style JSON and master clauses CSV', revision: 'a3c393f5d103fd0c516374e4fdff676c8176dcb1',

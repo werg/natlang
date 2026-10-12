@@ -614,7 +614,10 @@ test('authenticated host-return values stay visible crisp context without a mode
         origin: 'observed-host-result; not a model-generated writer target', call_id: 'child',
         parent_call_id: 'root', result_type: 'Draft', value, value_sha256: valueSha } } },
     task: { program_ir: { semantics: { root: 'root.nl', files: { 'root.nl': '', 'child.nl': '' } } } },
-    messages: [{ role: 'user', content: 'You are inside this call: decide(): Draft' }],
+    // The child's own eval computed the value and showed it; the return relays it.
+    messages: [{ role: 'user', content: 'You are inside this call: decide(): Draft' },
+      { role: 'assistant', tool_calls: [{ id: 'compute', function: { name: 'eval', arguments: '{"code":"return draft();"}' } }] },
+      { role: 'tool', tool_call_id: 'compute', content: encoded }],
     target: { role: 'assistant', tool_calls: [{ id: 'ret', function: { name: 'return_result',
       arguments: JSON.stringify({ status: 'success', value }) } }] } };
   const parent = { id: 'parent-read', decision: { index: 8 }, source_ref: { trajectory_id: run, invocation_id: 'root' },
@@ -647,6 +650,67 @@ test('authenticated host-return values stay visible crisp context without a mode
   const rejected = new ChildResultIndexBuilder(); rejected.add(tampered); rejected.add(parent);
   assert.equal(rejected.finish().get(run).observed_host_contexts.length, 0,
     'a mismatched host capture digest cannot authorize context provenance');
+});
+
+test('a value the child writes itself is its result even though the host capture observed it too', () => {
+  const value = 'The Collegian is the bi-weekly official student publication of Houston Baptist University.';
+  const run = 'direct-host-run';
+  const capture = { version: 'reduction-trace/1', kind: 'host_capture', capture_kind: 'invocation_output', complete: true,
+    origin: 'observed-host-result; not a model-generated writer target', call_id: 'child', parent_call_id: 'root',
+    result_type: 'string', value, value_sha256: cryptoCreateHash('sha256').update(JSON.stringify(value)).digest('hex') };
+  const task = { program_ir: { semantics: { root: 'root.nl', files: { 'root.nl': '', 'find_fact.nl': '' } } } };
+  const child = { id: 'child', decision: { index: 1 }, task,
+    source_ref: { trajectory_id: run, invocation_id: 'child', parent_invocation_id: 'root', host_result_capture: { capture } },
+    messages: [{ role: 'user', content: 'You are inside this call: find_fact(question: string): string' }],
+    target: { role: 'assistant', tool_calls: [{ id: 'ret', function: { name: 'return_result',
+      arguments: JSON.stringify({ status: 'success', value }) } }] } };
+  const parent = { id: 'parent', decision: { index: 2 }, task, source_ref: { trajectory_id: run, invocation_id: 'root' }, messages: [
+    { role: 'user', content: 'You are inside this call: root(): string' },
+    { role: 'assistant', tool_calls: [{ id: 'e', function: { name: 'eval', arguments: JSON.stringify({ code: 'console.log(await find_fact("q"));' }) } }] },
+    { role: 'tool', tool_call_id: 'e', content: `console:\n${value}\nnull` }], target: { role: 'assistant', content: 'done' } };
+  const index = new ChildResultIndexBuilder();
+  index.add(child); index.add(parent);
+  const indexed = index.finish().get(run);
+  assert.equal(indexed.producers.length, 1, 'an explicit return the model wrote is a producer');
+  assert.equal(indexed.observed_host_contexts.length, 0);
+  const written = JSON.parse(convertTrajectory(child, { childResults: index.finish() }).record.target.tool_calls[0].function.arguments).value;
+  assert.equal(written.$write.source, value);
+  const read = convertTrajectory(parent, { childResults: index.finish() }).record.messages[2].content.find(part => part.type === 'read');
+  assert.equal(read.name, written.$write.name, 'the caller reads the block the child writes');
+});
+
+test('a sibling reads a value as an argument its shared caller passed on, unless the caller got it as input', () => {
+  // Listings show text JSON-escaped inside quotes.
+  const fact = 'From 2000 to 2004, she was a Member of Parliament for the "Liberal" Party of Canada.';
+  const run = 'sibling-run';
+  const task = { program_ir: { semantics: { root: 'root.nl', files: { 'root.nl': '', 'find_fact.nl': '' } } } };
+  const listing = (opening, content) => [{ role: 'user', content: opening },
+    { role: 'assistant', tool_calls: [{ id: 'scope_0', function: { name: 'eval', arguments: '{"code":"const inputs = read_inputs();"}' } }] },
+    { role: 'tool', tool_call_id: 'scope_0', content }];
+  const opening = 'You are inside this call: find_fact(question: string, known: string[]): string';
+  const ret = value => ({ role: 'assistant', tool_calls: [{ id: 'ret', function: { name: 'return_result',
+    arguments: JSON.stringify({ status: 'success', value }) } }] });
+  const build = rootInputs => {
+    const root = { id: 'root', decision: { index: 0 }, task, source_ref: { trajectory_id: run, invocation_id: 'root' },
+      messages: listing('You are inside this call: root(paragraphs: string[]): string', rootInputs),
+      target: { role: 'assistant', content: 'calling' } };
+    const first = { id: 'first', decision: { index: 1 }, task,
+      source_ref: { trajectory_id: run, invocation_id: 'c1', parent_invocation_id: 'root' },
+      messages: listing(opening, 'question: string = "a >> party"\nknown: string[] = []'), target: ret(fact) };
+    const second = { id: 'second', decision: { index: 2 }, task,
+      source_ref: { trajectory_id: run, invocation_id: 'c2', parent_invocation_id: 'root' },
+      messages: listing(opening, `question: string = "when was #1 formed"\nknown: string[] = [${JSON.stringify(fact)}]`),
+      target: ret('The united party was formed in 1861 by a merger.') };
+    const index = new ChildResultIndexBuilder();
+    for (const record of [root, first, second]) index.add(record);
+    return { index: index.finish(), second };
+  };
+  const passed = build('paragraphs: string[] = ["# Scherrer\\nFrom 2000 to 2004, she was a Member of Parliament."]');
+  const reads = convertTrajectory(passed.second, { childResults: passed.index }).record.messages[2].content
+    .filter(part => part.type === 'read');
+  assert.deepEqual(reads.map(part => part.source), [fact], 'the sibling reads the fact its caller passed on');
+  const input = build(`paragraphs: string[] = [${JSON.stringify(fact)}]`);
+  assert.equal(input.index.get(run).readers.length, 0, 'a whole input of the shared caller is not a passed-on value');
 });
 
 test('reader links use tool message IDs and choose whole-object blocks over overlapping field blocks', () => {

@@ -35,11 +35,15 @@
  *   trainer writes the block from the child's record and trains it by the caller's loss. Kept exact, counted:
  *   `crisp-value` (a boolean, number or short text: its exact form is the value), `producer-missing` (the child's
  *   final turn is not in the corpus), `value-not-printed` (the output does not show the returned value as returned).
+ *   A return whose value the child's own eval showed it first (code computed it; the model relays it) is an
+ *   `observed-host-result`: crisp context, never a writer. Version 16: a return the child writes itself is a producer
+ *   even though the collector's host capture also observed it.
  *
  * - **Argument reads** (field-level flow). A structured child result's long text field that the caller passes into
  *   another call (`notes.push(found.facts)`, then `answer(notes)`) is written field by field in the producer's
  *   `return_result` (`{ facts: { $write: ... } }`, the other fields exact) and read where the consumer's argument
  *   listing (`scope_0`) shows it. Producers are identified as for child results; ambiguous ones stay text.
+ *   The consumer is the producer's caller or (version 16) a sibling call: the caller passed the value it read on.
  *
  * Kept exact, counted: tool outputs (`single-use`), `nl` literals in eval code (`later-curriculum-step`), turn-count
  * notices (`dynamic-text`).
@@ -55,7 +59,7 @@ import { promptPieces, findPieces, type PromptPiece } from '../native/system-pro
 import { AUTOMATIC_NOTE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 import { VIEW_PROMPT } from '../builtin/index.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/15';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/16';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type PureLiteralEvalReturn = {
@@ -215,7 +219,7 @@ function directTypedResultEventName(blockId: string, trajectoryId: string, write
 
 type ChildResultProducer = { id: string; invocation: string; value: string; field?: string; parent?: string;
   renderings: string[]; order?: number };
-type ChildResultOutput = { invocation: string; tool_call_id: string; text: string; argument: boolean; order?: number };
+type ChildResultOutput = { invocation: string; parent?: string; tool_call_id: string; text: string; argument: boolean; order?: number };
 type ObservedHostResult = { id: string; invocation: string; parent?: string; value: string; body_sha256: string;
   capture_sha256: string; result_type: string; order?: number };
 type ChildResultRun = { returned: Set<string>; producers: ChildResultProducer[];
@@ -347,9 +351,13 @@ function providerActionNormalizationEquivalent(record: Record<string, unknown>, 
 }
 
 /** Authenticate a completed host return against the same decision's successful typed result.
- * This is crisp context evidence, never a model-written Neuralese producer. */
+ * This is crisp context evidence, never a model-written Neuralese producer. The collector captures every completed
+ * invocation's output, so the capture alone does not make a return host-computed: a return is host-computed when its
+ * value was shown to the call by one of its own evals (the model relays a value code computed). A value the call
+ * writes itself (an answer, an extracted sentence) is its model-written result, and the capture corroborates it. */
 function observedHostReturn(record: Record<string, unknown>, returned: string, value: unknown):
   Omit<ObservedHostResult, 'order'> | undefined {
+  if (!relayedEvalValue(record, returned, value)) return undefined;
   const source = record.source_ref as Record<string, unknown> | undefined;
   const receipt = source?.host_result_capture as Record<string, unknown> | undefined;
   const capture = receipt?.capture as Record<string, unknown> | undefined;
@@ -368,6 +376,16 @@ function observedHostReturn(record: Record<string, unknown>, returned: string, v
   if (!id) return undefined;
   return { id, invocation: String(source.invocation_id), ...(parent ? { parent } : {}), value: returned,
     body_sha256: sha256Text(returned), capture_sha256: sha256Text(JSON.stringify(capture)), result_type: capture.result_type };
+}
+
+/** Whether a call's own eval output (not its argument listing) showed the value it returns before it returned it. */
+function relayedEvalValue(record: Record<string, unknown>, returned: string, value: unknown): boolean {
+  const messages = Array.isArray(record.messages) ? record.messages as Message[] : [];
+  const evals = new Set(messages.flatMap(message => message.role === 'assistant' ? (message.tool_calls ?? [])
+    .filter(call => call.function?.name === 'eval' && call.id !== 'scope_0').map(call => String(call.id)) : []));
+  const forms = [...new Set([returned, renderValueForChild(value), JSON.stringify(value) ?? returned])];
+  return messages.some(message => message.role === 'tool' && evals.has(String(message.tool_call_id)) &&
+    typeof message.content === 'string' && forms.some(form => (message.content as string).includes(form)));
 }
 
 /** One corpus-pass index for child results. It records only explicit successful return_result targets;
@@ -398,7 +416,9 @@ export class ChildResultIndexBuilder {
         const invocation = invocationOf(record), parent = (record.source_ref as { parent_invocation_id?: unknown } | undefined)?.parent_invocation_id;
         const id = String(record.id);
         run.producers.push({ id, invocation, value: returned, ...(typeof parent === 'string' ? { parent } : {}),
-          renderings: value === undefined ? [returned] : [...new Set([render(value), JSON.stringify(value)])], order });
+          // A text value is also listed JSON-escaped inside a quoted argument (`known: string[] = ["... \"quoted\" ..."]`).
+          renderings: value === undefined ? [returned] : [...new Set([render(value), JSON.stringify(value),
+            ...(typeof value === 'string' ? [JSON.stringify(value).slice(1, -1)] : [])])], order });
         if (value && typeof value === 'object' && !Array.isArray(value)) for (const [field, text] of Object.entries(value))
           if (typeof text === 'string' && text.length >= MIN_CHILD_RESULT_CHARS && text !== returned) {
             run.returned.add(text);
@@ -416,7 +436,9 @@ export class ChildResultIndexBuilder {
         typeof message.content === 'string' && typeof message.tool_call_id === 'string') {
       const key = `${invocation}:${message.tool_call_id}`;
       const existing = run.outputs.get(key);
+      const outputParent = (record.source_ref as { parent_invocation_id?: unknown } | undefined)?.parent_invocation_id;
       if (!existing || (order !== undefined && (existing.order === undefined || order < existing.order))) run.outputs.set(key, { invocation,
+        ...(typeof outputParent === 'string' ? { parent: outputParent } : {}),
         tool_call_id: message.tool_call_id, text: message.content, argument: message.tool_call_id === 'scope_0', order });
     }
   }
@@ -440,13 +462,20 @@ export class ChildResultIndexBuilder {
             observed_host_contexts.push({ invocation: output.invocation, tool_call_id: output.tool_call_id, value: host.value,
               producer_id: host.id, body_sha256: host.body_sha256, capture_sha256: host.capture_sha256, result_type: host.result_type });
         }
+        // A value reaches a call from its own child (the caller's eval prints it) or, as an argument, from a sibling
+        // through their shared caller (which read the sibling's value and passed it on).
+        // A sibling's argument that the shared caller itself received as an input is that input, not the value passed on.
+        const callerInputs = output.argument && output.parent !== undefined ? run.outputs.get(`${output.parent}:scope_0`)?.text : undefined;
+        const reaches = (producer: ChildResultProducer) => producer.parent === output.invocation ||
+          (output.argument && output.parent !== undefined && producer.parent === output.parent &&
+            ![`"${producer.value}"`, JSON.stringify(producer.value)].some(form => (callerInputs ?? '').includes(form)));
         const matches: { producer: ChildResultProducer; form: string }[] = [];
         for (const producer of run.producers) {
           // Ingestion order is not evidence. Without authoritative per-decision order, keep exact text.
           if (producer.order === undefined || output.order === undefined || producer.order >= output.order) continue;
           if (producer.invocation === output.invocation) continue;
           const candidates = run.producers.filter(p => p.value === producer.value);
-          if (candidates.some(p => p.parent !== undefined) && producer.parent !== output.invocation) continue;
+          if (candidates.some(p => p.parent !== undefined) && !reaches(producer)) continue;
           for (const form of new Set([producer.value, ...producer.renderings])) {
             const shown = output.argument ? output.text.includes(`"${form}"`) : output.text.includes(form);
             if (producer.value.length >= MIN_CHILD_RESULT_CHARS && shown) matches.push({ producer, form });
@@ -462,7 +491,7 @@ export class ChildResultIndexBuilder {
         for (const [value, producer] of selected) {
           const peers = run.producers.filter(p => p.value === value && p.order !== undefined && output.order !== undefined && p.order < output.order &&
             (run.producers.some(candidate => candidate.value === value && candidate.parent !== undefined) ?
-              p.parent === output.invocation : true));
+              reaches(p) : true));
           if (peers.length === 1 && !readers.some(reader => reader.invocation === output.invocation &&
               reader.tool_call_id === output.tool_call_id && reader.value === value))
             readers.push({ invocation: output.invocation, tool_call_id: output.tool_call_id, value, producer_id: producer.id });
