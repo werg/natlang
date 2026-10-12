@@ -16,6 +16,7 @@ import { canonical as sharedCanonical } from '../ts-host/dist/adaptation/identit
 import { hexDigest } from '../ts-host/dist/native/hash.js';
 import { providerRenderedTurn, visibleValue } from './lib/decision-child-visibility.mjs';
 import { parentEvalChain, projectDeclaredChildResult } from './lib/decision-child-projection.mjs';
+import { reviewDecisionChildOutput } from './lib/decision-child-source-review.mjs';
 
 const { values } = parseArgs({ options: {
   'results-dir': { type: 'string' }, 'source-cases': { type: 'string' },
@@ -314,9 +315,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
           reason: `adapter-contract-repair-required:${item.family}` });
         continue;
       }
-      if (expected === undefined || !sourceReview.accepted) continue;
-      if (sourceReview.source_label_correction && !labelCorrectionSha)
-        throw new Error(`source-label correction lacks immutable evidence file: ${id}`);
+      if (expected === undefined) continue;
       const fields = effectiveFields(item, task);
       let matches = [];
       const bindingGaps = [];
@@ -327,8 +326,13 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         const parentCodes = parentChain.flatMap(parent => [parent.code, ...(parent.followup_codes ?? [])]);
         const projection = projectDeclaredChildResult(declaredReturnType, entry.host_result.value,
           parentCodes, entry.inline_instruction_site);
-        if (!projection.accepted || !sourceOutputReview(item, semantics, expected,
-            projection.value, correctionsByItem).accepted) continue;
+        const childReview = reviewDecisionChildOutput({ expected, parentObserved: observed,
+          childObserved: projection.value,
+          review: (expectedValue, actualValue) => sourceOutputReview(item, semantics,
+            expectedValue, actualValue, correctionsByItem) });
+        if (!projection.accepted || !childReview.accepted) continue;
+        if (childReview.child_output_review.source_label_correction && !labelCorrectionSha)
+          throw new Error(`source-label correction lacks immutable evidence file: ${id}`);
         // An intermediate caller may return the typed value unchanged before
         // an enclosing action projects it (for example `return selected;`
         // followed by a per-item `answer[0]`). Require the captured result at
@@ -370,7 +374,9 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
           continue;
         }
         if (Object.values(visible).every(Boolean)) matches.push({ entry, turn, visible, caseIdBound,
-          scopeBoundFields: Object.keys(scopeBound).filter(key => scopeBound[key]), providerView, projection: {
+          scopeBoundFields: Object.keys(scopeBound).filter(key => scopeBound[key]), providerView,
+          childValue: projection.value,
+          childReview, projection: {
             kind: projection.projection, declared_return_type: declaredReturnType,
             result_binding: projection.result_binding, parent_invocation_id: entry.parent_invocation_id,
             parent_action_sha256: sha(parentCodes[projection.projection_code_index] ?? ''),
@@ -399,6 +405,8 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
       if (!matchingCandidates.length) {
         rejected.push({ program_id: program.id, item_id: id, item_sha256: itemSha, group: source.group,
           reason: 'no-child-with-complete-exact-visible-inputs',
+          parent_observed_value: observed,
+          parent_output_review: sourceReview,
           matching_children: 0,
           expected_value_has_completed_child: bindingGaps.length > 0,
           binding_gaps: bindingGaps.slice(0, 8) });
@@ -410,7 +418,10 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         trajectory_id: row.id, trajectory_sha256: originalDigest,
         item_id: id, item_sha256: itemSha, source_group: source.group, source_role: source.role,
         source_split: source.role ?? source.split,
-        expected_value: expected, observed_value: observed, invocation_id: entry.invocation_id,
+        expected_value: expected, observed_value: match.childValue,
+        parent_observed_value: observed,
+        parent_output_review: match.childReview.parent_output_review,
+        invocation_id: entry.invocation_id,
         decision_index: turn.decision.index, target_sha256: match.targetSha256,
         target_tool: turn.target?.tool_calls?.[0]?.function?.name ?? null,
         provider_request_sha256: providerView.requestSha256,
@@ -419,7 +430,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         visible_fields: Object.keys(visible), scope_bound_fields: scopeBoundFields,
         source_item_id_runtime_bound: caseIdBound,
         typed_output_projection: match.projection,
-        source_reference_review: sourceReview,
+        source_reference_review: match.childReview.child_output_review,
         source_quality_review_only: turn.candidate_selection?.source_quality_review_only === true,
         source_quality_hold_reasons: turn.candidate_selection?.source_quality_hold_reasons ?? [],
         scope_snapshot_sha256: sha(JSON.stringify(entry.inline_instruction_site?.runtime_capture_snapshots ?? null)),
