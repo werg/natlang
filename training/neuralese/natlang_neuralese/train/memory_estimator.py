@@ -101,7 +101,10 @@ class AdaptiveGraphMemory:
             old = {}
         self.samples = dict(old.get('samples', {}))
         self.margin = margin
-        self.joint_ratios = dict(old.get('joint_ratios', {}))
+        # Ratios of the observed to the predicted variable part (graph tape) of a joint attempt. The fixed part
+        # (resident weights, optimizer state, the update's gradient buffers) is counted exactly by the caller;
+        # older whole-peak ratios ('joint_ratios') mixed both and are not reused.
+        self.joint_ratios = dict(old.get('joint_tape_ratios', {}))
 
     @staticmethod
     def key(kind, context, length):
@@ -229,25 +232,33 @@ class AdaptiveGraphMemory:
         context = max([plan['reader_context']] + [c for c, _ in plan['writers']])
         return f"joint:{int(math.log2(max(1, count)))}:{int(math.log2(max(1, context)))}"
 
-    def adjust_joint(self, plan, predicted):
-        ratios = self.joint_ratios.get(self.joint_key(plan), [])
+    def joint_ratio(self, plan):
+        """The 80th-percentile tape ratio of this plan's bin; a bin not seen yet borrows every bin's observations
+        (a first two-writer record must not start uncalibrated after a one-writer record missed by 2x)."""
+        ratios = self.joint_ratios.get(self.joint_key(plan)) or [r for values in self.joint_ratios.values() for r in values]
         if not ratios:
-            return predicted
+            return 1.0
         ordered = sorted(ratios)
-        ratio = ordered[min(len(ordered) - 1, int(.8 * len(ordered)))]
-        return int(predicted * max(1.0, ratio))
+        return max(1.0, ordered[min(len(ordered) - 1, int(.8 * len(ordered)))])
 
-    def observe_joint(self, plan, predicted, peak, *, failed=False):
-        if predicted <= 0:
-            return
+    def adjust_joint(self, plan, predicted, fixed=0):
+        """``predicted`` is the whole raw peak (fixed + tape); only the tape above ``fixed`` is scaled."""
+        tape = max(0, predicted - fixed)
+        return int(fixed + tape * self.joint_ratio(plan))
+
+    def observe_joint(self, plan, predicted, peak, *, failed=False, fixed=0):
+        tape = predicted - fixed
+        if tape <= 0:
+            return None
         # Failed attempts are censored lower bounds, not successful peaks.
         # A small uplift makes the next related graph avoid the same miss.
-        ratio = peak / predicted * (1.03 if failed else 1.0)
+        ratio = max(0.0, peak - fixed) / tape * (1.03 if failed else 1.0)
         key = self.joint_key(plan)
         self.joint_ratios[key] = (self.joint_ratios.get(key, []) + [ratio])[-64:]
+        return ratio
 
     def state_dict(self):
-        return {'samples': self.samples, 'joint_ratios': self.joint_ratios,
+        return {'samples': self.samples, 'joint_tape_ratios': self.joint_ratios,
                 'geometry_version': self.geometry_version, 'reset_reason': self.reset_reason}
 
 
