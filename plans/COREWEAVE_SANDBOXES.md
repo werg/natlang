@@ -88,9 +88,10 @@ ones are below.
    path as on DGX, so a moved run resumes with identical identities. No trainer change is needed.
 4. **Checkpoint egress.** `checkpoint.pt` is 47 GB (the hard-linked `best-checkpoint.pt` costs nothing extra), and a
    49 GB `.checkpoint-space.reserve` sits next to it. Size scratch at ≥ 150 Gi per Mellum stage plus inputs (~60 GB):
-   about 300 Gi. `bundle.py publish` skips `*.reserve` and deduplicates hard links by content. Next step: publish
-   the run directory after each checkpoint (every 170 updates), not only at exit, so lifetime expiry, which kills
-   without grace, loses at most one checkpoint interval.
+   about 300 Gi. `bundle.py publish` skips `*.reserve` and the trainers' `*.pending` temp files, and deduplicates
+   hard links by content. `bundle.py watch` runs beside the job and publishes each output directory whenever a
+   checkpoint or report changes, so lifetime expiry, which kills without grace, loses at most one checkpoint
+   interval (every 170 updates).
 5. **Shutdown.** The trainers write their final state on SIGTERM, and v4 used `--stop-seconds 660`. `cwctl.py stop`
    defaults to `--graceful-shutdown-seconds 600` (`NATLANG_CW_STOP_GRACE`). The bootstrap forwards TERM to the job and
    publishes outputs after it exits. The documented cap for a normal stop's grace is unknown; verify it in the first
@@ -211,8 +212,21 @@ s3://<bucket>/
 
 ### Checkpoint sync back to DGX and Pop
 
-- The sandbox publishes each output directory (`NATLANG_CW_OUTPUTS`) on exit (`bundle.py publish`). Next step: also
-  publish after each checkpoint.
+- **Incremental publish.** While the job runs, `bundle.py watch` (started by the bootstrap) checks every
+  `NATLANG_CW_PUBLISH_INTERVAL` seconds (default 60) whether a trigger file changed (`*.pt`, `report.json`,
+  `*certificate*.json`). When one did, it publishes the whole output directory: objects, then the manifest, then
+  `outputs/<job>/<dir>/latest.json`. So a reader always sees a complete state. Without a trigger change it still
+  publishes every 30 minutes (`--max-interval`), which carries the logs.
+  - Consistency: files ≤ 64 MiB are read into memory once, so a growing log is hashed and uploaded as the same bytes.
+    A checkpoint is hashed and uploaded through one open descriptor, so the trainer's atomic rename during the upload
+    cannot mix two versions.
+  - Each checkpoint's 47 GB is hashed once per new inode (cached), and unchanged objects are not re-uploaded.
+  - The pointer keeps the `previous` manifest key, so a resume can fall back one publish.
+  - On exit the bootstrap stops the watcher, publishes once more, and writes `outputs/<job>/exit.json`.
+- **Resume after expiry, stop or failure:** `cwctl.py launch JOB.json --resume`. It relaunches the same job id;
+  the bootstrap (`NATLANG_CW_RESUME=1`) fetches each output directory's `latest.json` state, verified, at its
+  original absolute path before running the job. The recipe then resumes from that `checkpoint.pt` as on DGX. On
+  the first launch the pointer is missing, so `--missing-ok` makes this a no-op.
 - DGX pulls with `bundle.py fetch --bucket B --pointer-key outputs/<job>/<dir>/latest.json`. That reads the
   pointer, fetches the manifest it names, and verifies every file. Add
   `--map /home/werg/natlang/runs/x=/home/werg/natlang/runs/x-cw` to land beside the local lineage instead of over it.

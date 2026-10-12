@@ -7,7 +7,8 @@ implementation. Which job goes to CoreWeave is the placement policy's decision, 
 
   cwctl.py doctor                         client, credentials (names only), bucket settings; no API call
   cwctl.py plan JOB.json [--gpu-hour-price P]   validated request + cost bound; no API call (the dry run)
-  cwctl.py launch JOB.json [--dry-run] [--wait]   start the sandbox, record it, print its id
+  cwctl.py launch JOB.json [--bundle K] [--resume] [--dry-run] [--wait]   start the sandbox, record it
+                                          (--resume: continue from <output prefix><dir>/latest.json)
   cwctl.py smoke [--gpu] [--dry-run]      a 10-minute sandbox that prints nvidia-smi / torch device facts
   cwctl.py records                        sandboxes this machine launched (local state file)
   cwctl.py status-line                    one line for this machine's coord status page
@@ -100,7 +101,7 @@ def bootstrap_text() -> str:
     return (HERE / 'bootstrap.sh').read_text()
 
 
-def load_job(path: Path, bundle: str | None = None, bucket: str | None = None) -> dict:
+def load_job(path: Path, bundle: str | None = None, bucket: str | None = None, resume: bool = False) -> dict:
     """The job file, with the bundle key from the command line and bucket/region from the environment if unset."""
     try:
         job = json.loads(path.read_text())
@@ -108,6 +109,8 @@ def load_job(path: Path, bundle: str | None = None, bucket: str | None = None) -
         raise ControllerError(f'{path}: not JSON ({error})')
     if bundle:
         job['bundle'] = bundle
+    if resume:
+        job['resume'] = True
     job.setdefault('bucket', bucket or os.environ.get('NATLANG_CW_BUCKET'))
     if job['bucket'] is None:
         job.pop('bucket')
@@ -241,6 +244,8 @@ def main(argv=None) -> int:
         p.add_argument('--gpu-hour-price', type=float, help='USD per GPU-hour once CoreWeave quotes it')
         p.add_argument('--bundle', help='bundle manifest key, bundles/<id>.json (from bundle.py plan + upload)')
         p.add_argument('--bucket', help='AI Object Storage bucket (default NATLANG_CW_BUCKET)')
+        p.add_argument('--resume', action='store_true',
+                       help='continue this job id from its latest published outputs (after expiry, stop or failure)')
         if name == 'launch':
             p.add_argument('--dry-run', action='store_true')
             p.add_argument('--wait', action='store_true', help='block until the sandbox is RUNNING')
@@ -253,9 +258,9 @@ def main(argv=None) -> int:
     if args.command == 'doctor':
         print(json.dumps(doctor(), indent=1))
     elif args.command == 'plan':
-        print(json.dumps(launch(load_job(args.job, args.bundle, args.bucket), True, False, args.gpu_hour_price), indent=1))
+        print(json.dumps(launch(load_job(args.job, args.bundle, args.bucket, args.resume), True, False, args.gpu_hour_price), indent=1))
     elif args.command == 'launch':
-        print(json.dumps(launch(load_job(args.job, args.bundle, args.bucket), args.dry_run, args.wait, args.gpu_hour_price), indent=1))
+        print(json.dumps(launch(load_job(args.job, args.bundle, args.bucket, args.resume), args.dry_run, args.wait, args.gpu_hour_price), indent=1))
     elif args.command == 'smoke':
         result = launch(jobs.validate(smoke_job(args.gpu)), args.dry_run, not args.dry_run, None)
         print(json.dumps(result, indent=1))

@@ -93,6 +93,8 @@ def validate(job: dict[str, Any]) -> dict[str, Any]:
     bucket = job.get('bucket')
     if bucket is not None and (not isinstance(bucket, str) or not _BUCKET.match(bucket)):
         raise JobError('bucket: an AI Object Storage bucket name (lower case, 3-63 characters)')
+    if job.get('resume') and (bucket is None or not job.get('outputs')):
+        raise JobError('resume fetches the published outputs: it needs bucket and outputs')
     if job.get('bundle') is not None and bucket is None:
         raise JobError('a bundle lives in a bucket: set bucket')
     env = job.get('env', {})
@@ -137,6 +139,9 @@ def bootstrap_env(job: dict[str, Any]) -> dict[str, str]:
         env['NATLANG_CW_WORKDIR'] = job['workdir']
     if job.get('outputs'):
         env['NATLANG_CW_OUTPUTS'] = ' '.join(job['outputs'])
+    if job.get('resume'):
+        # Relaunch of the same job id: fetch <output prefix><dir>/latest.json of every output before running.
+        env['NATLANG_CW_RESUME'] = '1'
     env.update(job['env'])
     return env
 

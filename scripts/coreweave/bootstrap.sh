@@ -19,7 +19,8 @@
 #
 # Environment (set by cwctl.py from the job; no credentials: object storage uses the sandbox's own WIF token):
 #   NATLANG_CW_JOB NATLANG_CW_WORK NATLANG_CW_BUCKET NATLANG_CW_BUNDLE NATLANG_CW_OUTPUT_PREFIX NATLANG_CW_OUTPUTS
-#   NATLANG_CW_WORKDIR NATLANG_CW_MIRROR_ROOTS NATLANG_CW_IMAGE_READY NATLANG_CW_BUILD_TSHOST AWS_REGION
+#   NATLANG_CW_WORKDIR NATLANG_CW_MIRROR_ROOTS NATLANG_CW_IMAGE_READY NATLANG_CW_BUILD_TSHOST NATLANG_CW_RESUME
+#   NATLANG_CW_PUBLISH_INTERVAL NATLANG_CW_S3_ADDRESSING (path only for the local rehearsal) AWS_REGION
 set -uo pipefail
 WORK=${NATLANG_CW_WORK:-/work}
 export NATLANG_REPO=${NATLANG_REPO:-/home/werg/natlang}
@@ -30,7 +31,8 @@ log start "\"sandbox\":\"${CW_SANDBOX_ID:-}\""
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>/dev/null | sed 's/^/gpu: /'
 
 # 1. client deps for object storage (the code snapshot's requirements come after step 3)
-if [ "${NATLANG_CW_IMAGE_READY:-0}" != 1 ]; then
+mkdir -p "$WORK"
+if ! python3 -c "import boto3, sys; sys.exit(tuple(map(int, boto3.__version__.split('.')[:2])) < (1, 42))" 2>/dev/null; then
   python3 -m pip install -q --no-cache-dir 'boto3>=1.42.5' || die pip-boto3
 fi
 
@@ -48,7 +50,8 @@ if [ -n "${NATLANG_CW_BUNDLE:-}" ]; then
 import hashlib, json, os, tarfile, boto3
 from botocore.client import Config
 s3 = boto3.client('s3', endpoint_url=os.environ.get('AWS_ENDPOINT_URL_S3', 'https://cwobject.com'),
-                  config=Config(region_name=os.environ['AWS_REGION'], s3={'addressing_style': 'virtual'}))
+                  config=Config(region_name=os.environ['AWS_REGION'],
+                                s3={'addressing_style': os.environ.get('NATLANG_CW_S3_ADDRESSING', 'virtual')}))
 bucket, work, repo = os.environ['NATLANG_CW_BUCKET'], os.environ.get('NATLANG_CW_WORK', '/work'), os.environ['NATLANG_REPO']
 manifest = json.loads(s3.get_object(Bucket=bucket, Key=os.environ['NATLANG_CW_BUNDLE'])['Body'].read())
 os.makedirs(f'{work}/.coreweave', exist_ok=True)
@@ -88,13 +91,28 @@ if [ "${NATLANG_CW_BUILD_TSHOST:-0}" = 1 ]; then
   log ts-host
 fi
 
+BUNDLE="$NATLANG_REPO/scripts/coreweave/bundle.py"
+outputs=()
+for dir in ${NATLANG_CW_OUTPUTS:-}; do
+  case "$dir" in /*) outputs+=("$dir") ;; *) outputs+=("$NATLANG_REPO/$dir") ;; esac
+done
+
+# 5b. resume: fetch the latest published state of each output directory (NATLANG_CW_RESUME=1, set by
+# `cwctl.py launch --resume`), so a relaunched job continues from its last checkpoint at the same absolute path.
+if [ "${NATLANG_CW_RESUME:-0}" = 1 ] && [ -n "${NATLANG_CW_BUCKET:-}" ]; then
+  for dir in "${outputs[@]}"; do
+    python3 "$BUNDLE" fetch --bucket "$NATLANG_CW_BUCKET" --missing-ok --root "$NATLANG_REPO" \
+      --pointer-key "${NATLANG_CW_OUTPUT_PREFIX%/}/$(basename "$dir")/latest.json" || die "resume $dir"
+  done
+  log resumed
+fi
+
 publish() {
   [ -n "${NATLANG_CW_BUCKET:-}" ] || return 0
-  for dir in ${NATLANG_CW_OUTPUTS:-}; do
-    case "$dir" in /*) ;; *) dir="$NATLANG_REPO/$dir" ;; esac
+  for dir in "${outputs[@]}"; do
     [ -d "$dir" ] || continue
-    python3 "$NATLANG_REPO/scripts/coreweave/bundle.py" publish "$dir" --bucket "$NATLANG_CW_BUCKET" \
-      --prefix "${NATLANG_CW_OUTPUT_PREFIX}$(basename "$dir")/" || log publish-failed "\"dir\":\"$dir\""
+    python3 "$BUNDLE" publish "$dir" --bucket "$NATLANG_CW_BUCKET" --prefix "$NATLANG_CW_OUTPUT_PREFIX" \
+      || log publish-failed "\"dir\":\"$dir\""
   done
 }
 
@@ -104,14 +122,24 @@ export PYTHONPATH="$NATLANG_REPO/training/neuralese${PYTHONPATH:+:$PYTHONPATH}"
 log run "\"command\":\"$*\""
 "$@" &
 child=$!
+# Incremental publish beside the job: every new checkpoint reaches the bucket while the job runs, because lifetime
+# expiry kills without a grace period (NATLANG_CW_PUBLISH_INTERVAL seconds between checks, default 60).
+watcher=
+if [ -n "${NATLANG_CW_BUCKET:-}" ] && [ ${#outputs[@]} -gt 0 ]; then
+  python3 "$BUNDLE" watch "${outputs[@]}" --bucket "$NATLANG_CW_BUCKET" --prefix "$NATLANG_CW_OUTPUT_PREFIX" \
+    --interval "${NATLANG_CW_PUBLISH_INTERVAL:-60}" > "$WORK/.coreweave-watch.log" 2>&1 &
+  watcher=$!
+fi
 trap 'log term; kill -TERM $child 2>/dev/null' TERM INT
 wait $child; status=$?
 while kill -0 $child 2>/dev/null; do wait $child; status=$?; done  # a trapped TERM interrupts wait; keep waiting
 log exited "\"status\":$status"
+if [ -n "$watcher" ]; then kill -TERM $watcher 2>/dev/null; wait $watcher 2>/dev/null; fi
 mkdir -p "$WORK/.coreweave"; echo "$status" > "$WORK/.coreweave/exit-status"
 publish
 if [ -n "${NATLANG_CW_BUCKET:-}" ]; then
-  STATUS=$status python3 -c "import boto3,json,os; from botocore.client import Config; boto3.client('s3', endpoint_url=os.environ.get('AWS_ENDPOINT_URL_S3','https://cwobject.com'), config=Config(region_name=os.environ['AWS_REGION'], s3={'addressing_style':'virtual'})).put_object(Bucket=os.environ['NATLANG_CW_BUCKET'], Key=os.environ['NATLANG_CW_OUTPUT_PREFIX']+'exit.json', Body=json.dumps({'job':os.environ.get('NATLANG_CW_JOB'),'sandbox':os.environ.get('CW_SANDBOX_ID'),'status':int(os.environ['STATUS'])}).encode())" || log exit-record-failed
+  python3 "$BUNDLE" record-exit --bucket "$NATLANG_CW_BUCKET" --prefix "$NATLANG_CW_OUTPUT_PREFIX" --status "$status" \
+    || log exit-record-failed
 fi
 log done "\"status\":$status"
 # Always exit 0: a nonzero main-process exit makes the platform restart the container (docs sandbox-lifecycle.md),

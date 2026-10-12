@@ -16,7 +16,8 @@ path prefix). Copies are not training admission (AGENTS.md): a bundle moves byte
   plan     --recipe R [--stage S ...] [--corpus ID ...] [--extra PATH ...] [--code-sha SHA] -o manifest.json
   upload   manifest.json --bucket B [--dry-run]
   fetch    --bucket B (--manifest-key K | --pointer-key outputs/<job>/<dir>/latest.json | --manifest FILE) [--map OLD=NEW ...] [--dry-run]
-  publish  DIR --bucket B --prefix outputs/<job>/ [--dry-run]
+  publish  DIR --bucket B --prefix outputs/<job>/ [--dry-run]     pointer: <prefix><DIR name>/latest.json
+  watch    DIR... --bucket B --prefix outputs/<job>/ [--interval 60] [--max-interval 1800]
   verify   manifest.json [--map OLD=NEW ...]
   ping     --bucket B [--prefix P]
 
@@ -39,12 +40,19 @@ from typing import Any, Iterable
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
-from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex  # noqa: E402
+from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex, sha256_hex  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_file_hex_cached  # noqa: E402
 
 SCHEMA = 'natlang.coreweave-bundle/1'
 DEFAULT_ENDPOINT = 'https://cwobject.com'
 TOKEN_EXCHANGE_URI = 'https://api.coreweave.com/v1/cwobject/temporary-credentials/api-token'
+# Not content: free-space reservations, the trainers' atomic-write temp names, our own fetch temps.
+SKIP_SUFFIXES = ('.reserve', '.pending', '.pending-link', '.tmp', '.partial')
+# Files up to this size are read into memory once, so the bytes hashed are the bytes uploaded even while a log grows;
+# larger files (checkpoints, written by atomic rename) are hashed and uploaded through one open descriptor.
+SMALL_FILE_BYTES = 64 * 1024 * 1024
+# A change of a file matching one of these names starts an incremental publish (watch).
+DEFAULT_TRIGGERS = ('*.pt', 'report.json', '*certificate*.json')
 
 
 class BundleError(ValueError):
@@ -192,8 +200,10 @@ def s3_client():
     region = os.environ.get('AWS_REGION') or os.environ.get('NATLANG_CW_REGION')
     if not region:
         raise BundleError('set AWS_REGION (or NATLANG_CW_REGION) to the bucket availability zone, e.g. US-EAST-04A')
+    # NATLANG_CW_S3_ADDRESSING=path only for the local S3 stand-in of the rehearsal (rehearse.py).
+    addressing = os.environ.get('NATLANG_CW_S3_ADDRESSING', 'virtual')
     return boto3.client('s3', endpoint_url=os.environ.get('AWS_ENDPOINT_URL_S3', DEFAULT_ENDPOINT),
-                        config=Config(region_name=region, s3={'addressing_style': 'virtual'}))
+                        config=Config(region_name=region, s3={'addressing_style': addressing}))
 
 
 def _exists(s3, bucket: str, key: str, size: int) -> bool:
@@ -206,7 +216,7 @@ def _exists(s3, bucket: str, key: str, size: int) -> bool:
     return head.get('ContentLength') == size
 
 
-def upload(manifest: dict[str, Any], sources: dict[str, Path], bucket: str, s3, dry_run: bool = False,
+def upload(manifest: dict[str, Any], sources: dict[str, Any], bucket: str, s3, dry_run: bool = False,
            log=print) -> dict[str, int]:
     """Upload missing objects (content-addressed, so existing keys are skipped), then the manifest."""
     check_manifest(manifest)
@@ -221,10 +231,17 @@ def upload(manifest: dict[str, Any], sources: dict[str, Path], bucket: str, s3, 
             stats['skipped'] += 1
             continue
         source = sources[item['key']]
-        log(json.dumps({'event': 'upload', 'key': item['key'], 'bytes': item['bytes'], 'from': str(source),
+        shown = getattr(source, 'name', None) or ('<memory>' if isinstance(source, bytes) else str(source))
+        log(json.dumps({'event': 'upload', 'key': item['key'], 'bytes': item['bytes'], 'from': str(shown),
                         'dry_run': dry_run}))
         if not dry_run:
-            s3.upload_file(str(source), bucket, item['key'])
+            if isinstance(source, bytes):
+                s3.put_object(Bucket=bucket, Key=item['key'], Body=source)
+            elif hasattr(source, 'read'):
+                source.seek(0)
+                s3.upload_fileobj(source, bucket, item['key'])
+            else:
+                s3.upload_file(str(source), bucket, item['key'])
         stats['uploaded'] += 1
         stats['bytes_uploaded'] += item['bytes']
     if not dry_run:
@@ -283,16 +300,147 @@ def verify(manifest: dict[str, Any], root: Path, mapping: list[tuple[str, str]] 
     return bad
 
 
-def directory_manifest(directory: Path, note: str = '') -> tuple[dict, dict[str, Path]]:
-    """Manifest of a directory tree under its absolute path (a stage --out), for publishing outputs."""
+def _skipped(path: Path) -> bool:
+    return path.name.endswith(SKIP_SUFFIXES) or path.name.startswith('.cw-fetch-')
+
+
+def snapshot_file(path: Path, cache: dict) -> tuple[str, int, Any]:
+    """(sha256, size, source) of one consistent version of a file.
+
+    Small files are read once into memory. A large file stays open: an atomic rename that replaces it during the
+    upload leaves this descriptor on the old inode, so hash and uploaded bytes agree. ``cache`` maps
+    (device, inode, size, mtime_ns) to a digest, so an unchanged checkpoint is not rehashed on every publish.
+    """
+    stream = path.open('rb')
+    info = os.fstat(stream.fileno())
+    if info.st_size <= SMALL_FILE_BYTES:
+        data = stream.read()
+        stream.close()
+        return sha256_hex(data), len(data), data
+    identity = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+    if identity not in cache:
+        cache[identity] = sha256_file_hex(f'/proc/self/fd/{stream.fileno()}')
+    return cache[identity], info.st_size, stream
+
+
+def close_sources(sources: dict[str, Any]) -> None:
+    for source in sources.values():
+        if hasattr(source, 'close'):
+            source.close()
+
+
+def directory_manifest(directory: Path, note: str = '', cache: dict | None = None) -> tuple[dict, dict[str, Any]]:
+    """Manifest of a directory tree under its absolute path (a stage --out), with snapshot sources for upload.
+
+    The caller closes the sources (close_sources). Files that vanish between listing and opening are skipped.
+    """
     directory = directory.resolve()
-    pairs = []
-    for child in sorted(p for p in directory.rglob('*') if p.is_file() and not p.name.startswith('.cw-fetch-')):
-        if child.name.endswith('.reserve'):  # preallocated free-space reservation, not content
+    cache = {} if cache is None else cache
+    files, sources = [], {}
+    for child in sorted(p for p in directory.rglob('*') if p.is_file() and not _skipped(p)):
+        try:
+            digest, size, source = snapshot_file(child, cache)
+        except FileNotFoundError:
             continue
-        pairs.append((entry(str(child), child, sha256_file_hex(child)), child))
-    manifest = build_manifest(pairs, note=note)
-    return manifest, {item['key']: source for item, source in pairs}
+        item = {'path': _safe_relative(str(child)), 'sha256': digest, 'bytes': size, 'key': object_key(digest)}
+        files.append((item, None))
+        if item['key'] in sources:
+            if hasattr(source, 'close'):
+                source.close()
+        else:
+            sources[item['key']] = source
+    return build_manifest(files, note=note), sources
+
+
+def output_prefix(prefix: str, directory: Path) -> str:
+    """outputs/<job>/<directory name>/: where one output directory's manifests and pointer live."""
+    return f'{prefix.rstrip("/")}/{directory.name}/'
+
+
+def read_json(s3, bucket: str, key: str) -> dict | None:
+    try:
+        return json.loads(s3.get_object(Bucket=bucket, Key=key)['Body'].read())
+    except Exception as error:
+        if getattr(error, 'response', {}).get('Error', {}).get('Code') in ('404', 'NoSuchKey', 'NotFound'):
+            return None
+        raise
+
+
+def publish_directory(directory: Path, bucket: str, prefix: str, s3, cache: dict | None = None, note: str = '',
+                      dry_run: bool = False, log=print) -> dict[str, Any]:
+    """Upload one consistent snapshot of ``directory``, then move ``<prefix><name>/latest.json`` to it.
+
+    Order makes a reader safe at every moment: objects, then the manifest, then the pointer. The pointer keeps the
+    previous manifest key, so a resume can fall back one publish (and gc keeps both).
+    """
+    manifest, sources = directory_manifest(directory, note, cache)
+    try:
+        stats = upload(manifest, sources, bucket, s3, dry_run, log)
+    finally:
+        close_sources(sources)
+    pointer_key = output_prefix(prefix, directory) + 'latest.json'
+    previous = None if dry_run else read_json(s3, bucket, pointer_key)
+    pointer = {'schema': 'natlang.coreweave-output-pointer/1', 'bundle': manifest['id'],
+               'manifest_key': manifest_key(manifest), 'directory': str(directory.resolve()),
+               'files': len(manifest['files']), 'bytes': manifest['bytes'], 'at': manifest['created'],
+               'previous': previous['manifest_key'] if previous and previous['manifest_key'] != manifest_key(manifest)
+               else (previous or {}).get('previous')}
+    if not dry_run:
+        s3.put_object(Bucket=bucket, Key=pointer_key, Body=json.dumps(pointer, indent=1).encode())
+    log(json.dumps({'event': 'published', 'pointer': pointer_key, **pointer, **stats, 'dry_run': dry_run}))
+    return pointer
+
+
+def trigger_signature(directory: Path, triggers: Iterable[str]) -> tuple:
+    """(path, inode, size, mtime_ns) of every trigger file: it changes when a checkpoint or report is (re)written."""
+    import fnmatch
+    if not directory.is_dir():
+        return ()
+    out = []
+    for child in sorted(directory.rglob('*')):
+        if child.is_file() and not _skipped(child) and any(fnmatch.fnmatch(child.name, t) for t in triggers):
+            try:
+                info = child.stat()
+            except FileNotFoundError:
+                continue
+            out.append((str(child), info.st_ino, info.st_size, info.st_mtime_ns))
+    return tuple(out)
+
+
+def watch(directories: list[Path], bucket: str, prefix: str, s3, interval: float = 60, max_interval: float = 1800,
+          triggers: Iterable[str] = DEFAULT_TRIGGERS, rounds: int | None = None, sleep=time.sleep, clock=time.monotonic,
+          log=print) -> int:
+    """Publish each directory whenever a trigger file changes, and at least every ``max_interval`` seconds.
+
+    Runs beside the job (bootstrap.sh), so a sandbox killed at lifetime expiry (no grace period) loses at most the
+    work since its last checkpoint. ``rounds`` bounds the loop for tests; the bootstrap stops it with SIGTERM.
+    Returns the number of publishes.
+    """
+    triggers = tuple(triggers)
+    cache: dict = {}
+    seen: dict[Path, tuple] = {}
+    last: dict[Path, float] = {}
+    published = 0
+    done = 0
+    while rounds is None or done < rounds:
+        for directory in directories:
+            if not directory.is_dir():
+                continue
+            signature = trigger_signature(directory, triggers)
+            changed = signature != seen.get(directory, ())
+            due = directory in last and clock() - last[directory] >= max_interval
+            if (changed and signature) or due:
+                try:
+                    publish_directory(directory, bucket, prefix, s3, cache, note='incremental', log=log)
+                    published += 1
+                    seen[directory] = signature
+                    last[directory] = clock()
+                except Exception as error:  # a failed round is retried next round; the job is never disturbed
+                    log(json.dumps({'event': 'publish_failed', 'directory': str(directory), 'error': repr(error)}))
+        done += 1
+        if rounds is None or done < rounds:
+            sleep(interval)
+    return published
 
 
 def _use_client_venv() -> None:
@@ -323,7 +471,9 @@ def _load_manifest(args, s3) -> dict[str, Any]:
     if args.manifest:
         return json.loads(Path(args.manifest).read_text())
     if args.pointer_key:
-        pointer = json.loads(s3.get_object(Bucket=args.bucket, Key=args.pointer_key)['Body'].read())
+        pointer = read_json(s3, args.bucket, args.pointer_key)
+        if pointer is None:
+            return None
         args.manifest_key = pointer['manifest_key']
     body = s3.get_object(Bucket=args.bucket, Key=args.manifest_key)['Body'].read()
     return json.loads(body)
@@ -349,15 +499,27 @@ def main(argv=None) -> int:
     p.add_argument('--manifest-key')
     p.add_argument('--manifest')
     p.add_argument('--pointer-key', help='outputs/<job>/<dir>/latest.json: fetch the output manifest it names')
+    p.add_argument('--missing-ok', action='store_true', help='a missing pointer is not an error (first launch)')
     p.add_argument('--root', type=Path, default=Path(os.environ.get('NATLANG_REPO', str(REPO))))
     p.add_argument('--map', action='append', default=[])
     p.add_argument('--dry-run', action='store_true')
     p = sub.add_parser('publish')
     p.add_argument('directory', type=Path)
     p.add_argument('--bucket', required=True)
-    p.add_argument('--prefix', required=True, help='e.g. outputs/<job id>/')
+    p.add_argument('--prefix', required=True, help='outputs/<job id>/ (the pointer is <prefix><dir name>/latest.json)')
     p.add_argument('--note', default='')
     p.add_argument('--dry-run', action='store_true')
+    p = sub.add_parser('watch', help='publish directories incrementally while a job runs')
+    p.add_argument('directories', type=Path, nargs='+')
+    p.add_argument('--bucket', required=True)
+    p.add_argument('--prefix', required=True)
+    p.add_argument('--interval', type=float, default=60)
+    p.add_argument('--max-interval', type=float, default=1800)
+    p.add_argument('--trigger', action='append', help=f'file-name glob (default {", ".join(DEFAULT_TRIGGERS)})')
+    p = sub.add_parser('record-exit', help='write <prefix>exit.json with the job status')
+    p.add_argument('--bucket', required=True)
+    p.add_argument('--prefix', required=True)
+    p.add_argument('--status', type=int, required=True)
     p = sub.add_parser('ping', help='list a few keys: checks endpoint, region, credentials and bucket policy')
     p.add_argument('--bucket', required=True)
     p.add_argument('--prefix', default='')
@@ -366,7 +528,7 @@ def main(argv=None) -> int:
     p.add_argument('--root', type=Path, default=REPO)
     p.add_argument('--map', action='append', default=[])
     args = parser.parse_args(argv)
-    if args.command in ('upload', 'fetch', 'publish', 'ping') and not getattr(args, 'dry_run', False):
+    if args.command in ('upload', 'fetch', 'publish', 'ping', 'watch', 'record-exit') and not getattr(args, 'dry_run', False):
         _use_client_venv()
 
     if args.command == 'plan':
@@ -408,18 +570,26 @@ def main(argv=None) -> int:
         if not (args.manifest or args.manifest_key or args.pointer_key):
             parser.error('fetch needs --manifest-key, --pointer-key or --manifest')
         s3 = None if (args.dry_run and args.manifest) else s3_client()
-        fetch(_load_manifest(args, s3), args.bucket, s3, args.root, _mapping(args.map), args.dry_run)
+        manifest = _load_manifest(args, s3)
+        if manifest is None:
+            print(json.dumps({'event': 'no_pointer', 'pointer': args.pointer_key}))
+            return 0 if args.missing_ok else 1
+        fetch(manifest, args.bucket, s3, args.root, _mapping(args.map), args.dry_run)
         return 0
     if args.command == 'publish':
-        manifest, sources = directory_manifest(args.directory, args.note)
-        s3 = None if args.dry_run else s3_client()
-        upload(manifest, sources, args.bucket, s3, args.dry_run)
-        pointer = {'bundle': manifest['id'], 'manifest_key': manifest_key(manifest), 'directory': str(args.directory),
-                   'files': len(manifest['files']), 'bytes': manifest['bytes'], 'at': manifest['created']}
-        if not args.dry_run:
-            s3.put_object(Bucket=args.bucket, Key=args.prefix.rstrip('/') + '/latest.json',
-                          Body=json.dumps(pointer, indent=1).encode())
-        print(json.dumps({'event': 'published', **pointer, 'dry_run': args.dry_run}))
+        publish_directory(args.directory, args.bucket, args.prefix, None if args.dry_run else s3_client(),
+                          note=args.note, dry_run=args.dry_run)
+        return 0
+    if args.command == 'record-exit':
+        record = {'job': os.environ.get('NATLANG_CW_JOB'), 'sandbox': os.environ.get('CW_SANDBOX_ID'),
+                  'status': args.status, 'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
+        s3_client().put_object(Bucket=args.bucket, Key=args.prefix.rstrip('/') + '/exit.json',
+                               Body=json.dumps(record).encode())
+        print(json.dumps({'event': 'exit_recorded', **record}))
+        return 0
+    if args.command == 'watch':
+        watch(args.directories, args.bucket, args.prefix, s3_client(), args.interval, args.max_interval,
+              args.trigger or DEFAULT_TRIGGERS)
         return 0
     return 2
 

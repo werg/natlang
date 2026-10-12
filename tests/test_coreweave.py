@@ -76,6 +76,7 @@ def test_cost_estimate_is_request_based_and_gpu_rate_unknown_by_default():
 class FakeS3:
     def __init__(self):
         self.objects = {}
+        self.modified = {}
 
     def head_object(self, Bucket, Key):
         if Key not in self.objects:
@@ -86,6 +87,27 @@ class FakeS3:
 
     def upload_file(self, source, bucket, key):
         self.objects[key] = Path(source).read_bytes()
+
+    def upload_fileobj(self, stream, bucket, key):
+        self.objects[key] = stream.read()
+
+    def get_object(self, Bucket, Key):
+        if Key not in self.objects:
+            error = Exception('NoSuchKey')
+            error.response = {'Error': {'Code': 'NoSuchKey'}}
+            raise error
+        import io
+        return {'Body': io.BytesIO(self.objects[Key])}
+
+    def list_objects_v2(self, Bucket, Prefix='', ContinuationToken=None, MaxKeys=1000):
+        keys = sorted(k for k in self.objects if k.startswith(Prefix))
+        return {'Contents': [{'Key': k, 'Size': len(self.objects[k]), 'LastModified': self.modified.get(k)}
+                             for k in keys], 'IsTruncated': False}
+
+    def delete_objects(self, Bucket, Delete):
+        for item in Delete['Objects']:
+            self.objects.pop(item['Key'], None)
+        return {}
 
     def put_object(self, Bucket, Key, Body):
         self.objects[Key] = Body
@@ -169,7 +191,9 @@ def test_directory_manifest_skips_space_reservations(tmp_path):
     out.mkdir()
     (out / 'checkpoint.pt').write_bytes(b'state')
     (out / '.checkpoint-space.reserve').write_bytes(b'\0' * 64)
+    (out / 'checkpoint.pending').write_bytes(b'half')
     manifest, sources = bundle.directory_manifest(out)
+    bundle.close_sources(sources)
     assert [Path(f['path']).name for f in manifest['files']] == ['checkpoint.pt']
     assert manifest['files'][0]['path'] == str(out.resolve() / 'checkpoint.pt')
 
@@ -213,3 +237,62 @@ def test_installed_client_accepts_the_request():
     container = wire['sandbox']['spec']['containers'][0]
     assert container['files'][0]['path'] == job.BOOTSTRAP_PATH
     assert wire['sandbox']['spec']['objectStorageAccess']['buckets'] == ['natlang-cw']
+
+
+def test_large_file_upload_is_the_hashed_inode_even_if_replaced(tmp_path, monkeypatch):
+    monkeypatch.setattr(bundle, 'SMALL_FILE_BYTES', 4)
+    out = tmp_path / 'run'
+    out.mkdir()
+    (out / 'checkpoint.pt').write_bytes(b'old-state')
+    manifest, sources = bundle.directory_manifest(out)
+    (out / 'checkpoint.pending').write_bytes(b'new-state!')
+    (out / 'checkpoint.pending').replace(out / 'checkpoint.pt')  # the trainer's atomic rename, mid-publish
+    s3 = FakeS3()
+    bundle.upload(manifest, sources, 'b', s3, log=lambda _: None)
+    bundle.close_sources(sources)
+    key = manifest['files'][0]['key']
+    assert s3.objects[key] == b'old-state' and key.endswith(hashlib.sha256(b'old-state').hexdigest())
+
+
+def test_watch_publishes_each_checkpoint_and_resume_fetches_latest(tmp_path):
+    out = tmp_path / 'runs' / 'stage'
+    out.mkdir(parents=True)
+    s3 = FakeS3()
+    steps = iter(range(1, 10))
+
+    def trainer_step(_seconds):  # between watch rounds the job writes a new checkpoint, or nothing
+        step = next(steps)
+        if step in (1, 3):
+            (out / 'checkpoint.pt').write_bytes(f'state {step}'.encode())
+        (out / 'train.jsonl').open('a').write(f'{{"step": {step}}}\n')
+
+    published = bundle.watch([out], 'b', 'outputs/job/', s3, rounds=5, sleep=trainer_step, clock=lambda: 0.0,
+                             log=lambda _: None)
+    assert published == 2  # one per new checkpoint; log growth alone does not publish
+    pointer = json.loads(s3.objects['outputs/job/stage/latest.json'])
+    assert pointer['previous'] and pointer['manifest_key'] != pointer['previous']
+    manifest = json.loads(s3.objects[pointer['manifest_key']])
+    restored = tmp_path / 'restored'
+    bundle.fetch(manifest, 'b', s3, tmp_path, [(str(out), str(restored))], log=lambda _: None)
+    assert (restored / 'checkpoint.pt').read_bytes() == b'state 3'
+
+
+def test_watch_republishes_after_max_interval_without_trigger(tmp_path):
+    out = tmp_path / 'stage'
+    out.mkdir()
+    (out / 'checkpoint.pt').write_bytes(b'x')
+    now = [0.0]
+
+    def advance(_seconds):
+        now[0] += 30
+
+    count = bundle.watch([out], 'b', 'o/', FakeS3(), rounds=4, max_interval=50, sleep=advance,
+                         clock=lambda: now[0], log=lambda _: None)
+    assert count == 2  # at t=0 (new checkpoint) and t=60 (due); t=30 and t=90 are within 50 s of a publish
+
+
+def test_resume_sets_env_and_needs_outputs():
+    with pytest.raises(job.JobError, match='resume'):
+        job.validate(base_job(resume=True, bucket='natlang-cw'))
+    env = job.bootstrap_env(job.validate(base_job(resume=True, bucket='natlang-cw', outputs=['runs/x'])))
+    assert env['NATLANG_CW_RESUME'] == '1'
