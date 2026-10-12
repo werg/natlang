@@ -1,9 +1,9 @@
-"""Keep training-step I/O off the slow external HDD (DGX: /mnt/external).
+"""Keep training-step I/O off the slow external HDD (DGX).
 
 Inputs that resolve (realpath) under the HDD prefix are copied once to an NVMe cache keyed by SHA-256 and the staged
 path is passed to the stage; the declared hash is checked on the copy. The out dir (checkpoints, logs) must not
 resolve under the HDD. A no-op where the prefix does not exist (Pop). The prefix comes from NATLANG_HDD_PREFIX
-(default /mnt/external); the cache from NATLANG_STAGED_INPUTS (default ~/data/staged-inputs).
+(default: the data_hdd root of common.paths); the cache from NATLANG_STAGED_INPUTS (default ~/data/staged-inputs).
 """
 from __future__ import annotations
 
@@ -12,11 +12,13 @@ import os
 import shutil
 from pathlib import Path
 
+from .paths import resolve
+
 RECORDS: list[dict] = []
 
 
 def hdd_prefix() -> Path | None:
-    prefix = Path(os.environ.get('NATLANG_HDD_PREFIX', '/mnt/external'))
+    prefix = Path(os.environ.get('NATLANG_HDD_PREFIX') or resolve('data_hdd'))
     return prefix.resolve() if prefix.exists() else None
 
 
