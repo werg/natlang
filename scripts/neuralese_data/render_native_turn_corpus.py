@@ -284,6 +284,13 @@ def candidate_selection_correction_ref(packet, admission):
     return packet_ref
 
 
+def candidate_selection_owner_item_sha(owner_row, verified_item_sha):
+    """Validate a supplied item digest; older receipts omit it under pinned review/registry bindings."""
+    if 'item_sha256' in owner_row and owner_row['item_sha256'] != verified_item_sha:
+        raise ValueError('root candidate-selection owner item hash differs from verified packet')
+    return owner_row.get('item_sha256', verified_item_sha)
+
+
 def registered_candidate_selection_admission(corpus_id, sources):
     """Verify a registry owner's exact admission of a conversion-only candidate packet.
 
@@ -432,7 +439,8 @@ def registered_candidate_selection_admission(corpus_id, sources):
     actual_by_id = {row['id']: row for row in receipt['rows']}
     declared_owner_rows = [{
         'id': row.get('native_id'), 'item_id': row.get('item_id'),
-        'item_sha256': actual_by_id.get(row.get('native_id'), {}).get('item_sha256'),
+        'item_sha256': candidate_selection_owner_item_sha(
+            row, actual_by_id.get(row.get('native_id'), {}).get('item_sha256')),
         'target_sha256': row.get('target_sha256'), 'messages_sha256': row.get('messages_sha256'),
         'split': row.get('split'), 'source_groups': row.get('source_groups'),
         'decision': row.get('decision'), 'training_admission': row.get('training_admission'),

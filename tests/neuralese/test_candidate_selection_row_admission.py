@@ -67,3 +67,15 @@ def test_correction_pin_must_be_absent_on_both_sides_or_match_exactly():
     ):
         with pytest.raises(ValueError, match='correction pin mismatch|reference is malformed'):
             render.candidate_selection_correction_ref(bad_packet, bad_admission)
+
+
+def test_owner_item_digest_is_checked_when_declared_and_optional_under_pinned_receipt():
+    render = load_renderer()
+    verified = 'a' * 64
+    # Older /1 receipts omit this row field; packet verifier + registry pins bind it.
+    assert render.candidate_selection_owner_item_sha({}, verified) == verified
+    assert render.candidate_selection_owner_item_sha({'item_sha256': verified}, verified) == verified
+    with pytest.raises(ValueError, match='owner item hash differs'):
+        render.candidate_selection_owner_item_sha({'item_sha256': 'b' * 64}, verified)
+    with pytest.raises(ValueError, match='owner item hash differs'):
+        render.candidate_selection_owner_item_sha({'item_sha256': None}, verified)
