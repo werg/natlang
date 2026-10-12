@@ -85,7 +85,8 @@ def _drop(drop: dict, key: tuple[str, str], reason: str, **details) -> None:
 
 def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
                      tokenizer_names: list[str], held_groups: set, held_texts: set,
-                     member_duplicates: dict | None = None) -> tuple[set, dict]:
+                     member_duplicates: dict | None = None,
+                     member_duplicate_observations: dict | None = None) -> tuple[set, dict]:
     """Return (selected (member,id) pairs, omissions) after twin and source-safety checks.
 
     ``member_rows`` holds only row identities, not rendered text/token payloads. A candidate becomes eligible only
@@ -96,6 +97,7 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
     eligible_by_id = defaultdict(list)
     observed_by_id = defaultdict(list)
     member_duplicates = member_duplicates or {}
+    member_duplicate_observations = member_duplicate_observations or {}
     member_rank = {name: index for index, name in enumerate(order)}
     for name in order:
         per_tok = member_rows[name]
@@ -106,6 +108,9 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
             key = (name, rid)
             observations = [per_tok[tok][rid] for tok in tokenizer_names if rid in per_tok.get(tok, {})]
             observed_by_id[rid].extend({'member': name, 'identity': identity} for identity in observations)
+            observed_by_id[rid].extend(
+                {'member': name, 'identity': identity}
+                for identity in member_duplicate_observations.get(name, {}).get(rid, []))
             if rid in member_duplicates.get(name, set()):
                 _drop(drop, key, 'duplicate_document_id_within_member')
                 continue
@@ -299,22 +304,25 @@ def main(argv=None):
     for rendering in members:
         # Pass 2: index compact row identities in both tokenizer files before resolving any duplicate. This prevents
         # an incomplete or held copy from claiming an ID/text hash before a later complete eligible twin is seen.
-        member_rows, member_duplicates = {}, {}
+        member_rows, member_duplicates, member_duplicate_observations = {}, {}, {}
         for name in order[rendering]:
-            per_tok, duplicates = {}, set()
+            per_tok, duplicates, repeated_rows = {}, set(), defaultdict(list)
             for tok, path in members[rendering][name].items():
                 per_tok[tok] = {}
                 for _, row in rows(path):
                     rid = row['id']
                     if rid in per_tok[tok]:
                         duplicates.add(rid)
+                        repeated_rows[rid].append(_row_identity(row))
                     else:
                         per_tok[tok][rid] = _row_identity(row)
             member_rows[name] = per_tok
             member_duplicates[name] = duplicates
+            member_duplicate_observations[name] = repeated_rows
         selected, drop = plan_member_rows(order[rendering], member_rows, supersedes,
                                           list(tokenizer_dirs), held_groups, held_texts,
-                                          member_duplicates=member_duplicates)
+                                          member_duplicates=member_duplicates,
+                                          member_duplicate_observations=member_duplicate_observations)
         out = a.out_dir / rendering
         out.mkdir(parents=True, exist_ok=True)
         rendering_receipt = {'members': order[rendering], 'by_tokenizer': {}}

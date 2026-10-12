@@ -143,6 +143,22 @@ def test_duplicate_ids_inside_one_member_are_ineligible():
     assert omissions[('one', 'doc')]['reason'] == 'duplicate_document_id_within_member'
 
 
+def test_held_duplicate_row_inside_member_still_blocks_conflicting_train_copy():
+    rows = {tok: {'doc': identity('train first', groups=('train',))} for tok in TOKENS}
+    duplicated_held = identity('held duplicate', split='test', groups=('held',))
+    valid_train = member('valid-train', {tok: {'doc': identity('other train', groups=('other',))}
+                                         for tok in TOKENS})
+    # Pure planner fixtures model duplicate observations explicitly; production fills this argument while scanning.
+    selected, omissions = plan_member_rows(
+        ['duplicate-member', 'valid-train'], {'duplicate-member': rows} | valid_train,
+        {}, TOKENS, set(), set(), member_duplicates={'duplicate-member': {'doc'}},
+        member_duplicate_observations={'duplicate-member': {'doc': [duplicated_held]}},
+    )
+    assert not selected
+    assert omissions[('duplicate-member', 'doc')]['reason'] == 'duplicate_document_id_within_member'
+    assert omissions[('valid-train', 'doc')]['reason'] == 'conflicting_split_duplicate_id'
+
+
 def test_target_set_signature_pins_supersedes_policy():
     base = {'id': 'new', 'files': {'full': {'lfm': 'new-lfm', 'mellum': 'new-mellum'}}}
     superseding = {**base, 'supersedes': ['old']}
