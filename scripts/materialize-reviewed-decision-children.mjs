@@ -15,6 +15,7 @@ import { ordinalDistanceRecordReview } from '../ts-host/dist/evaluation/oracles.
 import { sourceQualityClearanceForProgram, sourceQualityClearanceProblems } from '../ts-host/dist/teacher/source-quality-clearance.js';
 import { canonical as sharedCanonical } from '../ts-host/dist/adaptation/identity.js';
 import { hexDigest } from '../ts-host/dist/native/hash.js';
+import { visibleTurnText } from './lib/decision-child-visibility.mjs';
 
 const { values } = parseArgs({ options: {
   'results-dir': { type: 'string' }, 'source-cases': { type: 'string' },
@@ -78,11 +79,6 @@ function sourceOutputReview(item, semantics, expected, actual, correctionsByItem
     return { accepted: true, errors: [], entries: [], source_label_correction: correction };
   return { accepted: false, errors: ['source_label_mismatch'], entries: [] };
 }
-function turnText(turn) {
-  return (turn.messages ?? []).map(message => `${message.content ?? ''}\n${(message.tool_calls ?? [])
-    .map(call => call.function?.arguments ?? '').join('\n')}`).join('\n');
-}
-
 const sourceCasesPath = resolve(values['source-cases']);
 const sourceManifestPath = resolve(values['source-manifest']);
 const sourceBytes = await readFile(sourceCasesPath);
@@ -274,7 +270,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
       if (sourceReview.source_label_correction && !labelCorrectionSha)
         throw new Error(`source-label correction lacks immutable evidence file: ${id}`);
       const fields = effectiveFields(item, task);
-      const matches = [];
+      let matches = [];
       const bindingGaps = [];
       for (const entry of ledger) {
         if (entry.parent_invocation_id !== rootInvocation || entry.completion_status !== 'done' ||
@@ -283,7 +279,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         const invocationTurns = materialized.turns.filter(turn => turn.source_ref?.invocation_id === entry.invocation_id);
         const turn = invocationTurns.at(-1);
         if (!turn) { bindingGaps.push({ invocation_id: entry.invocation_id, reason: 'materializer_has_no_child_turn' }); continue; }
-        const text = turnText(turn);
+        const text = visibleTurnText(turn);
         const snapshots = entry.inline_instruction_site?.runtime_capture_snapshots?.captures ?? [];
         const scopeValues = Object.fromEntries(snapshots.map(snapshot => [snapshot.name, snapshot.value]));
         const scopeBound = Object.fromEntries(Object.entries(fields).map(([key, value]) =>
@@ -307,10 +303,23 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
           missing_fields: Object.keys(visible).filter(key => !visible[key]),
           scope_capture_names: Object.keys(scopeValues) });
       }
+      const approvalKey = `${program.id}\0${id}`;
+      const approval = approvalsByKey.get(approvalKey);
+      if (matches.length > 1 && approval) {
+        const selected = matches.filter(match => approval.decision_index === match.turn.decision.index &&
+          approval.target_sha256 === nativeDecisionTargetDigest(match.turn.target));
+        if (selected.length === 1) matches = selected;
+      }
       if (matches.length !== 1) {
         rejected.push({ program_id: program.id, item_id: id, item_sha256: itemSha, group: source.group,
           reason: matches.length ? 'ambiguous-exact-child-invocation' : 'no-child-with-complete-exact-visible-inputs',
           matching_children: matches.length,
+          ...(matches.length ? { matching_candidates: matches.map(match => ({
+            decision_index: match.turn.decision.index,
+            target_sha256: nativeDecisionTargetDigest(match.turn.target),
+            target_tool: match.turn.target?.tool_calls?.[0]?.function?.name ?? null,
+            invocation_id: match.entry.invocation_id,
+          })) } : {}),
           expected_value_has_completed_child: bindingGaps.length > 0,
           binding_gaps: bindingGaps.slice(0, 8) });
         continue;
@@ -327,7 +336,6 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         scope_snapshot_sha256: sha(JSON.stringify(entry.inline_instruction_site?.runtime_capture_snapshots ?? null)),
         group_role_closure: [...roles] };
       candidates.push(candidate);
-      const approval = approvalsByKey.get(`${program.id}\0${id}`);
       if (!approval) continue;
       if (approval.item_sha256 !== itemSha || approval.group !== source.group ||
           approval.decision_index !== candidate.decision_index || approval.target_sha256 !== candidate.target_sha256)
