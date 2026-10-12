@@ -511,3 +511,38 @@ def test_the_stateless_fp8_expert_backend_switches_at_a_resume():
                                         'inputs': {'/a': 'h'}})
     assert not same_resume_identity(saved, {'options': {'latent_lr': 1e-5, 'fp8_training': 'te-fp8'},
                                             'inputs': {'/a': 'h'}})
+
+
+def test_fused_readout_matches_the_chunked_readout_and_the_soft_token_mixture():
+    """text_warmup.fused_readout: the weighted CE, its gradient to the states, predictions and token losses equal
+    chunked_readout's; the mixture equals soft_token_mixture's (same logits, computed once)."""
+    import torch
+    from natlang_neuralese.model.neuralese_projection import soft_token_mixture
+    from natlang_neuralese.train.text_warmup import chunked_readout, fused_readout
+
+    class Readout(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.head = torch.nn.Linear(16, 40, bias=False)
+            self.head.requires_grad_(False)
+
+        def logits(self, h):
+            return self.head(torch.nn.functional.rms_norm(h, (16,)))
+
+    torch.manual_seed(0)
+    backbone = Readout()
+    states = torch.randn(2, 37, 16, requires_grad=True)
+    targets = torch.randint(0, 40, (2, 37))
+    weights = torch.rand(2, 37)
+    table = torch.randn(40, 16)
+    _, reference, reference_pred, _, reference_losses = chunked_readout(backbone, states, targets, 0, chunk_size=8,
+                                                                        position_weights=weights)
+    (reference_grad,) = torch.autograd.grad(reference * 3.0, states)
+    loss, prediction, losses, mixture = fused_readout(backbone, states, targets, 0, chunk_size=8,
+                                                      position_weights=weights, mixture_table=table)
+    (grad,) = torch.autograd.grad(loss * 3.0, states)
+    assert torch.allclose(loss, reference) and torch.allclose(grad, reference_grad, atol=1e-6)
+    assert torch.equal(prediction, reference_pred) and torch.allclose(losses, reference_losses)
+    assert torch.allclose(mixture, soft_token_mixture(backbone.logits, table, states.detach(), chunk=8), atol=1e-6)
+    with torch.no_grad():
+        assert fused_readout(backbone, states, targets, 0, position_weights=weights)[3] is None

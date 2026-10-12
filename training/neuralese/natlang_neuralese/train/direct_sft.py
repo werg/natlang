@@ -357,7 +357,7 @@ def main(argv=None):
     from .trajectory_state import clip_finite_gradients, gradient_norm
     from .quantization import Behaviour, load_component, teacher_shards
     from .text_supervision import ROLE_CODES, balanced_position_weights
-    from .text_warmup import (chunked_readout, evaluation_batches, load_text_rows,
+    from .text_warmup import (chunked_readout, evaluation_batches, fused_readout, load_text_rows,
                               prepare_text_windows, select_held_document_windows)
     from ..common.paths import root as path_root
 
@@ -648,15 +648,22 @@ def main(argv=None):
         hidden = span_states(ids, index)
         # Project once over the whole turn so every chunk sees its full causal history, then keep the
         # vocabulary-sized readout chunked as before.
+        fused = token_choice is None and os.environ.get('NATLANG_FUSED_READOUT', '1') != '0'
         with profile_scope('readout'):
             read = project_token_states(hidden, token_choice, segments)
-            _, training_ce, prediction, _, token_losses = chunked_readout(
-                backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights)
+            if fused:  # text_warmup.fused_readout: logits once per chunk; the mixture from the same probabilities
+                training_ce, prediction, token_losses, mixture = fused_readout(
+                    backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights,
+                    mixture_table=table)
+            else:
+                _, training_ce, prediction, _, token_losses = chunked_readout(
+                    backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights)
         real = valid.sum().clamp_min(1)
         training_ce = training_ce * (span.numel() / real)  # the token mean over real positions (padding excluded)
         ce = (token_losses * valid).sum() / real
         with profile_scope('projection'):
-            mixture = soft_token_mixture(backbone.logits, table, hidden.detach())
+            if not fused:
+                mixture = soft_token_mixture(backbone.logits, table, hidden.detach())
             value = neuralese(hidden.detach(), mixture.to(hidden.dtype), segments)
             target = table[span]
             value_error = relative_mse(value, target, weights)

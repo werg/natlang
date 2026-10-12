@@ -492,6 +492,62 @@ def chunked_readout(backbone, states, targets, close_id, *, chunk_size=128,
             torch.cat(close_probabilities,dim=1),torch.cat(token_losses,dim=1))
 
 
+class _ForwardGradReadout(torch.autograd.Function):
+    """The weighted readout CE whose input gradient was computed in the forward (``fused_readout``)."""
+
+    @staticmethod
+    def forward(ctx, states, value, gradient, count):
+        ctx.save_for_backward(gradient)
+        ctx.count = count
+        return value / count
+
+    @staticmethod
+    def backward(ctx, grad):
+        (gradient,) = ctx.saved_tensors
+        return (gradient * (grad / ctx.count).to(gradient.dtype)), None, None, None
+
+
+def fused_readout(backbone, states, targets, close_id, *, chunk_size=128, gradients=True, position_weights,
+                  mixture_table=None):
+    """``chunked_readout``'s weighted CE (the training loss) for a frozen readout, each chunk's vocabulary logits
+    computed once: the forward also takes the chunk's input gradient (autograd of the chunk alone), which the backward
+    only scales, instead of a checkpoint that recomputes the logits in backward. With ``mixture_table`` the same
+    probabilities give the soft-token mixture softmax(logits)·table (``soft_token_mixture``), returned detached.
+
+    Returns (training_ce, prediction, token_losses, mixture): ``training_ce`` = sum(weights x token CE) / numel, with
+    a gradient to ``states``; the others detached. The readout's own parameters (final norm, head, control rows) get
+    no gradient: callers whose optimizer does not train them (neuralese_direct)."""
+    weights = position_weights
+    needs_grad = gradients and torch.is_grad_enabled() and states.requires_grad
+    total = states.new_zeros((), dtype=torch.float32)
+    gradient = torch.empty_like(states) if needs_grad else None
+    predictions, token_losses, mixtures = [], [], []
+    detached = states.detach()
+    for start in range(0, states.shape[1], chunk_size):
+        stop = min(start + chunk_size, states.shape[1])
+        gold, weight = targets[:, start:stop], weights[:, start:stop]
+        with torch.enable_grad() if needs_grad else torch.no_grad():
+            chunk = detached[:, start:stop].requires_grad_(needs_grad)
+            logits = backbone.logits(chunk).float()
+            per_token = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), gold.reshape(-1),
+                                        reduction='none').reshape_as(gold)
+            weighted = (per_token * weight).sum()
+            if needs_grad:
+                (gradient[:, start:stop],) = torch.autograd.grad(weighted, chunk)
+        with torch.no_grad():
+            total += weighted.detach()
+            predictions.append(logits.argmax(-1))
+            token_losses.append(per_token.detach())
+            if mixture_table is not None:
+                probabilities = torch.softmax(logits, -1)
+                mixtures.append(probabilities.to(mixture_table.dtype) @ mixture_table)
+        del logits, per_token
+    count = targets.numel()
+    training_ce = (_ForwardGradReadout.apply(states, total, gradient, count) if needs_grad else total / count)
+    return (training_ce, torch.cat(predictions, 1), torch.cat(token_losses, 1),
+            torch.cat(mixtures, 1) if mixtures else None)
+
+
 def projection_errors(heads, top, secondary_projection, target, *, secondary_target=None):
     """Full projection stays anchored to gold; an input map may have a separate detached target."""
     full_projection = heads.content(torch.zeros_like(top), top)

@@ -40,6 +40,10 @@ def main(argv=None):
                    help='sequential accumulation (the trainer\'s sequential path): forward/backward this many rows at a '
                         'time, gradients accumulated, one optimizer step; 0: packed with the latents stepping in backward')
     p.add_argument('--qat', default='bf16:0', help='point:mix, e.g. q4:1.0 or ternary-experts:0.5')
+    p.add_argument('--readout', choices=('chunked', 'fused'), default='fused',
+                   help="direct_sft's readout: chunked_readout + soft_token_mixture, or fused_readout (shared logits)")
+    p.add_argument('--dump-grads', type=Path, help='save layer 0\'s expert and attention latent gradients of the '
+                   'last update here (real gradients for optimizer numerics checks); the optimizer step is skipped')
     p.add_argument('--fp8-training', choices=('off', 'triton-experts'), default='off')
     p.add_argument('--latent-optimizer', choices=('muonsr', 'lionsr'), default='muonsr')
     p.add_argument('--ns', default='cubic5')
@@ -58,7 +62,8 @@ def main(argv=None):
     from .backbone_policy import configure_backbone_training, shared_parametrized_weights
     from .optim import PortMuonAdamW, latent_entries, latent_options, latent_split
     from .quantization import Quantization
-    from .text_warmup import chunked_readout
+    from .text_warmup import chunked_readout, fused_readout
+    from ..model.neuralese_projection import soft_token_mixture
 
     torch.manual_seed(a.seed)
     device = 'cuda'
@@ -96,6 +101,7 @@ def main(argv=None):
                       'compile': os.environ.get('NATLANG_MAPLE_COMPILE', '1')}), flush=True)
 
     vocab = int(backbone.embedding_weight.shape[0])
+    table = backbone.embedding_weight.detach().float().clone()  # direct_sft's mixture table (FP32)
     generator = torch.Generator().manual_seed(a.seed)
     profiler = profiling.UpdateProfiler(a.out, value=f'{a.warmup + 1}:{a.updates}' if a.profile else '')
     rows = []
@@ -108,8 +114,16 @@ def main(argv=None):
         def part(rows_ids, scale=1.0):
             with profiling.region('update/forward'):
                 hidden = backbone.forward_ids(rows_ids[:, :-1], cutoff=backbone.num_layers, logits=False)['h_final']
-                _, loss, _, _, _ = chunked_readout(backbone, hidden[:, -a.span:], rows_ids[:, -a.span:],
-                                                   backbone.controls.close_id)
+                states, gold = hidden[:, -a.span:], rows_ids[:, -a.span:]
+                weights = torch.ones_like(gold, dtype=torch.float32)
+                if a.readout == 'fused':
+                    loss, _, _, mixture = fused_readout(backbone, states, gold, backbone.controls.close_id,
+                                                        position_weights=weights, mixture_table=table)
+                else:
+                    _, loss, _, _, _ = chunked_readout(backbone, states, gold, backbone.controls.close_id,
+                                                       position_weights=weights)
+                    mixture = soft_token_mixture(backbone.logits, table, states.detach())
+                loss = loss + 0.0 * mixture.sum()
                 loss = loss * scale
             with profiling.region('update/backward'), profiling.backward_phase():
                 loss.backward()
@@ -117,6 +131,12 @@ def main(argv=None):
 
         fp8 = fp8_backend.autocast() if fp8_backend is not None else contextlib.nullcontext()
         with fp8, quant.context(point, mix), shared_parametrized_weights(backbone.hf) as next_pass:
+            if a.dump_grads is not None and update == a.updates:  # accumulate this update's real gradients
+                loss = sum(part(chunk, len(chunk) / a.rows) for chunk in ids.split(a.micro_rows or a.rows))
+                torch.save({name: q.grad.detach().cpu() for name, q in latent_named
+                            if '.layers.0.' in name and q.grad is not None}, a.dump_grads)
+                print(json.dumps({'event': 'gradients_dumped', 'path': str(a.dump_grads)}), flush=True)
+                return
             if a.micro_rows:
                 loss = sum(part(chunk, len(chunk) / a.rows) for chunk in ids.split(a.micro_rows))
             else:
