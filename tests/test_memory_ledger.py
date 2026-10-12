@@ -29,7 +29,10 @@ def test_over_budget_unit_is_stopped_first_only_under_memory_pressure():
     assert ledger.victim(live, True, 1.15) == ('b.service', 'over budget under memory pressure')
 
 
-def test_admission_learns_each_job_familys_measured_peak():
+def test_admission_learns_each_job_familys_measured_peak(monkeypatch):
+    # Exercise learned admission independently of the runner's physical RAM;
+    # the production policy caps learned peaks below its host reserve.
+    monkeypatch.setattr(ledger, 'mem_total', lambda: 64 * GIB)
     assert ledger.family('natlang-mellum-qat-test-210556.service') == 'natlang-mellum-qat-test'
     assert ledger.family('natlang-maple-reg-c224705.service') == 'natlang-maple-reg'
     state = {'family_peaks': {'natlang-mellum-qat-test': 10 * GIB}}

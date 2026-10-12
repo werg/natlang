@@ -32,18 +32,23 @@ class CampaignStopTest(unittest.TestCase):
                              'log': str(root / 'supervisor.log')}]}))
             digest = hashlib.sha256(plan.read_bytes()).hexdigest()
             worker = Mock(pid=123)
-            worker.poll.return_value = None
-            worker.wait.side_effect = [KeyboardInterrupt(), 130]
+            worker.poll.side_effect = KeyboardInterrupt()
+            worker.wait.return_value = 130
+            def kill_group(pid, signum):
+                if signum == 0:
+                    raise ProcessLookupError()
             previous = signal.getsignal(signal.SIGTERM)
             try:
                 with patch.object(sys, 'argv', ['campaign', str(plan), '--sha256', digest]), \
                      patch.object(campaign, 'tree_identity', return_value={}), \
-                     patch.object(campaign.subprocess, 'Popen', return_value=worker):
+                     patch.object(campaign.subprocess, 'Popen', return_value=worker), \
+                     patch.object(campaign.os, 'killpg', side_effect=kill_group) as killpg:
                     self.assertEqual(campaign.main(), 130)
             finally:
                 signal.signal(signal.SIGTERM, previous)
-            worker.terminate.assert_called_once()
-            self.assertEqual(worker.wait.call_args.kwargs, {'timeout': 15})
+            killpg.assert_any_call(123, signal.SIGTERM)
+            killpg.assert_any_call(123, 0)
+            worker.wait.assert_called_once_with()
             receipt = json.loads(record.read_text())
             self.assertEqual(receipt['status'], 'operator_stopped')
             self.assertIn('unscored', receipt['disposition'])
