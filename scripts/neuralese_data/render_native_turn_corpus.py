@@ -623,8 +623,13 @@ def select(args, shard_dir: Path):
                     omissions.append({'id': rid, 'program': program_key(row), 'split': row.get('split'),
                                       'reason': reason, 'stage': 'selection'})
                     counts['omitted:' + reason.split(':', 1)[0]] += 1
-                    chain = chain_key(row)
-                    blocked[chain] = min(blocked.get(chain, 1 << 30), len(row.get('messages') or []))
+                    if reason != 'duplicate_source_row_id':
+                        # A later copy of a selected ID is not an unselected decision: its first occurrence (an
+                        # earlier source, e.g. a replacement overlay) was selected. Blocking its chain cut the
+                        # selected copy and every longer decision out of whole-trajectory documents (the 4962
+                        # render kept 32 of 4962 rows, 2026-10-12).
+                        chain = chain_key(row)
+                        blocked[chain] = min(blocked.get(chain, 1 << 30), len(row.get('messages') or []))
                     continue
                 seen_ids.add(rid)
                 if row.get('split') == 'test':
