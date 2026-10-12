@@ -212,6 +212,16 @@ def shared_resume_fixture(tmp_path, monkeypatch):
     return output, recipe, recipe_path, heads, stage_inputs, code
 
 
+def current_package(tmp_path, monkeypatch, content=b"handed-off trainer code\n"):
+    """Point the launcher's shared package at a fixture tree and return its pin (the handoff checks the real tree)."""
+    neuralese = tmp_path / "current-neuralese"
+    code_file = neuralese / "natlang_neuralese" / "train" / "direct_sft.py"
+    code_file.parent.mkdir(parents=True, exist_ok=True)
+    code_file.write_bytes(content)
+    monkeypatch.setattr(LAUNCHER, "NEURALESE", neuralese)
+    return {"train/direct_sft.py": LAUNCHER.sha256(code_file)}
+
+
 def test_exact_existing_shared_resume_binds_recipe_inputs_device_and_frozen_runtime(tmp_path, monkeypatch):
     output, recipe, recipe_path, heads, stage_inputs, code = shared_resume_fixture(tmp_path, monkeypatch)
 
@@ -228,7 +238,7 @@ def test_shared_resume_code_handoff_allows_only_a_pinned_package_code_change(tmp
     output, recipe, recipe_path, heads, stage_inputs, _old_code = shared_resume_fixture(tmp_path, monkeypatch)
     plan_path = output / "recipe-plan.json"
     plan = json.loads(plan_path.read_text())
-    new_code = {"train/direct_sft.py": "e" * 64}
+    new_code = current_package(tmp_path, monkeypatch)
     recipe = json.loads(json.dumps(recipe))
     recipe["runtime"]["package_code"] = new_code
 
@@ -239,7 +249,7 @@ def test_shared_resume_code_handoff_allows_only_a_pinned_package_code_change(tmp
     assert binding["frozen_code"] == plan["code"]
 
     recipe["stages"][0]["parameters"]["learning_rate"] = 0.5
-    with pytest.raises(ValueError, match="changes more than pinned runtime code"):
+    with pytest.raises(ValueError, match="changes more than operational stage parameters"):
         LAUNCHER.validate_existing_shared_resume(
             output, recipe, recipe_path, heads, stage_inputs, "cuda", new_code, handoff=True)
 
@@ -250,7 +260,7 @@ def test_shared_resume_handoff_allows_epoch_only_neuralese_direct_budget_change(
     plan = json.loads(plan_path.read_text())
     plan["recipe"]["stages"][0]["parameters"]["epochs"] = 2.0
     plan_path.write_text(json.dumps(plan))
-    new_code = {"train/direct_sft.py": "e" * 64}
+    new_code = current_package(tmp_path, monkeypatch)
     recipe = json.loads(json.dumps(recipe))
     recipe["runtime"]["package_code"] = new_code
     recipe["stages"][0]["parameters"]["epochs"] = 1.0
@@ -266,14 +276,15 @@ def test_shared_resume_handoff_allows_epoch_only_neuralese_direct_budget_change(
     }
 
     recipe["stages"][0]["parameters"]["batch"] = 2
-    with pytest.raises(ValueError, match="changes more than pinned runtime code"):
+    with pytest.raises(ValueError, match="changes outside the direct-stage epoch budget"):
         LAUNCHER.validate_existing_shared_resume(
             output, recipe, recipe_path, heads, stage_inputs, "cuda", new_code, handoff=True)
 
 
 def test_shared_resume_handoff_requires_changed_package_code(tmp_path, monkeypatch):
     output, recipe, recipe_path, heads, stage_inputs, code = shared_resume_fixture(tmp_path, monkeypatch)
-    with pytest.raises(ValueError, match="requires changed shared package code"):
+    current_package(tmp_path, monkeypatch, content=b"pinned trainer code\n")
+    with pytest.raises(ValueError, match="package_code has not changed"):
         LAUNCHER.validate_existing_shared_resume(
             output, recipe, recipe_path, heads, stage_inputs, "cuda", code, handoff=True)
 
