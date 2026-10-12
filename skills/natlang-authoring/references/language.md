@@ -29,7 +29,7 @@ export async function triage(ticket: Ticket, style: string): Promise<Report> {
 
 ## Named functions and callable folders
 
-A build collects every `.nl` file under the project root, except in `node_modules`, `dist`, hidden directories and nested packages: a subdirectory with its own `natlang.json` is its own project and is skipped (for example a task repository shipped as data).
+A build collects every `.nl` file under the project root, except in `node_modules`, `dist`, hidden directories and nested packages: inside a package, a subdirectory with its own `natlang.json` is its own project and is skipped (for example a task repository shipped as data); a workspace root without `natlang.json` (such as `applications/`) builds its member packages.
 
 ```text
 review/

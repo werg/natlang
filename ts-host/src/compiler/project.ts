@@ -134,21 +134,23 @@ function callableFolders(files: ProjectFiles, root: string): { named: string[]; 
       if (files.isDirectory(path)) mark(path);
     }
   };
-  const walk = (dir: string) => {
+  // A package nested inside another package (its own natlang.json below one) is its own project, e.g. a task
+  // repository shipped as data; the member packages of a workspace root without natlang.json (applications/) are built.
+  const walk = (dir: string, inPackage: boolean) => {
     for (const entry of files.list(dir).sort()) {
       if (SKIPPED_DIRS.has(entry) || entry.startsWith('.')) continue;
       const path = join(dir, entry);
       if (files.isDirectory(path)) {
         if (folders.has(path)) continue;
-        // A nested package (its own natlang.json) is its own project, e.g. a task repository shipped as data.
-        if (files.isFile(join(path, 'natlang.json'))) continue;
+        const isPackage = files.isFile(join(path, 'natlang.json'));
+        if (isPackage && inPackage) continue;
         if (entry === 'natlang.d') { contexts.push(path); mark(path); continue; }
         if (files.isFile(`${path}.nl`)) { mark(path); continue; }
-        walk(path);
+        walk(path, inPackage || isPackage);
       } else if (entry.endsWith('.nl')) named.push(path);
     }
   };
-  walk(root);
+  walk(root, files.isFile(join(root, 'natlang.json')));
   return { named, contexts, folders };
 }
 
