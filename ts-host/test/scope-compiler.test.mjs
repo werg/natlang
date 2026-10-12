@@ -214,3 +214,16 @@ test('a helper that calls itself, or names a property in a type query, persists'
   assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
   assert.deepEqual(compiled.persistentHelpers.map(helper => helper.name), ['count', 'next']);
 });
+
+test('redeclaring an injected name names its kind and the fix for that kind', () => {
+  const message = (code, options) => compileScopeSnippet(code, options).diagnostics
+    .filter(item => item.code === 'invalid-binding').map(item => item.message).join('\n');
+  assert.match(message('const shipments = shipments.page(1);', { serviceBindings: ['shipments'] }),
+    /^shipments is already a service in this scope, used through its methods \(read_code\("shipments"\) lists them\); call them on shipments directly and keep what they return in a variable with another name, such as shipmentsResult\.$/);
+  assert.doesNotMatch(message('const shipments = shipments.page(1);', { serviceBindings: ['shipments'] }), /function/);
+  assert.match(message('const plan = plan(1);', { helperBindings: ['plan'] }), /^plan is already a function in this scope; call plan\(\.\.\.\) directly/);
+  assert.match(message('const ids = [1];', { inputBindings: ['ids'] }), /^ids is this call's input and already holds the caller's value/);
+  assert.match(message('const transcript = 1;', { opaqueBindings: ['transcript'] }), /^transcript is already a built-in of this scope/);
+  assert.match(message('const total = 1;', { captureBindings: [{ name: 'total', mutable: false }] }),
+    /^total is already a variable of the enclosing code, captured by this call/);
+});

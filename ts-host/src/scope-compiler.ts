@@ -713,15 +713,21 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   for (const name of injected) if (declared.has(name) && !shadowedLocals.has(name))
     {
       const binding = bindings.find(item => item.name === name)!;
-      // An input redeclared is usually test data about to replace the caller's real values; say whose they are.
-      const callable = helperNames.includes(name) || serviceNames.includes(name);
-      const whose = options.inputBindings?.includes(name) ? `${name} is this call's input and already holds the caller's value` :
-        callable ? `${name} is already a function in this scope` : `${name} is already defined in this scope`;
-      // A function's name stays the function's: its result goes in a variable of another name (`plan` -> `planResult`).
-      const fix = callable ? `call ${name}(...) directly and keep its result in a variable with another name, such as ${name}Result` :
-        'use it directly instead of declaring it again';
-      diagnostics.push({ code: 'invalid-binding', message: `${whose}; ${fix}.`,
-        ...rawSpan(binding.start, binding.end) });
+      // Name the kind of binding the declaration collides with, and the fix for that kind. An input redeclared is
+      // usually test data about to replace the caller's real values; a function's or service's name stays theirs, and
+      // what they return goes in a variable of another name (`plan` -> `planResult`).
+      const message = options.inputBindings?.includes(name) ?
+        `${name} is this call's input and already holds the caller's value; use it directly instead of declaring it again.` :
+        helperNames.includes(name) ?
+          `${name} is already a function in this scope; call ${name}(...) directly and keep its result in a variable with another name, such as ${name}Result.` :
+        serviceNames.includes(name) ?
+          `${name} is already a service in this scope, used through its methods (read_code("${name}") lists them); call them on ${name} directly and keep what they return in a variable with another name, such as ${name}Result.` :
+        captureNames.includes(name) ?
+          `${name} is already a variable of the enclosing code, captured by this call; use it directly instead of declaring it again.` :
+        opaqueNames.includes(name) ?
+          `${name} is already a built-in of this scope; use it directly, and give a value of your own another name, such as ${name}Value.` :
+          `${name} is already defined in this scope; use it directly instead of declaring it again.`;
+      diagnostics.push({ code: 'invalid-binding', message, ...rawSpan(binding.start, binding.end) });
     }
 
   const statements = [...fn.body.statements];
