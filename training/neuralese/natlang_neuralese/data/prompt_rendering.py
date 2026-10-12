@@ -9,6 +9,10 @@ The scope table is ts-host's ``promptPieces()`` with its ``scope`` field plus th
 (recorded corpora carry earlier runtime prompts), exported to ``training/prompt-pieces/pieces.json``; the algorithm
 is a port of ts-host ``renderSystemPrompt`` (parity: tests/neuralese/test_prompt_rendering_parity.py).
 ``PROGRAM_SPECIFIC_HEADS`` was the interim paragraph-head table (kept for reference; no longer used).
+
+The contract's identity (``prompt_rendering_identity``) is behavioural (data/rendering_contract.py, schema /2): it
+hashes what the pinned fixture requests render to, not this file's bytes. Helpers that only use the renderer (e.g.
+data/e2e_rendering.py) may live anywhere; an edit here changes the identity only if it changes a rendering.
 """
 from __future__ import annotations
 
@@ -16,25 +20,17 @@ PROMPT_RENDERINGS = ("full", "program-header")
 
 
 def prompt_rendering_identity(mode: str) -> dict:
-    """Content identity for the serving/training prompt transformation contract."""
-    if mode not in PROMPT_RENDERINGS:
-        raise ValueError(f"unknown prompt_rendering {mode!r} (declared: {PROMPT_RENDERINGS})")
-    import hashlib
-    import json
-    from pathlib import Path
+    """Content identity for the serving/training prompt transformation contract: the behavioural /2 identity
+    (data/rendering_contract.py; the rendered outputs of a pinned fixture set plus the piece table), so a refactor or
+    an unrelated helper in this module keeps it. Check a recorded binding with ``prompt_rendering_binding_accepted``,
+    which also accepts a superseded (/1) identity bound to behaviourally identical code."""
+    from .rendering_contract import behavioural_identity
+    return behavioural_identity(mode)
 
-    source = Path(__file__).resolve()
-    package_root = source.parents[1]
-    pieces_path = source.parents[4] / "training" / "prompt-pieces" / "pieces.json"
-    implementation = {name: hashlib.sha256((package_root / name).read_bytes()).hexdigest()
-                       for name in ("data/prompt_rendering.py", "serve/engine.py", "serve/chat.py")}
-    pieces_sha = hashlib.sha256(pieces_path.read_bytes()).hexdigest()
-    identity = {"schema": "natlang.prompt-rendering-identity/1", "mode": mode,
-                "implementation_sha256": implementation, "pieces_sha256": pieces_sha}
-    identity["identity_sha256"] = hashlib.sha256(
-        (identity["schema"] + "\0" + mode + "\0" + json.dumps(implementation, sort_keys=True) +
-         "\0" + pieces_sha).encode()).hexdigest()
-    return identity
+
+def prompt_rendering_binding_accepted(identity_sha256, mode: str) -> bool:
+    from .rendering_contract import binding_accepted
+    return binding_accepted(identity_sha256, mode)
 
 
 def checkpoint_prompt_rendering(identity: dict, *, serving_mode: str | None = None) -> tuple[str, dict]:

@@ -32,8 +32,8 @@ def test_serving_program_header_uses_native_renderer_and_contract_identity():
     identity = prompt_rendering_identity("program-header")
     assert identity["mode"] == "program-header"
     assert len(identity["identity_sha256"]) == 64
-    assert {"data/prompt_rendering.py", "serve/engine.py", "serve/chat.py"} == set(
-        identity["implementation_sha256"])
+    assert identity["schema"] == "natlang.prompt-rendering-identity/2"
+    assert {"fixtures_sha256", "rendered_sha256", "pieces_sha256"} <= set(identity)
 
 
 def test_engine_request_rendering_keeps_external_tool_schemas():

@@ -137,7 +137,7 @@ def verify_plan(plan_path: Path) -> tuple[dict, Path, Path]:
 def comparison_key(plan: dict, image: str) -> str:
     """Bind best-checkpoint comparisons to one packet/runtime/inference contract."""
     threads = int(plan.get("server_threads", 2))
-    from natlang_neuralese.data.prompt_rendering import prompt_rendering_identity
+    from natlang_neuralese.data.rendering_contract import comparison_binding
     contract = {
         "schema": "natlang.direct-task-comparison/1",
         "derived_packet_sha256": plan["derived_packet_sha256"],
@@ -154,7 +154,8 @@ def comparison_key(plan: dict, image: str) -> str:
         "queue_entries": plan["queue_entries"],
         "max_case_seconds": plan["max_case_seconds"],
         "execution_plans": plan["execution_plans"],
-        "prompt_rendering": prompt_rendering_identity(plan["prompt_rendering"]),
+        # Stable across /1 -> /2 while the rendering behaviour is unchanged (rendering_contract.comparison_binding).
+        "prompt_rendering": comparison_binding(plan["prompt_rendering"]),
         "prompt_rendering_sources": plan.get("prompt_rendering_sources", []),
     }
     encoded = json.dumps(contract, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
@@ -304,12 +305,11 @@ def wait_server(name: str, port: int) -> None:
 
 
 def verify_server_rendering(port: int, mode: str) -> None:
-    from natlang_neuralese.data.prompt_rendering import prompt_rendering_identity
+    from natlang_neuralese.data.prompt_rendering import prompt_rendering_binding_accepted
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/v1/neuralese/info", timeout=5) as response:
         info = json.loads(response.read())
     if (info.get("prompt_rendering") != mode or
-            info.get("prompt_rendering_identity_sha256") !=
-            prompt_rendering_identity(mode)["identity_sha256"]):
+            not prompt_rendering_binding_accepted(info.get("prompt_rendering_identity_sha256"), mode)):
         raise RuntimeError("serving prompt-rendering contract differs from the reviewed evaluation plan")
 
 

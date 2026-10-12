@@ -95,3 +95,18 @@ precedes soft-bank substitution. Full mode is unchanged. Read-only folder and
 ad-hoc depth variants share this registry. The emulation prompt is declared in
 native/prompt and re-exported from its provider adapter, avoiding a second copy.
 Python parity and trained-weight evaluations remain outstanding on DGX.
+
+## 7. Contract identity: behavioural, schema /2 (DGX, 2026-10-12)
+
+A direct export binds the prompt-rendering contract it was trained for (`manifest.prompt_rendering`), and restore,
+serving (`/v1/neuralese/info`) and the task-packet evaluator check it. Identity /1 hashed the source bytes of
+`data/prompt_rendering.py`, `serve/engine.py` and `serve/chat.py`, so an unrelated helper (07630d34) refused every
+earlier export. That helper now lives in `data/e2e_rendering.py` (54067476).
+
+| Unit | Decision | Why |
+| --- | --- | --- |
+| Identity (`data/rendering_contract.py`, `prompt_rendering.prompt_rendering_identity`) | Crisp exact verifier. Schema `/2`: sha256 of the canonical outputs of the pinned fixture cases (`training/prompt-pieces/rendering-contract-fixtures.json`: 10 system prompts, 9 of them recorded with the parity fixture, times 2 conversations with tool calls, escaped specials and Neuralese blocks, plus no-system and late-system cases) rendered through `Engine.render_request` (= `apply_prompt_rendering` then `chat.render_messages`) with a stub chat template, plus `BACKBONE_HISTORY_REASONING`, the fixture file's sha256 and `pieces.json`'s sha256 | It hashes what the model is shown, not file bytes: a refactor keeps it, a rendering or piece-table change alters it. The backbone chat template is pinned by the base binding, so a stub stands in. |
+| Old bindings (`training/prompt-pieces/rendering-identity-equivalence.json`) | Crisp table: each known superseded identity (all /1 states since c1de43eb, both modes) maps to the /2 identity of the exact code it was bound to, computed by running the current fingerprint over that commit's blobs (`scripts/neuralese_data/prompt_rendering_equivalence.py --write`) and re-verified from git by `tests/neuralese/test_rendering_contract.py` | Accepted iff the mapped /2 equals the current /2: a /1 export restores while the behaviour is unchanged, and is refused after a real rendering change. |
+| Declared adoptions (`adoptions` in the same table) | A deliberate rendering change that applies to artifacts bound before it is declared by commit and mode; the table records the /2 identity at its parent and at it (recomputed from git by the test). A binding is accepted when its /2 identity reaches the current one through adoptions. First: 95bc6eca (Pop), program-header serving keeps externally supplied tool schemas; native requests send none in that mode | Pop's LFM step-10006 export (/1 420ac1c7, bound before 95bc6eca) keeps restoring; an undeclared behaviour change still refuses. |
+| Evaluation comparison key (`evaluate_direct_task_packet.comparison_key`) | Uses `comparison_binding(mode)`: the table's canonical /1 identity (058a5269 state) while it binds the current behaviour (directly or through adoptions), else /2 | Best-task-checkpoint receipts recorded under /1 keep comparing. |
+| Changing the fixtures | Changes every /2 identity: rerun the equivalence script with `--write` and add the superseded /2 identities as entries | The fixture set is frozen data; extend it only together with the table. |

@@ -908,7 +908,8 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
     if manifest.get("schema") != ARTIFACT_SCHEMA or claimed != canonical_json_sha256_hex(manifest):
         raise ValueError("direct artifact manifest schema/hash mismatch")
     manifest["manifest_sha256"] = claimed
-    from ..data.prompt_rendering import PROMPT_RENDERINGS, prompt_rendering_identity
+    from ..data.prompt_rendering import (PROMPT_RENDERINGS, prompt_rendering_binding_accepted,
+                                         prompt_rendering_identity)
     prompt_binding = manifest.get("prompt_rendering")
     if prompt_binding is None:
         # Artifacts created before prompt-rendering was bound retain original full-prompt behavior.
@@ -916,9 +917,10 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
     prompt_mode = prompt_binding.get("mode")
     if prompt_mode not in PROMPT_RENDERINGS:
         raise ValueError("direct artifact prompt-rendering mode is missing or unsupported")
-    expected_prompt_binding = prompt_rendering_identity(prompt_mode)
-    if prompt_binding.get("identity_sha256") != expected_prompt_binding.get("identity_sha256"):
-        raise ValueError("direct artifact prompt-rendering implementation or piece table changed")
+    # Behavioural binding (data/rendering_contract.py): the current /2 identity, or a superseded identity whose
+    # bound code renders identically (rendering-identity-equivalence.json).
+    if not prompt_rendering_binding_accepted(prompt_binding.get("identity_sha256"), prompt_mode):
+        raise ValueError("direct artifact prompt-rendering behaviour or piece table changed")
     prompt_source = prompt_binding.get("source_proof")
     if prompt_source is not None and prompt_source.get("mode") != prompt_mode:
         raise ValueError("direct artifact prompt-rendering mode differs from its source proof")
