@@ -247,12 +247,45 @@ class QwenPortBackbone(PortBackbone):
 
 
 
+_FLEX = {}
+
+
+def _flex_window(attn, q, k, v, window: int) -> torch.Tensor:
+    """Sliding-window causal attention of a fresh sequence (keys = queries) as one FlexAttention call: a block-sparse
+    Triton kernel forward and backward with native GQA and the window as a block mask (keys at distance < window, the
+    query itself included: `_window_mask`). 7.6x faster forward+backward than the banded SDPA blocks on the GB10
+    (their masked memory-efficient backward; plans/neuralese/TRAINING_SPEED_20261012.md). Compiled once with dynamic
+    shapes; block masks are cached per (length, window)."""
+    from torch.nn.attention.flex_attention import create_block_mask, flex_attention
+
+    if "kernel" not in _FLEX:
+        _FLEX["kernel"] = torch.compile(flex_attention, dynamic=True)
+    steps = q.shape[2]
+    key = (steps, window, q.device)
+    masks = _FLEX.setdefault("masks", {})
+    if key not in masks:
+        def in_window(b, h, query, key_index):
+            return (query >= key_index) & (query - key_index < window)
+        if len(masks) >= 64:
+            masks.pop(next(iter(masks)))
+        masks[key] = create_block_mask(in_window, None, None, steps, steps, device=q.device)
+    return _FLEX["kernel"](q, k, v, block_mask=masks[key], scale=attn.scaling, enable_gqa=True)
+
+
+def _flex_enabled(q, k) -> bool:
+    import os
+    return (q.is_cuda and q.shape[2] == k.shape[2] and q.dtype in (torch.bfloat16, torch.float16)
+            and os.environ.get("NATLANG_FLEX_WINDOW", "1") != "0")
+
+
 def _attend_window(attn, q, k, v, steps: int, window: int) -> torch.Tensor:
     """Sliding-window causal attention without padding, banded: each block of `window` queries attends to its own
     keys only (at most 2 * window - 1), so the cost is linear in length rather than a masked full T x total. One query
     needs no mask at all (its keys are exactly the last `window`), which keeps decoding on the fast SDPA kernels; a
     block passes a small band mask with the key heads expanded, since a mask with GQA would fall back to SDPA's math
     backend. Same result as the explicit `_window_mask` path."""
+    if steps > 1 and _flex_enabled(q, k):
+        return _flex_window(attn, q, k, v, window)
     total = k.shape[2]
     start = total - steps
     repeats = q.shape[1] // k.shape[1]
