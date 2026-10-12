@@ -43,11 +43,13 @@ domains with exact checks (AGENTS.md: breadth from natlang domains), each added 
   contract.
 - **Driver.** `scripts/run_bonsai_queue.py` with `--chat-completions-url` runs the frozen TS collector
   (`dist/teacher/cli.js`), one single-case entry per rollout. A queue entry may set `temperature` (added
-  2026-10-12; absent = the collector's greedy default). A group is `G` entries of one row with distinct seeds.
+  2026-10-12; absent = the collector's greedy default), and `--chat-request-config` may carry
+  `x_natlang_adapters` (validated `[{id, scale}]`) so rollouts sample an adapter policy. A group is `G` entries of one
+  row with distinct seeds.
 - **Glue.** `training/neuralese/natlang_neuralese/rl/task_rollouts.py`: `prepare` (train-only packet + group queue),
   `score` (classify every rollout, reward, `grpo.group_advantages`, route each group). Tests:
   `tests/neuralese/test_rl_task_rollouts.py`.
-- **Policy turns for replay.** The collector result rows carry the `trajectory`; `score` is to convert it into
+- **Policy turns for replay.** The collector result rows carry the `trajectory`; `score --emit-rollouts` converts it into
   `natlang.rollout/1` records (`turns` = messages/tools/target exactly as on the wire) for groups routed to GRPO.
 
 ## 4. Groups, curriculum and step 0
@@ -149,12 +151,49 @@ Consequence: RL on this row family needs a policy with nonzero success first —
 successes), or start S7 from a direct-SFT LFM checkpoint (the stage design already says RL starts from the direct
 artifact, not the base).
 
+### 8.3 Direct-SFT student (Pop LFM Muon main, step 10006) and the first GRPO update
+
+Same 8 rows × G=4, temperature 1, served from `runs/pop-lfm-muon-main-v2-export-step10006` with its own
+`program-header` rendering. The export's source proof pins Pop paths (`/srv/storage/...` HF cache and launch
+receipt), so `s7_task_round.sh` serves it in a container (`SERVE_IMAGE=natlang-neuralese:26.09`) that mounts the
+local HF cache and the export's byte-identical `artifact.launch-receipt.json` at those paths. The loader still checks
+every hash. (The step-9000 export had no receipt beside it; luna v8 lacked its anchor beside it.)
+
+```
+python3 scripts/memory_ledger.py run --unit s7rl-round0-muon10006 --container s7rl-round0-muon10006 --budget-gb 8 \
+  --reserve-gb 2 --env PORT=8098 --env DIRECT=$E --env SERVE_IMAGE=natlang-neuralese:26.09 \
+  --env RECEIPT=$E/artifact.launch-receipt.json --env CONTAINER=s7rl-round0-muon10006 \
+  -- scripts/s7_task_round.sh $D/round0-muon10006 4
+# one GRPO round: emit natlang.rollout/1, zero xs adapter (rank 8), grpo.py round (lr 1e-3, beta 0.02, clip 0.2)
+... --env UPDATE_FROM=$D/round0-muon10006 -- scripts/s7_task_round.sh $D/update-muon10006
+# re-score with the updated adapter (collector passes x_natlang_adapters via --chat-request-config)
+... --env RESTORE_ADAPTER=$D/update-muon10006/policy-r1/adapter.nzb -- scripts/s7_task_round.sh $D/round1-muon10006 4
+```
+
+| Run | Rollouts | Outcomes | Successes | Groups: grpo / retire / rejection |
+| --- | --- | --- | --- | --- |
+| round0, Muon 10006 | 32 | 11 task_success, 11 invalid_action, 7 semantic_mismatch, 3 budget_exhaustion | 11 (34 %) | 1 / 2 / 5 |
+| round1, + GRPO adapter | RESCORE_PENDING | | | |
+
+- Unlike the base, the direct student solves rows end to end: two rows succeed 4/4 (retire), row s7202-1 is mixed
+  (3/4: the GRPO group), five rows fail in every sample. Failure classes (non-successes): `answer` rejected 7,
+  `invalid-binding` 4, `missing-fresh-result` 4, `undeclared-field` 2, `typescript-syntax` 1, no result row 2,
+  aborted 1. Wall 79–314 s per rollout (mean 144 s; the student uses more turns than the base).
+- **GRPO round (`natlang.grpo-round/1`):** 32 rollouts, 30 usable (2 without a result row have no turns), 0 unscored,
+  1 group with spread, reward mean 0.37, 22 logLikelihood terms, ratio 1.0 (on-policy, zero adapter), 0 clipped, KL
+  estimate 0, surrogate −1.48, 32 s. Adapter `nz1_m6a6…` in `update-muon10006/policy-r1/`. The pipeline
+  rollout → classify_case reward → group advantage → replay gradient → adapter → collector sampling with the adapter
+  runs end to end.
+- A ledger preemption by the Mellum v4 relaunch (high priority) killed the first update attempt mid-`grad`; the
+  requeued unit completed. Resumable smoke units are requeued after preemption and also after failures: cancel
+  stale ones (`memory_ledger.py cancel`).
+
 ## 9. Next work
 
-1. Re-run round0 from the current direct-SFT LFM checkpoint (`--direct-artifact`, matching its rendering) to find
-   groups with spread; held eval re-scores the base under `full` rendering (Pop).
-2. `score --emit-rollouts`: `natlang.rollout/1` records from collector results, then one `grpo.py round` on a group
-   with spread; adapters through the collector (chat controls do not yet carry `x_natlang_adapters`).
-3. RFT step 0 on successes (teacher rollouts of train rows where the student has none).
-4. `neuralese_rl` handler + recipe; task-selection pluggable (crisp default, NL shadow).
+1. Scale the GRPO smoke: more rows (all 72 train rows), G=8 so more groups have spread, several rounds with
+   re-scoring; RFT step 0 on the five all-fail rows (teacher rollouts) and on the student's own successes.
+2. Evaluate the RL adapter on the held 48 (task-success cadence) against the step-10006 export, matched rendering.
+3. Train the full direct checkpoint instead of an adapter: `neuralese_rl` handler + recipe (`extends` the direct
+   recipe), drift monitor against the pre-RL checkpoint; task-selection pluggable (crisp default, NL shadow).
+4. Held eval re-scores the base under `full` rendering (Pop; requested 2026-10-12).
 5. End-to-end rollouts with Neuralese consumers.
