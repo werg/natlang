@@ -54,3 +54,20 @@ def test_score_routes_groups_by_spread(tmp_path):
     routes = [g["route"] for g in report["groups"]]
     assert routes == ["grpo", "rejection-sampling"]
     assert report["successes"] == 1 and report["groups_with_spread"] == 1
+
+
+def test_rollout_turns_keep_policy_samples_and_skip_authored_actions():
+    from natlang_neuralese.rl.task_rollouts import rollout_turns
+    context = [{"role": "user", "content": "q"}]
+    result = {"trajectory": [
+        {"phase": "action", "context": context, "tools_offered": [{"type": "function"}],
+         "assistant": {"content": "", "calls": [{"tool": "eval", "arguments": {"code": "1"}}],
+                       "action_provenance": {"kind": "authored_reference_root_eval"}}},
+        {"phase": "action", "context": context, "tools_offered": [{"type": "function"}],
+         "assistant": {"content": "", "calls": [{"tool": "return_result", "source_tool": "return_result",
+                                                 "arguments": {"status": "success", "value": 3}}]}},
+    ]}
+    turns = rollout_turns(result)
+    assert len(turns) == 1 and turns[0]["messages"] == context
+    call = turns[0]["target"]["tool_calls"][0]["function"]
+    assert call["name"] == "return_result" and json.loads(call["arguments"])["value"] == 3

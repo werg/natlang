@@ -49,6 +49,27 @@ def authored_root_row(row: dict[str, Any]) -> dict[str, Any]:
     return {**row, "curriculum": curriculum}
 
 
+def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """The policy's own model turns of a collector result as `natlang.rollout/1` turns ({messages, tools, target}),
+    replayable as `logLikelihood` terms. Host-authored actions (`action_provenance`, e.g. the authored root eval) are
+    not policy samples and are skipped."""
+    turns = []
+    for step in (result or {}).get("trajectory") or []:
+        assistant = step.get("assistant")
+        if step.get("phase") != "action" or not isinstance(assistant, dict) or assistant.get("action_provenance") \
+                or step.get("action_provenance") or not isinstance(step.get("context"), list):
+            continue
+        target: dict[str, Any] = {"role": "assistant", "content": assistant.get("content") or ""}
+        calls = [{"id": f"call_{index}", "type": "function",
+                  "function": {"name": call.get("source_tool") or call.get("tool"),
+                               "arguments": json.dumps(call.get("arguments") or {}, ensure_ascii=False)}}
+                 for index, call in enumerate(assistant.get("calls") or [])]
+        if calls:
+            target["tool_calls"] = calls
+        turns.append({"messages": step["context"], "tools": step.get("tools_offered") or None, "target": target})
+    return turns
+
+
 def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: float, case_seconds: int,
                 max_model_requests: int, max_turns: int, seed_base: int) -> list[dict[str, Any]]:
     if group < 2:
@@ -84,8 +105,10 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
             "source_cases": str(args.cases), "ids": [row["id"] for row in selected]}
 
 
-def score(run_dir: Path) -> dict[str, Any]:
+def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str, Any]:
+    """Classify every rollout; with `emit`, also write `natlang.rollout/1` records for `grpo.py round`."""
     run_dir = run_dir.resolve()
+    emitted: list[dict[str, Any]] = []
     packet = read_jsonl(run_dir / "packet.jsonl")
     entries = read_jsonl(run_dir / "queue.jsonl")
     journal_path = run_dir / "journal.jsonl"
@@ -99,6 +122,13 @@ def score(run_dir: Path) -> dict[str, Any]:
         outcome = classify_case(result, finishes.get(entry["key"]))
         task = packet[entry["index"]]
         detail = ((result or {}).get("outcome") or {}).get("detail") if result else None
+        if emit is not None:
+            emitted.append({"schema": "natlang.rollout/1", "round": round_, "task_id": task["id"],
+                            "family": task.get("family"), "group": entry["group"], "sample": entry["sample"],
+                            "seed": entry["seed"], "policy": {"temperature": entry.get("temperature")},
+                            "turns": rollout_turns(result), "outcome": outcome,
+                            "reward": None if reward_of(outcome) is None else {"quality": reward_of(outcome)},
+                            "unscored": outcome if reward_of(outcome) is None else None})
         rollouts.append({"task_id": task["id"], "family": task.get("family"), "group": entry["group"],
                          "sample": entry["sample"], "seed": entry["seed"], "outcome": outcome,
                          "reward": reward_of(outcome), "detail": detail if isinstance(detail, str) else None,
@@ -128,6 +158,9 @@ def score(run_dir: Path) -> dict[str, Any]:
               "successes": sum(r["reward"] == 1.0 for r in rollouts),
               "groups_with_spread": sum(g["spread"] for g in groups), "groups": groups}
     (run_dir / "rewards.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rollouts), encoding="utf-8")
+    if emit is not None:
+        emit.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in emitted), encoding="utf-8")
+        report["emitted_rollouts"] = str(emit)
     (run_dir / "score.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
 
@@ -148,8 +181,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--seed-base", type=int, default=7000)
     s = sub.add_parser("score")
     s.add_argument("--run-dir", type=Path, required=True)
+    s.add_argument("--emit-rollouts", type=Path, default=None, help="write natlang.rollout/1 records here")
+    s.add_argument("--round", type=int, default=0)
     args = parser.parse_args(argv)
-    result = prepare(args) if args.command == "prepare" else score(args.run_dir)
+    result = prepare(args) if args.command == "prepare" else score(args.run_dir, args.emit_rollouts, args.round)
     print(json.dumps(result, indent=2))
 
 
