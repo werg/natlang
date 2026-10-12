@@ -60951,6 +60951,106 @@
       "trace_admission": false,
       "admission": "Existing root-admitted ordinary SFT targets; exact authenticated context metadata restored via shared binder",
       "notes": "126 previously admitted train targets, zero new decisions/worlds; root verified unchanged original fields except authenticated external-context metadata, 146 provider-read bindings and shared context renderer. Six original omissions remain explicit; full-source overlay render needed. No learned writer/recurrence/runtime qualification; active GPU inputs unchanged."
+    },
+    {
+      "id": "neuralese-e2e-union-cohort-20261012-v1",
+      "owner": "dgx",
+      "path": "runs/neuralese-e2e-union-cohort-20261012-v1",
+      "include": [
+        "records.jsonl",
+        "pieces.jsonl",
+        "edges.jsonl",
+        "receipt.json"
+      ],
+      "source_class": "native-e2e-producer-consumer-records",
+      "split": "per record, inherited from the source rows (the same rows the target-set unions render); held stays held; cross-split edges and train edges sharing a source group with any held document of union r3 are dropped (none were)",
+      "admission": "end-to-end Neuralese stage data (train/trajectories.py --handover written --direct-artifact): both endpoints of every authenticated producer->consumer gradient edge",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-12: the e2e stage replaces text-only SFT on both lines and needs the unions' breadth; superset of the 1243-record cohort the stage was pinned to (byte-identical lines), selected by the same rule over every union source that has child-result write/read sites",
+      "derived_from": [
+        "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1",
+        "natlang-native-turns-luna-v17-v9-render-20261012-v3",
+        "natlang-free-provider-v28-wholetraj-render-20261012-v2",
+        "natlang-free-provider-v29-wholetraj-render-20261012-v3"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "counts": {
+        "records": 1389,
+        "records_by_split": {
+          "test": 620,
+          "train": 769
+        },
+        "records_by_source": {
+          "assembly-v3": 1243,
+          "free-v28": 26,
+          "free-v29": 2,
+          "luna-v17-v9-v3": 118
+        },
+        "edges": 1137,
+        "edges_by_split": {
+          "test": 520,
+          "train": 617
+        },
+        "edges_by_source": {
+          "assembly-v3": 1018,
+          "free-v28": 21,
+          "free-v29": 1,
+          "luna-v17-v9-v3": 97
+        },
+        "readers_by_split": {
+          "test": 520,
+          "train": 617
+        }
+      },
+      "build": {
+        "script": "scripts/neuralese_data/build_e2e_union_cohort.py",
+        "receipt": "runs/neuralese-e2e-union-cohort-20261012-v1/receipt.json",
+        "sources": [
+          {
+            "name": "assembly-v3",
+            "pieces": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-pieces.jsonl",
+            "pieces_sha256": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6",
+            "records": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-records.jsonl",
+            "records_sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3"
+          },
+          {
+            "name": "luna-v17-v9-v3",
+            "pieces": "runs/luna-v17-actual-quality-proposal-20261010-v9-portable-context-view-v1/assembled-v3/native-pieces.jsonl",
+            "pieces_sha256": "dbf728ceadd6dc25a4486081e8b90919feb3464facea484af9f3b512c9fdf671",
+            "records": "runs/luna-v17-actual-quality-proposal-20261010-v9-portable-context-view-v1/assembled-v3/native-records.jsonl",
+            "records_sha256": "47988bc5092bf3c07131611c20c43697db1cc47a83b158401103d1acf1c89afe"
+          },
+          {
+            "name": "free-v28",
+            "pieces": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v10-target-binding/pieces.jsonl",
+            "pieces_sha256": "edc897feca4ad16cf28e488f49ed82f6a59bfd4af5701b28207101d5be57ab42",
+            "records": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v10-target-binding/native-turns-render-input.jsonl",
+            "records_sha256": "8ef006ce5b201e3ce8497920e5e1f3de8ba30faee474d9a59533c6f9f65d2595"
+          },
+          {
+            "name": "free-v29",
+            "pieces": "runs/free-provider-generation-20261009-v1/held-v29-visible-input-native-text-v2/pieces.jsonl",
+            "pieces_sha256": "3f01f3cfbd18fd3c2c2bb830fbc8762e6edb4a2afd9513a3000d3e9d4e3668e0",
+            "records": "runs/free-provider-generation-20261009-v1/v29-root-ordinary-text-admission-v1/selected-native-turns-render-input.jsonl",
+            "records_sha256": "508475eb883a90d7e875aa69b9cbea90f698d3019420579e714a9d208f8bc429"
+          }
+        ],
+        "files": {
+          "edges.jsonl": {
+            "bytes": 363462,
+            "sha256": "256acd74050b30c8b75ccff15c707eac9d7555b81add3ee942b01479c6331302"
+          },
+          "pieces.jsonl": {
+            "bytes": 495286,
+            "sha256": "90d194c2d029f81ca17f4accaed5bce4840641fdf014431d03dd21f963c6bd2d"
+          },
+          "records.jsonl": {
+            "bytes": 85217353,
+            "sha256": "7fec509602f13d988a5fd7ada62d0b41d7b0f03986b33da8cdcbce6135f67392"
+          }
+        }
+      },
+      "notes": "Tokenizer-agnostic native records: one file serves both lines (LFM2.5 and Mellum2.1 tokenize at train time), so the lines stay in lockstep. 85 MB plain, not compressed (trajectories.py reads plain JSONL). Pieces: the pinned assembly-v3 table wins every name; later tables only add names. The other union members (s72, v13, bgkit, static-lambda, clef, campaign, SWE) are single whole-program decisions without child calls, so they contribute no producer->consumer pairs."
     }
   ],
   "coverage_backlog": [

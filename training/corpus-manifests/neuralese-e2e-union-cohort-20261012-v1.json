@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-union-cohort-20261012-v1",
+  "owner": "dgx",
+  "path": "runs/neuralese-e2e-union-cohort-20261012-v1",
+  "files": [
+    {
+      "path": "edges.jsonl",
+      "bytes": 363462,
+      "sha256": "256acd74050b30c8b75ccff15c707eac9d7555b81add3ee942b01479c6331302",
+      "lines": 1137
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 495286,
+      "sha256": "90d194c2d029f81ca17f4accaed5bce4840641fdf014431d03dd21f963c6bd2d",
+      "lines": 418
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 4397,
+      "sha256": "445c65f7799d4963617ae167a623fa989524a00f9af0ffa70a9f9d2578bf4bdb"
+    },
+    {
+      "path": "records.jsonl",
+      "bytes": 85217353,
+      "sha256": "7fec509602f13d988a5fd7ada62d0b41d7b0f03986b33da8cdcbce6135f67392",
+      "lines": 1389
+    }
+  ],
+  "bytes": 86080498
+}
