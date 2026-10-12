@@ -65,6 +65,10 @@ def render(shard: Path, tokenizers: dict, root: Path, workers: int) -> str:
         verify_shard_receipt(shard, out, tokenizers)
         return f'{shard.name} kept'
     out.parent.mkdir(parents=True, exist_ok=True)
+    # A shard's twins take ~3.4 GB per 1.15 GB of records (both renderings, both
+    # tokenizers), ~110 GB for the whole bulk run: pause while the NVMe is short, like the other generators
+    # (coordinator 2026-10-12: disk_guard.sh, 100 GB).
+    subprocess.call([str(ROOT / 'scripts/disk_guard.sh'), str(root)])
     log = root / 'render' / f'{shard.name}.log'
     cmd = ['nice', '-n', '10', str(PY), str(ROOT / 'scripts/neuralese_data/render_native_turn_corpus.py'),
            '--corpus-id', f'swe-rebench-bulk-{shard.name}', '--source', str(shard / 'records.jsonl'),
@@ -157,6 +161,7 @@ def main() -> int:
                         for s in shards}
             for name in tokenizers:
                 for rendering in RENDERINGS:
+                    subprocess.call([str(ROOT / 'scripts/disk_guard.sh'), str(args.twin_root)])
                     assemble(args.twin_root, name, rendering, shards, receipts)
             return 0
         if not args.wait:
