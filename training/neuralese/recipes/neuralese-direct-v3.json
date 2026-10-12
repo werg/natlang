@@ -93,7 +93,7 @@
   },
   "family": {
    "schema": "natlang.neuralese-family/1",
-   "description": "The nested family as an in-stage objective of both lines (owner 2026-10-08 nested-family goal, reinstated 2026-10-12, REVIEW_20261012 rec. 4; owner: as much unity and lockstep between the lines as possible; plans/neuralese/MAPLE_NESTED.md 4a). Shared: the objective (each update draws the full model at weight 1 or one member at its weight times the ramp; a member update is the stage objective on the same windows plus KL(full BF16 || member) on the supervised positions, at the update's drawn precision point), kl_weight 1, the ramp on the shared curriculum (0.03-0.08, so a running lineage takes it from zero), members sharing every weight (no private parts), total member weight 0.3 (about 23% of updates once ramped in). Backbone-inherent (line-parity.json): the members and the order. The base (LFM2.5-350M, dense, 16 layers) nests in depth: 12xall and 8xall exit early after 12 and 8 layers through the final norm and shared head; 10xall is evaluated between them. The Mellum line nests in experts (N0 order) and depth.",
+   "description": "The nested family as an in-stage objective of both lines (owner 2026-10-08 nested-family goal, reinstated 2026-10-12, REVIEW_20261012 rec. 4; owner: as much unity and lockstep between the lines as possible; plans/neuralese/MAPLE_NESTED.md 4a). Shared: the objective (each update draws the full model at weight 1 or one member at its weight times the ramp; a member update is the stage objective on the same windows plus KL(full BF16 || member) on the supervised positions, at the update's drawn precision point), kl_weight 1, the ramp on the shared curriculum (0.05-0.10: above Mellum v4's curriculum at its handoff, about 0.03, so a running lineage takes it from zero), members sharing every weight (no private parts), total member weight 0.3 (about 23% of updates once ramped in). Backbone-inherent (line-parity.json): the members and the order. The base (LFM2.5-350M, dense, 16 layers) nests in depth: 12xall and 8xall exit early after 12 and 8 layers through the final norm and shared head; 10xall is evaluated between them. The Mellum line nests in experts (N0 order) and depth.",
    "members": {
     "12xall": 0.15,
     "8xall": 0.15
@@ -106,8 +106,8 @@
    "kl_weight": 1.0,
    "seed": 0,
    "ramp": {
-    "start": 0.03,
-    "end": 0.08
+    "start": 0.05,
+    "end": 0.1
    },
    "stages": [
     "direct_sft",
