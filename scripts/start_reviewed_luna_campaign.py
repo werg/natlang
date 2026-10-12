@@ -138,6 +138,21 @@ def verify_execution_pins(plan, runtime, plan_path, expected_plan_sha):
         raise ValueError('Frozen runtime changed before worker launch')
 
 
+def worker_command(plan, worker, runtime):
+    """Build the exact, plan-pinned Luna queue command."""
+    execution_plans = plan.get('execution_plans', True)
+    if not isinstance(execution_plans, bool):
+        raise ValueError('Reviewed execution_plans setting must be boolean')
+    command = ['python3', plan['supervisor'], worker['queue'], worker['journal'],
+               '--runtime', str(runtime), '--provider', 'openai-codex',
+               '--model-id', 'gpt-6-luna', '--model-concurrency', '1']
+    if execution_plans:
+        command.append('--execution-plans')
+    command.extend(['--reasoning-effort', plan.get('reasoning_effort', 'low'),
+                    '--min-free-mib', '1024'])
+    return command
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('plan', type=Path)
@@ -219,11 +234,21 @@ def main():
     def launch_lane(lane, worker):
         # Pins and the exact lane's old queue are checked immediately before
         # every spawn, so a long wait on another lane cannot stale approval.
-        verify_execution_pins(plan, runtime, args.plan, args.sha256)
-        for pinned_predecessor in predecessors:
-            if digest(pinned_predecessor['queue']) != pinned_predecessor['queue_sha256']:
-                raise ValueError(f'Predecessor queue changed before lane {lane}: '
-                                 f'{pinned_predecessor["queue"]}')
+        try:
+            verify_execution_pins(plan, runtime, args.plan, args.sha256)
+            for pinned_predecessor in predecessors:
+                if digest(pinned_predecessor['queue']) != pinned_predecessor['queue_sha256']:
+                    raise ValueError(f'Predecessor queue changed before lane {lane}: '
+                                     f'{pinned_predecessor["queue"]}')
+        except Exception as error:
+            # A late lane whose approval can no longer be verified must stay
+            # unlaunched. Its sibling workers already have independent sealed
+            # queues and should finish; pin drift is not a reason to kill them.
+            lane_states[lane] = {
+                'status': 'blocked_invalid_approval_pins',
+                'reason': f'{type(error).__name__}: {error}',
+            }
+            return False
         predecessor = lanes.get(lane)
         if predecessor:
             if running(predecessor['pid']):
@@ -236,11 +261,7 @@ def main():
                                      'predecessor_pid': predecessor['pid'], 'reason': reason,
                                      'queue': predecessor['queue'], 'journal': predecessor['journal']}
                 return False
-        command = ['python3', plan['supervisor'], worker['queue'], worker['journal'],
-                   '--runtime', str(runtime), '--provider', 'openai-codex',
-                   '--model-id', 'gpt-6-luna', '--model-concurrency', '1',
-                   '--execution-plans', '--reasoning-effort', reasoning_effort,
-                   '--min-free-mib', '1024']
+        command = worker_command(plan, worker, runtime)
         Path(worker['log']).parent.mkdir(parents=True, exist_ok=True)
         with Path(worker['log']).open('xb') as log:
             process = subprocess.Popen(command, cwd=plan['cwd'], stdin=subprocess.DEVNULL,
@@ -272,7 +293,8 @@ def main():
                 if launch_lane(lane, worker):
                     pending.remove(lane)
                     made_progress = True
-                elif lane_states[lane]['status'] == 'blocked_incomplete_predecessor':
+                elif lane_states[lane]['status'] in {
+                        'blocked_incomplete_predecessor', 'blocked_invalid_approval_pins'}:
                     pending.remove(lane)
                     made_progress = True
             if pending:
@@ -301,13 +323,18 @@ def main():
             lane_states[worker['lane']] = {'status': 'finished', 'pid': process.pid,
                                            'exit_code': code}
             codes.append(code)
-        blocked = [lane for lane, state in lane_states.items()
-                   if state['status'] == 'blocked_incomplete_predecessor']
-        status = ('finished_with_blocked_predecessor_lanes' if blocked else
+        blocked_pins = [lane for lane, state in lane_states.items()
+                        if state['status'] == 'blocked_invalid_approval_pins']
+        blocked_predecessors = [lane for lane, state in lane_states.items()
+                                if state['status'] == 'blocked_incomplete_predecessor']
+        status = ('finished_with_blocked_approval_pins' if blocked_pins else
+                  'finished_with_blocked_predecessor_lanes' if blocked_predecessors else
                   'finished' if not any(codes) else 'finished_with_incomplete_work')
         atomic_json(record, {'status': status, 'workers': launched, 'lanes': lane_states,
+                             'blocked_approval_pin_lanes': blocked_pins,
+                             'blocked_predecessor_lanes': blocked_predecessors,
                              'exit_codes': codes, 'plan': str(args.plan), 'time': time.time()})
-        return int(bool(blocked) or any(codes))
+        return int(bool(blocked_pins or blocked_predecessors) or any(codes))
     except BaseException as error:
         for process in processes:
             try:

@@ -418,6 +418,7 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
             for predecessor in predecessors
         ],
         "reasoning_effort": args.reasoning_effort,
+        "execution_plans": args.execution_plans,
         "action_max_tokens": args.action_max_tokens,
         "prepared_only": True,
     }
@@ -485,6 +486,7 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         "runtime": str(runtime),
         "supervisor": str(SUPERVISOR),
         "reasoning_effort": args.reasoning_effort,
+        "execution_plans": args.execution_plans,
         "action_max_tokens": args.action_max_tokens,
         "training_admission": False,
         "independent_new_worlds": 0,
@@ -511,6 +513,9 @@ def main() -> int:
     parser.add_argument("--predecessor-campaign", type=Path,
                         help="optional campaign root; actual worker queues become pinned predecessors")
     parser.add_argument("--reasoning-effort", choices=("low", "medium", "high"), default="medium")
+    parser.add_argument("--no-execution-plans", dest="execution_plans", action="store_false",
+                        help="use the reviewed queue path without a sampled planner turn")
+    parser.set_defaults(execution_plans=True)
     parser.add_argument("--item-agreement-count", type=int,
                         help="optional caller-supplied count recorded as an unverified review note")
     parser.add_argument("--action-max-tokens", type=int,
