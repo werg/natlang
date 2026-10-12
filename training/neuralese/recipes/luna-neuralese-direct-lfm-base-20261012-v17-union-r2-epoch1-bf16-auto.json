@@ -261,7 +261,7 @@
       "train/delta_e2e.py": "3a5676e1ceb92b5d5ae9ff126be3a13ed2519ad21ffecdadcc116f29792942b5",
       "train/delta_projection.py": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91",
       "train/direct_export.py": "e63b9808a9fb65885ec5f6c216a6490f4bebb70f8e159a36bbe37737db18d6cd",
-      "train/direct_sft.py": "9a5b2e17ef5b91ddb7a2b84eaf1f5412651dfd84b84ea6e7709d83bbaa6927a0",
+      "train/direct_sft.py": "de60340c9cb20cc2b186a862566c35f50c77b7d1a6d09d37b7bcadf8291ac126",
       "train/drift_monitor.py": "29cdb01a0363d4c0af417ac8ae66e4b09fb89084033d2c97f201dc7e01faff4e",
       "train/execution.py": "a847a145e5b4e1987f0c69c8cbc7902406754be8b57e2e37bd1139d8756643b3",
       "train/export_trajectory.py": "5bbc545ff603530fbcc5b5930c6f841c70b09f37732b0f26bd088666250fef14",
