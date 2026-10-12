@@ -46,7 +46,7 @@ import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
-from multiprocessing import Pool
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1088,8 +1088,13 @@ def main(argv=None):
             pending.append(job)
     print(json.dumps({'jobs': len(jobs), 'already_done': len(results)}), flush=True)
     jobs = pending
-    with Pool(a.workers, initializer=_init, initargs=(tokenizers, pieces)) as pool:
-        for i, res in enumerate(pool.imap_unordered(render_shard, jobs)):
+    # ProcessPoolExecutor, not multiprocessing.Pool: a worker killed by the container's OOM killer makes the pool
+    # raise BrokenProcessPool (the unit fails visibly and a relaunch resumes the finished shards) instead of
+    # waiting forever for the lost shard (view-ask render, 2026-10-12).
+    with ProcessPoolExecutor(a.workers, initializer=_init, initargs=(tokenizers, pieces)) as pool:
+        futures = [pool.submit(render_shard, job) for job in jobs]
+        for i, future in enumerate(as_completed(futures)):
+            res = future.result()
             results.append(res)
             if i % 8 == 0:
                 print(json.dumps({'done': i + 1, 'of': len(jobs), 'last': res.get('shard'),
