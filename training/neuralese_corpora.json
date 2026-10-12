@@ -61110,6 +61110,17 @@
         }
       },
       "notes": "Each record through data/prompt_rendering.program_header_native_record: the system soft pieces resolved and reduced to the program header by the shared renderer (system turn dropped when none remains), runtime tool schemas dropped, every other field unchanged. The 1137 edges were re-derived with authenticated_recurrence_context_view on the rendered records and equal v1's edges.jsonl exactly. pieces.jsonl and edges.jsonl are byte copies of v1's."
+    },
+    {
+      "id": "luna-held-shapes-s52005-source-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-s52005-source-20261013-v1",
+      "admission": "source-only-nontraining-pending-teacher-and-quality-review",
+      "include": [
+        "source.ir.jsonl",
+        "build-report.json",
+        "provenance.json"
+      ]
     }
   ],
   "coverage_backlog": [
