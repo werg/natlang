@@ -15,7 +15,7 @@ Usage:
     python3 scripts/current_state.py --machine dgx            # writes plans/neuralese/HANDOVER.md
     python3 scripts/current_state.py --machine pop            # writes plans/POP_CURRENT.md (run on Pop)
     python3 scripts/current_state.py --machine pop --stdout   # print instead of writing
-    ssh pop-os 'NATLANG_REPO=~/natlang python3 - --machine pop --stdout' < scripts/current_state.py   # Pop's page from DGX
+    ssh "$POP_HOST" "NATLANG_REPO=$POP_CHECKOUT python3 - --machine pop --stdout" < scripts/current_state.py   # Pop's page from DGX
 Each machine generates its own page (units are read locally). Regenerate when the status page changes, and commit.
 """
 import argparse
