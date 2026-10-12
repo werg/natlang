@@ -1,7 +1,8 @@
 /** Offline source replay evidence is distinct from the original agent's task-success label. */
 import { hexDigest } from '../native/hash.js';
 import { sourceQualityClearanceForProgram, sourceQualityClearanceRefProblems,
-  type VerifiedSourceQualityClearance } from './source-quality-clearance.js';
+  type SourceQualityActionIdentity, type VerifiedSourceQualityClearance } from './source-quality-clearance.js';
+import { nativeDecisionTargetDigest } from '../native/decision-review.js';
 type Dict = Record<string, unknown>;
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -82,7 +83,9 @@ export function retiredWorkflowEvaluationReleased(program: Dict): boolean {
     release.scope === 'these four pinned revisions only' && release.original_split === 'test' && release.training_split === 'train';
 }
 
-export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; outcome?: Dict; trajectory?: unknown[]; source_ref?: Dict }, clearance?: VerifiedSourceQualityClearance): string[] {
+export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; outcome?: Dict; trajectory?: unknown[];
+  source_ref?: Dict; target?: unknown; decision?: Dict; teacher_trajectory_digest?: string },
+  clearance?: VerifiedSourceQualityClearance): string[] {
   const provenance = row.provenance ?? {}, evidence = provenance.source_conversion as Dict | undefined;
   const program = row.task?.program_ir as Dict | undefined;
   const quality = (program?.external_source as Dict | undefined)?.quality as Dict | undefined;
@@ -99,12 +102,29 @@ export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; 
   const sourceClearanceRef = row.source_ref?.source_quality_clearance;
   const clearanceReference = sourceClearanceRef as Dict | undefined;
   const referencedSidecar = clearanceReference?.schema === 'natlang.source-quality-clearance-ref/1';
+  const actualTarget: SourceQualityActionIdentity | undefined = typeof row.source_ref?.trajectory_id === 'string' &&
+    typeof row.teacher_trajectory_digest === 'string' && Number.isSafeInteger(row.decision?.index) &&
+    Number(row.decision?.index) >= 0 && typeof row.source_ref?.invocation_id === 'string' && row.target !== undefined ? {
+      trajectory_id: row.source_ref.trajectory_id,
+      trajectory_sha256: row.teacher_trajectory_digest,
+      decision_index: Number(row.decision?.index),
+      invocation_id: row.source_ref.invocation_id,
+      target_sha256: nativeDecisionTargetDigest(row.target),
+    } : undefined;
   let clearanceReferenceProblems: string[] = [];
-  if (referencedSidecar) {
-    clearanceReferenceProblems = sourceQualityClearanceRefProblems(sourceClearanceRef, clearance, program);
-  }
-  const qualityClearance = sourceQualityClearanceForProgram(clearance ??
-    (referencedSidecar ? undefined : sourceClearanceRef), program);
+  if (referencedSidecar)
+    clearanceReferenceProblems = sourceQualityClearanceRefProblems(sourceClearanceRef, clearance, program, actualTarget);
+  const embeddedClearance = isVerifiedClearance(clearance) ? clearance :
+    isVerifiedClearance(sourceClearanceRef) ? sourceClearanceRef : undefined;
+  const scopedClearance = embeddedClearance?.review.target_scope === 'exact-selected-actions-only';
+  if (scopedClearance && row.target !== undefined && row.decision !== undefined && !referencedSidecar)
+    clearanceReferenceProblems.push('source_quality_clearance_scoped_reference_required');
+  const qualityClearance = scopedClearance
+    ? referencedSidecar && clearanceReferenceProblems.length === 0
+      ? sourceQualityClearanceForProgram(clearance, program, actualTarget)
+      : undefined
+    : sourceQualityClearanceForProgram(clearance ??
+      (referencedSidecar ? undefined : sourceClearanceRef), program);
   if (qualityClearance) {
     const heldIndex = qualityProblems.indexOf('source_quality_held');
     if (heldIndex >= 0) qualityProblems.splice(heldIndex, 1);
@@ -190,4 +210,9 @@ export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; 
       (evidence.source_success !== true || !['independent_editor_slice', 'independent_file_creation'].includes(String(evidence.conversion_scope)) ||
        evidence.whole_issue_replayed !== false)) reasons.push('invalid_external_replay_scope');
   return reasons;
+}
+
+function isVerifiedClearance(value: unknown): value is VerifiedSourceQualityClearance {
+  return !!value && typeof value === 'object' && !Array.isArray(value) &&
+    (value as Dict).schema === 'natlang.verified-source-quality-clearance/1';
 }

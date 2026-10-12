@@ -16,6 +16,8 @@ export type SourceQualityClearance = {
   trace_admission: false;
   evidence: { role: string; path: string; sha256: string }[];
   source_policy: { path: string; sha256: string; held_source_ids: string[]; held_source_groups: string[] };
+  /** When set to exact-selected-actions-only, conversion applies only to bound child actions. */
+  target_scope?: 'program' | 'exact-selected-actions-only';
   programs: {
     program_id: string;
     program_ir_sha256: string;
@@ -27,6 +29,7 @@ export type SourceQualityClearance = {
     source_ids: string[];
     source_groups: string[];
     source_rows: { id: string; row_index: number; row_sha256: string; group: string; split: string }[];
+    selected_targets?: SelectedSourceQualityTarget[];
   }[];
   root_approval: {
     schema: 'natlang.source-quality-clearance-approval/1';
@@ -38,6 +41,21 @@ export type SourceQualityClearance = {
     trace_admission: false;
   };
 };
+
+export type SelectedSourceQualityTarget = {
+  candidate_id: string;
+  item_id: string;
+  item_sha256: string;
+  program_source_row_sha256: string;
+  trajectory_id: string;
+  trajectory_sha256: string;
+  decision_index: number;
+  invocation_id: string;
+  target_sha256: string;
+};
+
+export type SourceQualityActionIdentity = Pick<SelectedSourceQualityTarget,
+  'trajectory_id' | 'trajectory_sha256' | 'decision_index' | 'invocation_id' | 'target_sha256'>;
 
 /** The CLI creates this wrapper only after verifying all referenced bytes on disk. */
 export type VerifiedSourceQualityClearance = {
@@ -61,6 +79,7 @@ export type SourceQualityClearanceRef = {
   source_manifest_sha256: string;
   source_ids: string[];
   source_groups: string[];
+  selected_target?: SelectedSourceQualityTarget;
   scope: 'source-conversion-only';
   training_admission: false;
   trace_admission: false;
@@ -98,6 +117,27 @@ const isSha256 = (value: unknown): value is string => typeof value === 'string' 
 const isRecord = (value: unknown): value is Dict => !!value && typeof value === 'object' && !Array.isArray(value);
 const stringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === 'string');
 
+function isSelectedTarget(value: unknown): value is SelectedSourceQualityTarget {
+  return isRecord(value) && typeof value.candidate_id === 'string' && !!value.candidate_id.trim() &&
+    typeof value.item_id === 'string' && !!value.item_id.trim() && isSha256(value.item_sha256) &&
+    isSha256(value.program_source_row_sha256) &&
+    typeof value.trajectory_id === 'string' && !!value.trajectory_id.trim() && isSha256(value.trajectory_sha256) &&
+    Number.isSafeInteger(value.decision_index) && Number(value.decision_index) >= 0 &&
+    typeof value.invocation_id === 'string' && !!value.invocation_id.trim() && isSha256(value.target_sha256);
+}
+
+function isActionIdentity(value: unknown): value is SourceQualityActionIdentity {
+  return isRecord(value) && typeof value.trajectory_id === 'string' && !!value.trajectory_id.trim() &&
+    isSha256(value.trajectory_sha256) && Number.isSafeInteger(value.decision_index) && Number(value.decision_index) >= 0 &&
+    typeof value.invocation_id === 'string' && !!value.invocation_id.trim() && isSha256(value.target_sha256);
+}
+
+function selectedTargetMatches(target: SelectedSourceQualityTarget, action: SourceQualityActionIdentity): boolean {
+  return target.trajectory_id === action.trajectory_id && target.trajectory_sha256 === action.trajectory_sha256 &&
+    target.decision_index === action.decision_index && target.invocation_id === action.invocation_id &&
+    target.target_sha256 === action.target_sha256;
+}
+
 function payloadWithoutApproval(review: Dict): Dict {
   const { root_approval: _approval, ...payload } = review;
   return payload;
@@ -128,6 +168,9 @@ export function sourceQualityClearanceProblems(value: unknown): string[] {
       new Set(review.source_policy.held_source_ids).size !== review.source_policy.held_source_ids.length ||
       new Set(review.source_policy.held_source_groups).size !== review.source_policy.held_source_groups.length)
     problems.push('source_quality_clearance_source_policy_invalid');
+  if (review.target_scope !== undefined && review.target_scope !== 'program' &&
+      review.target_scope !== 'exact-selected-actions-only')
+    problems.push('source_quality_clearance_target_scope_invalid');
   if (!Array.isArray(review.programs) || !review.programs.length) problems.push('source_quality_clearance_programs_missing');
   else {
     const ids = new Set<string>();
@@ -149,6 +192,28 @@ export function sourceQualityClearanceProblems(value: unknown): string[] {
       if (new Set(rowIds).size !== rowIds.length ||
           canonical(entry.source_ids) !== canonical(rowIds) || canonical(entry.source_groups) !== canonical(rowGroups))
         problems.push('source_quality_clearance_source_set_mismatch');
+      if (review.target_scope === 'exact-selected-actions-only') {
+        if (!Array.isArray(entry.selected_targets) || !entry.selected_targets.length) {
+          problems.push('source_quality_clearance_selected_targets_missing');
+          continue;
+        }
+        const candidateIds = new Set<string>();
+        const actionKeys = new Set<string>();
+        for (const target of entry.selected_targets as unknown[]) {
+          if (!isSelectedTarget(target) || !rowIds.includes(target.item_id) ||
+              (entry.source_rows as Dict[]).find(row => row.id === target.item_id)?.row_sha256 !== target.program_source_row_sha256) {
+            problems.push('source_quality_clearance_selected_target_invalid');
+            continue;
+          }
+          const actionKey = canonical({ trajectory_id: target.trajectory_id,
+            trajectory_sha256: target.trajectory_sha256, decision_index: target.decision_index,
+            invocation_id: target.invocation_id, target_sha256: target.target_sha256 });
+          if (candidateIds.has(target.candidate_id) || actionKeys.has(actionKey))
+            problems.push('source_quality_clearance_selected_target_duplicate');
+          candidateIds.add(target.candidate_id);
+          actionKeys.add(actionKey);
+        }
+      }
     }
   }
   const approval = review.root_approval;
@@ -164,7 +229,24 @@ export function sourceQualityClearanceProblems(value: unknown): string[] {
 }
 
 /** Return the exact review binding only when it matches this unchanged, train-split program IR. */
-export function sourceQualityClearanceForProgram(value: unknown, programValue: unknown): Dict | undefined {
+export function sourceQualityClearanceForProgram(value: unknown, programValue: unknown,
+  action?: SourceQualityActionIdentity): Dict | undefined {
+  const binding = sourceQualityClearanceProgramBinding(value, programValue);
+  if (!binding) return;
+  const review = isRecord(value) && value.schema === 'natlang.verified-source-quality-clearance/1'
+    ? value.review as Dict : undefined;
+  if (review?.target_scope === 'exact-selected-actions-only') {
+    if (!action || !isActionIdentity(action)) return;
+    const entry = (review.programs as Dict[]).find(item => item.program_id === String(binding.program_id));
+    const selectedTargets = Array.isArray(entry?.selected_targets) ? entry.selected_targets as SelectedSourceQualityTarget[] : [];
+    const target = selectedTargets.find(item => selectedTargetMatches(item, action));
+    return target ? { ...binding, selected_target: target } : undefined;
+  }
+  return binding;
+}
+
+/** Internal identity check used to construct an exact action reference, never an admission by itself. */
+function sourceQualityClearanceProgramBinding(value: unknown, programValue: unknown): Dict | undefined {
   if (!isRecord(programValue)) return;
   const wrapper = isRecord(value) && value.schema === 'natlang.verified-source-quality-clearance/1' ? value : undefined;
   if (!wrapper || sourceQualityClearanceProblems(wrapper).length) return;
@@ -195,24 +277,33 @@ export function sourceQualityClearanceForProgram(value: unknown, programValue: u
 
 /** Build a small packet-relative reference while retaining the signed clearance in one sidecar. */
 export function sourceQualityClearanceRefForProgram(value: VerifiedSourceQualityClearance, programValue: unknown,
-  sidecarPath: string, fileSha256: string): SourceQualityClearanceRef | undefined {
-  const binding = sourceQualityClearanceForProgram(value, programValue);
+  sidecarPath: string, fileSha256: string, action?: SourceQualityActionIdentity): SourceQualityClearanceRef | undefined {
+  const binding = sourceQualityClearanceProgramBinding(value, programValue);
   if (!binding || !isSha256(fileSha256) || fileSha256 !== value.review_sha256 ||
       !isSha256(value.review_canonical_sha256) || value.review_canonical_sha256 !== hash(value.review) ||
       typeof sidecarPath !== 'string' || !sidecarPath.trim() || sidecarPath.startsWith('/') ||
       sidecarPath.includes('\\') || sidecarPath.split('/').some(part => !part || part === '.' || part === '..')) return;
+  const scoped = value.review.target_scope === 'exact-selected-actions-only';
+  let selectedTarget: SelectedSourceQualityTarget | undefined;
+  if (scoped) {
+    if (!action || !isActionIdentity(action)) return;
+    const entry = value.review.programs.find(item => item.program_id === String(binding.program_id));
+    selectedTarget = entry?.selected_targets?.find(target => selectedTargetMatches(target, action));
+    if (!selectedTarget) return;
+  }
   return { schema: 'natlang.source-quality-clearance-ref/1', sidecar_path: sidecarPath,
     file_sha256: value.review_sha256, review_canonical_sha256: value.review_canonical_sha256,
     review_id: value.review.id, program_id: String(binding.program_id),
     program_ir_sha256: String(binding.program_ir_sha256), source_quality_sha256: String(binding.source_quality_sha256),
     source_snapshot_sha256: String(binding.source_snapshot_sha256), source_manifest_sha256: String(binding.source_manifest_sha256),
     source_ids: [...(binding.source_ids as string[])], source_groups: [...(binding.source_groups as string[])],
+    ...(scoped ? { selected_target: structuredClone(selectedTarget) } : {}),
     scope: 'source-conversion-only', training_admission: false, trace_admission: false };
 }
 
 /** A compact reference is trusted only alongside the verified sidecar and the exact pinned program. */
 export function sourceQualityClearanceRefProblems(value: unknown, clearance: VerifiedSourceQualityClearance | undefined,
-  programValue: unknown): string[] {
+  programValue: unknown, actualTarget?: SourceQualityActionIdentity): string[] {
   if (!isRecord(value) || value.schema !== 'natlang.source-quality-clearance-ref/1')
     return ['source_quality_clearance_reference_invalid'];
   const ref = value as unknown as SourceQualityClearanceRef;
@@ -227,7 +318,14 @@ export function sourceQualityClearanceRefProblems(value: unknown, clearance: Ver
     return ['source_quality_clearance_reference_invalid'];
   if (!clearance || sourceQualityClearanceProblems(clearance).length)
     return ['source_quality_clearance_sidecar_unresolved'];
-  const expected = sourceQualityClearanceRefForProgram(clearance, programValue, ref.sidecar_path, clearance.review_sha256);
+  const scoped = clearance.review.target_scope === 'exact-selected-actions-only';
+  if (scoped && (!isActionIdentity(actualTarget) || !isSelectedTarget(ref.selected_target) ||
+      !selectedTargetMatches(ref.selected_target, actualTarget)))
+    return ['source_quality_clearance_selected_target_mismatch'];
+  if (!scoped && ref.selected_target !== undefined)
+    return ['source_quality_clearance_selected_target_unexpected'];
+  const expected = sourceQualityClearanceRefForProgram(clearance, programValue, ref.sidecar_path,
+    clearance.review_sha256, scoped ? actualTarget : undefined);
   if (!expected || canonical(ref) !== canonical(expected)) return ['source_quality_clearance_reference_mismatch'];
   return [];
 }
