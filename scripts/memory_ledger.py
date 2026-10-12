@@ -501,6 +501,20 @@ def plan_launch(state, head, wanted, backfill, free):
                 and not any(container_running(n) for n in entry.get('containers', ())))
 
 
+def default_reserve(budget):
+    """Free memory a job must leave after its admission unless ``run --reserve-gb`` says otherwise: a quarter of its
+    budget, at least 1 GiB and at most 8 GiB. A flat 8 GiB kept every 2-12 GB job (plan-only proofs, full checks,
+    smokes) out beside Mellum v4 with ~8 GB headroom (2026-10-12); a small job can only push memory down by little,
+    and the guard's floor stops lower-priority units if it does."""
+    return int(min(8 * GIB, max(GIB, 0.25 * budget)))
+
+
+def spec_reserve(spec, budget):
+    """The reserve of a launch spec: the explicit ``--reserve-gb``, else the default for ``budget``. Specs written
+    before the reserve was proportional carry no ``reserve_explicit`` and take the default."""
+    return spec['reserve'] if spec.get('reserve_explicit') and spec.get('reserve') is not None else default_reserve(budget)
+
+
 def fits(free, budget, reserve):
     """Real-headroom admission: free is MemAvailable minus what running claims still reserve."""
     return free - budget >= reserve
@@ -555,7 +569,7 @@ def requeue_spec(state, unit, now=None, containers=()):
         return False
     state.setdefault('waiting', {})[unit] = {'priority': PRIORITY_NAMES[priority_of(claim)], 'since': now,
                                              'requeued': True, 'not_before': now + REQUEUE_DELAY,
-                                             'budget': claim['budget'], 'reserve': claim['spec'].get('reserve', 8 * GIB),
+                                             'budget': claim['budget'], 'reserve': spec_reserve(claim['spec'], claim['budget']),
                                              'spec': claim['spec']}
     if containers:
         state['waiting'][unit]['containers'] = list(containers)
@@ -607,7 +621,8 @@ def launch(spec):
 
 def run(args):
     budget = int(args.budget_gb * GIB)
-    reserve = int(args.reserve_gb * GIB)
+    explicit_reserve = getattr(args, 'reserve_gb', None) is not None
+    reserve = int(args.reserve_gb * GIB) if explicit_reserve else default_reserve(budget)
     unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
     priority = args.priority or DEFAULT_PRIORITY[args.cls]
     # Before admission: a claim whose unit has not started within 30 s is released by the next ledger call, and a
@@ -628,6 +643,8 @@ def run(args):
                 print(json.dumps({'budget_raised_to_measured_peak_gb': round(learned / GIB, 1),
                                   'requested_gb': args.budget_gb, 'family': family(unit)}), file=sys.stderr)
                 budget = learned
+                if not explicit_reserve:
+                    reserve = default_reserve(budget)
             waiting = state.setdefault('waiting', {})
             now = time.time()
             waiting[unit] = {'priority': priority, 'since': waiting.get(unit, {}).get('since', since), 'seen': now,
@@ -643,7 +660,8 @@ def run(args):
                         'oom_policy': args.oom_policy, 'workdir': os.path.abspath(args.workdir), 'env': args.env,
                         'stop_seconds': args.stop_seconds, 'command': args.command, 'priority': priority,
                         'resumable': args.resumable if args.resumable is not None else args.cls != 'service',
-                        'hold_budget': args.hold_budget, 'reserve': reserve, 'containers': args.container}
+                        'hold_budget': args.hold_budget, 'reserve': reserve, 'reserve_explicit': explicit_reserve,
+                        'containers': args.container}
                 state['claims'][unit] = claim_for(spec)
                 if head != unit:
                     state['claims'][unit]['backfilled_behind'] = head
@@ -656,7 +674,7 @@ def run(args):
             with ledger() as state:
                 state.get('waiting', {}).pop(unit, None)
             raise SystemExit(f'not admitted: {free / GIB:.1f} GiB free after reservations{blockers}, '
-                             f'{args.budget_gb} GiB requested, {args.reserve_gb} GiB reserve')
+                             f'{args.budget_gb} GiB requested, {reserve / GIB:.1f} GiB reserve')
         time.sleep(30)
     if launch(spec):
         with ledger() as state:
@@ -1042,7 +1060,8 @@ def main():
     r.add_argument('--resumable', action=argparse.BooleanOptionalAction, default=None,
                    help='the command resumes from its own checkpoints, so the ledger may stop it for a higher priority job '
                         'or under pressure and relaunch it from the queue (default: yes except services)')
-    r.add_argument('--reserve-gb', type=float, default=8, help='free memory that must remain after admission (the guard floor; owner: use the memory we have)')
+    r.add_argument('--reserve-gb', type=float, default=None,
+                   help='free memory that must remain after admission (default: a quarter of the budget, 1-8 GiB)')
     r.add_argument('--wait', type=float, default=0, help='seconds to wait for admission')
     r.add_argument('--hold-budget', '--fixed-claim', action='store_true',
                    help='always count the whole unspent budget, even after the job settles (working set grows later)')
