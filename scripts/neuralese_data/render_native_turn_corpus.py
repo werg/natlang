@@ -667,15 +667,6 @@ def _init(tokenizers, pieces=None):
         _G['tok'][name] = tok
 
 
-def prepare_record(row: dict) -> dict:
-    target = dict(row['target'])
-    reasoning = row.get('teacher_reasoning')
-    if (isinstance(reasoning, str) and reasoning.strip() and row.get('teacher_reasoning_trained') is not False
-            and not target.get('reasoning_content') and '</think>' not in str(target.get('content') or '')):
-        target['reasoning_content'] = reasoning
-    return {**row, 'target': target}
-
-
 def _message_digest(message) -> str:
     return sha(canonical(message).encode())
 
@@ -716,7 +707,8 @@ def render_shard(job):
     # program-header rendering is the full rendering.
     from natlang_neuralese.data.text_corpus import (authenticated_context_writer_sources,
                                                     authenticated_crisp_context_messages, gold_text_rows,
-                                                    native_gold_document, tokenizer_fingerprint)
+                                                    native_gold_document, target_with_teacher_reasoning,
+                                                    tokenizer_fingerprint)
     from natlang_neuralese.train.trajectories import crisp_messages, handover_notes
     tok = _G['tok'][tok_name]
     records = []
@@ -724,7 +716,7 @@ def render_shard(job):
         for line in f:
             row = json.loads(line)
             row['_source_record_sha256'] = sha(line.rstrip(b'\n'))
-            records.append(prepare_record(row))
+            records.append(row)
     stem = Path(shard_path).stem
     result = {'shard': stem, 'tokenizer': tok_name, 'records': len(records)}
     omissions = []
@@ -753,7 +745,8 @@ def render_shard(job):
             rows[mode] = []
             continue
         r, receipt, omitted, provenance = gold_text_rows(decision_records, _G['pieces'], tokenizer=tok,
-                                                         require_independent_splits=False, prompt_rendering=mode)
+                                                         require_independent_splits=False, prompt_rendering=mode,
+                                                         target_reasoning=True)
         for row, prov in zip(r, provenance):
             row['corpus'] = corpus
             row['prompt_rendering'] = mode
@@ -826,7 +819,8 @@ def render_shard(job):
         try:
             piece_map = _G['pieces']
             messages, _, _ = authenticated_crisp_context_messages(record, piece_map, writer_sources)
-            target = crisp_messages([record['target']], piece_map, handover_notes(record))[0]
+            # Gates above bind the exact source target; the teacher reasoning is added only for rendering.
+            target = crisp_messages([target_with_teacher_reasoning(record)], piece_map, handover_notes(record))[0]
             text, ids = native_gold_document(tok, messages, target, record.get('tools') or [],
                                              prompt_rendering='full' if header_as_full else 'program-header')
         except (KeyError, TypeError, ValueError, IndexError) as exc:
