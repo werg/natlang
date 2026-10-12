@@ -224,8 +224,7 @@ def test_the_mellum_lineage_declares_the_continuation_of_its_running_quantizatio
     assert {k: v for k, v in lq.items() if k != 'ramp'} == {k: v for k, v in mq.items() if k != 'ramp'}
     assert lq['ramp'] == {'start': 0.25, 'end': 0.3}  # QAD base weights: later, shorter ramp
     assert lfm['backbone']['model'] == 'LiquidAI/LFM2.5-350M-GGUF/qad' and 'backbone' in lineage
-    from natlang_neuralese.train import line_parity
-    assert line_parity.check() == []
+    # Line parity of these recipes is tests/neuralese/test_line_parity.py's (one owner per check).
 
 
 def test_a_handoff_ignores_the_fresh_lineage_backbone_source():
