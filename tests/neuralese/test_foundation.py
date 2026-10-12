@@ -50,10 +50,11 @@ def test_transparent_reader_preserves_positions_and_payload_without_markers():
     engine.device = 'cpu'
     engine._template = None
     engine._specials = ()
+    engine.prompt_rendering = 'full'
     engine.lookup = lambda identifier: SimpleNamespace(payload=payload)
     engine._template_tokens = lambda segment, nonce: [0] if segment == 'before' else [1]
     rendered = SimpleNamespace(blocks=['value'], segments=['before', 0, 'after'], escape_nonce=None)
-    with patch('natlang_neuralese.serve.engine.render_messages', return_value=rendered):
+    with patch('natlang_neuralese.serve.chat.render_messages', return_value=rendered):
         raw = engine.prompt_embeddings([], None, block_mode='transparent')
         assert torch.equal(raw, table[torch.tensor([[0, 2, 3, 1]])])
         legacy = engine.prompt_embeddings([], None)
