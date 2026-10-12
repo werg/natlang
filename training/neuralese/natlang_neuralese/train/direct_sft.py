@@ -648,8 +648,12 @@ def main(argv=None):
         previous_options = previous_identity.get('options') or {}
         current_options = identity['options']
         # A later phase of one lineage changes its data, its budget and its precision schedule (recipe stages:
-        # full-prompt warm-up, then program-header direct_sft with the QAT ramp); everything else must match.
-        phase_keys = {'text_data', 'records', 'pieces', 'epochs', 'quantization', 'batch', 'batch_tokens'}
+        # full-prompt warm-up, then program-header direct_sft with the QAT ramp). Supervised span size is also a
+        # declared phase geometry knob: context capacity and masking stay fixed, the new phase rebases held metrics
+        # and the memory estimator uses a distinct target-size bin. It changes window grouping, so never an exact
+        # in-place resume. Everything else must match.
+        phase_keys = {'text_data', 'records', 'pieces', 'epochs', 'quantization', 'batch', 'batch_tokens',
+                      'target_tokens'}
         changed_objective = sorted(key for key in set(previous_options) & set(current_options)
                                    if key not in phase_keys and previous_options[key] != current_options[key])
         if changed_objective:
