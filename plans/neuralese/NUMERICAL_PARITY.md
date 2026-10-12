@@ -349,3 +349,18 @@ model qualification claim. The compact digest-bound receipt, including exact
 JSONL line hashes, is
 [`measurement-receipt.json`](../../runs/neuralese-direct-memory-estimator-boundary-v1/measurement-receipt.json)
 (SHA-256 `59fb277cff8bd2ba3ac979cd2ac9d8c3b285901e5ac18adc8646fd585c6511b1`).
+
+### Sparse exact-bin tail miss and correction (2026-10-12)
+
+V18 completed update3004, then ran out of CUDA memory during the token CE
+readout at3005. Its exact context/target bin had10 observations but retained
+the older q80 policy. Context5107/target244 forecast6,107,880,985 incremental
+bytes against6,146,102,272 reusable bytes: only38,221,287 bytes of slack.
+The saved step3000 estimator's maximum observed activation ratio was1.2581182530;
+nearest-rank q95 with the same5% margin predicts6,283,007,089 bytes and selects
+checkpointing. Shared fix `e9b3edc1` applies q95 to every direct-SFT calibrated
+bin, retaining other estimator families and BF16. Estimator17/17 and quick
+checks pass. Exact optimizer/RNG resume3000 completed the same3005 shape with
+checkpointing in2.139 seconds, observed incremental1,181,845,504 bytes versus
+forecast1,273,942,873; later updates continue without checkpointing when they
+fit. This is a memory-policy correction, not an arithmetic precision fix.
