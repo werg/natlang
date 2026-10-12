@@ -1568,11 +1568,26 @@ def native_gold_packet_context_only_messages(tokenizer, messages, target, tools,
     return text, token_ids, suffix_start, spans
 
 
+def target_with_teacher_reasoning(record):
+    """The gold target as rendered: the source target plus the record's ``teacher_reasoning``.
+
+    The reasoning is added unless the source marks it untrained (``teacher_reasoning_trained: false``), it is empty,
+    or the target already carries reasoning. Attestation gates bind the exact source target, so this projection is
+    applied only when rendering, after they pass.
+    """
+    target = dict(record["target"])
+    reasoning = record.get("teacher_reasoning")
+    if (isinstance(reasoning, str) and reasoning.strip() and record.get("teacher_reasoning_trained") is not False
+            and not target.get("reasoning_content") and "</think>" not in str(target.get("content") or "")):
+        target["reasoning_content"] = reasoning
+    return target
+
+
 def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer,
                    require_independent_splits: bool = True,
                    ordinary_text_admission_receipt: Mapping[str, Any] | None = None,
                    ordinary_text_admission_receipt_sha256: str | None = None,
-                   prompt_rendering: str = "full"):
+                   prompt_rendering: str = "full", target_reasoning: bool = False):
     """Return ``(rows, receipt, omissions, provenance)`` for renderer-qualified records.
 
     Each row has the shared ``text_warmup.load_text_rows`` schema. Text is a
@@ -1586,7 +1601,7 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                            require_independent_splits=require_independent_splits,
                            ordinary_text_admission_receipt=ordinary_text_admission_receipt,
                            ordinary_text_admission_receipt_sha256=ordinary_text_admission_receipt_sha256,
-                           prompt_rendering=prompt_rendering)
+                           prompt_rendering=prompt_rendering, target_reasoning=target_reasoning)
 
 
 def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
@@ -1682,7 +1697,8 @@ def bind_ordinary_text_admission(records, receipt, receipt_sha256):
 
 def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_independent_splits=True,
                     ordinary_text_admission_receipt=None,
-                    ordinary_text_admission_receipt_sha256=None, prompt_rendering="full"):
+                    ordinary_text_admission_receipt_sha256=None, prompt_rendering="full",
+                    target_reasoning=False):
     from ..train.trajectories import crisp_messages, handover_notes
     from .prompt_rendering import PROMPT_RENDERINGS
     if prompt_rendering not in PROMPT_RENDERINGS:
@@ -1737,7 +1753,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             messages, context_attestations, capture_augmentation_attestations = (
                 authenticated_crisp_context_messages(record, piece_map, writer_sources))
             notes = handover_notes(record)
-            target = crisp_messages([record["target"]], piece_map, notes)[0]
+            gold = target_with_teacher_reasoning(record) if target_reasoning else record["target"]
+            target = crisp_messages([gold], piece_map, notes)[0]
         except (KeyError, TypeError, ValueError, IndexError) as exc:
             omitted.append({"id": rid, "reason": "unresolved_or_malformed_crisp_reference", "detail": str(exc)[:240]})
             continue

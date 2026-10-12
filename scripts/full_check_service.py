@@ -77,17 +77,18 @@ def launch(state: dict, sha: str) -> None:
     log = BASE / f'{sha[:10]}.log'
     unit = f'natlang-full-check-{sha[:10]}'
     command = f'scripts/check-main.sh > {log} 2>&1; echo exit=$? >> {log}'
+    # 28 GB: the full suite peaked at 18.3 GB and was OOM-killed at an 18 GB cap (2026-10-12, 9361c4f989).
     # `run --wait` blocks until admitted. It runs as its own transient user unit (the launcher): a child of the timer's
     # oneshot tick would be in the tick's cgroup and killed when the tick exits (KillMode=control-group), leaving no run.
     ledger_log = BASE / f'{sha[:10]}.ledger.log'
     subprocess.run(['systemctl', '--user', 'reset-failed', f'{unit}-launch.service'], capture_output=True)
     subprocess.run(['systemd-run', '--user', '--collect', '--unit', f'{unit}-launch', '--property=Type=exec', f'--working-directory={REPO}',
                     '-p', f'StandardOutput=append:{ledger_log}', '-p', f'StandardError=append:{ledger_log}',
-                    'python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '18',
+                    'python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '28',
                     '--priority', 'medium', '--resumable', '--wait', '86400', '--workdir', str(wt), '--',
                     'sh', '-c', command], check=True, capture_output=True)
     state['running'] = {'sha': sha, 'unit': unit, 'worktree': str(wt), 'log': str(log), 'started': time.time(),
-                        'command': f'python3 scripts/memory_ledger.py run --unit {unit} --budget-gb 18 --priority '
+                        'command': f'python3 scripts/memory_ledger.py run --unit {unit} --budget-gb 28 --priority '
                                    f'medium --resumable --workdir {wt} -- sh -c "{command}"'}
     save(state)
 

@@ -299,7 +299,7 @@ Recovered (all set to `training_admission: true` with `review_status`; JeFF rese
     current renderer and the LFM2.5 tokenizer (gold_text_rows with V17's native pieces), equal their 4962 union train
     document byte for byte (text, token IDs and supervised_suffix_start): 3,207/3,207, 0 differences, 0 omissions
     (2,792 distinct documents). **V17 adds zero new decision examples.**
-  - DGX render: V17 contributes whole trajectories only (`natlang-native-turns-luna-v17-v9-render-20261011-v1`, no decision
+  - DGX render: V17 contributes whole trajectories only (`natlang-native-turns-luna-v17-v9-render-20261012-v3`, no decision
     documents: `--decision-exclude-ids` over the union's 5,733 source records).
 - `refine-judge-exact-20261009-v1`: 1,020 train rows of exact predicate labels; 307 held-out predicate/family rows stay out.
 - `refine-author-static-20261009-v1`: 28 authoring pairs (~197k tokens).

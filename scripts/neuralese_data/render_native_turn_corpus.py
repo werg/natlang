@@ -46,7 +46,7 @@ import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
-from multiprocessing import Pool
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -474,18 +474,28 @@ def registered_candidate_selection_admission(corpus_id, sources):
 
 
 def validate_candidate_selection_row(row, approved):
-    """Keep corpus-level approval from overriding a rejected or out-of-scope child row."""
+    """Keep corpus approval bound to one verifier-approved child row."""
     rid = row.get('id')
     if (approved.get('decision') != 'admit-exact-selected-native-action-SFT-only' or
             approved.get('training_admission') is not True):
         raise ValueError(f'registry candidate-selection row lacks exact native-action SFT approval: {rid}')
+    if (approved.get('id') != rid or
+            sha(canonical(row.get('target')).encode()) != approved.get('target_sha256') or
+            sha(canonical(row.get('messages')).encode()) != approved.get('messages_sha256') or
+            row.get('split') != approved.get('split') or
+            row.get('source_groups') != approved.get('source_groups')):
+        raise ValueError(f'registry candidate-selection row changed after packet verification: {rid}')
     decision = row.get('decision')
     if isinstance(decision, dict) and decision.get('training_approved') is not True:
         raise ValueError(f'candidate-selection source row is explicitly rejected: {rid}')
     admission = row.get('training_admission')
     if isinstance(admission, dict) and admission.get('approved') is False:
         pending = (admission.get('kind') == 'candidate-selection-pending-corpus-admission' and
-                   admission.get('reason') == 'exact child target selected for review; corpus admission remains false')
+                   admission.get('reason') in {
+                       'exact child target selected for review; corpus admission remains false',
+                       'source quality remains held; exact child target is materialized for review only; '
+                       'corpus admission remains false',
+                   })
         if not pending:
             raise ValueError(f'candidate-selection source row has an explicit training rejection: {rid}')
 
@@ -554,14 +564,6 @@ def select(args, shard_dir: Path):
                         reason = 'not_in_registry_candidate_selection_admission'
                     else:
                         validate_candidate_selection_row(row, approved)
-                        actual_target = sha(canonical(row.get('target')).encode())
-                        actual_messages = sha(canonical(row.get('messages')).encode())
-                        # The packet verifier binds item/source and target provenance; the registered corpus
-                        # manifest binds this exact turns.jsonl file. Recheck fields rendered from the row itself.
-                        if (actual_target != approved['target_sha256'] or row.get('split') != approved['split'] or
-                                actual_messages != approved['messages_sha256'] or
-                                row.get('source_groups') != approved['source_groups']):
-                            raise ValueError(f'registry candidate-selection row changed after packet verification: {rid}')
                         row['training_admission'] = {
                             'approved': True, 'kind': 'registry-bound-candidate-selection',
                             'status': 'admitted-exact-selected-child-action', 'corpus_id': candidate_admission['corpus_id'],
@@ -667,15 +669,6 @@ def _init(tokenizers, pieces=None):
         _G['tok'][name] = tok
 
 
-def prepare_record(row: dict) -> dict:
-    target = dict(row['target'])
-    reasoning = row.get('teacher_reasoning')
-    if (isinstance(reasoning, str) and reasoning.strip() and row.get('teacher_reasoning_trained') is not False
-            and not target.get('reasoning_content') and '</think>' not in str(target.get('content') or '')):
-        target['reasoning_content'] = reasoning
-    return {**row, 'target': target}
-
-
 def _message_digest(message) -> str:
     return sha(canonical(message).encode())
 
@@ -716,7 +709,8 @@ def render_shard(job):
     # program-header rendering is the full rendering.
     from natlang_neuralese.data.text_corpus import (authenticated_context_writer_sources,
                                                     authenticated_crisp_context_messages, gold_text_rows,
-                                                    native_gold_document, tokenizer_fingerprint)
+                                                    native_gold_document, target_with_teacher_reasoning,
+                                                    tokenizer_fingerprint)
     from natlang_neuralese.train.trajectories import crisp_messages, handover_notes
     tok = _G['tok'][tok_name]
     records = []
@@ -724,7 +718,7 @@ def render_shard(job):
         for line in f:
             row = json.loads(line)
             row['_source_record_sha256'] = sha(line.rstrip(b'\n'))
-            records.append(prepare_record(row))
+            records.append(row)
     stem = Path(shard_path).stem
     result = {'shard': stem, 'tokenizer': tok_name, 'records': len(records)}
     omissions = []
@@ -753,7 +747,8 @@ def render_shard(job):
             rows[mode] = []
             continue
         r, receipt, omitted, provenance = gold_text_rows(decision_records, _G['pieces'], tokenizer=tok,
-                                                         require_independent_splits=False, prompt_rendering=mode)
+                                                         require_independent_splits=False, prompt_rendering=mode,
+                                                         target_reasoning=True)
         for row, prov in zip(r, provenance):
             row['corpus'] = corpus
             row['prompt_rendering'] = mode
@@ -826,7 +821,8 @@ def render_shard(job):
         try:
             piece_map = _G['pieces']
             messages, _, _ = authenticated_crisp_context_messages(record, piece_map, writer_sources)
-            target = crisp_messages([record['target']], piece_map, handover_notes(record))[0]
+            # Gates above bind the exact source target; the teacher reasoning is added only for rendering.
+            target = crisp_messages([target_with_teacher_reasoning(record)], piece_map, handover_notes(record))[0]
             text, ids = native_gold_document(tok, messages, target, record.get('tools') or [],
                                              prompt_rendering='full' if header_as_full else 'program-header')
         except (KeyError, TypeError, ValueError, IndexError) as exc:
@@ -1092,8 +1088,13 @@ def main(argv=None):
             pending.append(job)
     print(json.dumps({'jobs': len(jobs), 'already_done': len(results)}), flush=True)
     jobs = pending
-    with Pool(a.workers, initializer=_init, initargs=(tokenizers, pieces)) as pool:
-        for i, res in enumerate(pool.imap_unordered(render_shard, jobs)):
+    # ProcessPoolExecutor, not multiprocessing.Pool: a worker killed by the container's OOM killer makes the pool
+    # raise BrokenProcessPool (the unit fails visibly and a relaunch resumes the finished shards) instead of
+    # waiting forever for the lost shard (view-ask render, 2026-10-12).
+    with ProcessPoolExecutor(a.workers, initializer=_init, initargs=(tokenizers, pieces)) as pool:
+        futures = [pool.submit(render_shard, job) for job in jobs]
+        for i, future in enumerate(as_completed(futures)):
+            res = future.result()
             results.append(res)
             if i % 8 == 0:
                 print(json.dumps({'done': i + 1, 'of': len(jobs), 'last': res.get('shard'),
