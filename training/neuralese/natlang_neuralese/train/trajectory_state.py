@@ -132,6 +132,9 @@ def atomic_checkpoint(path, state):
     """Write ``state`` atomically; data jobs pause (io-quiet marker) while the bytes are going out."""
     with io_quiet(f'checkpoint write {Path(path).name}'):
         _atomic_checkpoint(path, state)
+    # The verified copy to the external disk runs in the background (checkpoint_offload; never fails the write).
+    from .checkpoint_offload import after_write
+    after_write(path)
 
 
 def _atomic_checkpoint(path, state):

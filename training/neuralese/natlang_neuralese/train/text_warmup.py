@@ -852,15 +852,19 @@ def retain_best_checkpoint(out, report):
     out=Path(out)
     receipt={'schema':'natlang.neuralese-best-warmup-checkpoint/1','step':report['step'],
              'qualification':report,'files':{}}
+    from .checkpoint_offload import after_write,path_lock
     for name in ('checkpoint.pt','heads.pt'):
         source=out/name;destination=out/('best-'+name);pending=destination.with_suffix('.pending-link')
-        pending.unlink(missing_ok=True)
-        os.link(source,pending);pending.replace(destination)
+        with path_lock(destination):
+            pending.unlink(missing_ok=True)
+            os.link(source,pending);pending.replace(destination)
         receipt['files'][destination.name]={'sha256':sha(destination),'bytes':destination.stat().st_size}
     pending=out/'best-checkpoint.json.pending'
     with pending.open('w') as stream:
         json.dump(receipt,stream,indent=2);stream.write('\n');stream.flush();os.fsync(stream.fileno())
     pending.replace(out/'best-checkpoint.json')
+    for name in ('best-checkpoint.pt','best-heads.pt'):
+        after_write(out/name,'archive')  # verified external copy, then a link in place (checkpoint_offload)
 
 
 def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, supervised_suffix_start=None,

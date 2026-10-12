@@ -331,6 +331,22 @@ def archive_predecessor_state(slot: Path) -> dict | None:
     import os
     if slot.is_symlink() or not slot.is_file():
         return None
+    from .checkpoint_offload import OffloadSettings, mirror_current, mirror_path, offload_one, replace_with_link
+    settings = OffloadSettings.from_env()
+    mirror = mirror_path(slot, settings)
+    current = mirror_current(slot, mirror) if mirror is not None else None
+    if current is not None:  # already a verified copy on the external disk (the offload's disaster mirror): link it
+        best = slot.with_name('best-checkpoint.pt')
+        relinked = None
+        if best.is_file() and not best.is_symlink() and best.stat().st_ino == slot.stat().st_ino:
+            relinked = offload_one(best, 'archive', settings)  # a hard link beside the mirror, then the swap
+        replace_with_link(slot, mirror, expect=current['source_identity'])
+        record = dict(current, source=str(slot), dest=str(mirror), via='checkpoint_offload mirror')
+        if relinked is not None:
+            record['also_relinked'] = str(best)
+        slot.with_name(slot.name + '.archived.json').write_text(json.dumps(record, indent=2) + '\n')
+        print(json.dumps({'event': 'predecessor_state_archived', **record}), flush=True)
+        return record
     from ..common.paths import root as path_root
     script = Path(os.environ.get('NATLANG_REPO') or path_root('repo')) / 'scripts' / 'archive_to_external.py'
     spec = importlib.util.spec_from_file_location('archive_to_external', script)
@@ -1636,8 +1652,7 @@ def main(argv=None):
                 base_drift_ce=rebased['drift_ce'], previous_best=best,
                 base_weights='continue_from' if a.continue_from is not None else 'base model')
             base_eval, best = rebased, None
-            policy.best_metric = None  # the best checkpoint is chosen on the new held set from here on
-            (a.out / 'checkpoint-policy.json').write_text(json.dumps({'best_metric': None}) + '\n')
+            policy.write_best_metric(None)  # the best checkpoint is chosen on the new held set from here on
         continuation['time'] = time.strftime('%Y-%m-%dT%H:%M:%S%z')
         sidecar = a.out / 'data-continuation.json'
         sidecar.with_suffix('.pending').write_text(json.dumps(continuation) + '\n')

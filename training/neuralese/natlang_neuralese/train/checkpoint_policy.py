@@ -40,6 +40,7 @@ from pathlib import Path
 import torch
 
 from .loop import Cadence, StopSignal
+from .checkpoint_offload import after_write, path_lock, policy_record, recover_latest, update_policy_record
 from .trajectory_state import atomic_checkpoint
 
 
@@ -47,14 +48,16 @@ def publish_best(slot: Path, best: Path, receipt: dict | None = None) -> None:
     """``best`` becomes the same file as ``slot`` (a hard link: no copy). A later atomic replacement of the slot leaves
     the linked inode, so the best survives the next rolling write. The receipt (if any) is written last."""
     pending = best.with_name(best.name + '.pending-link')
-    pending.unlink(missing_ok=True)
-    os.link(slot, pending)
-    pending.replace(best)
+    with path_lock(best):  # never interleaved with the offload's link swap of the previous best
+        pending.unlink(missing_ok=True)
+        os.link(slot, pending)
+        pending.replace(best)
     if receipt is not None:
         manifest = best.with_suffix('.json')
         temp = manifest.with_name(manifest.name + '.pending')
         temp.write_text(json.dumps(receipt, indent=2) + '\n')
         temp.replace(manifest)
+    after_write(best, 'archive')  # verified copy to the external disk, then a link in its place (checkpoint_offload)
 
 
 class CheckpointPolicy:
@@ -78,6 +81,13 @@ class CheckpointPolicy:
                 self.best_metric = json.loads(meta.read_text()).get("best_metric")
             except ValueError:
                 pass
+        # A missing or truncated NVMe slot of a mirrored run resumes from its verified external mirror.
+        self.recovered = recover_latest(self.slot)
+        update_policy_record(self.out, offload=policy_record(self.out))
+
+    def write_best_metric(self, metric: float | None) -> None:
+        self.best_metric = metric
+        update_policy_record(self.out, best_metric=metric)
 
     # Points -----------------------------------------------------------------------------------------------------
     def install_signal_handlers(self, signals=(signal.SIGTERM, signal.SIGINT, signal.SIGUSR1)):
@@ -116,8 +126,7 @@ class CheckpointPolicy:
         if better:
             publish_best(self.slot, self.best_path, {"step": state.get("step"), "metric": metric,
                                                      "file": self.slot.name})
-            self.best_metric = metric
-            (self.out / "checkpoint-policy.json").write_text(json.dumps({"best_metric": metric}) + "\n")
+            self.write_best_metric(metric)
             event = dict(event, best=True)
         return event
 

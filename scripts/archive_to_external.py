@@ -17,7 +17,6 @@ without a verified copy; symlinks are never followed. Dry run by default.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shutil
@@ -27,8 +26,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
-from natlang_neuralese.common.hashing import sha256_file_hex  # noqa: E402
 from natlang_neuralese.common.paths import resolve  # noqa: E402
+from natlang_neuralese.train.checkpoint_offload import replace_with_link, verified_copy  # noqa: E402
 
 GIB = 2**30
 HOME = Path.home()
@@ -272,55 +271,17 @@ def link_dir_writable(path: Path) -> bool:
 
 
 def archive_file(path: Path, dest: Path, manifest: Path) -> dict:
-    """Copy, verify, then replace the source with a symlink. Raises (leaving the source untouched) on any doubt."""
-    before = path.lstat()
+    """Copy, verify, then replace the source with a symlink. Raises (leaving the source untouched) on any doubt.
+    The copy and the link swap are the checkpoint offload's (train/checkpoint_offload.py): one implementation."""
     if not link_dir_writable(path):
         raise PermissionError(f'{path.parent} is not writable: cannot leave a link')
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    partial = dest.with_name(dest.name + '.archiving')
-    source_hash = hashlib.sha256()
-    with open(path, 'rb') as src, open(partial, 'wb') as out:
-        copied = 0
-        while block := src.read(8 << 20):
-            source_hash.update(block)
-            out.write(block)
-            copied += len(block)
-            if copied % (512 << 20) == 0:
-                # Keep the copy out of the page cache: on unified memory (DGX GB10) cached pages of a 47 GB state
-                # are taken from the same RAM as CUDA allocations of a run training beside the copy.
-                out.flush()
-                os.fdatasync(out.fileno())
-                for handle in (src, out):
-                    try:
-                        os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
-                    except (AttributeError, OSError):
-                        pass
-        out.flush()
-        os.fsync(out.fileno())
-    os.utime(partial, ns=(before.st_atime_ns, before.st_mtime_ns))
-    after = path.lstat()
-    if (after.st_size, after.st_mtime_ns, after.st_ino) != (before.st_size, before.st_mtime_ns, before.st_ino):
-        partial.unlink()
-        raise RuntimeError(f'{path} changed during the copy')
-    digest = source_hash.hexdigest()
-    if partial.stat().st_size != before.st_size or sha256_file_hex(partial, 8 << 20, drop_cache=True) != digest:
-        partial.unlink()
-        raise RuntimeError(f'verification failed for {path}')
-    os.replace(partial, dest)
-    link = path.with_name(path.name + '.archive-link')
+    record = verified_copy(path, dest, partial_suffix='.archiving')
     try:
-        os.symlink(dest, link)
-        os.replace(link, path)  # atomic: readers see the old file or the link, never nothing
-    except OSError:
-        # The source stays; do not leave an orphaned verified copy (and no stray link) behind.
-        for leftover in (link, dest):
-            try:
-                leftover.unlink()
-            except OSError:
-                pass
+        replace_with_link(path, dest, expect=record['source_identity'])
+    except (OSError, RuntimeError):
+        dest.unlink(missing_ok=True)  # the source stays; do not leave an orphaned verified copy behind
         raise
-    record = {'source': str(path), 'dest': str(dest), 'bytes': before.st_size, 'sha256': digest,
-              'mtime': before.st_mtime, 'time': time.time()}
+    record = {k: record[k] for k in ('source', 'dest', 'bytes', 'sha256', 'mtime', 'time')}
     with open(manifest, 'a') as handle:
         handle.write(json.dumps(record) + '\n')
     return record
