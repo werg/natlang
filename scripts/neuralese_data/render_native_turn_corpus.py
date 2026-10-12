@@ -265,6 +265,25 @@ def registered_source_pieces(sources):
     return tables, bindings
 
 
+def candidate_selection_correction_ref(packet, admission):
+    """Keep the packet and registry correction declaration in exact agreement."""
+    packet_ref = packet.get('selection_review_pin_correction')
+    if packet_ref is not None and not isinstance(packet_ref, dict):
+        raise ValueError('registry candidate-selection correction reference is malformed')
+    packet_sha = packet_ref.get('sha256') if isinstance(packet_ref, dict) else None
+    registry_sha = admission.get('selection_review_pin_correction_sha256')
+    if packet_sha != registry_sha:
+        raise ValueError('registry candidate-selection correction pin mismatch')
+    if packet_ref is None:
+        if packet_sha is not None:
+            raise ValueError('registry candidate-selection correction pin mismatch')
+        return None
+    if (not isinstance(packet_ref.get('path'), str) or not packet_ref['path'] or
+            not isinstance(packet_sha, str) or not packet_sha):
+        raise ValueError('registry candidate-selection correction reference is malformed')
+    return packet_ref
+
+
 def registered_candidate_selection_admission(corpus_id, sources):
     """Verify a registry owner's exact admission of a conversion-only candidate packet.
 
@@ -315,16 +334,18 @@ def registered_candidate_selection_admission(corpus_id, sources):
         raise ValueError('registry candidate-selection packet has an invalid stage/admission')
     candidate_ref, semantic_ref = packet.get('candidate_selection_review'), packet.get('semantic_review')
     clearance_ref = packet.get('source_quality_clearance')
+    correction_ref = candidate_selection_correction_ref(packet, admission)
     if (not candidate_ref or not semantic_ref or not clearance_ref or
             candidate_ref.get('sha256') != admission.get('candidate_selection_review_sha256') or
             semantic_ref.get('sha256') != admission.get('semantic_review_sha256') or
             packet.get('semantic_review_input_audit', {}).get('sha256') != admission.get('historical_audit_sha256') or
-            packet.get('selection_review_pin_correction', {}).get('sha256') != admission.get('selection_review_pin_correction_sha256') or
             clearance_ref.get('file_sha256') != admission.get('source_quality_clearance_sha256')):
         raise ValueError('registry candidate-selection review or clearance pin mismatch')
     registered_bytes(candidate_ref['path'])
     registered_bytes(semantic_ref['path'])
     registered_bytes(clearance_ref['path'])
+    if correction_ref:
+        registered_bytes(correction_ref['path'])
     owner_path = admission.get('owner_admission_path')
     owner_sha = admission.get('owner_admission_sha256')
     if owner_path != 'root-selected-action-admission.json' or not isinstance(owner_sha, str):

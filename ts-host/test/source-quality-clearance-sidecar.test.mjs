@@ -9,7 +9,8 @@ import { sourceQualityClearanceForProgram, sourceQualityClearanceProblems, sourc
   sourceQualityClearanceRefProblems, verifySourceQualityClearanceSidecar } from '../dist/teacher/source-quality-clearance.js';
 import { sourceConversionProblems } from '../dist/teacher/source-conversion.js';
 import { nativeDecisionTargetDigest } from '../dist/native/decision-review.js';
-import { openPacketSourceQualityClearanceResolver, resolvePacketSourceQualityClearance } from '../../scripts/lib/source-quality-clearance-sidecar.mjs';
+import { candidateSelectionCorrectionReference, openPacketSourceQualityClearanceResolver,
+  resolvePacketSourceQualityClearance } from '../../scripts/lib/source-quality-clearance-sidecar.mjs';
 
 const sha = value => hexDigest(typeof value === 'string' ? value : canonical(value));
 const sourceRow = { id: 'source-1', row_index: 0, row_sha256: '1'.repeat(64), group: 'group-1', split: 'train' };
@@ -168,4 +169,15 @@ test('exact-action clearance cannot authorize an unreviewed sibling action', asy
     'source_quality_held',
     'source_quality_clearance_scoped_reference_required',
   ]);
+});
+
+test('candidate correction reference accepts explicit absence and validates declared pins', () => {
+  assert.equal(candidateSelectionCorrectionReference({}), null);
+  assert.equal(candidateSelectionCorrectionReference({ selection_review_pin_correction: null }), null);
+  assert.deepEqual(candidateSelectionCorrectionReference({ selection_review_pin_correction: {
+    path: 'selection-review-pin-correction.json', sha256: 'a'.repeat(64),
+  } }), { path: 'selection-review-pin-correction.json', sha256: 'a'.repeat(64) });
+  for (const value of [false, {}, { path: 'x', sha256: 'bad' }])
+    assert.throws(() => candidateSelectionCorrectionReference({ selection_review_pin_correction: value }),
+      /candidate-selection-pin-correction-reference-invalid/);
 });
