@@ -1,7 +1,8 @@
 #!/bin/bash
 # usage: scripts/s7_task_round.sh RUN_DIR [SHARDS]  (env: RENDER, PORT, SNAP, DIRECT=export dir,
 #   SERVE_IMAGE + RECEIPT + CONTAINER: serve DIRECT in a container at its source-proof paths;
-#   UPDATE_FROM=<scored run dir>: one GRPO round instead of a rollout round; RESTORE_ADAPTER=<adapter.nzb>: sample with it)
+#   UPDATE_FROM=<scored run dir>: one GRPO round instead of a rollout round; RESTORE_ADAPTER=<adapter.nzb>: sample with it;
+#   CONTROL_DIR=<prepared run dir>: concurrent no-adapter arm; PROBE_ROLLOUTS=<rollouts.jsonl>: decode tok/s probe)
 # S7 smoke round (plans/neuralese/S7_RL.md §8): serve LFM2.5-350M on GPU, run the group queue through the collector in SHARDS
 # parallel queue runners, merge journals, score.
 set -u
@@ -57,6 +58,9 @@ if [ -n "${RESTORE_ADAPTER:-}" ]; then  # sample with a saved adapter policy (re
   echo "{\"x_natlang_adapters\": [{\"id\": \"$AID\", \"scale\": 1}]}" > $R/chat-config.json
   CHAT=(--chat-request-config $R/chat-config.json)
 fi
+if [ -n "${PROBE_ROLLOUTS:-}" ] && [ -n "${AID:-}" ]; then  # decode tok/s with and without the adapter, alternating
+  python3 $ROOT/scripts/s7_decode_probe.py $URL "$PROBE_ROLLOUTS" "$AID" $R/decode-probe.json > $R/decode-probe.log 2>&1
+fi
 mkdir -p $R/shards
 python3 - "$R" "$N" <<'PY'
 import json, sys
@@ -72,7 +76,29 @@ for s in $(seq 0 $((N-1))); do
     --model-concurrency 2 "${CHAT[@]}" > $R/shards/queue-$s.log 2>&1 &
   pids+=($!)
 done
+if [ -n "${CONTROL_DIR:-}" ]; then
+  # Matched control arm without the adapter (same rows and seeds), run concurrently on the same server so both arms
+  # see the same GPU contention.
+  mkdir -p $CONTROL_DIR/shards
+  python3 - "$CONTROL_DIR" "$N" <<'PY'
+import sys
+r, n = sys.argv[1], int(sys.argv[2])
+rows = [l for l in open(f"{r}/queue.jsonl") if l.strip()]
+for s in range(n):
+    open(f"{r}/shards/queue-{s}.jsonl", "w").write("".join(rows[s::n]))
+PY
+  for s in $(seq 0 $((N-1))); do
+    python3 $ROOT/scripts/run_bonsai_queue.py $CONTROL_DIR/shards/queue-$s.jsonl $CONTROL_DIR/shards/journal-$s.jsonl \
+      --runtime $ROOT/ts-host --server $URL --chat-completions-url $URL/v1/chat/completions --model-id lfm \
+      --model-concurrency 2 > $CONTROL_DIR/shards/queue-$s.log 2>&1 &
+    pids+=($!)
+  done
+fi
 wait "${pids[@]}"
 cat $R/shards/journal-*.jsonl > $R/journal.jsonl
 $PY -m natlang_neuralese.rl.task_rollouts score --run-dir $R > $R/score.log 2>&1
+if [ -n "${CONTROL_DIR:-}" ]; then
+  cat $CONTROL_DIR/shards/journal-*.jsonl > $CONTROL_DIR/journal.jsonl
+  $PY -m natlang_neuralese.rl.task_rollouts score --run-dir $CONTROL_DIR > $CONTROL_DIR/score.log 2>&1
+fi
 stop_server
