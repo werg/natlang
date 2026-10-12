@@ -37,6 +37,15 @@ def test_incomplete_twin_cannot_claim_same_document_id_or_text():
     assert omissions[('older', 'doc')]['reason'] == 'missing_tokenizer_twin'
 
 
+def test_mismatched_tokenizer_twin_identity_cannot_claim_document_id():
+    mismatched = member('mismatch', {'lfm': {'doc': identity('left')},
+                                     'mellum': {'doc': identity('right')}})
+    valid = member('valid', {tok: {'doc': identity('same')} for tok in TOKENS})
+    selected, omissions = decide(['mismatch', 'valid'], mismatched | valid)
+    assert selected == {('valid', 'doc')}
+    assert omissions[('mismatch', 'doc')]['reason'] == 'tokenizer_twin_identity_mismatch'
+
+
 def test_held_or_decontaminated_copy_does_not_claim_document_id():
     held_copy = member('held-copy', {tok: {'doc': identity('held', groups=('reserved',))} for tok in TOKENS})
     eligible_copy = member('eligible-copy', {tok: {'doc': identity('new', groups=('train',))} for tok in TOKENS})

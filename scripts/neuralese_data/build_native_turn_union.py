@@ -96,6 +96,7 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
     eligible_by_id = defaultdict(list)
     observed_by_id = defaultdict(list)
     member_duplicates = member_duplicates or {}
+    member_rank = {name: index for index, name in enumerate(order)}
     for name in order:
         per_tok = member_rows[name]
         id_sets = {tok: set(per_tok.get(tok, {})) for tok in tokenizer_names}
@@ -132,7 +133,7 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
     # ``supersedes``; every other conflict is an explicit, hash-bound omission.
     selected_by_id = {}
     for rid, candidates in eligible_by_id.items():
-        candidates.sort(key=lambda candidate: order.index(candidate['member']))
+        candidates.sort(key=lambda candidate: member_rank[candidate['member']])
         winner = candidates[0]
         winner_identity = winner['identity']
         observations = observed_by_id[rid]
@@ -212,7 +213,7 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
     # the later candidate explicitly supersedes that text owner.
     selected = set()
     seen_text = {}
-    for rid, candidate in sorted(selected_by_id.items(), key=lambda item: order.index(item[1]['member'])):
+    for rid, candidate in sorted(selected_by_id.items(), key=lambda item: member_rank[item[1]['member']]):
         key = (candidate['identity']['split'], candidate['identity']['text_sha256'])
         if key in seen_text:
             kept_member, kept_id = seen_text[key]
