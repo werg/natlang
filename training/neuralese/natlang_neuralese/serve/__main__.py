@@ -1,4 +1,4 @@
-"""`python -m natlang_neuralese.serve --port 8090 [--device cuda] [--heads checkpoint.pt] [--store-dir [DIR]]`"""
+"""`python -m natlang_neuralese.serve --port 8090 [--device cuda] [--heads checkpoint.pt | --direct-artifact DIR --direct-base-snapshot DIR] [--store-dir [DIR]]`"""
 
 from __future__ import annotations
 
@@ -24,6 +24,10 @@ def main(argv=None):
                         help="complete learned recurrent checkpoint; requires its exact runtime qualification")
     parser.add_argument("--runtime-qualification", default=None,
                         help="passed recurrence_runtime report binding the exact checkpoint")
+    parser.add_argument("--direct-artifact", default=None,
+                        help="strictly restored direct-SFT serving artifact for ordinary HF chat/tool generation")
+    parser.add_argument("--direct-base-snapshot", default=None,
+                        help="exact base snapshot pinned by --direct-artifact")
     parser.add_argument("--cutoff", type=int, default=None)
     parser.add_argument("--max-block", type=int, default=None)
     parser.add_argument("--dialect", default=None)
@@ -48,6 +52,8 @@ def main(argv=None):
     parser.add_argument("--guidance", default=None,
                         help="guidance for requests that do not set one: JSON (serve/guidance.py), e.g. '{\"repeat\": 3}' or true")
     args = parser.parse_args(argv)
+    if args.direct_base_snapshot and not args.direct_artifact:
+        parser.error('--direct-base-snapshot requires --direct-artifact')
     if args.deterministic_gradients:
         os.environ["NATLANG_NEURALESE_DETERMINISTIC"] = "1"
         os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -62,7 +68,8 @@ def main(argv=None):
     cap_cuda_memory(args.device, args.memory_gb)
     if args.recurrence_checkpoint:
         if not args.runtime_qualification or any(value is not None for value in
-                (args.base, args.lora, args.heads, args.cutoff, args.max_block, args.dialect)):
+                (args.base, args.lora, args.heads, args.cutoff, args.max_block, args.dialect,
+                 args.direct_artifact, args.direct_base_snapshot)):
             parser.error('recurrence checkpoint requires runtime qualification and no backbone/port overrides')
         from pathlib import Path
         from ..train.output_embedding_projection import sha
@@ -84,6 +91,23 @@ def main(argv=None):
             parser.error('convolution implementation differs from the qualified runtime')
         engine.recurrence_checkpoint['runtime_requalified'] = True
         engine.recurrence_checkpoint['runtime_report_sha256'] = sha(args.runtime_qualification)
+    elif args.direct_artifact:
+        if (not args.direct_base_snapshot or args.runtime_qualification or any(value is not None for value in
+                (args.base, args.lora, args.heads, args.cutoff, args.max_block, args.dialect))):
+            parser.error('--direct-artifact requires --direct-base-snapshot and cannot be combined with other model inputs')
+        from pathlib import Path
+        from ..common.hashing import sha256_file_hex
+        from ..train.direct_export import load_direct_artifact
+        restored = load_direct_artifact(args.direct_artifact, base_snapshot=args.direct_base_snapshot,
+                                        device=args.device)
+        engine = restored.engine
+        manifest_path = Path(args.direct_artifact) / "manifest.json"
+        print(json.dumps({"event": "direct_artifact_restored",
+                          "artifact": str(Path(args.direct_artifact).resolve()),
+                          "manifest_sha256": sha256_file_hex(manifest_path),
+                          "training_checkpoint": restored.manifest.get("training_checkpoint"),
+                          "status": restored.manifest.get("status"),
+                          "base_snapshot": str(Path(args.direct_base_snapshot).resolve())}), flush=True)
     else:
         if args.runtime_qualification:
             parser.error('runtime qualification requires a recurrence checkpoint')
