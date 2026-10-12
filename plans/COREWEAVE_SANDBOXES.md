@@ -233,9 +233,18 @@ s3://<bucket>/
 - Resume on CoreWeave: a new sandbox fetches the same run directory at its original absolute path, then runs the
   recipe with `--handoff` or the plain resume. The checkpoint identity is content-based, so moving a run between DGX
   and CoreWeave is a resume, not a restart (owner rule "continue training with more data": never restart).
-- Storage hygiene (AGENTS.md) applies to the bucket. Discarded runs' output prefixes and unreferenced `cas/` objects
-  are deleted when the lineage is discarded. A `bundle.py gc` (keep: objects referenced by manifests of active
-  lineages) is a follow-up.
+- **Storage hygiene (AGENTS.md) applies to the bucket: `bundle.py gc`.**
+  - Kept roots:
+    - every job's `latest.json` pointer, with its latest and previous manifests, except jobs named with
+      `--drop-job` (a discarded approach);
+    - input bundles named with `--keep-bundle` or written within `--keep-input-days` (14).
+  - Kept content: everything a kept manifest references (files and code).
+  - Deleted: a dropped job's whole `outputs/<job>/` prefix, unkept manifests, and unreferenced `cas/` objects.
+  - Nothing younger than `--min-age-hours` (24) goes, because an in-flight upload writes its objects before its
+    manifest.
+  - Without `--execute` it only prints the plan; `--out plan.json` writes the exact keys first (list, then delete).
+    With `--execute` it deletes exactly those keys.
+  - Run it at the storage-check cadence. Brief the other machine when a job is dropped.
 
 ### Which workloads move first
 

@@ -20,6 +20,7 @@ path prefix). Copies are not training admission (AGENTS.md): a bundle moves byte
   watch    DIR... --bucket B --prefix outputs/<job>/ [--interval 60] [--max-interval 1800]
   verify   manifest.json [--map OLD=NEW ...]
   ping     --bucket B [--prefix P]
+  gc       --bucket B [--drop-job JOB ...] [--keep-bundle ID ...] [--out plan.json] [--execute]
 
 Credentials: never in files or arguments. Inside a sandbox the AWS SDK reads the sandbox's injected Workload Identity
 Federation token (AWS_CONTAINER_CREDENTIALS_FULL_URI etc.); on DGX/Pop the CoreWeave API token from
@@ -443,6 +444,73 @@ def watch(directories: list[Path], bucket: str, prefix: str, s3, interval: float
     return published
 
 
+def list_all(s3, bucket: str, prefix: str = '') -> list[dict]:
+    objects, token = [], None
+    while True:
+        page = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, **({'ContinuationToken': token} if token else {}))
+        objects += page.get('Contents', [])
+        if not page.get('IsTruncated'):
+            return objects
+        token = page['NextContinuationToken']
+
+
+def _age_hours(item: dict, now: float) -> float:
+    modified = item.get('LastModified')
+    return float('inf') if modified is None else (now - modified.timestamp()) / 3600
+
+
+def gc_plan(s3, bucket: str, drop_jobs: Iterable[str] = (), keep_bundles: Iterable[str] = (),
+            keep_input_days: float = 14, min_age_hours: float = 24, now: float | None = None) -> dict[str, Any]:
+    """Which keys to delete (AGENTS.md storage hygiene, applied to the bucket). Nothing is deleted here.
+
+    Kept roots: every output pointer (outputs/<job>/<dir>/latest.json) of a job not in ``drop_jobs``, with its
+    latest and previous manifests; input bundles named in ``keep_bundles`` or written within ``keep_input_days``.
+    Everything a kept manifest references (files and code snapshot) is kept. Deleted: the whole outputs/<job>/ prefix
+    of each dropped job, manifests no root keeps, and content objects no kept manifest references. Content objects
+    and manifests younger than ``min_age_hours`` are never deleted: an upload in flight writes its objects before its
+    manifest and pointer.
+    """
+    now = time.time() if now is None else now
+    drop_jobs, keep_bundles = set(drop_jobs), set(keep_bundles)
+    outputs = list_all(s3, bucket, 'outputs/')
+    manifests = {o['Key']: o for o in list_all(s3, bucket, 'bundles/')}
+    content = list_all(s3, bucket, 'cas/')
+    delete, keep_manifests = [], set()
+    for item in outputs:
+        job = item['Key'].split('/')[1]
+        if job in drop_jobs:
+            delete.append(item)
+        elif item['Key'].endswith('/latest.json'):
+            pointer = read_json(s3, bucket, item['Key']) or {}
+            keep_manifests.update(k for k in (pointer.get('manifest_key'), pointer.get('previous')) if k)
+    for key, item in manifests.items():
+        bundle_id = key.removeprefix('bundles/').removesuffix('.json')
+        if bundle_id in keep_bundles or _age_hours(item, now) < max(keep_input_days * 24, min_age_hours):
+            keep_manifests.add(key)
+    referenced = set()
+    for key in sorted(keep_manifests):
+        manifest = read_json(s3, bucket, key)
+        if manifest is None:
+            continue
+        referenced.update(f['key'] for f in manifest['files'])
+        if manifest.get('code'):
+            referenced.add(manifest['code']['key'])
+    delete += [item for key, item in manifests.items() if key not in keep_manifests]
+    delete += [item for item in content if item['Key'] not in referenced and _age_hours(item, now) >= min_age_hours]
+    return {'schema': 'natlang.coreweave-gc-plan/1', 'bucket': bucket, 'drop_jobs': sorted(drop_jobs),
+            'kept_manifests': len(keep_manifests), 'kept_objects': len(referenced),
+            'delete': [{'key': o['Key'], 'bytes': o.get('Size', 0)} for o in delete],
+            'delete_bytes': sum(o.get('Size', 0) for o in delete)}
+
+
+def gc_execute(s3, bucket: str, plan: dict[str, Any]) -> int:
+    keys = [item['key'] for item in plan['delete']]
+    for start in range(0, len(keys), 1000):
+        s3.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': k} for k in keys[start:start + 1000]],
+                                                 'Quiet': True})
+    return len(keys)
+
+
 def _use_client_venv() -> None:
     """Re-execute under the client venv (scripts/coreweave/setup_client.sh) when this boto3 is missing or too old."""
     try:
@@ -520,6 +588,14 @@ def main(argv=None) -> int:
     p.add_argument('--bucket', required=True)
     p.add_argument('--prefix', required=True)
     p.add_argument('--status', type=int, required=True)
+    p = sub.add_parser('gc', help='list (default) or delete bucket objects no kept root references')
+    p.add_argument('--bucket', required=True)
+    p.add_argument('--drop-job', action='append', default=[], help='a discarded job: delete its outputs/<job>/')
+    p.add_argument('--keep-bundle', action='append', default=[], help='input bundle id to keep regardless of age')
+    p.add_argument('--keep-input-days', type=float, default=14)
+    p.add_argument('--min-age-hours', type=float, default=24)
+    p.add_argument('--out', type=Path, help='write the plan (the exact keys) here')
+    p.add_argument('--execute', action='store_true', help='delete exactly the planned keys')
     p = sub.add_parser('ping', help='list a few keys: checks endpoint, region, credentials and bucket policy')
     p.add_argument('--bucket', required=True)
     p.add_argument('--prefix', default='')
@@ -528,7 +604,7 @@ def main(argv=None) -> int:
     p.add_argument('--root', type=Path, default=REPO)
     p.add_argument('--map', action='append', default=[])
     args = parser.parse_args(argv)
-    if args.command in ('upload', 'fetch', 'publish', 'ping', 'watch', 'record-exit') and not getattr(args, 'dry_run', False):
+    if args.command in ('upload', 'fetch', 'publish', 'ping', 'watch', 'record-exit', 'gc') and not getattr(args, 'dry_run', False):
         _use_client_venv()
 
     if args.command == 'plan':
@@ -579,6 +655,15 @@ def main(argv=None) -> int:
     if args.command == 'publish':
         publish_directory(args.directory, args.bucket, args.prefix, None if args.dry_run else s3_client(),
                           note=args.note, dry_run=args.dry_run)
+        return 0
+    if args.command == 'gc':
+        s3 = s3_client()
+        plan = gc_plan(s3, args.bucket, args.drop_job, args.keep_bundle, args.keep_input_days, args.min_age_hours)
+        if args.out:
+            args.out.write_text(json.dumps(plan, indent=1) + '\n')
+        if args.execute:
+            plan['deleted'] = gc_execute(s3, args.bucket, plan)
+        print(json.dumps({k: v for k, v in plan.items() if k != 'delete'} | {'delete_count': len(plan['delete'])}))
         return 0
     if args.command == 'record-exit':
         record = {'job': os.environ.get('NATLANG_CW_JOB'), 'sandbox': os.environ.get('CW_SANDBOX_ID'),

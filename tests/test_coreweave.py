@@ -296,3 +296,33 @@ def test_resume_sets_env_and_needs_outputs():
         job.validate(base_job(resume=True, bucket='natlang-cw'))
     env = job.bootstrap_env(job.validate(base_job(resume=True, bucket='natlang-cw', outputs=['runs/x'])))
     assert env['NATLANG_CW_RESUME'] == '1'
+
+
+def test_gc_keeps_live_outputs_and_recent_inputs_and_drops_the_rest(tmp_path):
+    import datetime
+    s3 = FakeS3()
+    old = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+    now = datetime.datetime(2026, 10, 12, tzinfo=datetime.timezone.utc).timestamp()
+    for name, payload in (('live', b'live-state'), ('dead', b'dead-state')):
+        out = tmp_path / name / 'stage'
+        out.mkdir(parents=True)
+        (out / 'checkpoint.pt').write_bytes(payload)
+        bundle.publish_directory(out, 'b', f'outputs/{name}/', s3, log=lambda _: None)
+    inputs = bundle.build_manifest(make_files(tmp_path / 'in'))
+    s3.objects[bundle.manifest_key(inputs)] = json.dumps(inputs).encode()
+    for key in s3.objects:
+        s3.modified[key] = old
+    s3.objects['cas/sha256/ff/' + 'f' * 64] = b'in flight'
+    s3.modified['cas/sha256/ff/' + 'f' * 64] = datetime.datetime(2026, 10, 11, 23, tzinfo=datetime.timezone.utc)
+    plan = bundle.gc_plan(s3, 'b', drop_jobs=['dead'], now=now)
+    deleted = {item['key'] for item in plan['delete']}
+    dead_key = bundle.object_key(hashlib.sha256(b'dead-state').hexdigest())
+    live_key = bundle.object_key(hashlib.sha256(b'live-state').hexdigest())
+    assert dead_key in deleted and live_key not in deleted
+    assert 'outputs/dead/stage/latest.json' in deleted and 'outputs/live/stage/latest.json' not in deleted
+    assert bundle.manifest_key(inputs) in deleted  # old input bundle, not kept by id
+    assert 'cas/sha256/ff/' + 'f' * 64 not in deleted  # younger than min_age_hours
+    kept = bundle.gc_plan(s3, 'b', drop_jobs=['dead'], keep_bundles=[inputs['id']], now=now)
+    assert bundle.manifest_key(inputs) not in {item['key'] for item in kept['delete']}
+    assert bundle.gc_execute(s3, 'b', plan) == len(plan['delete'])
+    assert live_key in s3.objects and dead_key not in s3.objects
