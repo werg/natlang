@@ -1,0 +1,40 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-direct-v3",
+ "extends": "neuralese-direct-v2",
+ "description": "Unified shared base for both lines (line parity, coordinator decision 2026-10-12 following Pop's main LFM line, decision pop-2356): neuralese-direct-v2 on the admitted target union natlang-target-union-20261011-r2 (training/corpus-manifests/natlang-target-union-20261011-r2.json) with three phases of one lineage: direct_warmup, 0.5 epoch of the full-prompt rendering; direct_sft, 2 epochs of the program-header rendering (~133k train documents), continuing from the warm-up; direct_trajectory, 1 epoch of the whole-trajectory rendering (~76k documents), continuing from direct_sft. Each later phase continues from its predecessor phase's full state with the lineage's identity check and the base drift reference (recipe.py DIRECT_PHASE_CONTINUATION). The base binds the LFM2.5 renders; a line with another tokenizer binds the same union's twin renders (same document ids, splits and source groups). Everything else is neuralese-direct-v2.",
+ "overrides": {
+  "input_bindings": {
+   "direct_text": {
+    "path": "runs/natlang-target-union-20261011-r2/full/lfm25/text-data.jsonl",
+    "sha256": "c240dfad4bf326c42d85fd3448fd9fc3615f8defe8dd3e6ed3fe9cbd7ca7bd2a"
+   },
+   "direct_text_program_header": {
+    "path": "runs/natlang-target-union-20261011-r2/program-header/lfm25/text-data.jsonl",
+    "sha256": "9ab8e89b447a7ba9397f881fe13cdc20197c6ba4f32a9973a4d5b730d698b883"
+   },
+   "direct_text_trajectory": {
+    "path": "runs/natlang-target-union-20261011-r2/whole-trajectory/lfm25/text-data.jsonl",
+    "sha256": "2b6cf2e17e146715a10e7fbc954eab72616f3817694229b88be0ad81952bdec5"
+   }
+  },
+  "stages_added": [
+   {
+    "after": "direct_sft",
+    "stage": {
+     "id": "direct_trajectory",
+     "kind": "neuralese_direct",
+     "requires": [
+      "direct_sft"
+     ],
+     "inputs": {
+      "text_data": "direct_text_trajectory"
+     },
+     "parameters": {
+      "epochs": 1.0
+     }
+    }
+   }
+  ]
+ }
+}

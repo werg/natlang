@@ -1,0 +1,134 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-direct-mellum-v4",
+ "extends": "neuralese-direct-v3",
+ "description": "neuralese-direct-v3 (union r2, three phases: full-prompt warm-up 0.5 epoch, program-header direct_sft 2 epochs, whole-trajectory direct_trajectory 1 epoch) on BF16 Mellum2.1 with raw-token-v1 heads. Every difference from the base is declared in training/neuralese/line-parity.json. Backbone-inherent: the data binds the union's Mellum2.1 twin renders (full/, program-header/, whole-trajectory/mellum21; same document ids, splits and source groups as the base's lfm25 renders); grouped MoE kernel; maple output convention and Mellum's measured base gate_pass; MuonSR latent_lr 1e-5; Mellum's quantization component (as neuralese-direct-mellum-v3), its curriculum progress continued over the new phase: direct_sft [0, 0.35], direct_trajectory [0.35, 0.5]. Fit-only: window_execution packed. Supersedes neuralese-direct-mellum-v3 (4962-document data, two phases). History: recipes/HISTORY.md.",
+ "overrides": {
+  "input_bindings": {
+   "direct_text": {
+    "path": "runs/natlang-target-union-20261011-r2/full/mellum21/text-data.jsonl",
+    "sha256": "aaa838741ad07e075b89d3b6b39ed22c1659628bb25252d8bc79a0800a57b55d"
+   },
+   "direct_text_program_header": {
+    "path": "runs/natlang-target-union-20261011-r2/program-header/mellum21/text-data.jsonl",
+    "sha256": "2699844e3a76e329ca8a454b38c32bf2695eb9c3b7e4d071730a6e24fefb095f"
+   },
+   "direct_text_trajectory": {
+    "path": "runs/natlang-target-union-20261011-r2/whole-trajectory/mellum21/text-data.jsonl",
+    "sha256": "f92e2f330fc3d8a394b148c5c625e158bb7f7f4ff2c85dd0f9eea514aea81ca4"
+   }
+  },
+  "stage_parameter_defaults": {
+   "neuralese_direct": {
+    "moe_kernel": "grouped",
+    "monitor": {
+     "gate": {
+      "output_convention": "maple",
+      "reference": {
+       "gate_pass": 0.5833333333333334,
+       "source": "BF16 Mellum2.1 (raw-token-v1 heads) on the 48 shared probes, 28/48 with the maple tool-call convention (runs/neuralese-direct-line-parity-20261011/mellum-base-gate-48.json texts, rescored mellum-base-gate-48-maple.json; plain math 10/12, tool 12/12, natlang test turn 5/12, open answer 1/12: answers run past the 256-token budget)"
+      }
+     }
+    },
+    "latent_lr": 1e-05,
+    "window_execution": "packed"
+   }
+  },
+  "quantization": {
+   "schema": "natlang.neuralese-quantization/1",
+   "description": "raw-recurrence-mellum-v11's precision points woven into the direct stage (owner rule: QAT in every stage), trained on the same SFT targets with no BF16 KL teacher (flagged, NEURALESE_DIRECT_V1.md). No preserve stream and no own gate: drift reference and behaviour gate are the shared monitor (in-run capture on the 48 probes), as on the LFM line.",
+   "loss": {
+    "mode": "sample",
+    "bf16_weight": 1.0,
+    "seed": 0
+   },
+   "stage_progress": {
+    "direct_sft": [
+     0.0,
+     0.35
+    ],
+    "direct_trajectory": [
+     0.35,
+     0.5
+    ]
+   },
+   "points": [
+    {
+     "name": "q4",
+     "gate": "required",
+     "weight": 0.5,
+     "ramp": {
+      "start": 0.15,
+      "end": 0.3
+     },
+     "modules": {
+      "experts": {
+       "format": "int4",
+       "group": 32
+      },
+      "mlp": {
+       "format": "int4",
+       "group": 32
+      },
+      "attention": {
+       "format": "int4",
+       "group": 32
+      },
+      "conv": {
+       "format": "int4",
+       "group": 32
+      }
+     }
+    },
+    {
+     "name": "ternary-experts",
+     "gate": "required",
+     "weight": 1.0,
+     "ramp": {
+      "start": 0.3,
+      "end": 0.7
+     },
+     "modules": {
+      "experts": {
+       "format": "ternary"
+      },
+      "mlp": {
+       "format": "ternary"
+      },
+      "attention": {
+       "format": "int4",
+       "group": 32
+      },
+      "conv": {
+       "format": "int4",
+       "group": 32
+      }
+     }
+    },
+    {
+     "name": "ternary",
+     "gate": "report",
+     "weight": 0.5,
+     "ramp": {
+      "start": 0.55,
+      "end": 0.95
+     },
+     "modules": {
+      "experts": {
+       "format": "ternary"
+      },
+      "mlp": {
+       "format": "ternary"
+      },
+      "attention": {
+       "format": "ternary"
+      },
+      "conv": {
+       "format": "ternary"
+      }
+     }
+    }
+   ]
+  }
+ }
+}

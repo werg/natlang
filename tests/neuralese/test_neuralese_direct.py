@@ -384,3 +384,21 @@ def test_a_continued_direct_phase_binds_both_sidecars_and_the_plan_check_require
     (tmp_path / 'declared.json').write_text(json.dumps(declared))
     with pytest.raises(ValueError, match='continuation from its predecessor'):
         load_recipe(tmp_path / 'declared.json')
+
+
+def test_union_r2_three_phase_recipes_and_the_mellum_resume_from_the_v3_warm_up():
+    """neuralese-direct-v3 (2026-10-12): union r2, warm-up -> program header -> whole trajectory; Mellum's resume
+    replaces its warm-up with the finished v3 warm-up as direct_sft's declared continuation inputs."""
+    from natlang_neuralese.train.recipe import direct_phase_predecessor, load_recipe, stage_quantization
+    for name in ('neuralese-direct-v3.json', 'neuralese-direct-mellum-v4.json', 'neuralese-direct-lfm-v3.json'):
+        recipe = load_recipe(RECIPES / name)
+        assert [s['id'] for s in recipe['stages']] == ['direct_warmup', 'direct_sft', 'direct_trajectory']
+        assert direct_phase_predecessor(recipe, recipe['stages'][2]) == 'direct_sft'
+        assert all('natlang-target-union-20261011-r2' in b['path'] for b in recipe['input_bindings'].values())
+    resume = load_recipe(RECIPES / 'neuralese-direct-mellum-v4-from-v3-warmup.json')
+    first, second = resume['stages']
+    assert first['id'] == 'direct_sft' and first['requires'] == [] and direct_phase_predecessor(resume, first) is None
+    assert {'continue_from', 'continue_identity', 'continue_monitor_reference'} <= set(first['inputs'])
+    assert direct_phase_predecessor(resume, second) == 'direct_sft'
+    component = stage_quantization(resume, second, {'epochs': 1.0}, [])
+    assert component['stage']['progress'] == [0.35, 0.5]

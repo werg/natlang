@@ -3,10 +3,10 @@
  "description": "Line parity of the Neuralese stages (owner 2026-10-11: the Mellum line on DGX and the LFM line on Pop use the same recipe, data and code; settings may differ only to fit, or where the backbone requires it, each declared with its reason). natlang_neuralese.train.line_parity checks it in scripts/check-main.sh --quick; plans/neuralese/LINE_PARITY.md holds the audit. stages.<stage>.lines.<line>.recipe names the recipe of the line's NEXT launch; a direct-stage recipe that declares \"parity\": {\"line\", \"stage\"} is checked the same way, and the direct-stage runner refuses a fresh neuralese_direct or direct-artifact recurrence launch without a parity declaration.",
  "stages": {
   "direct": {
-   "base": {"recipe": "neuralese-direct-v2"},
+   "base": {"recipe": "neuralese-direct-v3"},
    "lines": {
-    "mellum": {"recipe": "neuralese-direct-mellum-v3"},
-    "lfm": {"recipe": "neuralese-direct-lfm-v2"}
+    "mellum": {"recipe": "neuralese-direct-mellum-v4"},
+    "lfm": {"recipe": "neuralese-direct-lfm-v3"}
    }
   },
   "e2e": {
@@ -57,6 +57,12 @@
    }
   }
  },
+ "historical_differences": [
+  {"stage": "direct", "lines": ["mellum"], "phase": "direct_warmup", "kind": "historical-one-off",
+   "recipe": "neuralese-direct-mellum-v4-from-v3-warmup",
+   "difference": "Mellum's completed warm-up (runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup, 333 updates, 0.5 epoch) used the 4962 full-prompt set (3,258 train documents, Mellum twin) while LFM's warm-up uses the union r2 full rendering (66k train documents)",
+   "reason": "coordinator decision 2026-10-12 (agreed by Pop, pop-86dc): the finished warm-up is not redone; Mellum continues into neuralese-direct-mellum-v4's direct_sft and direct_trajectory on union r2. Not backbone-inherent and not a precedent: the parity recipe neuralese-direct-mellum-v4 keeps the r2 warm-up for the next fresh launch."}
+ ],
  "lineage_keys": {
   "direct": ["inputs.heads"],
   "e2e": ["inputs.heads", "inputs.direct_artifact_manifest", "inputs.continue_from", "inputs.direct_parent_proof",
@@ -65,7 +71,7 @@
  },
  "allowed_differences": [
   {"stage": "direct", "lines": ["mellum"], "key": "inputs.text_data", "kind": "backbone-inherent", "check": "tokenizer_twin",
-   "reason": "the same 4962 documents rendered with Mellum's tokenizer and chat template (prepared text carries token ids)"},
+   "reason": "the same documents (union r2 renders) rendered with Mellum's tokenizer and chat template (prepared text carries token ids)"},
   {"stage": "direct", "lines": ["mellum"], "key": "parameters.moe_kernel", "kind": "backbone-inherent",
    "reason": "Mellum's dense trainable MoE experts run as two grouped GEMMs; LFM2.5-350M has no experts"},
   {"stage": "direct", "lines": ["mellum"], "key": "quantization", "kind": "backbone-inherent",

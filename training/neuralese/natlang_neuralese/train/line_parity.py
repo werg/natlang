@@ -117,6 +117,13 @@ def _twin_registered(base_sha, line_sha, repo):
         twin = corpus.get('tokenizer_twin_of') if isinstance(corpus, dict) else None
         if twin and twin.get('sha256') == base_sha and twin.get('twin_sha256') == line_sha:
             return True
+        # A union's renders (build_native_turn_union.py): within one rendering, each tokenizer's file is a twin of
+        # the others (aligned by document id, same splits and source groups).
+        renders = corpus.get('renders') if isinstance(corpus, dict) else None
+        for rendering in (renders.values() if isinstance(renders, dict) else ()):
+            hashes = {item.get('sha256') for item in rendering.values() if isinstance(item, dict)}
+            if base_sha in hashes and line_sha in hashes:
+                return True
     return False
 
 
