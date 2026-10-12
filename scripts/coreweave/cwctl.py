@@ -43,7 +43,9 @@ VENV = Path(os.environ.get('NATLANG_CW_VENV', Path.home() / '.local/share/natlan
 STATE = Path(os.environ.get('NATLANG_CW_STATE', Path.home() / '.local/state/natlang/coreweave'))
 ENV_FILE = Path(os.environ.get('NATLANG_CW_ENV_FILE', Path.home() / '.config/natlang/coreweave.env'))
 KEY_NAMES = ('CWSANDBOX_API_KEY', 'COREWEAVE_API_TOKEN', 'WANDB_API_KEY')
-PASSTHROUGH = ('ls', 'get', 'exec', 'logs', 'stop', 'files', 'snapshots', 'delete', 'sh')
+# exec, logs and files are native (gateway data plane): the cwsandbox CLI uses the auto data plane, whose direct
+# connection fails under W&B auth with "project not found".
+PASSTHROUGH = ('ls', 'get', 'stop', 'snapshots', 'delete')
 SMOKE_CHECK = ("import torch; print(torch.__version__, torch.version.cuda, torch.cuda.get_arch_list()); "
                "print(torch.cuda.get_device_name(0), torch.cuda.get_device_capability(0), "
                "torch.cuda.mem_get_info()); x = torch.ones(1 << 20, device='cuda'); print((x + x).sum().item())")
@@ -398,7 +400,7 @@ def collect(sandbox_id: str, scratch: str = '/work', mapping: list[tuple[str, st
     the manifest the sandbox wrote, place it (``mapping`` remaps path prefixes), then release the sandbox."""
     import bundle
     from cwsandbox import Sandbox
-    sandbox = Sandbox.from_id(sandbox_id, auth=sdk_auth()).result()
+    sandbox = Sandbox.from_id(sandbox_id, auth=sdk_auth(), data_plane_mode='gateway').result()
     base = f'{scratch}/.coreweave'
     deadline = time.time() + timeout
     while sandbox.exec(['test', '-f', f'{base}/outputs-ready']).result().returncode != 0:
@@ -466,7 +468,7 @@ def read_sandbox(sandbox_id: str, patience: float = 900):
     deadline = time.time() + patience
     while True:
         try:
-            return Sandbox.from_id(sandbox_id, auth=sdk_auth()).result()
+            return Sandbox.from_id(sandbox_id, auth=sdk_auth(), data_plane_mode='gateway').result()
         except Exception as error:
             transient = type(error).__name__ in ('SandboxUnavailableError', 'SandboxRequestTimeoutError')
             if not transient or time.time() > deadline:
@@ -573,6 +575,14 @@ def main(argv=None) -> int:
     p.add_argument('sandbox_id')
     p.add_argument('--scratch', default='/work')
     p.add_argument('--map', action='append', default=[], help='OLD=NEW path prefix for where outputs land')
+    p = sub.add_parser('logs', help='main-process logs through the gateway data plane')
+    p.add_argument('sandbox_id')
+    p.add_argument('--follow', '-f', action='store_true')
+    p.add_argument('--tail', type=int)
+    p = sub.add_parser('exec', help='run a command in a sandbox (gateway data plane): exec ID -- CMD...')
+    p.add_argument('sandbox_id')
+    p.add_argument('cmd', nargs=argparse.REMAINDER)
+    p.add_argument('--cwd')
     sub.add_parser('records')
     sub.add_parser('status-line')
     args = parser.parse_args(argv)
@@ -582,6 +592,16 @@ def main(argv=None) -> int:
         print(json.dumps(launch(load_job(args.job, args.bundle, args.bucket, args.resume), True, False, args.gpu_hour_price), indent=1))
     elif args.command == 'launch':
         print(json.dumps(launch(load_job(args.job, args.bundle, args.bucket, args.resume), args.dry_run, args.wait, args.gpu_hour_price, args.bundle_file), indent=1))
+    elif args.command == 'logs':
+        sandbox = read_sandbox(args.sandbox_id)
+        for line in sandbox.stream_logs(follow=args.follow, tail_lines=args.tail):
+            print(line, end='', flush=True)
+    elif args.command == 'exec':
+        cmd = args.cmd[1:] if args.cmd[:1] == ['--'] else args.cmd
+        result = read_sandbox(args.sandbox_id).exec(cmd, cwd=args.cwd).result()
+        sys.stdout.write(result.stdout)
+        sys.stderr.write(result.stderr)
+        return result.returncode
     elif args.command == 'collect':
         mapping = [tuple(m.split('=', 1)) for m in args.map]
         print(json.dumps(collect(args.sandbox_id, args.scratch, mapping), indent=1))

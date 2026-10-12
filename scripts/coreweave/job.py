@@ -178,6 +178,9 @@ def sandbox_request(job: dict[str, Any], bootstrap: str) -> dict[str, Any]:
         'mounted_files': {BOOTSTRAP_PATH: bootstrap},
         'volumes': [{'name': 'work', 'mount_path': job['scratch']['path'], 'size': job['scratch']['size']}],
         'environment_variables': bootstrap_env(job),
+        # Measured 2026-10-12 under W&B auth: the default (auto, which prefers a direct mTLS data plane) fails every
+        # exec/log/file call with "Connect to sandbox data plane failed: project not found"; the gateway works.
+        'data_plane_mode': job.get('data_plane_mode', 'gateway'),
     }
     if job.get('bucket'):
         request['object_storage_access'] = {'buckets': [job['bucket']], 'permission': 'read_write'}
