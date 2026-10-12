@@ -111,7 +111,9 @@ def test_only_named_regenerable_caches_are_cleared(tmp_path):
     assert not (tmp_path / 'pip').exists() and (tmp_path / 'huggingface' / 'hub').exists()
 
 
-def test_a_file_in_a_read_only_directory_is_kept_and_does_not_fail_the_run(tmp_path, capsys):
+def test_a_file_in_a_read_only_directory_is_kept_and_does_not_fail_the_run(tmp_path, capsys, monkeypatch):
+    # Its own apply lock: the machine's hourly archiver holding the real one made this run print 'skipped'.
+    monkeypatch.setattr(archive, 'HOME', tmp_path)
     root = tmp_path / 'nvme'
     locked = big(root / 'closeout' / 'run' / 'ckpt.pt', size=2048)
     free = big(root / 'free' / 'ckpt.pt', size=2048)
