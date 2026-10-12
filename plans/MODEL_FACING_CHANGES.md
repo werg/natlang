@@ -7,6 +7,8 @@ and it is measured in the next teacher window (see the teacher-window plan in me
 `runs/research-teacher-20261006/teacher-window.json`). `scripts/check_model_facing.py` reports diffs to model-facing
 files that have no entry here.
 
+The unmeasured rows are scheduled in batches for the weekly NatLang-pillar teacher window: `plans/NATLANG_PILLAR.md`.
+
 Columns:
 - **Status:** `unmeasured`, `measured: keep`, `measured: revert` or `measured: revise`.
 - **Measurement:** the variants compared and where the results are.

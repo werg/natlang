@@ -1,332 +1,65 @@
-# Pop current work
+# POP current state
 
-Last reviewed: 2026-10-09, shared AR supervision correction. This page is a navigation aid; inspect live processes and receipts before acting. Historical evidence and course changes remain in [HANDOVER.md](HANDOVER.md) and [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
+Generated 2026-10-12 15:59 UTC by `python3 scripts/current_state.py --machine pop`. Do not edit by hand: regenerate.
+This page holds the present only. History is in git (`git log -p -- plans/POP_CURRENT.md`), in the
+decision records and in the coordination log. Live processes and the status pages are the authority.
 
-## Ownership and coordination
+## Read first
 
-- Pop owns execution here; DGX owns its execution. Canonical checkout on both: `/home/werg/natlang`. Do not launch from retired mirrors or change DGX jobs.
-- Run `python3 scripts/coord.py inbox --ack` at session start, before resource changes and each monitoring cycle. Use Git for code and the corpus registry/manifests plus `sync_training_corpora.py` for selected data artifacts.
-- The user wants autonomous work and monitoring, including waiting/sleeping when jobs are in progress. Keep five authorized Luna slots supplied where appropriate. Do not report planned workers as actual provider activity.
-- Current shared-work ownership: DGX is leading the shared objective/schedule and recipe-launcher consolidation; Pop owns the C++/WASM read-port transport for the reader adapter. Coordinate before editing shared renderer/window helpers. The current Pop AR run is frozen and does not include later shared-runtime changes.
+- `AGENTS.md`: owner rules (start here)
+- `plans/REVIEW_20261012.md`: strategic review and the accepted direction
+- `plans/neuralese/NEURALESE_DIRECT_V1.md`: the active training design
+- `plans/neuralese/LINE_PARITY.md`: Mellum/LFM line parity
+- `plans/neuralese/DECISIONS.md`: recorded decisions
+- `plans/MACHINE_COORDINATION.md`: coordination protocol, data sync, storage
+- `plans/OWNER_REVIEW.md`: owner review queue
+- `plans/MODEL_FACING_CHANGES.md`: model-facing changes and measurement debt
 
-## GPU: full-depth autoregressive foundation continuation
+## POP status page (this machine)
 
-Current state: corrected continuation `luna-ar-feedback-prefix-4962-best23936-v1`
-was gracefully paused at serialized step24704 for two serial GPU own-history
-diagnostics, then resumed (first observed update24705). All optimizer/schedule
-state is retained. Resume uses the exact frozen child argv and existing stage
-checkpoint, not a fresh outer recipe. The first resume attempt failed before
-training because its `/tmp` working directory could not resolve inherited
-checkpoint-relative artifacts; corrected launch uses `/home/werg/natlang`.
-Receipts/logs: `runs/luna-self-feedback-best23936-20261009-v1/`.
-It continues from immutable mapped best23936, not regressed final24960. Declared
-recipe `luna-ar-feedback-prefix-4962-best23936-20261009-v1.json` has SHA
-`70e416d7558727d0eced37cd465827184da5cc64198bd5c26ec25ffc0317a99c`;
-its frozen122-file common package is from `9a16218c`. Startup confirms all four
-optimizer groups and31 schedule observations restored. Cap is4096 additional
-updates (absolute28032), with128-update evaluation/checkpoint cadence. The
-shared causal-prefix supervision and checkpoint tests passed79 focused CPU tests
-at launch. Current main passes146 focused tests covering prefix metrics, shared
-window preparation, self-feedback evaluation, optimizer restoration and recipes;
-these later changes are not hot-patched into the frozen run.
-Input is the complete4962-row root-adopted text union (3258train/1704test), SHA
-`30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576`,
-verified on both machines. It adds82 train documents to the previous4880 input;
-held rows are unchanged. No new sample admission from composing these bytes.
-An abandoned closed repair's empty checkpoint-space reserve was released after
-a privileged host-process check found no FD or job references; receipt is
-`.coordination/closed-anchor-reserve-release-v1.json` (1,435,903,552 bytes).
-Recheck available storage and atomic-save reservation before launch.
+Updated 2026-10-12T15:33:36.118144Z by pop-luna-salvage-static.
 
-Closed final24960's full checkpoint was canonicalized into its regular corpus
-path, then remotely verified and offloaded through the shared tool. Its original
-external path is now a historical alias and requires restoration before use.
-Restore the exact state with:
-`python3 scripts/sync_training_corpora.py restore --machine pop --host dgx --remote-repo /home/werg/natlang --id neuralese-ar-final24960-diagnostic-artifacts-20261009-v2 --file training-run/autoregressive_text_fixup/checkpoint.pt`.
-Receipt: `.coordination/artifact-evictions/neuralese-ar-final24960-diagnostic-artifacts-20261009-v2--5b3d63800c01e324.json`.
-The current run's source best23936 remains local. Root disk floor for this
-external-output job is4GiB; external preflight floor5.8GB covers estimated
-5.13GB checkpoint peak. The old8GiB root floor reserved training space on the
-wrong filesystem and is not the launch requirement.
+Pop Luna static salvage: owner standing cap 3 actual workers. V14 lane01 stopped (57 finishes, plus one start-only unfinished case preserved); lane02 stopped at verified boundary after 58 finishes. Lanes03–05 remain live. No successor launched. See coordination decision 2026-10-12T15:33:29.135330Z-pop-fbad.
 
-Course correction: sharing a repository did not prevent divergent recipes and
-stale sketch assumptions. Pop incorrectly resumed sketch training after the
-mapped-input decision. The sole active text implementation is now the shared
-mapped-input trainer followed by its full-depth AR fixup. The shared
-`causal_gold_prefix_mask` supervises the first differing decision and excludes
-later gold targets from the generated history; gold control and held diagnostics
-retain complete spans. This is a common objective change, not a Pop experiment
-fork. Shared named optimizer restoration landed through `e8c7523c`, is pulled on
-Pop, and removes silent fresh-state fallback from both text and trajectory
-trainers. The active frozen run already restored its unchanged four groups; do
-not patch its implementation in place. DGX owns the remaining objective/schedule
-and outer-loop consolidation (architecture C1–C3).
+## DGX status page
 
-The owner-approved direction for the next qualification evaluates the channel
-on its own generated history, not the unrelated gold tail after divergence.
-Shared `eval/self_feedback.py` compares ordinary embeddings and actual projected
-payloads on the same continuation, and scores projected/crisp continuations with
-the ordinary model on their respective histories. Its proposed per-stratum gates
-(.99 argmax agreement, .02 KL nats/token, .05 own-output CE gap) were declared
-before measurements. Code and146 tests are landed. The best23936 GPU diagnostic completed: short
-spans pass the proposed gate, medium/long and first/last strata fail. A matched
-immutable intermediate24448 comparison also completed: short passes, other
-strata fail; first/medium strata worsen versus23936, later quality improves
-slightly. No uniform channel qualification. Reports live beneath
-`/srv/storage/natlang-artifacts/luna-self-feedback-best23936-20261009-v1/result-parent-v3/`;
-launch declaration v4 retains that v3 output parent. These are diagnostics, not
-certificates; canonical qualification integration remains open.
-Do not duplicate this evaluator for another backbone. Coordinate integration
-with the DGX-owned C1–C3 work through request
-`2026-10-09T19:31:19.113313Z-pop-85c7`.
+Updated 2026-10-12T14:39:14.872130Z by dgx-claude-d8484b5f.
 
-Pop has about16GB physical RAM. During the active trainer, approximately4.3GB
-was available and2.6GB GPU memory free at the October9 check. Prepare an exact
-checkpoint/restart plan before scheduling a second model evaluator; free GPU
-memory alone does not establish sufficient host memory.
+Mellum v4 direct_sft continues on union r3 (data continuation from update 661; budget 31,281 updates; unit v4-161355 on 1d74eabf incl. speed rounds 1-5). First r3 updates run at about 16 s/update, so the phase ETA is about 5.6 days, then direct_trajectory on r3. Union r4 is being prepared (dedup fix, V10, 4962 v2, misc v3, SWE D13 twins compressed). Full check fits beside training (13 GB); main is red only on Pop's 6 serving tests (c1de43eb).
 
-V30 finished4 exact task successes and1 oracle mismatch (RRD-B omitted A).
-The source-repaired FLD/RRD variants and three factual counterfactuals are held
-observations, not automatically admitted training data. V30 closeout v2 pins
-313 logical turns,631 sender starts,5 observed retries and71,483 completion tokens.
-The next five V22 counterfactuals preserve four inherited train groups and claim
-no independent-world credit. Root reviewed their explicit facts and targets and
-authorized generation-only dispatch; inspect its launch receipt for actual
-worker activity. Source SHA is
-`2de1a4a78b22d5136551bc72b03924e494c4d9f845b644c66bbc379667fabc35`.
+## Running on this machine
 
-The V29 FLD/RRD rejections exposed missing source predicates (verified alert /
-approved schedule), not established model mistakes. Hold those attempts and any
-negative pairs until source review. A read-only audit of the admitted union found
-no FLD-510 rows; its seven native and seven text RRD rows use the earlier V14
-source, whose positive satisfies all predicates and whose approved-schedule
-negative has a legal hold. No active input change or corpus exclusion is indicated.
+| Unit | Priority | Budget / used GB | Recipe |
+| --- | --- | --- | --- |
+| `natlang-gemini31lite-pubmedqa43` |  |  |  |
+| `natlang-maple-dgx-tunnel-20261005` |  |  |  |
+| `natlang-pop-lfm-export-step9000` | low | 2.5 / 0.3 |  |
+| `natlang-pop-muon-main-v2-resume-fp8-v4` |  |  | neuralese-direct-lfm-muon-main-20261012-v2.resume-after-fp8-v7.json |
 
-The superseded sketch-consumer repair is closed and is artifact evidence only;
-its best step3328 is not a qualified source. The preceding Pop job was the mapped-input continuation
-`luna-map-refresh-step22272-v5` (container `98c449e7ef60`), launched from the
-shared runtime at commit `d915133f695ced59fde70d71100735cc9ccd2ca7` using the
-pinned image `sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de`.
-Its declared recipe is
-`training/neuralese/recipes/luna-map-text-4880-from-qualified-22272-20261009-v5.json`
-(SHA `2043c442d5f740c183031203dc9a218424ee9ab6bc131b3f2843a1376cb66a84`).
+## Declared lineages (training/neuralese/line-parity.json: next launch per line)
 
-The authoritative same-map source is the full checkpoint at step22272, SHA
-`9d56437d775bf88bb4c156e129a73f43b60f914fb05bcb28fcf590340000aa8f`. Restore
-logs confirm all four optimizer groups and the foundation schedule/RNG restored;
-no fresh-optimizer fallback occurred. The source was previously qualified only
-for its earlier data and gates; this changed corpus has a fresh baseline and
-must earn new gates. Input is the adopted4880-row text file, 3176 train / 1704
-heldout, SHA `b10da15de2510b55635b5aaa85301204e559669ac239968bc94e4393d08e0572`;
-the admitted87 target-bound documents are already in it and must not be appended
-again. Native records/pieces are source bindings, not extra text rows.
+| Stage | Line | Recipe | Extends | Description |
+| --- | --- | --- | --- | --- |
+| direct | lfm | `neuralese-direct-lfm-v3` | neuralese-direct-v3 → neuralese-direct-v2 → neuralese-direct-v1 | neuralese-direct-v3 (union r2, three phases: full-prompt warm-up 0.5 epoch, program-header direct_sft 1 epoch, whole-trajectory direct_trajectory 1 epoch) on base LFM2.5-350M (LiquidAI/LFM2.5-350M, revision 9e6c6ccf; he… |
+| direct | mellum | `neuralese-direct-mellum-v4` | neuralese-direct-v3 → neuralese-direct-v2 → neuralese-direct-v1 | neuralese-direct-v3 (union r2, three phases: full-prompt warm-up 0.5 epoch, program-header direct_sft 1 epoch, whole-trajectory direct_trajectory 1 epoch) on BF16 Mellum2.1 with raw-token-v1 heads. |
+| e2e | lfm | `None` |  |  |
+| e2e | mellum | `None` |  |  |
 
-At the latest handoff, the mapped run was safely stopped by signaling its
-ancestry-verified trainer child; emergency checkpoint step24843 is preserved.
-Best step23936 is immutably pinned for AR exposure, checkpoint SHA
-`adc6bfd59a5e0e67fa243270035f32da4688d25a73cdbb5a0da83276c11ecb1d`
-and heads SHA `c73d46511451ded3e6d304bce489765e0c08be458c44fe47500e022bf6834f48`.
-Its original strict .995 gate remains failed. Six saved evaluations pass a .99
-CPU advisory with the other original clauses; this is not qualification.
+Recipes on disk (119): `foundation-maple-c12-ctx1k`, `foundation-maple-c12-ctx512`, `foundation-maple-c18`, `foundation-maple-c18-ctx1k`, `foundation-maple-c18-ctx512`, `foundation-maple-c21-ctx512`, `foundation-maple-c23-calibrated-v1`, `foundation-maple-c23-ctx1k`, `foundation-maple-c23-ctx512`, `foundation-maple-v1`, `foundation-mellum-v1`, `foundation-mellum-v2`, `foundation-mellum-v3`, `foundation-v1`, `fp8-lfm-direct-long-bf16-diagnostic-20261012-v1`, `fp8-lfm-direct-long-diagnostic-template-20261012-v1`, `fp8-lfm-direct-long-te-fp8-diagnostic-20261012-v1`, `fp8-lfm-direct-short-bf16-diagnostic-20261012-v1`, `fp8-lfm-direct-short-diagnostic-template-20261012-v1`, `fp8-lfm-direct-short-te-fp8-diagnostic-20261012-v1`, `gold-text-exposure-curriculum-v1`, `gold-text-input-map-lfm-action45-refinement-v1`, `gold-text-input-map-lfm-refinement-v1`, `gold-text-input-map-lfm-v1`, `gold-text-input-map-v1`, `gold-text-warmup-lfm-cutoff8-rollout4-to8-v1`, `gold-text-warmup-lfm-cutoff8-v1`, `gold-text-warmup-maple-v1`, `gold-text-warmup-v1`, `latent-sketch-consumer-maple-v2`, `latent-sketch-consumer-v1`, `latent-sketch-consumer-v2`, `learned-residual-curriculum-v1`, `local-stage-sketch-credit-v1`, `luna-ar-channelkl-native-4962-final28032-20261010-v1`, `luna-ar-native-harness-8805-final28793-20261010-v1`, `luna-ar-native-harness-gateref-29466-20261010-v1`, `luna-ar-native-harness-gateref-29466-20261010-v2`, `luna-ar-native-harness-gentle-29696-20261010-v3`, `luna-ar-native-harness-gentle-29696-20261010-v4`, `luna-direct-lfm-native-e2e-best225-heads-lr3e-5-diagnostic-20261011-v3`, `luna-direct-lfm-native-e2e-endpoint-epoch-20261011-v1`, `luna-direct-lfm-native-e2e-failing-context-diagnostic-20261011-v1`, `luna-direct-lfm-native-e2e-failing-context-diagnostic-20261011-v2`, `luna-direct-lfm-native-e2e-six-row-smoke-20261011-v1`, `luna-direct-lfm-native-e2e-six-row-smoke-20261011-v2`, `luna-direct-lfm-native-e2e-six-row-smoke-20261011-v3`, `luna-direct-lfm-native-e2e-six-row-smoke-20261011-v4`, `luna-direct-lfm-native-e2e-six-row-smoke-20261011-v5`, `luna-direct-lfm-native-e2e-six-row-smoke-20261011-v6`, `luna-direct-lfm-native-e2e-six-row-smoke-20261011-v7`, `luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v2`, `luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v3`, `luna-direct-lfm-native-e2e-token-writer-failing-context-20261011-v3`, `luna-neuralese-direct-lfm-base-20261011-v1`, `luna-neuralese-direct-lfm-base-20261011-v12-full-rendering-continuation`, `luna-neuralese-direct-lfm-base-20261011-v13-full-rendering-continuation`, `luna-neuralese-direct-lfm-base-20261011-v14-full-rendering-continuation`, `luna-neuralese-direct-lfm-base-20261011-v15-header-v3-auto-split-aware-v2`, `luna-neuralese-direct-lfm-base-20261011-v15-header-v3-checkpointed-100-recovery`, `luna-neuralese-direct-lfm-base-20261011-v15-header-v3-continuation`, `luna-neuralese-direct-lfm-base-20261011-v16-header-v3-checkpointed-remainder`, `luna-neuralese-direct-lfm-base-20261011-v2`, `luna-neuralese-direct-lfm-base-20261011-v3`, `luna-neuralese-direct-lfm-base-20261011-v4`, `luna-neuralese-direct-lfm-base-20261011-v5`, `luna-neuralese-direct-lfm-base-20261011-v6`, `luna-neuralese-direct-lfm-base-20261011-v7`, `luna-neuralese-direct-lfm-base-20261011-v8`, `luna-neuralese-direct-lfm-base-20261012-v17-union-r2-epoch1-bf16-auto`, `luna-neuralese-direct-lfm-base-20261012-v18-union-r2-epoch1-bf16-auto`, `luna-neuralese-direct-lfm-base-20261012-v18-union-r2-epoch1-bf16-auto-resume-step3000-q95`, `luna-neuralese-direct-lfm-base-20261012-v18-union-r2-epoch1-bf16-auto-resume-step838-standard-rmsnorm`, `native-text-recurrence-full-selected17-v1`, `neuralese-direct-lfm-muon-main-20261012-v1-full`, `neuralese-direct-lfm-muon-main-20261012-v2`, `neuralese-direct-lfm-v1`, `neuralese-direct-lfm-v2`, `neuralese-direct-lfm-v3`, `neuralese-direct-mellum-v1`, `neuralese-direct-mellum-v2`, `neuralese-direct-mellum-v3`, `neuralese-direct-mellum-v4`, `neuralese-direct-mellum-v4-from-v3-warmup`, `neuralese-direct-v1`, `neuralese-direct-v2`, `neuralese-direct-v3`, `optimizer-bakeoff-lfm-lion-20261011`, `optimizer-bakeoff-lfm-muon-20261011`, `optimizer-bakeoff-lfm-muon-gentle-20261011`, `optimizer-bakeoff-lfm-muon-medium-20261011`, `optimizer-bakeoff-mellum-lion-idle-20261011`, `optimizer-bakeoff-mellum-lion-matched-20261011`, `optimizer-bakeoff-mellum-lion-matched3e-6-20261011`, `optimizer-bakeoff-mellum-muon-1e-5-20261011`, `optimizer-bakeoff-mellum-muon-3e-5-20261011`, `optimizer-bakeoff-mellum-muon-3e-6-20261011`, `raw-recurrence-mellum-v1`, `raw-recurrence-mellum-v10`, `raw-recurrence-mellum-v11`, `raw-recurrence-mellum-v12`, `raw-recurrence-mellum-v2`, `raw-recurrence-mellum-v3`, `raw-recurrence-mellum-v4`, `raw-recurrence-mellum-v5`, `raw-recurrence-mellum-v6`, `raw-recurrence-mellum-v7`, `raw-recurrence-mellum-v8`, `raw-recurrence-mellum-v9`, `raw-recurrence-v1`, `raw-recurrence-v2`, `raw-recurrence-v3`, `raw-recurrence-v4`, `raw-recurrence-v5`, `raw-recurrence-v6`, `raw-recurrence-v7`, `raw-recurrence-v8`, `semantic-exposure-data-contract-v1`, `sketch-training-defaults-v1`
 
-The AR fixup v1 launch restored all four optimizer groups but failed before
-updates: the old mapped metric was named `shallow`, the shared handler names it
-`input_map`. Shared fix `cf582398` performs only that checked semantic rename;
-every other schedule setting must match. Eight focused tests and a CPU replay
-of the real source checkpoint preserve31 observations/history and RNG state.
+## Corpus registry
 
-AR fixup v2 completed normally at step24960 as `luna-ar-feedback-best23936-v2`, recipe
-`training/neuralese/recipes/luna-ar-feedback-fixup-4880-best23936-20261009-v2.json`
-(commit `6dcaac85`, SHA `e1a50f2941c121658ac5c0daf4fd57caaf193372426c594495860bec98b104bd`).
-It pins shared code `cf582398` and the same Docker image. Logs confirm all
-four optimizer groups and31 schedule observations restored. Final alignment
-qualification is false; short/medium/long consumer agreement is
-.783/.410/.307. The fixed projected AR control first diverges at target4
-(crisp control remains exact for256 tokens). Final checkpoint and heads both
-report step24960 with `heads_current: true`. Do not extend the failed run blindly:
-use the matched diagnostics and investigate targets after generated-history
-divergence before the next shared objective decision.
-Driver/launch receipts are under
-`/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v2/`.
-Failed v1 launch evidence remains preserved under its original path.
-This binding uses16K total context,256 generated target positions, unchanged
-gold targets,1024 additional updates, fresh .99/.05/.025 gates and two
-consecutive passes. No transport or recurrence qualification is inherited.
+1370 live entries in `training/neuralese_corpora.json` (111 dgx, 1259 pop); 93 carry training admission.
 
-### Matched AR evaluation
+## Open coordination requests to pop
 
-The six-window held-test crisp-versus-projected diagnostic completed as
-`luna-ar-matched-source23936-v2`. Its source pair is the frozen step23936 checkpoint/heads; the optimizer
-checkpoint is hash-checked only, while inference loads the paired heads export.
-Selection and source pins are in
-`runs/neuralese-ar-matched-multistratum-23936-20261009-v1/window-selection-v5.json`
-(SHA `9b186dbf99d326890cb1c9e694144a8b077425b3567fb6f96d4745fd6586642e`)
-and the frozen-code-bound `source-recipe-v5.json` (SHA
-`a3735ddfa6b825b0e85e886a30f7973e48b66d7e9bedff8b73247d1762f3b6ad`). The
-118-file Python package snapshot is under
-`/srv/storage/natlang-artifacts/ar-matched-eval-v4/frozen-runtime-v1/`; its
-inventory receipt SHA is `5be037143b19e9064c0f643ab2dbe3710fe2b94fd46ec51a4faad79bf596164b`
-and matches the reviewed source-recipe inventory exactly. Use this frozen
-package through `PYTHONPATH`, not mutable checkout code. The pinned image is
-`sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de`.
+- `2026-10-11T09:29:18.442129Z-pop-aab3`: V41 enum diagnostic and V40 no-enum bundle ready
 
-The first GPU launch failed before model load because the window manifest still
-pinned source recipe v4 after its code-root relocation to v5. The new v5 window
-manifest changes only the recipe pin and ID; its six windows remain identical.
-Both launch receipts and failure logs are preserved. The prior CPU attempt also
-remains a preserved failure with no result; inference now runs on the GPU using
-the heads-only loader and never deserializes optimizer state. Keep the report diagnostic
-only. It grants no foundation, runtime, or task qualification.
+## Latest decisions (coord)
 
-The DGX owner direction is to phase the raw-token-embedding projection anchor
-out after warm-in using a declared decay, then adapt the read port to learned
-Neuralese vectors with a full-rank residual read adapter. It is not a request to
-hot-patch this frozen map job. Existing evaluation-only autoregressive controls
-remain limited: a fixed one-window full-projection control survived 256/256
-tokens, while strict multi-stratum alignment remains false. Treat those as
-evidence for the next declared stage, not as broad runtime qualification.
-
-### Shutdown and storage
-
-The active immutable runtime predates the repaired recipe signal forwarding. If an early stop is necessary, signal its ancestry-verified trainer child and verify the emergency checkpoint; do not rely on Docker stopping the outer PID1. Normal completion is safe. Future launches should use shared signal fix18770099; actual CPU-only Docker routing proof is in `runs/neuralese-recipe-signal-forwarding-proof-20261009-v1/receipt.json`.
-
-The stopped sketch-consumer repair is preserved as held artifact evidence, not an
-active training route. Its earlier Docker shutdown failed to save 73 updates
-(serialized step1920 versus final log step1993); preserve that failure receipt,
-current/best checkpoints, and the earlier recurrence checkpoint separately.
-
-Latest storage check: about9.3 GiB free on `/` and2.8 GiB free on `/srv/storage`, plus the active run's separately allocated1.4 GiB checkpoint reserve. Its current and best full checkpoints are distinct. Avoid redundant checkpoint/model copies. Historical Step5 process state and unused grouped Ling base weights were handled with verified local offload/duplicate eviction; private process/browser caches are not training corpora.
-
-## Generation and review
-
-### Five Luna workers
-
-Current campaign: `runs/luna-v26-counterfactual-fivecase-20261009-v1/dispatch-approved-v1/`.
-Root approved plan SHA `fdca2f69aff6aa00b9623db31f48a2727d375eaa99085e07bf61fd94d53e543d`;
-five workers have observed provider activity. Five train-only counterfactuals
-inherit V26 source groups, with zero new-world credit. Runtime snapshot
-`f17354c5ee64009031b057e38b4742fd1a68dec62317e5a49f7c897c6e7710fc`
-was built from current source through the shared isolated compiler, including
-the crisp-string read fix. Its1140 file hashes were independently verified.
-The old runtime proposal was replaced before launch. Check journals/claims for
-live completion status; completed tasks remain held pending action review.
-
-The separate four-case packet under
-`runs/luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/`
-has50 reviewed native actions approved by the standard per-action receipt
-`root-selected-50-admission-v1.json` (SHA `87e30fd3a02f3acbb7b71564b3c186a0f088cfcbce8b6a8ed09bdc9dc17d03a9`).
-Root replayed the exact captured-request audit. Missing-score suspicions cleared
-through authenticated expanded provider inputs, not oracle metadata. Shared
-current isolated rematerialization and shared text conversion are root-adopted
-as50 native /46 text rows. Actor joins are verified on every included row.
-Full-current-union hash/collision/split checks and exact tokenizer/suffix decoding
-passed. Published corpus ID: `luna-v17-conjunctive-eligibility-50-native-46-actor-text-20261009-v1`.
-Four text omissions,179 other actions and four authored roots remain held. No recurrence/whole-trace/learned-vector credit.
-Shared diagnostic fix96f9c697 clarifies `nl.with` result/capture generics and
-`decide`'s callable contract; future snapshots include it, active frozen runs
-retain their recorded implementation.
-
-- The recent held packet has been reduced from199 proposals to22 after two definite visibility holds. The22 selected native actions and19 derived text documents were independently replayed and explicitly adopted;177 other actions remain held. Task acceptance does not grant whole-trajectory or recurrence admission.
-- Earlier wave3 plan and its source/runtime proofs remain preserved under this campaign. Treat them as historical evidence; do not use their previous “latest wave” wording as current status.
-- Review every observed action and skill disclosure before admission. No global v6 activation, new-world credit or blanket task-level admission.
-
-### Step5 Preview Free
-
-`runs/step5-preview-free-clinic-row0-corrected-20261009-v1` completed the correct Clinic source0/scenario2 and passed its oracle. It has18 actions,15 children and6 iterations. Owned idle bridge stopped; captures sealed. One malformed `return_result({code:...})` attempt is held separately; subsequent valid typed output is independently reviewed. Current shared adapters produced17 reviewed native actions and17 exact-serving-boundary text documents; root native and text replays are byte-identical. One action is an authored static root and16 are model samples; actor provenance is now mandatory in shared conversion. Token-suffix audit passed and root composition adopted17native/17text; curated publication/sync are verified on both machines; no recurrence or hidden-state admission. Step5 Microgrid terminated on repeated endpoint-unavailable503 errors, with captures sealed under `runs/step5-microgrid-concurrent-luna-wave2-20261009-v1`. No paid fallback or text-distillation flag.
-
-### Failure repairs and skills
-
-- Exact-context source audit confirms three genuine positive-eligibility false judgments (BIR-2C, RWA-1C, ESR-2A), with the relevant facts visible and faithful host captures. The failure boundaries were respectively a false leaf answer, an added identity/proof requirement in the delegated criterion, and a stale “eligibility unknown” premise passed to a child. The original three repair rows remain held.
-- The shared `build-preference-pairs.mjs --source-derived-repairs PROPOSAL.json` adapter now accepts the exact-context v5 causal-boundary proposal. It joins source row, request hash, raw response hash, terminal tool-call ID, trace action and offered schema; it checks chosen eval syntax and names against declarations in the captured opening scope only, not the full persistent eval history. All three candidate pairs stay in the held sidecar pending per-item root preference admission; ordinary preference output remains empty. The chosen side preserves the eligibility delegation, and carries no task-success, runtime-equivalence or hidden-state claim.
-- The audit's generic skill recommendations are to evaluate each stated conjunction against supplied facts, use later source-bound evidence instead of retaining a superseded unknown premise, and avoid adding identity/proof conditions absent from the task contract. These remain review recommendations; no skill-wide activation or new DPO/SFT admission follows from them.
-
-## Corpus inventory
-
-Current published admitted facets:5773 native (3738train/2035test),4962 text (3258/1704),5004R (3115/1889). Counts are overlapping facets, not independent task/world counts. The current GPU continuation uses the immutable4962 text input; publication does not mutate it. Fresh sampled actions remain held until explicit per-action review and composition adoption.
-
-- Full4793 historical text documents were rebuilt from exact serving request/assistant boundaries;87 newly adopted documents complete4880. Split/group and tokenizer checks are preserved.
-- Registered target-bound refresh and convenience input are verified on Pop and DGX. Convenience corpus: `luna-v17-foundation-text-input-4880-20261009-v1`; inputSHA `b10da15de2510b55635b5aaa85301204e559669ac239968bc94e4393d08e0572`.
-- Shared sync copies verified file aliases as bytes; immutable selected-file manifests must exclude private process databases/logs/caches. Unsafe retired manifests remain untracked and held. Do not commit or reactivate them.
-- Never silently switch the active training input. Publish fresh facets through registry/admission/provenance first, then explicitly declare the next recipe or continuation.
-
-## Free-provider expansion under review
-
-User requested review of `mnfst/awesome-free-llm-apis`. Verify its claims against
-provider documentation/live catalog rather than treating its quotas as current.
-Priority candidates: Kilo anonymous free gateway (200 requests/hour/IP; explicit
-free-model IDs), Groq GPT-OSS120B for short tasks (8K TPM/200K TPD published free
-token limits), Z.AI `glm-4.7-flash` for longer trajectories (free, 200K context;
-actual account concurrency unverified). Mistral is optional pending actual free
-API allowance shown in the account. No generation quality claim yet.
-
-At the user's request, Gemini and NVIDIA hosted free inference are also in
-the integration shortlist. The installed shared Pi backend already supports
-Google, NVIDIA, Groq and Z.AI. Use available free models and verified account
-quotas; Gemini limits are project-scoped, not multiplied by keys.
-
-Private blank credential templates were prepared at
-`~/.config/natlang/{groq,zai,mistral,gemini,nvidia}.env` (mode0600), with respectively
-`GROQ_API_KEY`, `ZAI_API_KEY`, `MISTRAL_API_KEY`, `GEMINI_API_KEY`,
-`NVIDIA_API_KEY`. Kilo needs no key for anonymous
-free access. Keys remain outside Git/logs/chat. Existing shared external HTTP
-transport should be reused; do not clone a launcher per provider. The user saved Groq/Z.AI/Gemini/NVIDIA keys; private format/permissions were
-verified without printing values. Gemini3.8Flash and NVIDIA Nemotron3Super
-completed tiny authentication probes; Groq metadata worked after specifying a
-User-Agent (urllib default returned403). Z.AI GLM4.7Flash first returned429/1305,
-then accepted a request. Probe receipt: `runs/free-provider-auth-preflight-20261009-v1/`.
-No training admission from these probes. Mistral is not configured.
-
-Shared external HTTP plumbing now supports an exact completion URL and
-environment-only key forwarding through profiles, collector and existing queue.
-This avoids forced `/v1` paths and localhost8081 health polling for external
-APIs. It also omits llama-specific wire defaults and local KV budgets when an
-explicit full HTTP target is declared. Current TypeScript sources compiled in
-isolation and froze to `runs/free-provider-generation-20261009-v1/runtime`;
-CLI help was exercised; no unit tests added/run in this change. Initial held
-case probes are being prepared; no case workers launched yet.
-
-Sources: https://kilo.ai/docs/gateway/authentication ;
-https://console.groq.com/docs/rate-limits ;
-https://docs.z.ai/guides/overview/pricing ;
-https://docs.z.ai/guides/llm/glm-4.7 ;
-https://docs.mistral.ai/admin/billing-usage/subscriptions .
-
-Additional setup sources: https://aistudio.google.com/apikey ;
-https://ai.google.dev/gemini-api/docs/rate-limits ;
-https://build.nvidia.com ;
-https://docs.nvidia.com/nemo/retriever/26.5.0/extraction/api-keys/ .
-
-## Free-provider expansion — 2026-10-09
-
-User configured Groq, Z.AI, Gemini and NVIDIA keys; Mistral is excluded.
-Private environment files remain outside Git. Shared external HTTP target and
-credential-environment support landed in `248d7c94`; native Pi handles Google,
-NVIDIA and Groq. Ordinary Z.AI and anonymous Kilo use the shared HTTP transport.
-
-Current-runtime reference replay passed all five V22 cases without provider
-calls. Launch evidence lives in `runs/free-provider-generation-20261009-v1/`.
-Initial NVIDIA v1 failed before an SDK call because its proposed model ID omitted
-the namespace; independent v2 uses `nvidia/nemotron-3-super-120b-a12b` and has
-completed real tool calls. Gemini v1 failed with Google's missing thought-signature
-error during tool history; investigate the shared adapter before relaunch.
-Kilo is producing actual saved turns. Z.AI v3 retries transient429s at the
-request layer; v1/v2 are preserved. Gemini v2 uses the repaired runtime and is
-making actual calls. NVIDIA completed its first exact case and has a serial
-queue for source indices1–4. Groq is generating16 short train decision labels through the shared HTTP
-label backend, with five-second request spacing and bounded retries. First
-responses used about330 tokens and match answer.noul. These labels still need
-source/quality review and explicit current-IR conversion. Kilo completed its
-first case with a wrong decision; preserve it for child-level failure analysis. These are held
-teacher samples of existing source groups, not new worlds or admitted training
-data. Inspect actual requests and terminal accounting before reporting success.
-
-Shared evaluator `b189b0e1` adds generated-position bands and common first-close
-prefix metrics without extra rollouts or changes to the existing fixed-span gate.
-No active frozen GPU runtime is hot-patched.
-
-Smaller teacher screens: Gemini3.5FlashLite first case exact (14 saved turns),
-remaining four source rows queued. Gemini3.8 daily quota exhausted;2.5FlashLite
-404 for this account. Groq GPT-OSS20B16 short labels complete,0 errors. ZAI
-GLM4.5Flash alternate free pool active. NVIDIA Nano unavailable for account;
-GPT-OSS20B tiny probe succeeded and full HTTP case is active. Shared retry and
-wire-control updates apply only to runtime-small-teachers-v5 and future freezes.
+- 2026-10-12T06:36 pop-codex-01a0e480: Pop warmup curtailed; executable header and whole phases now
+- 2026-10-12T11:33 dgx-claude-d8484b5f: Owner decision: continue running training onto bigger data unions
+- 2026-10-12T15:33 pop-luna-salvage-static: Pop Luna generation cap reduced to three
+- 2026-10-12T15:46 dgx-claude-d8484b5f: Owner decisions 2026-10-12: e2e Neuralese arm NOW on both lines; behaviour gate report-only; dormant goals revived
+- 2026-10-12T15:50 dgx-housekeeping: Coordination protocol: status values plus exact verifiers (owner 2026-10-12)
+- 2026-10-12T15:54 dgx-review-accept: Owner review queue accepted on owner's behalf (3721f0eb)
