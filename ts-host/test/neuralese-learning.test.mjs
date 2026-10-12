@@ -22,13 +22,15 @@ const repo = fileURLToPath(new URL('../..', import.meta.url));
 const python = process.env.NATLANG_NEURALESE_PYTHON ?? join(repo, '.venv-neuralese', 'bin', 'python');
 const fallbackPython = join(homedir(), 'natlang', '.venv-neuralese', 'bin', 'python');
 const executable = existsSync(python) ? python : existsSync(fallbackPython) ? fallbackPython : null;
-const model = join(homedir(), '.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M');
+const model = process.env.NATLANG_NEURALESE_BASE ?? join(homedir(), '.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M');
 const skip = !executable || !existsSync(model) ? 'Neuralese venv or LFM2.5-350M not available' : false;
 
 let server, endpoint;
 before(async () => {
   if (skip) return;
-  server = spawn(executable, ['-m', 'natlang_neuralese.serve', '--port', '0', '--max-block', '4', '--threads', '8',
+  server = spawn(executable, ['-m', 'natlang_neuralese.serve', '--port', '0', '--max-block', '4', '--threads',
+    process.env.NATLANG_NEURALESE_THREADS ?? '8',
+    ...(process.env.NATLANG_NEURALESE_BASE ? ['--base', model] : []),
     // NATLANG_NEURALESE_DETERMINISTIC=1 (set below): the same gradient request gives the same bytes on a GPU.
     // NATLANG_NEURALESE_DEVICE=cuda runs the server on the GPU (on unified memory, run it under the memory ledger).
     '--device', process.env.NATLANG_NEURALESE_DEVICE ?? 'cpu'], {
