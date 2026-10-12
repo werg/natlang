@@ -592,8 +592,18 @@ def run_candidate_serialized(args: argparse.Namespace) -> dict:
 
 
 def run_base(args: argparse.Namespace) -> dict:
-    """Score the pinned HF base through the same serve engine and reviewed queue."""
+    """Score the pinned HF base through the same serve engine and reviewed queue.
+
+    The base is served under its NATIVE prompt rendering (``base_prompt_rendering``, default ``full``: the runtime's
+    system prompt and tool schemas), not the candidate's. ``program-header`` drops every tool schema and the generic
+    runtime instructions, which only a model trained on program-header rows has internalised; the un-fine-tuned base
+    then cannot know that eval/return_result exist and ends each call with an immediate EOS (the 0/48 of the v4
+    program-header base run, 27 model_incomplete; DGX debug 2026-10-12, plans/neuralese/DECISIONS.md).
+    """
     plan, packet, runtime = verify_plan(args.plan)
+    base_rendering = plan.get("base_prompt_rendering", "full")
+    if base_rendering not in {"full", "program-header"}:
+        raise ValueError("plan declares an unsupported base_prompt_rendering")
     base_snapshot = Path(plan["base_snapshot"]).resolve(strict=True)
     serving_dtype = plan.get("serving_dtype", "float32")
     if serving_dtype not in {"float32", "bfloat16"}:
@@ -627,12 +637,12 @@ def run_base(args: argparse.Namespace) -> dict:
         "-w", str(ROOT), args.image, "python", "-m", "natlang_neuralese.serve",
         "--base", str(base_snapshot), "--device", "cpu", "--dtype", serving_dtype,
         "--threads", str(server_threads), "--port", str(port),
-        "--prompt-rendering", plan["prompt_rendering"],
+        "--prompt-rendering", base_rendering,
     ]
     try:
         subprocess.run(command, check=True, text=True, capture_output=True)
         wait_server(server_name, port)
-        verify_server_rendering(port, plan["prompt_rendering"])
+        verify_server_rendering(port, base_rendering)
         report = run_reviewed_queue(plan, packet, runtime, run_dir, server_name, port)
         report.update({
             "evaluation_kind": "pinned-base-fixed-held-task-packet",
@@ -640,7 +650,8 @@ def run_base(args: argparse.Namespace) -> dict:
             "base_snapshot": str(base_snapshot),
             "base_snapshot_revision": base_snapshot.name,
             "serving_precision": f"{serving_dtype.upper()} on CPU",
-            "prompt_rendering": plan["prompt_rendering"],
+            "prompt_rendering": base_rendering,
+            "candidate_prompt_rendering": plan["prompt_rendering"],
             "runtime_image": args.image,
             "threads": server_threads,
             "server_cpu_count": server_cpu_count,
