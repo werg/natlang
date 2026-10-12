@@ -50,7 +50,7 @@ def log(**event):
 
 def ledger(unit: str, budget_gb: float, command: list[str], container: str | None = None) -> None:
     args = ['python3', str(REPO / 'scripts' / 'memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', str(budget_gb),
-            '--priority', 'medium', '--wait', '3600', '--no-resumable']
+            '--priority', 'medium', '--wait', '21600', '--no-resumable']
     if container:
         args += ['--container', container]
     subprocess.run(args + ['--', *command], check=True, stdout=subprocess.DEVNULL)
