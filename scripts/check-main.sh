@@ -77,14 +77,17 @@ if [ $python = 1 ]; then
       "$ROOT/.venv-neuralese/bin/python" \
       "$MAIN/.venv-neuralese/bin/python" \
       "$ROOT/.venv/bin/python" \
-      "$MAIN/.venv/bin/python"; do
-      if [ -x "$candidate" ]; then
+      "$MAIN/.venv/bin/python" \
+      /usr/bin/python3; do
+      # A stale general-purpose venv may exist without the neuralese test
+      # dependencies. Select an interpreter that can actually run this suite.
+      if [ -x "$candidate" ] && "$candidate" -c 'import pytest, torch' >/dev/null 2>&1; then
         PY=$candidate
         break
       fi
     done
     if [ -z "$PY" ]; then
-      python_error="Python checks requested, but no project interpreter was found. Set NATLANG_PYTHON or create .venv-neuralese/bin/python / .venv/bin/python in this checkout or its main worktree."
+      python_error="Python checks requested, but no interpreter with pytest and torch was found. Set NATLANG_PYTHON or install them in .venv-neuralese."
     fi
   fi
   if [ -n "$python_error" ]; then
