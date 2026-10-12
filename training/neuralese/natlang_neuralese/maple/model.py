@@ -390,13 +390,17 @@ class DenseExperts(nn.Module):
         return swiglu(y[..., :self.ff], y[..., self.ff:], self.clamp) @ down.T
 
 
-# The dense-expert MoE kernel (a trainer's --moe-kernel; recipe parameter ``moe_kernel``): "loop" or "grouped".
-DENSE_MOE = {"kernel": os.environ.get("NATLANG_MAPLE_DENSE_MOE", "loop")}
+# The dense-expert MoE kernel (a trainer's --moe-kernel; recipe parameter ``moe_kernel``): "invariant" (the default:
+# one fixed Triton tile per routed row, so a token's output and routing never depend on the other tokens of the call;
+# maple/fused_moe.invariant_dense_experts), "loop" (the per-expert reference) or "grouped" (torch's grouped GEMM).
+# The last two choose cuBLAS kernels by shape (NUMERICAL_PARITY.md, "Mellum batch-row dragnet").
+DENSE_MOE_KERNELS = ("invariant", "loop", "grouped")
+DENSE_MOE = {"kernel": os.environ.get("NATLANG_MAPLE_DENSE_MOE", "invariant")}
 
 
 def set_dense_moe_kernel(kernel: str) -> None:
-    if kernel not in ("loop", "grouped"):
-        raise ValueError(f"unknown dense MoE kernel {kernel!r}; expected loop or grouped")
+    if kernel not in DENSE_MOE_KERNELS:
+        raise ValueError(f"unknown dense MoE kernel {kernel!r}; expected one of {', '.join(DENSE_MOE_KERNELS)}")
     DENSE_MOE["kernel"] = kernel
 
 
@@ -424,6 +428,13 @@ class SparseMoE(nn.Module):
         key = str(STATE["size"])
         if self.active_experts is not None and STATE["enabled"] and key in self.private_gate:
             logits = F.linear(x.float(), self.private_gate[key])
+        elif self._invariant(x):
+            # Exact FP32 with one fixed tile per row: top-k routing flips near ties on any shape-dependent rounding
+            # (and the NGC containers' TF32 override would otherwise run this FP32 product in TF32).
+            from .fused_moe import invariant_linear
+            logits = invariant_linear(x.float(), self.gate.weight.float())
+            if self.active_experts is not None:
+                logits = logits[:, :self.active_experts]
         else:
             logits = F.linear(x.float(), self.gate.weight.float())
             if self.active_experts is not None:
@@ -441,6 +452,10 @@ class SparseMoE(nn.Module):
         from .fused_moe import expert_weights
         return expert_weights(self.experts)
 
+    def _invariant(self, x) -> bool:
+        """Dense experts on CUDA under the "invariant" kernel (the default): maple/fused_moe.invariant_dense_experts."""
+        return DENSE_MOE["kernel"] == "invariant" and x.is_cuda and isinstance(self.experts, DenseExperts)
+
     def _grouped(self, x) -> bool:
         """Dense (BF16, trainable) experts on CUDA under ``set_dense_moe_kernel("grouped")`` run as two grouped GEMMs
         (maple/fused_moe.dense_grouped_experts) instead of the per-expert loop below (the reference, the default)."""
@@ -457,6 +472,10 @@ class SparseMoE(nn.Module):
         if projections is not None:
             from .fused_moe import fused_experts
             return fused_experts(self.experts, x, index, weights, self.clamp, projections).to(h.dtype).view(shape)
+        if self._invariant(x) and x.dtype == torch.bfloat16:
+            from .fused_moe import invariant_dense_experts
+            gate_up, down = self.experts.stacked(x.dtype)
+            return invariant_dense_experts(x, index, weights, gate_up, down, self.clamp).to(h.dtype).view(shape)
         if self._grouped(x):
             from .fused_moe import dense_grouped_experts
             gate_up, down = self.experts.stacked(x.dtype)

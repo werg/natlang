@@ -696,8 +696,8 @@ def main(argv=None):
                              "--latent-step-in-backward is math-neutral except inside a spike. Every update logs the "
                              "applied and exact latent norm (grad_clip in train.jsonl). 0: the earlier fixed clip at a "
                              "global norm of 1.0 (in-backward latents unclipped)")
-    parser.add_argument("--moe-kernel", choices=["loop", "grouped"], default="loop",
-                        help="dense (BF16, trainable) MoE experts on CUDA: loop = one matmul pair per expert (reference); grouped = two grouped GEMMs over the expert-sorted routed tokens (maple/fused_moe.dense_grouped_experts; BF16 accumulation-order differences only)")
+    parser.add_argument("--moe-kernel", choices=["invariant", "loop", "grouped"], default="invariant",
+                        help="dense (BF16, trainable) MoE experts on CUDA: invariant = one fixed Triton tile per routed row, batch-invariant (maple/fused_moe.invariant_dense_experts, the default); loop = one matmul pair per expert (reference); grouped = torch grouped GEMMs (maple/fused_moe.dense_grouped_experts); loop and grouped choose kernels by shape")
     parser.add_argument("--save-state", action=argparse.BooleanOptionalAction, default=True,
                         help="write full training state and weight exports (checkpoint.pt, best link, heads.pt, adapter.pt); "
                              "smokes pass --no-save-state and keep only their logs and report (as in the direct stage)")
