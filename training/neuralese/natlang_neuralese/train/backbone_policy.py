@@ -56,8 +56,13 @@ def latent_backbone_parameters(backbone):
     attention projections, the dense experts (made trainable parameters), the routers and the layer norms; never a
     ternary-deployed checkpoint (its weights are codes, not latents)."""
     if not getattr(backbone, 'ternary', False):
+        from .quantization import plain_parameter_name
         selected=full_backbone_parameter_names(backbone)
-        named=[(name,parameter) for name,parameter in backbone.hf.named_parameters() if name in selected]
+        # A precision point wraps a weight as ``parametrizations.weight.original``
+        # without replacing the latent. Keep its checkpoint/optimizer identity
+        # under the plain name across a BF16 -> QAT objective continuation.
+        named=[(plain_parameter_name(name),parameter) for name,parameter in backbone.hf.named_parameters()
+               if name in selected]
     else:
         from ..maple.model import DenseExperts
         if getattr(backbone.hf,'natlang_precision',None)!='bf16':
