@@ -759,10 +759,15 @@ class PortBackbone(nn.Module):
         # A depth-nested family member (maple/family.py) exits early after ``exit_layers`` layers through the
         # final norm and the shared head; None: every layer.
         depth = getattr(self, "exit_layers", None) or self.num_layers
-        if cutoff is not None and cutoff < depth:
-            h, cache = self.run_layers(h, range(0, cutoff), cache, padding=padding, left_pad=left_pad)
+        if cutoff is not None:
+            # ``h_cut`` is returned whenever a cutoff is given, also at full depth (Mellum's raw-token heads use
+            # cutoff = num_layers, so h_cut = h_final) and for a member exiting at or before the cutoff (its exit
+            # residual). Only a cutoff strictly inside the run splits it into two layer ranges.
+            cut = min(cutoff, depth)
+            h, cache = self.run_layers(h, range(0, cut), cache, padding=padding, left_pad=left_pad)
             result["h_cut"] = h
-            h, cache = self.run_layers(h, range(cutoff, depth), cache, padding=padding, left_pad=left_pad)
+            if cut < depth:
+                h, cache = self.run_layers(h, range(cut, depth), cache, padding=padding, left_pad=left_pad)
         else:
             h, cache = self.run_layers(h, range(0, depth), cache, padding=padding, left_pad=left_pad)
         result.update(h_final=h, logits=self.logits(h) if logits else None, cache=cache)

@@ -381,3 +381,45 @@ def test_export_in_n0_order_equals_ordering_after_load(tmp_path):
     for name, value in ordered.state_dict().items():
         if ".experts." in name or ".mlp.gate." in name:
             assert torch.equal(value, reference.state_dict()[name]), name
+
+
+def _mellum_port(tmp_path):
+    """The Mellum port shape of the live direct lineage: raw-token heads whose cutoff is the full depth."""
+    from natlang_neuralese.maple.maple_port import MaplePortBackbone
+    from natlang_neuralese.model.heads import PortHeads
+    from natlang_neuralese.model.lfm2_port import ControlTokens
+
+    tiny_mellum(tmp_path)
+    model = load_maple(tmp_path, device="cpu", dtype=torch.float32, ternary_attention=False)
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+    backbone = MaplePortBackbone(model, ControlTokens(open_id=126, close_id=127))
+    heads = PortHeads(backbone, cutoff=LAYERS, max_length=6, stop_source="final", stop_position=False,
+                      profile="raw-token-v1").eval()
+    heads.set_content_transport("learned-residual")
+    return backbone, heads
+
+
+@torch.no_grad()
+def test_full_depth_cutoff_returns_h_cut_through_the_serve_write_path(tmp_path):
+    """Regression (7bbfd00f): a cutoff equal to the depth dropped ``h_cut`` from forward_embeds, so every Mellum
+    serve request failed with KeyError 'h_cut' (in-run task eval 0/16, all unresolved)."""
+    from natlang_neuralese.write import open_block, read_back, write_block
+
+    backbone, heads = _mellum_port(tmp_path)
+    ids = torch.randint(3, 120, (1, 10))
+    out = backbone.forward_ids(ids, cutoff=heads.cutoff, logits=False)
+    assert torch.equal(out["h_cut"], out["h_final"])  # cutoff = num_layers: the cut state is the top state
+    torch.testing.assert_close(out["h_final"], backbone.forward_ids(ids, logits=False)["h_final"])
+    backbone.exit_layers = 2  # a depth member exiting before the cutoff: its exit residual
+    try:
+        member = backbone.forward_ids(ids, cutoff=heads.cutoff, logits=False)
+    finally:
+        backbone.exit_layers = None
+    assert torch.equal(member["h_cut"], member["h_final"])
+    prefix = torch.cat([ids, torch.tensor([[backbone.controls.open_id]])], 1)
+    opened = open_block(backbone, heads, prefix)
+    assert torch.equal(opened.h_cut, out["h_cut"][:, -1])
+    written = write_block(backbone, heads, opened, max_length=4)
+    back = read_back(backbone, heads, written.block_start, written.payload[:, :max(1, int(written.lengths[0]))])
+    assert back["h_cut"].shape == (1, backbone.config.hidden_size) and torch.isfinite(back["logits"]).all()
