@@ -10,6 +10,7 @@ Effective configuration, flattened to dotted keys:
 - ``parameters.*``: the stage's resolved parameters (recipe defaults merged with the stage's own);
 - ``inputs.<role>``: each data input's sha256 (identity, not location);
 - ``quantization.*``: the quantization component, if any (without its description);
+- ``family.*``: the nested-family component of a stage that trains it (maple/family.py), without its description;
 - ``derived.supervision``: the amount of supervision of a neuralese_direct stage, which must stay equal across lines:
   its ``epochs`` over the target-bearing windows of its (twin) data (the update count is derived from the data and
   each line's fit-only packing), or for a legacy steps-budgeted stage steps x target_tokens x batch.
@@ -64,13 +65,15 @@ def _recipe_file(recipe_id, repo):
     return found[0]
 
 
-def _stage_view(kind, parameters, inputs, quantization=None):
+def _stage_view(kind, parameters, inputs, quantization=None, family=None):
     out = {}
     _flatten('parameters', parameters, out)
     for role, binding in inputs.items():
         out['inputs.' + role] = binding.get('sha256', binding.get('artifact'))
     if quantization:
         _flatten('quantization', {k: v for k, v in quantization.items() if k != 'description'}, out)
+    if family:
+        _flatten('family', {k: v for k, v in family.items() if k != 'description'}, out)
     if kind == 'neuralese_direct':
         out['derived.supervision'] = (f"{parameters['epochs']} epochs" if 'epochs' in parameters else
                                       f"{parameters.get('steps', 0) * parameters.get('target_tokens', 0) * parameters.get('batch', 1)} positions")
@@ -105,7 +108,9 @@ def recipe_config(recipe):
     for stage in stages:
         parameters = {**recipe.get('stage_parameter_defaults', {}).get(stage['kind'], {}), **stage.get('parameters', {})}
         inputs = {role: catalog[name] for role, name in stage.get('inputs', {}).items()}
-        views[stage['id']] = _stage_view(stage['kind'], parameters, inputs, recipe.get('quantization'))
+        family = recipe.get('family')
+        views[stage['id']] = _stage_view(stage['kind'], parameters, inputs, recipe.get('quantization'),
+                                         family if family and stage['id'] in family.get('stages', []) else None)
     if len(views) == 1:
         return stages[0]['kind'], next(iter(views.values()))
     return stages[0]['kind'], {f'stages.{sid}.{key}': value for sid, view in views.items() for key, value in view.items()}

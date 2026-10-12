@@ -615,6 +615,16 @@ def load_recipe(path):
         raise ValueError('neuralese recipe must declare identity and embedding distillation stages')
     validate_input_bindings(recipe)
     declared_runtime_environment(recipe)
+    if 'family' in recipe:
+        # The nested family as an in-stage objective (owner 2026-10-12; maple/family.py): it ramps on the stage
+        # curriculum the quantization component declares.
+        from ..maple.family import validate_family
+        validate_family(recipe['family'], {stage['id']: stage['kind'] for stage in recipe['stages']})
+        progress = (recipe.get('quantization') or {}).get('stage_progress', {})
+        if any(stage_id not in progress for stage_id in recipe['family']['stages']):
+            raise ValueError('a family stage needs a curriculum: name it in quantization.stage_progress')
+    if 'objective_continuation' in recipe:
+        validate_objective_continuation(recipe)
     if 'quantization' in recipe:
         # QAT woven into the stages (owner 2026-10-10; train/quantization.py): one component, inherited by every
         # stage it names.
@@ -753,6 +763,87 @@ def verify_direct_stage_lineage_gates(stage, inputs, lineage_evidence):
              'heads_sha256': heads_sha, 'runtime_qualified': True,
              'output_reference_qualified': True, 'weights_unmodified': True,
              'retained_trained_heads': True}]
+
+
+# Objective components an active stage may change by a declared objective continuation (``objective_continuation``;
+# the trainer's direct_sft.OBJECTIVE_KEYS): the curriculum continues from the checkpoint's update without a jump.
+OBJECTIVE_COMPONENTS = ('quantization', 'family')
+
+
+def validate_objective_continuation(recipe):
+    """``objective_continuation``: {"stage": the active neuralese_direct stage, "previous": {component: canonical
+    sha256 of the component the stage trained with, or null when it had none}, "description"}. The declaration
+    pins exactly what the running stage trained with, as a data continuation pins the data it trained on."""
+    declared = recipe['objective_continuation']
+    if not isinstance(declared, dict) or set(declared) - {'stage', 'previous', 'description'}:
+        raise ValueError('objective_continuation is {stage, previous, description}')
+    kinds = {stage['id']: stage['kind'] for stage in recipe['stages']}
+    if kinds.get(declared.get('stage')) != 'neuralese_direct':
+        raise ValueError('objective_continuation names a neuralese_direct stage of the recipe')
+    previous = declared.get('previous')
+    if (not isinstance(previous, dict) or not previous or set(previous) - set(OBJECTIVE_COMPONENTS) or
+            not all(v is None or isinstance(v, str) and re.fullmatch(r'[0-9a-f]{64}', v) for v in previous.values())):
+        raise ValueError('objective_continuation.previous maps ' + '/'.join(OBJECTIVE_COMPONENTS) +
+                         ' to the canonical sha256 of the component the stage trained with (null: none)')
+
+
+def objective_component_sha256(component):
+    """The canonical SHA-256 an objective continuation pins a recipe component by (None when absent)."""
+    return None if component is None else canonical_json_sha256_hex(component)
+
+
+def objective_handoff(old_recipe, new_recipe, out):
+    """A handoff that changes objective components (``OBJECTIVE_COMPONENTS``) must declare an objective continuation
+    of the active stage pinning the old components. Finished stages keep their curriculum (their stage_progress and
+    family membership); the active stage is the declared one; unstarted stages may change freely. The trainer then
+    continues the curriculum from the checkpoint's update and refuses any λ or member-weight jump
+    (direct_sft.objective_continuation). Returns (record or None, old recipe, new recipe) with the components and the
+    declaration removed when they changed."""
+    changed = [key for key in OBJECTIVE_COMPONENTS if old_recipe.get(key) != new_recipe.get(key)]
+    if not changed:
+        return None, old_recipe, new_recipe
+    declared = new_recipe.get('objective_continuation')
+    if not isinstance(declared, dict):
+        raise ValueError('handoff refused: objective component(s) ' + ', '.join(changed) + ' changed without a '
+                         'declared objective_continuation')
+    stage_id = declared['stage']
+    if not stage_started(out, stage_id) or stage_finished(out, stage_id):
+        raise ValueError('handoff refused: objective_continuation names ' + stage_id + ', which is not the active '
+                         'stage (started, unfinished)')
+    for key in changed:
+        if declared['previous'].get(key, 'missing') != objective_component_sha256(old_recipe.get(key)):
+            raise ValueError('handoff refused: objective_continuation.previous.' + key + ' is not the running '
+                             'lineage\'s component')
+    for stage in new_recipe.get('stages', []):
+        if not stage_finished(out, stage['id']):
+            continue
+        for key, member in (('quantization', lambda c, s: (c or {}).get('stage_progress', {}).get(s)),
+                            ('family', lambda c, s: s in (c or {}).get('stages', []))):
+            if member(old_recipe.get(key), stage['id']) != member(new_recipe.get(key), stage['id']):
+                raise ValueError('handoff refused: finished stage ' + stage['id'] + ' keeps its ' + key)
+    old_value, new_value = json.loads(json.dumps(old_recipe)), json.loads(json.dumps(new_recipe))
+    for value in (old_value, new_value):
+        for key in changed + ['objective_continuation']:
+            value.pop(key, None)
+    record = {'stage': stage_id, 'changed': changed,
+              'previous_sha256': {key: objective_component_sha256(old_recipe.get(key)) for key in changed},
+              'sha256': {key: objective_component_sha256(new_recipe.get(key)) for key in changed}}
+    return record, old_value, new_value
+
+
+def stage_objective_args(recipe, stage):
+    """The stage's family component and objective-continuation declaration as trainer arguments."""
+    from ..maple.family import stage_family
+    command = []
+    component = stage_family(recipe.get('family'), stage['id'])
+    if component is not None:
+        command += ['--family', json.dumps(component, sort_keys=True, separators=(',', ':'))]
+    declared = recipe.get('objective_continuation')
+    if isinstance(declared, dict) and declared.get('stage') == stage['id']:
+        command += ['--objective-continuation', json.dumps({'stage': declared['stage'],
+                                                            'previous': declared['previous']},
+                                                           sort_keys=True, separators=(',', ':'))]
+    return command
 
 
 def stage_quantization(recipe, stage, parameters, reports, init_mix=None):
@@ -1094,6 +1185,8 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
     new_handoff_recipe = _without_extensions(plan['recipe'], extended)
     old_handoff_recipe, new_handoff_recipe = _without_unstarted_bindings(
         old_handoff_recipe, new_handoff_recipe, input_changes)
+    objective_change, old_handoff_recipe, new_handoff_recipe = objective_handoff(
+        old_handoff_recipe, new_handoff_recipe, out)
     epoch_budget_changes = recipe_handoff_epoch_changes(old_handoff_recipe, new_handoff_recipe)
     old_code = existing['code']
     old_runtime = existing['recipe'].get('runtime', {})
@@ -1131,6 +1224,8 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
         record['extended'] = extended
     if epoch_budget_changes:
         record['epoch_budget_changes'] = epoch_budget_changes
+    if objective_change:
+        record['objective_continuation'] = objective_change
     updated = dict(existing, recipe=plan['recipe'], code=new_code,
                    handoffs=list(existing.get('handoffs', [])) + [record])
     if input_changes:
@@ -1688,6 +1783,8 @@ def main(argv=None):
                 component = stage_quantization(recipe, stage, stage_parameters, reports, init_mix)
                 if component is not None:
                     command += ['--quantization', json.dumps(component, sort_keys=True, separators=(',', ':'))]
+                if kind == 'neuralese_direct':
+                    command += stage_objective_args(recipe, stage)
                 environment = dict(os.environ)
                 declared_environment = declared_runtime_environment(recipe)
                 if 'NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE' not in declared_environment:

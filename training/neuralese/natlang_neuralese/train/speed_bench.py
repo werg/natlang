@@ -48,6 +48,10 @@ def main(argv=None):
     p.add_argument('--latent-optimizer', choices=('muonsr', 'lionsr'), default='muonsr')
     p.add_argument('--ns', default='cubic5')
     p.add_argument('--moe-kernel', default='grouped')
+    p.add_argument('--member', help='a family member update (maple/family.py), e.g. 2x32 or 1x32 on a 2-layer bench: '
+                   'the BF16 teacher forward, then the member forward/backward with KL(full || member)')
+    p.add_argument('--order', default=str(resolve('repo') / 'runs/mellum-nested-20261009/n0-v1/expert-order.pt'),
+                   help='--member: the N0 expert order (its first --layers layers are used)')
     p.add_argument('--profile', action='store_true')
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--seed', type=int, default=0)
@@ -93,6 +97,17 @@ def main(argv=None):
     if a.fp8_training != 'off':
         from .fp8_backend import make_backend
         fp8_backend = make_backend(a.fp8_training, backbone.hf, device=device)
+    family = None
+    if a.member:
+        from ..maple.family import Family, member_kl
+        from ..common.hashing import sha256_file_hex
+        from .joint_kd import IGNORE
+        order = a.out / 'expert-order.pt'
+        torch.save({'orders': torch.load(a.order)['orders'][:a.layers]}, order)
+        family = Family({'schema': 'natlang.neuralese-family/1', 'members': {a.member: 1.0}, 'kl_weight': 1.0,
+                         'order': {'path': str(order), 'sha256': sha256_file_hex(order)}, 'stages': ['bench'],
+                         'stage': 'bench'})
+        family.install(backbone)
     point, _, mix = a.qat.partition(':')
     mix = float(mix or 0)
     norm_dtypes = sorted({str(m.weight.dtype) for n, m in maple.named_modules() if n.endswith('norm')})
@@ -111,6 +126,13 @@ def main(argv=None):
         torch.cuda.reset_peak_memory_stats()
         profiler.begin(update)
         tick = time.perf_counter()
+        teacher = None
+        if family is not None:  # direct_sft's member update: the BF16 full model's span states, no graph
+            with profiling.region('update/teacher'), torch.no_grad(), quant.context('bf16', 0.0), (
+                    fp8_backend.native_modules() if fp8_backend is not None else contextlib.nullcontext()):
+                teacher = backbone.forward_ids(ids[:, :-1], cutoff=backbone.num_layers,
+                                               logits=False)['h_final'][:, -a.span:]
+
         def part(rows_ids, scale=1.0):
             with profiling.region('update/forward'):
                 hidden = backbone.forward_ids(rows_ids[:, :-1], cutoff=backbone.num_layers, logits=False)['h_final']
@@ -124,13 +146,16 @@ def main(argv=None):
                                                        position_weights=weights)
                     mixture = soft_token_mixture(backbone.logits, table, states.detach())
                 loss = loss + 0.0 * mixture.sum()
+                if teacher is not None:
+                    loss = loss + member_kl(backbone, states, teacher, gold, kl_weight=family.kl_weight)[0]
                 loss = loss * scale
             with profiling.region('update/backward'), profiling.backward_phase():
                 loss.backward()
             return float(loss)
 
         fp8 = fp8_backend.autocast() if fp8_backend is not None else contextlib.nullcontext()
-        with fp8, quant.context(point, mix), shared_parametrized_weights(backbone.hf) as next_pass:
+        member = family.selected(backbone, a.member) if family is not None else contextlib.nullcontext()
+        with member, fp8, quant.context(point, mix), shared_parametrized_weights(backbone.hf) as next_pass:
             if a.dump_grads is not None and update == a.updates:  # accumulate this update's real gradients
                 loss = sum(part(chunk, len(chunk) / a.rows) for chunk in ids.split(a.micro_rows or a.rows))
                 torch.save({name: q.grad.detach().cpu() for name, q in latent_named

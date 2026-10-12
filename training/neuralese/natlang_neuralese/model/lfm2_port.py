@@ -756,12 +756,15 @@ class PortBackbone(nn.Module):
         cache = cache or PortCache.empty(self.num_layers)
         result = {}
         h = embeds
-        if cutoff is not None:
+        # A depth-nested family member (maple/family.py) exits early after ``exit_layers`` layers through the
+        # final norm and the shared head; None: every layer.
+        depth = getattr(self, "exit_layers", None) or self.num_layers
+        if cutoff is not None and cutoff < depth:
             h, cache = self.run_layers(h, range(0, cutoff), cache, padding=padding, left_pad=left_pad)
             result["h_cut"] = h
-            h, cache = self.run_layers(h, range(cutoff, self.num_layers), cache, padding=padding, left_pad=left_pad)
+            h, cache = self.run_layers(h, range(cutoff, depth), cache, padding=padding, left_pad=left_pad)
         else:
-            h, cache = self.run_layers(h, range(0, self.num_layers), cache, padding=padding, left_pad=left_pad)
+            h, cache = self.run_layers(h, range(0, depth), cache, padding=padding, left_pad=left_pad)
         result.update(h_final=h, logits=self.logits(h) if logits else None, cache=cache)
         return result
 

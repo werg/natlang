@@ -2,7 +2,7 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-mellum-v4",
  "extends": "neuralese-direct-v3",
- "description": "neuralese-direct-v3 (union r2, three phases: full-prompt warm-up 0.5 epoch, program-header direct_sft 1 epoch, whole-trajectory direct_trajectory 1 epoch) on BF16 Mellum2.1 with raw-token-v1 heads. Every difference from the base is declared in training/neuralese/line-parity.json. Backbone-inherent: the data binds the union's Mellum2.1 twin renders (full/, program-header/, whole-trajectory/mellum21; same document ids, splits and source groups as the base's lfm25 renders); grouped MoE kernel; maple output convention and Mellum's measured base gate_pass; MuonSR latent_lr 1e-5; Mellum's quantization component (as neuralese-direct-mellum-v3), its curriculum progress continued over the new phase: direct_sft [0, 0.35], direct_trajectory [0.35, 0.5]. Fit-only: window_execution packed. Supersedes neuralese-direct-mellum-v3 (4962-document data, two phases). History: recipes/HISTORY.md.",
+ "description": "neuralese-direct-v3 (union r2, three phases: full-prompt warm-up 0.5 epoch, program-header direct_sft 1 epoch, whole-trajectory direct_trajectory 1 epoch) on BF16 Mellum2.1 with raw-token-v1 heads. Every difference from the base is declared in training/neuralese/line-parity.json. Backbone-inherent: the data binds the union's Mellum2.1 twin renders (full/, program-header/, whole-trajectory/mellum21; same document ids, splits and source groups as the base's lfm25 renders); grouped MoE kernel; maple output convention and Mellum's measured base gate_pass; MuonSR latent_lr 1e-5; Mellum's quantization points (ternary-experts, ternary) on the shared curriculum (direct_sft [0, 0.75], direct_trajectory [0.75, 1.0]; owner 2026-10-12); the shared nested-family objective with Mellum's members (backbone-inherent): expert width over the N0 order (runs/mellum-nested-20261009/n0-v1: 32 experts carry 91% of routing mass, 16 carry 71%) and depth: 28x32, 28x16, 21x32 (28x24 evaluated). Fit-only: window_execution packed. Supersedes neuralese-direct-mellum-v3 (4962-document data, two phases). History: recipes/HISTORY.md.",
  "overrides": {
   "input_bindings": {
    "direct_text": {
@@ -37,21 +37,11 @@
   },
   "quantization": {
    "schema": "natlang.neuralese-quantization/1",
-   "description": "raw-recurrence-mellum-v11's precision points woven into the direct stage (owner rule: QAT in every stage), trained on the same SFT targets with no BF16 KL teacher (flagged, NEURALESE_DIRECT_V1.md). No preserve stream and no own gate: drift reference and behaviour gate are the shared monitor (in-run capture on the 48 probes), as on the LFM line.",
+   "description": "raw-recurrence-mellum-v11's precision points woven into the direct stage (owner rule: QAT in every stage), trained on the same SFT targets with no BF16 KL teacher (flagged, NEURALESE_DIRECT_V1.md). The curriculum is the shared base's (direct_sft [0, 0.75], direct_trajectory [0.75, 1.0]; owner 2026-10-12: ramps the stages actually reach), so ternary-experts reaches lambda 1 at curriculum 0.7, inside direct_sft, and full ternary (report) at 0.95, inside direct_trajectory. Backbone-inherent beyond the base's q4: ternary-experts (required) and ternary (report), the 12B MoE's deploy targets. No preserve stream and no own gate: drift reference and behaviour gate are the shared monitor, as on the LFM line; the stage reports held CE at each gated point (lambda 1) beside BF16.",
    "loss": {
     "mode": "sample",
     "bf16_weight": 1.0,
     "seed": 0
-   },
-   "stage_progress": {
-    "direct_sft": [
-     0.0,
-     0.35
-    ],
-    "direct_trajectory": [
-     0.35,
-     0.5
-    ]
    },
    "points": [
     {
@@ -129,6 +119,29 @@
       }
      }
     }
+   ]
+  },
+  "family": {
+   "order": {
+    "path": "runs/mellum-nested-20261009/n0-v1/expert-order.pt",
+    "sha256": "b38de5d6f939fc6135efb69a3f99c4854af44b50dd9e3a1a358c4384dbbcf1a4"
+   },
+   "members": {
+    "12xall": {
+     "$delete": true
+    },
+    "8xall": {
+     "$delete": true
+    },
+    "28x32": 0.1,
+    "28x16": 0.1,
+    "21x32": 0.1
+   },
+   "evaluate": [
+    "28x32",
+    "28x24",
+    "28x16",
+    "21x32"
    ]
   }
  }

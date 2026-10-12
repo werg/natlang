@@ -55,12 +55,16 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
                   'epochs': None, 'batch_tokens': 0, 'continue_from': None,
                   'fp8_training': 'off', 'fp8_recipe': 'delayed', 'fp8_amax_history_len': 16,
                   'gradient_audit_steps': 0, 'saved_tensor_audit_steps': 0,
-                  'gradient_digest_steps': 0, 'state_hash_steps': 0, 'sdpa_backend': 'default'}
+                  'gradient_digest_steps': 0, 'state_hash_steps': 0, 'sdpa_backend': 'default', 'family': None}
 OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
                          'continue_monitor_reference', 'gradient_digest_steps', 'state_hash_steps',
-                         'continued_text_data', 'plan_only', 'plan_out'})
+                         'continued_text_data', 'plan_only', 'plan_out', 'objective_continuation'})
+# Objective components a declared objective continuation may change in an active stage (recipe.py
+# OBJECTIVE_COMPONENTS): each is a recipe component the stage receives as one JSON option.
+OBJECTIVE_KEYS = ('quantization', 'family')
+OBJECTIVE_SCHEMA = 'natlang.neuralese-objective-continuation/1'
 
 
 def parse(argv=None):
@@ -144,6 +148,12 @@ def parse(argv=None):
                    help='auto accumulates independent windows sequentially and chooses checkpointing from shared '
                         'activation geometry plus live CUDA headroom; packed is a diagnostic override')
     p.add_argument('--quantization')
+    p.add_argument('--family', help='the recipe\'s nested-family component for this stage (maple/family.py): members '
+                   'drawn per update as an objective beside the full model')
+    p.add_argument('--objective-continuation',
+                   help='declared objective handoff (recipe objective_continuation): JSON {"stage", "previous": '
+                        '{component: canonical sha256 or null}}; a resume may then change those objective components '
+                        '(objective_continuation below)')
     p.add_argument('--fp8-training', choices=('off', 'te-fp8', 'triton-experts'), default='off',
                    help='FP8 backend (train/fp8_backend.py): te-fp8 = TE dense linears (LFM); triton-experts = '
                         'Triton grouped FP8 expert GEMMs (Mellum, composes with QAT); off = BF16')
@@ -496,6 +506,100 @@ def data_continuation(previous_targets, previous_held, targets, held, *, consume
     return record, plan
 
 
+def objective_component_sha256(value):
+    """Canonical SHA-256 of a stage objective option (JSON text) as the recipe declares it: without the stage's own
+    binding (``stage``, ``init_mix``). None for an absent component."""
+    if value in (None, ''):
+        return None
+    component = json.loads(value) if isinstance(value, str) else dict(value)
+    component.pop('stage', None)
+    component.pop('init_mix', None)
+    return canonical_json_sha256_hex(component)
+
+
+def effective_quantization_stage(component, steps, continuation, objective):
+    """The stage binding ``{id, progress, start, end}`` a quantization component runs with in this lineage: its
+    declared binding, ``end`` derived from the plan, then the data continuation's rebase, then an objective
+    continuation's (each continues the progress from its update)."""
+    if component is None:
+        return None
+    stage = dict(component['stage'])
+    if stage.get('end') == 'derived':
+        stage['end'] = steps
+    if continuation is not None and continuation.get('quantization_rebase'):
+        rebase = continuation['quantization_rebase']
+        stage.update(start=rebase['start'], end=steps, progress=list(rebase['progress']))
+    if objective is not None:
+        stage.update(start=objective['start'], end=steps, progress=list(objective['progress']))
+    return stage
+
+
+def objective_continuation(previous_options, current_options, declared, *, step, steps, continuation,
+                           previous_record):
+    """A declared objective handoff of the active stage (owner 2026-10-12: nested family and QAT reinstated in the
+    running lineage). The saved state trained with ``previous_options``; this launch declares new objective components
+    (``OBJECTIVE_KEYS``). Weights, optimizer state, the update counter and the data plan continue. The curriculum
+    progress continues from its value p_k at update k to the new stage end p1 over the remaining updates (as a data
+    continuation does): progress(t) = p_k + (p1 - p_k) (t - k) / (N - k). Refused unless the declaration pins every
+    changed component's previous content and nothing jumps at k: every precision point's λ and every family member's
+    sampling weight equals its previous value (a new component starts at 0). Returns the record (None when no
+    objective component changed)."""
+    from .quantization import Quantization
+    from ..maple.family import Family
+    changed = [key for key in OBJECTIVE_KEYS if previous_options.get(key) != current_options.get(key)]
+    if not changed:
+        return None
+    if not declared:
+        raise ValueError('neuralese_direct objective changed (' + ', '.join(changed) + '); an active stage changes '
+                         'its objective only by a declared objective continuation (recipe objective_continuation)')
+    declared = json.loads(declared) if isinstance(declared, str) else declared
+    pinned = declared.get('previous') or {}
+    for key in changed:
+        if key not in pinned:
+            raise ValueError('objective continuation does not declare the previous ' + key + ' component')
+        if objective_component_sha256(previous_options.get(key)) != pinned[key]:
+            raise ValueError('objective continuation: the checkpoint\'s ' + key + ' component is not the declared '
+                             'previous one')
+    old_q = json.loads(previous_options['quantization']) if previous_options.get('quantization') else None
+    new_q = json.loads(current_options['quantization']) if current_options.get('quantization') else None
+    if new_q is None:
+        raise ValueError('objective continuation keeps a quantization component (the stage curriculum)')
+    old_stage = effective_quantization_stage(old_q, steps, continuation, previous_record)
+    # A stage that trained without a curriculum (no quantization component, e.g. a BF16 LFM lineage) starts the new
+    # one at the handoff update, from its declared start: every ramp then begins at zero there.
+    old_quant = Quantization({**old_q, 'stage': old_stage}) if old_stage is not None else None
+    p_k = old_quant.progress(step) if old_quant is not None else new_q['stage']['progress'][0]
+    p1 = new_q['stage']['progress'][1]
+    if not p_k <= p1:
+        raise ValueError(f'objective continuation moves the curriculum backwards ({p_k} > {p1})')
+    stage = {'id': new_q['stage']['id'], 'start': step, 'end': steps, 'progress': [p_k, p1]}
+    new_quant = Quantization({**new_q, 'stage': stage})
+    before, after = (old_quant.mixes(step) if old_quant is not None else {}), new_quant.mixes(step)
+    jumps = {name: [before.get(name, 0.0), after.get(name, 0.0)] for name in set(before) | set(after)
+             if abs(before.get(name, 0.0) - after.get(name, 0.0)) > 1e-9}
+
+    def member_weights(option, progress):
+        if not option:
+            return {}
+        family = Family(json.loads(option))
+        mix = family.mix(progress)
+        return {key: weight * mix for key, weight in family.weights.items()}
+    old_members = member_weights(previous_options.get('family'), p_k)
+    new_members = member_weights(current_options.get('family'), p_k)
+    jumps.update({'family:' + key: [old_members.get(key, 0.0), new_members.get(key, 0.0)]
+                  for key in set(old_members) | set(new_members)
+                  if abs(old_members.get(key, 0.0) - new_members.get(key, 0.0)) > 1e-9})
+    if jumps:
+        raise ValueError('objective continuation jumps at update ' + str(step) + ': ' + json.dumps(jumps, sort_keys=True))
+    return {'schema': OBJECTIVE_SCHEMA, 'step': step, 'changed': changed, 'start': step, 'end': steps,
+            'progress': [p_k, p1], 'previous_stage': old_stage,
+            'previous_sha256': {key: objective_component_sha256(previous_options.get(key)) for key in changed},
+            'sha256': {key: objective_component_sha256(current_options.get(key)) for key in changed},
+            'mixes_at_step': after, 'family_weights_at_step': new_members,
+            'lr_schedule': 'constant (direct_sft has no LR schedule or warm-up): unchanged',
+            'previous': previous_record}
+
+
 def continuation_summary(record):
     """The record without its seen-document lists (stage report, plan, logs)."""
     return None if record is None else {k: v for k, v in record.items() if not k.startswith('seen_document_')}
@@ -673,11 +777,21 @@ def plan_only(a):
               if mode == 'continue' else recorded)
     _, plan = direct_schedule(targets, a, record)
     step = state['step'] if state is not None else 0
+    objective = added = None
+    if state is not None:
+        # A declared objective continuation is validated here exactly as the trainer will (no λ or weight jump).
+        objective = state.get('objective_continuation')
+        added = objective_continuation((state.get('identity') or {}).get('options') or {},
+                                       {key: getattr(a, key) for key in OBJECTIVE_KEYS}, a.objective_continuation,
+                                       step=step, steps=len(plan), continuation=record, previous_record=objective)
+        objective = added or objective
     if quantization_stage is not None:
         quantization_stage = dict(quantization_stage, end=len(plan))
         if record is not None and record.get('quantization_rebase'):
             quantization_stage.update(start=record['quantization_rebase']['start'],
                                       progress=record['quantization_rebase']['progress'])
+        if objective is not None:
+            quantization_stage.update(start=objective['start'], progress=objective['progress'])
     summary = {'event': 'direct_plan_only', 'mode': mode, 'resume_accepted': resumable, 'step': step,
                'updates': len(plan), 'remaining_updates': len(plan) - step, 'epochs': a.epochs,
                'batch_tokens': a.batch_tokens, 'target_windows': len(targets),
@@ -686,6 +800,9 @@ def plan_only(a):
                'next_update_documents': [[w['document'] for w in batch] for batch, _ in plan[step:step + 2]],
                'held_documents': held_documents(held), 'held_policy': held_selection.get('policy'),
                'quantization_stage': quantization_stage,
+               'objective_continuation': ({k: v for k, v in objective.items() if k != 'previous'}
+                                          if objective is not None else None),
+               'objective_continuation_new': added is not None,
                'lr_schedule': 'constant (no schedule, no warm-up)',
                'data_continuation': continuation_summary(record)}
     print(json.dumps(summary, indent=1), flush=True)
@@ -784,6 +901,15 @@ def main(argv=None):
             gate_held = teacher_shards(preserve['teacher']['artifact'])[1]
         if quant.component.get('gate'):
             behaviour = Behaviour(quant.component['gate'], engine.tokenizer, gate_held, root=path_root('repo'))
+    family = None
+    if a.family:
+        # The nested family as an in-stage objective (maple/family.py; owner 2026-10-12, REVIEW_20261012 rec. 4).
+        from ..maple.family import Family
+        if quant is None:
+            raise ValueError('the family objective ramps on the stage curriculum, which the quantization component '
+                             'declares')
+        family = Family(json.loads(a.family), root=path_root('repo'))
+        print(json.dumps({'event': 'family_installed', **family.install(backbone)}), flush=True)
     # The monitor (train/drift_monitor.py): the base model's own reference when no teacher holds one (LFM), the
     # monitor's gate when no quantization component declares one, and the stage's response-KL bound on the gate.
     from .drift_monitor import DriftMonitor, parse_monitor, setup_monitor
@@ -993,8 +1119,20 @@ def main(argv=None):
             hidden = backbone.forward_ids(ids[:, :-1], cutoff=engine.heads.cutoff, logits=False)['h_final']
         return hidden.gather(1, index[..., None].expand(-1, -1, hidden.shape[-1]))
 
-    def forward(rows_, *, gradients, accumulation=None):
-        """(weighted CE, metrics, predictions, token losses) of one padded batch at the active precision."""
+    def teacher_states(rows_):
+        """A member update's KL teacher: the full model's BF16 pre-norm states at the span positions of ``rows_``,
+        without a graph (maple/family.py)."""
+        with torch.no_grad(), contextlib.ExitStack() as scope:
+            if quant is not None:
+                scope.enter_context(quant.context('bf16', 0.0))
+            if fp8_backend is not None:
+                scope.enter_context(fp8_backend.native_modules())
+            ids, _, index, *_ = tensors(rows_)
+            return span_states(ids, index)
+
+    def forward(rows_, *, gradients, accumulation=None, teacher=None):
+        """(weighted CE, metrics, predictions, token losses) of one padded batch at the active precision. With
+        ``teacher`` (a member update): plus the family's KL(full ‖ member) on the supervised positions."""
         with profile_region('update/data'):
             ids, span, index, valid, weights, segments, suffix = tensors(rows_)
         usable = float(weights.sum()) > 0  # a window made only of failed assistant turns teaches nothing
@@ -1048,6 +1186,16 @@ def main(argv=None):
             training_ce = training_ce * (real / accumulation['valid_positions'])
             value_error = value_error * (local_weight / accumulation['weight_mass'].clamp_min(1e-12))
             loss = training_ce + a.neuralese_weight * value_error
+        if teacher is not None:
+            from ..maple.family import member_kl
+            from .joint_kd import IGNORE
+            labels = torch.where(valid & (weights > 0), span, torch.full_like(span, IGNORE))
+            with profile_scope('family_kl'):
+                kl, kl_parts = member_kl(backbone, hidden, teacher, labels, kl_weight=family.kl_weight)
+            if accumulation is not None:
+                kl = kl * ((labels != IGNORE).sum() / accumulation['valid_positions'])
+            loss = loss + kl
+            metrics['member_kl'] = kl_parts.kl / max(kl_parts.tokens, 1)
         loss_stats = {'valid_positions': int(valid.sum()), 'weight_mass': float(weights.sum())}
         return (loss if usable else loss * 0.0), metrics, prediction, token_losses, loss_stats
 
@@ -1055,6 +1203,7 @@ def main(argv=None):
     if not a.save_state:
         policy.save = lambda state, **_: None  # a smoke: logs and report only, never a full state
     step, best, base_eval, history = 0, None, None, []
+    objective = None  # a declared objective continuation of this stage (objective_continuation), once made
     archive = None
     pending_restore = None  # a data continuation with a new held set restores after the base is re-measured
 
@@ -1089,6 +1238,24 @@ def main(argv=None):
         # A data continuation's checkpoint read --continued-text-data in --text-data's place (continuation_mode).
         expected_inputs = (continuation_inputs(a, identity['inputs']) if continuation_launch == 'continue'
                            else identity['inputs'])
+        # A declared objective continuation (objective_continuation): the objective components may change; the
+        # curriculum continues from the checkpoint's update without a jump. A later resume reapplies the record.
+        objective = state.get('objective_continuation')
+        added = objective_continuation(previous_options, current_options, a.objective_continuation,
+                                       step=state['step'], steps=a.steps, continuation=continuation,
+                                       previous_record=objective)
+        if added is not None:
+            objective = dict(added, time=time.strftime('%Y-%m-%dT%H:%M:%S%z'))
+            for key in OBJECTIVE_KEYS:
+                previous_options.pop(key, None)
+                current_options.pop(key, None)
+            sidecar = a.out / 'objective-continuation.json'
+            sidecar.with_suffix('.pending').write_text(json.dumps(objective, indent=1) + '\n')
+            sidecar.with_suffix('.pending').replace(sidecar)
+            print(json.dumps({'event': 'objective_continuation', **{k: v for k, v in objective.items()
+                                                                    if k != 'previous'}}), flush=True)
+        if objective is not None and quant is not None:
+            quant.stage.update(start=objective['start'], end=a.steps, progress=list(objective['progress']))
         if state.get('schema') != SCHEMA or not same_resume_identity(
                 {'options': previous_options, 'inputs': state['identity']['inputs']},
                 {'options': current_options, 'inputs': expected_inputs}):
@@ -1148,7 +1315,7 @@ def main(argv=None):
         # declared phase geometry knob: context capacity and masking stay fixed, the new phase rebases held metrics
         # and the memory estimator uses a distinct target-size bin. It changes window grouping, so never an exact
         # in-place resume. Everything else must match.
-        phase_keys = {'text_data', 'records', 'pieces', 'epochs', 'quantization', 'batch', 'batch_tokens',
+        phase_keys = {'text_data', 'records', 'pieces', 'epochs', 'quantization', 'family', 'batch', 'batch_tokens',
                       'target_tokens', 'fp8_training', 'fp8_recipe', 'fp8_amax_history_len'}
         changed_objective = sorted(key for key in set(previous_options) & set(current_options)
                                    if key not in phase_keys and previous_options[key] != current_options[key])
@@ -1225,7 +1392,7 @@ def main(argv=None):
                 'best': best, 'base_eval': base_eval, 'history': history, **monitor.state(),
                 'grad_spike_clip': spike.state_dict() if spike is not None else None,
                 'direct_memory_estimator': memory_estimator.state_dict(),
-                'data_continuation': continuation,
+                'data_continuation': continuation, 'objective_continuation': objective,
                 'fp8_training': fp8_backend.extra_state() if fp8_backend is not None else None}
 
     def log(name, value):
@@ -1259,8 +1426,32 @@ def main(argv=None):
                           base_agreement=sum(agree) / len(agree))
             if monitor.active and check_monitor:
                 report['behaviour_drift'] = monitor.check(step, min(a.stop_at or a.steps, a.steps))
+        columns = held_columns()
+        if columns:
+            report['columns'] = columns
         log(log_name, report)
         return report
+
+    def held_columns():
+        """Held CE on the first --drift-ce-windows held windows for every gated precision point at its deploy
+        precision (λ = 1, full model) and every evaluated family member (BF16): the stage's precision and member
+        columns next to BF16 (owner 2026-10-10: every stage reports each deployed precision)."""
+        windows = held[:a.drift_ce_windows or 4]
+        arms = ([('precision', name, name, 1.0, None) for name in quant.gated_points()] if quant is not None else [])
+        arms += ([('member', key, 'bf16', 0.0, key) for key in family.evaluated] if family is not None else [])
+        result = {}
+        for kind, name, point, mix, member in arms:
+            total = 0.0
+            with torch.no_grad(), contextlib.ExitStack() as scope:
+                scope.enter_context(quant.context(point, mix))
+                if member is not None:
+                    scope.enter_context(family.selected(backbone, member))
+                if fp8_backend is not None:
+                    scope.enter_context(fp8_backend.native_modules())
+                for window in windows:
+                    total += forward([window], gradients=False)[1]['ce']
+            result.setdefault(kind, {})[name] = total / max(len(windows), 1)
+        return result
 
     def drift_ce():
         """Held CE on the first --drift-ce-windows held windows (BF16): where held CE bottoms out, between evals."""
@@ -1614,6 +1805,8 @@ def main(argv=None):
             fp8_backend.reset_row_counts()
         batch, covered = schedule[step_index]
         point, mix = ('bf16', 0.0) if quant is None else quant.sampled(step_index)[:2]
+        # The family objective (maple/family.py): this update trains the full model or one member, drawn by weight.
+        member = None if family is None else family.sampled(step_index, quant.progress(step_index))
         profiler.begin(step_index + 1)
         if deferred_reserve:
             settle_reserve(wait=False)
@@ -1631,9 +1824,16 @@ def main(argv=None):
         if cuda_active:
             torch.cuda.reset_peak_memory_stats(a.device)
         saved_tensor_audit = SavedTensorAudit() if step_index < a.saved_tensor_audit_steps else None
+        teachers = None
+        if member is not None:  # before the update's precision and cached weights: the teacher is the BF16 model
+            with profile_region('update/teacher'):
+                teachers = ([teacher_states([window]) for window in batch]
+                            if plan['mode'] == 'sequential' and len(batch) > 1 else teacher_states(batch))
         with contextlib.ExitStack() as scope:
             if saved_tensor_audit is not None:
                 scope.enter_context(saved_tensor_audit)
+            if member is not None:  # through backward: checkpointed layers recompute as the member
+                scope.enter_context(family.selected(backbone, member))
             if quant is not None:
                 scope.enter_context(quant.context(point, mix))
             if fp8_backend is not None:
@@ -1655,10 +1855,11 @@ def main(argv=None):
                 # The gated latent hooks are deliberately unarmed here: their gradients accumulate like the
                 # other parameters, and the shared optimizer updates every partition exactly once below.
                 with shared_parametrized_weights(backbone.hf):
-                    for window in batch:
+                    for position, window in enumerate(batch):
                         with profile_region('update/forward'):
                             part, part_metrics, _, _, part_stats = forward(
-                                [window], gradients=True, accumulation=normalizers)
+                                [window], gradients=True, accumulation=normalizers,
+                                teacher=teachers[position] if teachers is not None else None)
                         if not torch.isfinite(part):
                             raise RuntimeError('nonfinite neuralese_direct loss')
                         with profile_region('update/backward'), backward_phase():
@@ -1679,6 +1880,9 @@ def main(argv=None):
                     'real_tokens': sum(m['real_tokens'] for m, _ in metrics_rows),
                     'forward_tokens': sum(m['forward_tokens'] for m, _ in metrics_rows),
                 }
+                if teachers is not None:
+                    metrics['member_kl'] = sum(m['member_kl'] * s['valid_positions']
+                                               for m, s in metrics_rows) / span_total
                 loss = loss_value
                 latent_norm = gradient_norm([parameter for _, parameter, *_ in latent])
                 all_trainables = other_trainables + [parameter for _, parameter, *_ in latent]
@@ -1703,7 +1907,7 @@ def main(argv=None):
                     next_pass()
                     with in_backward.in_backward() as armed:
                         with profile_region('update/forward'):
-                            loss, metrics, _, _, _ = forward(batch, gradients=True)
+                            loss, metrics, _, _, _ = forward(batch, gradients=True, teacher=teachers)
                         if not torch.isfinite(loss):
                             raise RuntimeError('nonfinite neuralese_direct loss')
                         with profile_region('update/backward'), backward_phase():
@@ -1766,7 +1970,7 @@ def main(argv=None):
         for key in totals:
             totals[key] += metrics[key]
         log('train.jsonl', {'step': step, 'loss': float(loss), 'precision': point,
-                            'precision_policy': point, 'mix': mix,
+                            'precision_policy': point, 'mix': mix, 'member': member,
                             'window_execution': plan['mode'], 'checkpoint_layers': plan['checkpoint_layers'],
                             'memory_plan': plan, 'observed_incremental_peak_bytes': observed_increment,
                             'fp8_training': fp8_backend.configuration() if fp8_backend is not None else {'enabled': False},

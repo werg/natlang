@@ -434,6 +434,11 @@ class SparseMoE(nn.Module):
             self.experts = TernaryExperts(config.num_experts, config.hidden_size, config.moe_intermediate_size)
             self.experts.clamp = config.swiglu_clamp
         self.active_experts: int | None = None
+        # The active member's expert ids in this layer (``MapleForCausalLM.set_member_order``): a member of an
+        # unpermuted model routes over these experts (the first ``active_experts`` of the N0 order) instead of the
+        # first ``active_experts`` indices; an expert keeps its own id, so weights, optimizer state and kernels are
+        # untouched. ``None``: the prefix (a model permuted with ``order_experts``).
+        self.member_experts: torch.Tensor | None = None
         self.statistics: dict | None = None
         # Private router rows per family member (MAPLE_NESTED §4): a trainable copy of the rows of the member's
         # experts. The member's GGUF carries them as its own ffn_gate_inp, so they export exactly.
@@ -443,20 +448,23 @@ class SparseMoE(nn.Module):
         from .ternary import STATE
 
         key = str(STATE["size"])
+        ids = self.member_experts if self.active_experts is not None else None
         if self.active_experts is not None and STATE["enabled"] and key in self.private_gate:
-            logits = F.linear(x.float(), self.private_gate[key])
-        elif self._invariant(x):
-            # Exact FP32 with one fixed tile per row: top-k routing flips near ties on any shape-dependent rounding
-            # (and the NGC containers' TF32 override would otherwise run this FP32 product in TF32).
-            from .fused_moe import invariant_linear
-            logits = invariant_linear(x.float(), self.gate.weight.float())
-            if self.active_experts is not None:
-                logits = logits[:, :self.active_experts]
+            logits = F.linear(x.float(), self.private_gate[key])  # the member's own rows, in its expert order
         else:
-            logits = F.linear(x.float(), self.gate.weight.float())
+            if self._invariant(x):
+                # Exact FP32 with one fixed tile per row: top-k routing flips near ties on any shape-dependent
+                # rounding (and the NGC containers' TF32 override would otherwise run this FP32 product in TF32).
+                from .fused_moe import invariant_linear
+                logits = invariant_linear(x.float(), self.gate.weight.float())
+            else:
+                logits = F.linear(x.float(), self.gate.weight.float())
             if self.active_experts is not None:
-                logits = logits[:, :self.active_experts]
+                logits = (logits.index_select(1, ids.to(logits.device)) if ids is not None
+                          else logits[:, :self.active_experts])
         top_logits, top_index = logits.topk(self.top_k, dim=-1)
+        if ids is not None:  # member positions -> the experts' own ids
+            top_index = ids.to(top_index.device)[top_index]
         weights = torch.softmax(top_logits, dim=-1)  # = softmax over all, renormalised over the top k
         return top_index, weights
 
@@ -601,14 +609,34 @@ class MapleForCausalLM(nn.Module):
 
         STATE["size"] = key
         self.model.active_layers = layers
-        for layer in self.model.layers:
+        orders = getattr(self, "member_orders", None)
+        for index, layer in enumerate(self.model.layers):
             layer.mlp.active_experts = experts
+            layer.mlp.member_experts = (orders[index][:experts] if orders is not None and experts is not None
+                                        else None)
+
+    def set_member_order(self, orders: list[torch.Tensor] | None):
+        """Members of this (unpermuted) model take the first E experts of ``orders[layer]`` (the N0 usage order,
+        ``routing.py``) instead of expert ids 0..E-1: the nested family without permuting weights, router rows or
+        optimizer state (an export permutes once, ``qat_export --order``). ``None``: prefixes of the stored order."""
+        if orders is not None:
+            if len(orders) != len(self.model.layers):
+                raise ValueError("the expert order has one permutation per layer")
+            count = self.model.layers[0].mlp.gate.weight.shape[0]
+            for order in orders:
+                if sorted(order.tolist()) != list(range(count)):
+                    raise ValueError("each layer's expert order is a permutation of its experts")
+            device = self.model.layers[0].mlp.gate.weight.device
+            orders = [order.to(device=device, dtype=torch.long) for order in orders]
+        self.member_orders = orders
 
     def add_private_router(self, n: int, key: str | None = None, layers: int | None = None) -> list[nn.Parameter]:
         """Trainable private router rows for member ``key`` (default ``str(n)``): a copy of the first ``n`` rows."""
         added = []
-        for layer in self.model.layers[:layers]:
-            parameter = nn.Parameter(layer.mlp.gate.weight.detach()[:n].float().clone())
+        orders = getattr(self, "member_orders", None)
+        for index, layer in enumerate(self.model.layers[:layers]):
+            rows = orders[index][:n] if orders is not None else torch.arange(n, device=layer.mlp.gate.weight.device)
+            parameter = nn.Parameter(layer.mlp.gate.weight.detach()[rows].float().clone())
             layer.mlp.private_gate[key or str(n)] = parameter
             added.append(parameter)
         return added

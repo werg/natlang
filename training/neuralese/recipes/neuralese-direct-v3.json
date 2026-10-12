@@ -2,7 +2,7 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-v3",
  "extends": "neuralese-direct-v2",
- "description": "Unified shared base for both lines (line parity, coordinator decision 2026-10-12 following Pop's main LFM line, decision pop-2356): neuralese-direct-v2 on the admitted target union natlang-target-union-20261011-r2 (training/corpus-manifests/natlang-target-union-20261011-r2.json) with three phases of one lineage: direct_warmup, 0.5 epoch of the full-prompt rendering; direct_sft, 1 epoch of the program-header rendering (owner decision 2026-10-12: one epoch, not two) (~133k train documents), continuing from the warm-up; direct_trajectory, 1 epoch of the whole-trajectory rendering (~76k documents), continuing from direct_sft. Each later phase continues from its predecessor phase's full state with the lineage's identity check and the base drift reference (recipe.py DIRECT_PHASE_CONTINUATION). The base binds the LFM2.5 renders; a line with another tokenizer binds the same union's twin renders (same document ids, splits and source groups). Everything else is neuralese-direct-v2.",
+ "description": "Unified shared base for both lines (line parity, coordinator decision 2026-10-12 following Pop's main LFM line, decision pop-2356): neuralese-direct-v2 on the admitted target union natlang-target-union-20261011-r2 (training/corpus-manifests/natlang-target-union-20261011-r2.json) with three phases of one lineage: direct_warmup, 0.5 epoch of the full-prompt rendering; direct_sft, 1 epoch of the program-header rendering (owner decision 2026-10-12: one epoch, not two) (~133k train documents), continuing from the warm-up; direct_trajectory, 1 epoch of the whole-trajectory rendering (~76k documents), continuing from direct_sft. Each later phase continues from its predecessor phase's full state with the lineage's identity check and the base drift reference (recipe.py DIRECT_PHASE_CONTINUATION). The base binds the LFM2.5 renders; a line with another tokenizer binds the same union's twin renders (same document ids, splits and source groups). Everything else is neuralese-direct-v2. Shared QAT component (owner 2026-10-12, REVIEW_20261012 rec. 4): curriculum direct_sft [0, 0.75], direct_trajectory [0.75, 1.0], one q4 point (int4 g32, ramp 0.15-0.3, weight 0.5, sampled); lines add lower-precision points only where the backbone deploys them. Shared nested-family objective (same date): depth members on the dense base (12xall, 8xall), backbone-inherent members per line, ramped on the shared curriculum.",
  "overrides": {
   "input_bindings": {
    "direct_text": {
@@ -42,6 +42,77 @@
      "epochs": 1.0
     }
    }
+  },
+  "quantization": {
+   "schema": "natlang.neuralese-quantization/1",
+   "description": "Shared QAT component of both lines (owner 2026-10-12: QAT ramps the stages actually reach; light QAT on the LFM line). The curriculum spans the two phases that train the backbone after the BF16 warm-up: direct_sft [0, 0.75], direct_trajectory [0.75, 1.0] (QAT_CURRICULUM_20261012 in plans/neuralese/NEURALESE_DIRECT_V1.md). One point, q4: int4 group 32 (Q4_0-style) on every linear module group a backbone has, ramped in over curriculum 0.15-0.3 (about 20-40% of direct_sft), sampled at weight 0.5 beside BF16 1.0 (one precision per update; BF16 stays the reference of the drift monitor and gate). Light because it is the precision the LFM line deploys (Q4_K_M is the browser default, BROWSER_INFERENCE.md) and costs no extra pass; ternary on a 350M dense model is not a deploy target. A line adds points only where its backbone deploys lower (Mellum: ternary experts, line-parity.json).",
+   "loss": {
+    "mode": "sample",
+    "bf16_weight": 1.0,
+    "seed": 0
+   },
+   "stage_progress": {
+    "direct_sft": [
+     0.0,
+     0.75
+    ],
+    "direct_trajectory": [
+     0.75,
+     1.0
+    ]
+   },
+   "points": [
+    {
+     "name": "q4",
+     "gate": "required",
+     "weight": 0.5,
+     "ramp": {
+      "start": 0.15,
+      "end": 0.3
+     },
+     "modules": {
+      "experts": {
+       "format": "int4",
+       "group": 32
+      },
+      "mlp": {
+       "format": "int4",
+       "group": 32
+      },
+      "attention": {
+       "format": "int4",
+       "group": 32
+      },
+      "conv": {
+       "format": "int4",
+       "group": 32
+      }
+     }
+    }
+   ]
+  },
+  "family": {
+   "schema": "natlang.neuralese-family/1",
+   "description": "The nested family as an in-stage objective of both lines (owner 2026-10-08 nested-family goal, reinstated 2026-10-12, REVIEW_20261012 rec. 4; owner: as much unity and lockstep between the lines as possible; plans/neuralese/MAPLE_NESTED.md 4a). Shared: the objective (each update draws the full model at weight 1 or one member at its weight times the ramp; a member update is the stage objective on the same windows plus KL(full BF16 || member) on the supervised positions, at the update's drawn precision point), kl_weight 1, the ramp on the shared curriculum (0.03-0.08, so a running lineage takes it from zero), members sharing every weight (no private parts), total member weight 0.3 (about 23% of updates once ramped in). Backbone-inherent (line-parity.json): the members and the order. The base (LFM2.5-350M, dense, 16 layers) nests in depth: 12xall and 8xall exit early after 12 and 8 layers through the final norm and shared head; 10xall is evaluated between them. The Mellum line nests in experts (N0 order) and depth.",
+   "members": {
+    "12xall": 0.15,
+    "8xall": 0.15
+   },
+   "evaluate": [
+    "12xall",
+    "10xall",
+    "8xall"
+   ],
+   "kl_weight": 1.0,
+   "seed": 0,
+   "ramp": {
+    "start": 0.03,
+    "end": 0.08
+   },
+   "stages": [
+    "direct_sft",
+    "direct_trajectory"
+   ]
   }
  }
 }

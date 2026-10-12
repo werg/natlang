@@ -488,7 +488,7 @@ def test_union_r2_three_phase_recipes_and_the_mellum_resume_from_the_v3_warm_up(
     assert {'continue_from', 'continue_identity', 'continue_monitor_reference'} <= set(first['inputs'])
     assert direct_phase_predecessor(resume, second) == 'direct_sft'
     component = stage_quantization(resume, second, {'epochs': 1.0}, [])
-    assert component['stage']['progress'] == [0.35, 0.5]
+    assert component['stage']['progress'] == [0.75, 1.0]  # the shared curriculum (owner 2026-10-12)
 
 
 def test_the_resume_identity_is_content_not_paths():
