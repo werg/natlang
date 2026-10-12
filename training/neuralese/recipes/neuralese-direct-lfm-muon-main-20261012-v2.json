@@ -1,7 +1,7 @@
 {
   "schema": "natlang.neuralese-training-recipe/1",
   "id": "neuralese-direct-lfm-muon-main-20261012-v2",
-  "description": "Executable Pop main Muon curriculum: program-header 2 epochs then whole-trajectory 1 epoch. Continues clean-base Muon weights and full optimizer state from curtailed full-prompt warmup step393; no Lion state. Automatic phase handoff preserves identity and base drift reference. Generic system prompt removed by the admitted program-header render. Supervised spans are512 tokens to reduce repeated prefix forwards; context capacity remains32768, masks and role weights unchanged; phase metrics rebase.",
+  "description": "Executable Pop main Muon curriculum: program-header 2 epochs then whole-trajectory 1 epoch. Continues clean-base Muon weights and full optimizer state from curtailed full-prompt warmup step393; no Lion state. Automatic phase handoff preserves identity and base drift reference. Generic system prompt removed by the admitted program-header render. Supervised spans are512 tokens to reduce repeated prefix forwards; context capacity remains32768, masks and role weights unchanged; phase metrics rebase. Includes all87 existing approved targets with exact recovered visible context, correcting42 prior conversion omissions; held rows and suffix targets unchanged.",
   "identity_qualification": "neuralese_direct_step0_identity",
   "input_bindings": {
     "base_heads": {
@@ -21,8 +21,8 @@
       "sha256": "d8cb2c7e18ac55e5b9d785c42fabe15401dc1ba5d858c9277af415db748d2a7f"
     },
     "program_header": {
-      "path": "/home/werg/natlang/runs/natlang-target-union-20261011-r2/program-header/lfm25/text-data.jsonl",
-      "sha256": "9ab8e89b447a7ba9397f881fe13cdc20197c6ba4f32a9973a4d5b730d698b883"
+      "path": "/home/werg/natlang/runs/natlang-target-union-20261011-r2-context-recovery-v1/program-header/lfm25/text-data.jsonl",
+      "sha256": "27e40b8b0531b1c246fb13541301aa10afd4da0f376520ff01f71cdbd33c6353"
     },
     "whole_trajectory": {
       "path": "/home/werg/natlang/runs/natlang-target-union-20261011-r2/whole-trajectory/lfm25/text-data.jsonl",
@@ -170,6 +170,7 @@
       "eval/scheduler_throughput.py": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064",
       "eval/self_feedback.py": "064339913cebb5a8253d0fbf09e97956c495fff018f5d84ff06dd2230f4c94dd",
       "eval/stopping_diagnostics.py": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37",
+      "eval/task_packet.py": "6f28788186acd8922683c2490cd2b37d46c7895768ea7575240987a36aba10e3",
       "eval/text_warmup_runtime.py": "32d55ae89e69d1b2be117c673008c3a18284d5110d273c00193b7da712e78537",
       "eval/trajectory_execution.py": "82d4032da64cfe39e0e1eda30dd79eeacb24d5f6de495a73b8058b673d18506a",
       "eval/view_gate.py": "e48a2268ffa1514a58ef4ce3141d898a5920b1843cafeeb82ca0123061b0b799",
@@ -275,7 +276,7 @@
       "train/projection_anchor.py": "300f993e439432faee809694ac3f71a0089cefab9e47142f0ffb4e98caae5ac8",
       "train/projection_e2e.py": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be",
       "train/quantization.py": "a32fd7258683ca51186d6ff2e43b96265d3bbac4c3c38b3330ec86711f21ea01",
-      "train/recipe.py": "02cebee3b9a047a70ffcd34d5ef99dbbe4acb1b9114963e72342fc5078d54dd1",
+      "train/recipe.py": "41640feacd75a723c87a4571c7db6e18a3bfa510e079345c50986c3810eaacaa",
       "train/record_cohorts.py": "7c69d0dfa81869e6dcd6bce45bb7230d51b995ca648a4ca16663bfaea7e99dba",
       "train/recurrence.py": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d",
       "train/staging.py": "d826eee727aae24930ba2ebffb782da71c7d18dafc05575a345a4acbb87ebb19",
@@ -302,6 +303,11 @@
         "path": "/home/werg/natlang/runs/natlang-target-union-20261011-r2/receipt.json",
         "role": "admitted_union_receipt",
         "sha256": "e0d1ba6bc5793b788859a7f8cfdb0c6f77b51f2e9d994c8f3d687e2a4d333018"
+      },
+      {
+        "role": "exact_visible_context_recovery",
+        "path": "/home/werg/natlang/runs/natlang-target-union-20261011-r2-context-recovery-v1/receipt/derivative-receipt.json",
+        "sha256": "e09d1f1ff035880cd1480e416ce76209dc29882aa8181b968e5e49d2fb684d9d"
       }
     ]
   }

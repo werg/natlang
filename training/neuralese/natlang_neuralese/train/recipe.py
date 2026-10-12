@@ -18,7 +18,7 @@ import os
 from pathlib import Path
 
 from ..common.hashing import canonical_json_sha256_hex
-from .output_embedding_projection import sha
+from ..common.hashing import sha256_file_hex as sha
 
 
 HANDLERS = {
