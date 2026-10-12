@@ -90,13 +90,18 @@ class RMSNorm(nn.Module):
         with _profile_scope("norm"):
             return self._forward(x)
 
-    def _forward(self, x):
+    def gain(self):
+        """The active gain: the shared weight plus the active family member's private correction."""
         from .ternary import STATE
 
         weight = self.weight
         member = STATE["size"]
         if member is not None and STATE["enabled"] and str(member) in self.private:
             weight = weight + self.private[str(member)].to(weight.dtype)
+        return weight
+
+    def _forward(self, x):
+        weight = self.gain()
         if (x.is_cuda and not _eager_depth and x.dtype in (torch.bfloat16, torch.float16)
                 and os.environ.get("NATLANG_MAPLE_FUSED_NORM", "1") != "0"):
             # One Triton kernel each way (maple/norm_kernels.py), same rule; NATLANG_MAPLE_FUSED_NORM=0: eager/compiled.

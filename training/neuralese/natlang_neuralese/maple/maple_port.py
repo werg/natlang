@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import torch
+
 from ..model.hf_port import QwenPortBackbone
 from .model import apply_partial_rope
 
@@ -21,6 +23,21 @@ class MaplePortBackbone(QwenPortBackbone):
         if self.layer_types[layer] == "sliding_attention":
             return apply_partial_rope(q, k, cos, sin)
         return q, k
+
+    def _fused_rope_tables(self, layer: int, attn, x, cos, sin):
+        """Mellum's full rotary (per-layer-type tables covering the whole head) with Maple's RMSNorm q/k norms on
+        BF16 CUDA activations: maple/rope_kernels.qk_norm_rope (NATLANG_FUSED_ROPE=0: the eager path)."""
+        import os
+
+        from .model import RMSNorm
+        if (not isinstance(cos, dict) or not x.is_cuda or x.dtype != torch.bfloat16
+                or os.environ.get("NATLANG_FUSED_ROPE", "1") == "0"
+                or not isinstance(attn.q_norm, RMSNorm) or not isinstance(attn.k_norm, RMSNorm)):
+            return None
+        kind = self.layer_types[layer]
+        if cos[kind].shape[-1] != attn.head_dim or cos[kind].dtype != torch.bfloat16:
+            return None
+        return cos[kind], sin[kind]
 
     @staticmethod
     def runner(maple_model) -> "MaplePortBackbone":
