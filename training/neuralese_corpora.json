@@ -61121,6 +61121,721 @@
         "build-report.json",
         "provenance.json"
       ]
+    },
+    {
+      "owner": "dgx",
+      "source_class": "native-e2e-producer-consumer-records",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-12 (e2e data: include everything; hold nothing for review, pending status or license): every authenticated producer->consumer edge of every converted native-turn source, for the e2e stage of both lines (tokenizer-agnostic records)",
+      "id": "neuralese-e2e-cohort-20261012-v2",
+      "path": "runs/neuralese-e2e-cohort-20261012-v2",
+      "include": [
+        "records.jsonl",
+        "pieces.jsonl",
+        "edges.jsonl",
+        "chains.jsonl",
+        "omissions.jsonl",
+        "receipt.json"
+      ],
+      "split": "per record, inherited from the source rows; cross-split edges dropped; train edges sharing a source group with any held document of union r3 dropped; MuSiQue dev is the musique_hops held split",
+      "admission": "e2e corpus v2: whole trajectories (chains) of every authenticated gradient edge (train/trajectories.authenticated_recurrence_context_view) over every converted native-turn source (conversion /16 with --admit-host-results, scripts/neuralese_data/e2e_mine.py); omissions.jsonl registers every conversion/authentication/assembly exclusion with its reason. Bound for training through slices (train/trajectories.py loads all records and needs unique writer names).",
+      "derived_from": [
+        "neuralese-e2e-union-cohort-20261012-v1",
+        "natlang-native-turns-s72-render-20261011-v1",
+        "natlang-native-turns-bgkit-knowledge-render-20261011-v2",
+        "natlang-native-turns-static-lambda-v2-render-20261011-v2",
+        "natlang-native-turns-static-lambda-expansion-render-20261011-v2",
+        "natlang-native-turns-clef-new-render-20261011-v2",
+        "natlang-native-turns-clef-pools-20261011-v2-render",
+        "natlang-native-turns-clef-pools-20261012-v1-render",
+        "natlang-native-turns-pop-v43-static-render-20261011-v1",
+        "natlang-native-turns-misc-admitted-render-20261011-v3",
+        "natlang-free-provider-v73-wholetraj-render-20261012-v1"
+      ],
+      "counts": {
+        "totals": {
+          "chains": 24141,
+          "edges": 95106,
+          "edges_dropped_endpoint": 1883,
+          "edges_duplicate_reference": 4919,
+          "edges_test": 9791,
+          "edges_train": 85315,
+          "omitted_assemble_duplicate_id": 3288,
+          "omitted_assemble_piece_version_conflict": 243,
+          "omitted_authenticate": 34773,
+          "omitted_convert": 441,
+          "records": 174608
+        },
+        "by_source": {
+          "assembly-v3": {
+            "chains": 184,
+            "edges": 977,
+            "records": 2864
+          },
+          "bgkit-knowledge": {
+            "chains": 3337,
+            "edges": 6871,
+            "records": 34800
+          },
+          "clef-new": {
+            "chains": 17,
+            "edges": 17,
+            "records": 111
+          },
+          "clef-pools-20261011-v2": {
+            "chains": 68,
+            "edges": 79,
+            "records": 502
+          },
+          "clef-pools-20261012-v1": {
+            "chains": 59,
+            "edges": 67,
+            "records": 440
+          },
+          "e2e-union-v1": {
+            "chains": 23,
+            "edges": 119,
+            "records": 146
+          },
+          "free-provider-v73": {
+            "chains": 19,
+            "edges": 98,
+            "records": 444
+          },
+          "luna-clinc-v5": {
+            "chains": 6,
+            "edges": 12,
+            "records": 23
+          },
+          "luna-clinc-v6": {
+            "chains": 6,
+            "edges": 12,
+            "records": 21
+          },
+          "luna-v17-v9": {
+            "chains": 6,
+            "edges": 10,
+            "records": 40
+          },
+          "luna-v21-clinc": {
+            "chains": 2,
+            "edges": 2,
+            "records": 6
+          },
+          "luna-v24-clinc": {
+            "chains": 11,
+            "edges": 16,
+            "records": 42
+          },
+          "misc-admitted": {
+            "chains": 32,
+            "edges": 287,
+            "records": 781
+          },
+          "musique-hops": {
+            "chains": 17424,
+            "edges": 71103,
+            "records": 75602
+          },
+          "pop-v43-static": {
+            "chains": 89,
+            "edges": 1457,
+            "records": 1277
+          },
+          "s72": {
+            "chains": 430,
+            "edges": 1897,
+            "records": 39100
+          },
+          "static-curriculum-pilot-s41001": {
+            "chains": 313,
+            "edges": 4152,
+            "records": 5218
+          },
+          "static-lambda-expansion": {
+            "chains": 169,
+            "edges": 391,
+            "records": 858
+          },
+          "static-lambda-v2": {
+            "chains": 1946,
+            "edges": 7539,
+            "records": 12333
+          }
+        },
+        "by_family": {
+          "authored_semantic_iterate_reducers_v28": {
+            "chains": 5,
+            "edges": 21,
+            "records": 26,
+            "supervised_tokens_lfm25_shard_kept": 52260
+          },
+          "authored_semantic_iterate_reducers_v30": {
+            "chains": 1,
+            "edges": 1,
+            "records": 2,
+            "supervised_tokens_lfm25_shard_kept": 3937
+          },
+          "authored_semantic_iterate_worlds_v17": {
+            "chains": 3,
+            "edges": 11,
+            "records": 17,
+            "supervised_tokens_lfm25_shard_kept": 13253
+          },
+          "curriculum_actor_greenhouse": {
+            "chains": 55,
+            "edges": 55,
+            "records": 165,
+            "supervised_tokens_lfm25_shard_kept": 15983
+          },
+          "curriculum_anli_batch": {
+            "chains": 9,
+            "edges": 24,
+            "records": 189,
+            "supervised_tokens_lfm25_shard_kept": 21853
+          },
+          "curriculum_annotation_decision_folders_decision_clinc_intent": {
+            "chains": 25,
+            "edges": 42,
+            "records": 92,
+            "supervised_tokens_lfm25_shard_kept": 3637
+          },
+          "curriculum_authored_semantic_iterate_worlds_v15": {
+            "chains": 5,
+            "edges": 62,
+            "records": 43,
+            "supervised_tokens_lfm25_shard_kept": 30772
+          },
+          "curriculum_authored_semantic_reducers": {
+            "chains": 9,
+            "edges": 17,
+            "records": 125,
+            "supervised_tokens_lfm25_shard_kept": 11573
+          },
+          "curriculum_authored_semantic_source_worlds_v10r2": {
+            "chains": 4,
+            "edges": 9,
+            "records": 109,
+            "supervised_tokens_lfm25_shard_kept": 22858
+          },
+          "curriculum_authored_semantic_source_worlds_v11": {
+            "chains": 6,
+            "edges": 34,
+            "records": 322,
+            "supervised_tokens_lfm25_shard_kept": 34514
+          },
+          "curriculum_authored_semantic_source_worlds_v12": {
+            "chains": 12,
+            "edges": 112,
+            "records": 234,
+            "supervised_tokens_lfm25_shard_kept": 30184
+          },
+          "curriculum_authored_semantic_source_worlds_v13": {
+            "chains": 4,
+            "edges": 12,
+            "records": 34,
+            "supervised_tokens_lfm25_shard_kept": 3392
+          },
+          "curriculum_authored_semantic_source_worlds_v14": {
+            "chains": 6,
+            "edges": 21,
+            "records": 31,
+            "supervised_tokens_lfm25_shard_kept": 6852
+          },
+          "curriculum_authored_semantic_source_worlds_v15": {
+            "chains": 22,
+            "edges": 167,
+            "records": 198,
+            "supervised_tokens_lfm25_shard_kept": 34981
+          },
+          "curriculum_child_opt_out": {
+            "chains": 9,
+            "edges": 25,
+            "records": 56,
+            "supervised_tokens_lfm25_shard_kept": 2994
+          },
+          "curriculum_child_sufficiency": {
+            "chains": 11,
+            "edges": 23,
+            "records": 49,
+            "supervised_tokens_lfm25_shard_kept": 1639
+          },
+          "curriculum_citance_summary": {
+            "chains": 4,
+            "edges": 8,
+            "records": 12,
+            "supervised_tokens_lfm25_shard_kept": 1698
+          },
+          "curriculum_claims_desk": {
+            "chains": 47,
+            "edges": 166,
+            "records": 1303,
+            "supervised_tokens_lfm25_shard_kept": 202588
+          },
+          "curriculum_clef_lead_scoring": {
+            "chains": 35,
+            "edges": 37,
+            "records": 224,
+            "supervised_tokens_lfm25_shard_kept": 11635
+          },
+          "curriculum_clef_skill_routing": {
+            "chains": 127,
+            "edges": 146,
+            "records": 942,
+            "supervised_tokens_lfm25_shard_kept": 34519
+          },
+          "curriculum_commaqa_numeric": {
+            "chains": 3,
+            "edges": 3,
+            "records": 35,
+            "supervised_tokens_lfm25_shard_kept": 1324
+          },
+          "curriculum_contract_desk": {
+            "chains": 35,
+            "edges": 102,
+            "records": 949,
+            "supervised_tokens_lfm25_shard_kept": 158529
+          },
+          "curriculum_cross_source_folders": {
+            "chains": 2,
+            "edges": 2,
+            "records": 116,
+            "supervised_tokens_lfm25_shard_kept": 9244
+          },
+          "curriculum_dataset_workbench": {
+            "chains": 76,
+            "edges": 422,
+            "records": 4231,
+            "supervised_tokens_lfm25_shard_kept": 255283
+          },
+          "curriculum_decision_extract_chain": {
+            "chains": 130,
+            "edges": 630,
+            "records": 1870,
+            "supervised_tokens_lfm25_shard_kept": 329809
+          },
+          "curriculum_decision_patch": {
+            "chains": 2,
+            "edges": 6,
+            "records": 27,
+            "supervised_tokens_lfm25_shard_kept": 3923
+          },
+          "curriculum_decision_skill_catalog": {
+            "chains": 14,
+            "edges": 24,
+            "records": 94,
+            "supervised_tokens_lfm25_shard_kept": 5503
+          },
+          "curriculum_decision_skills": {
+            "chains": 6,
+            "edges": 29,
+            "records": 126,
+            "supervised_tokens_lfm25_shard_kept": 20559
+          },
+          "curriculum_decision_source_cards": {
+            "chains": 3,
+            "edges": 12,
+            "records": 30,
+            "supervised_tokens_lfm25_shard_kept": 3169
+          },
+          "curriculum_decision_support": {
+            "chains": 1,
+            "edges": 3,
+            "records": 18,
+            "supervised_tokens_lfm25_shard_kept": 2854
+          },
+          "curriculum_digest_desk": {
+            "chains": 807,
+            "edges": 2244,
+            "records": 4746,
+            "supervised_tokens_lfm25_shard_kept": 1215379
+          },
+          "curriculum_edit_stream": {
+            "chains": 1207,
+            "edges": 4852,
+            "records": 7357,
+            "supervised_tokens_lfm25_shard_kept": 1324811
+          },
+          "curriculum_folder_edit": {
+            "chains": 4,
+            "edges": 488,
+            "records": 496,
+            "supervised_tokens_lfm25_shard_kept": 12122
+          },
+          "curriculum_folder_extract": {
+            "chains": 2,
+            "edges": 130,
+            "records": 134,
+            "supervised_tokens_lfm25_shard_kept": 4052
+          },
+          "curriculum_folder_index": {
+            "chains": 4,
+            "edges": 264,
+            "records": 272,
+            "supervised_tokens_lfm25_shard_kept": 5474
+          },
+          "curriculum_folder_index_inline": {
+            "chains": 7,
+            "edges": 93,
+            "records": 194,
+            "supervised_tokens_lfm25_shard_kept": 5058
+          },
+          "curriculum_folder_mixed": {
+            "chains": 4,
+            "edges": 764,
+            "records": 772,
+            "supervised_tokens_lfm25_shard_kept": 9502
+          },
+          "curriculum_folder_triage": {
+            "chains": 4,
+            "edges": 518,
+            "records": 526,
+            "supervised_tokens_lfm25_shard_kept": 9670
+          },
+          "curriculum_folder_triage_inline": {
+            "chains": 4,
+            "edges": 110,
+            "records": 118,
+            "supervised_tokens_lfm25_shard_kept": 2581
+          },
+          "curriculum_folio_batch": {
+            "chains": 16,
+            "edges": 46,
+            "records": 334,
+            "supervised_tokens_lfm25_shard_kept": 60515
+          },
+          "curriculum_inline_late_binding": {
+            "chains": 5,
+            "edges": 26,
+            "records": 670,
+            "supervised_tokens_lfm25_shard_kept": 187036
+          },
+          "curriculum_inline_multi_capture": {
+            "chains": 1,
+            "edges": 1,
+            "records": 9,
+            "supervised_tokens_lfm25_shard_kept": 1773
+          },
+          "curriculum_inline_review_each": {
+            "chains": 8,
+            "edges": 48,
+            "records": 64,
+            "supervised_tokens_lfm25_shard_kept": 980
+          },
+          "curriculum_inline_structured_extract": {
+            "chains": 153,
+            "edges": 493,
+            "records": 1106,
+            "supervised_tokens_lfm25_shard_kept": 83927
+          },
+          "curriculum_inline_union_target": {
+            "chains": 170,
+            "edges": 616,
+            "records": 1499,
+            "supervised_tokens_lfm25_shard_kept": 91018
+          },
+          "curriculum_iterate_schedule_repair": {
+            "chains": 28,
+            "edges": 28,
+            "records": 84,
+            "supervised_tokens_lfm25_shard_kept": 4025
+          },
+          "curriculum_knowledge_evidence": {
+            "chains": 608,
+            "edges": 1450,
+            "records": 22690,
+            "supervised_tokens_lfm25_shard_kept": 599090
+          },
+          "curriculum_knowledge_research": {
+            "chains": 543,
+            "edges": 679,
+            "records": 2170,
+            "supervised_tokens_lfm25_shard_kept": 274873
+          },
+          "curriculum_labeled_judgments": {
+            "chains": 25,
+            "edges": 91,
+            "records": 340,
+            "supervised_tokens_lfm25_shard_kept": 18951
+          },
+          "curriculum_memory_answer": {
+            "chains": 5,
+            "edges": 5,
+            "records": 15,
+            "supervised_tokens_lfm25_shard_kept": 574
+          },
+          "curriculum_musique_hops": {
+            "chains": 17424,
+            "edges": 71103,
+            "records": 75602,
+            "supervised_tokens_lfm25_shard_kept": 5082972
+          },
+          "curriculum_named_versus_inline": {
+            "chains": 12,
+            "edges": 68,
+            "records": 1006,
+            "supervised_tokens_lfm25_shard_kept": 64097
+          },
+          "curriculum_parallel_labels": {
+            "chains": 8,
+            "edges": 56,
+            "records": 72,
+            "supervised_tokens_lfm25_shard_kept": 1662
+          },
+          "curriculum_people_chain": {
+            "chains": 7,
+            "edges": 344,
+            "records": 358,
+            "supervised_tokens_lfm25_shard_kept": 7695
+          },
+          "curriculum_people_lookup": {
+            "chains": 3,
+            "edges": 66,
+            "records": 72,
+            "supervised_tokens_lfm25_shard_kept": 1860
+          },
+          "curriculum_proofwriter_question": {
+            "chains": 2,
+            "edges": 2,
+            "records": 9,
+            "supervised_tokens_lfm25_shard_kept": 420
+          },
+          "curriculum_recurrence_graphs": {
+            "chains": 8,
+            "edges": 10,
+            "records": 36,
+            "supervised_tokens_lfm25_shard_kept": 1209
+          },
+          "curriculum_recurrence_inline_graphs": {
+            "chains": 7,
+            "edges": 20,
+            "records": 39,
+            "supervised_tokens_lfm25_shard_kept": 1992
+          },
+          "curriculum_relational_policy_inline": {
+            "chains": 7,
+            "edges": 45,
+            "records": 251,
+            "supervised_tokens_lfm25_shard_kept": 37767
+          },
+          "curriculum_repo_answer": {
+            "chains": 1407,
+            "edges": 2619,
+            "records": 5628,
+            "supervised_tokens_lfm25_shard_kept": 412880
+          },
+          "curriculum_story_answer": {
+            "chains": 4,
+            "edges": 7,
+            "records": 12,
+            "supervised_tokens_lfm25_shard_kept": 356
+          },
+          "curriculum_story_choice": {
+            "chains": 4,
+            "edges": 4,
+            "records": 12,
+            "supervised_tokens_lfm25_shard_kept": 320
+          },
+          "curriculum_teacher_decision_labels_decision_ag_news_choice": {
+            "chains": 1,
+            "edges": 7,
+            "records": 17,
+            "supervised_tokens_lfm25_shard_kept": 1275
+          },
+          "curriculum_teacher_decision_labels_decision_banking77_choice": {
+            "chains": 40,
+            "edges": 1112,
+            "records": 644,
+            "supervised_tokens_lfm25_shard_kept": 32713
+          },
+          "curriculum_teacher_decision_labels_decision_boardgame_qa_choice": {
+            "chains": 1,
+            "edges": 1,
+            "records": 37,
+            "supervised_tokens_lfm25_shard_kept": 2997
+          },
+          "curriculum_teacher_decision_labels_decision_clinc_intent_choice": {
+            "chains": 32,
+            "edges": 313,
+            "records": 620,
+            "supervised_tokens_lfm25_shard_kept": 28979
+          },
+          "curriculum_teacher_decision_labels_decision_dbpedia_choice": {
+            "chains": 3,
+            "edges": 18,
+            "records": 68,
+            "supervised_tokens_lfm25_shard_kept": 3949
+          },
+          "curriculum_teacher_decision_labels_decision_emotion_choice": {
+            "chains": 1,
+            "edges": 2,
+            "records": 27,
+            "supervised_tokens_lfm25_shard_kept": 1994
+          },
+          "curriculum_teacher_decision_labels_decision_language_id_choice": {
+            "chains": 2,
+            "edges": 6,
+            "records": 36,
+            "supervised_tokens_lfm25_shard_kept": 2336
+          },
+          "curriculum_teacher_decision_labels_decision_massive_intent_choice": {
+            "chains": 31,
+            "edges": 206,
+            "records": 590,
+            "supervised_tokens_lfm25_shard_kept": 29800
+          },
+          "curriculum_teacher_decision_labels_decision_newsgroups_choice": {
+            "chains": 2,
+            "edges": 16,
+            "records": 46,
+            "supervised_tokens_lfm25_shard_kept": 2643
+          },
+          "curriculum_teacher_decision_labels_decision_trec_question_choice": {
+            "chains": 4,
+            "edges": 23,
+            "records": 85,
+            "supervised_tokens_lfm25_shard_kept": 5420
+          },
+          "curriculum_teacher_decision_labels_decision_vitaminc_choice": {
+            "chains": 1,
+            "edges": 2,
+            "records": 37,
+            "supervised_tokens_lfm25_shard_kept": 2175
+          },
+          "curriculum_teacher_decision_labels_decision_yahoo_topic_choice": {
+            "chains": 12,
+            "edges": 110,
+            "records": 234,
+            "supervised_tokens_lfm25_shard_kept": 14196
+          },
+          "curriculum_textworld_iterate": {
+            "chains": 73,
+            "edges": 279,
+            "records": 999,
+            "supervised_tokens_lfm25_shard_kept": 35654
+          },
+          "curriculum_translation_desk": {
+            "chains": 500,
+            "edges": 1969,
+            "records": 2968,
+            "supervised_tokens_lfm25_shard_kept": 468392
+          },
+          "curriculum_web_research": {
+            "chains": 2,
+            "edges": 2,
+            "records": 6,
+            "supervised_tokens_lfm25_shard_kept": 507
+          },
+          "curriculum_workbench_applicants": {
+            "chains": 67,
+            "edges": 250,
+            "records": 6306,
+            "supervised_tokens_lfm25_shard_kept": 461772
+          },
+          "curriculum_workbench_reviews": {
+            "chains": 93,
+            "edges": 750,
+            "records": 5795,
+            "supervised_tokens_lfm25_shard_kept": 343463
+          },
+          "curriculum_workbench_tickets": {
+            "chains": 107,
+            "edges": 524,
+            "records": 17731,
+            "supervised_tokens_lfm25_shard_kept": 1365053
+          }
+        }
+      },
+      "build": {
+        "script": "scripts/neuralese_data/e2e_mine.py",
+        "receipt": "runs/neuralese-e2e-cohort-20261012-v2/receipt.json",
+        "files": {
+          "chains.jsonl": {
+            "bytes": 13359911,
+            "sha256": "1b762736f46cdc626dacd1a1e3808bded8e62507f711ecf3583ac21a85d471c1"
+          },
+          "edges.jsonl": {
+            "bytes": 42834042,
+            "sha256": "60f8b107e60c7ecf3a65a46a0731e25b49af2207fef6060c94139bd484a344c0"
+          },
+          "omissions.jsonl": {
+            "bytes": 7331778,
+            "sha256": "b65dbf2910a281006f3a8965839ef81828a5cb66e3c026388d67db7cbb7eab8d"
+          },
+          "pieces.jsonl": {
+            "bytes": 1929022,
+            "sha256": "8f420dcd79ee6044012d2323ef06557706989d02dbdc07aa6108d7c9949a7a9a"
+          },
+          "records.jsonl": {
+            "bytes": 11065656724,
+            "sha256": "40d608d47714d31e54f027e2f7d38e07ac9b764d0df6185f42187b4f844c9c08"
+          }
+        }
+      },
+      "storage": "HDD (/mnt/external/natlang-development-data/e2e-data/corpora), bulk corpus; training reads slices on NVMe",
+      "notes": "Partial snapshot of the mining run: campaign-uncovered (whole-shard authentication failures, being redone per trajectory), static-curriculum-s7k and v13-r2 are not in v2 yet; a later version adds them. musique_hops (MuSiQue train+dev hop chains, static reference answers, e284901a) carries 71k of the 95k edges."
+    },
+    {
+      "owner": "dgx",
+      "source_class": "native-e2e-producer-consumer-records",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-12 (e2e data: include everything; hold nothing for review, pending status or license): every authenticated producer->consumer edge of every converted native-turn source, for the e2e stage of both lines (tokenizer-agnostic records)",
+      "id": "neuralese-e2e-cohort-20261012-v2-slice1",
+      "path": "runs/neuralese-e2e-cohort-20261012-v2-slice1",
+      "include": [
+        "records.jsonl",
+        "pieces.jsonl",
+        "edges.jsonl",
+        "chains.jsonl",
+        "receipt.json"
+      ],
+      "split": "from neuralese-e2e-cohort-20261012-v2 (per record)",
+      "admission": "trainer-sized slice of neuralese-e2e-cohort-20261012-v2: the edge endpoints of whole chains (the v1 rule), round-robin over families, densest chains first, writer names unique across the file (e2e_mine.py slice); re-authenticated as a whole: 7521 edges, 0 missing",
+      "derived_from": [
+        "neuralese-e2e-cohort-20261012-v2"
+      ],
+      "counts": {
+        "chains": 712,
+        "records": 7007,
+        "edges": 7521,
+        "by_split": {
+          "test": {
+            "chains": 170,
+            "edges": 1306,
+            "records": 1004
+          },
+          "train": {
+            "chains": 542,
+            "edges": 6215,
+            "records": 6003
+          }
+        },
+        "families": 80
+      },
+      "build": {
+        "script": "scripts/neuralese_data/e2e_mine.py",
+        "receipt": "runs/neuralese-e2e-cohort-20261012-v2-slice1/receipt.json",
+        "files": {
+          "chains.jsonl": {
+            "bytes": 503340,
+            "sha256": "6c2f7f08d74762687f6533c405a0a3d1eb8153d527852519d1950666317654fa"
+          },
+          "edges.jsonl": {
+            "bytes": 3579716,
+            "sha256": "577af36dd77e1fe98510ccf84feeafd51db1dab3ec38ee4a3718db7ac6e71218"
+          },
+          "pieces.jsonl": {
+            "bytes": 1929022,
+            "sha256": "8f420dcd79ee6044012d2323ef06557706989d02dbdc07aa6108d7c9949a7a9a"
+          },
+          "records.jsonl": {
+            "bytes": 972385014,
+            "sha256": "68b3e77951687aee85d0caf39df91561d1a7027b6aaa7487a16119c549a5e469"
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [
