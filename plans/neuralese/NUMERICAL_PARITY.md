@@ -223,8 +223,8 @@ in the pinned image. Five warm measurements gave 5.585→4.825 ms at 1024 tokens
 about 0.043; gradient relative L2 was 0.073–0.088 with cosine 0.996–0.997.
 Memory was unchanged at 1024 and slightly higher at 6144. These are one-layer
 results, not whole-model speed or quality qualification. A diagnostic shared
-direct-stage wrapper was subsequently checked; serving remained BF16. Probe SHA:
-`f24014803970fc30823919bab3ea0c1e1ceaf11c56ed6483e09b3b5035dd4aa3`.
+direct-stage wrapper was subsequently checked; serving remained BF16. The unused
+probe outputs and wrapper code have since been removed.
 
 The shared whole-model wrapper was then exercised on ten identical scheduled
 windows from V16 step 173, with checkpointing off: contexts 1023, 1027, 416,
@@ -238,10 +238,9 @@ After ten updates held CE was 3.934481/3.934944 and value MSE
 padded to multiples of 16 for these backward GEMMs; trim synthetic rows after
 the token-local FFN, leaving real token positions and targets unchanged.
 
-BF16 report (`te-full-model-pair-v4/bf16/direct_sft/report.json`) SHA:
-`a54a55b05bd2abec0b689193b7763c8401355f14a60dbbf6095b5611a13932cb`.
-FP8 report (`te-full-model-pair-v5/fp8-current-scaling-hybrid/direct_sft/report.json`) SHA:
-`1e101496791babf5bb1599af2d0c302e05ca932b056cc2d7c915290d96a62636`.
+The discarded run directories are removed. Their measured comparison is retained
+in `causal-conv-qualification-v1/fp8-ffn-precision-decision-v1.json`, SHA:
+`5cf0763334fa1e0a2b4b1011ffc9549a20677636013aeb364497730cebb9df81`.
 
 A real 6645-token/246-target row, repeated three times with checkpointing,
 gave warm BF16 times 1.019/1.029 seconds versus FP8 0.906/0.918 (about 12%
