@@ -7,7 +7,7 @@ acting on the owner's recorded answer, moves an entry to "Done" with the date an
 
 | Since | Item | What to review | Status meanwhile |
 | --- | --- | --- | --- |
-| 2026-10-12 | applications/ops-retention/DECOMPOSITION.md (review rec. 7) | Storage-retention classification as a pluggable: crisp `crisp_verdict` (default) and `classifyRetention.nl` over the same `retention_facts`; shadow log of disagreements; exact bound refuses an nl delete of protected files | Implemented on main e8f1b0b5; review after the fact. One-week shadow run (`--classifier shadow`) per the DECOMPOSITION |
+| 2026-10-12 | applications/ops-retention/DECOMPOSITION.md (review rec. 7) | Storage-retention classification as a pluggable: crisp `crisp_verdict` (default) and `classifyRetention.nl` over the same `retention_facts`; shadow log of disagreements; exact bound refuses an nl delete of protected files | Implemented on main 65bf7108; review after the fact. One-week shadow run (`--classifier shadow`) per the DECOMPOSITION |
 
 ## Follow-ups from the 2026-10-12 acceptance
 
