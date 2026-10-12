@@ -1,6 +1,13 @@
 """Geometry-first, adaptive memory admission; no speculative model forwards."""
 import math
 
+# Shared with memory_policy.choose_layer_checkpointing: a prediction below
+# this count remains subject to its conservative uncalibrated multiplier.
+CALIBRATED_SAMPLES = 3
+DIRECT_SFT_ADJACENT_CONTEXT_DISTANCE = 1
+DIRECT_SFT_ADJACENT_MIN_SAMPLES = 20
+DIRECT_SFT_ADJACENT_QUANTILE = .95
+
 
 def backbone_memory_layout(backbone, *, depth=None, checkpointed, **stage_options):
     """Build the activation geometry shared by trajectory and text warm-up.
@@ -132,28 +139,82 @@ class AdaptiveGraphMemory:
                 samples = samples + [ratio for values in siblings for ratio in values]
         return samples
 
-    def calibration_info(self, kind, context, length):
-        """Return the evidence selected for a prediction, including its bins."""
+    def _calibration_for_prediction(self, kind, context, length):
+        """Select matching observations, optionally seeding sparse direct-SFT context bins.
+
+        The adjacent-bin fallback only applies to the same direct-SFT execution
+        and checkpoint kind and geometry namespace. It uses one adjacent context
+        bin and needs twenty observations. Target bins at that source context
+        may pool because raw geometry already includes the requested target's
+        own readout workspace. Direct-SFT estimator state is stored within an
+        exact-resume checkpoint whose model and layout identity is verified by
+        the caller; it must not be detached and reused for another model/layout.
+        """
         exact_key = self.key(kind, context, length)
-        samples = self.calibration(kind, context, length)
-        source_bins = [exact_key]
-        if (kind.startswith('direct-sft-') and
-                len(self.samples.get(exact_key, [])) < 3 and len(samples) >= 3):
-            context_bin = int(math.log2(max(1, context)))
-            family_prefix = f'{kind}:{context_bin}:'
-            source_bins = sorted(
-                key for key, values in self.samples.items()
-                if key.startswith(family_prefix) and
-                key.rsplit(':', 1)[-1].isdigit() and values)
-        return {'sample_count': len(samples), 'source_bins': source_bins}
+        exact = self.samples.get(exact_key, [])
+        if len(exact) >= CALIBRATED_SAMPLES:
+            return exact, {'sample_count': len(exact), 'source_bins': [exact_key],
+                           'source': 'exact-target-bin', 'context_bin_distance': 0}
+        context_bin = int(math.log2(max(1, context)))
+        family_prefix = f'{kind}:{context_bin}:'
+        if kind.startswith('direct-sft-'):
+            same_context = [(key, values) for key, values in self.samples.items()
+                            if key.startswith(family_prefix) and
+                            key.rsplit(':', 1)[-1].isdigit() and values]
+            pooled = [ratio for _, values in same_context for ratio in values]
+            if len(pooled) >= CALIBRATED_SAMPLES:
+                return pooled, {'sample_count': len(pooled),
+                                'source_bins': sorted(key for key, _ in same_context),
+                                'source': 'same-context-target-pool', 'context_bin_distance': 0}
+        else:
+            pooled = self.calibration(kind, context, length)
+            if len(pooled) >= CALIBRATED_SAMPLES:
+                return pooled, {'sample_count': len(pooled), 'source_bins': [exact_key],
+                                'source': 'existing-calibration', 'context_bin_distance': 0}
+        if kind.startswith('direct-sft-'):
+            candidates = {}
+            for key, values in self.samples.items():
+                pieces = key.rsplit(':', 2)
+                if (len(pieces) != 3 or pieces[0] != kind or
+                        not pieces[1].isdigit() or not pieces[2].isdigit() or not values):
+                    continue
+                source_context_bin = int(pieces[1])
+                distance = abs(source_context_bin - context_bin)
+                if 0 < distance <= DIRECT_SFT_ADJACENT_CONTEXT_DISTANCE:
+                    candidates.setdefault(source_context_bin, []).append((key, values))
+            eligible = [(abs(source_bin - context_bin), -sum(len(v) for _, v in entries), source_bin, entries)
+                        for source_bin, entries in candidates.items()
+                        if sum(len(v) for _, v in entries) >= DIRECT_SFT_ADJACENT_MIN_SAMPLES]
+            if eligible:
+                distance, _, source_bin, entries = min(eligible)
+                source_bins = sorted(key for key, _ in entries)
+                samples = [ratio for _, values in entries for ratio in values]
+                return samples, {'sample_count': len(samples), 'source_bins': source_bins,
+                                 'source': 'adjacent-context',
+                                 'context_bin_distance': distance,
+                                 'source_context_bin': source_bin}
+        return exact, {'sample_count': len(exact), 'source_bins': [exact_key],
+                       'source': 'uncalibrated', 'context_bin_distance': None}
+
+    def calibration_info(self, kind, context, length):
+        """Return the evidence selected for a prediction, including its source bins."""
+        _, details = self._calibration_for_prediction(kind, context, length)
+        details['quantile'] = (DIRECT_SFT_ADJACENT_QUANTILE
+                               if details['source'] == 'adjacent-context' else .8)
+        return details
 
     def predict(self, kind, context, length, raw_bytes):
-        samples = self.calibration(kind, context, length)
+        samples, details = self._calibration_for_prediction(kind, context, length)
         if len(samples) < 3:
             ratio = 1.0
         else:
             ordered = sorted(samples)
-            ratio = ordered[min(len(ordered) - 1, int(.8 * len(ordered)))]
+            if details['source'] == 'adjacent-context':
+                rank = max(0, math.ceil(DIRECT_SFT_ADJACENT_QUANTILE * len(ordered)) - 1)
+            else:
+                # Preserve the established q80 selection for existing bins.
+                rank = int(.8 * len(ordered))
+            ratio = ordered[min(len(ordered) - 1, rank)]
         return int(raw_bytes * max(.1, ratio) * (1 + self.margin))
 
     def observe(self, kind, context, length, raw_bytes, retained_bytes):
