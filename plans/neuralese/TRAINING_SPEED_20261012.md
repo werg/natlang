@@ -176,3 +176,30 @@ Keep `NATLANG_MAPLE_COMPILE=0` (no measured gain) and leave `NATLANG_MOE_FP8` un
   - 74a01986: input digests are cached by (realpath, size, mtime_ns), and an archived predecessor takes the digest
     from its receipt or the archive manifest. A resume never re-reads the 47 GB state.
   - 00b524d7: the resume identity is content-based (sorted input digests and options without input paths).
+- **Shared tuned-BF16 GEMM dispatch: measured, not adopted.** Each shape on the hot path was measured beside the live
+  v4 run (`runs/training-speed-20261012/dispatch_bench.py`, Triton swizzled kernel vs cuBLAS at 32k tokens):
+
+  | GEMM | Triton vs cuBLAS |
+  |---|---|
+  | q forward | 0.80× |
+  | q dgrad | 1.30× |
+  | q wgrad | 0.88× |
+  | k/v forward | 0.96× |
+  | k/v dgrad | 1.17× |
+  | k/v wgrad | 0.78× |
+  | o forward | 1.01× |
+  | o dgrad | 0.94× |
+  | o wgrad | 1.51× |
+  | Newton-Schulz gram | 0.83× |
+  | Newton-Schulz M·X | 1.06× |
+  | Newton-Schulz down gram | 0.89× |
+
+  Relative error vs FP32 is 1.7e-3 for both. A per-shape dispatch would take only the wins: ≈8 ms per layer, ~0.2–0.3
+  s/update (~1%). That is below the 5% bar, so it is not wired in. The idle-GPU 97 vs 59 TFLOP/s gap (one 16k ×
+  2304 × 1792 shape) does not carry over to these shapes under load.
+- **Remaining candidates (v4 profile).** Each is about 1–3% of the update:
+  - Newton-Schulz 4.1 s. A Gram-iteration form would save ~20% of it, but its numerics need checking.
+  - Attention projections, q/k norms and rope (~4 s): fusing QKV + rope.
+  - Readout 1.3 s.
+  - NeuraleseProjection 0.9 s. It recomputes the span logits that the readout already computed; sharing them would
+    save about half.
