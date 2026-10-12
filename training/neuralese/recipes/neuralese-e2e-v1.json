@@ -1,16 +1,16 @@
 {
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-e2e-v1",
- "description": "Shared base of the end-to-end Neuralese stage for both lines (owner decision 2026-10-12: start the E2E arm now, in parallel with SFT; plans/REVIEW_20261012.md item 2; design plans/neuralese/NEURALESE_DIRECT_V1.md \"End-to-end stage\"). It starts from a direct export (a neuralese_direct checkpoint exported by train/direct_export.py) bound as input_bindings.direct_artifact by the launch recipe that extends a line recipe; that binding is a lineage key, not a parity setting. Two stages: direct_runtime runs the exact runtime qualification of that export on the stage's machine (eval/direct_runtime.py: writer, cache readback, producer replay and input adjoints, typed wire); e2e trains train/trajectories.py --direct-artifact on the authenticated 1243-record native cohort: producers write their child results with the shared direct writer (token-driven, one Neuralese value per crisp token, generated-length stops), consumers read the written block, the identity TokenChoiceProjection comes on at step 0 (logits equal the export's), the backbone latents train on MuonSR (cubic5, wd 0.1, spike clip 5) and step inside the layer-staged backward, with the shared drift monitor (response KL warns 0.5, stops 1.5; the 48-probe behaviour gate is reported only, owner 2026-10-12) and the line's QAT component held at its parent's curriculum progress. Acceptance (e2e_acceptance, train/e2e_acceptance.py, written as e2e-certificate.json): consumers reading values against consumers reading the gold tokens on the same held producer calls (V CE at most T CE; V beats shuffled and zeroed blocks by 0.05 nats; at least 32 paired readers), exact-oracle task success (V at most 0.02 below T), and no drift stop. Lines: neuralese-e2e-mellum-v1 (DGX), neuralese-e2e-lfm-v1 (Pop); every difference is declared in training/neuralese/line-parity.json.",
+ "description": "Shared base of the end-to-end Neuralese stage for both lines (owner decision 2026-10-12: start the E2E arm now, in parallel with SFT; plans/REVIEW_20261012.md item 2; design plans/neuralese/NEURALESE_DIRECT_V1.md \"End-to-end stage\"). It starts from a direct export (a neuralese_direct checkpoint exported by train/direct_export.py) bound as input_bindings.direct_artifact by the launch recipe that extends a line recipe; that binding is a lineage key, not a parity setting. Two stages: direct_runtime runs the exact runtime qualification of that export on the stage's machine (eval/direct_runtime.py: writer, cache readback, producer replay and input adjoints, typed wire); e2e trains train/trajectories.py --direct-artifact on the union e2e cohort neuralese-e2e-union-cohort-20261012-v1 (1389 records, 769 train / 620 held, 1137 producer->consumer edges: the authenticated 1243-record cohort byte-identically plus every other union source with child-result write/read sites, selected by the same rule; registered, scripts/neuralese_data/build_e2e_union_cohort.py): producers write their child results with the shared direct writer (token-driven, one Neuralese value per crisp token, generated-length stops), consumers read the written block, the identity TokenChoiceProjection comes on at step 0 (logits equal the export's), the backbone latents train on MuonSR (cubic5, wd 0.1, spike clip 5) and step inside the layer-staged backward, with the shared drift monitor (response KL warns 0.5, stops 1.5; the 48-probe behaviour gate is reported only, owner 2026-10-12) and the line's QAT component held at its parent's curriculum progress. Acceptance (e2e_acceptance, train/e2e_acceptance.py, written as e2e-certificate.json): consumers reading values against consumers reading the gold tokens on the same held producer calls (V CE at most T CE; V beats shuffled and zeroed blocks by 0.05 nats; at least 32 paired readers), exact-oracle task success (V at most 0.02 below T), and no drift stop. Lines: neuralese-e2e-mellum-v1 (DGX), neuralese-e2e-lfm-v1 (Pop); every difference is declared in training/neuralese/line-parity.json.",
  "identity_qualification": "direct_e2e_runtime_qualified_export",
  "input_bindings": {
   "e2e_records": {
-   "path": "runs/neuralese-native-e2e-binding-candidate-20261011-v1/full-authenticated-1243-cohort-v1.jsonl",
-   "sha256": "35a52f34de92f226bb68e34c2a28cd11dc51afcc56ccb685b7852b62b8cb549a"
+   "path": "runs/neuralese-e2e-union-cohort-20261012-v1/records.jsonl",
+   "sha256": "7fec509602f13d988a5fd7ada62d0b41d7b0f03986b33da8cdcbce6135f67392"
   },
   "e2e_pieces": {
-   "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-pieces.jsonl",
-   "sha256": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6"
+   "path": "runs/neuralese-e2e-union-cohort-20261012-v1/pieces.jsonl",
+   "sha256": "90d194c2d029f81ca17f4accaed5bce4840641fdf014431d03dd21f963c6bd2d"
   }
  },
  "stages": [
@@ -35,9 +35,9 @@
     "direct_artifact_manifest": "direct_artifact"
    },
    "parameters": {
-    "steps": 687,
+    "steps": 769,
     "batch": 1,
-    "train": 687,
+    "train": 769,
     "eval": 32,
     "max_tokens": 32768,
     "max_write_vectors": 2048,
