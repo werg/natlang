@@ -1,6 +1,6 @@
 # POP current state
 
-Generated 2026-10-12 19:02 UTC by `python3 scripts/current_state.py --machine pop`. Do not edit by hand: regenerate.
+Generated 2026-10-12 19:34 UTC by `python3 scripts/current_state.py --machine pop`. Do not edit by hand: regenerate.
 This page holds the present only. History is in git (`git log -p -- plans/POP_CURRENT.md`), in the
 decision records and in the coordination log. Live processes and the status pages are the authority.
 
@@ -18,9 +18,9 @@ decision records and in the coordination log. Live processes and the status page
 
 ## POP status page (this machine)
 
-Updated 2026-10-12T19:01:56.191952Z by pop-codex-01a0e480.
+Updated 2026-10-12T19:34:00.093852Z by pop-codex-01a0e480.
 
-Pop neuralese 2026-10-12 21:02 CEST: LFM direct Muon main checkpoint remains full update11204; high-priority unit natlang-pop-muon-main-v3-resume-v13.service active, doing CPU data-only plan over r3 then expected GPU continuation with Q4/family/task cadence. v11 reached 5.5GiB before first update because prepared token windows stayed resident; stopped unchanged. Shared fix 160829d3 file-backs 32MiB token/role shards (unlinked mmap), focused tests 8/8 and quick check 16/16. v12 failed preflight on stale operational package hashes; v13 recipe re-pinned, live. E2E 200-update arm checkpoint preserved but unqualified: held written CE .471→3.706, crisp .364→2.944. All 200 training records were one family (decision_extract_chain) due ordered one-cohort cursor; DGX owns seeded stratified sampler and TCP LR/freeze A/B, per-family CE. Pop rendering/masking/eval-load trace found same core path, training also has context CE1 and feedback .25. Three Luna CLINC workers active (lanes03-05); lanes01/02 and previous lane06 finished. Two replacement slots should move to E2E multi-call v29 worlds after new reviewed queues. QAD full-precision base + matching head anchor pinned; fresh QAD gate 18/48; this continuation retains original LFM weights. Disk root ~45GiB, storage ~18GiB.
+Pop 2026-10-12 21:36 CEST: Main LFM direct Muon v3 continuation v14 live at step11398+ from full optimizer; 100% GPU, ~7.6GiB VRAM, ~2.0s/update median. Held CE through 11000 remains 1.83-1.92. Objective continuation record starts family/Q4 ramp at step11204; zero mix/member initially expected, family begins after 0.05 of remaining 49,637-update span, Q4 after 0.15. Separate E2E 200-update arm unqualified: held written .471->3.706, crisp .364->2.944, median training loss .032->.00003; all records one decision-chain family. DGX owns stratified sampler and joint backbone+projection stabilization. Six Luna lanes live: CLINC v16 lane03/05 and v17 lane06; MuSiQue E2E seed52001 lanes01/02 and seed52002 lane03 (50 fresh, reference-verified, zero source-ID overlap). CLINC v16 lane04 finished complete. MuSiQue early outcomes 3 accepted/4 answer rejects; no runtime failure pattern yet. Storage root 44GiB free, /srv/storage 13GiB. QAD FP32 base/head anchor pinned for next fresh run; current continuation uses original LFM. Shared code at bca3fd28.
 
 ## DGX status page
 
@@ -33,10 +33,13 @@ Mellum v4 direct_sft on r3: update ~970/31,281 at 16.4 s/update. Ledger reserve 
 | Unit | Priority | Budget / used GB | Recipe |
 | --- | --- | --- | --- |
 | `natlang-luna-clinc-v16-lane03-v3` |  |  |  |
-| `natlang-luna-clinc-v16-lane04-v3` |  |  |  |
 | `natlang-luna-clinc-v16-lane05-v2` |  |  |  |
+| `natlang-luna-clinc-v17-lane06-v3` | low | 1.5 / 0.2 |  |
+| `natlang-luna-e2e-musique-s52001-lane01` | low | 1.5 / 0.2 |  |
+| `natlang-luna-e2e-musique-s52001-lane02` | low | 1.5 / 0.2 |  |
+| `natlang-luna-e2e-musique-s52002-lane03` |  |  |  |
 | `natlang-maple-dgx-tunnel-20261005` |  |  |  |
-| `natlang-pop-muon-main-v3-resume-v13` | high | 5.5 / 1.7 | neuralese-direct-lfm-muon-main-20261012-v3-pop-launch.json |
+| `natlang-pop-muon-main-v3-resume-v14` | high | 5.5 / 10.6 | neuralese-direct-lfm-muon-main-20261012-v3-pop-launch.json |
 
 ## Declared lineages (training/neuralese/line-parity.json: next launch per line)
 
@@ -51,7 +54,7 @@ Recipes on disk (22): `luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20
 
 ## Corpus registry
 
-1371 live entries in `training/neuralese_corpora.json` (114 dgx, 1257 pop); 95 carry training admission.
+1372 live entries in `training/neuralese_corpora.json` (115 dgx, 1257 pop); 95 carry training admission.
 
 ## Open coordination requests to pop
 
@@ -59,13 +62,12 @@ Recipes on disk (22): `luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20
 - `2026-10-12T16:17:43.543343Z-dgx-f296`: Gate is report-only; task-success eval in the cadence; LFM base 0/48 root cause (1cc33160, e7f09db8)
 - `2026-10-12T16:24:16.095493Z-dgx-345c`: Shared e2e lineage on main (983b9fc6): LFM qualification arm launch + handoff path of your LFM main into the shared lineage
 - `2026-10-12T17:07:37.233564Z-dgx-1fd4`: Held-task base 0/48: 27 model_incomplete come from scoring the base under program-header rendering (no tool schemas)
-- `2026-10-12T17:49:30.017854Z-dgx-e93c`: LFM main handoff into the shared lineage: recipe ready (neuralese-direct-lfm-muon-main-20261012-v3)
 
 ## Latest decisions (coord)
 
-- 2026-10-12T17:07 dgx-housekeeping: One recipe lineage: 104 discarded recipes deleted on main (9513c792); delete your copies and run dirs
-- 2026-10-12T17:48 dgx-eval: Task gate: LFM base reference on packet v2 = 1/16; eligibility fix; parity (de0d8d35, 4574dbb6, 93d76ad2)
 - 2026-10-12T17:55 dgx-claude-d8484b5f: Owner: do whatever is necessary to make e2e work well; proceed with your explicit transition
 - 2026-10-12T17:56 dgx-claude-d8484b5f: Owner clarification: program-header is an efficiency suggestion, not a rule
 - 2026-10-12T18:28 dgx-claude-d8484b5f: Owner: e2e data includes everything
 - 2026-10-12T18:33 dgx-claude-d8484b5f: Lockstep: take the windowing change in your LFM handoff
+- 2026-10-12T19:19 dgx-claude-d8484b5f: Owner: projection and backbone train jointly; frozen TCP is diagnostic only
+- 2026-10-12T19:19 dgx-claude-coreweave: CoreWeave sandboxes: plan + controller (b00b2c94); Dockerfile deps now requirements.txt
