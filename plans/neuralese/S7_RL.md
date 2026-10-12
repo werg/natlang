@@ -24,7 +24,8 @@ calls, error recovery, stopping, and (in the end-to-end line) the Neuralese valu
 
 `reward = 1` iff `eval.task_packet.classify_case(result, finish) == "task_success"` (collector outcome `done` and
 `accepted`); `0` for `invalid_action`, `repetition`, `budget_exhaustion`, `model_incomplete`, `semantic_mismatch`;
-`null` for `infrastructure_error` and `unresolved`. One function, `rl.task_rollouts.reward_of`, so the RL reward and
+`null` for `infrastructure_error`, `unresolved` and host wall-clock stops (`case_wall_budget`, a server-load
+artefact; 2026-10-12, §8.3). One function, `rl.task_rollouts.reward_of`, so the RL reward and
 the held-task eval can never disagree. Partial credit and the resource term (successful rollouts only) are later
 additions, each measured before adoption.
 
@@ -173,7 +174,7 @@ python3 scripts/memory_ledger.py run --unit s7rl-round0-muon10006 --container s7
 | Run | Rollouts | Outcomes | Successes | Groups: grpo / retire / rejection |
 | --- | --- | --- | --- | --- |
 | round0, Muon 10006 | 32 | 11 task_success, 11 invalid_action, 7 semantic_mismatch, 3 budget_exhaustion | 11 (34 %) | 1 / 2 / 5 |
-| round1, + GRPO adapter | RESCORE_PENDING | | | |
+| round1, + GRPO adapter | 32 | 8 task_success, 15 budget_exhaustion (all host wall budget), 5 semantic_mismatch, 4 invalid_action | 8 | 2 / 1 / 5 (old routing) |
 
 - Unlike the base, the direct student solves rows end to end: two rows succeed 4/4 (retire), row s7202-1 is mixed
   (3/4: the GRPO group), five rows fail in every sample. Failure classes (non-successes): `answer` rejected 7,
@@ -184,6 +185,17 @@ python3 scripts/memory_ledger.py run --unit s7rl-round0-muon10006 --container s7
   estimate 0, surrogate −1.48, 32 s. Adapter `nz1_m6a6…` in `update-muon10006/policy-r1/`. The pipeline
   rollout → classify_case reward → group advantage → replay gradient → adapter → collector sampling with the adapter
   runs end to end.
+- **Round1 is not a policy measurement.** Budget exhaustion rose 3 → 15, all `case_wall_budget` (300 s host
+  wall stop), while the model produced *fewer* replies (214 vs 361) and far fewer completion tokens (7.0k vs 16.8k):
+  decode throughput dropped about 4× per token. Round1 ran with the Mellum v4 relaunch training on the same GPU (round0
+  did not), and with the adapter applied per request; either slows serving. Not yet separated: the next round runs a
+  matched no-adapter control in the same unit and seeds. Among rollouts that finished, round1 had 8/17 successes,
+  round0 11/29; one tiny step on one group is not expected to move this measurably.
+- **Reward fix from this:** a `case_wall_budget` stop is a collection resource limit that depends on server load
+  (the queue journal itself labels it "not a language deadline or model-negative label"), so `reward_of` now makes
+  it unscored (null), like infrastructure; `model_request_budget` stays reward 0. Rescored: round0 29 scored, 11
+  successes, 1 group with spread; round1 17 scored, 8 successes, 0 groups with spread. The held eval keeps counting
+  wall stops as failures (its CPU contract is fixed and serialized).
 - A ledger preemption by the Mellum v4 relaunch (high priority) killed the first update attempt mid-`grad`; the
   requeued unit completed. Resumable smoke units are requeued after preemption and also after failures: cancel
   stale ones (`memory_ledger.py cancel`).

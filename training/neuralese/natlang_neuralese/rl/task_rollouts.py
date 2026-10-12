@@ -25,8 +25,12 @@ from .grpo import group_advantages
 UNSCORED_OUTCOMES = {"infrastructure_error", "unresolved"}
 
 
-def reward_of(outcome: str) -> float | None:
-    """Binary task-success reward; infrastructure outcomes are unscored, never 0."""
+def reward_of(outcome: str, finish: dict[str, Any] | None = None) -> float | None:
+    """Binary task-success reward; infrastructure outcomes are unscored, never 0. A host wall-clock stop
+    (`case_wall_budget`) is a collection resource limit that depends on server load, not on the policy (the journal
+    says so: "not a language deadline or model-negative label"), so it is unscored too; a model-request budget stays 0."""
+    if outcome == "budget_exhaustion" and (finish or {}).get("resource_limit_reason") == "case_wall_budget":
+        return None
     if outcome in UNSCORED_OUTCOMES:
         return None
     return 1.0 if outcome == "task_success" else 0.0
@@ -120,6 +124,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
         results = read_jsonl(output) if output.is_file() else []
         result = results[0] if results else None
         outcome = classify_case(result, finishes.get(entry["key"]))
+        reward = reward_of(outcome, finishes.get(entry["key"]))
         task = packet[entry["index"]]
         detail = ((result or {}).get("outcome") or {}).get("detail") if result else None
         if emit is not None:
@@ -127,11 +132,11 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
                             "family": task.get("family"), "group": entry["group"], "sample": entry["sample"],
                             "seed": entry["seed"], "policy": {"temperature": entry.get("temperature")},
                             "turns": rollout_turns(result), "outcome": outcome,
-                            "reward": None if reward_of(outcome) is None else {"quality": reward_of(outcome)},
-                            "unscored": outcome if reward_of(outcome) is None else None})
+                            "reward": None if reward is None else {"quality": reward},
+                            "unscored": outcome if reward is None else None})
         rollouts.append({"task_id": task["id"], "family": task.get("family"), "group": entry["group"],
                          "sample": entry["sample"], "seed": entry["seed"], "outcome": outcome,
-                         "reward": reward_of(outcome), "detail": detail if isinstance(detail, str) else None,
+                         "reward": reward, "detail": detail if isinstance(detail, str) else None,
                          "finish_status": (finishes.get(entry["key"]) or {}).get("status")})
     groups = []
     for index, task in enumerate(packet):

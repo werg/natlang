@@ -17,6 +17,8 @@ def test_reward_is_binary_task_success_and_infrastructure_is_unscored():
     for outcome in ("invalid_action", "repetition", "budget_exhaustion", "model_incomplete", "semantic_mismatch"):
         assert reward_of(outcome) == 0.0
     assert reward_of("infrastructure_error") is None and reward_of("unresolved") is None
+    assert reward_of("budget_exhaustion", {"resource_limit_reason": "case_wall_budget"}) is None
+    assert reward_of("budget_exhaustion", {"resource_limit_reason": "model_request_budget"}) == 0.0
 
 
 def test_authored_root_derivation_is_train_only_and_hash_bound():
