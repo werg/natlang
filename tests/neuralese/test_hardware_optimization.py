@@ -196,7 +196,7 @@ def test_teacher_bench_against_a_fake_server(tmp_path):
 def test_coreweave_bench_jobs_validate():
     sys.path.insert(0, str(REPO / 'scripts' / 'coreweave'))
     import job
-    for name in ('hw-bench-train', 'hw-bench-teacher'):
+    for name in ('hw-bench-train', 'hw-bench-teacher', 'hw-bench-probe'):
         declared = job.validate(json.loads((REPO / 'scripts/coreweave/jobs' / f'{name}.json').read_text()))
         assert declared['resources']['gpu'] == 1
     configs = json.loads((REPO / 'scripts/coreweave/teacher-configs.json').read_text())

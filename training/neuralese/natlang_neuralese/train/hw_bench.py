@@ -113,6 +113,18 @@ def probe() -> dict:
         except Exception as exc:  # absent or broken: record which
             versions[module] = None if isinstance(exc, ImportError) else f'error: {type(exc).__name__}'
     result['versions'] = versions
+    # Driver against toolkit (CUDA minor-version compatibility): CoreWeave's driver 595.58 is CUDA 13.2 while NGC
+    # 26.09 is built with 13.4. SASS code runs from driver >= 580; device code that only exists as PTX does not.
+    try:
+        driver = subprocess.run(['nvidia-smi', '--query-gpu=driver_version', '--format=csv,noheader'],
+                                capture_output=True, text=True, timeout=30).stdout.strip()
+    except Exception as exc:
+        driver = f'error: {type(exc).__name__}'
+    result['driver'] = {'nvidia_smi_driver': driver,
+                        'cuda_driver_api': getattr(torch._C, '_cuda_getDriverVersion', lambda: None)(),
+                        'cuda_runtime': torch.version.cuda,
+                        'compat_libs_loaded': [line.split()[-1] for line in open('/proc/self/maps')
+                                               if 'compat/libcuda' in line][:1]}
 
     def timed(fn, flops=None, nbytes=None, repeat=20):
         fn()
@@ -139,6 +151,35 @@ def probe() -> dict:
             result.setdefault('kernels', {})[name] = {'error': f'{type(exc).__name__}: {str(exc)[:300]}'}
 
     dev = 'cuda'
+
+    def triton_kernel():  # a raw Triton JIT kernel: PTX built and loaded through the bundled ptxas on this driver
+        import triton
+        import triton.language as tl
+
+        @triton.jit
+        def add(x, y, out, n, BLOCK: tl.constexpr):
+            offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+            tl.store(out + offs, tl.load(x + offs, mask=offs < n) + tl.load(y + offs, mask=offs < n), mask=offs < n)
+        x = torch.randn(1 << 20, device=dev)
+        out = torch.empty_like(x)
+        add[(x.numel() // 1024,)](x, x, out, x.numel(), BLOCK=1024)
+        return {'ok': bool(torch.allclose(out, 2 * x))}
+    attempt('triton_jit', triton_kernel)
+    attempt('jiterator_nvrtc', lambda: {'ok': bool(torch.allclose(
+        torch.special.zeta(torch.full((1024,), 2.0, device=dev), torch.ones(1024, device=dev)).cpu(),
+        torch.full((1024,), 1.6449341)))})
+    attempt('inductor_compile', lambda: {'ok': bool(torch.allclose(
+        torch.compile(lambda t: torch.nn.functional.gelu(t) * 2)(torch.ones(4096, device=dev)).cpu(),
+        torch.nn.functional.gelu(torch.ones(4096)) * 2, atol=1e-5))})
+
+    def te_fp8_linear():
+        import transformer_engine.pytorch as te
+        layer = te.Linear(2048, 2048, params_dtype=torch.bfloat16, device=dev)
+        x = torch.randn(4096, 2048, device=dev, dtype=torch.bfloat16, requires_grad=True)
+        with te.fp8_autocast(enabled=True):
+            layer(x).sum().backward()
+        return {'ok': bool(torch.isfinite(x.grad).all())}
+    attempt('te_fp8_linear', te_fp8_linear)
     M, N, K = 16384, 2304, 1792  # the GB10 measurement shape (TRAINING_SPEED_20261012.md)
     a = torch.randn(M, K, device=dev, dtype=torch.bfloat16)
     b = torch.randn(N, K, device=dev, dtype=torch.bfloat16)

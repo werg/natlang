@@ -13,6 +13,18 @@ harness that decides it runs as a job as soon as the GPU smoke passes.
 One NVIDIA RTX PRO 6000 Blackwell Server Edition per sandbox (GB202, compute capability 12.0), about 20 sandboxes at
 once, an x86_64 host, PCIe, no NVLink.
 
+**Measured on a real CoreWeave GPU sandbox (2026-10-13, commit 15f1062d, reported by the coordinator):**
+
+| Item | Value |
+| - | - |
+| GPU | NVIDIA RTX PRO 6000 Blackwell Server Edition, **97,887 MiB** (95.6 GiB), compute capability 12.0 |
+| Driver | **595.58.03, CUDA 13.2** (`nvidia-smi`) |
+| Default image | Debian 13, Python 3.11 (`python:3.11`); 7.0 TB node-local root filesystem |
+| Start latency | the docs' plain example (2 CPU / 8 Gi / 1 GPU) reaches running in 20–26 s |
+
+The driver's CUDA 13.2 is older than the toolkit in our image (NGC 26.09, CUDA 13.4.1). Section 4.1 covers what that
+means and how it is checked.
+
 Sources:
 - **WP**: NVIDIA, [RTX Blackwell PRO architecture whitepaper v1.1](https://www.nvidia.com/content/dam/en-zz/Solutions/design-visualization/quadro-product-literature/pdf/NVIDIA-RTX-Blackwell-PRO-GPU-Architecture-v1_1.pdf), Appendix A.
 - **DS**: the [Server Edition datasheet](https://www.akamai.com/site/en/documents/corporate/nvidia-rtx-pro-6000-blackwell-server-edition-datasheet.pdf).
@@ -385,6 +397,51 @@ Decide after the bench, with the placement program.
   - a build-time check that the base's PyTorch carries `sm_120` code (`torch._C._cuda_getArchFlags`, no GPU needed);
   - `/opt/natlang/pip-freeze.txt` records the exact resolved versions inside the image. Pinning is by image digest
     (which launches record) plus that freeze.
+### 4.1 Driver 595.58 (CUDA 13.2) against the NGC 26.09 toolkit (CUDA 13.4.1)
+
+Facts:
+- NGC PyTorch releases and their CUDA ([support matrix](https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html)):
+  26.09 and 26.08 are 13.4.1, 26.07 is 13.3.1, 26.06 is 13.3.0, **26.05 and 26.04 are 13.2.1**, 26.03 is 13.2.0.
+- [CUDA minor-version compatibility](https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html):
+  a CUDA 13.x application runs on any driver ≥ 580, so 595 qualifies. Two limits apply:
+  - "Applications that compile device code to PTX will not work on older drivers": the driver cannot JIT PTX from a
+    newer toolkit;
+  - features that need the newer driver fail with `cudaErrorCallRequiresNewerDriver`.
+- [Forward compatibility](https://docs.nvidia.com/deploy/cuda-compatibility/forward-compatibility.html) (the
+  `cuda-compat` libraries that NGC's entrypoint loads) covers "NVIDIA Data Center GPUs. Select NGC Server Ready SKUs
+  of RTX cards". Whether this Server Edition qualifies is unverified, and inside a GPU VM the platform's driver may not
+  accept a user-space compat libcuda anyway.
+
+What that means for our stack, path by path (expected; the probe checks each):
+
+| Path | Code form | Expected on driver 595 / CUDA 13.2 |
+| - | - | - |
+| PyTorch's own kernels, cuBLAS/cuBLASLt, cuDNN | SASS for `sm_120` (arch flags include it) | runs under minor-version compatibility |
+| Triton kernels (ours, FlexAttention, inductor) | PTX compiled to a cubin by the image's ptxas (13.4), loaded as SASS | runs: the driver loads a cubin; it does not JIT PTX |
+| NVRTC (torch jiterator, some TE kernels) | compiled at run time; a real `sm_120` target gives a cubin | runs if they request SASS; a PTX-only path fails |
+| TE 2.19 FP8 | SASS plus NVRTC kernels | to verify |
+| New CUDA 13.3/13.4 driver APIs | n/a | `cudaErrorCallRequiresNewerDriver` if used |
+
+**Check before any model job:**
+- `scripts/coreweave/jobs/hw-bench-probe.json` runs `hw_bench --only ^probe$` on NGC 26.09: 8 CPU / 32 Gi, 1 h
+  lifetime, about $4.20 at $2.50 per GPU-hour, code-only bundle.
+- The probe records:
+  - the driver (`nvidia-smi`), the CUDA driver API version and runtime, and whether a compat libcuda was loaded;
+  - a raw Triton JIT kernel, a jiterator/NVRTC op, an inductor compile and a TE FP8 linear forward/backward;
+  - cuBLAS BF16, FP8 rowwise, MXFP8 and NVFP4 `_scaled_mm`, `_grouped_mm` against the per-expert loop,
+    `_scaled_grouped_mm`, FlexAttention fwd+bwd, the SDPA backends, and device and host bandwidth.
+- Every check records its own error, so one run shows exactly which component fails.
+
+**Fallback if anything we use fails:** pin `nvcr.io/nvidia/pytorch:26.05-py3`. Its CUDA 13.2.1 matches the driver, so no
+compatibility mode is involved. Then:
+- rerun the probe and the smoke matrix on it (its PyTorch and Triton are older than 2.14 and 3.8, so the custom
+  kernels must pass `hw_bench --matrix smoke` there first);
+- set the job images, and `BASE_IMAGE` in `build_image.sh`, to that release by digest.
+
+The DGX and Pop keep 26.09. This is an image choice per machine, recorded in the job; the code stays the same.
+Expectation: 26.09 runs, because everything on our hot path is SASS or a Triton cubin. The fallback exists because the
+"select RTX SKUs" wording leaves forward compatibility open, and the probe costs minutes.
+
 - **Build:** `scripts/coreweave/build_image.sh` (owned by the sandbox agent) builds `linux/amd64` with buildx. No change
   was needed there; the arch check runs inside the Dockerfile on any builder. On DGX it needs QEMU binfmt, or build
   on Pop (x86_64).
@@ -430,6 +487,8 @@ These figures are estimates from rates and the GB10 profile. The bench replaces 
     8 h lifetime, output `runs/coreweave-hw-bench/first`. Cost bound $63.52 at $2.50/GPU-h.
   - `scripts/coreweave/jobs/hw-bench-teacher.json`: vLLM v0.31.0 by digest, `NATLANG_CW_IMAGE_READY=1`, bundle = code +
     Qwen3.6 NVFP4, 6 h lifetime. Cost bound $39.50.
+- **`scripts/coreweave/jobs/hw-bench-probe.json`:** the driver/toolkit compatibility and kernel probe alone (§4.1).
+  Code-only, minutes. **Run it first**, before the two jobs below.
 - **Run order after the GPU smoke passes:**
   `bundle.py plan … && bundle.py upload … && cwctl.py launch scripts/coreweave/jobs/hw-bench-train.json`. The bundle
   commands are in each job's `bundle_plan`. The teacher job can run at the same time in a second sandbox.
