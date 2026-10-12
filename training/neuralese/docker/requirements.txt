@@ -1,0 +1,13 @@
+# Python dependencies on top of NVIDIA's PyTorch image, shared by the Dockerfile here and the CoreWeave sandbox
+# bootstrap (scripts/coreweave/bootstrap.sh), so both environments install one list. NGC's own torch/triton stay
+# pinned by its pip constraints.
+transformers
+peft
+kernels
+accelerate
+safetensors
+pytest
+py-spy
+tree-sitter==0.26.0
+tree-sitter-typescript==0.23.2
+boto3>=1.42.5
