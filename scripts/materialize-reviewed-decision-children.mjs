@@ -266,6 +266,7 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         program.external_source?.source_manifest_sha256 !== sha(sourceManifestBytes)))
       throw new Error(`source-quality clearance is bound to different source bytes: ${program.id}`);
     const materialized = materializeNativeRows([row], { failedRuns: true, pendingDecisionCandidates: true,
+      candidateSelectionOnly: true,
       ...(verifiedLabelCorrections ? { sourceLabelCorrections: verifiedLabelCorrections } : {}),
       ...(qualityBinding ? { sourceQualityClearance } : {}) });
     if (materialized.unlinked.length) { rejected.push({ id: row.id, reason: 'action-ledger-unlinked', unlinked: materialized.unlinked }); continue; }
@@ -394,6 +395,8 @@ for (const resultsPath of await resultsFiles(resolve(values['results-dir']))) {
         source_item_id_runtime_bound: caseIdBound,
         typed_output_projection: matches[0].projection,
         source_reference_review: sourceReview,
+        source_quality_review_only: turn.candidate_selection?.source_quality_review_only === true,
+        source_quality_hold_reasons: turn.candidate_selection?.source_quality_hold_reasons ?? [],
         scope_snapshot_sha256: sha(JSON.stringify(entry.inline_instruction_site?.runtime_capture_snapshots ?? null)),
         group_role_closure: [...roles] };
       candidates.push(candidate);

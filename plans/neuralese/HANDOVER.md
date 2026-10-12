@@ -1794,3 +1794,15 @@ qualification. The active run continues with the shared BF16 adaptive policy;
 the step-1700 full checkpoint was verified with optimizer and RNG state
 (SHA-256 `491c676c183c935f04d3d9698111c5a96103ee397e51384cfd0223fbe6f5ab7b`).
 The older step-1610 handoff copy was then pruned.
+
+## Luna child candidate materialization — 2026-10-12
+
+The shared native materializer now permits `candidateSelectionOnly` to inspect
+rows whose sole conversion problem is `source_quality_held`. It preserves that
+hold as explicit review-only metadata; all training and trace admission flags
+remain false, and any additional conversion problem still rejects the row.
+The Luna static candidate-discovery pass uses this mode for both discovery and
+its reviewed materialization pass. Fresh V5/V6 derivations retained all hard
+visibility, typed-return, and exact source-label checks. Their source-quality
+hold remains in force pending independent review; these outputs are not
+admitted training data.
