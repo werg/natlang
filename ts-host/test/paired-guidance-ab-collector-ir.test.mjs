@@ -42,6 +42,8 @@ test('collector IR preserves exact typed A/B prompt inputs and hides the evaluat
     assert.equal(program.semantics.expected, null);
     assert.equal(program.protocol.training_admission, false);
     assert.equal(program.curriculum.trajectory_contract.authored_root_eval, true);
+    assert.equal(program.curriculum.trajectory_contract.min_state_edges_from_children, 0);
+    assert.equal(program.curriculum.trajectory_contract.min_iteration_steps, 0);
     assert.match(program.curriculum.reference.root[0][1].code, /nl\.with<\{ options: string\[\] \}, string>/);
     assert.doesNotMatch(JSON.stringify(program), /expected-label|gold-label|unexposed-match/);
   }

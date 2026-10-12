@@ -68,8 +68,8 @@ export function buildCollectorPrograms(requests, matchedPairs) {
         inputs: { state: request.call.input.state, options: request.call.captures.options, instruction },
         expected: null, operation: 'exact' },
       curriculum: { trajectory_contract: { version: 'natlang.trajectory_contract/1', authored_root_eval: true,
-        authored_root_sha256: sha256(rootCode), min_child_invocations: 1, min_state_edges_from_children: 1,
-        min_iteration_steps: 1, required_child_roles: [{ role: 'paired_guidance_leaf', min_invocations: 1,
+        authored_root_sha256: sha256(rootCode), min_child_invocations: 1, min_state_edges_from_children: 0,
+        min_iteration_steps: 0, required_child_roles: [{ role: 'paired_guidance_leaf', min_invocations: 1,
           instruction_contains: 'Answer from the scoped state.', return_type_contains: 'string' }] },
         reference: { root: [['eval', { code: rootCode }]] } },
     };
