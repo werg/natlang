@@ -65,7 +65,7 @@ def cmd_shard(a):
         print('already sharded', out); return
     out.mkdir(parents=True, exist_ok=True)
     size = sum(os.path.getsize(f) * (6 if f.endswith('.zst') else 1) for f in a.files)
-    n = max(1, -(-size // (a.target_mb << 20)))
+    n = a.shards or max(1, -(-size // (a.target_mb << 20)))
     handles = [open(out / f'shard-{i:04d}.jsonl', 'w', encoding='utf-8') for i in range(n)]
     rows = bad = 0
     for f in a.files:
@@ -82,6 +82,29 @@ def cmd_shard(a):
                **({'preconverted_pieces': a.pieces} if a.pieces else {})},
               open(out / 'sharded.json', 'w'), indent=1)
     print(json.dumps({'source': a.name, 'shards': n, 'rows': rows, 'unparseable_lines': bad}))
+
+
+def cmd_redo_failed(a):
+    """Re-create the shards whose conversion or authentication failed (sharding is deterministic) for a new convert."""
+    out = Path(a.work) / a.name
+    meta = json.load(open(out / 'sharded.json'))
+    failed = [Path(p[:-len('.stats.json')]) for p in glob.glob(str(out / 'shard-*.stats.json'))
+              if json.load(open(p)).get('error')]
+    if not failed:
+        print('nothing to redo', a.name); return
+    (out / 'sharded.json').rename(out / 'sharded.previous.json')
+    cmd_shard(argparse.Namespace(name=a.name, files=meta['files'], work=a.work, target_mb=150, shards=meta['shards'],
+                                 pieces=meta.get('preconverted_pieces')))
+    redo = {str(stem) for stem in failed}
+    for shard in glob.glob(str(out / 'shard-[0-9][0-9][0-9][0-9].jsonl')):
+        stem = str(Path(shard).with_suffix(''))
+        if stem in redo:
+            for suffix in ('stats.json', 'records.jsonl', 'edges.jsonl', 'pieces.jsonl', 'omissions.jsonl'):
+                Path(f'{stem}.{suffix}').unlink(missing_ok=True)
+        else:
+            os.remove(shard)
+    (out / 'sharded.previous.json').unlink()
+    print(json.dumps({'source': a.name, 'redo_shards': len(redo)}))
 
 
 def target_text(row):
@@ -134,11 +157,20 @@ def convert_shard(shard: Path, tokenizer, preconverted_pieces=None):
 
 def derive(stem, records, pieces, conversion, omissions, tokenizer):
     from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view
-    try:
-        _, review = authenticated_recurrence_context_view(records, pieces)
-    except (ValueError, KeyError) as error:  # the whole shard fails authentication: register every row
-        for r in records: omissions.append({'id': r.get('id'), 'stage': 'authenticate', 'reason': f'shard_failed: {error}'[:300]})
-        return write_shard(stem, [], {}, [], omissions, {'converted': False, 'error': str(error)[:300]})
+    # Producer->consumer edges never cross trajectories, and writer names (handover:<note sha>, result:...) are unique
+    # only within one: authenticate each trajectory on its own, so one trajectory's failure is registered alone.
+    groups = collections.defaultdict(list)
+    for r in records: groups[trajectory_of(r)].append(r)
+    review = {'decisions': [], 'excluded': []}
+    failed = 0
+    for traj, rows in groups.items():
+        try:
+            _, part = authenticated_recurrence_context_view(rows, pieces)
+        except (ValueError, KeyError) as error:
+            failed += 1
+            for r in rows: omissions.append({'id': r.get('id'), 'stage': 'authenticate', 'reason': f'trajectory_failed: {error}'[:300]})
+            continue
+        review['decisions'] += part['decisions']; review['excluded'] += part['excluded']
     for e in review['excluded']:
         omissions.append({'id': e.get('id'), 'stage': 'authenticate', 'reason': e.get('reason')})
     by_id = {r['id']: r for r in records}
@@ -166,6 +198,7 @@ def derive(stem, records, pieces, conversion, omissions, tokenizer):
             for x in v: walk(x)
     for r in kept: walk(r.get('messages')); walk(r.get('target'))
     stats = {'converted': True, 'rows': len(records), 'kept_records': len(kept), 'edges': len(edges), 'chains': len(chains),
+             'trajectories': len(groups), 'trajectories_failed_authentication': failed,
              'conversion_sites': {k: v for k, v in conversion.get('sites', {}).items() if 'child' in k or 'inline' in k or 'soft' in k or 'typed' in k},
              'by_family': {}}
     fam = collections.defaultdict(lambda: {'records': 0, 'edges': 0, 'chains': set(), 'supervised_tokens': 0, 'edge_kinds': collections.Counter()})
@@ -212,7 +245,7 @@ def content_key(row):
 
 def cmd_assemble(a):
     work = Path(a.work)
-    out = Path(resolve_str('data_nvme', 'natlang-corpora', a.id))
+    out = Path(a.out_dir) / a.id if a.out_dir else Path(resolve_str('data_nvme', 'natlang-corpora', a.id))
     staged = out.with_name(out.name + '.building'); staged.mkdir(parents=True, exist_ok=True)
     held_cache = work / 'held-groups.json'
     if held_cache.exists():
@@ -318,6 +351,75 @@ def cmd_assemble(a):
     print(json.dumps({k: receipt[k] for k in ('id', 'totals')}, indent=1, default=dict))
 
 
+def cmd_slice(a):
+    """A trainer-sized slice of an assembled corpus: the edge endpoints of whole chains (the v1 rule: both endpoints of
+    every edge), every family represented, writer names unique.
+
+    train/trajectories.py loads all records and authenticates them together (writer names must be unique across the
+    file), so the full corpus is bound through slices. Chains are taken round-robin over families (so small families
+    are kept whole before large ones fill the budget), densest chains (edges per endpoint record) first within a
+    family; test chains up to --test-records endpoint records, train chains up to --train-records; a chain whose
+    writer name already occurs is left for another slice.
+    """
+    from natlang_neuralese.train.trajectories import target_writes
+    src = Path(a.source) if '/' in a.source else Path(resolve_str('data_nvme', 'natlang-corpora', a.source))
+    chains = [json.loads(l) for l in read_lines(src / 'chains.jsonl')]
+    ends = collections.defaultdict(set)
+    index = {(c['source'], c['trajectory']): i for i, c in enumerate(chains)}
+    for line in read_lines(src / 'edges.jsonl'):
+        e = json.loads(line); i = index[(e['source'], e['trajectory'])]
+        ends[i] |= {e['writer_record_id'], e['reader_record_id']}
+    for i, c in enumerate(chains): c['records'] = [r for r in c['records'] if r in ends[i]]
+    member = {rid: i for i, c in enumerate(chains) for rid in c['records']}
+    names = collections.defaultdict(set); size = collections.Counter()
+    for line in read_lines(src / 'records.jsonl'):
+        r = json.loads(line); i = member.get(r['id'])
+        if i is None: continue
+        names[i].update(target_writes(r)); size[i] += len(line)
+    rng = __import__('random').Random(a.seed)
+    chosen, used = set(), set()
+    for split, budget in (('test', a.test_records), ('train', a.train_records)):
+        by_family = collections.defaultdict(list)
+        for i, c in enumerate(chains):
+            if c['split'] == split: by_family[c['family']].append(i)
+        for v in by_family.values():
+            rng.shuffle(v); v.sort(key=lambda i: chains[i]['edges'] / max(1, len(chains[i]['records'])))  # densest last: pop() takes it
+        taken = 0
+        while taken < budget and any(by_family.values()):
+            for f in sorted(by_family):
+                if not by_family[f] or taken >= budget: continue
+                i = by_family[f].pop()
+                if names[i] & used: continue
+                chosen.add(i); used |= names[i]; taken += len(chains[i]['records'])
+    out = Path(resolve_str('data_nvme', 'natlang-corpora', a.id)); staged = out.with_name(out.name + '.building')
+    staged.mkdir(parents=True, exist_ok=True)
+    ids = {rid for i in chosen for rid in chains[i]['records']}
+    with open(staged / 'records.jsonl', 'w') as f:
+        for line in read_lines(src / 'records.jsonl'):
+            if json.loads(line)['id'] in ids: f.write(line)
+    with open(staged / 'edges.jsonl', 'w') as f:
+        for line in read_lines(src / 'edges.jsonl'):
+            e = json.loads(line)
+            if e['reader_record_id'] in ids and e['writer_record_id'] in ids: f.write(line)
+    with open(staged / 'chains.jsonl', 'w') as f:
+        for i in sorted(chosen): f.write(json.dumps(chains[i]) + '\n')
+    import shutil; shutil.copyfile(src / 'pieces.jsonl', staged / 'pieces.jsonl')
+    sel = [chains[i] for i in chosen]
+    stats = {'chains': len(sel), 'records': len(ids), 'edges': sum(c['edges'] for c in sel),
+             'by_split': {s_: {'chains': sum(c['split'] == s_ for c in sel), 'records': sum(len(c['records']) for c in sel if c['split'] == s_),
+                               'edges': sum(c['edges'] for c in sel if c['split'] == s_)} for s_ in ('train', 'test')},
+             'by_family': {f: {'chains': n} for f, n in collections.Counter(c['family'] for c in sel).items()}}
+    receipt = {'schema': 'natlang.neuralese-e2e-cohort-slice/1', 'id': a.id, 'source': a.source,
+               'source_receipt_sha256': sha256_file_hex(src / 'receipt.json'), 'source_path': str(src),
+               'selection': cmd_slice.__doc__.strip(), 'seed': a.seed, 'train_records_budget': a.train_records,
+               'test_records_budget': a.test_records, **stats,
+               'files': {n: {'sha256': sha256_file_hex(staged / n), 'bytes': os.path.getsize(staged / n)}
+                         for n in ('records.jsonl', 'pieces.jsonl', 'edges.jsonl', 'chains.jsonl')}}
+    json.dump(receipt, open(staged / 'receipt.json', 'w'), indent=1, sort_keys=True)
+    staged.rename(out)
+    print(json.dumps({k: receipt[k] for k in ('id', 'chains', 'records', 'edges', 'by_split')}, indent=1))
+
+
 def _soft_names(row):
     out = set()
 
@@ -337,11 +439,17 @@ def main():
     s = sub.add_parser('shard'); s.add_argument('name'); s.add_argument('files', nargs='+'); s.add_argument('--work', required=True)
     s.add_argument('--target-mb', type=int, default=150)
     s.add_argument('--pieces', nargs='*')
+    s.add_argument('--shards', type=int, help='shard count (compressed sources: their ratio varies, give it explicitly)')
     c = sub.add_parser('convert'); c.add_argument('--work', required=True); c.add_argument('--source')
+    sl = sub.add_parser('slice'); sl.add_argument('--source', required=True, help='corpus id under data_nvme natlang-corpora, or a path'); sl.add_argument('--id', required=True)
+    sl.add_argument('--train-records', type=int, default=12000); sl.add_argument('--test-records', type=int, default=1500)
+    sl.add_argument('--seed', type=int, default=20261012)
+    r = sub.add_parser('redo-failed'); r.add_argument('name'); r.add_argument('--work', required=True)
     m = sub.add_parser('assemble'); m.add_argument('--work', required=True); m.add_argument('--id', required=True)
+    m.add_argument('--out-dir', help='parent directory of the corpus (default: data_nvme natlang-corpora); bulk corpora go to the HDD')
     m.add_argument('--held-union', default=resolve_str('repo', 'runs/natlang-target-union-20261011-r3'))
     a = ap.parse_args()
-    {'shard': cmd_shard, 'convert': cmd_convert, 'assemble': cmd_assemble}[a.cmd](a)
+    {'shard': cmd_shard, 'convert': cmd_convert, 'assemble': cmd_assemble, 'redo-failed': cmd_redo_failed, 'slice': cmd_slice}[a.cmd](a)
 
 
 if __name__ == '__main__':
