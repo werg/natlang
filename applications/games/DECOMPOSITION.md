@@ -62,7 +62,7 @@ spelled as numbered steps over named data, and exact arithmetic is done in eval.
   - *NPCs*: an event is acted on once (`basis`, `applied`, `event-N`), and a give removes a unit that exists.
 - **Pluggable hot paths.** Policy is natural language also where it runs for every actor of every turn. Each such
   part has one interface and two implementations, crisp and natural language, selected by `Settings`
-  (`Engine = 'nl' | 'crisp'`). Both are held to the same commit checks.
+  (`Engine = 'nl' | 'crisp' | 'shadow'`; remember and narrate take nl or crisp only). Both are held to the same commit checks.
   - `validate`: intent, tactic and plan legality (per actor per turn);
   - `settle`: the economy's trades (per tick);
   - `resolve`: the combat round (per round);
@@ -126,7 +126,7 @@ spelled as numbered steps over named data, and exact arithmetic is done in eval.
 |---|---|---|---|
 | Observation: inventory, memory including the new event, commitments | crisp | `npc/observe.ts` | The information boundary. The event id is `event-N` from the state's counter. |
 | Memory update: notes that summarize the event with the memory | pluggable | `npc/remember` (`remember/notes.nl`; crisp: no notes) | Per event. Notes cite the entries they rest on. The event itself is always stored verbatim by the commit. |
-| Plan: say, and one of none, give, promise | fn | `npc/plan` | The NPC's policy, from its memory and commitments. |
+| Plan: say, and one of none, give, promise | fn | `npc/respond` (`npc.nl`: `plan = respond(...)`) | The NPC's policy, from its memory and commitments. |
 | Plan validation: item available, targets named, promise concrete | pluggable | `npc/validate` | Per plan. |
 | An invalid plan keeps the speech and takes no action | inline | `npc` | Orchestration. |
 | Commit: basis, event not yet applied, id is next, give removes a unit that exists, promise cites the event | crisp | `npc/commit.ts` | The check, the exactly-once line, the atomic state change. |

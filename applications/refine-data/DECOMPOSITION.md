@@ -1,7 +1,7 @@
 # Refine data: decomposition note
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). This package is a teacher-side data generator, not a
-user-serving app, so this is a short note. Nothing is restructured until the owner has reviewed it.
+Status: accepted on the owner's behalf 2026-10-12 (plans/OWNER_REVIEW.md). This package is a teacher-side data
+generator, not a user-serving app, so this is a short note.
 
 The package is three natural-language stages (`exemplify.nl`, `nearMiss.nl`, `verifyNearMiss.nl`), `index.ts:9-12`
 (exports only), `types.ts` and `authoring.json` (the registry of guard sentences and the type slots that replace them).
@@ -28,6 +28,6 @@ Points that follow the natlang-native rules:
 - **New source for `authoring.json`.** The refinement-candidate tables in the new app decompositions (helpdesk,
   terminal, media, notebook, evidence, publisher, ide, specializer, program-improver) name guard sentences and the
   `Is<T, "...">` slots that replace them. Adding those pairs to `authoring.json` makes them `refine-author` rows,
-  with the registry reporting any whose `find` text is missing. This follows the owner review of each app; nothing
-  is registered before then.
+  with the registry reporting any whose `find` text is missing. The app reviews were accepted on 2026-10-12, so these
+  pairs are now due (follow-up in plans/OWNER_REVIEW.md).
 - **Model-facing text:** the three `.nl` files are already positively phrased. No change is proposed.

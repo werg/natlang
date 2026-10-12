@@ -2,7 +2,7 @@
  * `natlang run applications/build -- GRAPH.json [--goal ID] [--root DIR] [--ready P] [--choose P] [--validity P]`:
  * build the goal of a task graph. GRAPH.json is `{ "goal": "id", "tasks": [{ id, needs, description, argv, inputs,
  * outputs }] }`; --goal overrides its goal and --root (default: the workspace) is where tasks run. Each policy point
- * (ready, choose, validity) runs its `crisp` or `natural-language` implementation. Exit status 0 when the goal is done.
+ * (ready, choose, validity) runs its `crisp`, `nl` or `shadow` implementation. Exit status 0 when the goal is done.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -16,7 +16,7 @@ export async function main(context: TargetContext): Promise<number> {
   const option = (name: string) => args.find((_, i) => args[i - 1] === name);
   const path = args.find((arg, i) => !arg.startsWith('--') && !args[i - 1]?.startsWith('--'));
   if (!path) {
-    context.io.error.write('usage: GRAPH.json [--goal ID] [--root DIR] [--ready|--choose|--validity crisp|natural-language]\n');
+    context.io.error.write('usage: GRAPH.json [--goal ID] [--root DIR] [--ready|--choose|--validity crisp|nl|shadow]\n');
     return 2;
   }
   const spec = JSON.parse(readFileSync(resolve(context.workspace, path), 'utf8')) as { goal?: string, tasks: Task[] };
@@ -26,7 +26,7 @@ export async function main(context: TargetContext): Promise<number> {
   for (const point of POINTS) {
     const choice = option(`--${point}`);
     if (choice === undefined) continue;
-    if (!['crisp', 'nl', 'shadow', 'natural-language'].includes(choice)) { context.io.error.write(`--${point} takes crisp, nl or shadow (natural-language is the deprecated spelling of nl)\n`); return 2; }
+    if (!['crisp', 'nl', 'shadow', 'natural-language', 'natlang'].includes(choice)) { context.io.error.write(`--${point} takes crisp, nl or shadow (natural-language and natlang are deprecated spellings of nl)\n`); return 2; }
     policy[point] = choice as Implementation;
   }
   const root = resolve(context.workspace, option('--root') ?? '.');

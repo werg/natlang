@@ -49,10 +49,10 @@ Decisions: **fn**, **inline**, **implicit**, **crisp**, **service**, **host**, *
 | Decline without a model when nothing repeats | crisp | `crispDecline`, `specializer.ts:60`; `main.ts:178-179` | Costs no call. |
 | Findings from recorded calls | crisp | `detectFindings`, `findings.ts:14`; `main.ts:180` | Exact. |
 | Group calls by what they did (at least 3 training calls, at most 8 groups) | crisp, with `sameApproach` | `groupsOf`, `groups.ts:21`; `main.ts:181` | Normalization and anti-unification are exact; sameness of differently written programs is a judgment. The 8-group cap is a named setting. |
-| Do two normalized programs do the same work | fn, decision | `writeCase/sameApproach` | A judgment. |
+| Do two normalized programs do the same work | fn, decision | `chooseCondition/sameApproach` | A judgment. |
 | Write a case for one group, or skip with a reason | fn (directory reducer) | `writeCase` | Authoring. Today one call does condition search and body writing; see the split below. |
 | Choose a condition and measure it | fn | `writeCase/chooseCondition` (proposed) | Steps 1-3 of `writeCase.nl:22-24`. |
-| Is a condition structural or semantic | fn, decision | `writeCase/semanticCheck` | Its own question for small models. |
+| Is a condition structural or semantic | fn, decision | `chooseCondition/semanticCheck` | Its own question for small models. |
 | Write `case.ts` for a chosen condition | fn | `writeCase/writeBody` (proposed) | Step 4 of `writeCase.nl:25`. |
 | Assemble cases, check each loads | crisp | `assembleCases`, `groups.ts:114`; `main.ts:201-216` | Exact. |
 | Replay, compare with the agent, judge where they differ, accept within a bound | crisp with the runtime judge | `verifyCases`, `specializer.ts:207`; `main.ts:207` | Exact replay and equality; the judge is blinded to which side is the case. |

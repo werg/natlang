@@ -89,8 +89,9 @@ gate failures remain unchanged, and active frozen jobs keep their pinned gate.
 Pop owns this shared evaluator. Initial proposed thresholds, declared before its
 first matched measurements, are minimum agreement 0.99, maximum
 KL(plain || projected) 0.02 nats/token, and maximum own-output plain-model CE gap
-0.05 nats/token, each per stratum. These are a proposal for review, not an
-existing channel or runtime certificate. A checked declaration and exact-weight
+0.05 nats/token, each per stratum. These are a proposal, not an
+existing channel or runtime certificate; accepted 2026-10-12 as report-only
+(`proposed_gate_passed`), and Neuralese direct v1 lineages do not use them. A checked declaration and exact-weight
 evaluation must land before this contract can qualify a new handoff.
 
 The canonical `raw-recurrence-v1` recipe places `autoregressive_text_fixup`

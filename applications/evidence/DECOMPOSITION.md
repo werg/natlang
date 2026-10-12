@@ -134,7 +134,7 @@ returns: string
 | Slot | Proposed type | Check |
 | --- | --- | --- |
 | `planSearch` result | `Is<string[], "two or three search phrases">` | crisp (count) |
-| `select` result | `Is<string[], "distinct ids of hits in found">` | crisp (set membership) |
+| `select` result | `Is<string[], "each id listed once">` (`HitIds`); membership in the hits is a host check (`hitProblem`) with one repair | crisp (set membership) |
 | `Claim.quote` | `Is<string, "occurs literally in the passage with span_id">` | crisp (substring) |
 | `Claim.span_id` | `Is<string, "the id of a passage given to the call">` | crisp |
 | `Claim.revision` | host-filled; `Is<string, "equals the revision of the passage with span_id">` | crisp |

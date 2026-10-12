@@ -1,7 +1,8 @@
 # Failure explanation as advisory natlang programs (review items P5 and P11)
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). Nothing is built until the owner has reviewed it. No code
-changes accompany this document.
+Status: implemented on main 42ddb338 (applications/failure-explainer, `--explain-input`, scripts/explain_gate.py,
+ts-host/scripts/explain-advisory.mjs); accepted on the owner's behalf 2026-10-12. The open questions in section 8
+are still undecided (follow-up in plans/OWNER_REVIEW.md).
 
 Source: plans/NATLANG_NATIVE_REVIEW.md, rows P5 and P11.
 

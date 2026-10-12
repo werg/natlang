@@ -4,6 +4,11 @@ The owner asked for a review of where the codebase should be more natlang-native
 Three read-only reviews covered ts-host/src, applications/, and scripts/ plus training/. This document ranks the findings
 and orders the work. Line references are as of origin/main at the time of the review.
 
+Status 2026-10-12 (accepted on the owner's behalf, plans/OWNER_REVIEW.md): N1-N5 and P2, P4-P11 are implemented on
+main; P1 is withdrawn. P3 was built as `applications/specializer/promote.nl` plus the pluggable `promotionPolicy`
+(ts-host/src/runtime/promotion.ts) instead of `decideTierState.nl`. Still open: the refine-data `authoring.json` pairs
+from the P9 apps and the model-facing cleanups below. The per-row text and "Order of work" are the original plan.
+
 ## The pattern behind the findings
 
 Three things keep pushing work toward crisp code:
