@@ -1,6 +1,7 @@
 #!/bin/bash
 # usage: scripts/s7_task_round.sh RUN_DIR [SHARDS]  (env: RENDER, PORT, SNAP, DIRECT=export dir,
-#   SERVE_IMAGE + RECEIPT + CONTAINER: serve DIRECT in a container at its source-proof paths)
+#   SERVE_IMAGE + RECEIPT + CONTAINER: serve DIRECT in a container at its source-proof paths;
+#   UPDATE_FROM=<scored run dir>: one GRPO round instead of a rollout round; RESTORE_ADAPTER=<adapter.nzb>: sample with it)
 # S7 smoke round (plans/neuralese/S7_RL.md §8): serve LFM2.5-350M on GPU, run the group queue through the collector in SHARDS
 # parallel queue runners, merge journals, score.
 set -u
@@ -38,6 +39,24 @@ fi
 SP=$!
 for i in $(seq 1 150); do curl -sf http://127.0.0.1:${PORT:-8097}/v1/models >/dev/null && break; sleep 2; done
 curl -sf http://127.0.0.1:${PORT:-8097}/v1/models >/dev/null || { echo "server did not come up; see $R/server.log" >&2; kill $SP; exit 1; }
+URL=http://127.0.0.1:${PORT:-8097}
+stop_server() { kill $SP; wait $SP; [ -n "${SERVE_IMAGE:-}" ] && docker stop "$CONTAINER" >/dev/null 2>&1; }
+if [ -n "${UPDATE_FROM:-}" ]; then
+  # One GRPO round on a scored run (S7 §5): zero adapter (policy == reference), the run's rollouts as behaviour samples,
+  # natlang.rollout/1 records from the collector trajectories, adapter saved to $R/policy-r1/adapter.nzb.
+  $PY -m natlang_neuralese.rl.task_rollouts score --run-dir "$UPDATE_FROM" --emit-rollouts $R/rollouts.jsonl > $R/emit.log 2>&1
+  $PY -m natlang_neuralese.rl.grpo init --server $URL --kind ${ADAPTER_KIND:-xs} --rank ${ADAPTER_RANK:-8} --out $R/policy-r0 > $R/init.log 2>&1
+  A0=$(python3 -c "import json;print(json.load(open('$R/policy-r0/adapter.json'))['adapter'])")
+  $PY -m natlang_neuralese.rl.grpo round --server $URL --rollouts $R/rollouts.jsonl --adapter $A0 --out $R/policy-r1 \
+    --lr ${LR:-1e-3} --beta ${BETA:-0.02} --steps ${STEPS:-1} > $R/round.log 2>&1
+  status=$?; stop_server; exit $status
+fi
+CHAT=()
+if [ -n "${RESTORE_ADAPTER:-}" ]; then  # sample with a saved adapter policy (re-score after an update)
+  AID=$($PY -c "from natlang_neuralese.rl.grpo import Server; from pathlib import Path; print(Server('$URL').restore_block(Path('$RESTORE_ADAPTER')))")
+  echo "{\"x_natlang_adapters\": [{\"id\": \"$AID\", \"scale\": 1}]}" > $R/chat-config.json
+  CHAT=(--chat-request-config $R/chat-config.json)
+fi
 mkdir -p $R/shards
 python3 - "$R" "$N" <<'PY'
 import json, sys
@@ -50,11 +69,10 @@ pids=()
 for s in $(seq 0 $((N-1))); do
   python3 $ROOT/scripts/run_bonsai_queue.py $R/shards/queue-$s.jsonl $R/shards/journal-$s.jsonl --runtime $ROOT/ts-host \
     --server http://127.0.0.1:${PORT:-8097} --chat-completions-url http://127.0.0.1:${PORT:-8097}/v1/chat/completions --model-id lfm \
-    --model-concurrency 2 > $R/shards/queue-$s.log 2>&1 &
+    --model-concurrency 2 "${CHAT[@]}" > $R/shards/queue-$s.log 2>&1 &
   pids+=($!)
 done
 wait "${pids[@]}"
 cat $R/shards/journal-*.jsonl > $R/journal.jsonl
 $PY -m natlang_neuralese.rl.task_rollouts score --run-dir $R > $R/score.log 2>&1
-kill $SP; wait $SP
-[ -n "${SERVE_IMAGE:-}" ] && docker stop "$CONTAINER" >/dev/null 2>&1
+stop_server

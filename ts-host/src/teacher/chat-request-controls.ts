@@ -2,13 +2,20 @@
 export function chatRequestControls(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('chat request controls must be an object');
   const controls = value as Record<string, unknown>;
-  const allowed = ['max_tokens', 'top_p', 'top_k', 'min_p', 'chat_template_kwargs', 'repetition_penalty', 'reasoning_effort'];
+  const allowed = ['max_tokens', 'top_p', 'top_k', 'min_p', 'chat_template_kwargs', 'repetition_penalty', 'reasoning_effort',
+    'x_natlang_adapters'];
   if (Object.keys(controls).some(key => !allowed.includes(key))) throw new Error('unsupported chat request control');
   if (controls.max_tokens !== undefined && (!Number.isSafeInteger(controls.max_tokens) || Number(controls.max_tokens) < 1))
     throw new Error('max_tokens must be a positive integer');
   if (controls.reasoning_effort !== undefined && (typeof controls.reasoning_effort !== 'string' ||
       !['none', 'minimal', 'low', 'medium', 'high'].includes(controls.reasoning_effort)))
     throw new Error('reasoning_effort must be none, minimal, low, medium or high');
+  // S7 RL rollouts sample an adapter policy held by the Neuralese server: [{id, scale}] (serve/http.py).
+  if (controls.x_natlang_adapters !== undefined && (!Array.isArray(controls.x_natlang_adapters) ||
+      !controls.x_natlang_adapters.every(item => item && typeof item === 'object' && !Array.isArray(item) &&
+        typeof (item as { id?: unknown }).id === 'string' && Number.isFinite((item as { scale?: unknown }).scale) &&
+        Object.keys(item).every(key => key === 'id' || key === 'scale'))))
+    throw new Error('x_natlang_adapters must be a list of {id, scale} adapter references');
   const serialized = JSON.stringify(controls);
   if (/"(?:apiKey|api_key|authorization|headers|messages|tools|endpoint)"\s*:/i.test(serialized)) throw new Error('credentials and conversation content are forbidden in chat controls');
   return JSON.parse(serialized);
