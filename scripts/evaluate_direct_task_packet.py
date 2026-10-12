@@ -8,6 +8,7 @@ frozen TS collector. It is CPU-only and does not train or admit data.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -25,8 +26,8 @@ from natlang_neuralese.eval.task_packet import (  # noqa: E402
     read_jsonl,
     retain_best_checkpoint,
     score_rows,
-    sha256_file,
 )
+from natlang_neuralese.common.hashing import sha256_file_hex  # noqa: E402
 
 
 def atomic_json(path: Path, value: dict) -> None:
@@ -52,14 +53,23 @@ def verify_plan(plan_path: Path) -> tuple[dict, Path, Path]:
     if plan.get("schema") != "natlang.direct-held-task-evaluation/1":
         raise ValueError("unsupported direct held-task evaluation plan")
     packet = Path(plan["derived_packet"]).resolve(strict=True)
-    if sha256_file(packet) != plan["derived_packet_sha256"]:
+    if sha256_file_hex(packet) != plan["derived_packet_sha256"]:
         raise ValueError("derived held-task packet hash changed")
     source = Path(plan["source_packet"]).resolve(strict=True)
-    if sha256_file(source) != plan["source_packet_sha256"]:
+    if sha256_file_hex(source) != plan["source_packet_sha256"]:
         raise ValueError("protected held-task packet hash changed")
     runtime = Path(plan["runtime"]).resolve(strict=True)
-    if sha256_file(runtime / "frozen-runtime.json") != plan["runtime_manifest_sha256"]:
+    if sha256_file_hex(runtime / "frozen-runtime.json") != plan["runtime_manifest_sha256"]:
         raise ValueError("frozen collector runtime manifest changed")
+    queue_template = Path(plan["queue"]).resolve(strict=True)
+    if sha256_file_hex(queue_template) != plan["queue_sha256"]:
+        raise ValueError("reviewed queue template hash changed")
+    supervisor = Path(plan["supervisor"]).resolve(strict=True)
+    if sha256_file_hex(supervisor) != plan["supervisor_sha256"]:
+        raise ValueError("pinned queue supervisor changed")
+    reference_results = Path(plan["reference_results"]).resolve(strict=True)
+    if sha256_file_hex(reference_results) != plan["reference_results_sha256"]:
+        raise ValueError("held-task reference results changed")
     rows = read_jsonl(packet)
     if len(rows) != plan.get("derived_rows") or len(rows) != 48:
         raise ValueError("held-task packet must contain its exact 48 pinned rows")
@@ -119,6 +129,10 @@ def make_run_queue(plan: dict, packet: Path, run_dir: Path) -> tuple[Path, list[
     return queue, entries
 
 
+def _queue_entry_contract(entry: dict) -> dict:
+    return {key: value for key, value in entry.items() if key not in {"jobs", "log", "output"}}
+
+
 def collect_existing(plan: dict, packet: Path, queue_path: Path, journal_path: Path,
                      entries: list[dict], out: Path) -> dict:
     journal = [json.loads(line) for line in journal_path.read_text().splitlines() if line.strip()]
@@ -140,11 +154,11 @@ def collect_existing(plan: dict, packet: Path, queue_path: Path, journal_path: P
     score = score_rows(rows, result_rows, finishes, queue_keys)
     score["supervisor_accounting_complete"] = exact_accounting
     score["eligible_for_best"] = score["eligible_for_best"] and exact_accounting
-    queue_digest = sha256_file(queue_path)
-    journal_digest = sha256_file(journal_path)
+    queue_digest = sha256_file_hex(queue_path)
+    journal_digest = sha256_file_hex(journal_path)
     report = {
         **score,
-        "plan_sha256": sha256_file(Path(plan["plan_path"])) if plan.get("plan_path") else None,
+        "plan_sha256": sha256_file_hex(Path(plan["plan_path"])) if plan.get("plan_path") else None,
         "derived_packet_sha256": plan["derived_packet_sha256"],
         "protected_packet_sha256": plan["source_packet_sha256"],
         "reference_results_sha256": plan["reference_results_sha256"],
@@ -219,6 +233,8 @@ def run_candidate(args: argparse.Namespace) -> dict:
     plan, packet, runtime = verify_plan(args.plan)
     launch = args.launch_receipt.resolve(strict=True)
     base_snapshot = args.base_snapshot.resolve(strict=True)
+    if base_snapshot != Path(plan["base_snapshot"]).resolve(strict=True):
+        raise ValueError("candidate base snapshot differs from the reviewed evaluation plan")
     run_dir = args.out.resolve()
     if run_dir.exists():
         raise FileExistsError(f"evaluation output already exists: {run_dir}")
@@ -227,9 +243,9 @@ def run_candidate(args: argparse.Namespace) -> dict:
     run_dir.mkdir(parents=True)
     copied_checkpoint = run_dir / "candidate-checkpoint.pt"
     source_stat = args.checkpoint.stat()
-    checkpoint_sha = sha256_file(args.checkpoint)
+    checkpoint_sha = sha256_file_hex(args.checkpoint)
     shutil.copyfile(args.checkpoint, copied_checkpoint)
-    copied_sha = sha256_file(copied_checkpoint)
+    copied_sha = sha256_file_hex(copied_checkpoint)
     source_after = args.checkpoint.stat()
     if (checkpoint_sha != copied_sha or source_stat.st_ino != source_after.st_ino or
             source_stat.st_size != source_after.st_size or source_stat.st_mtime_ns != source_after.st_mtime_ns):
@@ -272,7 +288,7 @@ def run_candidate(args: argparse.Namespace) -> dict:
         report.update({
             "checkpoint_sha256": copied_sha,
             "training_step": (manifest.get("training_checkpoint") or {}).get("step"),
-            "direct_artifact_manifest_sha256": sha256_file(manifest_path),
+            "direct_artifact_manifest_sha256": sha256_file_hex(manifest_path),
             "base_snapshot": str(base_snapshot),
             "base_snapshot_revision": base_snapshot.name,
             "serving_precision": "FP32 on CPU",
@@ -284,7 +300,7 @@ def run_candidate(args: argparse.Namespace) -> dict:
         })
         atomic_json(run_dir / "task-score.json", report)
         if runner_code == 0:
-            score_sha = sha256_file(run_dir / "task-score.json")
+            score_sha = sha256_file_hex(run_dir / "task-score.json")
             report["score_sha256"] = score_sha
             promotion = retain_best_checkpoint(copied_checkpoint, report, score_sha, args.best_dir)
             report["best_checkpoint_update"] = promotion
@@ -302,7 +318,7 @@ def run_candidate(args: argparse.Namespace) -> dict:
         # when the retained candidate is served later.
         shutil.rmtree(artifact, ignore_errors=True)
         best_path = Path(args.best_dir) / "best-task-checkpoint.pt"
-        if not best_path.exists() or sha256_file(best_path) != copied_sha:
+        if not best_path.exists() or sha256_file_hex(best_path) != copied_sha:
             copied_checkpoint.unlink(missing_ok=True)
 
 
@@ -310,10 +326,12 @@ def score_existing(args: argparse.Namespace) -> dict:
     plan, packet, _runtime = verify_plan(args.plan)
     queue = args.queue.resolve(strict=True)
     entries = read_jsonl(queue)
+    reviewed_entries = read_jsonl(Path(plan["queue"]))
     if len(entries) != plan["queue_entries"]:
         raise ValueError("existing queue does not match the reviewed fixed packet size")
     for index, entry in enumerate(entries):
-        if entry.get("index") != index or entry.get("source") != str(packet) or entry.get("count") != 1:
+        if (entry.get("index") != index or entry.get("source") != str(packet) or entry.get("count") != 1 or
+                _queue_entry_contract(entry) != _queue_entry_contract(reviewed_entries[index])):
             raise ValueError("existing queue identity differs from the reviewed packet")
     report = collect_existing(plan, packet, queue, args.journal.resolve(strict=True), entries, args.out)
     report["comparison_key"] = comparison_key(plan, args.image)
@@ -343,7 +361,10 @@ def main() -> None:
     baseline.add_argument("--image", default="sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de")
     args = parser.parse_args()
     if args.command == "evaluate-checkpoint":
-        result = run_candidate(args)
+        args.best_dir.mkdir(parents=True, exist_ok=True)
+        with (args.best_dir / ".task-evaluation-run.lock").open("a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            result = run_candidate(args)
     else:
         result = score_existing(args)
     print(json.dumps({"out": str(args.out), "task_successes": result.get("task_successes"),

@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 from typing import Any
 
+from ..common.hashing import sha256_file_hex
 
 TASK_OUTCOMES = (
     "task_success",
@@ -20,14 +21,6 @@ TASK_OUTCOMES = (
     "semantic_mismatch",
     "unresolved",
 )
-
-
-def sha256_file(path: str | Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
@@ -152,11 +145,6 @@ def score_rows(source_rows: list[dict[str, Any]], result_rows: list[dict[str, An
     }
 
 
-def _canonical_json_sha256(value: Any) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
-                                    ensure_ascii=False).encode("utf-8")).hexdigest()
-
-
 def retain_best_checkpoint(checkpoint: str | Path, evaluation: dict[str, Any],
                            evaluation_sha256: str, destination: str | Path) -> dict[str, Any]:
     """Publish the highest task-success count among complete, comparable evaluations."""
@@ -169,7 +157,7 @@ def retain_best_checkpoint(checkpoint: str | Path, evaluation: dict[str, Any],
     successes = evaluation.get("task_successes")
     if isinstance(successes, bool) or not isinstance(successes, int) or successes < 0:
         raise ValueError("task_successes must be a nonnegative integer")
-    digest = sha256_file(checkpoint)
+    digest = sha256_file_hex(checkpoint)
     destination.mkdir(parents=True, exist_ok=True)
     lock_path = destination / ".task-best.lock"
     with lock_path.open("a+") as lock:
@@ -229,15 +217,15 @@ def export_checkpoint(args: argparse.Namespace) -> dict[str, Any]:
         "hf_hub_cache": str(hub_cache),
         "model_safetensors_sha256": weights[0][1],
         "launch_receipt_path": str(launch_path),
-        "launch_receipt_sha256": sha256_file(launch_path),
+        "launch_receipt_sha256": sha256_file_hex(launch_path),
         "runtime_image": launch["runtime_image"],
     }
-    checkpoint_sha = sha256_file(args.checkpoint)
+    checkpoint_sha = sha256_file_hex(args.checkpoint)
     artifact = export_direct_checkpoint(
         args.checkpoint, args.output, base_snapshot=snapshot, base_source_proof=proof,
         backbone_adapter=LFM2_ADAPTER,
     )
-    if sha256_file(args.checkpoint) != checkpoint_sha:
+    if sha256_file_hex(args.checkpoint) != checkpoint_sha:
         raise ValueError("source checkpoint changed during strict export")
     return artifact
 
