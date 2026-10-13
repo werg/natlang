@@ -62021,6 +62021,25 @@
         "provider-luna-folder-backfill-s52007-s52010-v1",
         "provider-luna-held-shapes-s52011-v1"
       ]
+    },
+    {
+      "id": "luna-held-shapes-followon-lfm-render-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-followon-lfm-render-20261013-v1",
+      "include": [
+        "receipt.json",
+        "full/lfm25/text-data.jsonl",
+        "program-header/lfm25/text-data.jsonl",
+        "whole-trajectory/lfm25/text-data.jsonl"
+      ],
+      "admission": "derived LFM rendering of exact admitted native-turn corpus; no independent source credit",
+      "training_admission": true,
+      "training_admission_reason": "source corpus luna-held-shapes-followon-native-turns-20261013-v1 is admitted; renderer confirms 1950 eligible rows, zero decontamination omissions or reservation hits, exact program-header serving token boundaries",
+      "derived_from": "luna-held-shapes-followon-native-turns-20261013-v1",
+      "source_class": "derived-lfm25-training-render",
+      "split": "train only; inherited from source decision rows",
+      "required_conversion": "include with preceding held-shape renders in next broad LFM union; Mellum twin DGX-owned",
+      "license": "inherited from source corpus; factual provenance"
     }
   ],
   "coverage_backlog": [

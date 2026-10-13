@@ -6,17 +6,14 @@ training admission; native turn approval and an explicit corpus decision follow.
 """
 import argparse
 import collections
-import hashlib
 import json
 from pathlib import Path
+import sys
 
 
-def sha256(path):
-    digest = hashlib.sha256()
-    with path.open('rb') as stream:
-        for block in iter(lambda: stream.read(1 << 20), b''):
-            digest.update(block)
-    return digest.hexdigest()
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'training/neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256
 
 
 def rows(path):
