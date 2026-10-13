@@ -17,6 +17,7 @@ Columns:
 
 | Date | Commit(s) | Change | Status | Measurement |
 | --- | --- | --- | --- | --- |
+| 2026-10-13 | Saga Forensics first source slice, commit pending | New application-scale multi-file natlang source: 23 authored `.nl` modules (533 lines) and typed signatures across inventory, correlation, effect adjudication, contingent repair and audit; four scoped NL literal sites and two structural `iterateOn` reducers. This is not adopted or training-admitted yet. Subsequent Cave Mission and Sol application trees need their own source hashes and rows before live adoption. | unmeasured | After source/fixture review and immutable project packaging, compare about 48 live executions per presentation variant on source-preserving worlds; report callable depth, actual typed stage deltas, invoked-and-consumed literal decisions, structural iteration, answer/verifier success, request/token cost and failure clusters. Do not infer adoption from loader or exact source replay alone. |
 | 2026-10-13 | (this commit) | Generative evals and serving render the full system prompt even for models trained on program-header rows (owner decision, DECISIONS.md): `task_eval.prompt_rendering` default `full` (was: the training rows' rendering), declared in direct-v3 and e2e-v1; `direct_export` and `task_packet export` serve `full` by default. Affects Mellum v4's task eval from the 09:56Z handoff: its step 1200-2000 scores (8/16 at step 2000) were program-header or the old frozen snapshot's schema block and are not comparable. | debt | Mellum v4 step-3600 task eval in full (in the run) against a program-header one-off of the same checkpoint, queued in a gap; Mellum base reference at T=0.6 in full (greedy base: 11/16, provisional). |
 | 2026-10-13 | (this commit) | `invalid-binding` for a redeclared service now shows the declaration under a new name: `docs names this scope's docs service, so it cannot also name a result; give the result its own name, as in const docsResult = docs.document();` (no initializer, or a long or multi-line one: `such as docsResult.`). Replaces 4fcd23a7's `docs is already a service in this scope, used through its methods (read_code("docs") lists them); ...` | measured: keep | LFM2.5-2.6B Q6_K (llama.cpp, temperature 0.7), scripts/error_text_replay.py on 15 captured contexts that redeclare a service, 120 replays per variant: recovered 71/120 (new), 57/120 (old `already a function`), 53/120 (4fcd23a7 `already a service`); redeclare or call-as-function 22, 37 and 25. The `already a service` wording mostly sent the model to read_code/read_page (26 of 120) instead of fixing the line. Data: DGX /home/werg/data/errtext/rep26-bind*.jsonl |
 | 2026-10-13 | (this commit) | `return_result` value rejections default to the `sentence` wording (`return_result needs the Judgment itself as its value argument.`; incomplete: `return_result needs a complete Judgment as its value argument, with every field filled.`), no `value: bad-action` code. `legacy`, `field` (a776223e) and `steps` stay selectable by `returnErrorText` / NATLANG_RETURN_ERROR_TEXT (8e431f14) | measured: keep | Replay of the turn after a misplaced or missing value (scripts/error_text_replay.py). LFM2.5-2.6B, 66 per variant: recovered 63 (legacy), 63 (field), 62 (sentence), 60 (steps). LFM2.5-350M base (CPU, BF16), 48 per variant: no variant recovers; the error is echoed back in 0.62 (legacy), 0.77 (field), 0 (sentence), 0 (steps). The students are small models, so sentence. Data: DGX /home/werg/data/errtext/rep26-ret*, rep350-pilot* |
@@ -232,3 +233,24 @@ A grouped typed v6 presentation is prepared for live comparison: it iterates ove
 The shared native return checker now considers every compatible arm of a declared record union before reporting a missing required field. This removes a false `return_result needs a complete ...` error on heterogeneously shaped arrays such as Sol060; an exact local regression includes one element of each arm and a true missing-field negative. **Measurement debt:** in the next live teacher window inspect about 48 union-typed returns or all available such returns if fewer, including the Sol060 case, for valid alternate-arm acceptance and true missing-field feedback. Do not infer Sol060 source quality from the earlier failed scripted replay.
 
 The v7 semantic-stack presentation replaces generic deep-stage forwarding with authored typed stage contributions and explicit source IDs on Astra records. It also exposes each catalog's output contract and applies declared per-field comparison rules for set-valued, ordered and prose fields. The renderer statically rejects missing prior-stage fields and type-erased IDs; the comparator leaves witness alternatives for independent review. **Measurement debt:** run a diagnostic live cohort first, then review about 48 complete cases on this exact presentation for actual distinct stage transformations, invoked and consumed scoped literals, per-record source coverage, grounded final answers, request cost and model rejections before production adoption. v5/v6b partial traces and exact source replay do not pay this debt.
+
+The first two v7 live diagnostics each reached roughly 50 turns. In ecology01, the
+parent stage invoked an ad hoc natural-language function, but the generated child
+did not return the required scope decision; the parent then passed an empty
+`scopeDecisions` despite applicable relations. This is a child-contract and
+source-presentation failure, not a negative example for the model. A proposed
+v8 variant will ask for one narrow decision per candidate relation, show a
+direct typed invocation, and require the returned decision to populate the
+stage's owned field. An empty field will need a source-grounded absence when
+there are no candidates. This variant has **zero live samples** and owes about
+48 matched cases before adoption. The v7 ecology case was stopped with its
+diagnostic trace preserved.
+
+In Sol008, the v7 nested stages added and consumed source-quoted inventory,
+rule candidates and licensing decisions; its final answer matched the authored
+gold. The collector then failed before recording an outcome because the
+frozen October 12 runtime lacked the new `semantic-structured` comparator.
+The failure is a runtime-snapshot mismatch, not a model rejection. A new
+immutable runtime snapshot includes the comparator and has passed canonical,
+set-permutation, omission and duplicate probes. The failed attempt remains
+diagnostic; a new queue is sealed against the corrected runtime.
