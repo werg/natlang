@@ -48,7 +48,7 @@ def main(argv=None):
                         'time, gradients accumulated, one optimizer step; 0: packed with the latents stepping in backward')
     p.add_argument('--qat', default='bf16:0', help='point:mix, e.g. q4:1.0 or ternary-experts:0.5')
     p.add_argument('--readout', choices=('chunked', 'fused'), default='fused',
-                   help="direct_sft's readout: chunked_readout + soft_token_mixture, or fused_readout (shared logits)")
+                   help="direct_sft's readout: chunked_readout, or fused_readout (logits once per chunk)")
     p.add_argument('--dump-grads', type=Path, help='save layer 0\'s expert and attention latent gradients of the '
                    'last update here (real gradients for optimizer numerics checks); the optimizer step is skipped')
     p.add_argument('--fp8-training', choices=('off', 'triton-experts', 'te-fp8'), default='off')
@@ -74,7 +74,6 @@ def main(argv=None):
     from .optim import PortMuonAdamW, latent_entries, latent_options, latent_split
     from .quantization import Quantization
     from .text_warmup import chunked_readout, fused_readout
-    from ..model.neuralese_projection import soft_token_mixture
 
     torch.manual_seed(a.seed)
     device = 'cuda'
@@ -104,10 +103,7 @@ def main(argv=None):
     named = [('backbone.' + n, q) for n, q in configure_backbone_training(backbone, 'latent')]
     latent_named, other = latent_split(named, a.latent_optimizer)
     latent = latent_entries(latent_named, a.latent_optimizer, 1e-5, head_dim)
-    from ..model.neuralese_projection import NeuraleseProjection
-    projection = NeuraleseProjection(int(backbone.embedding_weight.shape[1])).to(device)  # the trainer's head (idle)
-    head_named = [('neuralese_projection.' + n, q) for n, q in projection.named_parameters()]
-    optimizer = PortMuonAdamW(head_named + other, lr=7.5e-6, vocab_size=int(backbone.embedding_weight.shape[0]), latent=latent,
+    optimizer = PortMuonAdamW(other, lr=7.5e-6, vocab_size=int(backbone.embedding_weight.shape[0]), latent=latent,
                               latent_optimizer=a.latent_optimizer,
                               latent_options=latent_options(a.latent_optimizer, weight_decay=0.1, ns=a.ns))
     optimizer.latent.step_in_backward(gated=True)
@@ -139,7 +135,6 @@ def main(argv=None):
                       'compile': os.environ.get('NATLANG_MAPLE_COMPILE', '1')}), flush=True)
 
     vocab = int(backbone.embedding_weight.shape[0])
-    table = backbone.embedding_weight.detach().float().clone()  # direct_sft's mixture table (FP32)
     generator = torch.Generator().manual_seed(a.seed)
     profiler = profiling.UpdateProfiler(a.out, value=f'{a.warmup + 1}:{a.updates}' if a.profile else '')
     rows = []
@@ -162,13 +157,11 @@ def main(argv=None):
                 states, gold = hidden[:, -a.span:], rows_ids[:, -a.span:]
                 weights = torch.ones_like(gold, dtype=torch.float32)
                 if a.readout == 'fused':
-                    loss, _, _, mixture = fused_readout(backbone, states, gold, backbone.controls.close_id,
-                                                        position_weights=weights, mixture_table=table)
+                    loss, _, _ = fused_readout(backbone, states, gold, backbone.controls.close_id,
+                                               position_weights=weights)
                 else:
                     _, loss, _, _, _ = chunked_readout(backbone, states, gold, backbone.controls.close_id,
                                                        position_weights=weights)
-                    mixture = soft_token_mixture(backbone.logits, table, states.detach())
-                loss = loss + 0.0 * mixture.sum()
                 if teacher is not None:
                     loss = loss + member_kl(backbone, states, teacher, gold, kl_weight=family.kl_weight)[0]
                 loss = loss * scale

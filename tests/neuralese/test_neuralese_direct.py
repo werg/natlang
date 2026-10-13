@@ -31,32 +31,51 @@ def test_token_choice_projection_is_the_identity_and_logits_equal_base_at_initia
     assert torch.equal(head(norm(projection(hidden))), head(norm(hidden)))
 
 
-def test_neuralese_projection_is_the_soft_token_mixture_at_initialization():
-    from natlang_neuralese.model.neuralese_projection import NeuraleseProjection, soft_token_mixture
+def test_neuralese_projection_starts_exactly_at_the_chosen_tokens_embedding():
+    """Owner 2026-10-13: value(h) = E[chosen] + C(h), no soft-token mixture. At its start C = 0, so the value is the
+    chosen token's embedding exactly (nearest token, cosine 1); C is per position and trainable, and a consumer's
+    gradient reaches it (and, once it moves, h)."""
+    from natlang_neuralese.model.neuralese_projection import NeuraleseProjection, alignment_metrics
     torch.manual_seed(0)
-    hidden = torch.randn(2, 9, 16)
-    table = torch.randn(50, 16)
-    head = torch.nn.Linear(16, 50, bias=False)
-    mixture = soft_token_mixture(head, table, hidden, chunk=4)
-    assert torch.allclose(mixture, torch.softmax(head(hidden), -1) @ table, atol=1e-6)
-    projection = NeuraleseProjection(16, hidden=8)
-    assert torch.equal(projection(hidden, mixture), mixture)
-    # Trainable: a gradient reaches the correction's output projection from the first step.
-    projection(hidden, mixture).square().sum().backward()
-    assert projection.stack.blocks[-1].down.weight.grad.abs().sum() > 0
+    table = torch.randn(40, 16)
+    hidden = torch.randn(1, 64, 24)
+    chosen = (torch.nn.functional.rms_norm(hidden, (24,)) @ torch.randn(40, 24).t()).argmax(-1)
+    projection = NeuraleseProjection(24, embedding_width=16, hidden=32)
+    value = projection(hidden, anchor=table[chosen])
+    assert torch.equal(value, table[chosen])
+    metrics = alignment_metrics(value[0], chosen[0], table)
+    assert metrics['nearest_chosen'].mean() == 1 and torch.allclose(metrics['cos_chosen'], torch.ones(64))
+    hidden.requires_grad_(True)
+    projection(hidden, anchor=table[chosen]).square().sum().backward()
+    assert projection.linear.weight.grad.abs().sum() > 0  # C trains from the first consumer gradient
+    with torch.no_grad():
+        projection.linear.weight.normal_(0, 0.1)
+    later = hidden.detach().clone(); later[:, 40] += 1.0  # per position: a later position never changes an earlier one
+    assert torch.equal(projection(later, anchor=table[chosen])[:, :40],
+                       projection(hidden.detach(), anchor=table[chosen])[:, :40])
+    with pytest.raises(ValueError, match='anchor'):
+        projection(hidden, anchor=table[chosen][:, :3])
 
 
-@pytest.mark.parametrize('kind', ['neuralese', 'token_choice'])
-def test_projections_are_causal_and_reset_at_segment_boundaries(kind):
-    from natlang_neuralese.model.neuralese_projection import NeuraleseProjection, TokenChoiceProjection
+def test_the_removed_mixture_projection_needs_an_alignment_fit():
+    """A saved projection of the removed mixture design (a causal-conv correction: stack.*) never loads as P."""
+    from natlang_neuralese.model.neuralese_projection import (CausalConvStack, NeuraleseProjection,
+                                                               ProjectionNeedsAlignment, is_legacy_projection_state)
+    legacy = {'stack.' + k: v for k, v in CausalConvStack(8, hidden=4).state_dict().items()}
+    assert is_legacy_projection_state(legacy)
+    with pytest.raises(ProjectionNeedsAlignment, match='alignment fit'):
+        NeuraleseProjection(8).load_state_dict(legacy)
+
+
+def test_token_choice_projection_is_causal_and_resets_at_segment_boundaries():
+    from natlang_neuralese.model.neuralese_projection import TokenChoiceProjection
     torch.manual_seed(0)
-    module = _trained(NeuraleseProjection(8, hidden=4) if kind == 'neuralese' else TokenChoiceProjection(8, hidden=4))
+    module = _trained(TokenChoiceProjection(8, hidden=4))
     hidden = torch.randn(1, 10, 8)
-    mixture = torch.zeros(1, 10, 8)
     segments = torch.tensor([[-1, -1, 0, 0, 0, 1, 1, 1, 1, 1]])
 
     def run(h):
-        return module(h, mixture, segments) if kind == 'neuralese' else module(h, segments)
+        return module(h, segments)
     base = run(hidden)
     later = hidden.clone(); later[:, 7] += 1.0  # a later position never changes an earlier output
     assert torch.equal(run(later)[:, :7], base[:, :7])
@@ -87,7 +106,6 @@ def test_direct_recipes_resolve_for_both_lines_and_gate_on_qualification():
         assert defaults['token_choice_projection'] is False and defaults['tokens'] > defaults['target_tokens']
         args = stage_parameter_args({**defaults, **stage['parameters']})
         assert '--no-token-choice-projection' in args
-        assert defaults['value_margin'] > 0 and '--value-margin' in args  # report-only (owner 2026-10-11)
         assert 0 < defaults['drift_every'] < defaults['eval_every'] and '--drift-every' in args  # the guard sees the run
         assert defaults['drift_gate_every'] >= defaults['drift_every'] and 0 < defaults['drift_gate_rise'] < defaults['drift_stop']
         assert defaults['gate_response_kl'] == defaults['drift_stop'] and defaults['drift_ce_windows'] > 0
@@ -521,11 +539,10 @@ def test_the_stateless_fp8_expert_backend_switches_at_a_resume():
                                             'inputs': {'/a': 'h'}})
 
 
-def test_fused_readout_matches_the_chunked_readout_and_the_soft_token_mixture():
+def test_fused_readout_matches_the_chunked_readout():
     """text_warmup.fused_readout: the weighted CE, its gradient to the states, predictions and token losses equal
-    chunked_readout's; the mixture equals soft_token_mixture's (same logits, computed once)."""
+    chunked_readout's (logits computed once)."""
     import torch
-    from natlang_neuralese.model.neuralese_projection import soft_token_mixture
     from natlang_neuralese.train.text_warmup import chunked_readout, fused_readout
 
     class Readout(torch.nn.Module):
@@ -542,15 +559,11 @@ def test_fused_readout_matches_the_chunked_readout_and_the_soft_token_mixture():
     states = torch.randn(2, 37, 16, requires_grad=True)
     targets = torch.randint(0, 40, (2, 37))
     weights = torch.rand(2, 37)
-    table = torch.randn(40, 16)
     _, reference, reference_pred, _, reference_losses = chunked_readout(backbone, states, targets, 0, chunk_size=8,
                                                                         position_weights=weights)
     (reference_grad,) = torch.autograd.grad(reference * 3.0, states)
-    loss, prediction, losses, mixture = fused_readout(backbone, states, targets, 0, chunk_size=8,
-                                                      position_weights=weights, mixture_table=table)
+    loss, prediction, losses = fused_readout(backbone, states, targets, 0, chunk_size=8, position_weights=weights)
     (grad,) = torch.autograd.grad(loss * 3.0, states)
     assert torch.allclose(loss, reference) and torch.allclose(grad, reference_grad, atol=1e-6)
     assert torch.equal(prediction, reference_pred) and torch.allclose(losses, reference_losses)
-    assert torch.allclose(mixture, soft_token_mixture(backbone.logits, table, states.detach(), chunk=8), atol=1e-6)
-    with torch.no_grad():
-        assert fused_readout(backbone, states, targets, 0, position_weights=weights)[3] is None
+

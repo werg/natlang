@@ -5,13 +5,15 @@ leaves off. Recipe stage kind ``neuralese_direct``.
 
 Per update: one precision point (the recipe's quantization component, sampled as everywhere), one forward over each
 window's ``prefix ++ span[:-1]``, the weighted CE of the frozen readout (final norm + lm_head) on the span
-(``text_supervision.balanced_position_weights``), plus ``--neuralese-weight`` x the NeuraleseProjection's relative MSE to
-the gold next-token embedding on detached hidden states. Backbone attention and expert matrices step on the latent
-optimizer (LionSR or MuonSR, in backward); routers, norms and the projections on PortMuonAdamW.
+(``text_supervision.balanced_position_weights``). The stage trains no NeuraleseProjection (owner 2026-10-13: the
+soft-token mixture and its correction are removed; P is fitted to the embedding manifold on the exact parent export at
+end-to-end entry, train/projection_align.py). A checkpoint saved with the old projection continues without it: its
+state and optimizer slots are dropped by name (``drop_port_optimizer_slots``). Backbone attention and expert matrices
+step on the latent optimizer (LionSR or MuonSR, in backward); routers, norms and a declared TokenChoiceProjection on
+PortMuonAdamW.
 
 Every ``--eval-every`` updates (declared points): held CE, gold accuracy and agreement against the base model's own
-predictions on the same windows, the Neuralese value's error against its soft-token-mixture baseline, and
-``behaviour_drift`` with its guard, and (``--task-eval``) the in-run task-success evaluation: a fixed held subset of
+predictions on the same windows, and ``behaviour_drift`` with its guard, and (``--task-eval``) the in-run task-success evaluation: a fixed held subset of
 natlang tasks executed for real against the model being trained (eval/task_cadence.py). At the end: the behaviour
 gate, report-only (texts kept). Qualification (owner decision 2026-10-12): held CE below base, no drift stop, and
 the final task evaluation passing its relative bar (at least the base, not below the previous evaluation minus
@@ -69,7 +71,7 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
 # the window geometry: on the same data by a windowing continuation, or with a data continuation.
 WINDOWING_KEYS = ('train_target_tokens', 'merge_prefix_rows', 'cohort_repeats',
                   'recovery_selection', 'train_min_context_tokens')
-OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
+OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
                          'continue_monitor_reference', 'gradient_digest_steps', 'state_hash_steps',
@@ -79,6 +81,24 @@ OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkp
 # Objective components a declared objective continuation may change in an active stage (recipe.py
 # OBJECTIVE_COMPONENTS): each is a recipe component the stage receives as one JSON option.
 OBJECTIVE_KEYS = ('quantization', 'family')
+# Options of components removed from the stage (owner 2026-10-13: the NeuraleseProjection objective, its weight and its
+# report margin). A state saved with them continues without them; they are never part of a resume identity.
+REMOVED_OPTIONS = frozenset({'neuralese_weight', 'value_margin'})
+LEGACY_PROJECTION_KEY = 'neuralese_projection'
+
+
+def without_legacy_projection(state):
+    """``state``'s optimizer state and per-group names without the removed NeuraleseProjection's slots (the state of
+    every other parameter exact), or unchanged when it has none."""
+    names = state.get('optimizer_parameter_names')
+    optimizer_state = state.get('optimizer')
+    if not names or not any(n.startswith(LEGACY_PROJECTION_KEY + '.') for group in names for n in group):
+        return optimizer_state, names
+    from .optim_restore import drop_port_optimizer_slots
+    optimizer_state, names, dropped = drop_port_optimizer_slots(
+        optimizer_state, names, lambda name: name.startswith(LEGACY_PROJECTION_KEY + '.'))
+    print(json.dumps({'event': 'removed_projection_optimizer_slots', 'dropped': len(dropped)}), flush=True)
+    return optimizer_state, names
 OBJECTIVE_SCHEMA = 'natlang.neuralese-objective-continuation/1'
 
 
@@ -171,7 +191,6 @@ def parse(argv=None):
     p.add_argument('--latent-lr', type=float, default=3e-6,
                    help='lionsr: per row ternary scale; muonsr: on AdamW\'s scale')
     p.add_argument('--head-lr', type=float, default=3e-4, help='the projections\' lr (Muon/AdamW)')
-    p.add_argument('--neuralese-weight', type=float, default=1.0)
     p.add_argument('--projection-blocks', type=int, default=2)
     p.add_argument('--projection-hidden', type=int, default=0, help='0: width/4')
     p.add_argument('--projection-kernel', type=int, default=4)
@@ -226,9 +245,6 @@ def parse(argv=None):
     p.add_argument('--save-state', action=argparse.BooleanOptionalAction, default=True,
                    help='write the full training state (weights, optimizer); smokes pass --no-save-state and keep '
                         'only their logs and report')
-    p.add_argument('--value-margin', type=float, default=0.0,
-                   help='report-only: value_qualified says whether the final held value_relative_mse_delta is below '
-                        'minus this margin (the value requirement is the end-to-end stage\'s, owner 2026-10-11)')
     p.add_argument('--seed', type=int, default=0)
     a = p.parse_args(argv)
     if a.epochs is not None and a.steps is not None:
@@ -239,8 +255,8 @@ def parse(argv=None):
         p.error('--epochs must be positive and --batch-tokens nonnegative')
     if min(a.steps or 1, a.tokens, a.target_tokens, a.batch, a.eval_batch, a.eval_every, a.held_documents) < 1:
         p.error('positive bounds required')
-    if a.checkpoint_every < 0 or a.neuralese_weight < 0:
-        p.error('invalid checkpoint cadence or Neuralese weight')
+    if a.checkpoint_every < 0:
+        p.error('invalid checkpoint cadence')
     if min(a.gradient_audit_steps, a.saved_tensor_audit_steps, a.gradient_digest_steps, a.state_hash_steps) < 0:
         p.error('diagnostic audit step counts must be nonnegative')
     if a.gradient_digest_steps and a.window_execution == 'packed':
@@ -430,6 +446,7 @@ def same_resume_identity(saved: dict, current: dict) -> bool:
     # The stateless FP8 expert backend (current per-row scaling) is an execution choice, like --moe-kernel: a run
     # switches it on or off at a resume (owner 2026-10-12: v4 onto FP8 experts at a stop/resume).
     strip = lambda options: {k: v for k, v in options.items() if k not in INPUT_PATH_OPTIONS
+                             and k not in REMOVED_OPTIONS
                              and not (k == 'fp8_training' and v in ('off', 'triton-experts'))}
     return (strip(saved['options']) == strip(current['options'])
             and sorted(saved['inputs'].values()) == sorted(current['inputs'].values()))
@@ -1022,8 +1039,7 @@ def main(argv=None):
         return plan_only(a)
     stop = StopSignal().install()
     from ..common.hashing import sha256_file_hex
-    from ..model.neuralese_projection import (NeuraleseProjection, TokenChoiceProjection,
-                                               project_token_states, soft_token_mixture)
+    from ..model.neuralese_projection import TokenChoiceProjection, project_token_states
     from ..serve import load_engine
     from .backbone_policy import configure_backbone_training, plain_named_tensors, shared_parametrized_weights
     from .optim import PortMuonAdamW
@@ -1058,7 +1074,8 @@ def main(argv=None):
     # computed by a --plan-only child (it streams both corpora), then the plan is rebuilt here and its hash checked.
     policy = CheckpointPolicy(a.out, every_steps=a.checkpoint_every)
     resume_state = CheckpointPolicy.load(policy.slot) if policy.slot.exists() else None
-    resume_optimizer_schema = (resume_state['optimizer']['schema'] if resume_state is not None else None)
+    resume_optimizer_schema = (without_legacy_projection(resume_state)[0]['schema'] if resume_state is not None
+                               else None)
     continuation_launch, continuation = continuation_mode(a, resume_state, inputs)
     resume_state = None
     if continuation_launch == 'continue':
@@ -1121,16 +1138,15 @@ def main(argv=None):
                                          gate_response_kl=a.gate_response_kl, root=path_root('repo'))
     monitor = DriftMonitor(backbone.hf, engine.tokenizer, gate_held, behaviour, a,
                            bf16=(lambda: quant.context('bf16', 0.0)) if quant is not None else None)
-    # Trainables: backbone (latent policy), the projections. Embedding, final norm and lm_head stay frozen.
+    # Trainables: backbone (latent policy), a declared TokenChoiceProjection. Embedding, final norm and lm_head stay
+    # frozen. No NeuraleseProjection (owner 2026-10-13).
     for parameter in engine.heads.parameters():
         parameter.requires_grad_(False)
     backbone_named = [('backbone.' + n, q) for n, q in configure_backbone_training(backbone, 'latent')]
     width = int(backbone.embedding_weight.shape[1])
     sizes = dict(blocks=a.projection_blocks, hidden=a.projection_hidden or None, kernel=a.projection_kernel)
-    neuralese = NeuraleseProjection(width, **sizes).to(a.device)
     token_choice = TokenChoiceProjection(width, **sizes).to(a.device) if a.token_choice_projection else None
-    projections = {'neuralese_projection': neuralese, **({'token_choice_projection': token_choice}
-                                                         if token_choice is not None else {})}
+    projections = {'token_choice_projection': token_choice} if token_choice is not None else {}
     head_named = [(key + '.' + n, q) for key, module in projections.items() for n, q in module.named_parameters()]
     # The latent split, entries and options are shared with the end-to-end stage (train/optim.py).
     from .optim import beta_for_half_life, latent_entries, latent_options as latent_options_for, latent_split
@@ -1252,9 +1268,6 @@ def main(argv=None):
     print(json.dumps({'event': 'windows', 'train': len(train_windows), 'held': len(held), 'budget': budget,
                       'held_selection': {k: held_selection.get(k) for k in ('policy', 'limit_documents')},
                       'system_prompt_context_tokens': mask_receipt.get('masked_system_tokens')}), flush=True)
-    table = backbone.embedding_weight.detach().float().clone()
-    table[backbone.controls.open_id] = backbone.control_rows[0].detach().float()
-    table[backbone.controls.close_id] = backbone.control_rows[1].detach().float()
 
     failed_by_document = {}
     declared_by_document = {}
@@ -1367,7 +1380,7 @@ def main(argv=None):
         elif not accumulation['has_weight']:
             weights = valid.float()
         usable = float(weights.sum()) > 0
-        # Both projections read only the supervised positions: segments start inside the span (context and padding
+        # The token-choice projection reads only the supervised positions: segments start inside the span (context and padding
         # are -1), so no convolution tap reaches the context and the slice is exact. Never full-context logits.
         hidden = span_states(ids, index)
         # Project once over the whole turn so every chunk sees its full causal history, then keep the
@@ -1375,42 +1388,24 @@ def main(argv=None):
         fused = token_choice is None and os.environ.get('NATLANG_FUSED_READOUT', '1') != '0'
         with profile_scope('readout'):
             read = project_token_states(hidden, token_choice, segments)
-            if fused:  # text_warmup.fused_readout: logits once per chunk; the mixture from the same probabilities
-                training_ce, prediction, token_losses, mixture = fused_readout(
-                    backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights,
-                    mixture_table=table)
+            if fused:  # text_warmup.fused_readout: logits once per chunk
+                training_ce, prediction, token_losses = fused_readout(
+                    backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights)
             else:
                 _, training_ce, prediction, _, token_losses = chunked_readout(
                     backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights)
         real = valid.sum().clamp_min(1)
         training_ce = training_ce * (span.numel() / real)  # the token mean over real positions (padding excluded)
         ce = (token_losses * valid).sum() / real
-        with profile_scope('projection'):
-            if not fused:
-                mixture = soft_token_mixture(backbone.logits, table, hidden.detach())
-            value = neuralese(hidden.detach(), mixture.to(hidden.dtype), segments)
-            target = table[span]
-            value_error = relative_mse(value, target, weights)
-        metrics = {'ce': float(ce), 'gold_accuracy': float(((prediction == span) & valid).sum() / real),
-                   'value_relative_mse': float(value_error)}
-        if not torch.is_grad_enabled():
-            mixture_error = relative_mse(mixture, target, weights)
-            nearest = (2 * (value.float() @ table.t()) - table.square().sum(-1)).argmax(-1)
-            # These are same-evaluation comparisons: the delta is learned projection MSE minus the
-            # contemporaneous soft-mixture MSE, not change from an earlier training step.
-            metrics.update(value_mixture_relative_mse=float(mixture_error),
-                           value_relative_mse_delta=float(value_error - mixture_error),
-                           value_nearest_accuracy=float(((nearest == span) & valid).sum() / real))
-        else:
+        metrics = {'ce': float(ce), 'gold_accuracy': float(((prediction == span) & valid).sum() / real)}
+        if torch.is_grad_enabled():
             metrics.update(windows=len(rows_), supervised_tokens=int((weights > 0).sum()),
                            target_tokens=int(suffix.sum()), real_tokens=sum(len(r['ids']) - 1 for r in rows_),
                            forward_tokens=int(ids.shape[0] * (ids.shape[1] - 1)))
-        loss = training_ce + a.neuralese_weight * value_error
+        loss = training_ce
         if accumulation is not None:
-            local_weight = weights.sum()
             training_ce = training_ce * (real / accumulation['valid_positions'])
-            value_error = value_error * (local_weight / accumulation['weight_mass'].clamp_min(1e-12))
-            loss = training_ce + a.neuralese_weight * value_error
+            loss = training_ce
         if teacher is not None:
             from ..maple.family import member_kl
             from .joint_kd import IGNORE
@@ -1442,7 +1437,7 @@ def main(argv=None):
         for key, module in projections.items():
             module.load_state_dict(state[key])
         from .optim_restore import own_host_tensors
-        optimizer.load_state_dict(state['optimizer'])
+        optimizer.load_state_dict(without_legacy_projection(state)[0])
         own_host_tensors(optimizer)  # no view of the mmap'd state outlives the restore
         optimizer.param_groups = optimizer._groups()
         step, best, base_eval, history = state['step'], state.get('best'), state['base_eval'], state['history']
@@ -1584,12 +1579,12 @@ def main(argv=None):
             if any(tuple(saved_projection[name].shape) != tuple(value.shape)
                    for name, value in current_projection.items()):
                 raise ValueError('--continue-from projection shape differs: ' + key)
-        saved_optimizer = state.get('optimizer') or {}
+        saved_optimizer, saved_names = without_legacy_projection(state)
+        saved_optimizer = saved_optimizer or {}
         current_optimizer = optimizer.state_dict()
         if (saved_optimizer.get('format') != current_optimizer.get('format') or
                 saved_optimizer.get('schema') != current_optimizer.get('schema')):
             raise ValueError('--continue-from optimizer names, shapes, dtypes, or partitions differ')
-        saved_names = state.get('optimizer_parameter_names')
         if saved_names is not None and saved_names != optimizer_parameter_names:
             raise ValueError('--continue-from optimizer parameter names differ')
         from .text_warmup import copy_restored_values
@@ -1598,7 +1593,7 @@ def main(argv=None):
         for key, module in projections.items():
             module.load_state_dict(state[key])
         from .optim_restore import own_host_tensors
-        optimizer.load_state_dict(state['optimizer'])
+        optimizer.load_state_dict(saved_optimizer)
         own_host_tensors(optimizer)
         optimizer.param_groups = optimizer._groups()
         memory_estimator = restored_memory_estimator(state)
@@ -1790,7 +1785,8 @@ def main(argv=None):
             return event
         policy.save = reserved_save
 
-    # Step 0: the NeuraleseProjection is exactly the base soft-token mixture on a held batch.
+    # Step 0: the TokenChoiceProjection is absent or the identity on a held batch, so the logits are the base model's.
+    # (No NeuraleseProjection here; its manifold alignment is qualified at end-to-end entry, owner 2026-10-13.)
     if step == 0 and a.continue_from is not None:
         # The lineage's identity qualification is its first stage's; a continued stage carries it forward.
         inherited = a.continue_identity
@@ -1805,15 +1801,12 @@ def main(argv=None):
         with torch.no_grad(), (fp8_backend.native_modules() if fp8_backend is not None else contextlib.nullcontext()):
             ids, span, index, _, _, _, _ = tensors(held[:1])
             hidden = span_states(ids, index)
-            mixture = soft_token_mixture(backbone.logits, table, hidden)
-            if not torch.equal(neuralese(hidden, mixture.to(hidden.dtype)), mixture.to(hidden.dtype)):
-                raise RuntimeError('NeuraleseProjection is not the soft-token mixture at initialization')
             token_choice_identity = token_choice is None or torch.equal(token_choice(hidden), hidden)
             if not token_choice_identity:
                 raise RuntimeError('TokenChoiceProjection is not the identity at initialization')
         # The lineage's identity qualification (recipe identity_qualification, direct certificate).
         (a.out / 'identity-check.json').write_text(json.dumps({
-            'passed': True, 'step': 0, 'neuralese_projection_equals_soft_token_mixture': True,
+            'passed': True, 'step': 0, 'neuralese_projection': 'absent (aligned at end-to-end entry)',
             'token_choice_projection': 'absent' if token_choice is None else 'identity',
             'logits_equal_base': True}, indent=2) + '\n')
         evaluate()
@@ -2101,12 +2094,9 @@ def main(argv=None):
                         metrics_rows.append((part_metrics, part_stats))
                         del part
                 span_total = int(valid_positions)
-                weight_total = float(normalizers['weight_mass'])
                 metrics = {
                     'ce': sum(m['ce'] * s['valid_positions'] for m, s in metrics_rows) / span_total,
                     'gold_accuracy': sum(m['gold_accuracy'] * s['valid_positions'] for m, s in metrics_rows) / span_total,
-                    'value_relative_mse': sum(m['value_relative_mse'] * s['weight_mass']
-                                              for m, s in metrics_rows) / max(weight_total, 1e-12),
                     'windows': sum(m['windows'] for m, _ in metrics_rows),
                     'supervised_tokens': sum(m['supervised_tokens'] for m, _ in metrics_rows),
                     'target_tokens': sum(m['target_tokens'] for m, _ in metrics_rows),
@@ -2234,7 +2224,7 @@ def main(argv=None):
                     policy.save(full_state())
                     saved_step = step
                 raise
-            history.append({k: report[k] for k in ('step', 'ce', 'ce_delta', 'value_relative_mse_delta')})
+            history.append({k: report[k] for k in ('step', 'ce', 'ce_delta')})
             improved = best is None or report['ce'] < best['ce']
             if (report.get('behaviour_drift') or {}).get('guard') == 'stop':
                 report['stopped_by'] = 'behaviour_drift'
@@ -2313,10 +2303,6 @@ def main(argv=None):
     drift_stopped = any((json.loads(line).get('behaviour_drift') or {}).get('guard') == 'stop'
                         for name in ('eval.jsonl', 'drift.jsonl') if (a.out / name).is_file()
                         for line in (a.out / name).open())
-    value_delta = final.get('value_relative_mse_delta', math.inf)
-    value_qualified = math.isfinite(value_delta) and value_delta < -a.value_margin
-    # Owner 2026-10-11: the Neuralese value requirement belongs to the end-to-end stage (consumers reading values
-    # against consumers reading tokens); here the value metric and its margin are report-only.
     # Owner decision 2026-10-12 (plans/neuralese/DECISIONS.md): qualification is task success plus drift. The 48-probe behaviour
     # gate is report-only; without a declared task evaluation the stage cannot qualify.
     from ..eval.task_cadence import task_gate as task_gate_of
@@ -2329,9 +2315,7 @@ def main(argv=None):
     final.update(status=status, stop_signals=stop.received, completed=step >= a.steps, steps=step, stopped_at=a.stop_at or None, best=best,
                  behaviour_gate=gate, behaviour_gate_report_only=True, task_gate=task_gate,
                  qualification='held CE below base, no drift stop, final task successes at least the base and '
-                               'not below the previous evaluation minus noise (owner/coordinator 2026-10-12)', drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,
-                 value_gate={'margin': a.value_margin, 'delta': final.get('value_relative_mse_delta'),
-                             'report_only': True, 'moved_to': 'end-to-end stage (owner 2026-10-11)'},
+                               'not below the previous evaluation minus noise (owner/coordinator 2026-10-12)', drift_stopped=drift_stopped, qualified=qualified,
                  seconds=time.time() - started, budget=budget, data_continuation=continuation_summary(continuation),
                  epochs_covered=schedule[step - 1][1] if step else 0.0, this_run=dict(totals),
                  cuda_peak_allocated_gb=torch.cuda.max_memory_allocated(a.device) / 2 ** 30 if cuda_active else None,

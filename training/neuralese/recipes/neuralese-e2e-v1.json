@@ -19,9 +19,17 @@
    "kind": "direct_runtime_qualification",
    "requires": [],
    "inputs": {
-    "direct_artifact_manifest": "direct_artifact"
+    "direct_artifact_manifest": "direct_artifact",
+    "aligned_projection": "aligned_projection"
    },
-   "parameters": {}
+   "parameters": {
+    "projection_on_manifold": {
+     "description": "Owner 2026-10-13: the NeuraleseProjection value E[chosen] + C(h), made on the exact parent export as the first step of the e2e handoff (train/projection_align.py init), is on the token-embedding manifold before any e2e update. Held positions of the line's own union text data (test split): nearest-token accuracy and cosine to E[chosen] (the readout's argmax), and the mean functional KL of the backbone reading a held span as values instead of E[chosen] embeddings (NEURALESE_DIRECT_V1.md \"The Neuralese value\", \"Projection alignment fit (2026-10-13)\"). Applied by the direct_runtime stage (eval/direct_runtime.py) with train/e2e_acceptance.projection_on_manifold.",
+     "min_nearest_chosen": 0.99,
+     "min_cos_chosen": 0.98,
+     "max_functional_kl": 0.05
+    }
+   }
   },
   {
    "id": "e2e",
@@ -32,7 +40,8 @@
    "inputs": {
     "records": "e2e_records",
     "pieces": "e2e_pieces",
-    "direct_artifact_manifest": "direct_artifact"
+    "direct_artifact_manifest": "direct_artifact",
+    "aligned_projection": "aligned_projection"
    },
    "parameters": {
     "steps": 158936,

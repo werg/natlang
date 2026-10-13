@@ -73,7 +73,6 @@
           }
         }
       },
-      "neuralese_weight": 1.0,
       "prefix_tokens": 32,
       "projection_blocks": 2,
       "projection_hidden": 0,
@@ -82,7 +81,6 @@
       "target_tokens": 512,
       "token_choice_projection": false,
       "tokens": 32768,
-      "value_margin": 0.05,
       "window_execution": "auto"
     }
   },

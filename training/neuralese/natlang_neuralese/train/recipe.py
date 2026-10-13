@@ -32,10 +32,10 @@ HANDLERS = {
                                             'continued_text_data'},
                          'parameters':{'steps','epochs','batch_tokens','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
                            'train_target_tokens','train_min_context_tokens','merge_prefix_rows','cohort_repeats','recovery_selection','checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
-                           'latent_optimizer','latent_lr','head_lr','neuralese_weight','projection_blocks',
+                           'latent_optimizer','latent_lr','head_lr','projection_blocks',
                            'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows','drift_every','drift_gate_every','drift_gate_rise','drift_ce_windows','gate_response_kl',
                            'drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop','drift_gate','gate_held_rows','monitor',
-                           'value_margin','seed','window_execution','latent_skip_idle','latent_cautious','latent_beta2_half_life_tokens',
+                           'seed','window_execution','latent_skip_idle','latent_cautious','latent_beta2_half_life_tokens',
                            'latent_ns','latent_weight_decay','grad_spike_clip','stop_at','weight_drift_base','save_state',
                            'fp8_training','fp8_recipe','fp8_amax_history_len',
                            'gradient_audit_steps','saved_tensor_audit_steps','gradient_digest_steps',
@@ -67,9 +67,11 @@ HANDLERS = {
     # direct export it starts from (AGENTS.md: runtime transport/gradient replay is qualified against those exact
     # weights), on the stage's own machine, before any update.
     'direct_runtime_qualification': {'module': 'natlang_neuralese.eval.direct_runtime',
-                                     'required_inputs': {'direct_artifact_manifest'}, 'optional_inputs': set(),
-                                     'parameters': {'direct_base_snapshot'}, 'result': 'report.json'},
-    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads','direct_artifact_manifest','continue_from','direct_parent_proof'},
+                                     'required_inputs': {'direct_artifact_manifest', 'aligned_projection'},
+                                     'optional_inputs': set(),
+                                     'parameters': {'direct_base_snapshot', 'projection_on_manifold'},
+                                     'result': 'report.json'},
+    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads','direct_artifact_manifest','aligned_projection','continue_from','direct_parent_proof'},
                                 'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'backbone_lr', 'backbone_training', 'max_tokens',
                                                'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
                                                'write_depth', 'tokens_per_vector', 'heads_lr', 'token_choice_lr', 'token_choice_optimizer', 'neuralese_projection_optimizer', 'record_order', 'record_source',
@@ -365,7 +367,7 @@ def stage_input_args(resolved, kind):
     for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
-                 'direct_parent_proof'):
+                 'direct_parent_proof', 'aligned_projection'):
         if role in resolved and role in supported:
             args += ['--' + role.replace('_', '-'), resolved[role]['path']]
     if 'direct_artifact_manifest' in resolved and 'direct_artifact_manifest' in supported:
@@ -627,6 +629,11 @@ def load_recipe(path):
         if kind == 'text_warmup_runtime' and 'heads' not in stage.get('inputs', {}):
             if not any(s['id'] in required and s['kind'] == 'core_text_warmup' for s in recipe['stages']):
                 raise ValueError('adapted runtime requires a core warm-up predecessor or exact stage heads binding')
+        if kind == 'direct_runtime_qualification':
+            # The manifold gate (owner 2026-10-13): the aligned NeuraleseProjection of the exact parent export meets
+            # the declared thresholds before any end-to-end update (train/e2e_acceptance.projection_on_manifold).
+            from .e2e_acceptance import validate_manifold
+            validate_manifold(parameters.get('projection_on_manifold'))
         if kind == 'direct_runtime_qualification' and not isinstance(parameters.get('direct_base_snapshot'), str):
             raise ValueError('direct runtime qualification needs direct_base_snapshot (the export\'s pinned base)')
         if kind == 'raw_recurrence_training':
@@ -641,6 +648,10 @@ def load_recipe(path):
                 if not runtime_dependencies:
                     raise ValueError('a direct-artifact recurrence stage requires the direct_runtime_qualification '
                                      'stage of the same direct_artifact_manifest binding')
+                if any((s.get('inputs') or {}).get('aligned_projection') != stage_inputs.get('aligned_projection')
+                       for s in runtime_dependencies) or 'aligned_projection' not in stage_inputs:
+                    raise ValueError('a direct-artifact recurrence stage reads the aligned_projection its '
+                                     'direct_runtime_qualification stage gated (the same binding)')
             else:
                 runtime_dependencies = [s for s in recipe['stages']
                                         if s['id'] in required and s['kind'] == 'text_warmup_runtime']
@@ -658,8 +669,9 @@ def load_recipe(path):
         complete.add(name)
     # Neuralese direct v1 (owner decision 2026-10-11, AGENTS.md "Neuralese training foundation"): a lineage made only of
     # neuralese_direct stages starts from the base model at an exact identity with no warm-up; each stage's step-0
-    # identity check (direct_sft: NeuraleseProjection equals the soft-token mixture, TokenChoiceProjection absent or
-    # the identity, so logits equal the base model's) is its identity qualification. Older lineages keep the rule.
+    # identity check (direct_sft: TokenChoiceProjection absent or the identity, so logits equal the base model's; no
+    # NeuraleseProjection since 2026-10-13, whose manifold alignment is the e2e entry gate) is its identity
+    # qualification. Older lineages keep the rule.
     direct_lineage = all(s['kind'] in DIRECT_TRAINING_KINDS for s in recipe['stages'])
     if direct_lineage and recipe.get('identity_qualification') != DIRECT_IDENTITY_QUALIFICATION:
         raise ValueError('a neuralese_direct lineage must declare identity_qualification ' +
@@ -962,6 +974,10 @@ def require_gate(report, kind):
         if (report.get('schema') != 'natlang.neuralese-direct-runtime-qualification/1' or
                 report.get('runtime_qualified') is not True):
             raise ValueError('direct export runtime qualification failed')
+        manifold = report.get('projection_on_manifold') or {}
+        if manifold.get('passed') is not True:
+            raise ValueError('the aligned NeuraleseProjection is not on the embedding manifold (projection_on_manifold: '
+                             + json.dumps(manifold.get('criteria')) + '); refit it (train/projection_align.py)')
     elif kind == 'raw_recurrence_training':
         if report.get('training_stage_completed') is not True or report.get('errors') != 0:
             raise ValueError('raw recurrence training stage incomplete or errored')
@@ -994,6 +1010,9 @@ OPERATIONAL_STAGE_PARAMETERS = frozenset({'eval_every', 'checkpoint_every', 'moe
                                           # the execution backend; the trainer refuses a switch that loses FP8 state
                                           'fp8_training', 'checkpoint_layers', 'window_execution', 'report_column_fraction', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl',
                                           'drift_gate_now',  # retired by drift_gate_rise (b1cd6632); a lineage that declared it hands off
+                                          # retired 2026-10-13 (owner): the NeuraleseProjection objective left the
+                                          # direct stage; a lineage that declared them hands off without them
+                                          'neuralese_weight', 'value_margin',
                                           'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop',
                                           # the in-run task-success evaluation (owner 2026-10-12) joins at a handoff
                                           'task_eval', 'task_eval_every'})

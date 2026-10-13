@@ -1808,3 +1808,40 @@ system prompt, for more realistic better results, for all of our models."
 - Measured once: Mellum v4 step-3600 eval in `full` (in the run) beside a program-header one-off of the same checkpoint
   (MODEL_FACING_CHANGES.md).
 
+## The soft-token mixture is removed; the value is the chosen token's embedding plus a learned correction, gated on the manifold at e2e entry (owner, 2026-10-13)
+
+Owner: "Let's get rid of the soft token mixture approach" (the model is sensitive to having a proper token in
+embedding space and reads mixes poorly; the token-embedding space is not a VAE space), and "only if we're really
+matching the manifold do we have a chance of learning much more subtlety". Follow-ups the same day: go back to
+projection initialization on both tracks until the projection actually is on the manifold; the direct stage does
+not keep training P (once aligned, e2e takes over and P drifts freely under the consumer's gradient; no alignment
+loss or anchor after the fit); the fit runs at e2e entry on the exact parent export; a gate keeps every line out of
+e2e with an unaligned projection.
+
+Decision (design: NEURALESE_DIRECT_V1.md section 4 "The Neuralese value"):
+- value(h) = E[chosen(h)] + C(h): the input embedding of the token the line's readout chooses there (in the writer,
+  the token it emits) plus a learned per-position correction C (RMS norm, linear, residual MLP), zero at its start.
+  No softmax·E anywhere: removed from `model/neuralese_projection.py` (`soft_token_mixture` deleted), the direct
+  writer (`serve/direct_write.py`), the direct objective (`train/direct_sft.py`) and `text_warmup.fused_readout`.
+- Measured first, and rejected as implemented: a learned map h -> embedding fitted to E[chosen] (closed-form least
+  squares, then nearest-token CE + cosine/norm match). On LFM u10006 held positions it reached cosine 0.72 / nearest
+  53% (least squares) and 0.76-0.82 / 75-80% (MLP, 2 x width, 3,000 updates), against the 0.98 / 99% bar: the chosen
+  token is an argmax over the vocabulary, a vocabulary-scale choice the readout already makes exactly. So P keeps the
+  readout's choice and learns only the correction; it starts on the manifold by construction and stays
+  differentiable in h through C. (The old E[gold] relative-MSE target is capped by prediction accuracy; its optimum
+  is the mixture, which is why LFM direct v2's correction never moved off the mixture.)
+- The direct stage trains no NeuraleseProjection. A checkpoint with the old projection continues without it: its
+  state and optimizer slots are dropped by name (`optim_restore.drop_port_optimizer_slots`); `neuralese_weight` and
+  `value_margin` are retired recipe parameters (operational for a handoff). It takes effect at each line's next
+  handoff; the running backbone objective is unchanged (it never depended on the projection).
+- The first step of the e2e handoff: `python -m natlang_neuralese.train.projection_align init` on the exact parent
+  export writes `aligned-projection.pt` (C = 0, bound to the export's manifest SHA-256) and its held measurements.
+  An export without one raises `ProjectionNeedsAlignment` (no silent use of a mixture+stack projection). After entry
+  no alignment loss or anchor: C moves under the consumer's gradient.
+- Gate: `neuralese-e2e-v1`'s `direct_runtime` stage declares `projection_on_manifold` (held nearest >= 0.99, cos
+  >= 0.98 to E[chosen], mean functional KL <= 0.05) and binds `aligned_projection`, the same binding as the e2e stage;
+  the exact verifier is `e2e_acceptance.projection_on_manifold`, applied by `eval/direct_runtime.py` and required by
+  `recipe.require_gate`. Line parity compares it on both lines.
+- Both lines: Mellum at the v4 gap on its parent export (dgx-ops), LFM on Pop's running QAD lineage at its e2e
+  handoff. An existing lineage's projection of the removed design cannot be continued (another architecture); every
+  line enters with C = 0. Measurements: NEURALESE_DIRECT_V1.md "Projection alignment fit (2026-10-13)".

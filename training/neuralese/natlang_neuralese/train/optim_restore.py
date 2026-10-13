@@ -36,7 +36,7 @@ class OptimizerRestoreError(ValueError):
 def _children(optimizer):
     """Optimizer children in the same order as PortMuonAdamW._groups()."""
     if hasattr(optimizer, "muon"):
-        return ([("muon", optimizer.muon)]
+        return (([("muon", optimizer.muon)] if optimizer.muon is not None else [])
                 + ([("adamw", optimizer.auxiliary)] if optimizer.auxiliary is not None else [])
                 + ([(optimizer.latent_key, optimizer.latent)] if getattr(optimizer, "latent", None) is not None else []))
     return [("plain", optimizer)]
@@ -73,7 +73,7 @@ def _saved_children(saved):
         latent_keys = [key for key in ("lion", "muonsr", "adamini") if saved.get(key) is not None]
         if len(latent_keys) > 1:
             raise OptimizerRestoreError("saved optimizer has multiple latent partitions")
-        return ([("muon", saved["muon"])]
+        return (([("muon", saved["muon"])] if saved["muon"] is not None else [])
                 + ([("adamw", saved["adamw"])] if saved.get("adamw") is not None else [])
                 + [(key, saved[key]) for key in latent_keys])
     return [("plain", saved)]
@@ -309,3 +309,42 @@ def add_optimizer_restore_arguments(parser):
                              "the optimizer from scratch (a declared change, never the silent default)")
     parser.add_argument("--optimizer-added", action="append", default=[], metavar="PREFIX",
                         help="parameter-name prefix declared as newly added to the optimizer (starts fresh; repeatable)")
+
+
+def drop_port_optimizer_slots(saved, names_by_group, drop):
+    """A PortMuonAdamW ``state_dict`` without the slots of the parameters ``drop(name)`` selects: their moments,
+    their schema entries, groups left empty, and a child (Muon) left without groups (``None``). ``names_by_group``:
+    the checkpoint's parameter names per group, in the optimizer's ``param_groups`` order (Muon, AdamW, latent).
+    Returns (state, names_by_group, dropped names). Used when a declared component leaves a stage (the direct stage's
+    NeuraleseProjection, owner 2026-10-13): the remaining parameters keep their exact state."""
+    if "muon" not in saved:
+        raise OptimizerRestoreError("not a PortMuonAdamW state")
+    groups = [list(group) for group in names_by_group]
+    out = dict(saved)
+    kept_names, dropped, cursor = [], [], 0
+    for kind, child in _saved_children(saved):
+        new_state, new_groups, next_index = {}, [], 0
+        for group in child["param_groups"]:
+            if cursor >= len(groups) or len(groups[cursor]) != len(group["params"]):
+                raise OptimizerRestoreError("parameter names do not line up with the saved optimizer groups")
+            names = groups[cursor]
+            cursor += 1
+            params, kept = [], []
+            for index, name in zip(group["params"], names):
+                if drop(name):
+                    dropped.append(name)
+                    continue
+                if index in child["state"]:
+                    new_state[next_index] = child["state"][index]
+                params.append(next_index)
+                kept.append(name)
+                next_index += 1
+            if params:
+                new_groups.append({**group, "params": params})
+                kept_names.append(kept)
+        key = "adamw" if kind == "adamw" else kind
+        out[key] = {"state": new_state, "param_groups": new_groups} if new_groups else None
+    if cursor != len(groups):
+        raise OptimizerRestoreError("more named groups than saved optimizer groups")
+    out["schema"] = [entry for entry in saved["schema"] if not drop(entry.get("name") or "")]
+    return out, kept_names, dropped

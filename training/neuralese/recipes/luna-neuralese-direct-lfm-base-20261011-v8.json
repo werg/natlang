@@ -120,7 +120,6 @@
         }
       }
     },
-    "neuralese_weight": 1.0,
     "prefix_tokens": 32,
     "projection_blocks": 2,
     "projection_hidden": 0,
@@ -129,8 +128,7 @@
     "steps": 1000,
     "target_tokens": 256,
     "token_choice_projection": false,
-    "tokens": 32768,
-    "value_margin": 0.05
+    "tokens": 32768
   },
   "runtime": {
     "image": "sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de",

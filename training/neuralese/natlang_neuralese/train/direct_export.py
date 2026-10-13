@@ -436,17 +436,26 @@ def _recurrence_export_state(state: dict, checkpoint_path: Path, checkpoint_sha:
         raise ValueError("recurrence checkpoint has no NeuraleseProjection state")
     if not isinstance(token_choice_projection, dict) or not token_choice_projection:
         raise ValueError("native direct recurrence checkpoint has no TokenChoiceProjection state")
+    from ..model.neuralese_projection import TokenChoiceProjection, projection_config_from_state
+    # The end-to-end stage starts from the aligned P fitted on its parent export (owner 2026-10-13), so the parent's
+    # own NeuraleseProjection catalog is absent or the removed design: the recurrence checkpoint's P must be an
+    # aligned map (exact name/shape catalog of its own config); an aligned parent catalog is compared exactly.
     projection_catalogs = parent_catalog.get("neuralese_projection")
-    if not isinstance(projection_catalogs, dict) or not projection_catalogs:
-        raise ValueError("parent direct artifact has no NeuraleseProjection tensor catalog")
+    parent_aligned = isinstance(projection_catalogs, dict) and projection_catalogs and \
+        not any(name.startswith("stack.") for name in projection_catalogs)
+    projection_config_from_state(neuralese_projection)  # raises for a legacy or malformed state
+    width = int(neuralese_projection["linear.weight"].shape[1])
+    default_token_choice = {name: {"shape": list(value.shape)}
+                            for name, value in TokenChoiceProjection(width).state_dict().items()}
     for group_name, values in (("neuralese_projection", neuralese_projection),
                                ("token_choice_projection", token_choice_projection)):
         expected_group = parent_catalog.get(group_name)
+        if group_name == "neuralese_projection" and not parent_aligned:
+            expected_group = {name: {"shape": list(value.shape)} for name, value in values.items()
+                              if isinstance(value, torch.Tensor)}
         if group_name == "token_choice_projection" and expected_group is None:
-            # The current recurrence initializer creates TokenChoiceProjection
-            # with the parent's NeuraleseProjection stack config. Both modules
-            # share the same declared stack state layout.
-            expected_group = projection_catalogs
+            # The recurrence initializer creates an identity TokenChoiceProjection of the default geometry.
+            expected_group = default_token_choice
         if not isinstance(expected_group, dict) or not expected_group:
             raise ValueError("parent or declared initializer has no " + group_name + " tensor catalog")
         actual_group = {name: list(value.shape) for name, value in values.items()
@@ -574,8 +583,11 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
         raise ValueError("clean-head anchor changed since direct training")
     if not isinstance(state.get("student_parameters"), dict) or not state["student_parameters"]:
         raise ValueError("direct checkpoint has no student backbone parameters")
-    if not isinstance(state.get("neuralese_projection"), dict):
-        raise ValueError("direct checkpoint has no NeuraleseProjection")
+    # A direct stage trains no NeuraleseProjection since 2026-10-13 (owner): its export carries none, and earlier
+    # checkpoints carry the removed mixture design. Either way the projection is aligned at end-to-end entry
+    # (train/projection_align.py) and loads only with that alignment (load_direct_artifact aligned_projection).
+    if state.get("neuralese_projection") is not None and not isinstance(state.get("neuralese_projection"), dict):
+        raise ValueError("direct checkpoint NeuraleseProjection state is malformed")
     package_root = Path(__file__).resolve().parents[1]
     training_parameter_coverage = {"profile": "lfm-full-layer-policy/1",
                                    "attention_trained": True,
@@ -695,7 +707,7 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
                    for name, value in sorted(state["student_parameters"].items())}
         if schema_proof.get("student_parameters_catalog") != catalog:
             raise ValueError("Maple schema proof trainable tensor catalog differs from checkpoint")
-        projection_catalog = {
+        projection_catalog = None if state.get("neuralese_projection") is None else {
             name: [list(value.shape), str(value.dtype)]
             for name, value in sorted(state["neuralese_projection"].items())
         }
@@ -809,7 +821,8 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
     payload = {
         "schema": ARTIFACT_SCHEMA,
         "student_parameters": {k: v.detach().cpu().contiguous() for k, v in state["student_parameters"].items()},
-        "neuralese_projection": {k: v.detach().cpu().contiguous() for k, v in state["neuralese_projection"].items()},
+        "neuralese_projection": (None if state.get("neuralese_projection") is None else
+                                 {k: v.detach().cpu().contiguous() for k, v in state["neuralese_projection"].items()}),
         "token_choice_projection": (None if state.get("token_choice_projection") is None else
                                      {k: v.detach().cpu().contiguous()
                                       for k, v in state["token_choice_projection"].items()}),
@@ -847,6 +860,12 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
     projection_config = {"blocks": int(options.get("projection_blocks", 2)),
                          "hidden": int(options.get("projection_hidden", 0)) or None,
                          "kernel": int(options.get("projection_kernel", 4))}
+    from ..model.neuralese_projection import is_legacy_projection_state, projection_config_from_state
+    neuralese_state = payload["neuralese_projection"]
+    # The NeuraleseProjection's config: none (a direct stage after 2026-10-13), the removed causal-conv design (its
+    # stack config, kept to describe the tensors; it loads only through an alignment fit), or an aligned map.
+    neuralese_config = (None if neuralese_state is None else projection_config
+                        if is_legacy_projection_state(neuralese_state) else projection_config_from_state(neuralese_state))
     manifest = {
         "schema": ARTIFACT_SCHEMA,
         "status": "direct-writer-pending",
@@ -869,7 +888,7 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
         "base_binding": source_binding,
         "anchor": {"path": str(anchor_path), "sha256": inputs[str(anchor_path)]},
         "identity": identity,
-        "projection": {"neuralese": projection_config,
+        "projection": {"neuralese": neuralese_config,
                        "token_choice": (None if payload["token_choice_projection"] is None else
                                         {**projection_config, "present": True})},
         "projection_implementation": projection_code,
@@ -895,11 +914,18 @@ class DirectServingModel:
     token_choice_projection: torch.nn.Module | None
     manifest: dict
     status: str = "direct-writer-pending"
+    projection_alignment: dict | None = None  # the alignment report P came with (None: unaligned, allow_unaligned)
 
 
 def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
-                         device: str = "cpu", dtype=None) -> DirectServingModel:
-    """Strictly restore a direct export into the pinned clean-base engine."""
+                         device: str = "cpu", dtype=None, aligned_projection: str | Path | None = None,
+                         allow_unaligned: bool = False) -> DirectServingModel:
+    """Strictly restore a direct export into the pinned clean-base engine.
+
+    The NeuraleseProjection is the export's own when it is an aligned map (an end-to-end export), else the
+    ``aligned_projection`` fitted on this exact export (train/projection_align.py; bound to the manifest's SHA-256).
+    An export without an aligned projection (a direct stage's, or the removed mixture design) raises
+    ``ProjectionNeedsAlignment`` unless ``allow_unaligned`` (the alignment fit itself), which leaves it ``None``."""
     if base_snapshot is None:
         raise ValueError("a direct artifact restores into its pinned base: pass the base snapshot "
                          "(--direct-base-snapshot, the manifest's base_binding model path)")
@@ -1001,7 +1027,7 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
         proof_projection_catalog = schema_proof.get("neuralese_projection_catalog") or {}
         actual_projection_catalog = {
             name: [item["shape"], item["dtype"]]
-            for name, item in manifest["tensor_catalog"]["neuralese_projection"].items()
+            for name, item in (manifest["tensor_catalog"]["neuralese_projection"] or {}).items()
         }
         if proof_projection_catalog != actual_projection_catalog:
             raise ValueError("embedded Maple schema proof Neuralese projection catalog differs from exported payload")
@@ -1025,7 +1051,7 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
         raise ValueError("direct tensor payload schema mismatch")
 
     from ..serve import load_engine
-    from ..model.neuralese_projection import NeuraleseProjection, TokenChoiceProjection
+    from ..model.neuralese_projection import TokenChoiceProjection
     from .backbone_policy import full_backbone_parameter_names, restore_backbone_trainables
 
     anchor = manifest["anchor"]
@@ -1100,11 +1126,23 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
         expected = set(native_parameters)
     restore_backbone_trainables(engine.backbone, native_parameters, expected_names=expected)
     width = int(engine.backbone.hf.config.hidden_size)
-    neuralese = NeuraleseProjection(width, **manifest["projection"]["neuralese"])
-    neuralese.load_state_dict(payload["neuralese_projection"], strict=True)
-    neuralese.to(device=device).eval()
-    for parameter in neuralese.parameters():
-        parameter.requires_grad_(False)
+    from ..model.neuralese_projection import (ProjectionNeedsAlignment, is_legacy_projection_state,
+                                               load_aligned_projection, needs_alignment_message,
+                                               projection_from_config)
+    neuralese, alignment = None, None
+    own_state = payload["neuralese_projection"]
+    if aligned_projection is not None:
+        neuralese, alignment = load_aligned_projection(aligned_projection, manifest["manifest_sha256"])
+    elif own_state is not None and not is_legacy_projection_state(own_state):
+        neuralese = projection_from_config(manifest["projection"]["neuralese"])
+        neuralese.load_state_dict(own_state, strict=True)
+        alignment = {"source": "export"}
+    elif not allow_unaligned:
+        raise ProjectionNeedsAlignment(needs_alignment_message(f"direct artifact {artifact_dir}"))
+    if neuralese is not None:
+        neuralese.to(device=device).eval()
+        for parameter in neuralese.parameters():
+            parameter.requires_grad_(False)
     token_choice = None
     if manifest["projection"]["token_choice"] is not None:
         config = {k: v for k, v in manifest['projection']['token_choice'].items() if k != 'present'}
@@ -1157,4 +1195,4 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
     engine.neuralese_projection = neuralese
     engine.token_choice_projection = token_choice
     engine.direct_artifact_manifest = manifest
-    return DirectServingModel(engine, neuralese, token_choice, manifest)
+    return DirectServingModel(engine, neuralese, token_choice, manifest, projection_alignment=alignment)

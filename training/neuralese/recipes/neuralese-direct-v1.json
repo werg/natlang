@@ -29,7 +29,6 @@
    "latent_optimizer": "lionsr",
    "latent_lr": 3e-06,
    "head_lr": 0.0003,
-   "neuralese_weight": 1.0,
    "projection_blocks": 2,
    "projection_hidden": 0,
    "projection_kernel": 4,
@@ -46,8 +45,7 @@
    "gate_held_rows": 48,
    "gate_response_kl": 0.5,
    "seed": 0,
-   "drift_gate": true,
-   "value_margin": 0.05
+   "drift_gate": true
   }
  }
 }

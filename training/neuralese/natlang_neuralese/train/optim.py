@@ -88,17 +88,18 @@ class PortMuonAdamW(torch.optim.Optimizer):
                                    "split_rows": int(split or 1), "name": name}
                                   for name, parameter, rate, split in latent], lr=latent[0][2],
                                  momentum=momentum, ns_steps=ns_steps, **options)
-        if not muon:
+        if not muon and not latent:
             raise ValueError("the muon policy found no eligible hidden matrices")
+        # Without Muon-eligible matrices outside the latents (a direct stage without projections), no Muon child.
         self.muon = torch.optim.Muon(muon, lr=lr, weight_decay=0.0, momentum=momentum, ns_steps=ns_steps,
-                                     adjust_lr_fn="match_rms_adamw")
+                                     adjust_lr_fn="match_rms_adamw") if muon else None
         self.auxiliary = torch.optim.AdamW(auxiliary, lr=lr, weight_decay=0.0) if auxiliary else None
         self._constructed = False
         super().__init__(self._groups(), {})
         self._constructed = True
 
     def _groups(self):
-        return (self.muon.param_groups + (self.auxiliary.param_groups if self.auxiliary else [])
+        return ((self.muon.param_groups if self.muon else []) + (self.auxiliary.param_groups if self.auxiliary else [])
                 + (self.latent.param_groups if self.latent else []))
 
     def add_param_group(self, group: dict) -> None:
@@ -120,8 +121,9 @@ class PortMuonAdamW(torch.optim.Optimizer):
     def step(self, closure=None):
         if closure is not None:
             raise ValueError("PortMuonAdamW does not support closures")
-        with region("optim/port_muon"):
-            self.muon.step()
+        if self.muon is not None:
+            with region("optim/port_muon"):
+                self.muon.step()
         if self.auxiliary is not None:
             with region("optim/adamw"):
                 self.auxiliary.step()
@@ -130,7 +132,7 @@ class PortMuonAdamW(torch.optim.Optimizer):
                 self.latent.step()
 
     def state_dict(self):
-        state = {"format": FORMAT, "schema": self.schema, "muon": self.muon.state_dict(),
+        state = {"format": FORMAT, "schema": self.schema, "muon": self.muon.state_dict() if self.muon else None,
                  "adamw": self.auxiliary.state_dict() if self.auxiliary else None}
         if self.latent is not None:
             state[self.latent_key] = self.latent.state_dict()
@@ -143,7 +145,10 @@ class PortMuonAdamW(torch.optim.Optimizer):
             raise ValueError("port optimiser checkpoint AdamW partition differs")
         if (state_dict.get(getattr(self, "latent_key", "lion")) is None) != (self.latent is None):
             raise ValueError("port optimiser checkpoint latent optimizer partition differs")
-        self.muon.load_state_dict(state_dict["muon"])
+        if (state_dict.get("muon") is None) != (self.muon is None):
+            raise ValueError("port optimiser checkpoint Muon partition differs")
+        if self.muon is not None:
+            self.muon.load_state_dict(state_dict["muon"])
         if self.auxiliary is not None:
             self.auxiliary.load_state_dict(state_dict["adamw"])
         if self.latent is not None:

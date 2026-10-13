@@ -1,6 +1,8 @@
 """Pop's strict Maple direct export (train/direct_export.py) round-trips on a tiny Mellum: a direct-stage checkpoint
 with the complete latent policy exports with its proofs and restores into the clean BF16 base with the exact trained
-tensors. (The Mellum E2E smoke's load first failed on the coverage names' "backbone." prefix.)"""
+tensors. (The Mellum E2E smoke's load first failed on the coverage names' "backbone." prefix.) A direct stage carries
+no NeuraleseProjection since 2026-10-13: the export loads only with the aligned P fitted on it (or, for the fit
+itself, unaligned)."""
 import json
 
 import pytest
@@ -54,7 +56,6 @@ def test_maple_direct_export_round_trips_the_trained_tensors(tmp_path, monkeypat
     torch.manual_seed(0)
     trained = {"backbone." + n: (q.detach() + 0.01 * torch.randn_like(q)).clone() for n, q in named}
     width = int(engine.backbone.hf.config.hidden_size)
-    projection = NeuraleseProjection(width, hidden=8)
     package = __import__("pathlib").Path(dx.__file__).resolve().parents[1]
     code = {str(p.relative_to(package)): sha256_file_hex(p) for p in sorted(package.rglob("*.py"))}
     identity = {"schema": dx.CHECKPOINT_SCHEMA, "options": {"heads": str(heads.resolve()), "quantization": None,
@@ -64,8 +65,8 @@ def test_maple_direct_export_round_trips_the_trained_tensors(tmp_path, monkeypat
     stage = tmp_path / "direct_sft"
     stage.mkdir()
     checkpoint = stage / "checkpoint.pt"
-    torch.save({"schema": dx.CHECKPOINT_SCHEMA, "identity": identity, "step": 7, "student_parameters": trained,
-                "neuralese_projection": projection.state_dict()}, checkpoint)
+    torch.save({"schema": dx.CHECKPOINT_SCHEMA, "identity": identity, "step": 7, "student_parameters": trained},
+               checkpoint)
     checkpoint_sha = sha256_file_hex(checkpoint)
     anchor = torch.load(heads, weights_only=False)
     files = dx._model_input_inventory(model_dir)
@@ -74,7 +75,7 @@ def test_maple_direct_export_round_trips_the_trained_tensors(tmp_path, monkeypat
     proof.write_text(json.dumps({"checkpoint_sha256": checkpoint_sha, "step": 7, "identity": identity,
                                  "heads": {"path": str(heads.resolve()), "sha256": sha256_file_hex(heads)},
                                  "student_parameters_catalog": catalog(trained),
-                                 "neuralese_projection_catalog": catalog(projection.state_dict()),
+                                 "neuralese_projection_catalog": None,
                                  "base_model": {"path": str(model_dir.resolve()), "files": files}}))
     confirmation = tmp_path / "confirmation.json"
     confirmation.write_text(json.dumps({"schema": "natlang.maple-training-base-confirmation/1",
@@ -92,7 +93,22 @@ def test_maple_direct_export_round_trips_the_trained_tensors(tmp_path, monkeypat
                                 backbone_adapter=dx.MAPLE_BF16_ADAPTER)
     with pytest.raises(ValueError, match="base snapshot"):
         dx.load_direct_artifact(out, base_snapshot=None)
-    restored = dx.load_direct_artifact(out, base_snapshot=model_dir)
+    from natlang_neuralese.model.neuralese_projection import ProjectionNeedsAlignment, save_aligned_projection
+    with pytest.raises(ProjectionNeedsAlignment, match="alignment fit"):
+        dx.load_direct_artifact(out, base_snapshot=model_dir)
+    unaligned = dx.load_direct_artifact(out, base_snapshot=model_dir, allow_unaligned=True)
+    assert unaligned.neuralese_projection is None
+    manifest_sha = json.loads((out / "manifest.json").read_text())["manifest_sha256"]
+    projection = NeuraleseProjection(width, hidden=8)
+    with torch.no_grad():
+        projection.linear.weight.normal_(0, 0.1)
+    aligned = tmp_path / "aligned-projection.pt"
+    save_aligned_projection(aligned, projection, artifact_manifest_sha256="0" * 64, report={})
+    with pytest.raises(ValueError, match="another direct export"):
+        dx.load_direct_artifact(out, base_snapshot=model_dir, aligned_projection=aligned)
+    save_aligned_projection(aligned, projection, artifact_manifest_sha256=manifest_sha, report={"passed": True})
+    restored = dx.load_direct_artifact(out, base_snapshot=model_dir, aligned_projection=aligned)
+    assert restored.projection_alignment["report"] == {"passed": True}
     from natlang_neuralese.train.backbone_policy import plain_named_tensors
     values = plain_named_tensors(restored.engine.backbone.hf)
     for name, value in trained.items():

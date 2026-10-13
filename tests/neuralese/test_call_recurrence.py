@@ -123,6 +123,16 @@ def test_held_out_readers_compare_their_written_values_with_another_readers(load
         assert got["written"] != got["shuffled"]
 
 
+def _random_projection(width):
+    """A NeuraleseProjection with nonzero weights (an aligned P, not its zero initialization)."""
+    from natlang_neuralese.model.neuralese_projection import NeuraleseProjection
+    projection = NeuraleseProjection(width, hidden=8)
+    with torch.no_grad():
+        projection.linear.weight.normal_(0, 0.05)
+        projection.down.weight.normal_(0, 0.05)
+    return projection
+
+
 def _direct_stand_in(loaded, tmp_path, monkeypatch):
     """The shared load_direct_artifact replaced by a stand-in over raw-token heads; returns (records, pieces,
     projections) for a direct-writer end-to-end run."""
@@ -140,13 +150,15 @@ def _direct_stand_in(loaded, tmp_path, monkeypatch):
                 "heads": raw.state_dict(), "control_rows": backbone.control_rows.detach().cpu()}, anchor)
     projections = {}
 
-    def restore(artifact, *, base_snapshot=None, device="cpu", dtype=None):
+    def restore(artifact, *, base_snapshot=None, device="cpu", dtype=None, aligned_projection=None,
+                allow_unaligned=False):
         engine = load_engine(heads_checkpoint=str(anchor), device=device)
         torch.manual_seed(0)
-        projection = NeuraleseProjection(int(engine.backbone.hf.config.hidden_size), hidden=16)
+        # An aligned P (nonzero), as the e2e stage loads it: the consumer's gradient reaches the child through it.
+        projection = _random_projection(int(engine.backbone.hf.config.hidden_size))
         projections["neuralese"] = projection
         return SimpleNamespace(engine=engine, neuralese_projection=projection, token_choice_projection=None,
-                               manifest={"schema": "test-stand-in"})
+                               manifest={"schema": "test-stand-in"}, projection_alignment=None)
     monkeypatch.setattr(direct_export, "load_direct_artifact", restore)
     # The stand-in has no exported manifest; bind the run to a fixed stand-in parent document.
     monkeypatch.setattr(direct_export, "direct_parent_binding",
@@ -174,13 +186,15 @@ def test_direct_writer_end_to_end_stage_trains_the_child_write_through_the_neura
     the NeuraleseProjection. The restore is the shared load_direct_artifact; here a stand-in over raw-token heads."""
     records, pieces, projections = _direct_stand_in(loaded, tmp_path, monkeypatch)
     out = tmp_path / "out"
+    torch.manual_seed(0)
+    start = _random_projection(int(loaded[0].config.hidden_size)).linear.weight.detach().clone()
     assert main(_direct_arguments(records, pieces, out, tmp_path)) == 0
     moved = json.loads((out / "summary.json").read_text())["relative_change"]
     assert moved["instructions@caller"] > 0 and moved["instructions@child"] > 0
-    down = projections["neuralese"].stack.blocks[-1].down.weight
-    assert down.abs().sum() > 0, "the caller's loss trains the NeuraleseProjection (zero-initialised output)"
+    linear = projections["neuralese"].linear.weight
+    assert not torch.equal(linear, start), "the caller's loss trains the NeuraleseProjection"
     saved = torch.load(out / "heads.pt", weights_only=False)
-    assert torch.equal(saved["neuralese_projection"]["stack.blocks.1.down.weight"], down.detach().cpu())
+    assert torch.equal(saved["neuralese_projection"]["linear.weight"], linear.detach().cpu())
     # Full state at the end only: never before the first update (a fresh start has nothing to protect).
     phases = [json.loads(line) for line in (out / "host-phases.jsonl").read_text().splitlines()]
     assert [p["completed_updates"] for p in phases if p.get("event") == "checkpoint_saved"] == [1]
@@ -294,10 +308,7 @@ def test_direct_writer_feeds_back_tokens_so_a_consumer_reaches_each_value_at_dep
     model, tokenizer, backbone = loaded
     heads = SimpleNamespace(cutoff=backbone.num_layers, read_markers=False)
     torch.manual_seed(0)
-    projection = NeuraleseProjection(int(model.config.hidden_size), hidden=8)
-    with torch.no_grad():
-        for block in projection.stack.blocks:
-            block.down.weight.normal_(0, 0.05)
+    projection = _random_projection(int(model.config.hidden_size))
     context = backbone.embed(torch.tensor([tokenizer.encode("The parcel is ready.", add_special_tokens=False)]))
     pre = prefill_write_context(backbone, heads, context)
     from natlang_neuralese.write import Opened
@@ -311,7 +322,7 @@ def test_direct_writer_feeds_back_tokens_so_a_consumer_reaches_each_value_at_dep
     if feedback == "token":
         assert gradient is None or float(gradient.abs().sum()) == 0
         # The consumer still reaches the producer's projection through every emitted value.
-        down = projection.stack.blocks[-1].down.weight
+        down = projection.down.weight
         assert float(torch.autograd.grad(last.float().sum(), down)[0].abs().sum()) > 0
     else:
         assert gradient is not None and float(gradient.abs().sum()) > 0
@@ -329,11 +340,7 @@ def test_forced_sequence_write_matches_the_step_by_step_write(loaded):
     model, tokenizer, backbone = loaded
     heads = SimpleNamespace(cutoff=backbone.num_layers, read_markers=False)
     torch.manual_seed(0)
-    projection = NeuraleseProjection(int(model.config.hidden_size), hidden=8)
-    with torch.no_grad():
-        for block in projection.stack.blocks:
-            block.down.weight.normal_(0, 0.05)
-            block.taps.normal_(0, 0.5)
+    projection = _random_projection(int(model.config.hidden_size))
     context = backbone.embed(torch.tensor([tokenizer.encode("The parcel is ready.", add_special_tokens=False)]))
     forced = tokenizer.encode(" It arrived on Monday at noon.", add_special_tokens=False)
     stop = {tokenizer.eos_token_id}
@@ -346,7 +353,7 @@ def test_forced_sequence_write_matches_the_step_by_step_write(loaded):
                             tokens=forced).forced_sequence()
     a, b = stepwise.complete()[0], sequence.complete()[0]
     assert a.shape == b.shape and torch.allclose(a, b, atol=1e-4, rtol=1e-4)
-    down = projection.stack.blocks[-1].down.weight
+    down = projection.down.weight
     ga, = torch.autograd.grad(a.float().square().sum(), down)
     gb, = torch.autograd.grad(b.float().square().sum(), down)
     assert torch.allclose(ga, gb, atol=1e-3, rtol=1e-3)
@@ -367,10 +374,7 @@ def test_direct_write_context_gets_the_same_gradient_under_the_layer_staged_back
     model, tokenizer, backbone = loaded
     heads = SimpleNamespace(cutoff=backbone.num_layers, read_markers=False)
     torch.manual_seed(0)
-    projection = NeuraleseProjection(int(model.config.hidden_size), hidden=8)
-    with torch.no_grad():
-        for block in projection.stack.blocks:
-            block.down.weight.normal_(0, 0.05)
+    projection = _random_projection(int(model.config.hidden_size))
     ids = torch.tensor([tokenizer.encode("The parcel is ready for collection.", add_special_tokens=False)])
     soft = torch.nn.Parameter(backbone.embed(ids).detach().clone())
     tokens = tokenizer.encode(" It is ready", add_special_tokens=False)[:3]

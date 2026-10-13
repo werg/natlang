@@ -39,26 +39,45 @@ difference is declared and checked; the audit is in plans/neuralese/LINE_PARITY.
        lm_head(norm(h)).
      - It switches on in the stage that trains the backbone end-to-end on Neuralese, where h is meant to drift and
        token choice needs its own adapter.
-4. **The Neuralese value: space, initialisation and target (proposal).**
-   - **Space: the input token-embedding space.** Consumers read ordinary token embeddings (2), so a value in that
-     space can be fed back or passed on with no read adapter. It is also comparable, position for position, with
-     what the consumer would otherwise read.
-   - **Initialisation: the model's own soft-token mixture.** value(h) = softmax(lm_head(norm(h)))·E + stack(h),
-     with the stack's output at zero. At step 0 the value is exactly the expected next-token embedding under the
-     base model's own prediction. That is the owner's "soft-token mixture is the natural initialisation", and
-     unlike the old zero-initialised content head it starts as a meaningful, consumer-readable value. Audit
-     finding 4 showed that head never beat its zero init.
-   - **Target in this stage:** the gold next token's embedding E[y], by relative MSE, at Neuralese (supervised)
-     positions.
-     - The mixture is the squared-error-optimal estimate when the model is calibrated, so the stack learns what
-       the mixture misses, e.g. sharpening where the model is confident and right.
-     - The projection reads h **detached**. Its objective cannot bend the backbone (audit 4); the backbone learns
-       from the SFT CE alone.
-     - It is reported against the mixture-only baseline (relative MSE delta, which must fall below 0) and as
-       nearest-embedding accuracy.
-   - **Later:** when values are fed back (the recurrence stage), the target becomes the consumer's need: the
-     consumer's CE when it reads the value. That is when the backbone trains end-to-end on Neuralese and the
-     TokenChoiceProjection switches on.
+4. **The Neuralese value (owner decisions 2026-10-13; replaces the soft-token-mixture design).**
+   - **Space: the input token-embedding space.** Consumers read ordinary token embeddings (2), so a value there is
+     fed back or passed on with no read adapter, and compares position for position with what the consumer would
+     otherwise read.
+   - **No soft-token mixture.** The earlier design, value(h) = softmax(lm_head(norm(h)))·E + correction(h), is
+     removed everywhere (projection, writer, direct objective, `fused_readout`). The owner: the model is sensitive
+     to reading a proper token in embedding space and reads mixes poorly; the token-embedding space is not a VAE
+     space.
+   - **value(h) = E[chosen(h)] + C(h)** (`model/neuralese_projection.py`). chosen(h) is the token the line's own
+     readout chooses at that position (argmax of lm_head(norm(TCP(h)))), the token that drives generation; in the
+     writer it is the token the write emits at that state. E[chosen] is its ordinary input embedding (what a consumer
+     reads for that token). C is a learned per-position correction (RMS normalisation, linear map, residual MLP
+     width -> 2 x width -> embedding width, GELU), zero at its start, so the value starts exactly on the manifold.
+     C is differentiable in h, so in the end-to-end stage a consumer's gradient reaches the producer through it
+     (from the first update it trains C's weights; once C moves, it reaches h).
+   - **Why not a learned map h -> embedding fitted to E[chosen]** (the first design of this section, measured on LFM
+     u10006 held positions, "Projection alignment fit (2026-10-13)" below): the chosen token is an argmax over the
+     whole vocabulary. Closed-form least squares reaches cosine 0.72 / nearest 53%, an MLP (2 x width) 0.76-0.82 /
+     75-80% after 3,000 updates, while the readout's own choice is exact by construction. Reaching 99% / 0.98 needs
+     vocabulary-scale capacity, which the readout already has; so P keeps the readout's choice and learns only the
+     correction. The earlier target, E[gold] by relative MSE, is capped by prediction accuracy; its optimum is the
+     conditional mean, i.e. the mixture, which is why the old correction saturated (LFM direct v2 at u10006: the
+     mixture+stack value and the bare mixture are within 0.001 cosine of each other).
+   - **Entry** (`train/projection_align.py init`, the first step of the e2e handoff, on the exact parent export):
+     writes `aligned-projection.pt` (C = 0, or a carried P of that export) bound to the export's manifest SHA-256,
+     with its held measurements. The direct stage trains no NeuraleseProjection; a line still in direct SFT drifts
+     freely and the projection enters on the weights that enter e2e.
+   - **After entry there is no alignment loss or anchor anywhere.** C moves under the consumer's gradient only.
+   - **Manifold gate** (`e2e_acceptance.projection_on_manifold`, declared once in `neuralese-e2e-v1` on its
+     `direct_runtime` stage, line-parity compared): on the parent export's held rows (the line's union text data,
+     test split), nearest-token accuracy to E[chosen] >= 0.99, cosine to E[chosen] >= 0.98, and mean functional KL
+     <= 0.05. The functional KL is KL(p_E[chosen] || p_value): the backbone reads a held span as a block of values
+     instead of E[chosen] embeddings and its next-token distributions on the span are compared. The `direct_runtime`
+     stage applies the gate before any e2e update; an export loads its P only through an aligned projection made on
+     it (`load_direct_artifact(aligned_projection=...)`), and a projection of the removed design raises
+     `ProjectionNeedsAlignment`.
+   - **Reports:** cosine, norm ratio, nearest-token accuracy and rank of the chosen token, relative error, and the
+     same against E[gold], by position kind (supervised suffix, sampled prompt) and confidence bucket (pmax >= 0.9,
+     0.5-0.9, < 0.5); the functional KL by confidence bucket.
 5. **Start from the base models.** BF16 Mellum and base LFM. There is no warm-up stage and no projection-first
    phase: the backbone and P train from update 1.
 
@@ -134,8 +153,7 @@ difference is declared and checked; the audit is in plans/neuralese/LINE_PARITY.
 
 The stage report lists:
 - held CE against base on the same windows, plus gold accuracy and agreement with base;
-- the Neuralese value's relative MSE to the gold embedding against its mixture baseline, and nearest-embedding
-  accuracy;
+- (until 2026-10-13) the Neuralese value's relative MSE to the gold embedding against its mixture baseline;
 - drift (response KL and agreement) at every eval;
 - the final behaviour gate.
 
@@ -146,15 +164,17 @@ The stage passes when all of these hold:
   at that step on a warn);
 - the step-0 identity check passed.
 
-The Neuralese value is report-only here (owner decision 2026-10-11). `value_relative_mse_delta`, `value_qualified` and
-`value_gate` with `value_margin` stay in the report. From 2026-10-11 (Pop review) until this decision, the margin was
-part of the gate. The value requirement moves to the end-to-end stage, where consumers reading Neuralese values are
+The Neuralese value is not part of this stage since 2026-10-13 (owner): `value_relative_mse_delta`, `value_qualified`,
+`value_gate`, `neuralese_weight` and `value_margin` are removed (the last two are retired recipe parameters, so a
+lineage that declared them hands off without them). Before, it was report-only (owner decision 2026-10-11) and from
+2026-10-11 (Pop review) until then part of the gate. The value requirement moves to the end-to-end stage, where consumers reading Neuralese values are
 compared with consumers reading tokens, on task success and loss. A next-token-embedding reconstruction margin
 saturates once SFT makes predictions confident (run-v1).
 
 The lineage's identity qualification is the step-0 identity check (owner decision 2026-10-11, AGENTS.md "Neuralese
-training foundation"). It checks that the NeuraleseProjection equals the soft-token mixture, the TokenChoiceProjection
-is absent or the identity, and the logits equal the base model's. The recipe declares it as `identity_qualification`;
+training foundation"). It checks that the TokenChoiceProjection is absent or the identity and the logits equal the
+base model's (until 2026-10-13 also that the NeuraleseProjection equals the soft-token mixture; the projection is now
+qualified by the manifold gate at e2e entry). The recipe declares it as `identity_qualification`;
 `identity-check.json` records it in the report, and the runner writes `direct-certificate.json`. Eval and checkpoint
 come at the stage end only, plus step 0 (cadence 1000). Best = an eval that improves held CE writes the full state with
 that metric, and CheckpointPolicy hard-links it as `best-checkpoint.pt`.
@@ -560,6 +580,49 @@ streaming corpus v2). (2) Extract `train/e2e_edges.py` from trajectories.py, wit
 tests unchanged. (3) Add `e2e_mix` to direct_sft. (4) Run the ratio arms on LFM. (5) Do the recipes and line parity,
 then the handoffs.
 
+## Projection alignment fit (2026-10-13)
+
+Measured on LFM u10006 (`runs/pop-lfm-muon-main-v2-export-step10006`, frozen backbone, h detached) over union r3
+program-header lfm25 rows: 150 held test rows (27,100 positions: every supervised suffix position plus 25% of prompt
+positions) and 400 train rows (119,326 positions) for fitting. Targets: E[chosen] (argmax of the readout); gold equals
+chosen at 84.7% of held positions. Scripts and data: `/home/werg/data/projection-align/` (collect.py, fit.py,
+eval_kl.py; fit-report.json, kl-temps.json).
+
+Held geometry against E[chosen] (all held positions):
+
+| value | cos | nearest = chosen | nearest = gold |
+|---|---|---|---|
+| old: mixture + causal-conv stack (u10006) | 0.963 | 92.9% | 83.7% |
+| bare soft-token mixture softmax(logits)·E | 0.964 | 92.9% | — |
+| learned map, closed-form least squares | 0.715 | 53.5% | 52.4% |
+| learned map, MLP 2x width, cos+norm loss | 0.821 | 74.6% | 70.8% |
+| learned map, MLP 2x width, nearest-CE + cos | 0.757 | 79.9% | 75.1% |
+| learned map, MLP 2x width, 0.1 CE + cos | 0.830 | 79.3% | 74.6% |
+| learned map, MLP 8x width, 0.1 CE + cos | 0.637 | 72.5% | 69.5% |
+| **E[chosen] + C(h), C = 0 (adopted)** | **1.000** | **100%** | 84.8% |
+
+MLP fits used 3,000 AdamW updates of 1,024 positions with sampled nearest-token CE (the chosen token, its 64 top
+readout candidates, 512 shared random negatives; the chosen token is among the 64 candidates at 99.9% of positions).
+They overfit (MLP 2x, 0.1 CE: 99.1% nearest / 0.93 cos on train positions against 79.3% / 0.83 held): mapping h to
+the argmax over 65,536 tokens needs vocabulary-scale capacity and far more data than an alignment fit has, while the
+readout makes that choice exactly. The old projection's correction never moved off the mixture (0.963 vs 0.964).
+
+Functional KL KL(p_E[chosen] || p_value), a held span (40 rows, 2,073 supervised positions) read as a block of values,
+mean (by confidence of the producing state p >= 0.9 / 0.5-0.9 / < 0.5):
+- gold text: 1.49 (0.62 / 3.79 / 6.44); the bare mixture: 0.54 (0.15 / 0.84 / 4.68); the old value: 0.54;
+- sharpened mixtures softmax(logits/T)·E, for scale only (not adopted; no mixture): T 0.5 0.25, 0.2 0.11, 0.1 0.070,
+  0.05 0.050, 0.02 0.040 (residual at bf16 logit ties);
+- E[chosen] + C with C = 0: 0.0 on 1,695 positions (the tool's run on u10006 over 32 rows).
+The gate's functional-KL bound 0.05 is the sharpened mixture at T = 0.05; a value at entry measures 0.
+
+Gate run on u10006 (`projection_align init`, CPU, 150 held rows): nearest 1.0, cos 1.0, KL 0.0, passed;
+`runs/pop-lfm-muon-main-v2-export-step10006-aligned-projection/`. The dgx-e2e arm D (the same value at C = 0 in the
+e2e stage, LFM u10006, 32 paired held readers) measured V−T 0.105 at step 0 against 0.109 for the mixture writer:
+the remaining V−T is the writer's own token errors against the gold-text T, which the consumer gradient through C has
+to teach.
+
+Mellum: measured at the v4 gap by the same tool on its parent export (dgx-ops).
+
 ## Exact semantics (answers to Pop, pop-f7c5 / pop-b359)
 
 1. **Positional shift and Neuralese span.**
@@ -606,20 +669,20 @@ then the handoffs.
    - The TokenChoiceProjection is absent in this stage (recipe `token_choice_projection: null`). When declared
      (the end-to-end Neuralese stage), the readout becomes lm_head(norm(TokenChoiceProjection(h))), identity at its
      first step.
-   - The NeuraleseProjection reads h and the base readout's distribution at the same position (for its mixture).
-     It never feeds the token readout.
+   - The NeuraleseProjection reads h only (value(h) = P(h); 2026-10-13). It never feeds the token readout.
 5. **Gradient semantics.**
    - **Backbone:** trained by the weighted whole-trajectory CE only. Attention and expert matrices use the latent
      optimizer; routers and norms use AdamW at the backbone lr.
    - **Embedding, final norm and lm_head:** frozen.
-   - **NeuraleseProjection:** trained by relative MSE to E[y_{t+1}] at Neuralese positions, at `neuralese_weight`.
-     It reads h and the mixture detached, so its gradient never reaches the backbone.
+   - **NeuraleseProjection:** not trained in the direct stage since 2026-10-13 (owner). It is fitted to E[chosen]
+     on the exact parent export at e2e entry (section 4 above). Earlier: relative MSE to E[y_{t+1}] at
+     `neuralese_weight` on detached h and mixture.
    - **Quantization:** precision points are sampled per update as before and trained on the same CE. There is no
      BF16 KL teacher, which is flagged for the owner.
 6. **Qualification.**
-   - **Step 0:** two tests — TokenChoiceProjection(h) = h exactly with logits equal to base, and
-     NeuraleseProjection(h) = softmax(lm_head(norm(h)))·E exactly. The trainer also checks the latter on its first
-     held batch before training.
+   - **Step 0:** TokenChoiceProjection(h) = h exactly (or absent) with logits equal to base. (Until 2026-10-13 also
+     NeuraleseProjection(h) = the soft-token mixture; the NeuraleseProjection is now qualified by the manifold gate
+     at e2e entry.)
    - **Runtime qualification:** the stage report's evals and behaviour gate run on the exact trained weights, and
      the artifact records their hashes.
    - No warm-up, foundation or channel certificate of an old lineage carries over. A direct lineage starts from the

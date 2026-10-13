@@ -20,9 +20,14 @@ def launch_recipe(tmp_path, line='mellum', **extra):
     manifest = tmp_path / 'export' / 'manifest.json'
     manifest.parent.mkdir()
     manifest.write_text('{}\n')
+    aligned = tmp_path / 'aligned' / 'aligned-projection.pt'
+    aligned.parent.mkdir()
+    aligned.write_bytes(b'aligned P fitted on the export')
     recipe = {'schema': 'natlang.neuralese-training-recipe/1', 'id': 'launch', 'extends': 'neuralese-e2e-' + line + '-v1',
               'overrides': {'input_bindings': {'direct_artifact': {'path': str(manifest),
-                                                                  'sha256': sha256_file_hex(manifest)}}, **extra}}
+                                                                  'sha256': sha256_file_hex(manifest)},
+                                               'aligned_projection': {'path': str(aligned),
+                                                                      'sha256': sha256_file_hex(aligned)}}, **extra}}
     path = tmp_path / 'launch.json'
     path.write_text(json.dumps(recipe))
     return path
@@ -128,3 +133,26 @@ def test_family_interleaved_order_spreads_families_and_is_seeded():
 def family_interleave_other(records):
     from natlang_neuralese.train.trajectories import family_interleaved_order
     return family_interleaved_order(records, 8, 0)
+
+def test_the_manifold_gate_checks_the_aligned_projection_of_the_exact_export(tmp_path):
+    """Owner 2026-10-13: no line enters e2e with an unaligned projection. The shared recipe declares the thresholds on
+    its direct_runtime stage (both lines through line parity); the stage reads the aligned P with its e2e stage."""
+    from natlang_neuralese.train.recipe import require_gate
+    recipe = load_recipe(launch_recipe(tmp_path))
+    runtime, e2e = recipe['stages']
+    declaration = runtime['parameters']['projection_on_manifold']
+    assert runtime['inputs']['aligned_projection'] == e2e['inputs']['aligned_projection'] == 'aligned_projection'
+    report = {'held': {'all': {'nearest_chosen': 0.995, 'cos_chosen': 0.985}},
+              'functional_kl': {'all': {'kl_mean': 0.001}}}
+    statuses = lambda r: {k: c['status'] for k, c in e2e_acceptance.projection_on_manifold(declaration, r).items()}
+    assert set(statuses(report).values()) == {'pass'}
+    assert statuses({**report, 'held': {'all': {'nearest_chosen': 0.9, 'cos_chosen': 0.985}}})['nearest_chosen'] == 'fail'
+    assert statuses({'held': report['held']})['functional_kl'] == 'pending'  # missing evidence never passes
+    qualified = {'schema': 'natlang.neuralese-direct-runtime-qualification/1', 'runtime_qualified': True}
+    with pytest.raises(ValueError, match='manifold'):
+        require_gate({**qualified, 'projection_on_manifold': {'passed': False, 'criteria': {}}},
+                     'direct_runtime_qualification')
+    require_gate({**qualified, 'projection_on_manifold': {'passed': True}}, 'direct_runtime_qualification')
+    (tmp_path / 'c').mkdir()
+    with pytest.raises(ValueError, match='aligned_projection'):
+        load_recipe(launch_recipe(tmp_path / 'c', stages={'e2e': {'inputs': {'aligned_projection': {'$delete': True}}}}))

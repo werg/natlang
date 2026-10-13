@@ -116,6 +116,38 @@ def certificate(declaration, summary_path, *, recipe_sha256, stage, report_path)
                      'exact-oracle task success, no drift stop; behaviour gate report-only (owner 2026-10-12)'}
 
 
+# The projection on the embedding manifold (owner 2026-10-13): the end-to-end lineage starts from the NeuraleseProjection
+# fitted on its exact parent export (train/projection_align.py). The shared e2e recipe declares the thresholds once
+# (its direct_runtime stage's ``projection_on_manifold`` parameter, the same on both lines through line parity); the
+# direct_runtime stage applies them to the aligned projection's held measurements before any e2e update.
+MANIFOLD_KEYS = {'min_nearest_chosen', 'min_cos_chosen', 'max_functional_kl'}
+
+
+def validate_manifold(declaration):
+    if (not isinstance(declaration, dict) or set(declaration) - {'description'} != MANIFOLD_KEYS or
+            not all(_number(declaration[k]) for k in MANIFOLD_KEYS)):
+        raise ValueError('projection_on_manifold is {' + ', '.join(sorted(MANIFOLD_KEYS)) + ': number, description?}')
+
+
+def projection_on_manifold(declaration, report):
+    """Criteria of the manifold gate on an alignment report (projection_align ``fit``/``verify``): held nearest-token
+    accuracy and cosine to E[chosen] over all held positions, and the mean functional KL (the backbone reading a held
+    span as P(h) values against E[chosen] embeddings). A measurement the report lacks is pending."""
+    validate_manifold(declaration)
+    held = ((report or {}).get('held') or {}).get('all') or {}
+    kl = ((report or {}).get('functional_kl') or {}).get('all') or {}
+    criteria = {}
+
+    def criterion(name, measured, bound, at_least):
+        passed = measured is not None and (measured >= bound if at_least else measured <= bound)
+        criteria[name] = {'status': 'pending' if measured is None else ('pass' if passed else 'fail'),
+                          'measured': measured, ('min' if at_least else 'max'): bound}
+    criterion('nearest_chosen', held.get('nearest_chosen'), declaration['min_nearest_chosen'], True)
+    criterion('cos_chosen', held.get('cos_chosen'), declaration['min_cos_chosen'], True)
+    criterion('functional_kl', kl.get('kl_mean'), declaration['max_functional_kl'], False)
+    return criteria
+
+
 # Readiness of a direct phase to hand off into the end-to-end lineage (owner 2026-10-12: e2e replaces text-only SFT
 # as soon as it is ready, without waiting for the direct phase's full epoch). Declared once in the shared base recipe
 # (``parent_readiness``), the same for both lines, and read from the running direct phase's own logs.

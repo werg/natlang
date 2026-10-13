@@ -507,21 +507,19 @@ class _ForwardGradReadout(torch.autograd.Function):
         return (gradient * (grad / ctx.count).to(gradient.dtype)), None, None, None
 
 
-def fused_readout(backbone, states, targets, close_id, *, chunk_size=128, gradients=True, position_weights,
-                  mixture_table=None):
+def fused_readout(backbone, states, targets, close_id, *, chunk_size=128, gradients=True, position_weights):
     """``chunked_readout``'s weighted CE (the training loss) for a frozen readout, each chunk's vocabulary logits
     computed once: the forward also takes the chunk's input gradient (autograd of the chunk alone), which the backward
-    only scales, instead of a checkpoint that recomputes the logits in backward. With ``mixture_table`` the same
-    probabilities give the soft-token mixture softmax(logits)·table (``soft_token_mixture``), returned detached.
+    only scales, instead of a checkpoint that recomputes the logits in backward.
 
-    Returns (training_ce, prediction, token_losses, mixture): ``training_ce`` = sum(weights x token CE) / numel, with
+    Returns (training_ce, prediction, token_losses): ``training_ce`` = sum(weights x token CE) / numel, with
     a gradient to ``states``; the others detached. The readout's own parameters (final norm, head, control rows) get
     no gradient: callers whose optimizer does not train them (neuralese_direct)."""
     weights = position_weights
     needs_grad = gradients and torch.is_grad_enabled() and states.requires_grad
     total = states.new_zeros((), dtype=torch.float32)
     gradient = torch.empty_like(states) if needs_grad else None
-    predictions, token_losses, mixtures = [], [], []
+    predictions, token_losses = [], []
     detached = states.detach()
     for start in range(0, states.shape[1], chunk_size):
         stop = min(start + chunk_size, states.shape[1])
@@ -538,14 +536,10 @@ def fused_readout(backbone, states, targets, close_id, *, chunk_size=128, gradie
             total += weighted.detach()
             predictions.append(logits.argmax(-1))
             token_losses.append(per_token.detach())
-            if mixture_table is not None:
-                probabilities = torch.softmax(logits, -1)
-                mixtures.append(probabilities.to(mixture_table.dtype) @ mixture_table)
         del logits, per_token
     count = targets.numel()
     training_ce = (_ForwardGradReadout.apply(states, total, gradient, count) if needs_grad else total / count)
-    return (training_ce, torch.cat(predictions, 1), torch.cat(token_losses, 1),
-            torch.cat(mixtures, 1) if mixtures else None)
+    return training_ce, torch.cat(predictions, 1), torch.cat(token_losses, 1)
 
 
 def projection_errors(heads, top, secondary_projection, target, *, secondary_target=None):

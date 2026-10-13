@@ -782,6 +782,10 @@ def main(argv=None):
                              "engine from this shared direct export (train/direct_export.load_direct_artifact); written "
                              "values are then written by the direct writer (serve/direct_write.write_direct) through the "
                              "NeuraleseProjection (and the TokenChoiceProjection when exported), which train at --heads-lr")
+    parser.add_argument("--aligned-projection", default=None,
+                        help="the NeuraleseProjection fitted to the embedding manifold on this exact --direct-artifact "
+                             "(train/projection_align.py, the first step of the end-to-end handoff; owner 2026-10-13). "
+                             "Required unless the export carries an aligned projection itself")
     parser.add_argument("--direct-parent-proof", default=None,
                         help="explicit immutable stage-plan/launch proof for resuming a legacy direct recurrence checkpoint "
                              "that predates its embedded direct-parent binding")
@@ -1174,7 +1178,11 @@ def main(argv=None):
     direct = None
     if args.direct_artifact:
         from .direct_export import load_direct_artifact
-        direct = load_direct_artifact(args.direct_artifact, base_snapshot=args.direct_base_snapshot, device=args.device)
+        direct = load_direct_artifact(args.direct_artifact, base_snapshot=args.direct_base_snapshot, device=args.device,
+                                      aligned_projection=args.aligned_projection)
+        print(json.dumps({'event': 'direct_e2e_projection', 'alignment': {
+            k: v for k, v in (direct.projection_alignment or {}).items() if k != 'report'},
+            'alignment_passed': ((direct.projection_alignment or {}).get('report') or {}).get('passed')}), flush=True)
         if direct_parent is None or direct.manifest != direct_parent['manifest']:
             raise ValueError('loaded direct artifact differs from the parent manifest pinned for this recurrence run')
         engine = direct.engine
@@ -1189,7 +1197,7 @@ def main(argv=None):
             # its distinct identity readout projection from its first update.
             from ..model.neuralese_projection import TokenChoiceProjection
             direct.token_choice_projection = TokenChoiceProjection(
-                **direct.neuralese_projection.stack.config).to(args.device)
+                int(engine.backbone.embedding_weight.shape[1])).to(args.device)
             engine.token_choice_projection = direct.token_choice_projection
             print(json.dumps({'event': 'direct_e2e_token_choice_initialized',
                               'initialization': 'identity',

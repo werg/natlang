@@ -1,7 +1,8 @@
 """Full-depth direct Neuralese writing, shared by serving and differentiable replay.
 
-Each final state predicts the next ordinary token and projects a Neuralese value. A call is one causal-convolution
-segment; no projection state crosses a call boundary.
+Each final state predicts the next ordinary token and projects a Neuralese value E[chosen] + C(h), the
+NeuraleseProjection (model/neuralese_projection.py; no soft-token mixture). A call is one segment; no projection state crosses a call
+boundary.
 
 What the next position reads (``feedback``):
 - ``"token"`` (Neuralese direct v1, the default; plans/neuralese/NEURALESE_DIRECT_V1.md): the embedding of the next
@@ -70,14 +71,13 @@ class DirectWriter:
             self.truncated = not stop and self.length is None
             return None
         hidden = torch.stack(self.history[-self.history_limit:], 1)
-        # Only the last position needs a vocabulary mixture. Causal conv still
-        # receives its complete receptive field, identically to the sequence pass.
-        logits = self.backbone.logits(hidden[:, -1:])
-        mixture = torch.softmax(logits.float(), -1).to(self.backbone.embedding_weight.dtype) @ \
-            self.backbone.embedding_weight
+        # value(h) = E[chosen] + C(h) at the newest state (model/neuralese_projection.py): chosen is the token this
+        # readout just chose there (``token``), the token the write emits.
+        from ..model.neuralese_projection import chosen_token_embedding
         segments = torch.zeros(hidden.shape[:2], dtype=torch.long, device=hidden.device)
-        value = self.projection(hidden, mixture, segments, last_only=True)
-        return value[:, 0]
+        anchor = chosen_token_embedding(self.backbone, token[:, None].to(hidden.device))
+        value = self.projection(hidden, segments, last_only=True, anchor=anchor)
+        return value[:, 0].to(self.backbone.embedding_weight.dtype)
 
     def advance(self, value, final, cache):
         self.payloads.append(value)
@@ -125,24 +125,24 @@ class DirectWriter:
         final, cache = self.backbone.run_layers(inputs, range(self.backbone.num_layers), self.cache)
         history = torch.cat([self.opened.top[:, None], final], 1)
         hidden = history[:, :-1]
-        # Retain the same differentiable readout->mixture path as decide().
-        # Bound the temporary vocabulary matrix per readout call.
-        mixtures = []
-        for start in range(0, self.length, 128):
-            logits = self.backbone.logits(hidden[:, start:start + 128])
-            mixtures.append(torch.softmax(logits.float(), -1).to(self.backbone.embedding_weight.dtype) @
-                            self.backbone.embedding_weight)
         segments = torch.zeros(history.shape[:2], dtype=torch.long, device=history.device)
-        values = self.projection(hidden, torch.cat(mixtures, 1), segments[:, :-1])
-        from ..model.neuralese_projection import project_token_states
+        from ..model.neuralese_projection import chosen_token_embedding, project_token_states
         token_states = project_token_states(history, self.token_choice_projection, segments)
-        stops = []
-        for start in range(1, self.length + 1, 128):
+        # One readout over h0..hN: the choices at h0..h(N-1) anchor the values (as decide()), the stop scores read
+        # h1..hN (bounded vocabulary matrix per chunk).
+        stops, chosen = [], []
+        for start in range(0, self.length + 1, 128):
             logits = self.backbone.logits(token_states[:, start:start + 128]).float()
+            chosen.append(logits.argmax(-1).detach())
             logp = torch.log_softmax(logits, -1)
             stop_logp = torch.logsumexp(logp[:, :, self.stop_ids], -1)
             stops.append(stop_logp - torch.log1p(-stop_logp.exp().clamp(max=1 - 1e-7)))
             self.token = logits[:, -1].argmax(-1)
+        chosen = torch.cat(chosen, 1)
+        stops = [torch.cat(stops, 1)[:, 1:]]
+        # The same value as decide(), over the whole write.
+        values = self.projection(hidden, segments[:, :-1], anchor=chosen_token_embedding(
+            self.backbone, chosen[:, :self.length])).to(self.backbone.embedding_weight.dtype)
         self.payloads = list(values.unbind(1))
         self.states = list(final.unbind(1))
         self.stop_tensors = list(torch.cat(stops, 1).unbind(1))

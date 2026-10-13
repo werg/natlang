@@ -175,11 +175,25 @@ def opened_context(engine, embeds):
     return Opened(pre.cache, pre.state, engine.backbone.logits(pre.top[:, None])[:, -1], pre.top)
 
 
+def manifold_gate(model, declaration):
+    """The manifold gate (owner 2026-10-13) on the aligned projection this export loaded with: its alignment report
+    (fitted on this exact export, bound by manifest SHA-256) against the declared thresholds."""
+    if declaration is None:
+        return None
+    from ..train.e2e_acceptance import projection_on_manifold
+    alignment = model.projection_alignment or {}
+    criteria = projection_on_manifold(declaration, alignment.get('report'))
+    return {'thresholds': declaration, 'aligned_projection': {k: v for k, v in alignment.items() if k != 'report'},
+            'criteria': criteria, 'passed': all(c['status'] == 'pass' for c in criteria.values())}
+
+
 def diagnose(artifact, base_snapshot, out, lengths, device='cuda', token_choice_diagnostic=False,
-             tcp_stream_diagnostic=False):
+             tcp_stream_diagnostic=False, aligned_projection=None, projection_on_manifold=None):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=False)
-    model = load_direct_artifact(artifact, base_snapshot=base_snapshot, device=device)
+    model = load_direct_artifact(artifact, base_snapshot=base_snapshot, device=device,
+                                 aligned_projection=aligned_projection)
+    manifold = manifold_gate(model, projection_on_manifold)
     engine = model.engine
     backbone, projection = engine.backbone, model.neuralese_projection
     synthetic_tcp_identity = None
@@ -333,6 +347,7 @@ def diagnose(artifact, base_snapshot, out, lengths, device='cuda', token_choice_
               'rows': rows, 'producer_replay_gradient_delta': replay_delta, 'producer_replay_value_equal': replay_equal,
               'public_input_gradient_delta': input_delta, 'typed_wire_value_restored': wire,
               'runtime_qualified': passed and not token_choice_diagnostic,
+              'projection_on_manifold': manifold,
               'synthetic_tcp_mechanism_passed': passed if token_choice_diagnostic else None,
               'token_choice_diagnostic': token_choice_diagnostic, 'decision_score_delta': decision_delta, 'consumer_task_qualified': False, 'autonomous_stopping_qualified': False,
               'synthetic_token_choice_state_sha256': synthetic_tcp_identity,
@@ -356,6 +371,10 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--lengths', type=int, nargs='+', default=[8, 32])
+    parser.add_argument('--aligned-projection', type=Path,
+                        help='the NeuraleseProjection fitted on this exact export (train/projection_align.py)')
+    parser.add_argument('--projection-on-manifold', type=json.loads,
+                        help='the manifold gate thresholds (recipe: the direct_runtime stage parameter)')
     parser.add_argument('--token-choice-diagnostic', action='store_true', help='Inject a synthetic TCP; mechanism evidence only')
     parser.add_argument('--tcp-stream-diagnostic', action='store_true',
                         help='Also compare multi-turn causal readout and guided rollback replay; requires synthetic TCP')
@@ -365,7 +384,8 @@ def main():
     if args.tcp_stream_diagnostic and not args.token_choice_diagnostic:
         parser.error('--tcp-stream-diagnostic requires --token-choice-diagnostic')
     diagnose(args.artifact, args.base_snapshot, args.out, args.lengths, args.device,
-             args.token_choice_diagnostic, args.tcp_stream_diagnostic)
+             args.token_choice_diagnostic, args.tcp_stream_diagnostic, args.aligned_projection,
+             args.projection_on_manifold)
 
 
 if __name__ == '__main__':
