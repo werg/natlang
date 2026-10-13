@@ -71,3 +71,14 @@ r4), `repeat-dragnet-open-ab`. Running: `e2edata-mine-v3`, `swe-bulk-d13-followu
   exits, GPU idle, NVMe free+reserve < 60 GB, v4 median update > 31 s). The job dir may not survive. If so, rebuild it
   from that logic.
 - Agents' merges: quick check before push; full check in gaps; main must stay green.
+
+## 7. Repetition dragnet decisions (coordinator, 2026-10-13 ~08:15Z)
+
+Findings in plans/neuralese/REPETITION_DRAGNET_20261013.md. Training data is not the cause. Decided for both lines,
+effective at the next handoff (v4: the 09:30Z relaunch):
+- `train_min_context_tokens` 16384: long pi documents had only 1,024 tokens of context per later window;
+- `task_eval.temperature` 0.6: greedy eval made the repeat runs identical by construction;
+- v4 moves to current main: its frozen snapshot's eval prompt carried a ~1,070-token schema block that training
+  never has, so Mellum's task scores from steps 1200–2000 aren't comparable with later ones;
+- recovery supervision data (a changed action after a no-progress observation): to design for r4/r5.
+If the recipe commit for the first two isn't on main by the relaunch, relaunch anyway and pick them up at the next handoff.
