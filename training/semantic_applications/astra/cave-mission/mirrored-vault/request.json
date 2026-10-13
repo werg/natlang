@@ -1,0 +1,7 @@
+{
+  "caseId": "mirrored-vault-v1",
+  "start": "E",
+  "goal": "Return to E carrying the sealed sample from V in every supported map.",
+  "initialEnergy": 9,
+  "objective": "minimum-worst-case-energy-then-observation-count"
+}

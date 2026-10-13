@@ -1,0 +1,3 @@
+[M01] The robot starts at entrance E with energy9, an empty sample carrier and one unused rope spool. The mission is complete only when it returns to E carrying the sealed sample from chamber V.
+[M02] Every listed action has its stated positive integer energy cost, charged when performed. Energy may reach zero on successful return. No recharging, external intervention or unlisted action is available in this closed fictional world.
+[M03] A policy must succeed in every map consistent with the complete supplied evidence. Minimize worst-case energy among such policies; use fewer observations to break an equal-energy tie. Generated world and policy-node identifiers may be any unique strings.

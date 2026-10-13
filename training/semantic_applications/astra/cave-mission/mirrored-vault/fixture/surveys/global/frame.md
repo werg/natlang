@@ -1,0 +1,2 @@
+[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1).
+[F02] Global observations call sides east and west from the fixed map frame, regardless of the direction the robot faces. From E the robot approaches J facing north; looking back toward E does not rename map east or west.

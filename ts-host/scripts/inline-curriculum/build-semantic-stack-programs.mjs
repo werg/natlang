@@ -16,20 +16,22 @@ const args = process.argv.slice(2);
 const flags = args.slice(2);
 const pilotAstra = flags.includes('--pilot-astra');
 const stageSpecsMode = flags.includes('--stage-specs');
+const sourceDriven = flags.includes('--source-driven');
 const groupedAstra = flags.includes('--grouped-astra') || stageSpecsMode;
 const reviewAt = flags.indexOf('--review-ids');
 const reviewPath = reviewAt >= 0 && flags[reviewAt + 1] ? resolve(flags[reviewAt + 1]) : null;
 const variantAt = flags.indexOf('--stage-variant');
 const variantPath = variantAt >= 0 && flags[variantAt + 1] ? resolve(flags[variantAt + 1]) : null;
-const knownFlags = new Set(['--pilot-astra', '--grouped-astra', '--stage-specs', '--review-ids', '--stage-variant']);
+const knownFlags = new Set(['--pilot-astra', '--grouped-astra', '--stage-specs', '--source-driven', '--review-ids', '--stage-variant']);
 const selected = flags.filter(flag => knownFlags.has(flag));
 const expectedFlagCount = selected.length + (reviewPath ? 1 : 0) + (variantPath ? 1 : 0);
 if (args[0] !== '--out' || !args[1] || flags.length !== expectedFlagCount ||
     (pilotAstra && (stageSpecsMode || groupedAstra || reviewPath)) ||
     (stageSpecsMode && flags.includes('--grouped-astra')) ||
+    (sourceDriven && (!groupedAstra || stageSpecsMode)) ||
     (variantPath && !stageSpecsMode) ||
     selected.length !== new Set(selected).size)
-  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --grouped-astra | --stage-specs] [--review-ids IDS_JSON] [--stage-variant VARIANT_JSON]');
+  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --grouped-astra [--source-driven] | --stage-specs] [--review-ids IDS_JSON] [--stage-variant VARIANT_JSON]');
 const output = resolve(args[1]);
 const variantBytes = variantPath ? await readFile(variantPath) : null;
 const variant = variantBytes ? JSON.parse(variantBytes) : null;
@@ -262,6 +264,9 @@ function checkedStageSpecs(entry, steps) {
       spec.types[name] = body;
     }
     stage.numbered_plan = variant.numbered_plan;
+    // Replace the old decision's semantic meaning as well as its recipe. A
+    // stale summary here can contradict the new literal contract.
+    stage.new_semantic_transformation = variant.literal_unit;
     stage.scoped_literal_plan = [variant.literal_unit, variant.capture_policy,
       ...paragraphs(variant.idiom_preconditions),
       variant.direct_await_idiom, variant.no_op_criterion, ...variant.invariants];
@@ -344,7 +349,7 @@ function render(entry, provider) {
     `Carry out these stages over the supplied data, preserving exact source references. ` +
     `Call ${steps[0].name} from solve; each later named stage is a child of the preceding stage and is called from within that active stage. ` +
     (entry.typed_inputs ? `Pass the typed bundle, inquiry, and carried StageState through the chain:\n` : grouped ?
-      `Use iterateOn over the sorted source folders. State holds nextFolderIndex and findings. Read the records in each folder and attach their exact id from the source ID binding table below, making EvidenceBatch {folderPath,records:EvidenceRecord[]}. Each step calls ${steps[0].name} with that batch and an EvidenceContext carrying objective, rule, related records from the whole source collection, prior findings, and an initially empty stageFindings array. Every named stage works over the current batch, preserving a separate EvidenceFinding for every current record. Append exactly one final finding for each batch record and advance nextFolderIndex. The unprocessed-folder count decreases by one; finish when nextFolderIndex equals the number of source folders. Then synthesize the declared result from all per-record findings and exact source records. The named stages are:\n` :
+      `Use iterateOn over the sorted source folders. State holds nextFolderIndex and findings. Read the records in each folder and attach their exact id from the source ID binding table below, making EvidenceBatch {folderPath,records:EvidenceRecord[]}. Each step calls ${steps[0].name} with that batch and an EvidenceContext carrying objective, rule, related records from the whole source collection, prior findings, and an initially empty stageFindings array. ${sourceDriven ? 'Each named stage carries the batch and appends only decisions actually returned by its scoped natural-language calls; structural stages may pass the existing context to their child. The final batch result contains exactly one grounded finding per record.' : 'Every named stage works over the current batch, preserving a separate EvidenceFinding for every current record.'} Append exactly one final finding for each batch record and advance nextFolderIndex. The unprocessed-folder count decreases by one; finish when nextFolderIndex equals the number of source folders. Then synthesize the declared result from all per-record findings and exact source records. The named stages are:\n` :
       `Use iterateOn over a finite, sorted list of source paths. State holds nextPathIndex and findings. Each step reads that one current file, attaches its exact id from the source ID binding table below, and calls ${steps[0].name} once with item={id,path,text} and an EvidenceContext carrying objective, rule, relevant related records, prior findings, and an initially empty stageFindings array. Append the returned EvidenceFinding and advance nextPathIndex. The unprocessed-path count decreases by one; finish when nextPathIndex equals the number of source paths. Each nested stage receives that same current EvidenceRecord and the updated context. Then synthesize the declared result from all findings and exact source records. The named stages are:\n`) +
     (identities ? `Source ID binding (use these exact identifiers in the declared result):\n${identities.map(({ id, path }) => `${id}: ${path}`).join('\n')}\n\n` : '') +
     steps.map((step, index) => `${index + 1}. ${step.name}: ${step.instructions}`).join('\n') + '\n\n' +
@@ -390,14 +395,19 @@ function render(entry, provider) {
       continue;
     }
     const scoped = literal?.placement === step.name && literal.instructions
-      ? grouped ? `\nAt this stage, formulate ad hoc typed natural-language literals for the current batch. Use this short plan: ${lambdaInstructions} Pass the batch's records and relevant context as arguments; keep individual source IDs in each finding.` :
+      ? grouped ? `\nAt this stage, formulate ad hoc typed natural-language literals for the current batch. Use this short plan: ${lambdaInstructions} ${sourceDriven ? 'Invoke a focused literal on each relevant current item or relation, passing only its needed context. Append the actual returned decisions, retaining each source ID and path.' : "Pass the batch's records and relevant context as arguments; keep individual source IDs in each finding."}` :
         `\nAt this stage, formulate an ad hoc typed natural-language literal ${literal.signature ?? ''} for the current item. Use this short plan: ${literal.instructions} Pass the current item and relevant context as arguments; keep source IDs in the finding.` : '';
     const delegate = next ? entry.typed_inputs ?
       `\nAfter making this stage's finding, call the child ${next} within this active call with bundle, inquiry, and the carried StageState. Return its StageState with this stage's source-linked evidence preserved.` :
-      grouped ? `\nAfter making this stage's per-record findings, call the child ${next} within this active call. Pass the same EvidenceBatch and an EvidenceContext whose stageFindings includes this stage's findings. Return the child's EvidenceBatchFinding, with one finding for each batch record and all relevant source identities preserved.` :
+      grouped ? sourceDriven ? `\nCall the child ${next} within this active call with the same EvidenceBatch and the accumulated EvidenceContext. Add this stage's actual source-grounded natural-language decisions to stageFindings when it makes one; otherwise pass the existing context. Return the child's complete EvidenceBatchFinding.` :
+        `\nAfter making this stage's per-record findings, call the child ${next} within this active call. Pass the same EvidenceBatch and an EvidenceContext whose stageFindings includes this stage's findings. Return the child's EvidenceBatchFinding, with one finding for each batch record and all relevant source identities preserved.` :
       `\nAfter making this stage's finding, call the child ${next} within this active call. Pass the same item and an EvidenceContext whose stageFindings includes this stage's EvidenceFinding; return the child's EvidenceFinding with all relevant source identities preserved.` : '';
     stageFolder += `/${name}`;
-    const instructionBody = `${stageBody(step)}${scoped}${delegate}\nApply the semantic rule to the supplied ${entry.typed_inputs ? 'bundle, inquiry, and prior state' : grouped ? 'current EvidenceBatch and EvidenceContext' : 'current item EvidenceRecord and EvidenceContext'}. Return a grounded ${entry.typed_inputs ? 'StageState with preserved source identities and carried work' : grouped ? 'EvidenceBatchFinding with folderPath=item.folderPath and exactly one EvidenceFinding per item.records path, each citing evidenceIds and unresolved claims' : 'EvidenceFinding with sourcePath=item.path, a concise finding, cited evidenceIds, and unresolved claims'}.`;
+    const finalInstruction = sourceDriven && grouped ? next ?
+      `\nFor a semantic judgment this stage owns, invoke a focused natural-language function on its source evidence and carry its returned decision to the child. Preserve the child's complete result.` :
+      `\nReturn a grounded EvidenceBatchFinding with folderPath=item.folderPath and exactly one EvidenceFinding per item.records path, each citing evidenceIds and unresolved claims. Base each semantic finding on returned natural-language decisions and source evidence.` :
+      `\nApply the semantic rule to the supplied ${entry.typed_inputs ? 'bundle, inquiry, and prior state' : grouped ? 'current EvidenceBatch and EvidenceContext' : 'current item EvidenceRecord and EvidenceContext'}. Return a grounded ${entry.typed_inputs ? 'StageState with preserved source identities and carried work' : grouped ? 'EvidenceBatchFinding with folderPath=item.folderPath and exactly one EvidenceFinding per item.records path, each citing evidenceIds and unresolved claims' : 'EvidenceFinding with sourcePath=item.path, a concise finding, cited evidenceIds, and unresolved claims'}.`;
+    const instructionBody = `${stageBody(step)}${scoped}${delegate}${finalInstruction}`;
     const selfName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (new RegExp(`\\b(?:call|invoke|delegate(?:\\s+to)?)\\s+${selfName}\\b`, 'i').test(instructionBody))
       throw Error(`${id}: ${name} instructions direct a self-call`);
@@ -518,7 +528,8 @@ await writeFile(join(output, 'source-candidates.ir.jsonl'), sourceText);
 const review = {
   schema: 'natlang.semantic-stack-source-review/1',
   partial_pilot: pilotAstra,
-  presentation: stageSpecsMode ? 'owned-typed-stage-contributions' : groupedAstra ?
+  presentation: stageSpecsMode ? 'owned-typed-stage-contributions' : sourceDriven ?
+    'source-driven-scoped-decisions' : groupedAstra ?
     'typed-coherent-folder-batches' : 'typed-individual-records',
   ...(variant ? { stage_variant: { id: variant.id, program_id: variant.program_id,
     file: variantPath, sha256: sha(variantBytes), base_catalog_sha256: variant.base_catalog_sha256 } } : {}),

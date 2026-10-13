@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import type { OracleVerdict } from '../evaluation/oracles.js';
 
 export type TrustedExactVerifier = { path: string; sha256: string; oracle: unknown };
@@ -10,7 +10,9 @@ export type ExactVerifierInput = { value: unknown; oracle: unknown; inputs: Reco
   fixture: Record<string, string> };
 export type ExactVerifierResult = { ok: boolean; issues: string[]; semantic_review_required?: boolean };
 
-const root = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
+// The teacher executable may be frozen outside the checkout. Its working
+// directory (or an explicit override) is the canonical repository checkout.
+const root = resolve(process.env.NATLANG_REPO_ROOT ?? process.cwd());
 
 export async function checkTrustedExactVerifier(spec: TrustedExactVerifier, input: ExactVerifierInput): Promise<OracleVerdict> {
   if (!spec.path.startsWith('training/semantic_applications/') || !spec.path.endsWith('.mjs') ||

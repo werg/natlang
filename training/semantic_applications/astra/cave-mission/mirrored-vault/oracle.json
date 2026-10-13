@@ -1,0 +1,100 @@
+{
+  "schema": "natlang.cave-mission-oracle/1",
+  "training_admission": false,
+  "independently_reviewed": false,
+  "canonical_witness": true,
+  "worlds": [
+    {
+      "uToGlobalXSign": 1,
+      "vToGlobalYSign": 1,
+      "origin": [
+        0,
+        1
+      ],
+      "A": "EW",
+      "B": "WW",
+      "echo": "ribbed",
+      "glow": "blue",
+      "rigSide": "east",
+      "outboundLanding": "EW",
+      "energyByAction": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        1
+      ],
+      "canonicalActionKinds": [
+        "move-E-J",
+        "observe-ECHO",
+        "rig-east",
+        "move-J-EW",
+        "move-EW-V",
+        "pickup",
+        "ascend-V-J",
+        "move-J-E"
+      ],
+      "finalLocation": "E",
+      "sampleHeld": true,
+      "finalEnergy": 0
+    },
+    {
+      "uToGlobalXSign": -1,
+      "vToGlobalYSign": 1,
+      "origin": [
+        0,
+        1
+      ],
+      "A": "WW",
+      "B": "EW",
+      "echo": "smooth",
+      "glow": "blue",
+      "rigSide": "west",
+      "outboundLanding": "WW",
+      "energyByAction": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        1
+      ],
+      "canonicalActionKinds": [
+        "move-E-J",
+        "observe-ECHO",
+        "rig-west",
+        "move-J-WW",
+        "move-WW-V",
+        "pickup",
+        "ascend-V-J",
+        "move-J-E"
+      ],
+      "finalLocation": "E",
+      "sampleHeld": true,
+      "finalEnergy": 0
+    }
+  ],
+  "minimum_worst_case_energy": 9,
+  "minimum_observations_at_optimum": 1,
+  "necessary_shared_prefix": [
+    "move-E-J",
+    "observe-ECHO"
+  ],
+  "forbidden_inferences": [
+    "Blue circle equates Amber A with EW",
+    "Global side changes when robot turns around",
+    "A missing convention means a blocked passage",
+    "A full carrier can return through a narrow tunnel",
+    "A rope creates reverse water-gate traversal",
+    "Rigging the blind anchor reveals its endpoint",
+    "GLOW distinguishes the two map worlds"
+  ],
+  "policy_equivalence": "Accept alpha-renamed world/node IDs and any policy with all-world legal transitions, sealed sample return and the same optimum; do not byte-compare prose or generated IDs.",
+  "lower_bound": "Every successful world requires E-to-J1, one discriminating observation1, correct rig1, outward gate1, landing-to-V tunnel1, pickup1, chimney return2 and J-to-E1, total9. Without distinguishing the two conventions before rigging, the sole spool is committed incorrectly in one supported world. GLOW does not distinguish them.",
+  "source_clause_count": 31
+}

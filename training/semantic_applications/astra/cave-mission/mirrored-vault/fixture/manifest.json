@@ -1,0 +1,63 @@
+{
+  "caseId": "mirrored-vault-v1",
+  "documents": [
+    {
+      "id": "MISSION",
+      "path": "contracts/mission.md",
+      "roleHint": "contract"
+    },
+    {
+      "id": "GLOBAL",
+      "path": "surveys/global/frame.md",
+      "roleHint": "frame"
+    },
+    {
+      "id": "AMBER-FRAME",
+      "path": "surveys/amber/frame.md",
+      "roleHint": "frame"
+    },
+    {
+      "id": "AMBER-CHAMBERS",
+      "path": "surveys/amber/chambers.md",
+      "roleHint": "passage"
+    },
+    {
+      "id": "BLUE-LANDMARKS",
+      "path": "surveys/blue/landmarks.md",
+      "roleHint": "landmark"
+    },
+    {
+      "id": "GLOBAL-ROUTES",
+      "path": "surveys/global/routes.md",
+      "roleHint": "passage"
+    },
+    {
+      "id": "CARRIER",
+      "path": "equipment/carrier.md",
+      "roleHint": "affordance"
+    },
+    {
+      "id": "ECHO",
+      "path": "sensors/echo.md",
+      "roleHint": "sensor"
+    },
+    {
+      "id": "GLOW",
+      "path": "sensors/glow.md",
+      "roleHint": "sensor"
+    },
+    {
+      "id": "BOUNDARY",
+      "path": "operations/closed-world.md",
+      "roleHint": "boundary"
+    }
+  ],
+  "source_scope": "Closed fictional cave mission; document and clause IDs are visible source references.",
+  "output_contract": {
+    "worldIds": "Generated identifiers are arbitrary; compare each world by its frame transform and directed passage/affordance structure.",
+    "nodeIds": "Generated policy node IDs are arbitrary; compare rooted policy behavior and branch coverage.",
+    "sourceIds": "Keep source IDs and landmark identifiers exactly as supplied; A/B are local labels and EW/WW are global labels.",
+    "ordering": "Edge endpoints and action transitions are directed; world sets, independent evidence assertions and observation outcome collections are unordered.",
+    "unknown": "Unknown frame sign is an explicit set of alternatives; unknown and blocked/nonexistent passages remain distinct."
+  }
+}

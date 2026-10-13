@@ -7,14 +7,14 @@
   "status": "proposal_not_adopted_unmeasured",
   "fixture_and_oracle_changes": false,
   "types": {
-    "ScopeInput": "{relation:{cause:string;effect:string;sign:number}; scopeClause:string; premises:EvidenceRecord[]}",
+    "ScopeInput": "{relation:{cause:string;effect:string;signedEffect:number;direct:boolean;witnesses:Witness[]}; scopeClause:string; premises:EvidenceRecord[]}",
     "ScopeDecision": "{cause:string;effect:string;usable:boolean;sign:number|null;reason:string;witnesses:Witness[]}"
   },
   "literal_unit": "One directed candidate causal edge: judge source establishment and edge-specific conditions only. Downstream edges are eligible even when their cause is not the perturbed organism.",
   "capture_policy": "Capture only the source edge-validity rule. Pass one relation plus its exact premises and edge-specific condition. Perturbation reachability and sign multiplication belong to verifyResult/root graph propagation, not this literal.",
   "numbered_plan": [
     "1. Select current-batch causalAssessments and their source-linked interactionEdges. Preserve the inherited earlier-stage contributions; create a new scopeDecisions list for this batch. Cross-batch final aggregation belongs to root.",
-    "2. For each candidate relation, select its quoted source records and any explicit condition needed to determine applicability. Bind one ScopeInput containing that relation and those premises.",
+    "2. For each selected causalAssessments element, bind it unchanged as ScopeInput.relation (cause/effect/signedEffect/direct/witnesses). Select exact premise records and any edge-specific condition into scopeClause/premises. When the edge is usable, preserve relation.signedEffect in the returned sign field.",
     "3. In eval, declare local ScopeInput and ScopeDecision aliases with these exact shapes. Bind edgeValidityRule from input.context.rule and create nl.with<ScopeDecision>({edgeValidityRule}). Ask whether this directed edge is established by its premises and its own stated conditions hold; preserve its source sign and exact witnesses. A supported downstream edge is usable even if its cause is not the initially perturbed organism.",
     "4. Directly await the literal on one ScopeInput and append its actual ScopeDecision. usable means this edge may participate in the causal graph. This stage does not decide whether the perturbation reaches it or the eventual net sign at its target.",
     "5. Continue over the finite candidate list. A relation with insufficient or inapplicable premises still produces a decision (usable=false, sign=null when unresolved); it is not silently omitted.",
@@ -29,7 +29,8 @@
     "Every witness is an exact quote from a supplied premise.",
     "A condition not established by the snapshot cannot become universal applicability.",
     "Only actual returned decisions are consumed downstream; empty does not stand for failed judgment.",
-    "Eligibility is local to edge evidence/conditions; downstream reachability and sign multiplication are graph-stage work. A cause unequal to the initial perturbation is not an exclusion rule."
+    "Eligibility is local to edge evidence/conditions; downstream reachability and sign multiplication are graph-stage work. A cause unequal to the initial perturbation is not an exclusion rule.",
+    "ScopeInput uses the actual causalAssessments element shape; output sign comes from relation.signedEffect when usable."
   ],
   "qualification_required": [
     "Rendered type/scope fidelity",
@@ -40,5 +41,7 @@
   ],
   "training_admitted": false,
   "idiom_preconditions": "Before executing this idiom, declare the local ScopeInput and ScopeDecision aliases; initialize scopeDecisions: ScopeDecision[]; bind one scopeInput from the selected edge and exact premises. Use the authored StageInput4 parameter input. The idiom explicitly binds its one captured rule from the declared context field.",
-  "diagnostic_revision_reason": "v8b consumed actual child decisions but wrongly excluded downstream edges by treating scope as direct applicability to the fox perturbation. v8c restricts the child to edge validity and keeps graph propagation downstream."
+  "diagnostic_revision_reason": "v8b consumed actual child decisions but wrongly excluded downstream edges by treating scope as direct applicability to the fox perturbation. v8c restricts the child to edge validity and keeps graph propagation downstream.",
+  "selected_collection": "input.prior.causalAssessments",
+  "source_projection": "Pass one actual causalAssessments element as ScopeInput.relation. The upstream signedEffect is the candidate source sign; when usable, map it to ScopeDecision.sign. direct describes the causal assessment and does not require the cause to be the initially perturbed organism."
 }
