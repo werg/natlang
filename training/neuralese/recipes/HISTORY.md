@@ -204,3 +204,9 @@ base recipe instead of an inline config, and both lines declare a recipe (no pen
   reported until measured. Mellum: QAT component held at the parent's progress (0.5 after the full direct lineage).
 - `neuralese-e2e-lfm-v1-qual-muon-main-v2-u9000`: mechanics qualification arm on Pop's LFM main at update 9000
   (200 updates).
+- 2026-10-13: `e2e_records`/`e2e_pieces` rebound from the 1,389-record union cohort v1 to
+  `neuralese-e2e-cohort-20261012-v2-slice1` (7,007 records, 6,003 train / 1,004 held, 7,521 edges, 80 families), the
+  trainer-sized slice of e2e corpus v2 (95,106 edges, 24,141 chains; scripts/neuralese_data/e2e_mine.py,
+  plans/neuralese/E2E_DATA.md); `steps`/`train` 769 -> 6,003 (one pass over the train records, the v1 rule). The slice
+  re-authenticates as one file (unique writer names, 0 missing edges). Later slices of v2 and its successors bind the
+  same way.
