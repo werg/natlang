@@ -205,3 +205,12 @@ compare about 48 live workbench ticket cases from the old and revised banks in
 the next teacher window, including the model's per-ticket judgements and exact
 totals. Existing s52027 cases retain their original source and labels; do not
 retroactively treat the ambiguous old examples as negative training targets.
+
+The same review found a churn-negative ticket in s52023 whose visible text
+reports a completed downgrade and unresolved overbilling, then praises support;
+Step 5 judged possible churn before revising to the synthetic `false` label.
+The old negative bank included an empty sentence and several sentiments that
+did not settle future intent. Family version 3 now gives every churn-negative
+ticket an explicit plan to stay or renew. Extend the live comparison to both
+criteria before admitting new versions. Hold the old ambiguous ticket's native
+decision and preference label from training.

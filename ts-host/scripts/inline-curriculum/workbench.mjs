@@ -37,9 +37,10 @@ const TICKETS = {
       clause: 'signal that the customer may cancel or leave', yes: ['If this is not fixed this week we will move to another provider.',
         'Honestly, we are evaluating alternatives at this point.', 'Our contract is up next month and this makes renewal hard to justify.',
         'We are considering cancelling our subscription over this.', 'Two of our managers already asked me to look at other tools.'],
-      no: ['', 'Thanks for the help, otherwise we are very happy with the product.', 'We cancelled our team meeting to look into this, so a quick reply would help.',
-        'We moved our data over to the new workspace last week and that went smoothly.', 'We are not going anywhere, we just want this fixed.',
-        'Our previous provider never had support this responsive, so thanks in advance.'] },
+      no: ['We plan to continue using this service while this is resolved.', 'We are renewing as planned; please help with this issue.',
+        'We cancelled our team meeting to look into this, but our subscription continues.',
+        'We moved our data to the new workspace and plan to keep it there.', 'We are not going anywhere; we just want this fixed.',
+        'Our previous provider never had support this responsive; we intend to stay with you.'] },
     blocking: { ask: 'Is the customer\'s work blocked right now by what ticket describes (no workaround)?', key: 'work blocked right now',
       clause: 'describe work that is blocked right now', yes: ['Our whole team is stuck until this is sorted.', 'We cannot ship anything today because of this.',
         'Nobody on our side can work right now.', 'This stops our month-end close completely.'],
@@ -329,7 +330,7 @@ export function semanticCollection(seed, index, domainName) {
       const items = world.map(x => ({ ...x, text: render(new Random(seed, `text:${shape}:${x.id}:${JSON.stringify(x.labels)}`), d, x, x.labels) }));
       const expected = evaluate(d, req, items);
       const program = curriculumCase({ family: `workbench_${d.name}`,
-        familyVersion: d.name === 'tickets' ? 2 : 1,
+        familyVersion: d.name === 'tickets' ? 3 : 1,
         shape, variant, pairGroup: `workbench:${shape}`,
         slice: 'inline_placement', domain: 'other', mode: 'single_call', inline,
         evidence: { world: items.map(x => `${x.id}: ${JSON.stringify(x.labels)}`), retrieved: [], background: [] },
@@ -339,7 +340,7 @@ export function semanticCollection(seed, index, domainName) {
         root: { name: d.root, args: {}, returns,
           instructions: `${text} Use ${d.service}.${d.plural}() for the data. Judge what each ${d.noun} says from its text, one ${d.noun} at a time; compute counts, filters and totals exactly.` },
         files: libraryFiles(d, items), inputs: {}, expected });
-      if (d.name === 'tickets') program.source_revisions.push('workbench-ticket-blocking-negatives/2');
+      if (d.name === 'tickets') program.source_revisions.push('workbench-ticket-semantic-negatives/3');
       return program;
     });
   }

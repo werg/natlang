@@ -69,9 +69,17 @@ oracle after one live turn. The canonical fallback source is the five-row
 successful fallback parents are pinned in
 `step5-fallback-accepted-parents-v2.review-candidates.jsonl`. Native
 materialization emitted 69 turn records: 54 replayed prefix decisions are held,
-11 live decisions are eligible before semantic review, and four live decisions
-are held for checker or return-value reasons. The set remains review-only until
-native decision audit and split/source checks.
+11 live decisions were initially eligible, and four live decisions were held
+for checker or return-value reasons. Semantic review held one more: a workbench
+child returned `true` for possible churn on a past downgrade plus a billing
+dispute, then a later child returned `false` on the same ticket before the root
+passed the synthetic exact oracle. The ticket's old `churn=false` label is
+ambiguous. `step5-fallback-native-decision-review-v3.json` binds the hold to
+the exact trajectory hash and decision; v3 native materialization now has 10
+eligible live decisions. Of two causally replayed preference candidates, the
+workbench pair is held in `step5-fallback-preference-pairs-v3.review-candidates.review.json`;
+the remaining actor-route pair still needs semantic approval. No candidate is
+admitted until native decision audit and split/source checks.
 The quiesced case and duplicate success may be compared as independent positive
 trajectories, but neither is a Luna model-negative or causal preference label.
 
