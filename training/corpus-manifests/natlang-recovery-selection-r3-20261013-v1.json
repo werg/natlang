@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-recovery-selection-r3-20261013-v1",
+  "owner": "dgx",
+  "path": "runs/natlang-recovery-selection-r3-20261013-v1",
+  "files": [
+    {
+      "path": "parity.json",
+      "bytes": 1796,
+      "sha256": "696e9d43c97e63ab0b799edf8716aee3e9323ab813830f2b951c2d9241bf0c21"
+    },
+    {
+      "path": "recovery-selection.jsonl",
+      "bytes": 5636516,
+      "sha256": "dae1c4567e34c25ac72ff103cc1ab09713e681ba75424b7156f113a0d80bf6c9",
+      "lines": 19523
+    },
+    {
+      "path": "summary.json",
+      "bytes": 5977,
+      "sha256": "c4807ee5b23c063033cf735d99be513f92a5dfcf6f0cfe707397870ffcd0d2ac"
+    }
+  ],
+  "bytes": 5644289
+}

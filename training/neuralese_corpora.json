@@ -63571,6 +63571,54 @@
       },
       "notes": "Partial snapshot of the mining run at 2026-10-13 (e2edata-mine-v3 still running); supersedes v2 for the full bulk corpus (a superset by source, 106,380 edges: 96,322 train / 10,058 held, 26,675 chains, 207,698 records, 103 families). v4 follows when mining and the miner fixes land.",
       "storage": "HDD (/mnt/external/natlang-development-data/e2e-data/corpora), bulk corpus; training reads slices on NVMe"
+    },
+    {
+      "owner": "dgx",
+      "source_class": "recovery-sampling-selection",
+      "license": "facts from the source rows (see union r3)",
+      "training_admission": true,
+      "training_admission_reason": "coordinator decision 2026-10-13 (repetition dragnet, plans/neuralese/RECOVERY_SUPERVISION.md source 1): natural recoveries (a changed action after a no-progress observation) as a `recovery` sampling group for union r4, both lines",
+      "id": "natlang-recovery-selection-r3-20261013-v1",
+      "path": "runs/natlang-recovery-selection-r3-20261013-v1",
+      "include": [
+        "recovery-selection.jsonl",
+        "summary.json",
+        "parity.json"
+      ],
+      "split": "per selection, inherited from the source rows (train / test); no train selection shares a source group with a held document",
+      "admission": "selection manifest of (rendering, document id, assistant-turn index) over union r3 (program-header, full, whole-trajectory; tokenizer-agnostic: the same ids exist in the lfm25 and mellum21 twins, verified in parity.json); selections only, no copies. Rules (exact, no model): identical observation, empty read, failure form; the supervised action differs from the previous one. Built by scripts/neuralese_data/mine_recovery.py (963d5e46).",
+      "derived_from": [
+        "natlang-target-union-20261011-r3"
+      ],
+      "counts": {
+        "selections": 19523,
+        "train": 18578,
+        "test": 945,
+        "distinct_decisions": {
+          "train": 13743,
+          "test": 555
+        }
+      },
+      "build": {
+        "script": "scripts/neuralese_data/mine_recovery.py",
+        "receipt": "runs/natlang-recovery-selection-r3-20261013-v1/summary.json",
+        "files": {
+          "recovery-selection.jsonl": {
+            "bytes": 5636516,
+            "sha256": "dae1c4567e34c25ac72ff103cc1ab09713e681ba75424b7156f113a0d80bf6c9"
+          },
+          "summary.json": {
+            "bytes": 5977,
+            "sha256": "c4807ee5b23c063033cf735d99be513f92a5dfcf6f0cfe707397870ffcd0d2ac"
+          },
+          "parity.json": {
+            "bytes": 1796,
+            "sha256": "696e9d43c97e63ab0b799edf8716aee3e9323ab813830f2b951c2d9241bf0c21"
+          }
+        }
+      },
+      "storage": "NVMe (small)",
+      "notes": "Pop consumes this manifest in the shared recovery-selection overlay of the direct trainer. Sources 2 and 3 (teacher-generated) are separate additions."
     }
   ],
   "coverage_backlog": [
