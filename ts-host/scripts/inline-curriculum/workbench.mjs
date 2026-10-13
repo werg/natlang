@@ -329,7 +329,7 @@ export function semanticCollection(seed, index, domainName) {
     return [['a', worldA], ['b', worldB]].map(([variant, world]) => {
       const items = world.map(x => ({ ...x, text: render(new Random(seed, `text:${shape}:${x.id}:${JSON.stringify(x.labels)}`), d, x, x.labels) }));
       const expected = evaluate(d, req, items);
-      const program = curriculumCase({ family: `workbench_${d.name}`,
+      const example = curriculumCase({ family: `workbench_${d.name}`,
         familyVersion: d.name === 'tickets' ? 3 : 1,
         shape, variant, pairGroup: `workbench:${shape}`,
         slice: 'inline_placement', domain: 'other', mode: 'single_call', inline,
@@ -340,8 +340,8 @@ export function semanticCollection(seed, index, domainName) {
         root: { name: d.root, args: {}, returns,
           instructions: `${text} Use ${d.service}.${d.plural}() for the data. Judge what each ${d.noun} says from its text, one ${d.noun} at a time; compute counts, filters and totals exactly.` },
         files: libraryFiles(d, items), inputs: {}, expected });
-      if (d.name === 'tickets') program.source_revisions.push('workbench-ticket-semantic-negatives/3');
-      return program;
+      if (d.name === 'tickets') example.source_revisions.push('workbench-ticket-semantic-negatives/3');
+      return example;
     });
   }
   throw new Error(`no discriminating workbench request for ${seed}:${index}`);
