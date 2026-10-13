@@ -125,7 +125,7 @@ function render(entry, provider) {
   const prefix = entry.operation ? `Operation: ${entry.operation}.\n` : '';
   const instructions = `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
     `Carry out these stages over the supplied data, preserving exact source references. The callable stages are children of solve; call them on the current scoped item and context as needed:\n` +
-    steps.map((step, index) => `${index + 1}. step_${index + 1}_${step.name.toLowerCase()}: ${step.instructions}`).join('\n') + '\n\n' +
+    steps.map((step, index) => `${index + 1}. ${step.name}: ${step.instructions}`).join('\n') + '\n\n' +
     `For each current item, formulate a focused typed natural-language function literal with a short numbered instruction plan. ` +
     `Capture only the current task criterion and pass that item's content and the necessary carried state as arguments. ` +
     `Do not substitute a keyword test for the semantic relation.\n` +
@@ -135,8 +135,8 @@ function render(entry, provider) {
     `Use exact code only for reading, ordering, serialization, and checks; the domain judgments belong in natural-language calls. ` +
     `Return the result specified by the output contract, grounded in the supplied sources.`;
   const files = { 'solve.nl': nlFile({ args: {}, returns: typed ?? 'string', description: title, kind: 'directory-reducer', instructions }) };
-  for (const [index, step] of steps.entries()) {
-    const name = `step_${index + 1}_${step.name}`.toLowerCase();
+  for (const step of steps) {
+    const name = step.name;
     const scoped = entry.lambda?.placement === step.name && typeof entry.lambda?.instructions === 'string'
       ? `\nAt this stage, formulate an ad hoc typed natural-language literal ${entry.lambda.signature ?? ''} for the current item. Use this short plan: ${entry.lambda.instructions} Pass the current item and relevant context as arguments; keep source IDs in the finding.` : '';
     files[`solve/${name}.nl`] = nlFile({ args: { item: 'string', context: 'string' }, returns: 'string',
