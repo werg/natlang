@@ -162,6 +162,22 @@ is what widened V−T. **Ruled in.** Two things remain:
   decision 0005) adds +1.2 to both. The backbone and TCP updates, trained on 60 decision records, cost the paired
   readers on both channels. With 32 readers, this needs a longer, broader arm (corpus v2) to judge.
 
+### Round 5: the writer on AdamW at 3e-5 (hypothesis 2)
+
+`r5-writer-adamw-3e-5` (`--neuralese-projection-optimizer adamw`, writer 3e-5, TCP Muon 3e-6, the same 32 paired
+held readers): V 0.471 → 0.595 at step 10, 0.557 at 20, 0.568 at 30; T 0.362 → 0.382; crisp 0.599 → 0.569. V−T
+0.109 → 0.186 at step 30. AdamW does not rescue a faster writer: the near-identity writer degrades consumers on
+either optimiser once its rate is above about 3e-6. **Hypothesis 2 ruled out** at this rate. These arms used the
+soft-token mixture writer, which main has replaced by value = E[chosen] + C(h) with C = 0 at entry (fc32044e,
+dgx-projection); the next arms run on it from the aligned u10006 P.
+
+### Corpus v2 arm could not start: Neuralese<HandoverNote> writers (fixed on main 47617d77)
+
+The streamed corpus v2 arm stopped at startup in `write_value_type`: 46 `compact_history` handover writes in v2 are
+typed `Neuralese<HandoverNote>` (the compiler's `HANDOVER_TYPE`, a crisp string note; corpus v2 declares 46,983
+`Neuralese<string>`, 2,221 `Neuralese<unknown>` and these 46). A named Neuralese type is now a string write when it is
+the handover type or its argument schema is a string; any other named type still fails, with the type in the error.
+
 ## Checked and ruled out (with how)
 
 - **Context CE over the written block:** `GradSession._context_logp` never targets block payloads; the token after a
