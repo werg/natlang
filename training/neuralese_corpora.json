@@ -63619,6 +63619,28 @@
       },
       "storage": "NVMe (small)",
       "notes": "Pop consumes this manifest in the shared recovery-selection overlay of the direct trainer. Sources 2 and 3 (teacher-generated) are separate additions."
+    },
+    {
+      "id": "luna-recovery-failure-seeded-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-recovery-failure-seeded-20261013-v1",
+      "include": [
+        "source.ir.jsonl",
+        "accepted-parents.native.jsonl",
+        "approved-turns.jsonl",
+        "parent-selection-review.json",
+        "decision-review.json",
+        "decision-materialization-review.json",
+        "admission-review.json"
+      ],
+      "source_class": "project-generated failure-seeded teacher recovery turns",
+      "license": "project-generated",
+      "split": "train only; source groups disjoint from held packet v3",
+      "admission": "exact native oracle and per-decision quality review",
+      "training_admission": true,
+      "training_admission_reason": "Ten distinct current-IR failure seeds yielded ten exact-oracle accepted continuations. Nine teacher repair actions passed native materialization and independent decision review; ten bad seed actions and two hardcoded teacher actions are excluded from targets.",
+      "required_conversion": "render LFM and Mellum twins; include approved turns in the next broad target union",
+      "review_status": "parent, action, held-group and native-render reviews complete; see admission-review.json"
     }
   ],
   "coverage_backlog": [

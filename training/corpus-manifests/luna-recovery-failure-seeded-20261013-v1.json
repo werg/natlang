@@ -1,0 +1,47 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-recovery-failure-seeded-20261013-v1",
+  "owner": "pop",
+  "path": "runs/luna-recovery-failure-seeded-20261013-v1",
+  "files": [
+    {
+      "path": "accepted-parents.native.jsonl",
+      "bytes": 996361,
+      "sha256": "acbd89bd7ab37890df0c3ae9693869d2cd86139fe2525e1ffc7295390d793102",
+      "lines": 10
+    },
+    {
+      "path": "admission-review.json",
+      "bytes": 1317,
+      "sha256": "8bd1d76d0c05c34e79124cbfde0db8285a7dc5257b387b947ac38e1683640870"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 588653,
+      "sha256": "1f990d80dbbd17f6356ec4bb0f54d2d45079069625775808a9e6e3fb818cda38",
+      "lines": 9
+    },
+    {
+      "path": "decision-materialization-review.json",
+      "bytes": 773,
+      "sha256": "8c061a3b231f910437209b41869dc284bbb65032e853b5702d88f0a0d60cad01"
+    },
+    {
+      "path": "decision-review.json",
+      "bytes": 861,
+      "sha256": "93a806147b1226edfc2dd5d440e43d20490d4278231379a6a0a0488247d4ce2e"
+    },
+    {
+      "path": "parent-selection-review.json",
+      "bytes": 1353,
+      "sha256": "b0841ef8c933982bd0c3ddbe67b847eae42ed69f70998d11c0eb085deb38fe5d"
+    },
+    {
+      "path": "source.ir.jsonl",
+      "bytes": 10209,
+      "sha256": "eeaddb3ad72acf4199f7a08968f6686cc2f3723a838a7709eeead32d047336ba",
+      "lines": 10
+    }
+  ],
+  "bytes": 1599527
+}
