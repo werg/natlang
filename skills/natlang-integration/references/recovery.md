@@ -33,6 +33,8 @@ When an intended per-item reducer produces one giant NL call over a serialized d
 
 If that typed-record loop repeats a deep named chain for every record in a coherent source folder, a typed folder batch can retain the semantic work with fewer chain setups. Iterate over source folders with a shrinking frontier, pass an `EvidenceBatch` of `{path,text}` records to each stage, and require one typed finding per original path. Inspect the actual returned path multiset and citations: missing, duplicate, or fabricated source IDs mean the batch lost evidence and must be repaired before generation or training admission. A batch must not be serialized into an untyped string. If an authored scoped-literal plan names a context field absent from the emitted type, bind the plan to the actual field name before collection.
 
+If nested stages run but return unchanged state, inspect each stage's typed owned field and the child's input. Require a new source-backed decision, or a reasoned no-applicable-evidence entry, before delegation; then confirm the child consumes the field. An unused scoped literal gives no semantic-stage credit. If an expected output ID is only in hidden oracle metadata, attach its ID/path binding to the model-visible typed record and source contract before collecting more attempts.
+
 If a heterogeneous record array is declared as a union and the runtime says a field from one arm is missing on a valid value of another arm, inspect the union completeness check. Each element should be tested against every structurally compatible arm until one is complete. Preserve the authored union and source meaning; do not add synthetic fields merely to appease the checker.
 
 ## Cancellation and limits

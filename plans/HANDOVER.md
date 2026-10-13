@@ -2,6 +2,42 @@
 
 ## 23:05 CEST: independent 200-program target and live source gates
 
+### Authoring quality correction
+
+The 220 count is a count of distinct semantic program *ideas*, not 220
+substantial, independent ready tasks. Both authors' self-audits found
+inventive examples (manuscript descent versus marginal borrowing; separate
+character beliefs under misinformation; nested-quotation deixis; retcon
+propagation), but also templated execution structure and thin fixtures.
+Astra's 120 use one five-stage scaffold; 54 worlds include many reused views.
+Sol's 100 use one generic stage outline; 90 are five questions each over 18
+shared worlds, often with only four to six decisive records despite 24 files.
+The live v5/v6b pass-through stages confirm that call count alone overstates
+semantic depth. **Owner correction:** valid shallow/easier cases are welcome
+training data and must not be held solely for low difficulty; hold only
+concrete source, semantic, oracle, type or visibility bugs. Depth/relevance
+labels are for mix insight. Authors are adding a separate, more inventive,
+high-depth slate with distinct task-specific call graphs, meaningful joins,
+scoped decisions and consumed stage outputs. The owner clarified that the
+new substantial programs should have application-scale natlang codebase size
+and complexity, comparable to `applications/compilers`, `nldb`, `games`,
+`migration`, `wiki` or `scheduling`: multi-file callable folders, substantial
+typed state, several real policies, dynamic NL literals that are invoked and
+used, iteration and exact service/verifier seams. **Deep structured pseudocode
+in natlang is the main implementation**, with numbered steps over named data,
+branches and explicit iteration; crisp TS is only exact I/O, durability and
+verification, never the hidden semantic algorithm. Use the existing apps as
+size/organization references, not as a crisp-code ratio target. Each new
+project starts with `DECOMPOSITION.md` that justifies every crisp seam.
+Authors start with two or
+three complete reference applications each before expanding, rather than
+mass-producing thin catalog rows. Keep the existing 220 and integrate all
+valid outputs.
+An additional source-visibility leak was found in inferred
+root types with gold-derived dynamic map keys (archives04/ecology06); hold
+those cases until generic typed maps or source-authored taxonomies replace
+the leaked answer keys.
+
 The owner clarified that Astra and GPT-6.1 Sol each have the **same** brief,
 independently, for at least 100 substantive natlang programs each. The
 catalogs currently contain 120 Astra and 100 Sol programs across 40 disjoint

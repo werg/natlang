@@ -11,6 +11,8 @@ export const ANSWER_COMPARISON_VERSION = 'normalized-decimal-exact/2';
 export type NumericListFieldSpec = { key: string; separator: '; '; empty_value: 'none' };
 export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknown[];
   threshold?: number; normalization?: 'qa' | 'qa-string-map' | 'named-tree' | 'json-string-record' | (string & {});
+  comparison_spec?: { schema_version: string; unordered_paths: string[]; prose_paths: string[];
+    ordered_paths?: string[]; witness_review_required?: boolean; witness_policy?: string; prose_policy?: string };
   /** Explicit answer-map keys whose string values are exact decimal quantities. */
   numeric_keys?: string[];
   /** Explicit answer-map keys whose values are ordered exact unsigned integer lists. */
@@ -19,6 +21,39 @@ export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknow
   radix_fields?: Array<{ key: string; base: number }>;
   rubric?: string; context?: unknown; [key: string]: unknown };
 const BUILTIN_NORMALIZATIONS = ['qa', 'qa-string-map', 'named-tree', 'json-string-record'] as const;
+/** Apply only explicitly declared unordered array paths; object keys are already order-free. */
+export function declaredStructuralCanonical(value: unknown, unorderedPaths: string[], prosePaths: string[] = [],
+  ignoreProse = false): string | null {
+  const parsePointer = (pointer: string): string[] => {
+    if (!pointer.startsWith('/') || /~(?![01])/.test(pointer)) throw new RangeError(`invalid comparison path: ${pointer}`);
+    return pointer.slice(1).split('/').map(part => part.replace(/~1/g, '/').replace(/~0/g, '~'));
+  };
+  const unordered = unorderedPaths.map(parsePointer), prose = prosePaths.map(parsePointer);
+  const matches = (path: string[], pattern: string[]) => path.length === pattern.length &&
+    path.every((part, index) => pattern[index] === '*' || pattern[index] === part);
+  const visit = (item: unknown, path: string[]): string | null => {
+    if (ignoreProse && prose.some(pattern => matches(path, pattern))) {
+      if (typeof item !== 'string') return null;
+      return JSON.stringify('__reviewed_prose__');
+    }
+    if (Array.isArray(item)) {
+      const parts = item.map((child, index) => visit(child, [...path, String(index)]));
+      if (parts.some(part => part === null)) return null;
+      if (unordered.some(pattern => matches(path, pattern))) parts.sort();
+      return `[${parts.join(',')}]`;
+    }
+    if (item && typeof item === 'object') {
+      const fields = Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+      const parts = fields.map(([key, child]) => [key, visit(child, [...path, key])] as const);
+      if (parts.some(([, child]) => child === null)) return null;
+      return `{${parts.map(([key, child]) => `${JSON.stringify(key)}:${child}`).join(',')}}`;
+    }
+    if (item === null || typeof item === 'string' || typeof item === 'boolean' ||
+        (typeof item === 'number' && Number.isFinite(item))) return JSON.stringify(item);
+    return null;
+  };
+  return visit(value, []);
+}
 const BUILTIN_FILE_COMPARES = ['content', 'exact', 'moves', 'rewrite', 'csv', 'counts', 'json-string-record', 'qa-string-map',
   'ordinal-distance-json-record',
   'markdown-terminal-newline'] as const;
@@ -697,6 +732,39 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
       comparison_version: spec.numeric_list_fields?.length ? 'json-string-record-integer-list-fields/1' : spec.numeric_keys?.length ?
         'json-string-record-decimal-fields/1' : spec.radix_fields?.length ?
         'json-string-record-radix-fields/1' : 'json-string-record-object/1' };
+  }
+  if (level === 'normalized' && spec.normalization === 'semantic-structured') {
+    const comparison = spec.comparison_spec;
+    const allPaths = comparison ? [...comparison.unordered_paths ?? [], ...comparison.ordered_paths ?? [],
+      ...comparison.prose_paths ?? []] : [];
+    if (comparison?.schema_version !== 'semantic-structured-comparison/1' ||
+        !Array.isArray(comparison.unordered_paths) || !Array.isArray(comparison.ordered_paths) ||
+        !Array.isArray(comparison.prose_paths) || new Set(allPaths).size !== allPaths.length ||
+        allPaths.some(path => typeof path !== 'string' || !path.startsWith('/') || /~(?![01])/.test(path)))
+      return { accepted: false, level, comparison_version: 'invalid-semantic-structured-spec/1' };
+    const strict = declaredStructuralCanonical(actual, comparison.unordered_paths);
+    const references = candidates.map(candidate => declaredStructuralCanonical(candidate, comparison.unordered_paths));
+    if (strict !== null && references.includes(strict))
+      return { accepted: true, level, comparison_version: 'declared-semantic-structure/1' };
+    const withoutProse = declaredStructuralCanonical(actual, comparison.unordered_paths, comparison.prose_paths, true);
+    const proseEquivalentStructure = withoutProse !== null && candidates.some(candidate =>
+      declaredStructuralCanonical(candidate, comparison.unordered_paths, comparison.prose_paths, true) === withoutProse);
+    if (proseEquivalentStructure || comparison.witness_review_required) {
+      // A witness alternative may change IDs, quantities, or route structure.
+      // A prose judge cannot waive those exact bindings. Such outputs need a
+      // separate source-grounded witness review, not this generic comparator.
+      if (proseEquivalentStructure && judge) {
+        const verdict = await judge({ actual, expected: { answer: expected, context: spec.context },
+          rubric: [comparison.witness_policy, comparison.prose_policy].filter(Boolean).join(' ') });
+        return { accepted: verdict.accepted === true && !verdict.needs_review, level,
+          verdict: verdict.verdict, ...(verdict.needs_review ? { needs_review: true } : {}),
+          comparison_version: 'declared-semantic-structure/1' };
+      }
+      return { accepted: false, level, needs_review: true,
+        verdict: 'structural alternative or prose equivalence needs independent source-grounded review',
+        comparison_version: 'declared-semantic-structure/1' };
+    }
+    return { accepted: false, level, comparison_version: 'declared-semantic-structure/1' };
   }
   const registered = level === 'normalized' ? recordComparator(spec.normalization) : undefined;
   if (registered) return { accepted: candidates.some(candidate => registered.equal(actual, candidate)), level };
