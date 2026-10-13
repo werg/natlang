@@ -22,11 +22,17 @@ HELD = ROOT / 'runs/natlang-held-task-packet-v3-20261012/cases.jsonl'
 RUNTIME = Path('/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/runtime-held-task-empty-eos-v1')
 FAMILIES = ('contract_diagnosis', 'workbench_tickets', 'logic_proof_verifier',
             'actor_route_replan', 'folder_criteria_reducer',
-            'iterate_schedule_repair', 'relational_late_argmax')
+            'iterate_schedule_repair', 'relational_late_argmax',
+            'actor_greenhouse', 'edit_stream', 'claims_desk',
+            'dataset_workbench', 'inline_review_each',
+            'counterexample_revision', 'policy_after_measure',
+            'recurrence_inline_graphs', 'composed_process')
 START_SEED = 52007
 WORKERS = 6
-PER_FAMILY = {family: (32 if family == 'folder_criteria_reducer' else 16)
-              for family in FAMILIES}
+PER_FAMILY = {family: 8 for family in FAMILIES}
+# inline_review_each also emits its paired no-crisp family. Preserve both
+# behaviours without letting this one builder take two full family slots.
+PER_FAMILY.update(inline_review_each=4, inline_avoid_crisp=4)
 BACKFILL = BASE / 'provider-luna-folder-backfill-s52007-s52010-v1'
 BACKFILL_UNIT_SEED = 52070
 
