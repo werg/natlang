@@ -96,14 +96,33 @@ improved by the same amount: that is the backbone learning, not the writer. Mell
 - Arm D tests the owner's exact-token hypothesis now (consumers read convex blends of embeddings poorly): value =
   E[chosen] + correction, correction zero at start, so V = T wherever the chosen token is the gold one.
 
-### Resume bug in the e2e trainer (found 2026-10-13, fixed in the e2e lead's worktree)
+### Resume bug in the e2e trainer (found 2026-10-13, fixed on main c2e88dcb)
 
 A direct-artifact e2e run could not resume its own checkpoint: `resumed backbone parameter mismatch:
 model.layers.0.conv.in_proj.weight`. Checkpoint names and shapes equal the base model's (146 trainables, 0
 mismatches), but with the quantisation component installed the live weight is
 `...in_proj.parametrizations.weight.original`, and `trajectories.py` looked names up in plain `named_parameters()`.
 Fix: the resume uses the shared `backbone_policy.restore_backbone_trainables` (plain names through
-`plain_named_tensors`), as the other trainers do.
+`plain_named_tensors`), as the other trainers do. Confirmed in a real run: arm B, stopped by a preemption after its 60
+updates, resumed on the new code from its step-60 checkpoint and wrote its final report.
+
+### Arm D, step 0: the exact-token hypothesis does not explain V−T (2026-10-13)
+
+Owner hypothesis: the model reads convex blends of embeddings poorly (the embedding space is not a VAE space), so the
+mixture writer's values cost consumers. Arm D writes value = E[chosen token] + correction, with the correction reset
+to zero and the chosen token the argmax of the TCP readout (the token the writer emits). Step 0, before any update,
+the same 32 paired held readers:
+- chosen = gold at 92.6% of the 1,875 held written positions (96.3% on train readers);
+- held V 0.4675, T 0.3622, V−T 0.105; the mixture writer at step 0: V 0.471, V−T 0.109; train readers V−T 0.023;
+- per reader: 23 of 32 have V ≈ T within ±0.006, which is the identity check where tokens match. The gap sits in 9
+  readers: 4ca467ab decision 0028 +1.45 (alone 0.045 of the 0.105 mean), f365cb4a 0003 +0.54, 1f0d9235 0005 +0.44,
+  1f0d9235 0006 +0.29, 39cdded0 0029 +0.29, 39cdded0 0028 +0.16, 67afce33 0004 / 0005 +0.09, f365cb4a 0005 +0.06.
+
+Reading: at step 0, convex blends cost almost nothing beyond the chosen tokens (0.109 against 0.105). V−T at step 0 is
+the writer's own token errors. T reads the gold text, an oracle; V carries what the writer would emit, and a few
+readers hinge on the tokens it gets wrong. So gold-T is an upper reference that the writer's argmax cannot reach, and
+V ≤ gold-T needs values that carry more than the argmax token, which the consumer gradient in e2e must teach. The
+writer's own greedy text (greedy-T) is the fair runtime comparison, and V(chosen) ≈ greedy-T is expected at step 0.
 
 ### Round 4 (running): instructions as text
 
@@ -114,8 +133,10 @@ same order, seed and held readers as round 2.
 |---|---|---|---|
 | A `r4-text-heads-3e-4` (writer 3e-4) | 0.599 → 0.544 | 0.471 → 0.617 | 0.362 → 0.387 |
 | B `r4-text-heads-3e-6` (writer 3e-6) | 0.599 → 0.565 | 0.471 → 0.529 | 0.362 → 0.422 |
+| D `d-chosen-heads-3e-4` (E[chosen] + correction, writer 3e-4) | running | 0.4675 at 0 | 0.3622 at 0 |
 
-Arm B: with the writer at 3e-6, V−T stays flat (0.109 → 0.107 at step 50; arm A: 0.109 → 0.230). The writer rate
+Arm B: with the writer at 3e-6, V−T stays flat (0.109 → 0.107 at step 50, 0.108 at step 60: V 0.510, T 0.402;
+arm A: 0.109 → 0.230). The writer rate
 is what widened V−T. **Ruled in.** Two things remain:
 - the writer at 3e-6 hardly learns, so V does not improve either;
 - T rises on the paired readers (0.362 → 0.422) while held crisp CE falls (0.599 → 0.565). Per reader, the 18
