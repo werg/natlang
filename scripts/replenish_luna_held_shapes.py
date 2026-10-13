@@ -155,7 +155,7 @@ def launch_worker(campaign, seed, number, *, repair=False):
 
 
 def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, repair=False):
-    """Retry a resultless provider error without reclassifying it as a model rejection."""
+    """Retry a resultless provider error or measured collection budget exhaustion."""
     if result.get('status') != 'incomplete' or result.get('exit_code') != 2:
         return False
     if result.get('output_accounting', {}).get('exact_result_rows') != 0:
@@ -173,11 +173,15 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, 
     if not errors:
         return False
     message = json.loads(errors[-1].read_text()).get('error', '')
-    if not any(phrase in message for phrase in ('Codex error: An error occurred while processing your request',
-                                                'rate limit', '429 Too Many Requests', 'Error: terminated')):
+    resource_budget = (result.get('resource_limit_reason') == 'model_request_budget' and
+                       'NATLANG_MODEL_REQUEST_BUDGET' in errors[-1].read_text())
+    provider_error = any(phrase in message for phrase in
+                         ('Codex error: An error occurred while processing your request',
+                          'rate limit', '429 Too Many Requests', 'Error: terminated'))
+    if not (resource_budget or provider_error):
         return False
     attempt = len(own_retries) + 1
-    if attempt > 3:
+    if attempt > (1 if resource_budget else 3):
         print(json.dumps({'event': 'needs_review', 'key': job['key'],
                           'reason': 'transient_retry_limit'}), flush=True)
         return False
@@ -193,10 +197,15 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, 
     retry.mkdir(exist_ok=False)
     again = dict(job, output=str(retry / 'results.jsonl'), jobs=str(retry / 'jobs'),
                  log=str(retry / 'collector.log'), seed=job['seed'] + attempt * 100000)
+    if resource_budget:
+        again['max_model_requests'] = max(768, job['max_model_requests'] * 2)
+        again['case_seconds'] = max(3600, job['case_seconds'] * 2)
     (retry / 'queue.jsonl').write_text(json.dumps(again, sort_keys=True) + '\n')
     (retry / 'review.json').write_text(json.dumps({
         'schema': 'natlang.teacher-transient-retry/1', 'original_key': job['key'],
-        'attempt': attempt, 'error': message, 'training_admission': False}, indent=2) + '\n')
+        'attempt': attempt, 'error': message,
+        'reason': 'observed_model_request_budget' if resource_budget else 'provider_transport',
+        'training_admission': False}, indent=2) + '\n')
     prefix = f'natlang-pop-luna-repair-s{seed}' if repair else f'natlang-pop-luna-s{seed}'
     launch_queue(retry, f'{prefix}-w{number:02d}-r{ordinal:03d}-{attempt:02d}')
     return True
@@ -317,12 +326,14 @@ def write_queues(campaign, seed, selected):
         with (worker / 'queue.jsonl').open('w') as stream:
             for ordinal, (source, index, row) in enumerate(selected[number - 1::WORKERS]):
                 case = worker / f'case-{ordinal:03d}'
+                expensive = row['family'] == 'curriculum_counterexample_revision'
                 job = dict(key=f'luna-held-shape-s{seed}-w{number:02d}-{ordinal:03d}',
                            source=str(source), index=index, count=1,
                            output=str(case / 'results.jsonl'), jobs=str(case / 'jobs'),
                            log=str(case / 'collector.log'), seed=seed * 1000 + (number - 1) * 100 + ordinal,
                            context_tokens=32768, action_max_tokens=4096,
-                           max_turns=60, max_model_requests=384, case_seconds=1800,
+                           max_turns=60, max_model_requests=768 if expensive else 384,
+                           case_seconds=3600 if expensive else 1800,
                            request_retries=3, transport_retries=0,
                            text_neuralese_emulation=True)
                 stream.write(json.dumps(job, sort_keys=True) + '\n')

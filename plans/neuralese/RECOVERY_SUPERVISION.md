@@ -31,6 +31,14 @@ Next, collect student-checkpoint train rollouts and widen task families before
 increasing the repair sampling share. Track recovery success by failure
 mechanism and family as well as total accepted count.
 
+Collection budget finding: s52026's customer shared-inbox deduplication case
+used 192 saved turns and reached 384 nested model requests without a result.
+Five sibling cases already yielded accepted exact results, so this was not a
+reason to discard the family. Pop raised its future per-case request/collection
+budgets to 768/3600 seconds and added one measured, resultless resource-budget
+retry to the replenisher. The source failure remains a resource-limited
+collection event, never a model-negative or repair preference label.
+
 Source: plans/neuralese/REPETITION_DRAGNET_20261013.md, recommendation 4. Both students loop: the same action and the
 same observation for 8 to 127 turns. The training targets almost never contain a repeated action (0.08–0.10% of
 supervised turns repeat a call on an identical observation), so the model never sees "this did not move, so do
