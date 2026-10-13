@@ -1,6 +1,6 @@
 {
   "schema": "semantic-stage-variant/1",
-  "id": "astra-ecology01-scope-literal-v8-proposal",
+  "id": "astra-ecology01-scope-literal-v8c-proposal",
   "program_id": "astra-ecology-01",
   "base_catalog_sha256": "d7619eadfd306223762b10d0866e9e121986389543b5ea230af6903046254907",
   "base_stage": "interpretObservationScope",
@@ -10,17 +10,17 @@
     "ScopeInput": "{relation:{cause:string;effect:string;sign:number}; scopeClause:string; premises:EvidenceRecord[]}",
     "ScopeDecision": "{cause:string;effect:string;usable:boolean;sign:number|null;reason:string;witnesses:Witness[]}"
   },
-  "literal_unit": "One directed candidate causal relation, with the exact source premises and applicability clause needed to judge it.",
-  "capture_policy": "Capture only the perturbation description and applicable scope rule. Pass one ScopeInput per invocation. Do not capture the full batch, prior or relatedRecords.",
+  "literal_unit": "One directed candidate causal edge: judge source establishment and edge-specific conditions only. Downstream edges are eligible even when their cause is not the perturbed organism.",
+  "capture_policy": "Capture only the source edge-validity rule. Pass one relation plus its exact premises and edge-specific condition. Perturbation reachability and sign multiplication belong to verifyResult/root graph propagation, not this literal.",
   "numbered_plan": [
     "1. Select current-batch causalAssessments and their source-linked interactionEdges. Preserve the inherited earlier-stage contributions; create a new scopeDecisions list for this batch. Cross-batch final aggregation belongs to root.",
     "2. For each candidate relation, select its quoted source records and any explicit condition needed to determine applicability. Bind one ScopeInput containing that relation and those premises.",
-    "3. In eval, declare local ScopeInput and ScopeDecision aliases with these exact shapes. Create a typed literal with nl.with<ScopeDecision>({perturbation, applicabilityRule}) and instructions to return whether the supplied relation applies under those captured conditions, preserving direction/sign and citing its exact premises.",
-    "4. Directly await the literal on one ScopeInput. Append the returned ScopeDecision itself to the owned contribution. Its usable/sign fields determine which relation can propagate; its reason and witnesses retain the semantic decision.",
+    "3. In eval, declare local ScopeInput and ScopeDecision aliases with these exact shapes. Bind edgeValidityRule from input.context.rule and create nl.with<ScopeDecision>({edgeValidityRule}). Ask whether this directed edge is established by its premises and its own stated conditions hold; preserve its source sign and exact witnesses. A supported downstream edge is usable even if its cause is not the initially perturbed organism.",
+    "4. Directly await the literal on one ScopeInput and append its actual ScopeDecision. usable means this edge may participate in the causal graph. This stage does not decide whether the perturbation reaches it or the eventual net sign at its target.",
     "5. Continue over the finite candidate list. A relation with insufficient or inapplicable premises still produces a decision (usable=false, sign=null when unresolved); it is not silently omitted.",
     "6. Pass all inherited contributions and these actual decisions to verifyResult. If a literal fails to return, propagate a failed/unresolved stage result with the affected source paths; do not replace its unmade decision with an empty successful contribution."
   ],
-  "direct_await_idiom": "const perturbation = input.context.objective; const applicabilityRule = input.context.rule; const judgeScope = nl.with<ScopeDecision>({perturbation, applicabilityRule})`Judge whether the supplied directed relation applies to perturbation under applicabilityRule. Return its cause, effect, usable, sign, reason and exact source witnesses.`; const scopeDecision = await judgeScope(scopeInput); scopeDecisions.push(scopeDecision);",
+  "direct_await_idiom": "const edgeValidityRule = input.context.rule; const judgeScope = nl.with<ScopeDecision>({edgeValidityRule})`Judge whether the supplied directed edge is source-established and its edge-specific conditions hold. Preserve cause, effect, source sign and exact witnesses. Supported downstream edges are usable even when their cause differs from the initially perturbed organism. Return cause, effect, usable, sign, reason and witnesses.`; const scopeDecision = await judgeScope(scopeInput); scopeDecisions.push(scopeDecision);",
   "applicability": "Run once per candidate causal relation whose premises intersect this batch or whose explicit scope condition is introduced by this batch. Deduplicate only the same directed relation under the same scope premises.",
   "no_op_criterion": "No candidate relation is introduced or modified by this batch. Then append StageAbsence with these source paths and the reason; no literal is required and no semantic-stage contribution is credited.",
   "owned_contribution": "scopeDecisions: ScopeDecision[]",
@@ -28,7 +28,8 @@
     "Return cause/effect exactly from the input relation; do not reverse direction.",
     "Every witness is an exact quote from a supplied premise.",
     "A condition not established by the snapshot cannot become universal applicability.",
-    "Only actual returned decisions are consumed downstream; empty does not stand for failed judgment."
+    "Only actual returned decisions are consumed downstream; empty does not stand for failed judgment.",
+    "Eligibility is local to edge evidence/conditions; downstream reachability and sign multiplication are graph-stage work. A cause unequal to the initial perturbation is not an exclusion rule."
   ],
   "qualification_required": [
     "Rendered type/scope fidelity",
@@ -38,5 +39,6 @@
     "Matched v7/v8 live diagnostic, then approximately48samples per adopted variant"
   ],
   "training_admitted": false,
-  "idiom_preconditions": "Before executing this idiom, declare the local ScopeInput and ScopeDecision aliases; initialize scopeDecisions: ScopeDecision[]; and bind one scopeInput from the selected relation and exact premises as specified in numbered step2. Use the authored StageInput4 parameter input. The idiom explicitly binds both captured strings from its declared context fields."
+  "idiom_preconditions": "Before executing this idiom, declare the local ScopeInput and ScopeDecision aliases; initialize scopeDecisions: ScopeDecision[]; bind one scopeInput from the selected edge and exact premises. Use the authored StageInput4 parameter input. The idiom explicitly binds its one captured rule from the declared context field.",
+  "diagnostic_revision_reason": "v8b consumed actual child decisions but wrongly excluded downstream edges by treating scope as direct applicability to the fox perturbation. v8c restricts the child to edge validity and keeps graph propagation downstream."
 }

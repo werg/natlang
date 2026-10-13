@@ -455,7 +455,7 @@
     ],
     "exact_fields": "Source IDs, quantity/unit, normalized numbers, namespace bindings, effect/cause references and branch status are exact.",
     "semantic_fields": "Explanations and alternative valid action placement receive independent source-grounded review. Branch-independent actions may be copied into all mutually exclusive branches.",
-    "verifier_status": "External exact checker passed 18 controls: 4 equivalent positive projections and 14 negative mutations. These are checker controls, not application execution, complete typed report validation or independent semantic certification."
+    "verifier_status": "External exact checker passed 20 controls: four equivalent positive projections, fourteen negative mutations, canonical full typed reference through trusted adapter, and adapter request/fixture mismatch. No application execution or semantic entailment credit."
   },
   "services": [],
   "provenance": {
@@ -470,7 +470,7 @@
     "exact_result_replay": false,
     "live_qualified": false,
     "training_admitted": false,
-    "exact_checker_controls_passed": 18
+    "exact_checker_controls_passed": 20
   },
   "model_facing_debt": "All 23 authored NL files and typed interfaces are unmeasured; collect live diagnostic and approximately 48 samples per adopted presentation before adoption.",
   "fixture_document_count": 16,
@@ -486,5 +486,6 @@
     "path": "training/semantic_applications/reviews/ASTRA_SAGA_REVIEW_SOL.json",
     "sha256": "7f6046c955ddd44210e60f3247fdc8c54eecf75576c765fe72b65d6ba8355b91",
     "scope": "Source/oracle/full canonical report and finite policy-minimum enumeration only; no live/admission credit."
-  }
+  },
+  "external_verifier_export": "verifyCandidate"
 }

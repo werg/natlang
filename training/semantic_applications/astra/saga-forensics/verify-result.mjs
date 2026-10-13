@@ -136,6 +136,16 @@ export function verifySagaResult(report, oracle, documents) {
   return { ok: issues.length === 0, issues, semantic_review_required: true };
 }
 
+
+/** Trusted host adapter; fixture is the exact model-visible path-to-text map, not an oracle directory. */
+export function verifyCandidate({ value, oracle, inputs, fixture }) {
+  const manifest = JSON.parse(fixture['manifest.json']);
+  const documents = manifest.documents.map(d => ({ ...d, text: fixture[d.path] }));
+  if (inputs?.request?.caseId !== manifest.caseId)
+    return { ok: false, issues: ['Request/fixture identity mismatch'], semantic_review_required: true };
+  return verifySagaResult(value, oracle, documents);
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (!process.argv[2]) throw new Error('Usage: node verify-result.mjs REPORT.json');
   const world = resolve(here, 'pooled-rental');

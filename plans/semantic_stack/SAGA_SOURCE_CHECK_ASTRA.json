@@ -67,7 +67,7 @@
     "structural_iterateOn_sites_authored": 2,
     "checker_controls": {
       "scope": "exact checker controls only; no application execution or independent source certification",
-      "passed": 18,
+      "passed": 20,
       "results": [
         {
           "name": "canonical projection",
@@ -176,6 +176,18 @@
           "expected": false,
           "actual": false,
           "issueCount": 1
+        },
+        {
+          "name": "trusted adapter canonical full typed reference",
+          "expected": true,
+          "actual": true,
+          "issueCount": 0
+        },
+        {
+          "name": "trusted adapter request/fixture mismatch",
+          "expected": false,
+          "actual": false,
+          "issueCount": 1
         }
       ]
     },
@@ -185,7 +197,8 @@
       "typescript": "passed"
     },
     "full_reference_runtime_coerce": "ForensicReport accepted",
-    "full_reference_exact_checker": "ok with no issues; semantic_review_required true"
+    "full_reference_exact_checker": "ok with no issues; semantic_review_required true",
+    "trusted_verifier_adapter": "Canonical fully typed reference accepted; wrong request/fixture case rejected; semantic_review_required flag retained."
   },
   "limitations": [
     "No live NL application execution yet.",
