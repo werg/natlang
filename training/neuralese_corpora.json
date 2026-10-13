@@ -63377,6 +63377,200 @@
         }
       },
       "notes": "Direct-SFT rendering of the e2e cohort v2 source static-curriculum-pilot-s41001 (/home/werg/data/e2e-data/pilot/plans/*/native.jsonl, 90 families). Held packet v3 visible-world check: 0 collisions. Registered by dgx-union-r4 for union r4."
+    },
+    {
+      "owner": "dgx",
+      "source_class": "native-e2e-producer-consumer-records",
+      "license": "facts from the source rows (see the source corpora)",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-12 (e2e data: include everything; hold nothing for review, pending status or license): every authenticated producer->consumer edge of every converted native-turn source, for the e2e stage of both lines (tokenizer-agnostic records)",
+      "id": "neuralese-e2e-cohort-20261013-v3",
+      "path": "runs/neuralese-e2e-cohort-20261013-v3",
+      "include": [
+        "records.jsonl",
+        "pieces.jsonl",
+        "edges.jsonl",
+        "chains.jsonl",
+        "omissions.jsonl",
+        "receipt.json"
+      ],
+      "split": "per record, inherited from the source rows; cross-split edges dropped; train edges sharing a source group with any held document of union r3 dropped; MuSiQue dev is the musique_hops held split",
+      "admission": "e2e corpus v3: whole trajectories (chains) of every authenticated gradient edge (train/trajectories.authenticated_recurrence_context_view) over every converted native-turn source (conversion /16 with --admit-host-results, scripts/neuralese_data/e2e_mine.py); omissions.jsonl registers every conversion/authentication/assembly exclusion with its reason. Bound for training through slices (train/trajectories.py loads all records and needs unique writer names). v3 adds per-trajectory re-authentication of campaign-uncovered and s72 (authentication exclusions 34,773 -> 2,606), static-curriculum-s7k, seeds s7011-s7014, v13-r2, port-record/view-ask sources mined so far, Luna families.",
+      "derived_from": [
+        "neuralese-e2e-union-cohort-20261012-v1",
+        "natlang-native-turns-s72-render-20261011-v1",
+        "natlang-native-turns-bgkit-knowledge-render-20261011-v2",
+        "natlang-native-turns-static-lambda-v2-render-20261011-v2",
+        "natlang-native-turns-static-lambda-expansion-render-20261011-v2",
+        "natlang-native-turns-clef-new-render-20261011-v2",
+        "natlang-native-turns-clef-pools-20261011-v2-render",
+        "natlang-native-turns-clef-pools-20261012-v1-render",
+        "natlang-native-turns-pop-v43-static-render-20261011-v1",
+        "natlang-native-turns-misc-admitted-render-20261011-v3",
+        "natlang-free-provider-v73-wholetraj-render-20261012-v1",
+        "neuralese-e2e-cohort-20261012-v2"
+      ],
+      "counts": {
+        "totals": {
+          "chains": 26675,
+          "edges": 106380,
+          "edges_dropped_endpoint": 1885,
+          "edges_dropped_train_shares_held_group": 213,
+          "edges_duplicate_reference": 4919,
+          "edges_test": 10058,
+          "edges_train": 96322,
+          "omitted_assemble_duplicate_id": 3297,
+          "omitted_assemble_piece_version_conflict": 243,
+          "omitted_authenticate": 2606,
+          "records": 207698
+        },
+        "by_source": {
+          "assembly-v3": {
+            "chains": 184,
+            "edges": 977,
+            "records": 2864
+          },
+          "bgkit-knowledge": {
+            "chains": 3337,
+            "edges": 6871,
+            "records": 34800
+          },
+          "campaign-uncovered": {
+            "chains": 240,
+            "edges": 2920,
+            "records": 5715
+          },
+          "clef-new": {
+            "chains": 17,
+            "edges": 17,
+            "records": 111
+          },
+          "clef-pools-20261011-v2": {
+            "chains": 68,
+            "edges": 79,
+            "records": 502
+          },
+          "clef-pools-20261012-v1": {
+            "chains": 59,
+            "edges": 67,
+            "records": 440
+          },
+          "e2e-union-v1": {
+            "chains": 23,
+            "edges": 119,
+            "records": 146
+          },
+          "free-provider-v73": {
+            "chains": 19,
+            "edges": 98,
+            "records": 444
+          },
+          "luna-clinc-v5": {
+            "chains": 6,
+            "edges": 12,
+            "records": 23
+          },
+          "luna-clinc-v6": {
+            "chains": 6,
+            "edges": 12,
+            "records": 21
+          },
+          "luna-v17-v9": {
+            "chains": 6,
+            "edges": 10,
+            "records": 40
+          },
+          "luna-v21-clinc": {
+            "chains": 2,
+            "edges": 2,
+            "records": 6
+          },
+          "luna-v24-clinc": {
+            "chains": 11,
+            "edges": 16,
+            "records": 42
+          },
+          "misc-admitted": {
+            "chains": 32,
+            "edges": 287,
+            "records": 781
+          },
+          "musique-hops": {
+            "chains": 17424,
+            "edges": 71103,
+            "records": 75602
+          },
+          "pop-v43-static": {
+            "chains": 89,
+            "edges": 1457,
+            "records": 1277
+          },
+          "s72": {
+            "chains": 459,
+            "edges": 2001,
+            "records": 41055
+          },
+          "static-curriculum-pilot-s41001": {
+            "chains": 325,
+            "edges": 4255,
+            "records": 5346
+          },
+          "static-curriculum-s7011-s7014": {
+            "chains": 346,
+            "edges": 892,
+            "records": 2785
+          },
+          "static-curriculum-s7k": {
+            "chains": 1252,
+            "edges": 2914,
+            "records": 9957
+          },
+          "static-lambda-expansion": {
+            "chains": 169,
+            "edges": 391,
+            "records": 858
+          },
+          "static-lambda-v2": {
+            "chains": 1946,
+            "edges": 7539,
+            "records": 12333
+          },
+          "v13-r2": {
+            "chains": 655,
+            "edges": 4341,
+            "records": 12550
+          }
+        },
+        "families": 103
+      },
+      "build": {
+        "script": "scripts/neuralese_data/e2e_mine.py",
+        "receipt": "runs/neuralese-e2e-cohort-20261013-v3/receipt.json",
+        "files": {
+          "chains.jsonl": {
+            "bytes": 15589587,
+            "sha256": "baafaeb6d11f8e1c7324a937ef05501e0f644c35910b12f800d93c64712daf81"
+          },
+          "edges.jsonl": {
+            "bytes": 48054128,
+            "sha256": "ac47483c526995c72ca81a6254919859b164ff932ac74c79084b137c5c014d3e"
+          },
+          "omissions.jsonl": {
+            "bytes": 1042991,
+            "sha256": "9d709ffc0e1f075709112b9e84e3f39e0af59d67ddabfe69aac6e56afdd6ab64"
+          },
+          "pieces.jsonl": {
+            "bytes": 2384044,
+            "sha256": "b7157f97012b669548ea35a42304bb09be572cd8b36ab207249b17912e9c7431"
+          },
+          "records.jsonl": {
+            "bytes": 13657545644,
+            "sha256": "0f197b3aa5973dd87239de53630024ffa8ab2d816a44ff9d23a671d21ef8db2f"
+          }
+        }
+      },
+      "notes": "Partial snapshot of the mining run at 2026-10-13 (e2edata-mine-v3 still running); supersedes v2 for the full bulk corpus (a superset by source, 106,380 edges: 96,322 train / 10,058 held, 26,675 chains, 207,698 records, 103 families). v4 follows when mining and the miner fixes land.",
+      "storage": "HDD (/mnt/external/natlang-development-data/e2e-data/corpora), bulk corpus; training reads slices on NVMe"
     }
   ],
   "coverage_backlog": [
