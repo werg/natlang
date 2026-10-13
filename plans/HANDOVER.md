@@ -24,10 +24,21 @@ worker queues. Its first replenisher pass failed because Python
 the source has 870 LF records but 998 `splitlines()` segments. LF-stream
 readers now fix the replenisher, teacher queue, accepted-parent collector and
 native-turn renderer. The resumed replenisher launched workers 01-04;
-workers 05-06 await RAM admission behind high-priority training and retry via
-the ten-minute timer. The first worker result completed; review new
-`folder_extract` outputs before training admission. Full shared check remains
-pending on DGX; Pop quick check passed.
+workers 05-06 initially awaited RAM admission; all six then launched. The
+first 100 result rows contained 87 exact accepts and 13 answer/status
+rejections. Six final CUAD `folder_extract` cases each contain 20–35 contracts
+and roughly 0.9–1.8 MB of text. Two exhausted the initial 384-request
+collection ceiling after about 190 fresh replies; durable 768-request retries
+started, with other retries queued by RAM admission. These are active model
+decisions, not stuck requests. Future Luna source selection temporarily omits
+this expensive shape and raises the successful `folder_criteria_reducer`
+target from six to eight per seed; make a smaller CUAD variant and measure it
+before bringing extraction back. Existing s52029 source and trial queue stay
+pinned. Review final `folder_extract` outcomes before training admission.
+DGX's full check of commit f3a2637e passed the JSONL-relevant paths and all
+other suites except one obsolete E2E-readiness test. That test was removed on
+current main 06a88849; current-main full check remains pending. Pop quick
+check passed.
 
 ## 19:25 CEST: QAD continuation and reasoning/template dragnet
 
