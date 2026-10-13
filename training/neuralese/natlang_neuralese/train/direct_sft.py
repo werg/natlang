@@ -2166,9 +2166,7 @@ def main(argv=None):
                 # A failed evaluation is recorded and evaluated again at the next cadence; the final one is retried
                 # at once (it gates qualification). Repeated failures raise (task_eval.max_consecutive_failures).
                 with profile_region('update/task_eval'):
-                    task_summary = task_eval.cadence(step)
-                    while step == end and not task_summary['eligible']:
-                        task_summary = task_eval.cadence(step)
+                    task_summary = task_eval.final_at(step) if step == end else task_eval.cadence(step)
                 report['task_eval'] = {k: task_summary.get(k) for k in
                                        ('task_successes', 'cases', 'outcome_counts', 'eligible', 'seconds', 'error')}
                 if step == end:
@@ -2193,6 +2191,11 @@ def main(argv=None):
     if archive is not None:
         archive.wait()
     finished = step >= end
+    if finished and task_eval is not None and final_task_summary is None:
+        # An exact resume at the final optimizer step has no train-loop body.
+        # The checkpoint is sound even if the collector failed afterwards;
+        # recover its task gate without repeating the 414 optimizer updates.
+        final_task_summary = task_eval.final_at(step)
     gate = monitor.final_gate(step) if finished else None
     final = json.loads((a.out / 'report.json').read_text()) if (a.out / 'report.json').exists() else {}
     drift_stopped = any((json.loads(line).get('behaviour_drift') or {}).get('guard') == 'stop'

@@ -280,7 +280,7 @@ def container_cgroups(names):
     return [f'/sys/fs/cgroup/system.slice/docker-{i}.scope' for i in dict.fromkeys(ids)]
 
 
-def unit_usage(unit, gpu, command=None, containers=()):
+def unit_usage(unit, gpu, command=None, containers=(), cuda_separate=False):
     """Host memory charged to the unit's cgroup plus CUDA memory of its processes, and the same for every container it
     runs (unit_containers: named by its command, declared with ``run --container``, named by a docker client in its
     cgroup, or named like the unit). 2026-10-12: a wrapper's view-ask container used 12.9 GiB while its claim read 0, so
@@ -288,11 +288,15 @@ def unit_usage(unit, gpu, command=None, containers=()):
     active, cgroup = unit_state(unit)
     if active not in ('active', 'activating', 'reloading') or not cgroup:
         return None
-    used = cgroup_usage('/sys/fs/cgroup' + cgroup, gpu)
+    # A discrete GPU's VRAM is outside MemAvailable. Counting it as host use
+    # starves unrelated CPU collectors; unified-memory machines keep the
+    # original combined accounting.
+    charged_gpu = {} if cuda_separate else gpu
+    used = cgroup_usage('/sys/fs/cgroup' + cgroup, charged_gpu)
     if used is None:
         return None
     roots = container_cgroups(unit_containers(unit, command, containers, cgroup=cgroup))
-    return used + sum(cgroup_usage(root, gpu) or 0 for root in roots)
+    return used + sum(cgroup_usage(root, charged_gpu) or 0 for root in roots)
 
 
 @contextlib.contextmanager
@@ -320,7 +324,9 @@ def claimed_budget(unit, state_path=None):
     except (OSError, ValueError):
         return None
     claim = state.get('claims', {}).get(unit)
-    return int(claim['budget']) if claim and claim.get('budget') is not None else None
+    if not claim:
+        return None
+    return int(claim.get('cuda_budget') or claim['budget'])
 
 
 def own_host_usage(pid='self'):
@@ -372,7 +378,8 @@ def live_claims(state, gpu):
     live = {}
     for unit, claim in list(state['claims'].items()):
         declared = claim.get('spec', {}).get('containers') or ()
-        used = unit_usage(unit, gpu, claim.get('command'), declared)
+        used = unit_usage(unit, gpu, claim.get('command'), declared,
+                          cuda_separate=bool(claim.get('cuda_budget')))
         if used is None and time.time() - claim['admitted'] > 30:  # give systemd a moment to start the unit
             if claim.get('peak'):  # the family's measured peak sizes its next admission
                 peaks = state.setdefault('family_peaks', {})
@@ -414,7 +421,7 @@ def outstanding(claim, now=None):
     unspent = max(0, claim['budget'] - claim['used'])
     if fixed_claim(claim) or now - claim['admitted'] < RAMP_SECONDS:
         return unspent
-    return int(unspent * RESERVE_FRACTION['gpu' if claim.get('gpu') else 'cpu'])
+    return int(unspent * RESERVE_FRACTION['gpu' if claim.get('gpu') and not claim.get('cuda_budget') else 'cpu'])
 
 
 def headroom(state, gpu):
@@ -580,6 +587,7 @@ def requeue_spec(state, unit, now=None, containers=()):
 def claim_for(spec, now=None):
     return {'budget': spec['budget'], 'class': spec['cls'], 'admitted': now or time.time(),
             'command': spec['command'], 'host_max': spec.get('host_max_gb'), 'priority': spec['priority'],
+            'cuda_budget': spec.get('cuda_budget'),
             'resumable': spec['resumable'], 'spec': spec,
             **({'stop_seconds': spec['stop_seconds'], 'stop_seconds_explicit': True}
                if spec.get('stop_seconds') is not None else {}),
@@ -596,7 +604,8 @@ def launch(spec):
                '-p', 'MemorySwapMax=0', '-p', f'OOMScoreAdjust={PRIORITY_OOM[spec["priority"]]}',
                '-p', f'OOMPolicy={spec["oom_policy"]}',
                '--working-directory', os.path.abspath(spec['workdir']),
-               '-E', f'NATLANG_CUDA_MEMORY_GB={round(budget / GIB, 1)}', '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
+               '-E', f'NATLANG_CUDA_MEMORY_GB={round((spec.get("cuda_budget") or budget) / GIB, 1)}',
+               '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
     # The user manager's PATH lacks ~/.local/bin, so units got /usr/bin/node v18 (no crypto.randomUUID; ts-host scripts
     # need Node >= 22) while shells get v24 (2026-10-11). Units see the shell's toolchain (scripts/natlang_env.sh).
     if not any(env.startswith('PATH=') for env in spec['env']):
@@ -621,6 +630,9 @@ def launch(spec):
 
 def run(args):
     budget = int(args.budget_gb * GIB)
+    cuda_budget = int(args.cuda_budget_gb * GIB) if args.cuda_budget_gb is not None else None
+    if cuda_budget is not None and cuda_budget <= 0:
+        raise SystemExit('--cuda-budget-gb must be positive')
     explicit_reserve = getattr(args, 'reserve_gb', None) is not None
     reserve = int(args.reserve_gb * GIB) if explicit_reserve else default_reserve(budget)
     unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
@@ -657,6 +669,7 @@ def run(args):
                 and head != unit and head_blocked(live, free, order[0][1], head)
             if may_start(order, unit, backfill, fits(free, budget, reserve)):
                 spec = {'unit': unit, 'budget': budget, 'host_max_gb': args.host_max_gb, 'cls': args.cls,
+                        'cuda_budget': cuda_budget,
                         'oom_policy': args.oom_policy, 'workdir': os.path.abspath(args.workdir), 'env': args.env,
                         'stop_seconds': args.stop_seconds, 'command': args.command, 'priority': priority,
                         'resumable': args.resumable if args.resumable is not None else args.cls != 'service',
@@ -732,6 +745,7 @@ def status(args):
                       'budget_gb': round(c['budget'] / GIB, 1), 'used_gb': round(c['used'] / GIB, 1),
                       'peak_gb': round(c.get('peak', 0) / GIB, 1), 'reserved_gb': round(outstanding(c) / GIB, 1),
                       'resumable': resumable(c), 'gpu': bool(c.get('gpu')),
+                      **({'cuda_budget_gb': round(c['cuda_budget'] / GIB, 1)} if c.get('cuda_budget') else {}),
                       **({'fixed_claim': True} if fixed_claim(c) else {}),
                       'command': shlex.join(c['command'])[:160]} for u, c in live.items()}
     print(json.dumps({'available_gb': round(mem_available() / GIB, 1), 'headroom_gb': round(free / GIB, 1),
@@ -1049,6 +1063,8 @@ def main():
     r.add_argument('--unit', required=True)
     r.add_argument('--budget-gb', type=float, required=True, help='host plus CUDA memory the job may use')
     r.add_argument('--host-max-gb', type=float, default=None, help='MemoryMax for host memory (default: the budget)')
+    r.add_argument('--cuda-budget-gb', type=float, default=None,
+                   help='discrete GPU VRAM envelope, separate from the host --budget-gb claim; omit on unified memory')
     r.add_argument('--oom-policy', choices=['stop', 'continue', 'kill'], default='stop',
                    help='when the kernel kills a process of the unit for memory: stop the unit (default), or continue '
                         '(a runner of many child processes, such as a test runner, records the kill and goes on)')

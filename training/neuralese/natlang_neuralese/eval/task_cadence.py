@@ -322,6 +322,29 @@ class TaskEval:
                     count = 0 if row.get('eligible') else count + 1
         return count
 
+    def final_at(self, step: int) -> dict:
+        """Recover a final evaluation after an exact-step resume without new updates.
+
+        A completed optimizer checkpoint can precede a failed collector. Reuse
+        an eligible result for the same packet and step, or rerun the collector
+        until it yields an eligible final result (subject to its failure cap).
+        """
+        log = self.out / 'task-eval.jsonl'
+        if log.is_file():
+            for line in reversed(log.read_text().splitlines()):
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (row.get('step') == step and row.get('eligible') is True and
+                        row.get('packet_sha256') == self.spec['packet']['sha256'] and
+                        row.get('case_indices') == self.spec['cases']):
+                    return row
+        summary = self.cadence(step)
+        while not summary['eligible']:
+            summary = self.cadence(step)
+        return summary
+
     def cadence(self, step: int) -> dict:
         """One in-run evaluation for the training loop: the summary of ``run``. An ineligible evaluation or an
         exception from the collector or serving stack is recorded and returned as an ineligible summary, so the next
