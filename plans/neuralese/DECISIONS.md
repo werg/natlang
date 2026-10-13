@@ -1670,8 +1670,20 @@ fixtures, with a pass bar of one success. It is replaced, for qualification and 
   `max_consecutive_failures` counts landed rows. The final evaluation stays synchronous (qualification). E2E handoff
   readiness (`e2e_acceptance.readiness`) takes task success from the candidate checkpoint's task evaluation (the
   latest step evaluated or requested) and stays pending until it lands. Difference from the synchronous eval:
-  the job serves the BF16 latent weights without the trainer's FP8 expert backend. Until v4 runs this code (next
-  handoff), its interim `task_eval_every` is 1600 (`neuralese-direct-mellum-v4-from-v3-warmup`).
+  the job serves the BF16 latent weights without the trainer's FP8 expert backend.
+  **Disk safety (2026-10-13, after the ENOSPC crash):** snapshots are written to the external checkpoint mirror
+  (`checkpoint_offload.mirror_path`, `/mnt/external/natlang-active-lineage/...`), never to the NVMe; the trainer's
+  full-state link exists only while the idle-priority child prunes it and is dropped whatever happens; no snapshot
+  is written when the mirror would fall below the offload's HDD floor (50 GB; recorded `skipped`); a stage keeps at
+  most `max_pending` (2) unlanded requests, older ones are dropped and recorded `superseded`. Skipped and superseded
+  rows are no evaluation: `max_consecutive_failures` ignores them.
+  **Where it is used:** on the DGX a Mellum eval job (~38 GB) cannot be admitted beside a running Mellum lineage
+  (~96 GB of 121 GB), so async Mellum evaluations would run only in pause windows and handoff gaps (at best one or
+  two a day, none when a window is short or the teacher holds the memory). The synchronous cadence every 1600 updates
+  gives ~1.35 a day at under 8% overhead, so Mellum v4 keeps it (`neuralese-direct-mellum-v4-from-v3-warmup`:
+  `task_eval.async` false, `task_eval_every` 1600). Async stays the shared default for the LFM line (its eval fits
+  beside its training) and returns for Mellum once CoreWeave sandboxes take eval snapshots (transfer through the
+  bucketless data path: not built).
 - **Applications:** nldb, pi and the harness bench are not yet in `natlang.program` form with exact scorers. They join
   as further shapes once adapted (v3), not as separate packets.
 

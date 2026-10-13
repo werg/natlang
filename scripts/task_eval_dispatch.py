@@ -12,8 +12,10 @@ Requests are found through the pointers the trainer writes to ``<data_nvme>/task
 ``request_queue``), never by walking runs/ (minutes on the DGX).
 
 Crisp plumbing (process launch, retry count); where a job runs is the placement policy's decision. CoreWeave sandboxes
-do not yet take eval snapshots (a 24 GB snapshot transfer per evaluation is not built), so every job is placed on
-this machine's ledger, which admits it when memory allows. A request whose job ended without a row (a hard crash) is
+do not yet take eval snapshots (the snapshot transfer through the bucketless data path is not built), so every job
+is placed on this machine's ledger, which admits it when memory allows: beside a running Mellum lineage (~96 GB of
+121) a Mellum eval (~38 GB) is admitted only in pause windows and handoff gaps, which is why the Mellum recipe keeps
+its synchronous evaluation (plans/neuralese/DECISIONS.md "Asynchronous in-run task evaluation"). A request whose job ended without a row (a hard crash) is
 relaunched up to --max-attempts times, then recorded as an ineligible evaluation (the trainer counts it) and its
 snapshot deleted.
 """
@@ -79,7 +81,8 @@ def alive(pid) -> bool:
 def budget_gb(request_dir: Path) -> float | None:
     """Host + CUDA memory of a job: the BF16 weights, the collector's KV cache and node workers. None while the
     snapshot is still being pruned by the trainer (its size is not known yet)."""
-    weights = request_dir / 'weights.pt'
+    from natlang_neuralese.eval.task_cadence import request_weights
+    weights = request_weights(request_dir)
     if not weights.exists():
         full = request_dir / 'full.pt'
         if full.exists() and time.time() - full.stat().st_mtime < 1800:
@@ -109,7 +112,7 @@ def launch(request_dir: Path, request: dict, unit: str, budget: float, dry_run: 
 
 
 def dispatch(queue: Path, *, max_attempts: int = 3, dry_run: bool = False) -> list[dict]:
-    from natlang_neuralese.eval.task_cadence import TaskEval
+    from natlang_neuralese.eval.task_cadence import TaskEval, drop_request
     events = []
     for request_dir in requests(queue):
         try:
@@ -125,15 +128,13 @@ def dispatch(queue: Path, *, max_attempts: int = 3, dry_run: bool = False) -> li
         evaluator = TaskEval(request['spec'], Path(request['stage_out']), None,
                              prompt_rendering=request['prompt_rendering'])
         if evaluator.landed(request['step']) is not None:
-            import shutil
-            shutil.rmtree(request_dir, ignore_errors=True)  # the row landed; a leftover snapshot goes
+            drop_request(request_dir)  # the row landed; a leftover snapshot goes
             events.append({'event': 'cleaned', 'dir': str(request_dir)})
             continue
         if record['attempts'] >= max_attempts:
             evaluator.record_failure(request['step'], f'asynchronous evaluation job ended without a result '
                                                       f'{record["attempts"]} times (see {record.get("log")})')
-            import shutil
-            shutil.rmtree(request_dir, ignore_errors=True)
+            drop_request(request_dir)
             events.append({'event': 'failed', 'dir': str(request_dir), 'attempts': record['attempts']})
             continue
         budget = budget_gb(request_dir)

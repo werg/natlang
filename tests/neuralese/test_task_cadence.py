@@ -238,3 +238,31 @@ def test_the_dispatcher_finds_requests_through_the_queue_pointers(tmp_path, monk
     assert sorted(p.name for p in queue.iterdir()) == ['a-step-0000400.json']  # landed requests drop their pointer
     (request_dir / 'weights.pt').write_bytes(b'\0' * 2**20)
     assert dispatch.budget_gb(request_dir) == round(2**20 / 2**30 * 1.3 + 8, 1)
+
+
+def test_pending_requests_are_capped_and_a_full_mirror_skips_without_failing(tmp_path, monkeypatch):
+    """Coordinator 2026-10-13 (ENOSPC lesson): at most max_pending unlanded snapshots per stage, older ones dropped
+    as superseded; no snapshot below the mirror's floor. Neither counts as a failed evaluation."""
+    import json
+    from natlang_neuralese.eval import task_cadence
+    from natlang_neuralese.train import checkpoint_offload
+    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'async': True,
+                            'max_consecutive_failures': 1})
+    evaluator = _light_evaluator(spec, tmp_path)
+    monkeypatch.setattr(task_cadence, 'request_queue', lambda: tmp_path / 'queue')
+    monkeypatch.setattr(task_cadence.threading, 'Thread', lambda **k: type('T', (), {'start': lambda s: None})())
+    slot = tmp_path / 'checkpoint.pt'
+    slot.write_bytes(b'x' * 1000)
+    for step in (100, 200, 300):
+        evaluator.submit(step, slot, heads=None)  # max_consecutive_failures 1: a superseded row must not raise
+    assert [p.name for p in task_cadence.pending_requests(tmp_path)] == ['step-0000200', 'step-0000300']
+    rows = [json.loads(line) for line in (tmp_path / 'task-eval.jsonl').read_text().splitlines()]
+    assert [(r['step'], r['superseded']) for r in rows] == [(100, True)] and evaluator.consecutive_failures() == 0
+    floor = checkpoint_offload.OffloadSettings(hdd_floor_bytes=10**18)
+    monkeypatch.setattr(checkpoint_offload.OffloadSettings, 'from_env', classmethod(lambda cls: floor))
+    request_dir = tmp_path / 'task-eval' / 'async' / 'step-0000300'
+    evaluator._prune_in_background(request_dir)
+    assert not request_dir.exists()
+    last = json.loads((tmp_path / 'task-eval.jsonl').read_text().splitlines()[-1])
+    assert last['step'] == 300 and last['skipped'] is True and 'floor' in last['error']
+    assert evaluator.consecutive_failures() == 0

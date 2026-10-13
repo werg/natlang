@@ -38,7 +38,10 @@ previous eligible evaluation of the stage minus ``noise_successes``. Every evalu
                   separate job (scripts/task_eval_dispatch.py: its own resumable ledger unit) restores the weights into
                   a serving engine, runs the evaluation and appends its row to task-eval.jsonl with its step; the
                   snapshot is deleted when the row lands. The final evaluation stays synchronous (it gates
-                  qualification), and a pending result is no failure until its job reports.
+                  qualification), and a pending result is no failure until its job reports. Snapshots live on the
+                  external checkpoint mirror (the offload's mirror tree), never on the NVMe, and only if the mirror
+                  keeps its HDD floor free after the copy; a stage keeps at most ``max_pending`` (default 2) unlanded
+                  requests: older ones are dropped and recorded ``superseded`` (no failure).
   max_consecutive_failures  ineligible evaluations in a row (infrastructure errors, unresolved tasks, a collector or
                   serving exception) before the training run stops (default 3). A single failed evaluation is recorded
                   in task-eval.jsonl and the next cadence evaluates again: a transient eval failure must not end a
@@ -74,7 +77,7 @@ def parse_task_eval(value):
         raise ValueError('task_eval.cases must be distinct nonnegative row indices')
     for key, default in (('case_seconds', 7200), ('max_model_requests', 128), ('max_turns', 160), ('workers', 8),
                          ('min_successes', 0), ('noise_successes', 0), ('noise_repeats', 2),
-                         ('max_consecutive_failures', 3)):
+                         ('max_consecutive_failures', 3), ('max_pending', 2)):
         spec.setdefault(key, default)
         if isinstance(spec[key], bool) or not isinstance(spec[key], int) or spec[key] < (
                 0 if key in ('min_successes', 'noise_successes') else 1):
@@ -329,6 +332,8 @@ class TaskEval:
                         row.get('case_indices') != self.spec['cases']):
                     count = 0
                 else:
+                    if row.get('superseded') or row.get('skipped'):
+                        continue  # a dropped request is no evaluation: neither a failure nor a success
                     count = 0 if row.get('eligible') else count + 1
         return count
 
@@ -390,7 +395,7 @@ class TaskEval:
         link dropped. Returns at once with a pending summary. Repeated landed failures still stop the run."""
         request_dir = self.root / 'async' / f'step-{step:07d}'
         request_dir.mkdir(parents=True, exist_ok=True)
-        full, weights = request_dir / 'full.pt', request_dir / 'weights.pt'
+        full, weights = request_dir / 'full.pt', snapshot_path(request_dir)
         if not weights.exists():
             pending = full.with_name(full.name + '.pending-link')
             pending.unlink(missing_ok=True)
@@ -399,6 +404,7 @@ class TaskEval:
         request = {'schema': ASYNC_SCHEMA, 'step': step, 'stage_out': str(self.out.resolve()), 'spec': self.spec,
                    'prompt_rendering': self.prompt_rendering, 'heads': heads, 'device': device,
                    'checkpoint': str(Path(checkpoint).resolve()), 'requested_at': time.time(),
+                   'weights': str(weights),
                    'trainer_code_commit': _git_head()}
         _write_json(request_dir / 'request.json', request)
         queue = request_queue()
@@ -407,8 +413,10 @@ class TaskEval:
         stage = hashlib.sha256(str(self.out.resolve()).encode()).hexdigest()[:8]
         _write_json(queue / f'{stage}-step-{step:07d}.json', {'request': str(request_dir.resolve())})
         if not weights.exists():
-            threading.Thread(target=prune_snapshot, args=(request_dir,), name=f'task-eval-prune-{step}',
+            threading.Thread(target=self._prune_in_background, args=(request_dir,), name=f'task-eval-prune-{step}',
                              daemon=True).start()
+        for older in pending_requests(self.out)[:-self.spec.get('max_pending', 2)]:
+            self.supersede(older)
         failures = self.consecutive_failures()
         print(json.dumps({'event': 'task_eval_submitted', 'step': step, 'request': str(request_dir),
                           'consecutive_failures': failures}), flush=True)
@@ -427,6 +435,20 @@ class TaskEval:
             print(json.dumps({'event': 'task_eval_async_unavailable', 'step': step, 'error': repr(error)}), flush=True)
             return self.cadence(step)
 
+    def _prune_in_background(self, request_dir: Path) -> None:
+        """The trainer's pruning thread. The full-state link never outlives it: without room above the mirror's floor
+        the request is skipped (recorded, no failure); any other error drops the link and leaves the request for its
+        job, which records the missing snapshot as a failed evaluation."""
+        try:
+            prune_snapshot(request_dir)
+        except SnapshotSpaceError as error:
+            self.supersede(request_dir, str(error))
+        except Exception as error:  # noqa: BLE001 - never raise in the trainer's thread
+            print(json.dumps({'event': 'task_eval_prune_failed', 'request': str(request_dir), 'error': repr(error)}),
+                  flush=True)
+        finally:
+            (Path(request_dir) / 'full.pt').unlink(missing_ok=True)
+
     def landed(self, step: int) -> dict | None:
         """The row recorded for ``step`` on this packet and subset (eligible or not), or None."""
         log = self.out / 'task-eval.jsonl'
@@ -442,9 +464,20 @@ class TaskEval:
                     found = row
         return found
 
-    def record_failure(self, step: int, error: str) -> dict:
-        """An ineligible row for an evaluation whose job could not produce one (counted by consecutive_failures)."""
-        summary = {'schema': SCHEMA, 'step': step, 'task_successes': 0, 'cases': len(self.rows),
+    def supersede(self, request_dir: Path, reason: str = 'superseded by newer pending requests (max_pending)') -> None:
+        """Drop an unlanded request (its snapshot and dir) and record it as no evaluation, not as a failure."""
+        request_dir = Path(request_dir)
+        step = int(request_dir.name.removeprefix('step-'))
+        if self.landed(step) is None:
+            space = 'floor' in reason
+            self.record_failure(step, reason, superseded=not space, skipped=space)
+        drop_request(request_dir)
+        print(json.dumps({'event': 'task_eval_superseded', 'step': step, 'reason': reason}), flush=True)
+
+    def record_failure(self, step: int, error: str, *, superseded: bool = False, skipped: bool = False) -> dict:
+        """An ineligible row for an evaluation whose job could not produce one (counted by consecutive_failures),
+        or, ``superseded``/``skipped``, a dropped request (not counted)."""
+        summary = {'superseded': superseded, 'skipped': skipped,'schema': SCHEMA, 'step': step, 'task_successes': 0, 'cases': len(self.rows),
                    'outcome_counts': None, 'eligible': False, 'error': error, 'async': True,
                    'packet_sha256': self.spec['packet']['sha256'], 'case_indices': self.spec['cases'],
                    'code_commit': _git_head(), 'seconds': 0.0, 'run': str(self.root / f'step-{step:07d}')}
@@ -465,12 +498,18 @@ def _write_json(path: Path, value) -> None:
 def prune_snapshot(request_dir: Path) -> Path:
     """``full.pt`` (a link to the step's full training state) -> ``weights.pt`` through the checkpoint offload's
     weights-only copy in a child at idle priority; the full link is dropped. Idempotent (trainer thread or job)."""
-    from ..train.checkpoint_offload import child_copy, verified_copy
+    from ..train.checkpoint_offload import OffloadSettings, child_copy, verified_copy
     request_dir = Path(request_dir)
-    full, weights = request_dir / 'full.pt', request_dir / 'weights.pt'
+    full, weights = request_dir / 'full.pt', request_weights(request_dir)
     if not weights.exists():
         if not full.exists():
             raise FileNotFoundError(f'eval snapshot missing: {full}')
+        weights.parent.mkdir(parents=True, exist_ok=True)
+        floor = OffloadSettings.from_env().hdd_floor_bytes
+        free = shutil.disk_usage(weights.parent).free
+        if free - full.stat().st_size < floor:  # the weights-only copy is smaller than the full state
+            raise SnapshotSpaceError(f'{weights.parent}: {free / 2**30:.0f} GiB free, the snapshot would leave less '
+                                     f'than the {floor / 2**30:.0f} GiB floor')
         record = child_copy(full, weights, prune=True)
         if not weights.exists():  # a state without optimizer entries is copied byte for byte
             record = verified_copy(full, weights)
@@ -484,6 +523,45 @@ def request_queue() -> Path:
     dispatcher never walks the runs tree (minutes on the DGX)."""
     from ..common.paths import root as logical_root
     return logical_root('data_nvme') / 'task-eval-queue'
+
+
+class SnapshotSpaceError(OSError):
+    """No room for an eval snapshot above the disk floor: the request is skipped (no evaluation, no failure)."""
+
+
+def snapshot_path(request_dir: Path) -> Path:
+    """Where a request's weights-only snapshot lives: its place in the external checkpoint mirror (the offload's
+    mirror tree, <data_hdd>/natlang-active-lineage), so pending snapshots never fill the NVMe; the
+    request dir itself only when no mirror is configured (e.g. tests, a machine without one)."""
+    from ..train.checkpoint_offload import OffloadSettings, mirror_path, mirror_unavailable
+    target = Path(request_dir) / 'weights.pt'
+    settings = OffloadSettings.from_env()
+    if mirror_unavailable(target, settings) is None:
+        return mirror_path(target, settings)
+    return target
+
+
+def request_weights(request_dir: Path) -> Path:
+    try:
+        recorded = json.loads((Path(request_dir) / 'request.json').read_text()).get('weights')
+    except (OSError, ValueError):
+        recorded = None
+    return Path(recorded) if recorded else Path(request_dir) / 'weights.pt'
+
+
+def drop_request(request_dir: Path) -> None:
+    """Delete a request: its snapshot (wherever it lives) and its dir; the queue pointer goes with the dir."""
+    from ..train.checkpoint_offload import PART_SUFFIX
+    request_dir = Path(request_dir)
+    weights = request_weights(request_dir)
+    if weights.parent != request_dir:
+        weights.unlink(missing_ok=True)
+        weights.with_name(weights.name + PART_SUFFIX).unlink(missing_ok=True)
+        try:
+            weights.parent.rmdir()
+        except OSError:
+            pass
+    shutil.rmtree(request_dir, ignore_errors=True)
 
 
 def pending_requests(stage_out: Path) -> list[Path]:
@@ -505,7 +583,7 @@ def restore_engine(request: dict, *, dtype=None):
     engine = load_engine(heads_checkpoint=request['heads'], device=request['device'],
                          dtype=dtype or (torch.bfloat16 if request['device'] != 'cpu' else torch.float32),
                          prompt_rendering=request['prompt_rendering'])
-    state = load_state(Path(request['dir']) / 'weights.pt')
+    state = load_state(request_weights(Path(request['dir'])))
     saved = state['student_parameters']
     targets = {'backbone.' + n: t for n, t in plain_named_tensors(engine.backbone.hf).items()}
     missing = sorted(set(saved) - set(targets))
@@ -531,12 +609,14 @@ def run_request(request_dir: Path, *, engine_factory=restore_engine) -> dict:
             prune_snapshot(request_dir)
             evaluator.engine = engine_factory(request)
             summary = evaluator.run(step)
+        except SnapshotSpaceError as error:
+            summary = evaluator.record_failure(step, str(error), skipped=True)
         except Exception as error:  # noqa: BLE001 - recorded as an ineligible evaluation, counted by the trainer
             summary = evaluator.record_failure(step, f'{type(error).__name__}: {error}')
             summary['seconds'] = time.time() - started
         finally:
             evaluator.engine = None
-    shutil.rmtree(request_dir, ignore_errors=True)  # storage rules: the snapshot goes once its row landed
+    drop_request(request_dir)  # storage rules: the snapshot goes once its row landed
     return summary
 
 
