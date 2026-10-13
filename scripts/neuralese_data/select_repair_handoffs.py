@@ -57,7 +57,7 @@ def select(source, held, output, *, per_family=3, limit=24):
                 continue
             row = by_family[family].pop(0)
             if counts[family] >= per_family:
-                reasons['family_cap'] += 1
+                reasons['family_cap'] += 1 + len(by_family[family])
                 by_family[family].clear()
                 continue
             parent = row['handoff']['source']['trajectory_id']
