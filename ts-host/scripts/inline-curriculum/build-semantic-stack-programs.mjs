@@ -201,7 +201,13 @@ function render(entry, provider) {
     'runnable_candidate_pending_reference_and_semantic_review') :
     hasScopedCollection && typed ? 'held_design_only_pending_expanded_fixture_review' :
       'held_missing_scoped_collection_or_exact_typed_oracle';
-  const sourceGroup = `semantic-stack:${provider}:${id}`;
+  // A catalog may ask several independent questions of one authored world.
+  // Keep that whole evidence world in one split, even when program IDs differ.
+  const worldKey = entry.source?.world_group ?? entry.source?.split_unit ?? id;
+  if (!safeId(String(worldKey).replace(/[:]/g, '-')))
+    throw Error(`${id}: invalid source world identity`);
+  const sourceGroup = `semantic-stack:${provider}:${worldKey}`;
+  const programSourceId = `semantic-stack:${provider}:${id}`;
   const caseRow = candidate ? curriculumCase({
     family: 'semantic_stack_authored', shape: id, variant: 'source-v1', splitGroup: sourceGroup,
     slice: 'iterate', domain: 'other', mode: 'single_call', inline: 'required', iterate: 'required',
@@ -220,7 +226,7 @@ function render(entry, provider) {
   }) : null;
   if (caseRow) {
     caseRow.id = `semantic-stack:${provider}:${id}`;
-    caseRow.source_ids = [sourceGroup];
+    caseRow.source_ids = [programSourceId];
     caseRow.source_groups = [sourceGroup];
     caseRow.source_revisions = ['semantic-stack-authored-v1'];
     caseRow.generation.collection = 'teacher';
