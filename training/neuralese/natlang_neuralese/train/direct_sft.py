@@ -98,6 +98,9 @@ def parse(argv=None):
                    help='the predecessor stage identity-check.json, pinned separately from a relocated checkpoint')
     p.add_argument('--continue-monitor-reference', type=Path,
                    help='the predecessor stage monitor-reference.pt, pinned separately from a relocated checkpoint')
+    p.add_argument('--fresh-monitor-reference', action='store_true',
+                   help='with --continue-from: capture the drift reference from the continued weights at update 0 '
+                        'instead of copying the predecessor\'s (S7 RL: KL to the pre-RL checkpoint)')
     p.add_argument('--continued-text-data', type=Path,
                    help='data continuation (owner 2026-10-12): the --text-data this stage trained on before; a resume '
                         'whose checkpoint read it continues on --text-data with the same update counter, weights and '
@@ -978,7 +981,7 @@ def main(argv=None):
         raise ValueError('continuation sidecars require --continue-from')
     a.out.mkdir(parents=True, exist_ok=True)
     reference = a.out / 'monitor-reference.pt'
-    if a.continue_from is not None and not reference.exists():
+    if a.continue_from is not None and not reference.exists() and not a.fresh_monitor_reference:
         # These sidecars are declared inputs: resolving a checkpoint symlink may relocate its parent directory.
         import shutil
         shutil.copyfile(a.continue_monitor_reference, reference)

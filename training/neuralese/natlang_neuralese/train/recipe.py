@@ -40,6 +40,15 @@ HANDLERS = {
                            'fp8_training','fp8_recipe','fp8_amax_history_len',
                            'gradient_audit_steps','saved_tensor_audit_steps','gradient_digest_steps',
                            'state_hash_steps','sdpa_backend','task_eval','task_eval_every'},'result':'report.json'},
+    # S7 RL on the full direct checkpoint (plans/neuralese/S7_RL.md §6): rl/stage.py turns scored policy rollouts into
+    # RL text data (mode rft) and runs the shared direct trainer on it, continued from the pre-RL checkpoint with the
+    # drift reference captured from those weights. Its parameters are the direct stage's plus the RL data decision;
+    # its stage_parameter_defaults inherit the recipe's neuralese_direct defaults (RL_DEFAULTS_FROM).
+    'neuralese_rl': {'module': 'natlang_neuralese.rl.stage',
+                     'required_inputs': {'rollouts', 'continue_from', 'continue_identity', 'continue_monitor_reference'},
+                     'optional_inputs': {'heads'},
+                     'parameters': set(),  # filled below: neuralese_direct's parameters plus the RL ones
+                     'result': 'report.json'},
     'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads','student_checkpoint'},
                         'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','target_tokens','cutoff',
                           'cohort_weights','qualification_cohort','context_weight','feedback_weight',
@@ -107,6 +116,12 @@ HANDLERS = {
                                                     'seed', 'agreement_gate', 'kl_gate', 'source_fraction',
                                                     'argmax_weight', 'continue_from', 'stop_on_gate'}, 'result': 'best-checkpoint.pt'},
 }
+
+# The RL stage takes every direct-trainer parameter plus its data decision (rl/stage.py).
+RL_PARAMETERS = {'rl_mode', 'rl_tokenizer', 'rl_prompt_rendering', 'rft_max_success_rate', 'rft_held_fraction'}
+HANDLERS['neuralese_rl']['parameters'] = set(HANDLERS['neuralese_direct']['parameters']) | RL_PARAMETERS
+# A stage kind whose parameter defaults start from another kind's declared defaults.
+RL_DEFAULTS_FROM = {'neuralese_rl': 'neuralese_direct'}
 DIRECT_STAGE_SCHEMA = 'natlang.neuralese-declared-direct-stage/1'
 
 INPUT_BINDING_NAME = re.compile(r'[a-z][a-z0-9_.-]*')
@@ -238,12 +253,16 @@ DIRECT_PHASE_CONTINUATION = {'continue_from': 'checkpoint.pt', 'continue_identit
                              'continue_monitor_reference': 'monitor-reference.pt'}
 
 
+# Stage kinds that train the direct checkpoint with the direct trainer and so continue phase to phase (S7 RL included).
+DIRECT_TRAINING_KINDS = frozenset({'neuralese_direct', 'neuralese_rl'})
+
+
 def direct_phase_predecessor(recipe, stage):
-    """The id of the neuralese_direct phase ``stage`` continues from, or None."""
-    if stage.get('kind') != 'neuralese_direct':
+    """The id of the direct-trainer phase (neuralese_direct or neuralese_rl) ``stage`` continues from, or None."""
+    if stage.get('kind') not in DIRECT_TRAINING_KINDS:
         return None
     kinds = {other.get('id'): other.get('kind') for other in recipe['stages']}
-    phases = [name for name in stage.get('requires', []) if kinds.get(name) == 'neuralese_direct']
+    phases = [name for name in stage.get('requires', []) if kinds.get(name) in DIRECT_TRAINING_KINDS]
     if len(phases) > 1:
         raise ValueError('a neuralese_direct stage continues from at most one direct predecessor: ' + stage['id'])
     return phases[0] if phases else None
@@ -341,7 +360,7 @@ def stage_input_args(resolved, kind):
     args = []
     supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
     resolved = _staged_inputs(resolved)
-    for role in ('records', 'pieces', 'text_data', 'continued_text_data', 'continue_from', 'continue_identity',
+    for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
                  'direct_parent_proof'):
@@ -370,7 +389,8 @@ def mapped_fixup_continuation(stage, reports):
 def effective_stage_parameters(stage, reports, recipe=None):
     """Resolve fixup ``steps`` as new updates above its exact predecessor step."""
     parameter_defaults = (recipe or {}).get('stage_parameter_defaults', {})
-    parameters = dict(parameter_defaults.get(stage['kind'], {}))
+    parameters = dict(parameter_defaults.get(RL_DEFAULTS_FROM.get(stage['kind']), {}))
+    parameters.update(parameter_defaults.get(stage['kind'], {}))
     parameters.update(stage['parameters'])
     if stage['kind'] == 'core_text_warmup' and parameters.get('ar_feedback_fixup',False):
         predecessors = [report for report in reports
@@ -638,7 +658,7 @@ def load_recipe(path):
     # neuralese_direct stages starts from the base model at an exact identity with no warm-up; each stage's step-0
     # identity check (direct_sft: NeuraleseProjection equals the soft-token mixture, TokenChoiceProjection absent or
     # the identity, so logits equal the base model's) is its identity qualification. Older lineages keep the rule.
-    direct_lineage = all(s['kind'] == 'neuralese_direct' for s in recipe['stages'])
+    direct_lineage = all(s['kind'] in DIRECT_TRAINING_KINDS for s in recipe['stages'])
     if direct_lineage and recipe.get('identity_qualification') != DIRECT_IDENTITY_QUALIFICATION:
         raise ValueError('a neuralese_direct lineage must declare identity_qualification ' +
                          repr(DIRECT_IDENTITY_QUALIFICATION))
@@ -901,7 +921,7 @@ def stage_quantization(recipe, stage, parameters, reports, init_mix=None):
     if stage['kind'] == 'core_text_warmup' and parameters.get('ar_feedback_fixup', False):
         start = next(r for r in reports if r['id'] in stage['requires'] and r['kind'] == 'core_text_warmup')['gate']['step']
     end = parameters.get('steps', 4096 if stage['kind'] == 'core_text_warmup' else 500)  # the trainers' defaults
-    if stage['kind'] == 'neuralese_direct' and 'epochs' in parameters:
+    if stage['kind'] in DIRECT_TRAINING_KINDS and 'epochs' in parameters:
         if 'steps' in parameters or 'quantization_steps' in parameters:
             raise ValueError('a neuralese_direct stage declares its budget as epochs or steps, not both')
         end = 'derived'  # direct_sft derives the update count from its data and packing
@@ -945,7 +965,7 @@ def require_gate(report, kind):
             raise ValueError('raw recurrence training stage incomplete or errored')
     elif kind=='core_text_warmup':
         if report.get('qualified') is not True:raise ValueError('text warm-up alignment goal not met')
-    elif kind=='neuralese_direct':
+    elif kind in ('neuralese_direct', 'neuralese_rl'):
         if report.get('qualified') is not True:
             raise ValueError('Neuralese direct stage not qualified (held CE below base, no drift stop, final task '
                              'successes >= min_successes; the behaviour gate is report-only, owner 2026-10-12)')
@@ -1606,7 +1626,7 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
                 'process_finished': True,
                 'completed': result.returncode == 0 and not signal_forwarder.stopped[0] and
                     (bool(report and report.get('training_stage_completed', False)) if stage['kind'] == 'raw_recurrence_training'
-                     else stage['kind'] != 'neuralese_direct' or bool(report and report.get('completed', False))),
+                     else stage['kind'] not in DIRECT_TRAINING_KINDS or bool(report and report.get('completed', False))),
                 'qualified': qualified,
                 'gate_scope': recipe['lineage'].get('qualification_scope'),
                 'report': report, 'outputs': outputs})
@@ -1898,7 +1918,7 @@ def main(argv=None):
                 component = stage_quantization(recipe, stage, stage_parameters, reports, init_mix)
                 if component is not None:
                     command += ['--quantization', json.dumps(component, sort_keys=True, separators=(',', ':'))]
-                if kind == 'neuralese_direct':
+                if kind in DIRECT_TRAINING_KINDS:
                     command += stage_objective_args(recipe, stage)
                 environment = dict(os.environ)
                 declared_environment = declared_runtime_environment(recipe)
@@ -1911,7 +1931,7 @@ def main(argv=None):
                     # The next stage's own data plan on the current code (budget, data continuation, QAT range, held
                     # set), from its exact child arguments; a trainer without a plan-only mode is listed only.
                     print(json.dumps({'stage': stage['id'], 'plan_only_command': command}), flush=True)
-                    if kind != 'neuralese_direct':
+                    if kind not in DIRECT_TRAINING_KINDS:
                         return 0
                     environment['PYTHONPATH'] = str(package.parent) + os.pathsep + os.environ.get('PYTHONPATH', '')
                     return subprocess.run(command + ['--plan-only'], env=environment).returncode
