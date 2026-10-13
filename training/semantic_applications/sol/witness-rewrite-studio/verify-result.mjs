@@ -33,6 +33,18 @@ export function verifyResult(result, oracle, snapshot, request) {
   require(storyEvidence.checkWitnesses(snapshot,edits.flatMap(e=>e.witnesses??[])).every(c=>c.valid),'exact-original-edit-witnesses');
   return {ok:failures.length===0,failures,semantic_witness_entailment:'requires independent review',live_literal_contribution:'requires actual full-project trace',training_admission:false};
 }
+/** Trusted collector adapter; exact invariants only, no semantic/live admission. */
+export function verifyCandidate({value, oracle, inputs, fixture}) {
+  const snapshot = inputs?.snapshot, request = inputs?.request;
+  if (!snapshot || !request || !fixture || typeof fixture !== 'object')
+    return {ok:false,issues:['Missing named source inputs or fixture snapshot.'],semantic_review_required:true};
+  const mismatches = snapshot.records.filter(record => fixture[record.path] !== record.text);
+  if (mismatches.length)
+    return {ok:false,issues:mismatches.map(record=>`Visible source mismatch: ${record.id}/${record.path}`),semantic_review_required:true};
+  const verdict = verifyResult(value, oracle, snapshot, request);
+  return {ok:verdict.ok,issues:verdict.failures,semantic_review_required:true,
+    live_literal_consumption:'requires actual full-project trace',training_admission:false};
+}
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   if(process.argv.length!==3)throw Error('usage: node verify-result.mjs RESULT_JSON');
   const base=new URL('./harbor-retcon/',import.meta.url);
