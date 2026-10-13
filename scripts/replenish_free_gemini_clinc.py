@@ -52,10 +52,16 @@ def launch(batch, number, retry=0):
                '--max-inflight-per-quota-group 1 --max-output-tokens 512 '
                '--choice-contract label-confidence --response-format json_schema '
                '--choice-enum-policy omit --wait')
-    subprocess.run(['python3', 'scripts/memory_ledger.py', 'run', '--unit', unit,
-                    '--budget-gb', '1.2', '--class', 'collection', '--priority', 'low',
-                    '--workdir', str(ROOT), '--', 'bash', '-lc', command],
-                   cwd=ROOT, check=True)
+    run = subprocess.run(['python3', 'scripts/memory_ledger.py', 'run', '--unit', unit,
+                          '--budget-gb', '0.6', '--reserve-gb', '0.2', '--class', 'collection',
+                          '--priority', 'low', '--workdir', str(ROOT), '--', 'bash', '-lc', command],
+                         cwd=ROOT, capture_output=True, text=True)
+    if run.returncode:
+        if 'not admitted:' in run.stderr:
+            print(json.dumps({'event': 'deferred_memory', 'batch': number,
+                              'reason': run.stderr.strip()}), flush=True)
+            return None
+        raise subprocess.CalledProcessError(run.returncode, run.args, run.stdout, run.stderr)
     print(json.dumps({'event': 'launched', 'batch': number, 'unit': unit}), flush=True)
     return unit + '.service'
 
@@ -83,6 +89,8 @@ def resume_incomplete(batch, number, completed):
     except subprocess.CalledProcessError:
         next_unit = unit
         failures += 1
+    if next_unit is None:
+        return  # admission waits for RAM; it is neither a failed request nor a failed worker
     delay = min(7200, 600 * 2 ** failures)
     state_path.write_text(json.dumps({'unit': next_unit, 'retry': retry,
                                       'last_completed': completed, 'failures': failures,
@@ -176,7 +184,8 @@ def main():
                     'quality': 'held pending semantic review'}
         (batch / 'source-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
         try:
-            launch(batch, number)
+            if launch(batch, number) is None:
+                print(json.dumps({'event': 'launch_deferred', 'batch': number}), flush=True)
         except subprocess.CalledProcessError:
             (batch / 'relaunch-state.json').write_text(json.dumps({
                 'unit': f'natlang-pop-gemini-clinc-batch{number:02d}.service',
