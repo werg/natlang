@@ -390,7 +390,38 @@ On trec-question the selected best came from `refine-baldwin`. Its fitness was m
 
 Author proposals (LFM2.5-2.6B) lowered fitness every time. These are 12-case query sets, so read the differences as indications only.
 
-*Next milestone:* run the memetic population on natlang task success instead of decision families. An individual is a program state: crisp instruction text, soft values (bodies, skills) and adapters. Fitness is the task verifier on held cases, and the operators are the same with `propose` given failing trajectories. Its kept improvement steps, and its refined soft values and adapters, then become training and initialisation data for the end-to-end Neuralese stage: soft values that consumers read in place of tokens, recorded as `natlang.improvement-step/1` with whole trajectories. Before that: fix Baldwinian final scoring, use larger query sets (≥48) on ag-news and trec-question, and get a better author (propose has not helped yet). Then Mellum when its export exists.
+*2026-10-13: Baldwin scoring fix, 48-case reruns and task-success driver.*
+
+The final best individual is now scored as its fitness was measured (ada37674). A Baldwinian winner is deployed with its refined block. The block it carries is recorded as `carried_skill`, and its refined blocks are saved in the `.nz`.
+
+Rerun on Muon 10006 with 48 query cases (in-context init, adapters on, 10 generations, support and validation 8). The author was LFM2.5-2.6B, because Qwen was not up at launch:
+
+| Family | Query: best / seed / soft-gold / uniform | Query accuracy: best / seed / soft-gold | Transfer: best / seed |
+| --- | --- | --- | --- |
+| ag-news | .833 / .752 / .809 / .625 | .813 / .542 / .729 | .756 / .759 |
+| trec-question | .762 / .759 / .762 / .583 | .625 / .625 / .646 | .761 / .752 |
+
+- **ag-news:** the result holds at 48 cases. The winner, a Baldwinian individual with no guidance, deployed with its refined skill, beats seed and soft-gold by 27 and 8 accuracy points.
+- **trec-question:** no gain. Validation rose .570 → .728 on 8 cases, so the search overfits its small validation set.
+- **Author:** propose lowered fitness every time.
+
+A rerun with the Qwen3.6 author is queued (unit `memetic-q48task2-20261013`).
+
+Task-success memetic (the M3 milestone), first version. The design is in `MEMETIC_TASK_DECOMPOSITION.md` (decomposition first) and the driver is `rl/memetic_tasks.py`.
+
+- An individual is guidance text plus an optional adapter.
+- It runs on train rows of `decision-rich-train-20261005-v2` through the collector:
+  - The guidance goes in as `<natlang_program_guidance>` via a per-entry `system_file`, new in `run_bonsai_queue.py`.
+  - The adapter goes in via `x_natlang_adapters`.
+  - Every individual uses the same seeds.
+- It is scored by `classify_case`/`reward_of`, never on the held 48.
+- Policies are NL functions on the author: `proposeGuidance`, and `chooseNext` behind `--policy nl|crisp`, where an invalid NL answer falls back to crisp and the fallback is recorded.
+- The gradient operator is one GRPO round (`grpo.py`) on the parent's own rollouts.
+- Soft values have no collector channel yet; that is the next unit.
+
+The first run (8 rows × 2 samples, temperature 1, 3 generations, Muon 10006, Qwen author) runs after the 48-case rerun in the same unit. Results go here.
+
+*Next milestone:* run the memetic population on natlang task success instead of decision families. An individual is a program state: crisp instruction text, soft values (bodies, skills) and adapters. Fitness is the task verifier on held cases, and the operators are the same with `propose` given failing trajectories. Its kept improvement steps, and its refined soft values and adapters, then become training and initialisation data for the end-to-end Neuralese stage: soft values that consumers read in place of tokens, recorded as `natlang.improvement-step/1` with whole trajectories. Next after the first task run: soft values through the collector, held-out confirmation of the winner on a disjoint train slice, then Mellum when its export exists.
 
 **M4: adapters.**
 8. `Adapter<Base, Kind>` export in `.nz`, base identity, scoping rules, crossing test.
