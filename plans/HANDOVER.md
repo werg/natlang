@@ -43,8 +43,22 @@ first relaunch with the shared package refused its exact recipe pin because
 `common/hdd_guard.py` changed since freezing; use the active lineage's frozen
 runtime (`/srv/storage/natlang-artifacts/neuralese-direct-lfm-qad-broad-20261013-v1/runtime`)
 as `PYTHONPATH` for this resume. The high-priority relaunch restored the
-step-8360 full checkpoint and resumed GPU updates at step8361 (99% GPU in the
-first observed update after its data reload). The DGX coordinator decision
+step-8360 full checkpoint and advanced through 8362, then OOMed at 8363 in
+the chunked CE/KL gradient: 479 MiB reserved but unallocated, 259 MiB free,
+256 MiB requested. The next relaunch explicitly passed
+`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` **inside Docker** (the
+ledger's wrapper setting alone did not reach the container) and declares a
+7.35 GiB CUDA envelope, but its inherited recipe no longer resolved to the
+frozen plan: the shared parent deleted `neuralese_weight` and `value_margin`.
+The active relaunch uses `resume-v12-frozen.json`, an exact copy of the already
+recorded resolved recipe in the run directory, and the pinned frozen runtime.
+It passed the previous OOM at 8363 and reached step8374 with
+`cuda_allocator_config=expandable_segments:True`; verify it passes 8552 before
+considering capacity solved. Pop also found a training/eval prompt gap: r3
+program-header rows have no generic system turn, but the full-prompt held eval
+gives one case a 16,126-character system turn and five tool schemas. Run a
+protected program-header eval A/B to isolate the prompt effect; the full-prompt
+score remains the deployment result. The DGX coordinator decision
 for the future lineage remains a mixed direct SFT + E2E run after projection
 fit, with no direct-stage plateau wait.
 

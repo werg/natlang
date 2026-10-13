@@ -135,7 +135,7 @@ def launch_queue(queue_dir, unit):
                '--model-id', 'gpt-6-luna', '--model-concurrency', '1',
                '--execution-plans', '--reasoning-effort', 'low', '--min-free-mib', '1024']
     run = subprocess.run(['python3', 'scripts/memory_ledger.py', 'run', '--unit', unit,
-                          '--budget-gb', '0.5', '--reserve-gb', '0.2', '--class', 'collection',
+                          '--budget-gb', '0.9', '--reserve-gb', '0.2', '--class', 'collection',
                           '--priority', 'low', '--workdir', str(ROOT), '--', *command],
                          cwd=ROOT, capture_output=True, text=True)
     if run.returncode:
