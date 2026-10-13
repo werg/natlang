@@ -26,9 +26,14 @@ def prepare(source, output, *, line, workers, case_seconds):
         raise ValueError('empty recovery source')
     ids = set()
     for row in rows:
-        if (row.get('split') != 'train' or not row.get('source_groups') or
+        semantics = row.get('semantics', {})
+        if (row.get('version') != 'natlang.program/2' or
+                row.get('kind') not in ('lambda_graph', 'lambda_source') or
+                not isinstance(semantics.get('root'), str) or
+                semantics['root'] not in semantics.get('files', {}) or
+                row.get('split') != 'train' or not row.get('source_groups') or
                 'failure_seed' not in row.get('semantics', {})):
-            raise ValueError('recovery sources need train split, source groups, and an executed failure seed')
+            raise ValueError('recovery source needs focused program IR v2, train split, source groups, and a failure seed')
         if row['id'] in ids:
             raise ValueError(f'duplicate recovery source id: {row["id"]}')
         ids.add(row['id'])
