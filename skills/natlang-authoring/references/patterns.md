@@ -76,6 +76,8 @@ To port a real system (a compiler, a database, an agent harness), keep its archi
 
 ## Judgments in synchronous code
 
+For a directory reducer whose sources have meaningful subfolders, a typed batch may be a better unit of `iterateOn` than one file. Pass `{folderPath,records:{path,text}[]}` to a named natural-language stage and return one finding with a distinct `sourcePath` for each record. The stage may formulate a scoped typed `nl` literal to interpret relations among the records; the root reduces the remaining folder frontier and later reconciles cross-folder findings. Keep the original source IDs in every finding and check exact path coverage before using the result. Do not flatten a folder into an untyped string or let a batch finding replace the per-record evidence.
+
 A synchronous hook (an SQLite function, a sort comparator, a parser callback) cannot await a natural-language call. Decide first: collect the distinct values the hook will see, judge them in parallel (a `readout: decision` function is one scoring pass each), store the verdicts keyed by value, and let the hook look them up. The cache also makes repeated questions free.
 
 ## Decisions with floors
