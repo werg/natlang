@@ -1,0 +1,2 @@
+ID D04. Selected-story dramatic linkage.
+E09's blue-seal reference recalls Mara recognizing the letter at E01 and receiving its life-saving information through E05. Its function is trust after an informed rescue, not proof of physical ownership. The callback must remain intelligible after the retcon. E07 must accurately identify its acquisition route, and E08 must retain both informed urgency and real-key access.

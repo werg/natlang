@@ -1,0 +1,161 @@
+{
+  "revision": "647fbd2636a6c76bd37b75e4698c0b5ce61bda6266ec8e065c5e4d42a188688c",
+  "records": [
+    {
+      "id": "D01",
+      "path": "director/request.md",
+      "text": "ID D01. Selected-world revision request R01.\nRemove actual physical delivery F_DELIVERY of original letter L01 from Ada to Mara in selected event E05. Instead Ada gives Mara the accurate destination and departure signal orally while retaining L01. Preserve rescue E08, trust reconciliation E09, and both unresolved explanations of Ada withholding L01. Do not revise memory frames M01/M02.\nOnly selected scenes E05, E07, E09 may be edited. Do not add actors, arrivals, unseen physical deliveries, new document copies or new observations. A valid repair uses one provided proposal recipe; choose the valid recipe with fewest edited selected scenes. The recipe ID is selectedProposalIds. Descriptive reasons may be equivalent grounded prose.\n",
+      "sha256": "eff3a0716d87f6a75c4cf5e1fac1a1b6adad32c122151a99ba5f46ccb97bcf6c"
+    },
+    {
+      "id": "D02",
+      "path": "director/coverage.md",
+      "text": "ID D02. Visible output identity and coverage contract.\nThe required impacted obligations are OD_CHANGE (remove F_DELIVERY, establish F_ORAL in E05), OK_INFO (Mara learns F_LOCATION and F_SIGNAL before E07), OK_READ (E07 states the actual information route rather than a false reading), OM_RESCUE (E08 rescue remains informed and physically possible), OC_CALLBACK (E09 preserves trust without falsely asserting letter custody), OA_MOTIVE (both protected motives remain possible), OP_KEY (K01 still reaches Mara and opens the real gate), OS_CAST (no new E05 participant), OP_COPY (no new letter or key copies).\nUse these exact obligation IDs in obligationCoverage; order is irrelevant. The uncertainty ID is U_MOTIVE. Consumed local decision IDs can be generated unique strings. Source IDs, scene IDs, entity IDs, proposal IDs and fact IDs are exact. Every edit oldQuote and replacement is the provided recipe span and text; editing recipes or director clauses is not allowed.\nNo unresolved obligations are allowed for a complete valid repair. Source check ID spellings and narrative explanations can vary while preserving their typed meaning and evidence. Witnesses cite exact nonempty source quotations and paths, using their original or explicitly replayed snapshot.\n",
+      "sha256": "96d2e2f1f6c94a429ce1e52320395b1562fc58e5c0079aed64583be267461811"
+    },
+    {
+      "id": "D03",
+      "path": "director/preservation.md",
+      "text": "ID D03. Hard preservation rules.\nR_KNOW: All unmarked factual character assertions require a source-supported acquisition before speaking; exact claims about how a fact was learned must also be true.\nR_PHYS: Physical custody of an original object requires an actual selected-world transfer; a report does not transfer an object. Do not invent hidden transfers or copies.\nR_MOTIVE: The selected story must leave Ada's withholding motive unresolved between protective caution and personal advantage. Memories can disagree without deciding truth. A definitive confession or omniscient ruling violates protection.\nR_DRAMA: E08 rescue and E09 Mara choosing to trust Ada must survive. Trust does not require certainty about motives.\nR_SCOPE: Retain E05 participants Ada and Mara only, and all original scene membership and order. Do not alter canon or memories.\n",
+      "sha256": "bb20d42641b95a7ed3f9d098dd6ce052b4bb4b16d77eaf91df8ec38df4eceebf"
+    },
+    {
+      "id": "C01",
+      "path": "canon/letter.md",
+      "text": "ID C01. Actual selected-world canon, authority over all selected scenes.\nOriginal letter L01 is a single sealed document. Its interior states F_LOCATION: Ivo waits inside the Tide Room. Its interior states F_SIGNAL: Ivo leaves at the night tide bell. The blue seal is visible outside, but no destination or departure signal is visible outside. No duplicate letter exists. A viewer can recognize the blue seal without learning either interior fact.\n",
+      "sha256": "4725e00bea0c69306dd82722ba9438f9e322d15f299c90cb3214638509a161a7"
+    },
+    {
+      "id": "C02",
+      "path": "canon/keys.md",
+      "text": "ID C02. Actual selected-world canon.\nOriginal key K01 opens the real tide gate leading to the Tide Room. Rehearsal duplicate K02 resembles K01 but cannot open the real gate. K01 and K02 are explicitly distinct physical objects, never aliases. The rescue route requires Mara possessing K01; an accurate destination without gate access is insufficient.\n",
+      "sha256": "cecc47dbecf3dcced2649d3c47370cde653c852e3375503903c4ffd63c12bec6"
+    },
+    {
+      "id": "C03",
+      "path": "canon/bells.md",
+      "text": "ID C03. Actual timing canon.\nPort bell PB rings at dusk. Night tide bell TB rings later, after all events E01 through E09. They are different bell events. Ivo's departure signal is TB, not PB. The selected event order is E01 before E02 before E03 before E04 before E05 before E06 before E07 before E08 before E09. E08 is before TB.\n",
+      "sha256": "754b605589c5c4a2a85b25f2341605e59d1a1f85db5d78a5ecfa016cd0605009"
+    },
+    {
+      "id": "I01",
+      "path": "identities/people.md",
+      "text": "ID I01. Explicit entity and scene identities.\nAda, Mara, Bo, Orin, Cy and Ivo are different people. Tide Room is the same room referenced by Ivo's letter, the rescue plan and the tide gate. F_LOCATION and F_SIGNAL are content propositions; L01 is their physical carrier. A letter, its seal, its contents and an actor's report are different referents. E01..E09 are selected event IDs. M01/M02 are memory-frame IDs.\n",
+      "sha256": "fb42c18cef0ff96e57ea6bd6b4db29a22e52365062dc6bdf76c4ee2791bc4aa8"
+    },
+    {
+      "id": "S01",
+      "path": "acts/one/E01.md",
+      "text": "ID S01. Selected frame ACTUAL. Scene/event E01.\nOrin entrusts sealed original L01 to Ada alone. F_CUSTODY_1: Ada becomes its holder. Mara is in the yard and sees the blue seal through the open door, but cannot see inside the envelope or hear Orin's private words. F_SEAL: Mara recognizes the blue seal. Orin does not state the destination or signal in Mara's hearing.\n",
+      "sha256": "b8af951474b1e7ae750701a1f6708f9a1cd701253217f79daea285e52dc0fc8f"
+    },
+    {
+      "id": "S02",
+      "path": "acts/one/E02.md",
+      "text": "ID S02. Selected frame ACTUAL. Scene/event E02, after E01.\nAda reads L01 alone. F_ADA_READ: Ada learns F_LOCATION and F_SIGNAL by reading the letter's interior. Nobody else sees the page or hears its contents. Ada closes L01 and keeps it. Mara remains in the yard.\n",
+      "sha256": "f82b882361c56e9ffa19b40092064c7db8d45a8e7b12bb761623f1b3701cf5a6"
+    },
+    {
+      "id": "S03",
+      "path": "acts/one/E03.md",
+      "text": "ID S03. Selected frame ACTUAL. Scene/event E03, after E02.\nAda gives original K01 to Bo. F_KEY_BO: Bo holds K01 after the transfer. Bo has not read L01, heard its contents or met Ivo. Ada says only, \"Keep this gate key safe.\" That utterance gives no location or bell information.\n",
+      "sha256": "77e198546460183b52c5fc503856969e4ffa1c865e71670828e8cbf80d1e45d6"
+    },
+    {
+      "id": "S04",
+      "path": "acts/one/E04.md",
+      "text": "ID S04. Selected frame ACTUAL. Scene/event E04, after E03.\nCy receives rehearsal duplicate K02 from the prop box. F_COPY_CY: Cy holds K02 only. Mara sees the duplicate on the table and is told it is rehearsal-only. Cy does not read L01. No letter is copied. The rehearsal room is not the Tide Room.\n",
+      "sha256": "87376c3a8145e2a9105cd70faccaad57ff912d9623148645e30619930edf0d9d"
+    },
+    {
+      "id": "S05",
+      "path": "acts/two/E05.md",
+      "text": "ID S05. Selected frame ACTUAL. Scene/event E05, after E04.\nOnly Ada and Mara are present. Orin is away at sea, Bo is at the gate, and Cy is facing away in the rehearsal room out of hearing.\nF_DELIVERY: Ada physically hands original L01 to Mara, who opens it and reads F_LOCATION and F_SIGNAL. Ada no longer holds L01.\nAda does not explain why she considered withholding the letter. Mara remains uncertain about that motive.\n",
+      "sha256": "f17758f43e5cddba2a0648e1206e32bd01a80a8e01fba6c780bf3049fe30709b"
+    },
+    {
+      "id": "S06",
+      "path": "acts/two/E06.md",
+      "text": "ID S06. Selected frame ACTUAL. Scene/event E06, after E05.\nBo physically gives original K01 to Mara. F_KEY_MARA: Mara obtains K01 from its actual holder Bo. Bo still knows nothing of the letter's contents. Mara does not receive K02. The two keys never exchange identities.\n",
+      "sha256": "3b3e1992b33ec0ce4e1a33c9eabf0fd3f6cdcefb235586ffd1e5be5a23b08672"
+    },
+    {
+      "id": "S07",
+      "path": "acts/two/E07.md",
+      "text": "ID S07. Selected frame ACTUAL. Scene/event E07, after E06.\nMara and Bo speak at the real tide gate. F_ROUTE_READ: Mara says to Bo, \"I read the original letter: Ivo is inside the Tide Room and leaves at the night tide bell. I will use this real gate key to reach him.\"\nMara speaks these facts confidently, not as guesses. Bo hears the destination and signal here for the first time.\n",
+      "sha256": "fa08bb53e54281d413258202eb97f36ec24a7637f87f4e395789e59703b16f9c"
+    },
+    {
+      "id": "S08",
+      "path": "acts/three/E08.md",
+      "text": "ID S08. Selected frame ACTUAL. Scene/event E08, after E07, before night tide bell TB.\nF_RESCUE: Mara uses original K01 to open the real tide gate, goes to the Tide Room and finds Ivo there. She brings him out before TB. The rescue is intentional: Mara follows the destination and departure signal she already knows, not an accidental discovery. Ivo lives. Neither K02 nor a second letter appears.\n",
+      "sha256": "b9e3ed7713d47185758208e57585ee87c8d8e3396de6749ca4de67c7e6e2ddb4"
+    },
+    {
+      "id": "S09",
+      "path": "acts/three/E09.md",
+      "text": "ID S09. Selected frame ACTUAL. Scene/event E09, after E08.\nF_CALLBACK_DELIVERY: Mara says to Ada, \"You carried that blue-sealed letter into my hands; I choose to trust you now, even though I still do not know why you hesitated.\"\nF_TRUST: This is reconciliation by choosing trust, not proof that Ada acted from protective caution. The narrator does not reveal Ada's motive.\n",
+      "sha256": "46ca1e4b09adcd9c9ef2659e51e8632458bc8dff486584af97aeeb30a4d32db9"
+    },
+    {
+      "id": "M01",
+      "path": "memories/Ada/M01.md",
+      "text": "ID M01. Memory frame MEM_ADA, owner Ada, nested within later recollection narration. This is not selected-world canon.\nAda remembers the moment before E05 as protective hesitation: she thought Mara would rush into danger if given the letter. She remembers protecting Mara, not profiting from delay. This interpretation remains possible; no controlling narrator endorses it. The recollection does not give Mara new information during E05.\n",
+      "sha256": "ee2959b91d5d13b8907b8008e4004067a6adbe46d5e2e20a56945cfea96cec57"
+    },
+    {
+      "id": "M02",
+      "path": "memories/Bo/M02.md",
+      "text": "ID M02. Memory frame MEM_BO, owner Bo, separate from MEM_ADA. This is not selected-world canon.\nBo remembers seeing Ada study a reward poster before E05 and suspects personal advantage motivated her hesitation. He did not hear Ada's thought or read L01. This interpretation remains possible; no controlling narrator endorses it. U_MOTIVE names the unresolved protective-caution versus personal-advantage question.\n",
+      "sha256": "e0a348d29544c1a4523a3eca59f26682d5ed75d3b45b377b9d549d762de9f3e9"
+    },
+    {
+      "id": "D04",
+      "path": "director/callback.md",
+      "text": "ID D04. Selected-story dramatic linkage.\nE09's blue-seal reference recalls Mara recognizing the letter at E01 and receiving its life-saving information through E05. Its function is trust after an informed rescue, not proof of physical ownership. The callback must remain intelligible after the retcon. E07 must accurately identify its acquisition route, and E08 must retain both informed urgency and real-key access.\n",
+      "sha256": "c683cf765c7570ac1170ca5911ee76500a0cc7cb7cc4508b8727d21279b6b532"
+    },
+    {
+      "id": "P1",
+      "path": "proposals/P1.md",
+      "text": "ID P1. Candidate recipe only; none of this replacement text is an actual selected event before application.\n{\n  \"proposalId\": \"P1\",\n  \"componentId\": \"COMP_RETCON\",\n  \"edits\": [\n    {\n      \"id\": \"P1-S05\",\n      \"sourceId\": \"S05\",\n      \"sourcePath\": \"acts/two/E05.md\",\n      \"sceneId\": \"E05\",\n      \"oldQuote\": \"F_DELIVERY: Ada physically hands original L01 to Mara, who opens it and reads F_LOCATION and F_SIGNAL. Ada no longer holds L01.\",\n      \"replacement\": \"F_ORAL: Ada tells Mara, \\\"Ivo waits inside the Tide Room and leaves at the night tide bell.\\\" Mara hears and understands both facts. Ada retains original L01; Mara does not read or receive it.\"\n    },\n    {\n      \"id\": \"P1-S07\",\n      \"sourceId\": \"S07\",\n      \"sourcePath\": \"acts/two/E07.md\",\n      \"sceneId\": \"E07\",\n      \"oldQuote\": \"F_ROUTE_READ: Mara says to Bo, \\\"I read the original letter: Ivo is inside the Tide Room and leaves at the night tide bell. I will use this real gate key to reach him.\\\"\",\n      \"replacement\": \"F_ROUTE_ORAL: Mara says to Bo, \\\"Ada told me Ivo is inside the Tide Room and leaves at the night tide bell. I will use this real gate key to reach him.\\\"\"\n    },\n    {\n      \"id\": \"P1-S09\",\n      \"sourceId\": \"S09\",\n      \"sourcePath\": \"acts/three/E09.md\",\n      \"sceneId\": \"E09\",\n      \"oldQuote\": \"F_CALLBACK_DELIVERY: Mara says to Ada, \\\"You carried that blue-sealed letter into my hands; I choose to trust you now, even though I still do not know why you hesitated.\\\"\",\n      \"replacement\": \"F_CALLBACK_MESSAGE: Mara says to Ada, \\\"You carried that blue-sealed letter's message to me; I choose to trust you now, even though I still do not know why you hesitated.\\\"\"\n    }\n  ]\n}\n",
+      "sha256": "c877bf999d6e4f692998cb1f7be34d15da290b74faa9cad4e1a289fb8ea28bc1"
+    },
+    {
+      "id": "P2",
+      "path": "proposals/P2.md",
+      "text": "ID P2. Candidate recipe only; none of this replacement text is an actual selected event before application.\n{\n  \"proposalId\": \"P2\",\n  \"componentId\": \"COMP_RETCON\",\n  \"edits\": [\n    {\n      \"id\": \"P2-S05\",\n      \"sourceId\": \"S05\",\n      \"sourcePath\": \"acts/two/E05.md\",\n      \"sceneId\": \"E05\",\n      \"oldQuote\": \"F_DELIVERY: Ada physically hands original L01 to Mara, who opens it and reads F_LOCATION and F_SIGNAL. Ada no longer holds L01.\",\n      \"replacement\": \"F_ORAL_ORIN: Orin arrives and tells Mara the destination and signal. Ada retains L01.\"\n    }\n  ]\n}\n",
+      "sha256": "9ad5d967c8a575e3704a3497e4f13ee6c5da94b9fb0423bada5f096e2da61533"
+    },
+    {
+      "id": "P3",
+      "path": "proposals/P3.md",
+      "text": "ID P3. Candidate recipe only; none of this replacement text is an actual selected event before application.\n{\n  \"proposalId\": \"P3\",\n  \"componentId\": \"COMP_RETCON\",\n  \"edits\": [\n    {\n      \"id\": \"P3-S05\",\n      \"sourceId\": \"S05\",\n      \"sourcePath\": \"acts/two/E05.md\",\n      \"sceneId\": \"E05\",\n      \"oldQuote\": \"F_DELIVERY: Ada physically hands original L01 to Mara, who opens it and reads F_LOCATION and F_SIGNAL. Ada no longer holds L01.\",\n      \"replacement\": \"F_GUESS: Ada retains L01. Mara privately guesses the Tide Room and night tide bell with no information source.\"\n    }\n  ]\n}\n",
+      "sha256": "bf97c147476cec0b4ab9558b5fd889c6e9ee734027d49f567157fef90f0950ed"
+    },
+    {
+      "id": "P4",
+      "path": "proposals/P4.md",
+      "text": "ID P4. Candidate recipe only; none of this replacement text is an actual selected event before application.\n{\n  \"proposalId\": \"P4\",\n  \"componentId\": \"COMP_RETCON\",\n  \"edits\": [\n    {\n      \"id\": \"P4-S05\",\n      \"sourceId\": \"S05\",\n      \"sourcePath\": \"acts/two/E05.md\",\n      \"sceneId\": \"E05\",\n      \"oldQuote\": \"F_DELIVERY: Ada physically hands original L01 to Mara, who opens it and reads F_LOCATION and F_SIGNAL. Ada no longer holds L01.\",\n      \"replacement\": \"F_ORAL_BO: Bo tells Mara the destination and signal from L01. Ada retains L01.\"\n    }\n  ]\n}\n",
+      "sha256": "d873f739fd824073714b6a750dd5a4eaa711dd6e63811b61efd6598835073c1d"
+    },
+    {
+      "id": "P5",
+      "path": "proposals/P5.md",
+      "text": "ID P5. Candidate recipe only; none of this replacement text is an actual selected event before application.\n{\n  \"proposalId\": \"P5\",\n  \"componentId\": \"COMP_RETCON\",\n  \"edits\": [\n    {\n      \"id\": \"P5-S05\",\n      \"sourceId\": \"S05\",\n      \"sourcePath\": \"acts/two/E05.md\",\n      \"sceneId\": \"E05\",\n      \"oldQuote\": \"F_DELIVERY: Ada physically hands original L01 to Mara, who opens it and reads F_LOCATION and F_SIGNAL. Ada no longer holds L01.\",\n      \"replacement\": \"F_COPY: Ada creates letter copy L02 and hands it to Mara to read. Ada retains original L01.\"\n    }\n  ]\n}\n",
+      "sha256": "048d39a93753e913d84d8515459da09f910c3a531b559f5b929fa12ba062ec5d"
+    },
+    {
+      "id": "P6",
+      "path": "proposals/P6.md",
+      "text": "ID P6. Candidate recipe only; none of this replacement text is an actual selected event before application.\n{\n  \"proposalId\": \"P6\",\n  \"componentId\": \"COMP_RETCON\",\n  \"edits\": [\n    {\n      \"id\": \"P6-S05\",\n      \"sourceId\": \"S05\",\n      \"sourcePath\": \"acts/two/E05.md\",\n      \"sceneId\": \"E05\",\n      \"oldQuote\": \"F_DELIVERY: Ada physically hands original L01 to Mara, who opens it and reads F_LOCATION and F_SIGNAL. Ada no longer holds L01.\",\n      \"replacement\": \"F_ORAL: Ada tells Mara, \\\"Ivo waits inside the Tide Room and leaves at the night tide bell.\\\" Mara hears and understands both facts. Ada retains original L01; Mara does not read or receive it.\"\n    }\n  ]\n}\n",
+      "sha256": "276d85976928581af5d71e2e160f09911f23f4bc2adb6620fa5489a3c771ae5b"
+    },
+    {
+      "id": "P7",
+      "path": "proposals/P7.md",
+      "text": "ID P7. Candidate recipe only; none of this replacement text is an actual selected event before application.\n{\n  \"proposalId\": \"P7\",\n  \"componentId\": \"COMP_RETCON\",\n  \"edits\": [\n    {\n      \"id\": \"P7-S05\",\n      \"sourceId\": \"S05\",\n      \"sourcePath\": \"acts/two/E05.md\",\n      \"sceneId\": \"E05\",\n      \"oldQuote\": \"F_DELIVERY: Ada physically hands original L01 to Mara, who opens it and reads F_LOCATION and F_SIGNAL. Ada no longer holds L01.\",\n      \"replacement\": \"F_ORAL: Ada tells Mara, \\\"Ivo waits inside the Tide Room and leaves at the night tide bell.\\\" Mara hears and understands both facts. Ada retains original L01; Mara does not read or receive it. Ada definitively confesses protective caution was her only motive, and the narrator confirms it.\"\n    },\n    {\n      \"id\": \"P7-S07\",\n      \"sourceId\": \"S07\",\n      \"sourcePath\": \"acts/two/E07.md\",\n      \"sceneId\": \"E07\",\n      \"oldQuote\": \"F_ROUTE_READ: Mara says to Bo, \\\"I read the original letter: Ivo is inside the Tide Room and leaves at the night tide bell. I will use this real gate key to reach him.\\\"\",\n      \"replacement\": \"F_ROUTE_ORAL: Mara says to Bo, \\\"Ada told me Ivo is inside the Tide Room and leaves at the night tide bell. I will use this real gate key to reach him.\\\"\"\n    },\n    {\n      \"id\": \"P7-S09\",\n      \"sourceId\": \"S09\",\n      \"sourcePath\": \"acts/three/E09.md\",\n      \"sceneId\": \"E09\",\n      \"oldQuote\": \"F_CALLBACK_DELIVERY: Mara says to Ada, \\\"You carried that blue-sealed letter into my hands; I choose to trust you now, even though I still do not know why you hesitated.\\\"\",\n      \"replacement\": \"F_CALLBACK_MESSAGE: Mara says to Ada, \\\"You carried that blue-sealed letter's message to me; I choose to trust you now, even though I still do not know why you hesitated.\\\"\"\n    }\n  ]\n}\n",
+      "sha256": "e7c34a3d716d85b91e86f71679b7062d0acacbb0bf9c1290117095aa858149e1"
+    }
+  ]
+}

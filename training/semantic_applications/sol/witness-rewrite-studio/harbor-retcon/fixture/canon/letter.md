@@ -1,0 +1,2 @@
+ID C01. Actual selected-world canon, authority over all selected scenes.
+Original letter L01 is a single sealed document. Its interior states F_LOCATION: Ivo waits inside the Tide Room. Its interior states F_SIGNAL: Ivo leaves at the night tide bell. The blue seal is visible outside, but no destination or departure signal is visible outside. No duplicate letter exists. A viewer can recognize the blue seal without learning either interior fact.

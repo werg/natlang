@@ -1,0 +1,158 @@
+{
+  "schema": "natlang.semantic-application-oracle/1",
+  "source_world_split_key": "sol-application-world:harbor-drama-rewrite-v1",
+  "baseRevision": "647fbd2636a6c76bd37b75e4698c0b5ce61bda6266ec8e065c5e4d42a188688c",
+  "requestId": "R01",
+  "selectedProposalIds": [
+    "P1"
+  ],
+  "canonical_edits": [
+    {
+      "id": "P1-S05",
+      "sourceId": "S05",
+      "sourcePath": "acts/two/E05.md",
+      "sceneId": "E05",
+      "oldQuote": "F_DELIVERY: Ada physically hands original L01 to Mara, who opens it and reads F_LOCATION and F_SIGNAL. Ada no longer holds L01.",
+      "replacement": "F_ORAL: Ada tells Mara, \"Ivo waits inside the Tide Room and leaves at the night tide bell.\" Mara hears and understands both facts. Ada retains original L01; Mara does not read or receive it.",
+      "removedFactIds": [
+        "F_DELIVERY"
+      ],
+      "addedMeanings": [
+        "Accurate oral transmission of F_LOCATION and F_SIGNAL with Ada retaining L01."
+      ],
+      "witnesses": [
+        {
+          "sourceId": "S05",
+          "path": "acts/two/E05.md",
+          "quote": "F_DELIVERY: Ada physically hands original L01 to Mara, who opens it and reads F_LOCATION and F_SIGNAL. Ada no longer holds L01."
+        }
+      ]
+    },
+    {
+      "id": "P1-S07",
+      "sourceId": "S07",
+      "sourcePath": "acts/two/E07.md",
+      "sceneId": "E07",
+      "oldQuote": "F_ROUTE_READ: Mara says to Bo, \"I read the original letter: Ivo is inside the Tide Room and leaves at the night tide bell. I will use this real gate key to reach him.\"",
+      "replacement": "F_ROUTE_ORAL: Mara says to Bo, \"Ada told me Ivo is inside the Tide Room and leaves at the night tide bell. I will use this real gate key to reach him.\"",
+      "removedFactIds": [
+        "F_ROUTE_READ"
+      ],
+      "addedMeanings": [
+        "Mara accurately identifies oral acquisition."
+      ],
+      "witnesses": [
+        {
+          "sourceId": "S07",
+          "path": "acts/two/E07.md",
+          "quote": "F_ROUTE_READ: Mara says to Bo, \"I read the original letter: Ivo is inside the Tide Room and leaves at the night tide bell. I will use this real gate key to reach him.\""
+        }
+      ]
+    },
+    {
+      "id": "P1-S09",
+      "sourceId": "S09",
+      "sourcePath": "acts/three/E09.md",
+      "sceneId": "E09",
+      "oldQuote": "F_CALLBACK_DELIVERY: Mara says to Ada, \"You carried that blue-sealed letter into my hands; I choose to trust you now, even though I still do not know why you hesitated.\"",
+      "replacement": "F_CALLBACK_MESSAGE: Mara says to Ada, \"You carried that blue-sealed letter's message to me; I choose to trust you now, even though I still do not know why you hesitated.\"",
+      "removedFactIds": [
+        "F_CALLBACK_DELIVERY"
+      ],
+      "addedMeanings": [
+        "Trust callback preserves message meaning without physical custody claim."
+      ],
+      "witnesses": [
+        {
+          "sourceId": "S09",
+          "path": "acts/three/E09.md",
+          "quote": "F_CALLBACK_DELIVERY: Mara says to Ada, \"You carried that blue-sealed letter into my hands; I choose to trust you now, even though I still do not know why you hesitated.\""
+        }
+      ]
+    }
+  ],
+  "required_obligation_ids": [
+    "OD_CHANGE",
+    "OK_INFO",
+    "OK_READ",
+    "OM_RESCUE",
+    "OC_CALLBACK",
+    "OA_MOTIVE",
+    "OP_KEY",
+    "OS_CAST",
+    "OP_COPY"
+  ],
+  "preservedUncertaintyIds": [
+    "U_MOTIVE"
+  ],
+  "unchangedSceneIds": [
+    "E01",
+    "E02",
+    "E03",
+    "E04",
+    "E06",
+    "E08"
+  ],
+  "required_rejections": {
+    "P2": [
+      "OS_CAST"
+    ],
+    "P3": [
+      "OK_INFO",
+      "OK_READ"
+    ],
+    "P4": [
+      "OK_INFO",
+      "OS_CAST"
+    ],
+    "P5": [
+      "OP_COPY"
+    ],
+    "P6": [
+      "OK_READ",
+      "OC_CALLBACK"
+    ],
+    "P7": [
+      "OA_MOTIVE"
+    ]
+  },
+  "unresolved": [],
+  "comparison_spec": {
+    "mode": "exact-typed-invariants-plus-independent-semantic-coverage",
+    "unordered_paths": [
+      "/selectedProposalIds",
+      "/edits",
+      "/unchangedSceneIds",
+      "/preservedUncertaintyIds",
+      "/obligationCoverage",
+      "/rejectedProposals",
+      "/consumedLocalDecisionIds"
+    ],
+    "ordered_paths": [],
+    "exact_fields": [
+      "baseRevision",
+      "requestId",
+      "sourceId",
+      "sourcePath",
+      "oldQuote",
+      "replacement",
+      "sceneId",
+      "obligationId",
+      "status",
+      "candidateId"
+    ],
+    "prose_fields": [
+      "reason",
+      "requiredMeaning",
+      "addedMeanings"
+    ],
+    "witness_policy": "Exact source quotation containment under the declared original or replay snapshot plus independent entailment review.",
+    "decision_policy": "All five local judgment sites must be actually invoked and their results consumed; IDs alone grant no credit."
+  },
+  "quality_status": {
+    "independent_semantic_review": false,
+    "exact_verifier_qualified": false,
+    "actual_application_execution": false,
+    "training_admission": false
+  }
+}

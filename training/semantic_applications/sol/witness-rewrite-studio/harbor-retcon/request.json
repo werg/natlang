@@ -1,0 +1,15 @@
+{
+  "id": "R01",
+  "requestedChange": "Replace actual physical delivery F_DELIVERY in selected E05 with accurate oral F_ORAL while Ada retains L01.",
+  "protectedMeanings": [
+    "Keep informed rescue E08 and trust E09.",
+    "Keep U_MOTIVE unresolved.",
+    "Keep real K01 custody and capability.",
+    "No new actors, physical deliveries, letter copies or observations."
+  ],
+  "allowedEditPaths": [
+    "acts/two/E05.md",
+    "acts/two/E07.md",
+    "acts/three/E09.md"
+  ]
+}

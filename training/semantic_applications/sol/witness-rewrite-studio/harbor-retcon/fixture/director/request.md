@@ -1,0 +1,3 @@
+ID D01. Selected-world revision request R01.
+Remove actual physical delivery F_DELIVERY of original letter L01 from Ada to Mara in selected event E05. Instead Ada gives Mara the accurate destination and departure signal orally while retaining L01. Preserve rescue E08, trust reconciliation E09, and both unresolved explanations of Ada withholding L01. Do not revise memory frames M01/M02.
+Only selected scenes E05, E07, E09 may be edited. Do not add actors, arrivals, unseen physical deliveries, new document copies or new observations. A valid repair uses one provided proposal recipe; choose the valid recipe with fewest edited selected scenes. The recipe ID is selectedProposalIds. Descriptive reasons may be equivalent grounded prose.

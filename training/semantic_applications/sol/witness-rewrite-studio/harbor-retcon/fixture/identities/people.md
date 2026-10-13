@@ -1,0 +1,2 @@
+ID I01. Explicit entity and scene identities.
+Ada, Mara, Bo, Orin, Cy and Ivo are different people. Tide Room is the same room referenced by Ivo's letter, the rescue plan and the tide gate. F_LOCATION and F_SIGNAL are content propositions; L01 is their physical carrier. A letter, its seal, its contents and an actor's report are different referents. E01..E09 are selected event IDs. M01/M02 are memory-frame IDs.

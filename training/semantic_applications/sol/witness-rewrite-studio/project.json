@@ -1,0 +1,584 @@
+{
+  "schema": "natlang.semantic-application-source/1",
+  "id": "sol-app-witness-rewrite-studio-v1",
+  "domain": "narrative-revision-and-epistemic-continuity",
+  "status": "authored_pending_independent_review_and_execution",
+  "entry": "studio.nl",
+  "program_files": [
+    "studio.nl",
+    "audit.nl",
+    "audit/checkAmbiguity.nl",
+    "audit/checkCanon.nl",
+    "audit/checkKnowledge.nl",
+    "epistemics.nl",
+    "epistemics/acquire.nl",
+    "epistemics/checkDialogue.nl",
+    "epistemics/checkDialogue/resolveLicensing.nl",
+    "studio/impact.nl",
+    "studio/impact/closureStep.nl",
+    "studio/intake.nl",
+    "studio/intake/interpretRequest.nl",
+    "readRecords.nl",
+    "motifs.nl",
+    "studio/packagePatch.nl",
+    "proposals.nl",
+    "proposals/simulate.nl",
+    "props.nl",
+    "studio/repairStep.nl",
+    "studio/repairStep/compareCandidates.nl",
+    "world.nl",
+    "world/bindEntities.nl",
+    "world/evaluateAuthority.nl",
+    "world/orderEvents.nl",
+    "world/parseFrames.nl",
+    "world/parseFrames/interpretFrame.nl",
+    "types.ts",
+    "services.d.ts",
+    "natlang.json",
+    "tsconfig.json"
+  ],
+  "decomposition": "DECOMPOSITION.md",
+  "typed_call_graph": {
+    "nodes": [
+      {
+        "path": "studio.nl",
+        "args": {
+          "request": "RewriteRequest",
+          "snapshot": "SourceSnapshot"
+        },
+        "returns": "PatchPacket",
+        "kind": "directory-reducer",
+        "owned_delta": "Repair a selected story event through its causal and epistemic consequences."
+      },
+      {
+        "path": "audit.nl",
+        "args": {
+          "original": "Analysis",
+          "impact": "ImpactResult",
+          "component": "AffectedComponent",
+          "replay": "Replay"
+        },
+        "returns": "Audit",
+        "kind": "function",
+        "owned_delta": "Join independent preservation findings without letting one success hide another defect."
+      },
+      {
+        "path": "audit/checkAmbiguity.nl",
+        "args": {
+          "original": "Analysis",
+          "replay": "Replay",
+          "obligations": "Obligation[]"
+        },
+        "returns": "SemanticFinding[]",
+        "kind": "function",
+        "owned_delta": "Preserve protected competing interpretations through an edited reconciliation."
+      },
+      {
+        "path": "audit/checkCanon.nl",
+        "args": {
+          "original": "Analysis",
+          "replay": "Replay",
+          "obligations": "Obligation[]"
+        },
+        "returns": "SemanticFinding[]",
+        "kind": "function",
+        "owned_delta": "Verify the requested event change and selected-world scope."
+      },
+      {
+        "path": "audit/checkKnowledge.nl",
+        "args": {
+          "original": "Analysis",
+          "replay": "Replay",
+          "obligations": "Obligation[]"
+        },
+        "returns": "SemanticFinding[]",
+        "kind": "function",
+        "owned_delta": "Validate changed information routes and source-provenance claims."
+      },
+      {
+        "path": "epistemics.nl",
+        "args": {
+          "intake": "IntakeResult",
+          "world": "WorldIndex"
+        },
+        "returns": "KnowledgeIndex",
+        "kind": "function",
+        "owned_delta": "Construct character-local information states and dialogue licenses."
+      },
+      {
+        "path": "epistemics/acquire.nl",
+        "args": {
+          "intake": "IntakeResult",
+          "world": "WorldIndex"
+        },
+        "returns": "KnowledgeIndex",
+        "kind": "function",
+        "owned_delta": "Fold observation and communication into scoped knowledge states."
+      },
+      {
+        "path": "epistemics/checkDialogue.nl",
+        "args": {
+          "intake": "IntakeResult",
+          "world": "WorldIndex",
+          "acquired": "KnowledgeIndex"
+        },
+        "returns": "DialogueDecision[]",
+        "kind": "function",
+        "owned_delta": "Audit asserted dialogue against actor-local prior information."
+      },
+      {
+        "path": "epistemics/checkDialogue/resolveLicensing.nl",
+        "args": {
+          "event": "EventView",
+          "actor": "string",
+          "factIds": "string[]",
+          "prior": "BeliefState | null",
+          "acquisitions": "InformationEvent[]",
+          "world": "WorldIndex"
+        },
+        "returns": "DialogueDecision",
+        "kind": "function",
+        "owned_delta": "Judge one dialogue conjunction under captured information access."
+      },
+      {
+        "path": "studio/impact.nl",
+        "args": {
+          "analysis": "Analysis"
+        },
+        "returns": "ImpactResult",
+        "kind": "function",
+        "owned_delta": "Build and traverse the finite semantic dependency graph for revision."
+      },
+      {
+        "path": "studio/impact/closureStep.nl",
+        "args": {
+          "state": "ImpactFrontier",
+          "analysis": "Analysis"
+        },
+        "returns": "ImpactFrontier",
+        "kind": "function",
+        "owned_delta": "Consume one graph node and contextualize its dependency edges."
+      },
+      {
+        "path": "studio/intake.nl",
+        "args": {
+          "request": "RewriteRequest",
+          "snapshot": "SourceSnapshot"
+        },
+        "returns": "IntakeResult",
+        "kind": "function",
+        "owned_delta": "Separate immutable evidence from task authority and candidate proposals."
+      },
+      {
+        "path": "studio/intake/interpretRequest.nl",
+        "args": {
+          "request": "RewriteRequest",
+          "instructions": "SourceRecord[]",
+          "canon": "SourceRecord[]",
+          "selectedScenes": "SourceRecord[]"
+        },
+        "returns": "RequestMeaning",
+        "kind": "function",
+        "owned_delta": "Derive the requested fact delta and hard preservation rules."
+      },
+      {
+        "path": "readRecords.nl",
+        "args": {
+          "snapshot": "SourceSnapshot"
+        },
+        "returns": "RecordInventory",
+        "kind": "function",
+        "owned_delta": "Inventory source records by declared narrative ownership."
+      },
+      {
+        "path": "motifs.nl",
+        "args": {
+          "intake": "IntakeResult",
+          "world": "WorldIndex",
+          "knowledge": "KnowledgeIndex"
+        },
+        "returns": "MotifIndex",
+        "kind": "function",
+        "owned_delta": "Interpret causal callbacks and preserve their dramatic function."
+      },
+      {
+        "path": "studio/packagePatch.nl",
+        "args": {
+          "request": "RewriteRequest",
+          "analysis": "Analysis",
+          "impact": "ImpactResult",
+          "state": "RepairState"
+        },
+        "returns": "PatchPacket",
+        "kind": "function",
+        "owned_delta": "Assemble an exact patch proposal with complete source-grounded coverage."
+      },
+      {
+        "path": "proposals.nl",
+        "args": {
+          "analysis": "Analysis",
+          "impact": "ImpactResult",
+          "component": "AffectedComponent",
+          "selectedEdits": "ProposedEdit[]"
+        },
+        "returns": "CandidateReview[]",
+        "kind": "function",
+        "owned_delta": "Generate coherent repair alternatives and replay each against all obligations."
+      },
+      {
+        "path": "proposals/simulate.nl",
+        "args": {
+          "analysis": "Analysis",
+          "impact": "ImpactResult",
+          "component": "AffectedComponent",
+          "candidate": "Candidate",
+          "selectedEdits": "ProposedEdit[]"
+        },
+        "returns": "CandidateReview",
+        "kind": "function",
+        "owned_delta": "Replay one private candidate through the real semantic branches."
+      },
+      {
+        "path": "props.nl",
+        "args": {
+          "intake": "IntakeResult",
+          "world": "WorldIndex"
+        },
+        "returns": "PropIndex",
+        "kind": "function",
+        "owned_delta": "Fold actual custody while preserving copies and framed appearances."
+      },
+      {
+        "path": "studio/repairStep.nl",
+        "args": {
+          "state": "RepairState",
+          "analysis": "Analysis",
+          "impact": "ImpactResult"
+        },
+        "returns": "RepairState",
+        "kind": "directory-reducer",
+        "owned_delta": "Settle one connected repair component and persist its decision on a private folder."
+      },
+      {
+        "path": "studio/repairStep/compareCandidates.nl",
+        "args": {
+          "component": "AffectedComponent",
+          "reviews": "CandidateReview[]",
+          "rules": "PreservationRule[]"
+        },
+        "returns": "CandidateChoice",
+        "kind": "function",
+        "owned_delta": "Choose only fully audited alternatives under the director's repair objective."
+      },
+      {
+        "path": "world.nl",
+        "args": {
+          "intake": "IntakeResult"
+        },
+        "returns": "WorldIndex",
+        "kind": "function",
+        "owned_delta": "Build scoped world views from the same immutable intake."
+      },
+      {
+        "path": "world/bindEntities.nl",
+        "args": {
+          "inventory": "RecordInventory",
+          "frames": "FrameIndex"
+        },
+        "returns": "EntityIndex",
+        "kind": "function",
+        "owned_delta": "Bind explicit aliases while preserving distinct people and objects."
+      },
+      {
+        "path": "world/evaluateAuthority.nl",
+        "args": {
+          "intake": "IntakeResult",
+          "frames": "FrameIndex",
+          "entities": "EntityIndex",
+          "temporal": "TemporalGraph"
+        },
+        "returns": "AuthorityView",
+        "kind": "function",
+        "owned_delta": "Separate selected-world facts from belief and protected uncertainty."
+      },
+      {
+        "path": "world/orderEvents.nl",
+        "args": {
+          "frames": "FrameIndex",
+          "entities": "EntityIndex",
+          "canon": "SourceRecord[]"
+        },
+        "returns": "TemporalGraph",
+        "kind": "function",
+        "owned_delta": "Recover only source-supported event precedence within each frame."
+      },
+      {
+        "path": "world/parseFrames.nl",
+        "args": {
+          "inventory": "RecordInventory"
+        },
+        "returns": "FrameIndex",
+        "kind": "function",
+        "owned_delta": "Construct nested scene frames before interpreting their events."
+      },
+      {
+        "path": "world/parseFrames/interpretFrame.nl",
+        "args": {
+          "record": "SourceRecord",
+          "parent": "FrameDefinition | null"
+        },
+        "returns": "FrameIndex",
+        "kind": "function",
+        "owned_delta": "Interpret one event under its inherited speaker and truth scope."
+      }
+    ],
+    "edges": [
+      {
+        "caller": "studio.nl",
+        "callee": "studio/intake.nl"
+      },
+      {
+        "caller": "studio.nl",
+        "callee": "world.nl"
+      },
+      {
+        "caller": "studio.nl",
+        "callee": "epistemics.nl"
+      },
+      {
+        "caller": "studio.nl",
+        "callee": "props.nl"
+      },
+      {
+        "caller": "studio.nl",
+        "callee": "motifs.nl"
+      },
+      {
+        "caller": "studio.nl",
+        "callee": "studio/impact.nl"
+      },
+      {
+        "caller": "studio.nl",
+        "callee": "studio/repairStep.nl"
+      },
+      {
+        "caller": "studio.nl",
+        "callee": "studio/packagePatch.nl"
+      },
+      {
+        "caller": "studio/intake.nl",
+        "callee": "readRecords.nl"
+      },
+      {
+        "caller": "studio/intake.nl",
+        "callee": "studio/intake/interpretRequest.nl"
+      },
+      {
+        "caller": "world.nl",
+        "callee": "world/parseFrames.nl"
+      },
+      {
+        "caller": "world.nl",
+        "callee": "world/bindEntities.nl"
+      },
+      {
+        "caller": "world.nl",
+        "callee": "world/orderEvents.nl"
+      },
+      {
+        "caller": "world.nl",
+        "callee": "world/evaluateAuthority.nl"
+      },
+      {
+        "caller": "world/parseFrames.nl",
+        "callee": "world/parseFrames/interpretFrame.nl"
+      },
+      {
+        "caller": "epistemics.nl",
+        "callee": "epistemics/acquire.nl"
+      },
+      {
+        "caller": "epistemics.nl",
+        "callee": "epistemics/checkDialogue.nl"
+      },
+      {
+        "caller": "epistemics/checkDialogue.nl",
+        "callee": "epistemics/checkDialogue/resolveLicensing.nl"
+      },
+      {
+        "caller": "studio/impact.nl",
+        "callee": "studio/impact/closureStep.nl"
+      },
+      {
+        "caller": "studio/repairStep.nl",
+        "callee": "proposals.nl"
+      },
+      {
+        "caller": "studio/repairStep.nl",
+        "callee": "studio/repairStep/compareCandidates.nl"
+      },
+      {
+        "caller": "proposals.nl",
+        "callee": "proposals/simulate.nl"
+      },
+      {
+        "caller": "proposals/simulate.nl",
+        "callee": "readRecords.nl"
+      },
+      {
+        "caller": "proposals/simulate.nl",
+        "callee": "world.nl"
+      },
+      {
+        "caller": "proposals/simulate.nl",
+        "callee": "epistemics.nl"
+      },
+      {
+        "caller": "proposals/simulate.nl",
+        "callee": "props.nl"
+      },
+      {
+        "caller": "proposals/simulate.nl",
+        "callee": "motifs.nl"
+      },
+      {
+        "caller": "proposals/simulate.nl",
+        "callee": "audit.nl"
+      },
+      {
+        "caller": "audit.nl",
+        "callee": "audit/checkCanon.nl"
+      },
+      {
+        "caller": "audit.nl",
+        "callee": "audit/checkKnowledge.nl"
+      },
+      {
+        "caller": "audit.nl",
+        "callee": "audit/checkAmbiguity.nl"
+      }
+    ]
+  },
+  "scoped_literal_sites": [
+    "world/parseFrames/interpretFrame.nl",
+    "epistemics/checkDialogue/resolveLicensing.nl",
+    "studio/impact/closureStep.nl",
+    "proposals/simulate.nl",
+    "studio/repairStep/compareCandidates.nl"
+  ],
+  "iteration_reducers": [
+    {
+      "path": "studio/impact/closureStep.nl",
+      "state": "ImpactFrontier",
+      "measure": "number of unexpanded inventoried graph nodes",
+      "until": "all inventoried nodes expanded"
+    },
+    {
+      "path": "studio/repairStep.nl",
+      "kind": "directory-reducer",
+      "state": "RepairState",
+      "measure": "remaining connected affected components",
+      "until": "all components settled as repaired or explicitly unresolved"
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "harbor-retcon",
+      "connected_evidence_records": 26,
+      "directory_depth": 3,
+      "oracle_role": "External typed canonical patch witness and semantic invariant checks, not model-visible."
+    }
+  ],
+  "exact_seams": [
+    "Immutable source/file identity and hashes",
+    "Exact quotation-span verification",
+    "Nonoverlapping bounded patch application on an existing private Folder transaction",
+    "Typed output serialization"
+  ],
+  "source_world_split_key": "sol-application-world:harbor-drama-rewrite-v1",
+  "license_provenance": "Original fictional owner-authored application and fixture; repository license applies.",
+  "generation_ready": false,
+  "training_admission": false,
+  "qualification": {
+    "source_reference_replay": "pending",
+    "independent_semantic_review": "pending",
+    "actual_live_full_project": "pending",
+    "live_stage_contributions": "pending",
+    "48_sample_measurement": "pending",
+    "exact_mechanics_and_canonical_invariant_check": "Passed canonical positive, set permutation, eight corrupt-output negatives, exact patch application and overlap rejection. This is not an app execution."
+  },
+  "source_root": "applications/witness-rewrite-studio",
+  "entry_kind": "directory-reducer",
+  "request_type": "RewriteRequest",
+  "snapshot_type": "SourceSnapshot",
+  "result_type": "PatchPacket",
+  "request_path": "training/semantic_applications/sol/witness-rewrite-studio/harbor-retcon/request.json",
+  "snapshot_path": "training/semantic_applications/sol/witness-rewrite-studio/harbor-retcon/snapshot.json",
+  "fixture_root": "training/semantic_applications/sol/witness-rewrite-studio/harbor-retcon/fixture",
+  "oracle_path": "training/semantic_applications/sol/witness-rewrite-studio/harbor-retcon/oracle.json",
+  "input_bindings": {
+    "request": {
+      "from": "request_path"
+    },
+    "snapshot": {
+      "from": "snapshot_path"
+    }
+  },
+  "fixture_files": [
+    "acts/one/E01.md",
+    "acts/one/E02.md",
+    "acts/one/E03.md",
+    "acts/one/E04.md",
+    "acts/three/E08.md",
+    "acts/three/E09.md",
+    "acts/two/E05.md",
+    "acts/two/E06.md",
+    "acts/two/E07.md",
+    "canon/bells.md",
+    "canon/keys.md",
+    "canon/letter.md",
+    "director/callback.md",
+    "director/coverage.md",
+    "director/preservation.md",
+    "director/request.md",
+    "identities/people.md",
+    "memories/Ada/M01.md",
+    "memories/Bo/M02.md",
+    "proposals/P1.md",
+    "proposals/P2.md",
+    "proposals/P3.md",
+    "proposals/P4.md",
+    "proposals/P5.md",
+    "proposals/P6.md",
+    "proposals/P7.md"
+  ],
+  "services": [
+    {
+      "binding": "storyEvidence",
+      "declaration": "services.d.ts",
+      "host_implementation": "applications/witness-rewrite-studio/host/storyEvidence.ts",
+      "semantic_policy": false,
+      "methods": [
+        "checkWitnesses",
+        "checkEdits",
+        "applySnapshot"
+      ]
+    }
+  ],
+  "provenance": {
+    "author": "semantic_slate_sol",
+    "kind": "Original fictional application, connected evidence and repair recipes.",
+    "license": "Repository license; no external source material."
+  },
+  "readiness": {
+    "source_loader_checked": true,
+    "typed_declarations_checked": true,
+    "independent_oracle_review": false,
+    "exact_result_replay": false,
+    "live_qualified": false,
+    "training_admitted": false
+  },
+  "model_facing_debt": "27 new NL bodies and their types are unmeasured; first full-project live diagnostic before broader generation, then approximately48samples per adopted presentation.",
+  "external_verifier_path": "training/semantic_applications/sol/witness-rewrite-studio/verify-result.mjs",
+  "nl_line_count": 710
+}

@@ -1,0 +1,1 @@
+{"schema":"natlang.package/v2","name":"@natlang/witness-rewrite-studio","version":"0.1.0","description":"Natural-language counterfactual story repair with scoped epistemic, physical and dramatic obligations.","include":["studio.nl","studio","types.ts","services.d.ts","DECOMPOSITION.md","tsconfig.json"],"engines":{"natlang":">=0.1.0","node":">=22.13.0"}}
