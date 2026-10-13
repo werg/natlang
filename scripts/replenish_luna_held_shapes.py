@@ -390,6 +390,7 @@ def queue_ordinal(worker, key):
 def build_source(campaign, seed):
     source = campaign / 'source' / f'held-shapes-s{seed}-n8.ir.jsonl'
     if source.exists():
+        verified_source_report(source)
         return source
     source.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(['node', 'ts-host/scripts/inline-curriculum/build.mjs',
@@ -397,17 +398,30 @@ def build_source(campaign, seed):
                     '--families', ','.join(FAMILIES), '--allow-failures',
                     '--out', str(source)],
                    cwd=ROOT, check=True)
-    report = json.loads(Path(str(source) + '.report.json').read_text())
-    unexpected = [failure for failure in report['failures']
-                  if failure['problems'] != ['reference not admitted: source_review_pending']]
-    if unexpected:
+    try:
+        report = verified_source_report(source)
+    except ValueError:
         source.unlink(missing_ok=True)
-        raise ValueError(f'unexpected source verification failures: {unexpected}')
+        raise
     if report['failures']:
         print(json.dumps({'event': 'source_review_excluded', 'seed': seed,
                           'cases': len(report['failures']),
                           'ids': [failure['id'] for failure in report['failures']]}), flush=True)
     return source
+
+
+def verified_source_report(source):
+    report = json.loads(Path(str(source) + '.report.json').read_text())
+    source_rows = rows(source)
+    failures = report['failures']
+    unexpected = [failure for failure in failures
+                  if failure['problems'] != ['reference not admitted: source_review_pending']]
+    source_ids = {row['id'] for row in source_rows}
+    if (unexpected or report['verified'] != len(source_rows) or
+            report['cases'] != len(source_rows) + len(failures) or
+            any(failure['id'] in source_ids for failure in failures)):
+        raise ValueError(f'Source replay verification incomplete: {source}')
+    return report
 
 
 def prior_worlds(current):
@@ -474,9 +488,7 @@ def write_queues(campaign, seed, selected):
 
 def prepare(campaign, seed, source, excluded, excluded_groups):
     source_rows = rows(source)
-    report = json.loads(Path(str(source) + '.report.json').read_text())
-    if report['cases'] != len(source_rows) or report['verified'] != len(source_rows):
-        raise ValueError('Source replay verification incomplete')
+    report = verified_source_report(source)
     selected = []
     seen = set()
     used_groups = set()
