@@ -76,7 +76,8 @@ def complete(campaign):
                                   'reason': 'four_no_progress_relaunches', 'missing': len(missing)}), flush=True)
                 return False
             subprocess.run(['systemctl', '--user', 'reset-failed', unit], check=False)
-            launch_worker(campaign, manifest['seed'], number)
+            if not launch_worker(campaign, manifest['seed'], number):
+                return False  # memory pressure is a deferred launch, not a no-progress attempt
             retry_file.write_text(json.dumps({'failures': failures, 'finished': len(finished)}) + '\n')
             pending = True
             continue
@@ -98,15 +99,23 @@ def launch_queue(queue_dir, unit):
                '--case-seconds', '1800', '--provider', 'openai-codex',
                '--model-id', 'gpt-6-luna', '--model-concurrency', '1',
                '--execution-plans', '--reasoning-effort', 'low', '--min-free-mib', '1024']
-    subprocess.run(['python3', 'scripts/memory_ledger.py', 'run', '--unit', unit,
-                    '--budget-gb', '0.8', '--class', 'collection', '--priority', 'low',
-                    '--workdir', str(ROOT), '--', *command], cwd=ROOT, check=True)
+    run = subprocess.run(['python3', 'scripts/memory_ledger.py', 'run', '--unit', unit,
+                          '--budget-gb', '0.5', '--reserve-gb', '0.2', '--class', 'collection',
+                          '--priority', 'low', '--workdir', str(ROOT), '--', *command],
+                         cwd=ROOT, capture_output=True, text=True)
+    if run.returncode:
+        if 'not admitted:' in run.stderr:
+            print(json.dumps({'event': 'deferred_memory', 'unit': unit,
+                              'reason': run.stderr.strip()}), flush=True)
+            return False
+        raise subprocess.CalledProcessError(run.returncode, run.args, run.stdout, run.stderr)
     print(json.dumps({'event': 'launched', 'unit': unit,
                       'cases': len(rows(queue_dir / 'queue.jsonl'))}), flush=True)
+    return True
 
 
 def launch_worker(campaign, seed, number):
-    launch_queue(campaign / f'worker-{number:02d}', f'natlang-pop-luna-s{seed}-w{number:02d}')
+    return launch_queue(campaign / f'worker-{number:02d}', f'natlang-pop-luna-s{seed}-w{number:02d}')
 
 
 def retry_transient(campaign, worker, seed, number, job, result, retry_dirs):
@@ -118,6 +127,10 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs):
     own_retries = [path for path in retry_dirs
                    if (path / 'review.json').exists() and
                    json.loads((path / 'review.json').read_text()).get('original_key') == job['key']]
+    if own_retries and not (own_retries[-1] / 'journal.jsonl').exists():
+        last_retry = own_retries[-1]
+        launch_queue(last_retry, f'natlang-pop-luna-s{seed}-w{number:02d}-r{last_retry.name.removeprefix("retry-")}')
+        return True
     last = own_retries[-1] if own_retries else worker / f'case-{queue_ordinal(worker, job["key"]):03d}'
     errors = sorted((last / 'jobs').glob('*.error.json'))
     if not errors:

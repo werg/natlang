@@ -96,7 +96,8 @@ def cmd_redo_failed(a):
     cmd_shard(argparse.Namespace(name=a.name, files=meta['files'], work=a.work, target_mb=150, shards=meta['shards'],
                                  pieces=meta.get('preconverted_pieces')))
     redo = {str(stem) for stem in failed}
-    for shard in glob.glob(str(out / 'shard-[0-9][0-9][0-9][0-9].jsonl')):
+    for shard in glob.glob(str(out / 'shard-[0-9][0-9][0-9][0-9]*.jsonl')):
+        if shard.count('.') > 1: continue
         stem = str(Path(shard).with_suffix(''))
         if stem in redo:
             for suffix in ('stats.json', 'records.jsonl', 'edges.jsonl', 'pieces.jsonl', 'omissions.jsonl'):
@@ -224,13 +225,43 @@ def write_shard(stem: Path, kept, pieces, edges, omissions, stats):
     json.dump(stats, open(f'{stem}.stats.json', 'w'), indent=1)  # written last: marks the shard done
 
 
+def split_by_trajectory(shard: Path, max_mb: int):
+    """Split an oversized shard into parts of whole trajectories (shard-NNNN-tKKK.jsonl), each at most max_mb unless a
+    single trajectory is larger (then it is a part of its own, converted later in a unit with more memory)."""
+    sizes, order = collections.Counter(), []
+    for line in read_lines(shard):
+        t = trajectory_of(json.loads(line))
+        if t not in sizes: order.append(t)
+        sizes[t] += len(line)
+    part, used, assign = 0, 0, {}
+    for t in sorted(order, key=lambda t: sizes[t]):
+        if used and used + sizes[t] > max_mb << 20: part += 1; used = 0
+        assign[t] = part; used += sizes[t]
+    handles = {}
+    for line in read_lines(shard):
+        i = assign[trajectory_of(json.loads(line))]
+        if i not in handles: handles[i] = open(shard.with_name(f'{shard.stem}-t{i:03d}.jsonl'), 'w', encoding='utf-8')
+        handles[i].write(line)
+    for h in handles.values(): h.close()
+    os.remove(shard)
+    print(json.dumps({'split': str(shard), 'parts': len(handles), 'trajectories': len(order)}), flush=True)
+
+
 def cmd_convert(a):
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained(LFM_TOKENIZER)
-    pattern = str(Path(a.work) / (a.source or '*') / 'shard-[0-9][0-9][0-9][0-9].jsonl')
-    for shard in sorted(glob.glob(pattern)):
+    import re
+    shard_name = re.compile(r'^shard-\d{4}(-t\d{3})?\.jsonl$')
+    shards = [p for p in glob.glob(str(Path(a.work) / (a.source or '*') / 'shard-*.jsonl')) if shard_name.match(Path(p).name)]
+    for shard in sorted(shards):
         stem = Path(shard).with_suffix('')
         if Path(f'{stem}.stats.json').exists(): continue
+        if a.max_mb and os.path.getsize(shard) > a.max_mb << 20:
+            if not Path(shard).name.count('-t'):
+                split_by_trajectory(Path(shard), a.max_mb)
+                continue
+            print(json.dumps({'shard': shard, 'deferred': f'over --max-mb {a.max_mb}: convert in a larger unit'}), flush=True)
+            continue
         meta = json.load(open(Path(shard).parent / 'sharded.json'))
         convert_shard(Path(shard), tok, meta.get('preconverted_pieces'))
         os.remove(shard)  # the shard is an intermediate copy of its source; outputs and omissions are kept
@@ -441,6 +472,7 @@ def main():
     s.add_argument('--pieces', nargs='*')
     s.add_argument('--shards', type=int, help='shard count (compressed sources: their ratio varies, give it explicitly)')
     c = sub.add_parser('convert'); c.add_argument('--work', required=True); c.add_argument('--source')
+    c.add_argument('--max-mb', type=int, default=0, help='split larger shards by trajectory; defer single parts above it')
     sl = sub.add_parser('slice'); sl.add_argument('--source', required=True, help='corpus id under data_nvme natlang-corpora, or a path'); sl.add_argument('--id', required=True)
     sl.add_argument('--train-records', type=int, default=12000); sl.add_argument('--test-records', type=int, default=1500)
     sl.add_argument('--seed', type=int, default=20261012)
