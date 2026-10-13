@@ -50,6 +50,22 @@
       "passed": 130,
       "source_sha256": "3033c307a843a6bffdf487b4bd897df8c0f284563f36fbfea736655b4eebbfdd",
       "teacher_observations": 0
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/integrated-independent-review-astra/source-replay-v1/source-review.json",
+      "sha256": "45e52682f52fe546448d32dbbc37eac9d319d0a3bf6445560e720d21b0aab87b",
+      "programs": 220,
+      "candidates": 220,
+      "passed": 220,
+      "source_sha256": "95e839723def1e6335edd4b1c3e1d43bf5a21a58674869f246f0149252bfb8d2",
+      "teacher_observations": 0,
+      "builder_commit": "115fc18c",
+      "semantics_oracle_present": false,
+      "astra_fixture_gold_matches": "115fc18c",
+      "sol_fixture_gold_matches": "/tmp/sol-stage-comparison-snapshot.json",
+      "sol_delta_from_115fc18c": "Only sol060 documentedInvoiceIds schema/query/gold repair; independently reviewed A18-A22 source meaning.",
+      "all_source_groups_equal_curriculum_split_groups": true,
+      "world_groups": 82
     }
   ],
   "findings": [
@@ -58,7 +74,7 @@
       "severity": "blocking_before_broad_collection",
       "status": "open",
       "title": "Authored semantic equality is dropped by source adapter",
-      "evidence": "grouped-record-candidates-v6b has no semantics.oracle on any of23rows; checkOracle defaults exact. Reversing sol001.correctedClaims or astra-archives-02.clusters preserves the declared set meaning but returned accepted:false, level:exact in actual runtime comparator calls.",
+      "evidence": "grouped-record-candidates-v6b has no semantics.oracle on any of23rows; checkOracle defaults exact. Reversing astra-ecology-01.increase or astra-archives-02.clusters preserves the declared set meaning but returned accepted:false, level:exact in actual runtime comparator calls. sol001 correctedClaims was withdrawn as a false-negative example because its visible query explicitly requires ascending IDs.",
       "required": "Emit field-specific unordered paths; preserve ordered chronology/path arrays; judge prose and alternative witnesses against source constraints. Exercise positive permutations and negative omitted/extra/wrong-ID mutations."
     },
     {
@@ -72,18 +88,19 @@
     {
       "id": "AINT-03",
       "severity": "model_facing_contract_debt",
-      "status": "open",
+      "status": "fixed_source_render_verified_pending_live",
       "title": "Sol authored typed witness/frontier structures weakened",
       "evidence": "runtimeTypeFile replaces RelationDecision proposition/relatedIds/witnesses{path,quote} with status:string/evidenceIds/detail, WorkItem candidateIds/requiredProposition with kind, and domain bundle fields with unknown.",
-      "required": "Preserve useful typed structures or explicitly justify translated contract and measure it; retain exact quote/path witness checks."
+      "required": "Preserve useful typed structures or explicitly justify translated contract and measure it; retain exact quote/path witness checks.",
+      "resolution": "115fc18c preserves all7 authored aliases. Independently checked all100 Sol types.ts and fixture maps in full-type-fidelity-candidates-v1; report23/23 reference replay, source SHA8a45513f3c9b68feeb072aa114e17abf32e4e677144c22ce301d86df17788d11."
     },
     {
       "id": "AINT-04",
-      "severity": "model_facing_contract_debt",
+      "severity": "model_facing_source_identity_bug",
       "status": "open",
       "title": "Astra individual-record literal ID alias is implicit",
-      "evidence": "Authored local argument is {id,text}; emitted helper item is EvidenceRecord{path,text}, while instructions say pass current item. Grouped presentation omits that authored signature and avoids this particular mismatch.",
-      "required": "Render explicit id/path adapter or use one record type consistently, then measure changed presentation."
+      "evidence": "Authored local argument is {id,text}; emitted helper item is EvidenceRecord{path,text}. More seriously, archives01 expected unassigned r21 is from source_fixture.records[].id, but emitted files/typed records expose only record-21.txt path and text; no visible r21 alias map exists.",
+      "required": "Render explicit authored record IDs and ID/path mapping into model-visible source. Accept only declared aliases; do not infer hidden ID conventions. Rebuild/replay/sample as source repair, not model-negative evidence."
     },
     {
       "id": "AINT-05",
@@ -100,12 +117,29 @@
       "title": "Grouped per-record coverage not yet sealed",
       "evidence": "Static types require one finding per record but arrays do not enforce bijection or real IDs. Partial trace preserves record02/03/05/06 paths and correct local relations; results.jsonl was empty at inspection.",
       "required": "For each batch enforce exact sourcePath bijection, evidence ID resolution, and grounded unresolved claims; inspect whole24-record result and active call parents."
+    },
+    {
+      "id": "AINT-07",
+      "severity": "source_quality_limit",
+      "status": "diagnostic_only_existing_valid_data_retained",
+      "title": "Record count overstates connected per-task semantic depth",
+      "evidence": "Astra120 share one5-stage scaffold;54worlds comprise40single-case worlds,10worlds reused6ways,4worlds reused5ways. Several24-record shared-world queries need only a few decisive records, while archaeology03/05 and folklore04 are strongly repetitive.",
+      "required": "Record task-specific relevant evidence, interdependent joins and dependent decision layers. Keep valid simpler cases in the mix; hold only concrete bugs. Add new application-scale programs separately."
+    },
+    {
+      "id": "AINT-08",
+      "severity": "model_facing_source_leak",
+      "status": "authored_repair_pending_render_and_peer_review",
+      "title": "Gold-inferred nested map keys reveal answer categories",
+      "evidence": "archives04.series root type enumerates inferred creator/function labels; ecology06.contradictions root type enumerates H2/H3/H4, revealing the contradicted hypothesis set. folklore05.beliefs and conservation01.plans also use closed object-key rosters inferred from gold though these rosters are already input-defined.",
+      "required": "Use source-authored generic Record maps or justified publicly specified schemas; inspect all120 root types and rerender/replay before pilot.",
+      "resolution": "All120 root types inspected; four dynamic maps replaced with generic Record maps in catalog. Fixture/gold unchanged; affected cases held for presentation repair."
     }
   ],
   "false_negative_reproductions": [
     {
-      "program": "sol-001",
-      "path": "/correctedClaims",
+      "program": "astra-ecology-01",
+      "path": "/increase",
       "mutation": "reverse set order",
       "semantic_equivalent": true,
       "runtime_accepted": false
@@ -141,13 +175,24 @@
   },
   "limitations": [
     "Astra source-oracle independence comes from Sol receipt; this reviewer does not self-certify authored gold.",
-    "All220 source design and82world identities inspected; current sealed replay evidence covers130 distinct programs, not220.",
+    "All220 source design and82world identities inspected; sealed pre-comparison reference replay covers all220 programs, but does not exercise named semantic stages.",
     "Live trace observation is partial and diagnostic, not a trajectory admission or presentation qualification."
   ],
+  "corrections": [
+    {
+      "finding": "AINT-01",
+      "note": "The original sol001 set-order reproduction ignored its visible ascending-ID instruction. That rejection is contractual, not a false negative. Replaced it with ecology01 increase-set permutation."
+    },
+    {
+      "finding": "AINT-07",
+      "note": "Owner explicitly retains valid simpler cases. Difficulty alone is not an admission hold; application-scale depth is added separately."
+    }
+  ],
+  "last_updated_at": "2026-10-13T21:13:03.048759+00:00",
   "signature": {
     "kind": "reviewer-attributed-content-digest",
     "signed_by": "/root/semantic_slate_astra",
-    "payload_sha256": "fe3fea36bc14df52ca9f63d2456aeeaf952cafefc900c1446e513ebcb97d624b",
+    "payload_sha256": "0eca9b1ea5bd1c7c004013630844a7f3eee45ca49328bca3e8267e3473017bf0",
     "canonicalization": "UTF-8 JSON sorted keys compact separators, ensure_ascii=false, excluding signature; attribution is agent review, not a private-key digital signature"
   }
 }

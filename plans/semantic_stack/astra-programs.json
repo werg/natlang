@@ -7,7 +7,7 @@
     "operation": "partial_order_reconstruction",
     "semantic_rule": "Only explicit relative dates within the same voyage support edges; retain unresolved voyage identity.",
     "input_contract": "CaseFolder { records: Array<{id:string,path:string,text:string}>, task: {objective:string,rule:string} }",
-    "output_contract": "{ \"V1_order\": (string)[]; \"V2_edges\": ((string)[])[]; \"unassigned\": (string)[] }",
+    "output_contract": "{ \"V1_order\": (string)[]; \"V2_edges\": ((string)[])[]; \"unassigned\": (string)[] }\nOutput representation: V1_order is an ordered sequence of source-grounded event descriptions; clear equivalent event names are allowed, and underscores versus spaces do not change event identity. V2_edges contains ordered earlier/later event-description pairs. The unassigned list contains record IDs: in this task record-NN.txt has ID rN, where N is its decimal file number without leading zeros. Preserve the voyage distinction even when event descriptions coincide.",
     "positive_evidence": [
       "Voyage V1 aboard Lark begins with departure on day 1.",
       "The V1 ice landing occurs three days after departure."
@@ -243,7 +243,10 @@
           "/V2_edges",
           "/unassigned"
         ],
-        "prose_paths": [],
+        "prose_paths": [
+          "/V1_order/*",
+          "/V2_edges/*/*"
+        ],
         "ordered_paths": [
           "/V1_order",
           "/V2_edges/*"
@@ -312,7 +315,7 @@
       "live_samples": 0,
       "training_admitted": false,
       "counting_key": "archives/partial_order_reconstruction/expedition-order",
-      "generation_ready": true
+      "generation_ready": false
     },
     "lambda": {
       "binding": "judgeLocal",
@@ -353,7 +356,7 @@
       "status": "authored_full_fixture",
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
-    "generation_ready": true,
+    "generation_ready": false,
     "source_fixture_review": {
       "date": "2026-10-13",
       "reviewer": "semantic_stack_curriculum",
@@ -372,7 +375,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{eventMentions: {sourcePath:string; voyageMention:string|null; eventPhrase:string; timePhrase:string|null; witnesses:Witness[]}[]; voyageBindings: {sourcePath:string; voyageId:string|null; eventId:string|null; bindingReason:string; witnesses:Witness[]}[]; temporalCandidates: {sourcePath:string; voyageId:string|null; earlier:string; later:string; relationBasis:string; witnesses:Witness[]}[]; temporalDecisions: {sourcePath:string; voyageId:string|null; earlier:string|null; later:string|null; status:string; reason:string; witnesses:Witness[]}[]; chronologyAudit: {supportedEdges:DirectedClaim[]; unassignedSources:string[]; cycleWitnesses:string[][]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
@@ -496,6 +499,17 @@
           "scoped_literal_plan": []
         }
       ]
+    },
+    "output_identity_contract": "V1_order is an ordered sequence of source-grounded event descriptions; clear equivalent event names are allowed, and underscores versus spaces do not change event identity. V2_edges contains ordered earlier/later event-description pairs. The unassigned list contains record IDs: in this task record-NN.txt has ID rN, where N is its decimal file number without leading zeros. Preserve the voyage distinction even when event descriptions coincide.",
+    "source_presentation_hold": {
+      "reason": "Visible output representation or prose-equivalence policy repaired after independent oracle visibility review; not a model failure.",
+      "required": [
+        "Inspect rebuilt root instructions and typed record identity map.",
+        "Replay exact source contracts and obtain independent peer review.",
+        "Sample affected model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
     }
   },
   {
@@ -887,7 +901,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{nameMentions: {sourcePath:string; name:string; authorityId:string|null; office:string|null; witnesses:Witness[]}[]; identityCandidates: {left:string; right:string; candidateBasis:string; witnesses:Witness[]}[]; identityAssessments: {left:string; right:string; supportKind:string; conflict:string|null; witnesses:Witness[]}[]; identityDecisions: {left:string; right:string; decision:string; witnesses:Witness[]}[]; clusterAudit: {clusters:string[][]; rejectedLinks:DirectedClaim[]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
@@ -1380,7 +1394,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{passageSpans: {sourcePath:string; subject:string; exactSpan:string; passageRole:string; witnesses:Witness[]}[]; personContexts: {subject:string; lifeStatus:string; publicRole:string|null; statusSources:Witness[]}[]; purposeAssessments: {sourcePath:string; exactSpan:string; purpose:string; protectedRole:string|null; witnesses:Witness[]}[]; disclosureDecisions: {sourcePath:string; exactSpan:string; action:string; reason:string; witnesses:Witness[]}[]; redactionAudit: {redactions:SpanDecision[]; retained:SpanDecision[]; unresolved:SpanDecision[]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
@@ -1514,7 +1528,7 @@
     "operation": "provenance_preserving_hierarchical_index",
     "semantic_rule": "Arrange by creating body then function; a topic match creates a cross-reference, never a provenance reassignment.",
     "input_contract": "CaseFolder { records: Array<{id:string,path:string,text:string}>, task: {objective:string,rule:string} }",
-    "output_contract": "{ \"series\": { \"Harbor Board / permits\": (string)[]; \"Harbor Board / fee policy\": (string)[]; \"Trade Union / petitions\": (string)[]; \"Trade Union / membership\": (string)[] }; \"crossReferences\": ((string)[])[] }",
+    "output_contract": "{ series: Record<string, string[]>; crossReferences: string[][] }",
     "positive_evidence": [
       "Arrangement rule: first group by creating body, then administrative function; subject links are cross-references.",
       "Harbor Board and Trade Union are separate creating bodies."
@@ -1754,7 +1768,7 @@
       ],
       "teacher_review_required": true,
       "semantic_review": "Independent source-grounded review must confirm interpretation, evidence scope and ambiguity; authored expected values are provisional seed answers, not a live teacher certificate.",
-      "return_type": "{ \"series\": { \"Harbor Board / permits\": (string)[]; \"Harbor Board / fee policy\": (string)[]; \"Trade Union / petitions\": (string)[]; \"Trade Union / membership\": (string)[] }; \"crossReferences\": ((string)[])[] }",
+      "return_type": "{ series: Record<string, string[]>; crossReferences: string[][] }",
       "comparison": "Treat expected as canonical semantic facts or a canonical witness. Accept other witnesses only if they satisfy the complete declared constraints; never use prose byte equality as the semantic judge.",
       "derivation": "Partition all twelve items by the explicit creator/function pair, then enumerate four reply links and two stated subject links. Shared custody and incidental fee mentions do not move items.",
       "ordering_policy": {
@@ -1838,7 +1852,7 @@
       "live_samples": 0,
       "training_admitted": false,
       "counting_key": "archives/provenance_preserving_hierarchical_index/finding-aid",
-      "generation_ready": true
+      "generation_ready": false
     },
     "lambda": {
       "binding": "judgeLocal",
@@ -1850,7 +1864,7 @@
       "placement": "interpretAdministrativeContext"
     },
     "result_contract_design": "{series:{creator:string,function:string,ids:string[]}[],crossReferences:[string,string][]}",
-    "return_type": "{ \"series\": { \"Harbor Board / permits\": (string)[]; \"Harbor Board / fee policy\": (string)[]; \"Trade Union / petitions\": (string)[]; \"Trade Union / membership\": (string)[] }; \"crossReferences\": ((string)[])[] }",
+    "return_type": "{ series: Record<string, string[]>; crossReferences: string[][] }",
     "fixture_size_status": "full_size_authored_priority",
     "expansion_recipe": {
       "id": "astra-archives-04-linked24-v1",
@@ -1879,7 +1893,7 @@
       "status": "authored_full_fixture_pending_independent_review",
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
-    "generation_ready": true,
+    "generation_ready": false,
     "source_fixture_review": {
       "date": "2026-10-13",
       "reviewer": "semantic_stack_curriculum",
@@ -1898,7 +1912,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{recordRoles: {sourcePath:string; recordId:string; authorMention:string; addressee:string|null; witnesses:Witness[]}[]; creatorBindings: {recordId:string; creator:string; bindingReason:string; witnesses:Witness[]}[]; functionCandidates: {recordId:string; creator:string; proposedFunction:string; alternatives:string[]; witnesses:Witness[]}[]; functionDecisions: {recordId:string; function:string; crossReferenceTargets:string[]; witnesses:Witness[]}[]; arrangementAudit: {series:{creator:string; function:string; recordIds:string[]}[]; crossReferences:DirectedClaim[]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
@@ -2022,6 +2036,16 @@
           "scoped_literal_plan": []
         }
       ]
+    },
+    "source_presentation_hold": {
+      "reason": "Replaced gold-inferred dynamic output-map key roster with source-authored generic Record; no expected answer categories exposed by type.",
+      "required": [
+        "Inspect rebuilt root signature.",
+        "Replay exact typed source contracts and independent peer review.",
+        "Sample model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
     }
   },
   {
@@ -2032,7 +2056,7 @@
     "operation": "directed_stemma_with_mixture",
     "semantic_rule": "A shared unique error supports descent; a later marginal addition does not date the underlying text.",
     "input_contract": "CaseFolder { records: Array<{id:string,path:string,text:string}>, task: {objective:string,rule:string} }",
-    "output_contract": "{ \"descent\": ((string)[])[]; \"borrowings\": ((string)[])[] }",
+    "output_contract": "{ \"descent\": ((string)[])[]; \"borrowings\": ((string)[])[] }\nOutput representation: For descent edges, use the source witness letters as endpoints. For borrowing edges, the first endpoint is the source witness letter and the second is the receiving layer identifier: append _margin to the receiving witness letter for a marginal addition. Tuple direction is source to recipient layer.",
     "positive_evidence": [
       "A stemma edge means declared copying of the body; a marginal borrowing is a different edge kind.",
       "A unique repeated-word error may support a copying hypothesis; explicit copying notes establish the intended lineage in this fixture."
@@ -2365,7 +2389,7 @@
       "live_samples": 0,
       "training_admitted": false,
       "counting_key": "archives/directed_stemma_with_mixture/version-stemma",
-      "generation_ready": true
+      "generation_ready": false
     },
     "lambda": {
       "binding": "judgeLocal",
@@ -2406,7 +2430,7 @@
       "status": "authored_full_fixture_pending_independent_review",
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
-    "generation_ready": true,
+    "generation_ready": false,
     "source_fixture_review": {
       "date": "2026-10-13",
       "reviewer": "semantic_stack_curriculum",
@@ -2425,7 +2449,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{variantSpans: {sourcePath:string; witnessId:string; variant:string; location:string; date:number|null; witnesses:Witness[]}[]; innovationGroups: {innovation:string; witnessIds:string[]; originCandidate:string|null; witnesses:Witness[]}[]; transmissionCandidates: {parent:string; child:string; layer:string; temporalCompatible:boolean; witnesses:Witness[]}[]; transmissionDecisions: {parent:string; child:string; relation:string; reason:string; witnesses:Witness[]}[]; stemmaAudit: {descent:DirectedClaim[]; borrowing:DirectedClaim[]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
@@ -2549,6 +2573,17 @@
           "scoped_literal_plan": []
         }
       ]
+    },
+    "output_identity_contract": "For descent edges, use the source witness letters as endpoints. For borrowing edges, the first endpoint is the source witness letter and the second is the receiving layer identifier: append _margin to the receiving witness letter for a marginal addition. Tuple direction is source to recipient layer.",
+    "source_presentation_hold": {
+      "reason": "Visible output representation or prose-equivalence policy repaired after independent oracle visibility review; not a model failure.",
+      "required": [
+        "Inspect rebuilt root instructions and typed record identity map.",
+        "Replay exact source contracts and obtain independent peer review.",
+        "Sample affected model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
     }
   },
   {
@@ -2916,7 +2951,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{editClaims: {sourcePath:string; editId:string; field:string; proposedValue:string; signed:boolean; witnesses:Witness[]}[]; fieldIntentGroups: {field:string; editIds:string[]; intendedPropositions:string[]; witnesses:Witness[]}[]; editRelations: {left:string; right:string; relation:string; reason:string; witnesses:Witness[]}[]; editDecisions: {editId:string; disposition:string; conflictWith:string[]; witnesses:Witness[]}[]; patchAudit: {accepted:string[]; conflictSets:string[][]; rejected:string[]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
@@ -3489,7 +3524,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{fieldRelations: {sourcePath:string; contextMentions:string[]; fieldPhrase:string; witnesses:Witness[]}[]; contextBindings: {sourcePath:string; contextId:string; role:string; aliases:string[]; witnesses:Witness[]}[]; stratigraphicCandidates: {older:string; younger:string; physicalBasis:string; witnesses:Witness[]}[]; stratigraphicDecisions: {older:string; younger:string; status:string; reason:string; witnesses:Witness[]}[]; cycleAudit: {edges:DirectedClaim[]; minimalCycles:string[][]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
@@ -5078,7 +5113,9 @@
         "unordered_paths": [
           "/biographies"
         ],
-        "prose_paths": [],
+        "prose_paths": [
+          "/biographies/*/episodes/*/role"
+        ],
         "ordered_paths": [
           "/biographies/*/episodes"
         ],
@@ -5192,7 +5229,17 @@
       "priority": "diagnostic_first",
       "reason": "Within-world evidence is strongly patterned; enrich causal interventions, nonuniform cases and ambiguity before mass generation. Program algorithm remains distinct from other catalog entries."
     },
-    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change."
+    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change.",
+    "source_presentation_hold": {
+      "reason": "Visible output representation or prose-equivalence policy repaired after independent oracle visibility review; not a model failure.",
+      "required": [
+        "Inspect rebuilt root instructions and typed record identity map.",
+        "Replay exact source contracts and obtain independent peer review.",
+        "Sample affected model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
+    }
   },
   {
     "id": "astra-archaeology-06",
@@ -5544,7 +5591,7 @@
     "operation": "role_aware_sequence_alignment",
     "semantic_rule": "Align events by causal role in the tale; repeated surface nouns do not establish the same motif.",
     "input_contract": "CaseFolder { records: Array<{id:string,path:string,text:string}>, task: {objective:string,rule:string} }",
-    "output_contract": "{ \"alignments\": ({ \"role\": string; \"events\": (string)[] })[]; \"inversions\": (string)[]; \"partialAnalogies\": (string)[] }",
+    "output_contract": "{ \"alignments\": ({ \"role\": string; \"events\": (string)[] })[]; \"inversions\": (string)[]; \"partialAnalogies\": (string)[] }\nOutput representation: Represent each tale event with its tale letter immediately followed by its decimal event number, with no separator. An event ID identifies one event in one tale; alignments group these IDs by shared narrative function. Keep incompatible or partial roles explicit.",
     "positive_evidence": [
       "Tale A, event 1: A fox lends a key so the traveler can pass the locked gate.",
       "Tale A, event 2: The traveler crosses a river to reach the prison."
@@ -5926,7 +5973,18 @@
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
     "generation_ready": false,
-    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change."
+    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change.",
+    "output_identity_contract": "Represent each tale event with its tale letter immediately followed by its decimal event number, with no separator. An event ID identifies one event in one tale; alignments group these IDs by shared narrative function. Keep incompatible or partial roles explicit.",
+    "source_presentation_hold": {
+      "reason": "Visible output representation or prose-equivalence policy repaired after independent oracle visibility review; not a model failure.",
+      "required": [
+        "Inspect rebuilt root instructions and typed record identity map.",
+        "Replay exact source contracts and obtain independent peer review.",
+        "Sample affected model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
+    }
   },
   {
     "id": "astra-folklore-02",
@@ -7032,7 +7090,7 @@
     "operation": "epistemic_state_update",
     "semantic_rule": "A report changes a listener belief; only supplied direct observation changes the witnessed-event register.",
     "input_contract": "CaseFolder { records: Array<{id:string,path:string,text:string}>, task: {objective:string,rule:string} }",
-    "output_contract": "{ \"world\": string; \"beliefs\": { \"Mara\": string; \"Jori\": string; \"Neri\": string; \"Ola\": string; \"Pia\": string; \"Quin\": string; \"Trickster\": string }; \"unsupported\": (string)[] }",
+    "output_contract": "{ world: string; beliefs: Record<string, string>; unsupported: string[] }",
     "positive_evidence": [
       "World starts with chest empty; direct observation is reliable in this tale.",
       "Mara inspects the chest and sees it empty."
@@ -7237,7 +7295,7 @@
       ],
       "teacher_review_required": true,
       "semantic_review": "Independent source-grounded review must confirm interpretation, evidence scope and ambiguity; authored expected values are provisional seed answers, not a live teacher certificate.",
-      "return_type": "{ \"world\": string; \"beliefs\": { \"Mara\": string; \"Jori\": string; \"Neri\": string; \"Ola\": string; \"Pia\": string; \"Quin\": string; \"Trickster\": string }; \"unsupported\": (string)[] }",
+      "return_type": "{ world: string; beliefs: Record<string, string>; unsupported: string[] }",
       "comparison": "Treat expected as canonical semantic facts or a canonical witness. Accept other witnesses only if they satisfy the complete declared constraints; never use prose byte equality as the semantic judge.",
       "derivation": "Replay only observed events and trusted reports into each named agent view. Pia uttering gold to Quin does not itself change Pia silver belief; the narrator claim cannot update observations.",
       "ordering_policy": {
@@ -7334,7 +7392,7 @@
       "placement": "interpretReportStatus"
     },
     "result_contract_design": "{beliefs:{person:string,claim:string}[],observed:string[],unsupported:string[]}",
-    "return_type": "{ \"world\": string; \"beliefs\": { \"Mara\": string; \"Jori\": string; \"Neri\": string; \"Ola\": string; \"Pia\": string; \"Quin\": string; \"Trickster\": string }; \"unsupported\": (string)[] }",
+    "return_type": "{ world: string; beliefs: Record<string, string>; unsupported: string[] }",
     "fixture_size_status": "full_size_authored_pending_independent_review",
     "expansion_recipe": {
       "id": "astra-folklore-05-linked24-v1",
@@ -7364,7 +7422,17 @@
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
     "generation_ready": false,
-    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change."
+    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change.",
+    "source_presentation_hold": {
+      "reason": "Replaced gold-inferred dynamic output-map key roster with source-authored generic Record; no expected answer categories exposed by type.",
+      "required": [
+        "Inspect rebuilt root signature.",
+        "Replay exact typed source contracts and independent peer review.",
+        "Sample model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
+    }
   },
   {
     "id": "astra-folklore-06",
@@ -7962,11 +8030,11 @@
       "acceptance": "Canonical structured witness, not the sole allowed prose serialization. Exact ID/number/boolean and invariant checks are combined with independent grounded-relation review; arbitrary free-text byte equality is not a semantic oracle.",
       "comparison_spec": {
         "schema_version": "semantic-structured-comparison/1",
-        "unordered_paths": [],
-        "prose_paths": [],
-        "ordered_paths": [
+        "unordered_paths": [
           "/displays"
         ],
+        "prose_paths": [],
+        "ordered_paths": [],
         "default_array_order": "ordered",
         "object_key_order": "irrelevant",
         "duplicate_policy": "reject unexpected multiplicity; unordered comparison is bijective, not lossy set deduplication",
@@ -8775,7 +8843,9 @@
         "unordered_paths": [
           "/labels"
         ],
-        "prose_paths": [],
+        "prose_paths": [
+          "/labels/*/oldAttributionStatus"
+        ],
         "ordered_paths": [],
         "default_array_order": "ordered",
         "object_key_order": "irrelevant",
@@ -8883,7 +8953,17 @@
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
     "generation_ready": false,
-    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change."
+    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change.",
+    "source_presentation_hold": {
+      "reason": "Visible output representation or prose-equivalence policy repaired after independent oracle visibility review; not a model failure.",
+      "required": [
+        "Inspect rebuilt root instructions and typed record identity map.",
+        "Replay exact source contracts and obtain independent peer review.",
+        "Sample affected model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
+    }
   },
   {
     "id": "astra-museum_curation-04",
@@ -9240,7 +9320,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{galleryAssertions: {sourcePath:string; location:string; assertionKind:string; content:string; witnesses:Witness[]}[]; themeCandidates: {objectId:string; location:string; theme:string; basis:string; witnesses:Witness[]}[]; objectAssessments: {objectId:string; theme:string; contribution:string; relevant:boolean; witnesses:Witness[]}[]; interestDecisions: {objectId:string; theme:string; qualifies:boolean; reason:string; witnesses:Witness[]}[]; routeAudit: {adjacency:DirectedClaim[]; route:string[]; coveredThemes:string[]; distance:number; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
@@ -10465,7 +10545,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{interactionAssertions: {sourcePath:string; organisms:string[]; observation:string; witnesses:Witness[]}[]; interactionEdges: {cause:string; effect:string; sign:number; mechanism:string; witnesses:Witness[]}[]; causalAssessments: {cause:string; effect:string; signedEffect:number; direct:boolean; witnesses:Witness[]}[]; scopeDecisions: {cause:string; effect:string; usable:boolean; sign:number|null; reason:string; witnesses:Witness[]}[]; effectAudit: {positivePaths:{target:string; path:string[]}[]; negativePaths:{target:string; path:string[]}[]; unresolvedTargets:string[]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
@@ -12015,7 +12095,7 @@
     "operation": "causal_explanation_cover",
     "semantic_rule": "An explanation must account for each supplied indicator and state which additional observation would separate remaining explanations.",
     "input_contract": "CaseFolder { records: Array<{id:string,path:string,text:string}>, task: {objective:string,rule:string} }",
-    "output_contract": "{ \"compatible\": (string)[]; \"contradictions\": { \"H2\": (string)[]; \"H3\": (string)[]; \"H4\": (string)[] } }",
+    "output_contract": "{ compatible: string[]; contradictions: Record<string, string[]> }",
     "positive_evidence": [
       "Model H1 predicts algae high.",
       "Model H1 predicts clarity low."
@@ -12222,7 +12302,7 @@
       ],
       "teacher_review_required": true,
       "semantic_review": "Independent source-grounded review must confirm interpretation, evidence scope and ambiguity; authored expected values are provisional seed answers, not a live teacher certificate.",
-      "return_type": "{ \"compatible\": (string)[]; \"contradictions\": { \"H2\": (string)[]; \"H3\": (string)[]; \"H4\": (string)[] } }",
+      "return_type": "{ compatible: string[]; contradictions: Record<string, string[]> }",
       "comparison": "Treat expected as canonical semantic facts or a canonical witness. Accept other witnesses only if they satisfy the complete declared constraints; never use prose byte equality as the semantic judge.",
       "derivation": "Compare the complete four-indicator vector for each model with the observed vector. H1 alone matches; report all differing components of each alternative, preserving the reliable-observation condition.",
       "ordering_policy": {
@@ -12316,7 +12396,7 @@
       "placement": "interpretIndicatorMeaning"
     },
     "result_contract_design": "{compatible:string[],excluded:{hypothesis:string,evidence:string}[]}",
-    "return_type": "{ \"compatible\": (string)[]; \"contradictions\": { \"H2\": (string)[]; \"H3\": (string)[]; \"H4\": (string)[] } }",
+    "return_type": "{ compatible: string[]; contradictions: Record<string, string[]> }",
     "fixture_size_status": "full_size_authored_pending_independent_review",
     "expansion_recipe": {
       "id": "astra-ecology-06-linked24-v1",
@@ -12346,7 +12426,17 @@
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
     "generation_ready": false,
-    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change."
+    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change.",
+    "source_presentation_hold": {
+      "reason": "Replaced gold-inferred dynamic output-map key roster with source-authored generic Record; no expected answer categories exposed by type.",
+      "required": [
+        "Inspect rebuilt root signature.",
+        "Replay exact typed source contracts and independent peer review.",
+        "Sample model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
+    }
   },
   {
     "id": "astra-conservation-01",
@@ -12356,7 +12446,7 @@
     "operation": "precedence_planning_with_incompatibilities",
     "semantic_rule": "Use only the supplied material protocol; propose actions, never execute treatment.",
     "input_contract": "CaseFolder { records: Array<{id:string,path:string,text:string}>, task: {objective:string,rule:string} }",
-    "output_contract": "{ \"plans\": { \"A\": (string)[]; \"B\": (string)[]; \"C\": (string)[]; \"D\": (string)[]; \"E\": (string)[]; \"F\": (string)[] }; \"waterWashExcluded\": (string)[] }",
+    "output_contract": "{ plans: Record<string, string[]>; waterWashExcluded: string[] }",
     "positive_evidence": [
       "Object A pigment is flaky; its support is water-sensitive.",
       "Protocol for A: consolidate flaky pigment before any cleaning; stable pigment needs no consolidation."
@@ -12576,7 +12666,7 @@
       ],
       "teacher_review_required": true,
       "semantic_review": "Independent source-grounded review must confirm interpretation, evidence scope and ambiguity; authored expected values are provisional seed answers, not a live teacher certificate.",
-      "return_type": "{ \"plans\": { \"A\": (string)[]; \"B\": (string)[]; \"C\": (string)[]; \"D\": (string)[]; \"E\": (string)[]; \"F\": (string)[] }; \"waterWashExcluded\": (string)[] }",
+      "return_type": "{ plans: Record<string, string[]>; waterWashExcluded: string[] }",
       "comparison": "Treat expected as canonical semantic facts or a canonical witness. Accept other witnesses only if they satisfy the complete declared constraints; never use prose byte equality as the semantic judge.",
       "derivation": "Bind condition and substrate separately. Three objects require consolidation; three water-sensitive supports exclude washing. The supplied preference resolves otherwise valid cleaning alternatives without fabricating a material rule.",
       "ordering_policy": {
@@ -12678,7 +12768,7 @@
       "placement": "interpretMaterialWarning"
     },
     "result_contract_design": "{plan:string[],excluded:string[]}",
-    "return_type": "{ \"plans\": { \"A\": (string)[]; \"B\": (string)[]; \"C\": (string)[]; \"D\": (string)[]; \"E\": (string)[]; \"F\": (string)[] }; \"waterWashExcluded\": (string)[] }",
+    "return_type": "{ plans: Record<string, string[]>; waterWashExcluded: string[] }",
     "fixture_size_status": "full_size_authored_pending_independent_review",
     "expansion_recipe": {
       "id": "astra-conservation-01-linked24-v1",
@@ -12708,7 +12798,17 @@
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
     "generation_ready": false,
-    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change."
+    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change.",
+    "source_presentation_hold": {
+      "reason": "Replaced gold-inferred dynamic output-map key roster with source-authored generic Record; no expected answer categories exposed by type.",
+      "required": [
+        "Inspect rebuilt root signature.",
+        "Replay exact typed source contracts and independent peer review.",
+        "Sample model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
+    }
   },
   {
     "id": "astra-conservation-02",
@@ -17638,7 +17738,7 @@
     "operation": "temporal_contract_join",
     "semantic_rule": "A protected transfer applies only to the named service pair and operating day; use exact minimum interchange time.",
     "input_contract": "CaseFolder { records: Array<{id:string,path:string,text:string}>, task: {objective:string,rule:string} }",
-    "output_contract": "{ \"connections\": ({ \"pair\": string; \"status\": string; \"earliestDeparture\": number })[] }",
+    "output_contract": "{ \"connections\": ({ \"pair\": string; \"status\": string; \"earliestDeparture\": number })[] }\nOutput representation: Represent a connection pair as feeder service ID, a hyphen, then receiving service ID. The status describes whether the supplied guarantee protects the interchange or whether the connection is missed; equivalent status wording must preserve that distinction.",
     "positive_evidence": [
       "Transit task snapshot is Monday at time 8; rider needs Harbor H by time 12 and step-free travel.",
       "Stop A is North Mill beside a library; stop S is South Mill beside a stadium."
@@ -17895,7 +17995,9 @@
         "unordered_paths": [
           "/connections"
         ],
-        "prose_paths": [],
+        "prose_paths": [
+          "/connections/*/status"
+        ],
         "ordered_paths": [],
         "default_array_order": "ordered",
         "object_key_order": "irrelevant",
@@ -18009,7 +18111,18 @@
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
     "generation_ready": false,
-    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change."
+    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change.",
+    "output_identity_contract": "Represent a connection pair as feeder service ID, a hyphen, then receiving service ID. The status describes whether the supplied guarantee protects the interchange or whether the connection is missed; equivalent status wording must preserve that distinction.",
+    "source_presentation_hold": {
+      "reason": "Visible output representation or prose-equivalence policy repaired after independent oracle visibility review; not a model failure.",
+      "required": [
+        "Inspect rebuilt root instructions and typed record identity map.",
+        "Replay exact source contracts and obtain independent peer review.",
+        "Sample affected model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
+    }
   },
   {
     "id": "astra-transit-04",
@@ -18372,7 +18485,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{tripAssertions: {sourcePath:string; tripId:string|null; route:string|null; calendarPhrase:string; destinationPhrase:string; witnesses:Witness[]}[]; servicePatterns: {tripId:string; branch:string; days:string[]; departure:number; amendmentSources:Witness[]}[]; coverageCandidates: {tripId:string; reachesHarbor:boolean|null; reason:string; witnesses:Witness[]}[]; noticeDecisions: {tripId:string; active:boolean; reachesHarbor:boolean; reason:string; witnesses:Witness[]}[]; calendarAudit: {includedTrips:{tripId:string; departure:number}[]; excludedTrips:string[]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
@@ -19887,14 +20000,13 @@
       "comparison_spec": {
         "schema_version": "semantic-structured-comparison/1",
         "unordered_paths": [
-          "/prerequisites"
+          "/prerequisites",
+          "/turns"
         ],
         "prose_paths": [
           "/prerequisites/*"
         ],
-        "ordered_paths": [
-          "/turns"
-        ],
+        "ordered_paths": [],
         "default_array_order": "ordered",
         "object_key_order": "irrelevant",
         "duplicate_policy": "reject unexpected multiplicity; unordered comparison is bijective, not lossy set deduplication",
@@ -21906,7 +22018,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{ingredientAssertions: {sourcePath:string; productId:string; assertionKind:string; componentMentions:string[]; witnesses:Witness[]}[]; compoundEdges: {compound:string; component:string; declarationScope:string; witnesses:Witness[]}[]; componentAssessments: {productId:string; component:string|null; meaning:string; relevant:boolean; witnesses:Witness[]}[]; supplierDecisions: {productId:string; componentIds:string[]; complete:boolean; unknownReason:string|null; witnesses:Witness[]}[]; compositionAudit: {excludedPaths:{productId:string; path:string[]}[]; eligible:string[]; unresolved:string[]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
@@ -24606,7 +24718,10 @@
           "/entries/*/subentries",
           "/entries/*/subentries/*/pages"
         ],
-        "prose_paths": [],
+        "prose_paths": [
+          "/entries/*/heading",
+          "/entries/*/subentries/*/heading"
+        ],
         "ordered_paths": [],
         "default_array_order": "ordered",
         "object_key_order": "irrelevant",
@@ -24720,7 +24835,17 @@
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
     "generation_ready": false,
-    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change."
+    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change.",
+    "source_presentation_hold": {
+      "reason": "Visible output representation or prose-equivalence policy repaired after independent oracle visibility review; not a model failure.",
+      "required": [
+        "Inspect rebuilt root instructions and typed record identity map.",
+        "Replay exact source contracts and obtain independent peer review.",
+        "Sample affected model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
+    }
   },
   {
     "id": "astra-publishing-03",
@@ -25739,7 +25864,10 @@
         "unordered_paths": [
           "/rejected"
         ],
-        "prose_paths": [],
+        "prose_paths": [
+          "/expression",
+          "/rejected/*"
+        ],
         "ordered_paths": [],
         "default_array_order": "ordered",
         "object_key_order": "irrelevant",
@@ -25853,7 +25981,17 @@
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
     "generation_ready": false,
-    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change."
+    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change.",
+    "source_presentation_hold": {
+      "reason": "Visible output representation or prose-equivalence policy repaired after independent oracle visibility review; not a model failure.",
+      "required": [
+        "Inspect rebuilt root instructions and typed record identity map.",
+        "Replay exact source contracts and obtain independent peer review.",
+        "Sample affected model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
+    }
   },
   {
     "id": "astra-publishing-06",
@@ -28391,7 +28529,10 @@
           "/invalid",
           "/valid"
         ],
-        "prose_paths": [],
+        "prose_paths": [
+          "/invalid/*/key",
+          "/valid/*"
+        ],
         "ordered_paths": [],
         "default_array_order": "ordered",
         "object_key_order": "irrelevant",
@@ -28505,7 +28646,17 @@
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
     "generation_ready": false,
-    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change."
+    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change.",
+    "source_presentation_hold": {
+      "reason": "Visible output representation or prose-equivalence policy repaired after independent oracle visibility review; not a model failure.",
+      "required": [
+        "Inspect rebuilt root instructions and typed record identity map.",
+        "Replay exact source contracts and obtain independent peer review.",
+        "Sample affected model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
+    }
   },
   {
     "id": "astra-theatre-01",
@@ -29533,12 +29684,11 @@
       "comparison_spec": {
         "schema_version": "semantic-structured-comparison/1",
         "unordered_paths": [
-          "/schedule/*/tasks"
-        ],
-        "prose_paths": [],
-        "ordered_paths": [
+          "/schedule/*/tasks",
           "/schedule"
         ],
+        "prose_paths": [],
+        "ordered_paths": [],
         "default_array_order": "ordered",
         "object_key_order": "irrelevant",
         "duplicate_policy": "reject unexpected multiplicity; unordered comparison is bijective, not lossy set deduplication",
@@ -29661,7 +29811,7 @@
     "operation": "event_trigger_alignment",
     "semantic_rule": "A cue attaches to the described observable event; a line mention is insufficient when the instruction names the later physical action.",
     "input_contract": "CaseFolder { records: Array<{id:string,path:string,text:string}>, task: {objective:string,rule:string} }",
-    "output_contract": "{ \"cues\": ({ \"id\": string; \"trigger\": string })[] }",
+    "output_contract": "{ \"cues\": ({ \"id\": string; \"trigger\": string })[] }\nOutput representation: Represent an action trigger by its source action ID. Represent a spoken-word trigger as the source line ID followed by .word_ and the literal triggering word. This distinguishes a word mention from the physical action.",
     "positive_evidence": [
       "Theatre snapshot uses actors Ada, Bo and Cy; stage positions left, center and right.",
       "At beat1 Ada is left, Bo center, Cy right; left and center are adjacent."
@@ -30030,7 +30180,18 @@
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
     "generation_ready": false,
-    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change."
+    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change.",
+    "output_identity_contract": "Represent an action trigger by its source action ID. Represent a spoken-word trigger as the source line ID followed by .word_ and the literal triggering word. This distinguishes a word mention from the physical action.",
+    "source_presentation_hold": {
+      "reason": "Visible output representation or prose-equivalence policy repaired after independent oracle visibility review; not a model failure.",
+      "required": [
+        "Inspect rebuilt root instructions and typed record identity map.",
+        "Replay exact source contracts and obtain independent peer review.",
+        "Sample affected model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
+    }
   },
   {
     "id": "astra-theatre-05",
@@ -31163,7 +31324,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{questAssertions: {sourcePath:string; questId:string; assertionKind:string; mentionedFlags:string[]; witnesses:Witness[]}[]; prerequisiteEdges: {questId:string; requiredFlag:string; producerQuest:string|null; witnesses:Witness[]}[]; rewardAssessments: {questId:string; reward:string; requiredCompletion:string; usableAfter:string; witnesses:Witness[]}[]; flagDecisions: {questId:string; flag:string; grants:boolean; condition:string; witnesses:Witness[]}[]; reachabilityAudit: {reachableOrder:string[]; deadlockedComponents:string[][]; finalRewards:string[]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
@@ -31852,7 +32013,8 @@
           "/withheldInformation"
         ],
         "prose_paths": [
-          "/allowedInformation/*"
+          "/allowedInformation/*",
+          "/withheldInformation/*"
         ],
         "ordered_paths": [],
         "default_array_order": "ordered",
@@ -31961,7 +32123,17 @@
       "reproducibility": "Freeze this specification plus generator/provider revision and returned artifact hashes; a teacher generation is not deterministic merely because a seed is recorded."
     },
     "generation_ready": false,
-    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change."
+    "seed_perturbation_note": "The original intervention is a program-design example; a generated variant must bind it to the current world IDs and explicitly verify its answer change.",
+    "source_presentation_hold": {
+      "reason": "Visible output representation or prose-equivalence policy repaired after independent oracle visibility review; not a model failure.",
+      "required": [
+        "Inspect rebuilt root instructions and typed record identity map.",
+        "Replay exact source contracts and obtain independent peer review.",
+        "Sample affected model-facing presentation before adoption."
+      ],
+      "fixture_and_gold_unchanged": true,
+      "training_admission": false
+    }
   },
   {
     "id": "astra-games-04",
@@ -33892,11 +34064,11 @@
       "acceptance": "Canonical structured witness, not the sole allowed prose serialization. Exact ID/number/boolean and invariant checks are combined with independent grounded-relation review; arbitrary free-text byte equality is not a semantic oracle.",
       "comparison_spec": {
         "schema_version": "semantic-structured-comparison/1",
-        "unordered_paths": [],
-        "prose_paths": [],
-        "ordered_paths": [
+        "unordered_paths": [
           "/lineups"
         ],
+        "prose_paths": [],
+        "ordered_paths": [],
         "default_array_order": "ordered",
         "object_key_order": "irrelevant",
         "duplicate_policy": "reject unexpected multiplicity; unordered comparison is bijective, not lossy set deduplication",
@@ -42337,7 +42509,7 @@
         "DirectedClaim": "{from:string; to:string; witnesses:Witness[]}",
         "AuditedFinding": "{subject:string; status:string; reason:string; witnesses:Witness[]}",
         "SpanDecision": "{sourcePath:string; exactSpan:string; action:string; witnesses:Witness[]}",
-        "EvidenceRecord": "{path:string; text:string}",
+        "EvidenceRecord": "{id:string; path:string; text:string}",
         "EvidenceBatch": "{folderPath:string; records:EvidenceRecord[]}",
         "StageContext": "{objective:string; rule:string; relatedRecords:EvidenceRecord[]}",
         "FinalSemanticState": "{versionAssertions: {sourcePath:string; instructionId:string; modelPhrase:string; intervalPhrase:string; setting:number; witnesses:Witness[]}[]; applicabilityPartitions: {orderId:string; model:string; serial:number; candidateInstructionIds:string[]; witnesses:Witness[]}[]; changeAssessments: {instructionId:string; supersedes:string|null; scopedModels:string[]; lower:number|null; upper:number|null; witnesses:Witness[]}[]; variantDecisions: {orderId:string; applicableInstructionId:string; excludedInstructionIds:string[]; reason:string; witnesses:Witness[]}[]; instructionAudit: {instructions:{orderId:string; torque:number; instructionId:string}[]; boundaryChecks:AuditedFinding[]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",

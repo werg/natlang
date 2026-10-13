@@ -1,5 +1,49 @@
 # Continuation guide — updated 2026-10-13
 
+## 23:30 CEST: application-scale NL slate and v7 Luna diagnostics
+
+Owner clarified that the existing 220 drafted cases remain eligible when
+correct even if simple. The new additive slate must be **application-scale**
+and primarily deep structured natural-language pseudocode, not TS policies
+with NL wrappers. Astra's `applications/saga-forensics` and `cave-mission`
+DECOMPOSITION plans are on main (`01e688af`), each roughly 29–30 distinct
+callable NL modules planned over hundreds of substantive NL lines; Sol's
+separate witness-rewrite and protocol-meaning designs are underway. The
+first actual modules are still being authored, so these are architecture
+plans, not runnable or accepted training data. `PROJECT_SOURCE_CONTRACT.md`
+on main (`51fa024a`) specifies immutable arbitrary project-tree packaging
+without flattening such applications into the older fixed-stage builder.
+
+Old-catalog source/grade repairs are on main (`6b575888`, `fb5ab47c`,
+`51fa024a`, `80de5a81`): four gold-key type leaks removed, visible record IDs
+and output conventions, typed stage contributions/absences, declared field
+comparison, and Sol's union-schema fix. Source v7 diagnostic queue has two
+cases (Astra ecology01, Sol008); preflight loaded and read every named helper.
+Pop launched exact low-priority ledger units
+`natlang-pop-luna-semstack-v7-w01.service` and `...-w02.service` with one
+case each. These are **diagnostic only**; authored comparator rules still
+need independent semantic review before training admission. Ordinary Luna
+replenisher timer is paused and two recently started ordinary workers were
+stopped with partials to make RAM; resume the timer after v7 frees capacity.
+QAD trainer and Gemini remain active. First ecology trace created the scoped
+NL literal **and invoked it correctly**. The generated NL child then confused
+the built-in `decide` helper with its own job, hit `nl-unknown-parameter`
+with a `typeof` intersection, and never returned a valid decision; the parent
+then tried an empty required stage result. Investigate narrower child result
+contract, explicit input/result aliases, and missing-decision review;
+do not label this diagnostic as a negative training example. Sol008 entered
+its named helper tree. Source correctness, actual stage contribution and
+final answer are separate gates. New model-facing guidance owes the usual
+live ~48-sample measurement before adoption.
+
+Pop listed exact obsolete semantic directories before deletion in
+`/tmp/natlang-prune-semantic-superseded-20261013.sh` and
+`/tmp/natlang-prune-semantic-v6b-20261013.sh`; removed superseded v4/v5/v6b
+pilots and old source versions (~446 MB total). Retained current v7 source,
+independent review receipts, and useful source/gold catalog data. DGX was
+briefed. A current-main full check remains queued on DGX ledger; Pop quick
+checks and targeted comparator/runtime checks passed, not a full-green claim.
+
 ## 23:05 CEST: independent 200-program target and live source gates
 
 ### Authoring quality correction
