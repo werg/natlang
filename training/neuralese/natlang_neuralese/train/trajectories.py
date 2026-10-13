@@ -1860,6 +1860,11 @@ def main(argv=None):
         reason = 'writer-name'
         try:
             named = group_producers(prepared)
+            # Writer names are unique per trajectory, not across the corpus: a resident unpinned chain that writes
+            # one of these names is evicted to make way (the drawn chain is the one this update trains); only a
+            # clash with a pinned (held or probe) chain refuses the drawn chain.
+            for other in [p for p, e in resident.items() if not e['pinned'] and set(e['names']) & set(named)]:
+                release_chain(other)
             if set(named) & set(producers):
                 raise ValueError('duplicate producer for ' + sorted(set(named) & set(producers))[0])
             producers.update(named)
@@ -1885,7 +1890,7 @@ def main(argv=None):
             coverage.update(trajectory_coverage(list(entry['records'].values())))
         resident[position] = entry
         while sum(not e['pinned'] for e in resident.values()) > max(1, args.stream_resident):
-            release_chain(next(p for p, e in resident.items() if not e['pinned']))
+            release_chain(next(p for p, e in resident.items() if not e['pinned'] and p != position))
         return entry['records']
 
     def stream_record(cursor):
