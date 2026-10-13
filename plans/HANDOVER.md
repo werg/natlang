@@ -32,10 +32,18 @@ Repair intake: s52018–s52025 produced 9 replay-checked same-state handoffs;
 Luna exact-accepted 3, answer-rejected 5, quiesced 1. The three accepted parents
 yielded 104 native-turn candidates and 2 causal preference pairs, review-only.
 `select_repair_fallback.py` now pins exact-answer rejects for another provider.
-Step 5 Preview through the official OpenCode CLI bridge has accepted the proof
-pilot and all 5 completed follow-up cases; the sixth, a schedule case, had a
-transport failure from the old 180-second bridge cap. Pop raised it to 600
-seconds and launched a separate retry. All outputs are review-only. Broad
+Step 5 Preview through the official OpenCode CLI bridge has accepted four
+distinct Luna answer-failure handoffs: the proof pilot and three completed
+follow-ups. The exploratory six-case queue also contained one Luna-quiesced
+case and one Luna-accepted duplicate, both of which Step 5 solved; neither is
+a model-negative/DPO label. The fifth exact-answer failure, a schedule case,
+had a transport failure from the old 180-second bridge cap. Pop raised it to
+600 seconds; the next run quiesced only because the 24-turn collector cap
+included its 23 replayed prefix turns. `prepare_recovery_teacher_queue.py` now
+budgets 24 live continuation turns beyond replay. The corrected 47-turn Luna
+schedule retry finished after one live turn with an exact-answer rejection;
+Step 5's 47-turn retry is still running. The four unique fallback successes
+are mechanically pinned, but all outputs remain review-only. Broad
 s52027 and Gemini generation continue under the Pop guard's low-priority
 admission; v11 reached at least update 6278 at full GPU utilization.
 

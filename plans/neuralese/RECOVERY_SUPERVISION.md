@@ -53,12 +53,23 @@ The six-case pilot exposed a bridge transport cap: an otherwise active schedule
 request exceeded the bridge's 180-second per-request limit and became a
 transport failure. Pop relaunched the official CLI bridge with a 600-second
 request limit and resumed the saved queue; this is a collection resource bound,
-not a model-negative label. The five completed follow-up cases all passed the
-exact oracle (two actor-route, one workbench, two proof), in addition to the
-earlier two-turn proof pilot. The schedule case has a separate transport retry
-under the longer bridge cap. All six accepted outputs remain review-only until
-native decision audit and split/source checks. The six-case queue included one
-Luna-quiesced exploratory case; it is not a Luna model-negative or DPO label.
+not a model-negative label. The manually assembled six-case queue accidentally
+included one Luna-quiesced case and one case Luna had already solved. Five
+completed follow-ups all passed the exact oracle, but only **three** are unique
+Luna answer-failure repairs. The earlier two-turn proof pilot is a fourth.
+The schedule case is the fifth exact-answer failure. Its first alternate attempt
+was transport-limited; the next completed with `quiesced` because the collector's
+fixed 24-turn cap counted the 23 replayed prefix turns, leaving only one live
+teacher turn. This is a collection-budget defect, not a model result. The queue
+preparer now adds 24 live continuation turns to the replay prefix (and scales
+the request budget). A 47-turn Luna continuation finished with an exact-answer
+rejection after one live turn. A 47-turn Step 5 continuation is running under
+the longer bridge cap. The canonical fallback source is the five-row
+`handoffs.luna-rejected.ir.jsonl` produced by the exact selector. Four successful
+fallback parents are pinned in `step5-fallback-accepted-parents.review-candidates.jsonl`;
+they remain review-only until native decision audit and split/source checks.
+The quiesced case and duplicate success may be compared as independent positive
+trajectories, but neither is a Luna model-negative or causal preference label.
 
 The current `natlang.handoff/2` replay presents the state **before** the bad
 decision, with the bad action retained only as provenance. These examples teach

@@ -52,6 +52,7 @@ def prepare(source, output, *, line, workers, case_seconds):
                 'line': line, 'source': str(source), 'source_sha256': sha256_file_hex(source),
                 'cases': len(rows), 'workers': workers,
                 'source_modes': sorted(source_modes),
+                'continuation_turns': 24,
                 'selection': 'all train-only exact failure seeds or replay-checked handoffs, one per source id',
                 'training_admission': False,
                 'required_review': 'exact oracle, continuation action quality, held-group exclusion, native render'}
@@ -62,12 +63,18 @@ def prepare(source, output, *, line, workers, case_seconds):
         with (worker / 'queue.jsonl').open('w') as stream:
             for ordinal, index in enumerate(range(number, len(rows), workers)):
                 case = worker / f'case-{ordinal:03d}'
+                handoff = rows[index].get('handoff') or {}
+                replay_turns = sum(len(call) for call in handoff.get('prefix', []))
+                # The collector counts replayed turns toward max_turns. Give
+                # every teacher the same live continuation allowance even for
+                # a handoff taken late in a long trajectory.
+                max_turns = replay_turns + 24
                 job = {'key': f'recovery-{line}-{number + 1:02d}-{ordinal:03d}',
                        'source': str(source), 'index': index, 'count': 1,
                        'output': str(case / 'results.jsonl'), 'jobs': str(case / 'jobs'),
                        'log': str(case / 'collector.log'), 'seed': 880000 + index,
                        'context_tokens': 32768, 'action_max_tokens': 4096,
-                       'max_turns': 24, 'max_model_requests': 96,
+                       'max_turns': max_turns, 'max_model_requests': max(96, 4 * max_turns),
                        'case_seconds': case_seconds, 'request_retries': 3,
                        'transport_retries': 0, 'text_neuralese_emulation': True}
                 stream.write(json.dumps(job, sort_keys=True) + '\n')
