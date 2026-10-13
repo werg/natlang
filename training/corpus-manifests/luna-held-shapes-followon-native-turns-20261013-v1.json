@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-held-shapes-followon-native-turns-20261013-v1",
+  "owner": "pop",
+  "path": "runs/luna-held-shapes-followon-native-turns-20261013-v1",
+  "files": [
+    {
+      "path": "accepted-parents.native.jsonl",
+      "bytes": 153934890,
+      "sha256": "eda171b4470d5d714a2fb07aed268f849a2b7cb0243b239e3ad4e53c679468ba",
+      "lines": 350
+    },
+    {
+      "path": "admission-review.json",
+      "bytes": 1645,
+      "sha256": "a5755ca74ff381b0883724d61303564d78238faa68952200f9e8d6f5f6d36e7c"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 161184934,
+      "sha256": "e88e434e9624da02ff9576c8fc06dcf94a929883e630d00c240e7ccc99f7437f",
+      "lines": 1950
+    },
+    {
+      "path": "parent-selection-review.json",
+      "bytes": 7229,
+      "sha256": "5ca978ae7c5cfd1fc04db31b4dc66a8e7138187c89332127853c29a670ca2493"
+    }
+  ],
+  "bytes": 315128698
+}
