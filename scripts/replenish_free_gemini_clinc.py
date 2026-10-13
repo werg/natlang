@@ -10,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,8 +41,8 @@ def unit_active(unit):
     return status.returncode == 0
 
 
-def launch(batch, number):
-    unit = f'natlang-pop-gemini-clinc-batch{number:02d}'
+def launch(batch, number, retry=0):
+    unit = f'natlang-pop-gemini-clinc-batch{number:02d}' + (f'-r{retry}' if retry else '')
     key_file = Path.home() / '.config/natlang/gemini.env'
     command = (f'set -a; source {key_file}; set +a; '
                'exec python3 scripts/run_gemini_decision_pool.py '
@@ -56,6 +57,36 @@ def launch(batch, number):
                     '--workdir', str(ROOT), '--', 'bash', '-lc', command],
                    cwd=ROOT, check=True)
     print(json.dumps({'event': 'launched', 'batch': number, 'unit': unit}), flush=True)
+    return unit + '.service'
+
+
+def resume_incomplete(batch, number, completed):
+    state_path = batch / 'relaunch-state.json'
+    state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    unit = state.get('unit', f'natlang-pop-gemini-clinc-batch{number:02d}.service')
+    if unit_active(unit):
+        print(json.dumps({'event': 'active', 'batch': number, 'completed': completed}), flush=True)
+        return
+    now = time.time()
+    if now < state.get('not_before', 0):
+        print(json.dumps({'event': 'cooldown', 'batch': number,
+                          'seconds': round(state['not_before'] - now)}), flush=True)
+        return
+    failures = 0 if completed > state.get('last_completed', -1) else state.get('failures', 0) + 1
+    if failures >= 4:
+        print(json.dumps({'event': 'needs_investigation', 'batch': number,
+                          'completed': completed, 'no_progress_failures': failures}), flush=True)
+        return
+    retry = state.get('retry', 0) + 1
+    try:
+        next_unit = launch(batch, number, retry)
+    except subprocess.CalledProcessError:
+        next_unit = unit
+        failures += 1
+    delay = min(7200, 600 * 2 ** failures)
+    state_path.write_text(json.dumps({'unit': next_unit, 'retry': retry,
+                                      'last_completed': completed, 'failures': failures,
+                                      'not_before': now + delay}, indent=2) + '\n')
 
 
 def main():
@@ -68,6 +99,9 @@ def main():
     with (campaign / '.replenisher.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         batches = sorted(campaign.glob('gemini-clinc-fresh-batch[0-9][0-9]'))
+        source = args.source.resolve()
+        if batches and digest(source) != json.loads((batches[0] / 'source-manifest.json').read_text())['source_sha256']:
+            raise ValueError('pinned CLINC source changed; review before replenishing')
         for batch in batches:
             number = int(batch.name[-2:])
             cases = lines(batch / 'cases.jsonl')
@@ -75,9 +109,12 @@ def main():
             case_ids = {row['id'] for row in cases}
             label_ids = {row['id'] for row in labels}
             if len(labels) < len(cases) or case_ids != label_ids or len(labels) != len(label_ids):
-                unit = f'natlang-pop-gemini-clinc-batch{number:02d}.service'
-                print(json.dumps({'event': 'active' if unit_active(unit) else 'needs_investigation',
-                                  'batch': number, 'completed': len(labels), 'target': len(cases)}))
+                if len(labels) > len(cases) or not label_ids.issubset(case_ids) or len(labels) != len(label_ids):
+                    print(json.dumps({'event': 'needs_investigation', 'batch': number,
+                                      'completed': len(labels), 'target': len(cases),
+                                      'reason': 'duplicate_or_foreign_label_ids'}))
+                    return
+                resume_incomplete(batch, number, len(labels))
                 return
             if cases:
                 valid = sum(isinstance(row.get('answer'), dict) and
@@ -93,7 +130,6 @@ def main():
             print('{"event":"campaign_limit"}')
             return
         used = {row['id'] for batch in batches for row in lines(batch / 'cases.jsonl')}
-        source = args.source.resolve()
         rows = [row for row in lines(source) if row.get('role') == 'train'
                 and row['id'] not in used]
         rows.sort(key=lambda row: hashlib.sha256((SALT + row['group']).encode()).hexdigest())
@@ -114,7 +150,14 @@ def main():
                     'role': 'train', 'training_admission': False,
                     'quality': 'held pending semantic review'}
         (batch / 'source-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
-        launch(batch, number)
+        try:
+            launch(batch, number)
+        except subprocess.CalledProcessError:
+            (batch / 'relaunch-state.json').write_text(json.dumps({
+                'unit': f'natlang-pop-gemini-clinc-batch{number:02d}.service',
+                'retry': 0, 'last_completed': 0, 'failures': 1,
+                'not_before': time.time() + 600}, indent=2) + '\n')
+            print(json.dumps({'event': 'launch_deferred', 'batch': number}), flush=True)
 
 
 if __name__ == '__main__':
