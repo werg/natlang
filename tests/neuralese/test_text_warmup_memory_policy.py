@@ -360,8 +360,12 @@ def test_ledger_claim_reads_unit_budget_from_ledger_state(tmp_path, monkeypatch)
     monkeypatch.setattr(ledger, 'STATE', str(state))
     monkeypatch.setattr(ledger, 'own_host_usage', lambda pid='self': 3 * GIB)
     monkeypatch.setenv('NATLANG_LEDGER_UNIT', 'natlang-x')
+    monkeypatch.delenv('NATLANG_DISCRETE_CUDA_MEMORY', raising=False)
     assert memory_policy.ledger_claim() == {'unit': 'natlang-x', 'budget_bytes': 80 * GIB,
-                                            'host_bytes': 3 * GIB, 'source': 'ledger-state'}
+                                            'host_bytes': 3 * GIB, 'discrete_cuda': False, 'source': 'ledger-state'}
+    monkeypatch.setenv('NATLANG_DISCRETE_CUDA_MEMORY', '1')  # Pop: CUDA memory is not host memory (35726751)
+    assert memory_policy.ledger_claim()['host_bytes'] == 0
+    monkeypatch.delenv('NATLANG_DISCRETE_CUDA_MEMORY')
     monkeypatch.setenv('NATLANG_LEDGER_UNIT', 'natlang-unknown')
     monkeypatch.setenv('NATLANG_CUDA_MEMORY_GB', '20')
     assert memory_policy.ledger_claim()['budget_bytes'] == 20 * GIB

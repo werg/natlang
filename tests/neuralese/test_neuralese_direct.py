@@ -486,7 +486,10 @@ def test_union_r2_three_phase_recipes_and_the_mellum_resume_from_the_v3_warm_up(
         recipe = load_recipe(RECIPES / name)
         assert [s['id'] for s in recipe['stages']] == ['direct_warmup', 'direct_sft', 'direct_trajectory']
         assert direct_phase_predecessor(recipe, recipe['stages'][2]) == 'direct_sft'
-        assert all('natlang-target-union-20261011-r2' in b['path'] for b in recipe['input_bindings'].values())
+        bindings = recipe['input_bindings']  # warm-up on r2's full prompt; r3 since 2026-10-13 (coordinator)
+        assert 'natlang-target-union-20261011-r2/full/' in bindings['direct_text']['path']
+        assert all('natlang-target-union-20261011-r3' in bindings[name]['path']
+                   for name in ('direct_text_program_header', 'direct_text_trajectory'))
     resume = load_recipe(RECIPES / 'neuralese-direct-mellum-v4-from-v3-warmup.json')
     first, second = resume['stages']
     assert first['id'] == 'direct_sft' and first['requires'] == [] and direct_phase_predecessor(resume, first) is None
