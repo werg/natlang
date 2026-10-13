@@ -1791,6 +1791,7 @@ def main(argv=None):
                           'handoff_record': ({k: v for k, v in plan['handoffs'][-1].items() if k != 'previous_inputs'}
                                              if args.handoff and plan.get('handoffs') else None)},
                          indent=1), flush=True)
+        return 0
     elif not plan_path.exists():
         shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         plan['code'] = {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')}
