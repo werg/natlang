@@ -29,6 +29,8 @@ Independent tasks run concurrently, and sibling natlang calls in one task (`Prom
 
 For `no-such-function` while a named child tries to call the next stage, inspect callable-folder nesting. A child sees its own descendants, not the parent's other children: `root/inspect/decide.nl` makes `decide` callable from `inspect`, whereas `root/decide.nl` is only a sibling. Keep the existing named function and move the file into the caller's folder; use `read_code('decide')` inside `inspect` to confirm visibility before retrying collection.
 
+When an intended per-item reducer produces one giant NL call over a serialized directory, inspect the named helper's argument type and root loop contract. Give the helper a single typed record with a source path, keep cross-record evidence in a separate typed context, and have the root advance one record per `iterateOn` step with a decreasing frontier. Review actual child invocation arguments and returned source IDs; a correct final answer alone does not establish the intended topology.
+
 ## Cancellation and limits
 
 `runtime.run(fn, { signal })` and `EventLoop.cancel()` abort the task; natlang calls in flight reject. Passing `AbortSignal.timeout(ms)` gives the whole task a deadline. Inside a call, cancellation follows the call tree: a call that fails stops the calls it started, and an eval that fails or times out stops the natural-language calls it started (the losers of a `Promise.race` are stopped when their eval ends). Native work already started keeps running unless the application cancels it. `limits` (`maxDepth`, `maxActions`, `maxToolCalls`, `maxEpisodes`) and model options are deployment policy; `maxDepth` counts nested natural-language calls.
