@@ -20,7 +20,7 @@ function spans(snapshot: SourceSnapshot, edits: ProposedEdit[], allowed: string[
       valid: !!record && allowed.includes(edit.sourcePath) && edit.oldQuote.length > 0 && unique};
   });
 }
-export const storyEvidence: StoryEvidence = {
+const storyEvidence: StoryEvidence = {
   checkWitnesses(snapshot, witnesses: Witness[]): ExactCheck[] {
     return [...sourceChecks(snapshot), ...witnesses.map((w, i) => {
       const record = snapshot.records.find(r => r.id === w.sourceId && r.path === w.path);
@@ -53,3 +53,8 @@ export const storyEvidence: StoryEvidence = {
     return {revision:hash(JSON.stringify(records.map(({id,path,sha256})=>({id,path,sha256})))),records};
   },
 };
+
+/** Flat exports match the trusted collector service module binding. */
+export const checkWitnesses: StoryEvidence['checkWitnesses'] = (snapshot, witnesses) => storyEvidence.checkWitnesses(snapshot, witnesses);
+export const checkEdits: StoryEvidence['checkEdits'] = (snapshot, edits, allowedPaths) => storyEvidence.checkEdits(snapshot, edits, allowedPaths);
+export const applySnapshot: StoryEvidence['applySnapshot'] = (snapshot, edits, allowedPaths) => storyEvidence.applySnapshot(snapshot, edits, allowedPaths);

@@ -2,7 +2,7 @@
 import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {storyEvidence} from '../../../../applications/witness-rewrite-studio/host/storyEvidence.ts';
+import * as storyEvidence from '../../../../applications/witness-rewrite-studio/host/storyEvidence.ts';
 const bag = values => JSON.stringify([...values].sort());
 export function verifyResult(result, oracle, snapshot, request) {
   const failures=[];const require=(ok,code)=>{if(!ok)failures.push(code);};
