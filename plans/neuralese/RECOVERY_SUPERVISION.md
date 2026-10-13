@@ -53,9 +53,12 @@ The six-case pilot exposed a bridge transport cap: an otherwise active schedule
 request exceeded the bridge's 180-second per-request limit and became a
 transport failure. Pop relaunched the official CLI bridge with a 600-second
 request limit and resumed the saved queue; this is a collection resource bound,
-not a model-negative label. The first alternate actor-route case passed its
-exact oracle in 27 turns. Reinspect the incomplete schedule case after its
-provider retry cooldown before drawing any model-quality conclusion.
+not a model-negative label. The five completed follow-up cases all passed the
+exact oracle (two actor-route, one workbench, two proof), in addition to the
+earlier two-turn proof pilot. The schedule case has a separate transport retry
+under the longer bridge cap. All six accepted outputs remain review-only until
+native decision audit and split/source checks. The six-case queue included one
+Luna-quiesced exploratory case; it is not a Luna model-negative or DPO label.
 
 The current `natlang.handoff/2` replay presents the state **before** the bad
 decision, with the bad action retained only as provenance. These examples teach

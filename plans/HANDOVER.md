@@ -5,8 +5,9 @@
 Pop v9 stopped at planned update 6524 **before its forward pass**: the adaptive
 memory estimator required 4,961,679,950 bytes for that update against
 4,695,523,328 bytes reusable under its 6.5 GiB discrete CUDA ledger claim.
-This was a safe resource preflight, not a numerical/model failure. The latest
-full optimizer/RNG checkpoint at update 6000 and its mirror remain intact.
+This was a safe resource preflight, not a numerical/model failure. V11's
+`resumed` receipt confirms that the latest full optimizer/RNG checkpoint was
+at update **6160** (the update-6000 task-eval receipt is a different cadence).
 V10 with a 7.2 GiB CUDA claim reached the recipe handoff check but refused:
 the shared base recipe had since acquired `recovery_selection` and
 `cohort_repeats` for an already-started stage. Pop did not silently change the
@@ -15,21 +16,28 @@ active run's sample schedule. The declared exact-resume recipe
 pins the **original resolved recipe** and current shared package hashes, so
 the normal code handoff is allowed without changing data. V11 is active under
 the high-priority ledger with a 7.2 GiB discrete CUDA claim, 4.5 GiB host
-budget; verify checkpoint/optimizer resume and first post-resume update.
+budget. V11 recorded the code handoff, restored update 6160, built its
+training windows and completed updates through at least 6170 with the GPU
+active. The larger claim has passed its first live checkpointed and packed
+windows; keep watching larger contexts for another estimator refusal.
 Recovery-selection sampling remains for a later explicitly declared data
-continuation. Pop's ledger guard was not running as a persistent service;
-two low-priority Luna workers were stopped by `guard --once` for the high-priority
-training admission and should be replenished. Add persistent guard supervision
-after v11 is stable so queued high-priority work does not leave the GPU idle.
+continuation. Pop's ledger guard was absent; the tracked
+`scripts/systemd/natlang-pop-memory-ledger-guard.service` is now enabled through
+the user's systemd symlink. Its Pop floor is 1.5 GiB (the DGX default of 8 GiB
+briefly preempted Luna, Step 5 and Gemini workers before this was corrected).
+The ledger requeues those resumable jobs as memory permits. V11's GPU is at
+full utilization while guard admission continues.
 
 Repair intake: s52018–s52025 produced 9 replay-checked same-state handoffs;
 Luna exact-accepted 3, answer-rejected 5, quiesced 1. The three accepted parents
 yielded 104 native-turn candidates and 2 causal preference pairs, review-only.
 `select_repair_fallback.py` now pins exact-answer rejects for another provider.
 Step 5 Preview through the official OpenCode CLI bridge has accepted the proof
-pilot and 3 of the six exploratory follow-ups so far; a 180-second bridge
-request cap caused a schedule-case transport failure. Pop raised it to 600
-seconds and resumed the queue. Broad s52027 and Gemini generation continue.
+pilot and all 5 completed follow-up cases; the sixth, a schedule case, had a
+transport failure from the old 180-second bridge cap. Pop raised it to 600
+seconds and launched a separate retry. All outputs are review-only. Broad
+s52027 and Gemini generation continue under the Pop guard's low-priority
+admission; v11 reached at least update 6278 at full GPU utilization.
 
 ## 13:36 CEST: diversity and recovery intake
 

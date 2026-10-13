@@ -1,0 +1,13 @@
+[Unit]
+Description=Guard Pop natlang memory ledger and admit queued high-priority work
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/werg/natlang
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/memory_ledger.py guard --interval 5 --floor-gb 1.5 --emergency-gb 0.7
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
