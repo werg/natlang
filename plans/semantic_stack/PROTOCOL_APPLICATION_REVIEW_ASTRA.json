@@ -1,0 +1,849 @@
+{
+  "schema": "natlang.semantic-application-independent-review/1",
+  "reviewer": "semantic_slate_astra",
+  "author": "semantic_slate_sol",
+  "application": "sol-app-protocol-meaning-debugger-v1",
+  "reviewed_commit": "f6fd49f1",
+  "source_oracle_status": "pass",
+  "exact_grader_status": "independent delta checks pass after three exact seam corrections",
+  "training_admission": false,
+  "live_execution_credit": false,
+  "source_review": {
+    "fixture_documents": 21,
+    "raw_trial_snapshots": 6,
+    "selected_artifact_identity": "TARGET and L bind C_POP/C_ANCHOR/C_WINDOW/C_METRIC; U binds three distinct U definitions plus semantically equivalent U_WINDOW. OLD_SUCCESS is unselected.",
+    "causes": [
+      "Population: accepted commissioning at/before0 vs telemetry availability at/before0.",
+      "Anchor: first accepted commissioning vs first accepted calibration.",
+      "Metric: pooled pass vs fail attempts; display label cannot change numerator proposition."
+    ],
+    "interaction": "TARGET/L select A1,A2,B1,B2 with2/4pass; U selects A2,A3 with1/2fail. Both50 but different units, anchor, attempts and numerator.",
+    "retry": "Rejected commissioning at5 leaves accepted origin0 and every source-bound plan unchanged.",
+    "repair_minimum": "Three distinct selected definition files independently own population, anchor and metric. R_SCOPE preserves execution bindings/window/rawdata; R_MIN requires role agreement on all cases. Each role needs its own site changed, lower bound3 attained by canonical repair.",
+    "window": "Inclusive endpoints0and2 source-equivalent for TARGET/L/U; P_POP B2at2 and P_ANCHOR A3at relative2 exercise boundary."
+  },
+  "independent_numeric_checks": [
+    {
+      "trial": "BASE",
+      "owner": "TARGET",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "BASE",
+      "owner": "L",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "BASE",
+      "owner": "U",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "BASE",
+      "owner": "TARGET",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "BASE",
+      "owner": "L",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "BASE",
+      "owner": "U",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_ANCHOR",
+      "owner": "TARGET",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_ANCHOR",
+      "owner": "L",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_ANCHOR",
+      "owner": "U",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A2",
+        "B1",
+        "B2",
+        "A3"
+      ],
+      "numerator": 3,
+      "denominator": 4,
+      "percent": 75.0,
+      "passed": true
+    },
+    {
+      "trial": "P_ANCHOR",
+      "owner": "TARGET",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_ANCHOR",
+      "owner": "L",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_ANCHOR",
+      "owner": "U",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_INTERACTION",
+      "owner": "TARGET",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_INTERACTION",
+      "owner": "L",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_INTERACTION",
+      "owner": "U",
+      "repaired": false,
+      "included": [
+        "A"
+      ],
+      "selected": [
+        "A2",
+        "A3"
+      ],
+      "numerator": 1,
+      "denominator": 2,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_INTERACTION",
+      "owner": "TARGET",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_INTERACTION",
+      "owner": "L",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_INTERACTION",
+      "owner": "U",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_METRIC",
+      "owner": "TARGET",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 4,
+      "denominator": 4,
+      "percent": 100.0,
+      "passed": true
+    },
+    {
+      "trial": "P_METRIC",
+      "owner": "L",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 4,
+      "denominator": 4,
+      "percent": 100.0,
+      "passed": true
+    },
+    {
+      "trial": "P_METRIC",
+      "owner": "U",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 0,
+      "denominator": 4,
+      "percent": 0.0,
+      "passed": true
+    },
+    {
+      "trial": "P_METRIC",
+      "owner": "TARGET",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 4,
+      "denominator": 4,
+      "percent": 100.0,
+      "passed": true
+    },
+    {
+      "trial": "P_METRIC",
+      "owner": "L",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 4,
+      "denominator": 4,
+      "percent": 100.0,
+      "passed": true
+    },
+    {
+      "trial": "P_METRIC",
+      "owner": "U",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 4,
+      "denominator": 4,
+      "percent": 100.0,
+      "passed": true
+    },
+    {
+      "trial": "P_POP",
+      "owner": "TARGET",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_POP",
+      "owner": "L",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_POP",
+      "owner": "U",
+      "repaired": false,
+      "included": [
+        "A"
+      ],
+      "selected": [
+        "A1",
+        "A2"
+      ],
+      "numerator": 0,
+      "denominator": 2,
+      "percent": 0.0,
+      "passed": true
+    },
+    {
+      "trial": "P_POP",
+      "owner": "TARGET",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_POP",
+      "owner": "L",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_POP",
+      "owner": "U",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_RETRY",
+      "owner": "TARGET",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_RETRY",
+      "owner": "L",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_RETRY",
+      "owner": "U",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_RETRY",
+      "owner": "TARGET",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_RETRY",
+      "owner": "L",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_RETRY",
+      "owner": "U",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    }
+  ],
+  "literal_contributions": [
+    {
+      "site": "lineage/resolveIdentity.nl",
+      "delta": "Definition identity controls lineage links; historical same-name artifact remains distinct."
+    },
+    {
+      "site": "populations.nl",
+      "delta": "Per-unit inclusion controls numeric cohort, false and unknown stay distinct."
+    },
+    {
+      "site": "metrics/interpretMetric.nl",
+      "delta": "Numerator polarity feeds exact service arithmetic."
+    },
+    {
+      "site": "debug/compare/interpretScope.nl",
+      "delta": "Semantic equivalence judgment seeds hypothesis mechanism."
+    },
+    {
+      "site": "debug/investigateStep/interpretOutcome.nl",
+      "delta": "Support/reject/inconclusive sets update finite investigation state."
+    }
+  ],
+  "grader_findings": [
+    {
+      "id": "trial-container-binding",
+      "status": "resolved",
+      "severity": "exact false positive",
+      "reproduction": "Replace P_RETRY outcome.prediction.plans with baseline and repaired P_RETRY plans with repaired baseline; verifier returns ok:true.",
+      "required_fix": "Bind each checkState to expected BASE or seedId, then verify its raw trial snapshot.",
+      "resolution": "Independently read corrected verifier and reproduced required rejection; equivalent object ordering and replacement wording still pass."
+    },
+    {
+      "id": "repair-immutable-clause-boundary",
+      "status": "resolved",
+      "severity": "exact scope omission",
+      "observation": "Allowed path/span checks do not enforce preserved U_WINDOW text and definition markers required by R_SCOPE.",
+      "required_fix": "Verify edits preserve all text outside target selected clause and preserve clause identity while allowing semantically equivalent replacement wording.",
+      "resolution": "Independently read corrected verifier and reproduced required rejection; equivalent object ordering and replacement wording still pass."
+    },
+    {
+      "id": "original-report-witness-coverage",
+      "status": "resolved",
+      "severity": "exact scope omission",
+      "reproduction": "Invented diagnosis root-cause quotation passed the original PlanState-only witness walk.",
+      "resolution": "Original-source witness walk now covers baseline, contrasts, hypotheses, outcomes, diagnosis and proposal; edited plan witnesses remain checked against edited source. Independently reproduced rejection."
+    }
+  ],
+  "limitations": [
+    "Exact typed/numeric agreement does not establish replacement-text entailment or actual NL stage/literal execution.",
+    "The exact checker intentionally leaves arbitrary repair prose to independent semantic judgment.",
+    "Canonical reference validity is not a live application trajectory."
+  ],
+  "hashes": {
+    "training/semantic_applications/sol/protocol-meaning-debugger/field-signal/oracle.json": "e70ffda93888bfb500d1ee5d98808fe6e2198b7f229b007d2396da6024a30f33",
+    "training/semantic_applications/sol/protocol-meaning-debugger/field-signal/reference-report.json": "2acb1197eeb03ce75e5ec6ed5c3d4be19898e14b979279a3e98712fd2eba4036",
+    "training/semantic_applications/sol/protocol-meaning-debugger/field-signal/input.json": "80cb6184ada1be5f60f981d9cd071325fe232a43ccec700c18de5cca894b95df",
+    "training/semantic_applications/sol/protocol-meaning-debugger/verify-result.mjs": "c003fd59668bcbbb6debf8b1605e465969ffe0ef80aaacb4dc591c6f300fd152"
+  },
+  "independent_verifier_controls": [
+    {
+      "name": "canonical",
+      "expected": true,
+      "actual": true,
+      "passed": true,
+      "issues": []
+    },
+    {
+      "name": "erased retry",
+      "expected": false,
+      "actual": false,
+      "passed": true,
+      "issues": [
+        "probe:P_RETRY:contained-trial-identity",
+        "probe:P_RETRY:raw-trial-identity",
+        "probe:P_RETRY:exact-numeric:TARGET",
+        "probe:P_RETRY:exact-numeric:L",
+        "probe:P_RETRY:exact-numeric:U",
+        "repair:P_RETRY:contained-trial-identity",
+        "repair:P_RETRY:raw-trial-identity",
+        "repair:P_RETRY:exact-numeric:TARGET",
+        "repair:P_RETRY:exact-numeric:L",
+        "repair:P_RETRY:exact-numeric:U"
+      ]
+    },
+    {
+      "name": "marker removed",
+      "expected": false,
+      "actual": false,
+      "passed": true,
+      "issues": [
+        "immutable-clause-context:U_POP",
+        "repair:baseline:exact-witness",
+        "repair:baseline:exact-witness",
+        "repair:baseline:exact-witness",
+        "repair:baseline:exact-witness",
+        "repair:P_POP:exact-witness",
+        "repair:P_POP:exact-witness",
+        "repair:P_POP:exact-witness",
+        "repair:P_POP:exact-witness",
+        "repair:P_ANCHOR:exact-witness",
+        "repair:P_ANCHOR:exact-witness",
+        "repair:P_ANCHOR:exact-witness",
+        "repair:P_ANCHOR:exact-witness",
+        "repair:P_METRIC:exact-witness",
+        "repair:P_METRIC:exact-witness",
+        "repair:P_METRIC:exact-witness",
+        "repair:P_METRIC:exact-witness",
+        "repair:P_RETRY:exact-witness",
+        "repair:P_RETRY:exact-witness",
+        "repair:P_RETRY:exact-witness",
+        "repair:P_RETRY:exact-witness",
+        "repair:P_INTERACTION:exact-witness",
+        "repair:P_INTERACTION:exact-witness",
+        "repair:P_INTERACTION:exact-witness",
+        "repair:P_INTERACTION:exact-witness"
+      ]
+    },
+    {
+      "name": "diagnosis fake quote",
+      "expected": false,
+      "actual": false,
+      "passed": true,
+      "issues": [
+        "exact-original-report-witnesses"
+      ]
+    },
+    {
+      "name": "object key ordering",
+      "expected": true,
+      "actual": true,
+      "passed": true,
+      "issues": []
+    },
+    {
+      "name": "equivalent repair wording with updated literal source witnesses",
+      "expected": true,
+      "actual": true,
+      "passed": true,
+      "issues": []
+    }
+  ],
+  "reviewed_source_snapshot": "f6fd49f1; verifier precision delta is pinned independently by SHA256 below",
+  "independent_review_complete": true,
+  "reviewed_verifier_commit": "0b29bc44"
+}
