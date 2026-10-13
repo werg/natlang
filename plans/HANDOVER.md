@@ -1,5 +1,42 @@
 # Continuation guide — updated 2026-10-13
 
+## 22:25 CEST: 220-program slate, live pilot repair, trainer resumed
+
+The owner's clarified target is **at least 100 distinct programs from each of
+two authoring agents**, 200 total. Astra committed 120 designs in 20 domains
+(`98af65b2`), and GPT-6.1 Sol committed 100 in a different 20 domains
+(`0691be8a`); both commits are on `origin/main`. These are program designs,
+not yet accepted training rows. Eighteen designs (Astra eight, Sol ten) have
+24-record concrete fixtures and independently reviewed exact reference
+outputs. The remaining 202 are held design seeds pending comparable source
+expansion and replay. Both authoring agents continue that work. The curriculum
+builder produced 220 source program folders, but actual teacher generation is
+restricted to quality-gated expanded fixtures.
+
+The first small Astra Luna diagnostic pilot exposed two builder faults rather
+than model failures. The first emitted lower-cased helper filenames that did
+not match authored calls; `624a05a2` fixed the names. The fresh v2 pilot then
+showed siblings where child functions require nested callable folders. Pop
+stopped the exact `natlang-pop-luna-semstack-pilot-v2-w01.service` unit. The
+curriculum agent is correcting the folder topology, tightening typed stage
+interfaces, and will reseal a v3 pilot with exact reference and `read_code`
+preflight through the full call chain. Neither pilot is training eligible.
+The general Luna replenisher timer is temporarily paused to reserve a slot
+for this diagnostic; one preexisting s52031 worker remains active. Re-enable
+normal replenishment if the repaired pilot is delayed.
+
+Pop QAD LFM v13 stopped at step 12320 because its preflight estimator exceeded
+the ledger CUDA claim by 111 MB before a forward pass. The full optimizer/RNG
+checkpoint was verified, and high-priority v14 resumed from the same recipe,
+frozen runtime and output, increasing the CUDA envelope from 7.35 to 7.5 GiB.
+It has passed the failed point and reached at least step 12335 with about 98%
+GPU utilization. This is a resource-envelope adjustment, not a change in the
+learning objective. Gemini CLINC replenishment had stopped inadvertently at
+batch 14; Pop restarted its timer and finished 256/256 prompts (255 typed-valid,
+201 exact source-label matches). Batch 15 is prepared and waiting for RAM
+admission while training holds priority. The exact-match count is a candidate
+quality signal, not training admission.
+
 ## 21:58 CEST: step-12000 behavioural check and semantic-stack expansion
 
 Pop QAD LFM v13 reached step 12000 and resumed after its synchronous held
