@@ -1,5 +1,22 @@
 # Continuation guide — updated 2026-10-14
 
+## 00:23 CEST: Pop space for R5 corpus transfer
+
+DGX's exact full R5 transfer initially failed its destination guard: root had
+only ~12 GiB available after a verified program-header subset landed, against
+30.16 GB plus 8 GiB reserve. Pop has no mounted external drive. Under the
+owner's discarded-work retention order, Pop listed and removed the retired
+`runs/dgx-development-sync-20261003/pull-revisions` copies (~12 GiB) and the
+superseded `runs/data-lineage-20261002/recipe-v33-current-policy-existing-data-only/run-v12`
+intermediate build (~22 GiB unique; its multiply linked source inputs remain
+through other paths). No live process referred to either path and no current
+corpus manifest or recipe depended on the v12 run. Exact deletion scripts are
+`/tmp/natlang-prune-retired-sync-revisions-20261014.sh` and
+`/tmp/natlang-prune-superseded-lineage-v12-20261014.sh`. Root now has ~45 GiB
+available; DGX was told to retry its guarded full transfer and remote verifier.
+The subset is not a verified full union, and current Pop training input is
+unchanged. Monitor root free space as transfer progresses.
+
 ## 00:07 CEST, 2026-10-14: live narrow diagnostic and shared service loader
 
 The v8b ecology queue corrected the one-line source index to zero and ran as

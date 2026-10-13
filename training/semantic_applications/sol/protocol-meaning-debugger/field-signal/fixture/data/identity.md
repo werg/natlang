@@ -1,0 +1,3 @@
+ID DATA_ID. Raw source identity convention.
+Each data/<trial>.json has source ID DATA_<trial>; its id names the trial. A/B identify corresponding physical units across independent counterfactual snapshots, not additional units combined into one run. Each row ID identifies an attempt within its trial. Typed input transports exactly these same raw values and attaches their source witnesses. The JSON source text is controlling observation data.
+All numeric event and reading times are global days. accepted:true denotes an actual accepted event; accepted:false denotes a rejected attempt, which creates no accepted commissioning.

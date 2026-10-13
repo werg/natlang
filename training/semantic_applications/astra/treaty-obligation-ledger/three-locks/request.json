@@ -1,0 +1,19 @@
+{
+  "caseId": "three-locks-v1",
+  "snapshots": [
+    {
+      "id": "S34",
+      "knowledgeTime": 34
+    },
+    {
+      "id": "S35",
+      "knowledgeTime": 35
+    }
+  ],
+  "tripIds": [
+    "T1",
+    "T2",
+    "T3"
+  ],
+  "objective": "Source-supported time-sliced obligations and inclusion-minimal changed-premise explanations"
+}

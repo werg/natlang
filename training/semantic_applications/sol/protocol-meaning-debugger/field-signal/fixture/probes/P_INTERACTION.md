@@ -1,0 +1,1 @@
+ID NOTE_P_INTERACTION. B late telemetry excludes it from U; A later calibration changes its window. U counts failures on A2/A3, yielding the same50percent as TARGET on A1/A2/B1/B2. Matching numbers conceal different units, readings, anchors and numerator propositions.

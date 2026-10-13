@@ -20,17 +20,18 @@
     "5. Continue over the finite candidate list. A relation with insufficient or inapplicable premises still produces a decision (usable=false, sign=null when unresolved); it is not silently omitted.",
     "6. Pass all inherited contributions and these actual decisions to verifyResult. If a literal fails to return, propagate a failed/unresolved stage result with the affected source paths; do not replace its unmade decision with an empty successful contribution."
   ],
-  "direct_await_idiom": "const edgeValidityRule = input.context.rule; const judgeScope = nl.with<ScopeDecision>({edgeValidityRule})`Judge whether the supplied directed edge is source-established and its edge-specific conditions hold. Preserve cause, effect, source sign and exact witnesses. Supported downstream edges are usable even when their cause differs from the initially perturbed organism. Return cause, effect, usable, sign, reason and witnesses.`; const scopeDecision = await judgeScope(scopeInput); scopeDecisions.push(scopeDecision);",
+  "direct_await_idiom": "const edgeValidityRule = input.context.rule; const judgeScope = nl.with<ScopeDecision>({edgeValidityRule})`Judge whether the supplied directed edge is source-established and its edge-specific conditions hold. Preserve entity identity, directed cause/effect orientation, source sign and exact witnesses; return lowercase case-folded entity keys. Supported downstream edges are usable even when their cause differs from the initially perturbed organism. Return cause, effect, usable, sign, reason and witnesses.`; const scopeDecision = await judgeScope(scopeInput); scopeDecisions.push(scopeDecision);",
   "applicability": "Run once per candidate causal relation whose premises intersect this batch or whose explicit scope condition is introduced by this batch. Deduplicate only the same directed relation under the same scope premises.",
   "no_op_criterion": "No candidate relation is introduced or modified by this batch. Then append StageAbsence with these source paths and the reason; no literal is required and no semantic-stage contribution is credited.",
   "owned_contribution": "scopeDecisions: ScopeDecision[]",
   "invariants": [
-    "Return cause/effect exactly from the input relation; do not reverse direction.",
+    "Preserve the input relation's entity identity and direction while returning canonical lowercase case-folded cause/effect keys.",
     "Every witness is an exact quote from a supplied premise.",
     "A condition not established by the snapshot cannot become universal applicability.",
     "Only actual returned decisions are consumed downstream; empty does not stand for failed judgment.",
     "Eligibility is local to edge evidence/conditions; downstream reachability and sign multiplication are graph-stage work. A cause unequal to the initial perturbation is not an exclusion rule.",
-    "ScopeInput uses the actual causalAssessments element shape; output sign comes from relation.signedEffect when usable."
+    "ScopeInput uses the actual causalAssessments element shape; output sign comes from relation.signedEffect when usable.",
+    "Use lowercase organism/resource keys for every cause/effect graph join and output, while preserving exact source quotation casing. Case normalization changes spelling only; substantive identity still needs evidence."
   ],
   "qualification_required": [
     "Rendered type/scope fidelity",
@@ -43,5 +44,11 @@
   "idiom_preconditions": "Before executing this idiom, declare the local ScopeInput and ScopeDecision aliases; initialize scopeDecisions: ScopeDecision[]; bind one scopeInput from the selected edge and exact premises. Use the authored StageInput4 parameter input. The idiom explicitly binds its one captured rule from the declared context field.",
   "diagnostic_revision_reason": "v8b consumed actual child decisions but wrongly excluded downstream edges by treating scope as direct applicability to the fox perturbation. v8c restricts the child to edge validity and keeps graph propagation downstream.",
   "selected_collection": "input.prior.causalAssessments",
-  "source_projection": "Pass one actual causalAssessments element as ScopeInput.relation. The upstream signedEffect is the candidate source sign; when usable, map it to ScopeDecision.sign. direct describes the causal assessment and does not require the cause to be the initially perturbed organism."
+  "source_projection": "Pass one actual causalAssessments element as ScopeInput.relation. The upstream signedEffect is the candidate source sign; when usable, map it to ScopeDecision.sign. direct describes the causal assessment and does not require the cause to be the initially perturbed organism.",
+  "entity_identity_contract": {
+    "domain": "Organism and ecological resource names in astra-ecology-01",
+    "join_key": "Use lowercase case-folded organism/resource names as entity keys in every edge, graph join and final output. Grass and grass share the key grass; Shelter and shelter share shelter.",
+    "source_quotes": "Preserve exact original casing in source quotations and evidence text.",
+    "scope": "Only normalize letter case. Keep distinct names distinct; synonym or referent equivalence still requires source-grounded semantic evidence."
+  }
 }

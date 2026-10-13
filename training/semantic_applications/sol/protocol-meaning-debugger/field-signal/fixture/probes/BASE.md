@@ -1,0 +1,1 @@
+ID NOTE_BASE. A succeeds on both attempts; B fails on both. Commissioning, calibration and telemetry availability coincide, concealing population/anchor differences while complementary pooled outcomes both yield50percent.

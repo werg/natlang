@@ -1,0 +1,380 @@
+{
+  "schema": "natlang.treaty-obligation-oracle/1",
+  "caseId": "three-locks-v1",
+  "independently_reviewed": false,
+  "training_admitted": false,
+  "expected_entries": [
+    {
+      "snapshot": "S34",
+      "tripId": "T1",
+      "debtor": "Alder",
+      "beneficiary": "Birch",
+      "action": "toll",
+      "status": "unresolved",
+      "amountAlternatives": [
+        0,
+        10
+      ],
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_TOLL"
+      ]
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T1",
+      "debtor": "Alder",
+      "beneficiary": "Birch",
+      "action": "notice",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_NOTICE",
+        "F02"
+      ]
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T1",
+      "debtor": "Alder",
+      "beneficiary": "Birch",
+      "action": "translation",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_TRANSLATE"
+      ]
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T1",
+      "debtor": "Birch",
+      "beneficiary": "Alder",
+      "action": "passage",
+      "status": "unresolved",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_PASSAGE"
+      ]
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T2",
+      "debtor": "Birch",
+      "beneficiary": "Cedar",
+      "action": "toll",
+      "status": "active",
+      "amountAlternatives": [
+        12
+      ],
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_TOLL",
+        "M01"
+      ]
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T2",
+      "debtor": "Birch",
+      "beneficiary": "Cedar",
+      "action": "notice",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_NOTICE"
+      ]
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T2",
+      "debtor": "Birch",
+      "beneficiary": "Cedar",
+      "action": "translation",
+      "status": "defeated",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_TRANSLATE"
+      ]
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T2",
+      "debtor": "Cedar",
+      "beneficiary": "Birch",
+      "action": "passage",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": true,
+      "baseJustificationClauseIds": [
+        "N_PASSAGE"
+      ]
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T3",
+      "debtor": "Cedar",
+      "beneficiary": "Alder",
+      "action": "toll",
+      "status": "active",
+      "amountAlternatives": [
+        12
+      ],
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_TOLL",
+        "M01"
+      ]
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T3",
+      "debtor": "Cedar",
+      "beneficiary": "Alder",
+      "action": "notice",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_NOTICE"
+      ]
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T3",
+      "debtor": "Cedar",
+      "beneficiary": "Alder",
+      "action": "translation",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_TRANSLATE"
+      ]
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T3",
+      "debtor": "Alder",
+      "beneficiary": "Cedar",
+      "action": "passage",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": true,
+      "baseJustificationClauseIds": [
+        "N_PASSAGE"
+      ]
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T1",
+      "debtor": "Alder",
+      "beneficiary": "Birch",
+      "action": "toll",
+      "status": "defeated",
+      "amountAlternatives": [
+        0
+      ],
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_TOLL"
+      ]
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T1",
+      "debtor": "Alder",
+      "beneficiary": "Birch",
+      "action": "notice",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_NOTICE",
+        "F02"
+      ]
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T1",
+      "debtor": "Alder",
+      "beneficiary": "Birch",
+      "action": "translation",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_TRANSLATE"
+      ]
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T1",
+      "debtor": "Birch",
+      "beneficiary": "Alder",
+      "action": "passage",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": true,
+      "baseJustificationClauseIds": [
+        "N_PASSAGE"
+      ]
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T2",
+      "debtor": "Birch",
+      "beneficiary": "Cedar",
+      "action": "toll",
+      "status": "active",
+      "amountAlternatives": [
+        12
+      ],
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_TOLL",
+        "M01"
+      ]
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T2",
+      "debtor": "Birch",
+      "beneficiary": "Cedar",
+      "action": "notice",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_NOTICE"
+      ]
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T2",
+      "debtor": "Birch",
+      "beneficiary": "Cedar",
+      "action": "translation",
+      "status": "defeated",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_TRANSLATE"
+      ]
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T2",
+      "debtor": "Cedar",
+      "beneficiary": "Birch",
+      "action": "passage",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": true,
+      "baseJustificationClauseIds": [
+        "N_PASSAGE"
+      ]
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T3",
+      "debtor": "Cedar",
+      "beneficiary": "Alder",
+      "action": "toll",
+      "status": "active",
+      "amountAlternatives": [
+        12
+      ],
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_TOLL",
+        "M01"
+      ]
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T3",
+      "debtor": "Cedar",
+      "beneficiary": "Alder",
+      "action": "notice",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_NOTICE"
+      ]
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T3",
+      "debtor": "Cedar",
+      "beneficiary": "Alder",
+      "action": "translation",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null,
+      "baseJustificationClauseIds": [
+        "N_TRANSLATE"
+      ]
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T3",
+      "debtor": "Alder",
+      "beneficiary": "Cedar",
+      "action": "passage",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": true,
+      "baseJustificationClauseIds": [
+        "N_PASSAGE"
+      ]
+    }
+  ],
+  "authority_rejections": {
+    "FREE_A": "Tariff exemption outside notice-wording power.",
+    "AL": "Unsupported reciprocal tariff authority; no root grant.",
+    "BI": "Unsupported reciprocal tariff authority; no root grant."
+  },
+  "effective_flood_interval": {
+    "startInclusive": 10,
+    "endExclusive": 25
+  },
+  "rate_boundary": 20,
+  "birch_translation_reservation": "Birch as debtor only; Alder-to-Birch still translates.",
+  "changed_identities": [
+    {
+      "tripId": "T1",
+      "action": "toll",
+      "before": "unresolved",
+      "after": "defeated",
+      "new_premise_support": [
+        "R01",
+        "R02"
+      ]
+    },
+    {
+      "tripId": "T1",
+      "action": "passage",
+      "before": "unresolved",
+      "after": "active",
+      "new_premise_support": [
+        "R01",
+        "R02"
+      ]
+    }
+  ],
+  "support_minimality_convention": "R01 supplies valid rescue content; R02 supplies its S35 availability and S34 absence. A changed-premise explanation must bind content to the knowledge snapshot. Existing authority A05 and exception clauses remain background premises.",
+  "no_change_reasons": [
+    "RATE12 never changes T1 day12 tariff even when reviewed at S35.",
+    "T1 arrival notice retains two independent proofs.",
+    "Birch reservation never exempts Alder's translation.",
+    "T3 at day27 is after board competence ends at day25, despite order text through29."
+  ],
+  "fixture_clause_count": 37
+}
