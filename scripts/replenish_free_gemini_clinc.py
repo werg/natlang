@@ -89,6 +89,34 @@ def resume_incomplete(batch, number, completed):
                                       'not_before': now + delay}, indent=2) + '\n')
 
 
+def quality_summary(batch, cases, labels):
+    path = batch / 'quality-summary.json'
+    case_hash = digest(batch / 'cases.jsonl')
+    label_hash = digest(batch / 'labels.jsonl')
+    if path.exists():
+        summary = json.loads(path.read_text())
+        if summary['cases_sha256'] != case_hash or summary['labels_sha256'] != label_hash:
+            raise ValueError(f'closed batch changed: {batch}')
+        return summary
+    gold = {row['id']: row['answer'] for row in cases}
+    exact_ids = sorted(row['id'] for row in labels
+                       if isinstance(row.get('answer'), dict) and
+                       row['answer'].get('choice') == gold[row['id']])
+    valid = sum(isinstance(row.get('answer'), dict) and
+                'choice' in row['answer'] for row in labels)
+    by_model = {}
+    for model in sorted({row['teacher'] for row in labels}):
+        group = [row for row in labels if row['teacher'] == model]
+        by_model[model] = {'total': len(group), 'exact': sum(row['id'] in exact_ids for row in group)}
+    summary = {'schema': 'natlang.free-api-held-label-quality/1', 'training_admission': False,
+               'cases_sha256': case_hash, 'labels_sha256': label_hash,
+               'source_rows': len(cases), 'typed_valid': valid, 'source_label_match': len(exact_ids),
+               'source_matching_ids': exact_ids, 'by_model': by_model,
+               'decision': 'Only source-matching rows are candidates; independent semantic review remains required.'}
+    path.write_text(json.dumps(summary, indent=2) + '\n')
+    return summary
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=SOURCE)
@@ -117,12 +145,9 @@ def main():
                 resume_incomplete(batch, number, len(labels))
                 return
             if cases:
-                valid = sum(isinstance(row.get('answer'), dict) and
-                            'error' not in row['answer'] for row in labels)
-                gold = {row['id']: row['answer'] for row in cases}
-                exact = sum(row.get('answer', {}).get('choice') == gold[row['id']]
-                            for row in labels if isinstance(row.get('answer'), dict))
-                if valid / len(cases) < 0.6 or exact / len(cases) < 0.75:
+                summary = quality_summary(batch, cases, labels)
+                valid, exact = summary['typed_valid'], summary['source_label_match']
+                if valid / len(cases) < 0.6 or exact / len(cases) < 0.6:
                     print(json.dumps({'event': 'quality_pause', 'batch': number,
                                       'valid': valid, 'exact': exact, 'target': len(cases)}))
                     return

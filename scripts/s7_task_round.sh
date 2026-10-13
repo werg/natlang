@@ -41,7 +41,7 @@ SP=$!
 for i in $(seq 1 150); do curl -sf http://127.0.0.1:${PORT:-8097}/v1/models >/dev/null && break; sleep 2; done
 curl -sf http://127.0.0.1:${PORT:-8097}/v1/models >/dev/null || { echo "server did not come up; see $R/server.log" >&2; kill $SP; exit 1; }
 URL=http://127.0.0.1:${PORT:-8097}
-stop_server() { kill $SP; wait $SP; [ -n "${SERVE_IMAGE:-}" ] && docker stop "$CONTAINER" >/dev/null 2>&1; }
+stop_server() { kill $SP 2>/dev/null; wait $SP 2>/dev/null; [ -n "${SERVE_IMAGE:-}" ] && docker stop "$CONTAINER" >/dev/null 2>&1; true; }
 if [ -n "${UPDATE_FROM:-}" ]; then
   # One GRPO round on a scored run (S7 §5): zero adapter (policy == reference), the run's rollouts as behaviour samples,
   # natlang.rollout/1 records from the collector trajectories, adapter saved to $R/policy-r1/adapter.nzb.

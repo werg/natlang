@@ -877,8 +877,7 @@ def write_done(work: Path, tok_name: str, stem: str, result: dict):
 # ---------------------------------------------------------------- merge
 
 def role_counter(tok):
-    from natlang_neuralese.train.text_warmup import chat_roles
-    from natlang_neuralese.train.text_supervision import ROLE_CODES
+    from natlang_neuralese.train.text_supervision import ROLE_CODES, chat_roles
 
     def token_id(text):
         value = tok.convert_tokens_to_ids(text)

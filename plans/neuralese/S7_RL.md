@@ -191,6 +191,22 @@ python3 scripts/memory_ledger.py run --unit s7rl-round0-muon10006 --container s7
   did not), and with the adapter applied per request; either slows serving. Not yet separated: the next round runs a
   matched no-adapter control in the same unit and seeds. Among rollouts that finished, round1 had 8/17 successes,
   round0 11/29; one tiny step on one group is not expected to move this measurably.
+- **Matched A/B (2026-10-13), resolving the above.** Same 8 rows, same seeds (seed base 11000), 4 samples, wall limit
+  raised to 900 s, both arms concurrently on one server (4 queue runners each) so they share GPU contention; unit
+  `--no-resumable` (two earlier attempts were preempted by Mellum v4 relaunches).
+
+  | Arm | Successes | Outcomes | Successes per row | Mean / max wall | Replies | Completion tokens |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | adapter (GRPO r1) | 11/32 | 11 success, 9 invalid_action, 4 semantic_mismatch, 8 model-request budget | 0 4 0 4 0 3 0 0 | 213 / 797 s | 407 | 51.0k |
+  | control (no adapter) | 12/32 | 12 success, 12 invalid_action, 8 model-request budget | 0 4 0 4 0 4 0 0 | 208 / 897 s | 406 | 44.6k |
+
+  No policy difference (one step on one group, as expected) and no serving difference: no wall-clock stops in either
+  arm, equal wall times. Decode probe (`scripts/s7_decode_probe.py`, one recorded 418-token request, greedy,
+  alternating ×3): idle server 16.3 tok/s base vs 14.7 with adapter (1.1×); under the A/B load 31.6 vs 41.0 (adapter
+  faster; noise at 23 generated tokens per request). The adapter path does not cost 4×; round1's slowdown was GPU
+  contention from the concurrent Mellum training. The 8 budget stops per arm are the 32-model-request limit (reward 0),
+  all on rows that fail in every sample. The same 3 rows succeed in both arms; the other 5 never do, so GRPO on this
+  set has almost no signal: the next step is more rows and RFT on the all-fail rows, not more GRPO steps here.
 - **Reward fix from this:** a `case_wall_budget` stop is a collection resource limit that depends on server load
   (the queue journal itself labels it "not a language deadline or model-negative label"), so `reward_of` now makes
   it unscored (null), like infrastructure; `model_request_budget` stays reward 0. Rescored: round0 29 scored, 11

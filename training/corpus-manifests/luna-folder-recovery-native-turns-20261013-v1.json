@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-folder-recovery-native-turns-20261013-v1",
+  "owner": "pop",
+  "path": "runs/luna-folder-recovery-native-turns-20261013-v1",
+  "files": [
+    {
+      "path": "accepted-parents.native.jsonl",
+      "bytes": 19587510,
+      "sha256": "f023674da24df9a1f16813b8e8d348b2c8269f13ab3bf662b480bddaadccfc29",
+      "lines": 50
+    },
+    {
+      "path": "admission-review.json",
+      "bytes": 960,
+      "sha256": "d4b9eeef1fefdccbdd8635666bdc7b588005e618f46f8c24598099d662b5ac83"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 20582543,
+      "sha256": "45114f8a7346cf006f4566e0b0cdb6bcd5ba655e69c64066af423b871675faf6",
+      "lines": 237
+    }
+  ],
+  "bytes": 40171013
+}

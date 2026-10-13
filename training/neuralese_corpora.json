@@ -61873,6 +61873,130 @@
       },
       "note": "Clef-flash-distilled inline-lambda programs over new source pools, day 20261013: 420 cases, 2681 decisions ({'clef_skill_routing': 154, 'clef_wellbeing_triage': 108, 'clef_clause_risk': 57, 'clef_edit_review': 101}). Files: *.skeletons (Clef requests), *.answers (Clef outputs with usage), *.ir (cases), *.rows (trajectories), *.turns (native training turns).",
       "consumable_by_direct_stage": false
+    },
+    {
+      "id": "luna-held-shapes-s52007-source-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-s52007-source-20261013-v1",
+      "admission": "source-only-nontraining; 32 held-world-colliding rows excluded from teacher queue",
+      "include": [
+        "source.ir.jsonl",
+        "build-report.json",
+        "provenance.json"
+      ],
+      "selection_correction": "2026-10-13: source itself is valid; original teacher selection falsely treated distinct folder_files worlds as collisions. Folder cases to be generated in a recovery campaign; complete visible-world comparison finds zero exact held overlaps."
+    },
+    {
+      "id": "luna-held-shapes-s52008-source-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-s52008-source-20261013-v1",
+      "admission": "source-only-nontraining; held input worlds excluded from selected teacher queue",
+      "include": [
+        "source.ir.jsonl",
+        "build-report.json",
+        "campaign-manifest.json",
+        "provenance.json"
+      ],
+      "selection_correction": "2026-10-13: source itself is valid; original teacher selection falsely treated distinct folder_files worlds as collisions. Folder cases to be generated in a recovery campaign; complete visible-world comparison finds zero exact held overlaps."
+    },
+    {
+      "id": "luna-held-shapes-s52009-source-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-s52009-source-20261013-v1",
+      "admission": "source-only-nontraining; held input worlds excluded from selected teacher queue",
+      "include": [
+        "source.ir.jsonl",
+        "build-report.json",
+        "campaign-manifest.json",
+        "provenance.json"
+      ],
+      "selection_correction": "2026-10-13: source itself is valid; original teacher selection falsely treated distinct folder_files worlds as collisions. Folder cases to be generated in a recovery campaign; complete visible-world comparison finds zero exact held overlaps."
+    },
+    {
+      "id": "luna-held-shapes-native-turns-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-native-turns-20261013-v1",
+      "include": [
+        "approved-turns.jsonl",
+        "accepted-parents.native.jsonl",
+        "admission-review.json",
+        "parent-selection.json"
+      ],
+      "admission": "exact-native-oracle approved decisions after exact held input-world exclusion; train-only native turns",
+      "training_admission": true,
+      "training_admission_reason": "670 accepted parent programs with all oracle checks true; 5195 materializer-approved decision targets; 309 unapproved context rows pruned. The earlier exclusion of 50 folder parents was an audit fingerprint error, not real held contamination; corrected folder turns will be admitted separately without duplicate targets.",
+      "review_status": "Approved rows remain valid. Decontamination correction 2026-10-13: prior receipt omitted semantics.folder_files; a complete visible-world check found zero exact held overlaps. This corpus is incomplete by 50 folder parents; see recovery corpus.",
+      "required_conversion": "render native-turn corpus for LFM and Mellum; merge with nonduplicate folder recovery corpus in next declared union",
+      "split": "train only; source seed groups disjoint from held seed61012; exact family+inputs/files/services collision exclusion",
+      "source_class": "project-generated inline curriculum and AG News-derived edit stream",
+      "license": "661 synthetic project-generated parent programs; 9 AG News academic-use derived parent programs; factual provenance, no exclusion",
+      "source_corpora": [
+        "luna-held-shapes-s52005-source-20261013-v1",
+        "luna-held-shapes-s52006-source-20261013-v1",
+        "luna-held-shapes-s52007-source-20261013-v1",
+        "luna-held-shapes-s52008-source-20261013-v1",
+        "luna-held-shapes-s52009-source-20261013-v1"
+      ]
+    },
+    {
+      "id": "luna-folder-recovery-native-turns-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-folder-recovery-native-turns-20261013-v1",
+      "include": [
+        "approved-turns.jsonl",
+        "accepted-parents.native.jsonl",
+        "admission-review.json"
+      ],
+      "admission": "corrected visible-world held clearance and exact native parent/turn approval; train-only",
+      "training_admission": true,
+      "training_admission_reason": "50 folder parents falsely excluded by an earlier fingerprint omitting semantics.folder_files; complete visible-world comparison finds zero held collisions; all parent checks true; 237 approved decision turns; disjoint from earlier held-shape v1 corpus",
+      "review_status": "exact oracle and all checks true; 24 nonapproved context decisions omitted; LFM/Mellum renderer pending",
+      "required_conversion": "render native-turn corpus for both LFM and Mellum; include with earlier held-shape corpus in next declared union",
+      "split": "train only; source group IDs distinct from held seed61012; complete visible-world decontamination",
+      "source_class": "project-generated folder criteria reducer",
+      "license": "project-generated",
+      "source_corpora": [
+        "luna-held-shapes-s52005-source-20261013-v1",
+        "luna-held-shapes-s52006-source-20261013-v1"
+      ]
+    },
+    {
+      "id": "luna-held-shapes-lfm-render-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-lfm-render-20261013-v1",
+      "include": [
+        "receipt.json",
+        "full/lfm25/text-data.jsonl",
+        "program-header/lfm25/text-data.jsonl",
+        "whole-trajectory/lfm25/text-data.jsonl"
+      ],
+      "admission": "derived LFM rendering of exact admitted native-turn corpus; no independent source credit",
+      "training_admission": true,
+      "training_admission_reason": "source corpus luna-held-shapes-native-turns-20261013-v1 is admitted; renderer receipt verifies zero omissions, zero held reservation hits, exact token/template rendering",
+      "derived_from": "luna-held-shapes-native-turns-20261013-v1",
+      "source_class": "derived-lfm25-training-render",
+      "split": "train only; inherited from source decision rows",
+      "required_conversion": "include in next declared LFM training union; Mellum twin rendering on DGX",
+      "license": "inherited from source corpus; factual provenance"
+    },
+    {
+      "id": "luna-folder-recovery-lfm-render-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-folder-recovery-lfm-render-20261013-v1",
+      "include": [
+        "receipt.json",
+        "full/lfm25/text-data.jsonl",
+        "program-header/lfm25/text-data.jsonl",
+        "whole-trajectory/lfm25/text-data.jsonl"
+      ],
+      "admission": "derived LFM rendering of exact admitted native-turn corpus; no independent source credit",
+      "training_admission": true,
+      "training_admission_reason": "source corpus luna-folder-recovery-native-turns-20261013-v1 is admitted; renderer receipt verifies zero omissions, zero held reservation hits, exact token/template rendering",
+      "derived_from": "luna-folder-recovery-native-turns-20261013-v1",
+      "source_class": "derived-lfm25-training-render",
+      "split": "train only; inherited from source decision rows",
+      "required_conversion": "include in next declared LFM training union; Mellum twin rendering on DGX",
+      "license": "inherited from source corpus; factual provenance"
     }
   ],
   "coverage_backlog": [

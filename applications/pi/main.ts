@@ -8,6 +8,8 @@
  *                                           profile endpoint and model); --agent-key-env VAR for its key;
  *                                           --context-window N (default 65536), --max-tokens N (default 16384)
  *   --thinking LEVEL                        the agent's thinking level (default off)
+ *   --temperature T                         the agent's sampling temperature, sent with each request that sets none
+ *                                           (default: none sent; the server's own default, greedy for natlang_neuralese)
  *   --agent-transport natlang               reach the agent model through natlang's own model transport, which speaks
  *                                           the Neuralese wire standard as natlang programs do (host/natlang-provider.ts;
  *                                           default: pi-ai's OpenAI-compatible provider)
@@ -65,7 +67,7 @@ import { openPi, runPiTask, type Implementations, type RunResult } from './index
 
 const context = BACKGROUND_CONTEXT;
 const VALUED = ['--executor-context', '--agent-endpoint', '--agent-model', '--agent-key-env', '--context-window', '--max-tokens', '--thinking', '--cwd',
-  '--agent-transport', '--agent-reader', '--tools', '--phases',
+  '--agent-transport', '--agent-reader', '--tools', '--phases', '--temperature',
   '--session', '--context', '--scheduler', '--admission', '--planning', '--shaping', '--hints', '--out', '--minutes', '--in', '--repos'];
 const option = (args: string[], name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
@@ -111,6 +113,7 @@ export async function agentModels(args: string[], launcher?: { endpoint: string;
     { kind: 'text' };
   return agentModelsFor({ endpoint: root, modelId, ...(apiKey === undefined ? {} : { apiKey }), transport, reader,
     contextWindow: Number(option(args, '--context-window') ?? 65536), maxTokens: Number(option(args, '--max-tokens') ?? 16384),
+    ...(option(args, '--temperature') === undefined ? {} : { temperature: Number(option(args, '--temperature')) }),
     ...(store ? { store } : {}) });
 }
 
