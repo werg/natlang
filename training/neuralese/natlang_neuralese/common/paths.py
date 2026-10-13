@@ -8,7 +8,10 @@ existed. Stdlib-only.
 from __future__ import annotations
 
 import os
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Pop's system Python is 3.10; its tomli package supplies the same reader.
+    import tomli as tomllib
 from pathlib import Path
 
 DEFAULTS: dict[str, str] = {

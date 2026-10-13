@@ -50,7 +50,16 @@ decisions and four other live decisions are also held. One of two causal
 preference candidates is held for the same reason. All outputs
 remain review-only. Broad
 s52027 and Gemini generation continue under the Pop guard's low-priority
-admission; v11 reached at least update 6278 at full GPU utilization.
+admission; v11 reached at least update 6900 at full GPU utilization. The next
+checkpoint-safe handoff should adopt the shared recovery windowing and full
+system-prompt task evaluation; an uncommitted v12 launch recipe is prepared,
+but its package-code pins must be refreshed against main immediately before
+handoff. On Pop, `~/.config/natlang/machine.toml` now sets `data_hdd` to
+`/srv/storage`; `common/paths.py` supports Pop's system Python 3.10 through
+its installed `tomli` fallback. The old free-provider decision-source builder
+failed because `/mnt/external/.../decision-sources/MANIFEST.json` is a DGX path
+and absent on Pop. DGX has been asked for the pinned source catalog location;
+the free Gemini CLINC lane and Luna generation remain active independently.
 
 ## 13:36 CEST: diversity and recovery intake
 
