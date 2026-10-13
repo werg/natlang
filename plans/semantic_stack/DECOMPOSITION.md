@@ -62,6 +62,12 @@ applicable relations. The next presentation should use a narrow per-relation
 typed literal and require its returned decision to enter the owned field.
 Neither trace is an admitted training row or a model-negative example.
 
+The first v8 ecology queue failed before any model call because its hand-built
+single-case row used source index 1 against a one-row selected source. Worker
+queue indices are zero based. A fresh immutable v8b queue uses index 0; the
+six-case plain cohort was also resealed with indices 0–5 before launch. Both
+queues were range-checked against their exact selected-source line counts.
+
 ## Application-scale semantic projects
 
 The additive high-depth slate is a different source shape: a complete natlang project with roughly 10–30 authored `.nl` files, topic-specific callable folders, explicit typed interfaces, service declarations when outside-world work is needed, and real multi-step tasks. A project manifest selects an immutable source tree, task input snapshot, declared output/checker, provenance and split world. Its adapter snapshots the files into Program/2 without rewriting the author's call graph or forcing a generic chain. The root and modules remain natural-language functions; exact source hashing, path containment, type checking, replay and result checks are crisp. Full teacher trajectories, including child calls and tool outputs, are collected through the existing teacher pipeline. Existing 220 authored programs remain eligible when valid; their difficulty is a mix label, not an admission criterion. New project cases must show actual stage contributions, source visibility and correct outputs before training admission.
