@@ -30,10 +30,15 @@ FAMILIES = ('contract_diagnosis', 'workbench_tickets', 'logic_proof_verifier',
             'counterexample_revision', 'policy_after_measure',
             'recurrence_inline_graphs', 'composed_process',
             'kqapro_question', 'scienceworld_task', 'alfworld_task',
-            'musique_hops', 'knowledge_research', 'folder_edit')
+            'musique_hops', 'knowledge_research', 'folder_extract')
 START_SEED = 52007
 WORKERS = 6
 PER_FAMILY = {family: 6 for family in FAMILIES}
+# Large CoEdIT folder edits require file-by-file semantic review even when the
+# numeric return matches. The exact reference replay has a separate admitted
+# static route; spend this slot on quote-grounded folder extraction instead.
+# Keep the zero cap for an already-built source encountered on resume.
+PER_FAMILY['folder_edit'] = 0
 # inline_review_each also emits its paired no-crisp family. Preserve both
 # behaviours without letting this one builder take two full family slots.
 PER_FAMILY.update(inline_review_each=3, inline_avoid_crisp=3)

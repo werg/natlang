@@ -133,6 +133,18 @@ after actual file-level semantic review. Future campaigns should route
 rewrite-oracle folder edits to that reviewer or static reference path rather
 than spend Luna requests without an admission route.
 
+At 19:50 CEST worker04's retry completed 408 turns with an exact numeric
+return, but failed the file oracle; it remains unadmitted. Worker05 exhausted
+its one 768-request retry with zero result rows; an exact reviewed exclusion
+pins the empty output hash and permits the campaign to advance. Worker03 was
+OOM-killed twice at a 1.5 GiB cgroup envelope; Pop restarted its same durable
+retry with 2.0 GiB after worker04 freed memory. For future source campaigns,
+the Pop Luna replenisher sets the `folder_edit` family quota to zero and omits
+that family from the build, replacing its slot with quote-grounded
+`folder_extract`. The 42–157-file semantic rewrite cases cannot pass automated
+file admission and have an exact static replay route; the other folder/reducer
+families remain in the teacher mix.
+
 ## 16:55 CEST: Pop generation and corpus sync
 
 The QAD direct SFT v12 handoff is training past update 7,500 with the GPU
