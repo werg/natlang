@@ -7,7 +7,8 @@ read once at startup, so a copy buys no step speed, only disk churn; the 44 GB v
 the archive) is read directly from the HDD and recorded as ``read_from_hdd``. The cache is bounded
 (NATLANG_STAGED_INPUTS_MAX_GB, default 64): least recently used entries are evicted before a new copy, and the
 archiver or storage retention may delete any entry (a stage re-stages what it needs). The out dir (checkpoints, logs)
-must not resolve under the HDD. A no-op where the prefix does not exist (Pop). The prefix comes from
+must not resolve under the HDD. A no-op where the prefix is absent or its device is known to be
+nonrotating (Pop's `/srv/storage` is an NVMe partition). The prefix comes from
 NATLANG_HDD_PREFIX (default: the data_hdd root of common.paths); the cache from NATLANG_STAGED_INPUTS (default
 ~/data/staged-inputs).
 """
@@ -29,8 +30,31 @@ SIDECARS = {'records.jsonl': ('chains.jsonl',)}
 
 
 def hdd_prefix() -> Path | None:
-    prefix = Path(os.environ.get('NATLANG_HDD_PREFIX') or resolve('data_hdd'))
-    return prefix.resolve() if prefix.exists() else None
+    explicit = os.environ.get('NATLANG_HDD_PREFIX')
+    prefix = Path(explicit or resolve('data_hdd'))
+    if not prefix.exists():
+        return None
+    prefix = prefix.resolve()
+    # A machine may use its logical data_hdd root for a second NVMe partition.
+    # Keep an explicit prefix authoritative, but avoid staging from that NVMe
+    # back onto itself when the logical root is only a storage location name.
+    if not explicit and _rotational(prefix) is False:
+        return None
+    return prefix
+
+
+def _rotational(path: Path) -> bool | None:
+    """Read the mounted block device's rotation flag; unknown keeps old behavior."""
+    try:
+        device = path.stat().st_dev
+        sys_device = Path(f'/sys/dev/block/{os.major(device)}:{os.minor(device)}').resolve()
+        for candidate in (sys_device, *sys_device.parents):
+            flag = candidate / 'queue' / 'rotational'
+            if flag.is_file():
+                return flag.read_text().strip() == '1'
+    except OSError:
+        pass
+    return None
 
 
 def on_hdd(path) -> bool:
