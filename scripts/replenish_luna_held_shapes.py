@@ -58,8 +58,8 @@ def complete(campaign):
         worker = campaign / f'worker-{number:02d}'
         queue = rows(worker / 'queue.jsonl')
         unit = f'natlang-pop-luna-s{manifest["seed"]}-w{number:02d}.service'
-        retry_dirs = sorted(worker.glob('retry-[0-9][0-9]'))
-        if active(unit) or any(active(f'natlang-pop-luna-s{manifest["seed"]}-w{number:02d}-r{int(path.name[-2:]):02d}.service')
+        retry_dirs = sorted(worker.glob('retry-*'))
+        if active(unit) or any(active(f'natlang-pop-luna-s{manifest["seed"]}-w{number:02d}-r{path.name.removeprefix("retry-")}.service')
                                for path in retry_dirs):
             pending = True
             continue
@@ -115,27 +115,31 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs):
         return False
     if result.get('output_accounting', {}).get('exact_result_rows') != 0:
         return False
-    last = retry_dirs[-1] if retry_dirs else worker / f'case-{queue_ordinal(worker, job["key"]):03d}'
+    own_retries = [path for path in retry_dirs
+                   if (path / 'review.json').exists() and
+                   json.loads((path / 'review.json').read_text()).get('original_key') == job['key']]
+    last = own_retries[-1] if own_retries else worker / f'case-{queue_ordinal(worker, job["key"]):03d}'
     errors = sorted((last / 'jobs').glob('*.error.json'))
     if not errors:
         return False
     message = json.loads(errors[-1].read_text()).get('error', '')
     if not any(phrase in message for phrase in ('Codex error: An error occurred while processing your request',
-                                                'rate limit', '429 Too Many Requests')):
+                                                'rate limit', '429 Too Many Requests', 'Error: terminated')):
         return False
-    attempt = len(retry_dirs) + 1
+    attempt = len(own_retries) + 1
     if attempt > 3:
         print(json.dumps({'event': 'needs_review', 'key': job['key'],
                           'reason': 'transient_retry_limit'}), flush=True)
         return False
     not_before = max(result.get('next_allowed_at', 0),
-                     (retry_dirs[-1] / 'review.json').stat().st_mtime + min(900, 30 * 2 ** (attempt - 1))
-                     if retry_dirs else 0)
+                     (own_retries[-1] / 'review.json').stat().st_mtime + min(900, 30 * 2 ** (attempt - 1))
+                     if own_retries else 0)
     if time.time() < not_before:
         print(json.dumps({'event': 'retry_cooldown', 'key': job['key'],
                           'seconds': round(not_before - time.time())}), flush=True)
         return True
-    retry = worker / f'retry-{attempt:02d}'
+    ordinal = queue_ordinal(worker, job['key'])
+    retry = worker / f'retry-{ordinal:03d}-{attempt:02d}'
     retry.mkdir(exist_ok=False)
     again = dict(job, output=str(retry / 'results.jsonl'), jobs=str(retry / 'jobs'),
                  log=str(retry / 'collector.log'), seed=job['seed'] + attempt * 100000)
@@ -143,7 +147,7 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs):
     (retry / 'review.json').write_text(json.dumps({
         'schema': 'natlang.teacher-transient-retry/1', 'original_key': job['key'],
         'attempt': attempt, 'error': message, 'training_admission': False}, indent=2) + '\n')
-    launch_queue(retry, f'natlang-pop-luna-s{seed}-w{number:02d}-r{attempt:02d}')
+    launch_queue(retry, f'natlang-pop-luna-s{seed}-w{number:02d}-r{ordinal:03d}-{attempt:02d}')
     return True
 
 
