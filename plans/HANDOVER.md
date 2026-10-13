@@ -1,5 +1,48 @@
 # Continuation guide — updated 2026-10-13
 
+## 22:48 CEST: all 220 fixture drafts, typed per-record pilot
+
+Astra committed all 120 substantive fixture views (`80404a4c`) across 54
+distinct source worlds; Sol has all 100 across 28 (`7b84aea4`). These are
+220 distinct program operations in 40 domains, each with at least 24 evidence
+records. Most are **still held**: Sol independently reviewed Astra's 112
+expanded cases and Astra reviewed Sol's 90. Scope ambiguities were corrected;
+61 of Sol's 90 held oracles packed compound facts into undeclared string
+delimiters, which could falsely reject equivalent answers. Sol is replacing
+them with named typed fields and declaring set versus sequence semantics.
+Keep the newly expanded cases out of teacher generation and training until
+independent source/oracle review and exact replay are sealed. The screened
+priority selection remains 18 cases. Neither successful reference replay
+alone nor draft fixture presence is admission.
+
+The v4 live diagnostic traversed nested named functions and generated many
+inline NL literals, but root passed all 24 evidence records as one string:
+about 77 turns/156 model requests, 47 invocations and 36 ad hoc literal eval
+sites, **zero** `iterateOn` and only one root inventory call. Its answer was
+not needed to localize this builder presentation failure. Pop stopped the
+exact v4 unit; classify it as a source-format diagnostic, not a model failure.
+Commit `e133fabc` changes Astra helpers to typed `EvidenceRecord`,
+`EvidenceContext`, `EvidenceFinding`, and root to `iterateOn` with a decreasing
+unprocessed count. Exact reference replay passed 23/23 and actual nested
+`read_code`/call preflight passed. Matched full-size v5 Luna pilot now runs on
+the same Astra case; its first turns formed `{nextPathIndex, findings}` state,
+passed only record 01 through the deep chain with a scoped typed `nl.with`
+literal, and advanced to record 02. This confirms the desired topology but
+does not yet prove answer quality or practical throughput. Record 01 took
+roughly 20 turns/40 model requests, so a relevance-first natlang stage may be
+needed before applying the deep chain to every record. The v5 run is pinned;
+do not change its source mid-flight. Model-facing ~48-sample measurement debt
+is recorded for both presentation variants. Pop restarted ordinary Luna and
+Gemini replenishment after stopping v4; RAM ledger controls admission.
+
+Pop listed and removed exactly the discarded seed pilots, full-slate source
+dirs v1–v8, priority selections v1/v5/v8 and v3 queue, reclaiming
+114,010,409 bytes. Current v9 source/selection, current v5 typed diagnostic
+and active review sources are retained. No live process or review consumer
+used the deleted dirs. DGX's matched emitted-token reader fix was merged;
+its corrected C6 step-400 remeasurement is good, while Pop's LFM template
+A/B remains pending before a training/serving template decision.
+
 ## 22:39 CEST: s52034 prepared; fourth semantic diagnostic launched
 
 The Luna s52034 retry exposed one more assumption: `prepare` rejected a
