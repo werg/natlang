@@ -394,8 +394,19 @@ def build_source(campaign, seed):
     source.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(['node', 'ts-host/scripts/inline-curriculum/build.mjs',
                     '--seed', str(seed), '--shapes', '8', '--split', 'train',
-                    '--families', ','.join(FAMILIES), '--out', str(source)],
+                    '--families', ','.join(FAMILIES), '--allow-failures',
+                    '--out', str(source)],
                    cwd=ROOT, check=True)
+    report = json.loads(Path(str(source) + '.report.json').read_text())
+    unexpected = [failure for failure in report['failures']
+                  if failure['problems'] != ['reference not admitted: source_review_pending']]
+    if unexpected:
+        source.unlink(missing_ok=True)
+        raise ValueError(f'unexpected source verification failures: {unexpected}')
+    if report['failures']:
+        print(json.dumps({'event': 'source_review_excluded', 'seed': seed,
+                          'cases': len(report['failures']),
+                          'ids': [failure['id'] for failure in report['failures']]}), flush=True)
     return source
 
 
@@ -556,15 +567,16 @@ def main():
         for campaign in campaigns:
             manifest_path = campaign / 'campaign-manifest.json'
             if not manifest_path.exists():
-                source = campaign / 'source' / f'held-shapes-s{int(campaign.name.split("-s")[-1].split("-")[0])}-n8.ir.jsonl'
-                if source.exists():
-                    if active(f'natlang-pop-build-held-s{int(campaign.name.split("-s")[-1].split("-")[0])}.service'):
-                        print(json.dumps({'event': 'source_build_wait', 'campaign': str(campaign)}), flush=True)
-                        return
-                    prepare(campaign, int(campaign.name.split('-s')[-1].split('-')[0]),
-                    source, prior_worlds(campaign), prior_groups(campaign))
+                seed = int(campaign.name.split('-s')[-1].split('-')[0])
+                if active(f'natlang-pop-build-held-s{seed}.service'):
+                    print(json.dumps({'event': 'source_build_wait', 'campaign': str(campaign)}), flush=True)
                     return
-                raise ValueError(f'Incomplete campaign preparation: {campaign}')
+                # A failed source build leaves the campaign directory and its
+                # verification report, but no shard. Rebuild that exact seed
+                # and keep valid cases after reviewed source holds are removed.
+                source = build_source(campaign, seed)
+                prepare(campaign, seed, source, prior_worlds(campaign), prior_groups(campaign))
+                return
             if not complete(campaign):
                 pending_campaigns.append(campaign)
         if not BACKFILL.exists():

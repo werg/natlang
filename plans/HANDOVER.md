@@ -1,5 +1,101 @@
 # Continuation guide — updated 2026-10-13
 
+## 22:31 CEST: corrected semantic pilot live; Luna source rebuild repaired
+
+Semantic source commits `5129d407`, `93fad573`, `35be7422` and
+`5198879a` are on main. The v5 sealed full slate contains 220 authored
+programs, 18 expanded runnable cases (eight Astra, ten Sol) and 202 held
+designs. All 18 exact source reference replays pass. Scripted runtime
+`read_code` and actual nested execution succeeded through six Astra and five
+Sol callable stages, including typed root returns. The priority selector
+bound to v5 hashes emitted exactly those 18, with no teacher results or
+training admission. Do not launch its superseded v1 selection. Astra has
+subsequently expanded 16 more worlds in `18d559c7`; only five of those have
+completed source review, so the v5 sealed selection has not yet changed.
+
+The corrected **full-size** v3 Luna diagnostic queue uses 24-record worlds,
+up to 360 turns/2048 requests and a 5400-second collection resource ceiling.
+Pop stopped exact ordinary s52033 worker 02, preserved its partial, and
+launched low-priority ledger unit
+`natlang-pop-luna-semstack-full-v3-w01.service` on two source-disjoint cases;
+s52033 worker 01 and QAD trainer v14 remain active. The ordinary Luna timer
+is paused during this pilot. Curriculum agent is inspecting live nested calls
+and outcomes. No diagnostic output is admitted yet.
+
+The ordinary Luna replenisher failed while constructing seed s52034 because
+two of 856 `dataset_workbench` cases have factual
+`source_review_pending` holds. Commit `1785b819` invokes the existing
+verified-row filter, logs those two exact IDs and refuses any *other*
+verification failure, preserving 854 eligible cases. Its first retry found
+the campaign directory left by the failed source build and stopped before
+rebuilding. Commit `dbf12b38` makes an incomplete campaign rebuild the same
+seed and prepare it once verified. Re-enable the ordinary timer after the
+semantic pilot frees a slot and confirm s52034 actually materializes; the
+recovery path has not yet been exercised end-to-end. The quick check passed
+for both commits; a current-main full check is pending DGX ledger capacity.
+
+## 22:25 CEST: 220-program slate, live pilot repair, trainer resumed
+
+The owner's clarified target is **at least 100 distinct programs from each of
+two authoring agents**, 200 total. Astra committed 120 designs in 20 domains
+(`98af65b2`), and GPT-6.1 Sol committed 100 in a different 20 domains
+(`0691be8a`); both commits are on `origin/main`. These are program designs,
+not yet accepted training rows. Eighteen designs (Astra eight, Sol ten) have
+24-record concrete fixtures and independently reviewed exact reference
+outputs. The remaining 202 are held design seeds pending comparable source
+expansion and replay. Both authoring agents continue that work. The curriculum
+builder produced 220 source program folders, but actual teacher generation is
+restricted to quality-gated expanded fixtures.
+
+The first small Astra Luna diagnostic pilot exposed two builder faults rather
+than model failures. The first emitted lower-cased helper filenames that did
+not match authored calls; `624a05a2` fixed the names. The fresh v2 pilot then
+showed siblings where child functions require nested callable folders. Pop
+stopped the exact `natlang-pop-luna-semstack-pilot-v2-w01.service` unit. The
+curriculum agent is correcting the folder topology, tightening typed stage
+interfaces, and will reseal a v3 pilot with exact reference and `read_code`
+preflight through the full call chain. Neither pilot is training eligible.
+The general Luna replenisher timer is temporarily paused to reserve a slot
+for this diagnostic; one preexisting s52031 worker remains active. Re-enable
+normal replenishment if the repaired pilot is delayed.
+
+Pop QAD LFM v13 stopped at step 12320 because its preflight estimator exceeded
+the ledger CUDA claim by 111 MB before a forward pass. The full optimizer/RNG
+checkpoint was verified, and high-priority v14 resumed from the same recipe,
+frozen runtime and output, increasing the CUDA envelope from 7.35 to 7.5 GiB.
+It has passed the failed point and reached at least step 12335 with about 98%
+GPU utilization. This is a resource-envelope adjustment, not a change in the
+learning objective. Gemini CLINC replenishment had stopped inadvertently at
+batch 14; Pop restarted its timer and finished 256/256 prompts (255 typed-valid,
+201 exact source-label matches). Batch 15 is prepared and waiting for RAM
+admission while training holds priority. The exact-match count is a candidate
+quality signal, not training admission.
+
+## 21:58 CEST: step-12000 behavioural check and semantic-stack expansion
+
+Pop QAD LFM v13 reached step 12000 and resumed after its synchronous held
+task evaluation. Held gold CE was 0.600443, accuracy 0.874372, and response
+KL 1.388241, below the declared 1.5 hard stop but continuing to rise. The
+full-prompt temperature-0.6 task packet scored 0/16: three exact-repetition
+stops, five model-incomplete outcomes, three invalid actions and five semantic
+mismatches, with no infrastructure errors. The five model-incomplete results
+quiesced after repeated immediate EOS on a recovery turn; two inspected cases
+had many preceding repeated failed `eval` actions and visible corrective
+feedback. This does not show a collector reasoning-parser loss. DGX's valid
+same-checkpoint full/program-header/start-marker A/B is still pending; retain
+the train/serve template, training lineage and held eval packet until that
+comparison localizes the failure. Pop GPU remains busy with v13.
+
+For a new curriculum, the owner requested two independent authoring agents,
+Astra and GPT-6.1 Sol, each to produce at least 100 sizable idiomatic natlang
+programs across at least 15 domains, for at least 200 distinct programs total.
+The domains are partitioned to avoid duplicates; a third subagent owns typed
+source materialization, quality review and priority generation integration.
+Require real fixture and exact or graded oracle before any case joins teacher
+generation. The active s52032 source campaign was built from the older vetted
+mix while these new sources are being prepared; it is not evidence the new
+curriculum has been generated yet.
+
 ## 21:45 CEST: CUAD pilots closed, six Luna slots refilled
 
 The two representative s52029 CUAD `folder_extract` pilots have terminal

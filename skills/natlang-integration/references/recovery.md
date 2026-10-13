@@ -27,6 +27,8 @@ A timeout can mean the operation is still running; a rejected return can follow 
 
 Independent tasks run concurrently, and sibling natlang calls in one task (`Promise.all`) run in parallel. Only folder writers serialize. A model backend may queue requests; that is resource scheduling, not a semantic limit. Order effectful work explicitly where it matters; several tool calls in one model response are an ordered, non-atomic batch.
 
+For `no-such-function` while a named child tries to call the next stage, inspect callable-folder nesting. A child sees its own descendants, not the parent's other children: `root/inspect/decide.nl` makes `decide` callable from `inspect`, whereas `root/decide.nl` is only a sibling. Keep the existing named function and move the file into the caller's folder; use `read_code('decide')` inside `inspect` to confirm visibility before retrying collection.
+
 ## Cancellation and limits
 
 `runtime.run(fn, { signal })` and `EventLoop.cancel()` abort the task; natlang calls in flight reject. Passing `AbortSignal.timeout(ms)` gives the whole task a deadline. Inside a call, cancellation follows the call tree: a call that fails stops the calls it started, and an eval that fails or times out stops the natural-language calls it started (the losers of a `Promise.race` are stopped when their eval ends). Native work already started keeps running unless the application cancels it. `limits` (`maxDepth`, `maxActions`, `maxToolCalls`, `maxEpisodes`) and model options are deployment policy; `maxDepth` counts nested natural-language calls.
