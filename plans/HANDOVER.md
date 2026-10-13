@@ -1,5 +1,43 @@
 # Continuation guide — updated 2026-10-14
 
+## 01:35 CEST: QAD drift stop and matched GPU prompt diagnostic
+
+Pop QAD v14 direct SFT stopped automatically at step15600 on its declared
+hard drift guard: held response KL was 1.518115 (limit 1.5), after 1.430213
+at15300 and 1.349916 at the best held-CE step15000. The stop is not a claim
+that direct training cannot work. The exact step15600 checkpoint and mirror
+contain all student weights, optimizer and RNG; step15000 best archive retains
+weights only. The step16000 task gate never ran. `direct_sft/report.json` says
+`checkpointed_on_drift_guard`, not qualified. Do not resume it as though the
+stage had passed, and do not apply the prepared R5 continuation yet.
+
+The Pop GPU is now running a matched task-packet A/B of **the same step15000
+weights** under `program-header` and `full` prompting, using the frozen v13
+Python runtime in the exact training Docker image, through medium ledger unit
+`natlang-pop-qad-prompt-ab-15000-v2.service`. The first host-Python attempt
+failed before evaluation because host Transformers lacks `lfm2`; it made no
+model result and was replaced by the containerized run. The script is
+`/tmp/natlang-pop-qad-prompt-ab-15000.py`; outputs are under
+`direct_sft/prompt-ab-step15000/{program-header,full}`. Inspect both outcome
+counts and actual traces before deciding whether full-prompt mismatch,
+optimizer, data, or deeper runtime behavior explains the lack of task gain.
+DGX is running its independent matched FP32/no-marker diagnostic and has been
+briefed of this stop. The current full `check-main` remains a low-priority
+ledger waiter, not yet verified; run/read it once memory permits. R5 plan-only
+still succeeds, preserving data-continuation intent, but actual handoff needs
+a new qualified training decision and parity coordination with DGX.
+
+Cave conditional-anchor v2 reached the corrected child judgments with exact
+quoted `compatible:true` under each supplied transform. Later `alignFrames`
+ignored those A/EW and B/WW bindings, fell back to A/A and B/B, and passed
+the malformed hypothesis to `buildWorlds`; `resolveContradiction` also treated
+unknown actual transform as a reason for null conditional compatibility.
+The frontier failed to advance. Its exact low-priority unit was preempted by
+the GPU diagnostic and then cancelled; the partial is assigned source-bug
+evidence, no model-negative/admission. Astra/curriculum are preparing a typed
+conditional-binding table and conditional contradiction semantics before a
+matched v3. Protocol and Witness reviewed queues remain sealed but unlaunched.
+
 ## 01:22 CEST: first broad semantic source run and application pilots
 
 The signed Astra120 and Sol100 source receipts now support a pinned full220
