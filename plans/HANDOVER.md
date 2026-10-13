@@ -1,25 +1,33 @@
-# Continuation guide — updated 2026-10-13
+# Continuation guide — updated 2026-10-14
 
 ## 00:07 CEST, 2026-10-14: live narrow diagnostic and shared service loader
 
-The v8b ecology queue corrected the one-line source index to zero and is
-running as `natlang-pop-semantic-ecology-v8b-diag.service` under the low
-priority Pop ledger. At ~51 turns it has produced several typed scoped
-`ScopeDecision` returns; independent review of source grounding and actual
-parent consumption is in progress. No model-facing qualification or training
-admission is claimed. The plain six-case cohort remains sealed and unlaunched.
+The v8b ecology queue corrected the one-line source index to zero and ran as
+`natlang-pop-semantic-ecology-v8b-diag.service` under the low-priority Pop
+ledger. It produced typed scoped `ScopeDecision` returns that the parent
+consumed. The child was wrongly asked whether each edge applied directly to
+the fox perturbation, so valid intermediate edges were marked unusable before
+the later graph stage could compute reachability. The unit was stopped after
+this diagnostic snapshot. This is a presentation bug, not a model-negative
+case. Revise the child to judge source support/conditions for each edge and
+let the graph stage determine path reachability/sign. Source-specific
+hard-coded arrays also keep this trajectory out of training. The plain
+six-case cohort now runs as `natlang-pop-semantic-plain-cohort-v1b.service`,
+diagnostic only. No model-facing qualification or training admission is claimed.
 
 Shared runtime commit `833ec7d9` fixes trusted host service imports: the Node
 teacher collector supplies `createRequire` when it transpiles an external
 service to CommonJS. This fixed Witness's `node:crypto` import and the full
-typed canonical source replay now passes. The external invariant verifiers
-still need one shared trusted grading interface, outside model-visible files;
-the curriculum author is integrating that. Both applications remain held for
+typed canonical source replay now passes. The external invariant verifiers now
+have one shared trusted grading interface (`d086c2e1`) outside model-visible
+files, with exact positive, negative and source-hash probes. Both applications remain held for
 semantic/live qualification. The previous Pop full-check waiter was cancelled
 because it predated this fix; fresh low-priority ledger waiter
-`natlang-pop-check-main-20261014-0004` is queued and blocked by trainer RAM.
-The trainer is near step 13920 and GPU remains fully used. Continue to monitor
-its step-14000 checkpoint and remove the stale truncated 295 MB
+`natlang-pop-check-main-20261014-0010` is queued after the verifier change and
+blocked by trainer RAM.
+The trainer is near step 14000 and GPU remains fully used. Its recipe
+checkpoints every 440 updates; monitor the next complete checkpoint and remove
+the stale truncated 295 MB
 `direct_sft/checkpoint.pending` only after a newer complete checkpoint exists.
 
 ## 23:58 CEST: Pop trainer resumed; application-scale source work
