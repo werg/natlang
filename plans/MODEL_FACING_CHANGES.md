@@ -254,3 +254,5 @@ The failure is a runtime-snapshot mismatch, not a model rejection. A new
 immutable runtime snapshot includes the comparator and has passed canonical,
 set-permutation, omission and duplicate probes. The failed attempt remains
 diagnostic; a new queue is sealed against the corrected runtime.
+
+The `witness-rewrite-studio` project adds 27 typed `.nl` functions and a 26-document story snapshot with natural-language scene interpretation, knowledge/custody analysis, repair search and audit. Its five scoped natural-language literals are intended to contribute typed decisions consumed by later functions. The exact source tree and external checker package load, but source validity is not live execution. **Measurement debt:** independently review the full typed reference witness and run about 48 live cases before admitting the project to generation or training; inspect real nested calls, whether each literal's return changes downstream state, unsupported crisp shortcuts, exact quote witnesses, repair quality and failure modes. Preserve useful simpler catalog cases separately; this app-scale target is an addition, not a depth filter.
