@@ -1,0 +1,16 @@
+export type TurnRequest = { caseId: string; announcedIntentId: string; responseIntentIds: string[]; initialSnapshot: string; resultScope: string };
+export type SourceManifest = { caseId: string; documents: { id: string; path: string }[] };
+export type SourceDocument = { id: string; path: string; text: string };
+export type Witness = { sourceId: string; path: string; quote: string };
+export type SourceClause = { id: string; text: string; witnesses: Witness[] };
+export type QuoteRef = { clauseId: string; exactQuote: string };
+export type RuleMeaning = { ruleId: string; kind: 'replacement' | 'trigger' | 'standing' | 'timing' | 'identity'; condition: string; consequence: string; controllerBasis: 'captured' | 'current' | 'last-known' | 'none' | 'unresolved'; tokenIds: string[]; effectClass: string; timing: string; evidence: QuoteRef[]; unresolved: string[] };
+export type RuleReading = { ruleId: string; kind: 'replacement' | 'trigger' | 'standing' | 'timing' | 'identity'; condition: string; consequence: string; controllerBasis: 'captured' | 'current' | 'last-known' | 'none' | 'unresolved'; tokenIds: string[]; effectClass: string; timing: string; witnesses: Witness[]; unresolved: string[] };
+export type RuleIndex = { rules: RuleReading[]; contextClauseIds: string[]; unresolved: string[] };
+export type BoardObject = { instanceId: string; cardId: string; kind: 'creature' | 'artifact'; zone: 'garden' | 'discard'; controller: string; integrity: number | null; damage: number; growth: number; attachedTo: string | null; witnesses: Witness[] };
+export type TurnToken = { id: string; holderCardId: string | null; status: 'available' | 'spent'; capacityMeaning: string; witnesses: Witness[] };
+export type BoardSnapshot = { revision: string; objects: BoardObject[]; resources: { player: string; ink: number; witnesses: Witness[] }[]; tokens: TurnToken[]; unresolved: string[] };
+export type IntentPart = { partId: string; printedOrder: number; effect: string; targetInstanceId: string; amount: number | null; witnesses: Witness[] };
+export type IntentReading = { intentId: string; kind: 'announcement' | 'response'; actor: string; responseOrder: number | null; parts: IntentPart[]; effect: string; submitted: boolean; witnesses: Witness[]; unresolved: string[] };
+export type IntentIndex = { intents: IntentReading[]; excludedSourceClaims: { clauseId: string; reason: string }[]; unresolved: string[] };
+export type TurnSource = { manifest: SourceManifest; documents: SourceDocument[]; clauses: SourceClause[]; rules: RuleIndex; initialBoard: BoardSnapshot; intents: IntentIndex; sourceCoverage: { sourceId: string; clauseIds: string[] }[]; unresolved: string[] };

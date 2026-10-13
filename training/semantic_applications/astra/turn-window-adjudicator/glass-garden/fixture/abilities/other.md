@@ -1,0 +1,3 @@
+[MIR01] Mirror is eligible only if a single Mantle conversion in this resolved batch converted at least2 current damage into growth and MIRROR is available. It would spend MIRROR and give2 ink to W1's current controller. Compare the post-Cover converted quantity, not the original announced amount.
+[REV01] Reprisal is eligible only if Fork dealt positive actual damage and REPRISAL is available. It would spend REPRISAL and give3 ink to P1's current controller. A condition that would otherwise match does not restore a spent token.
+[OTH01] A non-emitted consequence does not spend an available token. Report the source-specific reason for each negative trigger judgment, including a quantity threshold or an already spent token.

@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/turn-window-adjudicator",
+  "version": "0.1.0",
+  "description": "Typed NL interpretation of fictional tabletop timing, event replacement and simultaneous consequences.",
+  "include": ["types.ts", "adjudicateTurn", "DECOMPOSITION.md", "tsconfig.json"],
+  "engines": {"natlang": ">=0.1.0", "node": ">=22.13.0"}
+}

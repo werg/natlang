@@ -1,0 +1,45 @@
+{
+  "caseId": "glass-garden-v1",
+  "documents": [
+    {
+      "id": "IDENTITY",
+      "path": "rules/identity.md"
+    },
+    {
+      "id": "WINDOWS",
+      "path": "rules/windows.md"
+    },
+    {
+      "id": "BOARD",
+      "path": "board/before.md"
+    },
+    {
+      "id": "FORK",
+      "path": "announcements/fork.md"
+    },
+    {
+      "id": "RESPONSES",
+      "path": "responses/submitted.md"
+    },
+    {
+      "id": "REPLACEMENTS",
+      "path": "rules/replacements.md"
+    },
+    {
+      "id": "RETURN",
+      "path": "abilities/return.md"
+    },
+    {
+      "id": "SCRIBE",
+      "path": "abilities/scribe.md"
+    },
+    {
+      "id": "OTHER",
+      "path": "abilities/other.md"
+    },
+    {
+      "id": "CONTRACT",
+      "path": "contracts/result.md"
+    }
+  ]
+}
