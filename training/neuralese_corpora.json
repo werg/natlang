@@ -63641,6 +63641,22 @@
       "training_admission_reason": "Ten distinct current-IR failure seeds yielded ten exact-oracle accepted continuations. Nine teacher repair actions passed native materialization and independent decision review; ten bad seed actions and two hardcoded teacher actions are excluded from targets.",
       "required_conversion": "render LFM and Mellum twins; include approved turns in the next broad target union",
       "review_status": "parent, action, held-group and native-render reviews complete; see admission-review.json"
+    },
+    {
+      "owner": "dgx",
+      "source_class": "pinned-hf-dataset-catalog",
+      "license": "per dataset (MANIFEST.json lists each; all licenses acceptable, owner 2026-10-10)",
+      "training_admission": false,
+      "training_admission_reason": "source catalog for decision-case generation (scripts/build_decision_cases.py), not training rows; the generated cases are registered separately",
+      "id": "natlang-decision-sources-catalog-20261004",
+      "path": "data/decision-sources",
+      "include": [
+        "**/*"
+      ],
+      "split": "none (raw upstream splits inside each dataset)",
+      "admission": "27 pinned Hugging Face dataset snapshots (parquet) with data/decision-sources/MANIFEST.json (repo id, config, files, HF commit sha, license), downloaded 2026-10-04; consumed by scripts/build_decision_cases.py. Requested by Pop (free-API decision source builder) so both machines resolve data_hdd/natlang-development-data/data/decision-sources identically.",
+      "storage": "HDD (/mnt/external/natlang-development-data/data/decision-sources on DGX; data_hdd on Pop)",
+      "derived_from": []
     }
   ],
   "coverage_backlog": [
