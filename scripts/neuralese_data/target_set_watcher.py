@@ -126,11 +126,14 @@ def build_union(members: list[dict], rev: int, launches: int = 0) -> Path | str 
               '-v', f'{ROOT}:{ROOT}:ro', '-v', f'{root("data_hdd")}:{root("data_hdd")}:ro',
               '-v', f'{root("data_nvme")}:{root("data_nvme")}',
               '-v', f'{out}:{out}']
-    cmd = [sys.executable, str(ROOT / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '10',
+    # Eligible rows now survive twin verification: reserve room for the winner and
+    # dedup indexes as well as both tokenizer identity tables (the failed empty
+    # build never populated those indexes).
+    cmd = [sys.executable, str(ROOT / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '14',
            '--priority', 'low', '--resumable', '--container', unit, '--wait', '86400', '--detach',
            '--workdir', str(ROOT), '--',
            'docker', 'run', '--rm', '--name', unit, '--network', 'none', '--user', f'{os.getuid()}:{os.getgid()}',
-           '--memory', '12g', '-e', 'HOME=/tmp', '-e', 'PYTHONDONTWRITEBYTECODE=1', '-e', 'HF_HUB_OFFLINE=1',
+           '--memory', '16g', '-e', 'HOME=/tmp', '-e', 'PYTHONDONTWRITEBYTECODE=1', '-e', 'HF_HUB_OFFLINE=1',
            *mounts, '-w', str(ROOT), '--entrypoint', 'python3', 'natlang-neuralese:26.09',
            'scripts/neuralese_data/build_native_turn_union.py', '--out-dir', str(out),
            '--tokenizer', f'lfm25={LFM}', '--tokenizer', f'mellum21={MELLUM}', *args]
