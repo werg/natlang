@@ -1,5 +1,39 @@
 # Continuation guide — updated 2026-10-14
 
+## 01:22 CEST: first broad semantic source run and application pilots
+
+The signed Astra120 and Sol100 source receipts now support a pinned full220
+priority selection spanning 82 split worlds; queue preparation is in shared
+commit `f2524c75`. The first six selected cases are in independent worlds.
+Pop launched case-000 under ledger unit
+`natlang-pop-semstack-priority-001.service` at 1.5 GB low priority; it is
+actively producing substantive nested NL calls and source-quoted typed
+relation decisions. The trace is still incomplete. A child received an empty
+bundle despite the root having 25 files; curriculum is tracing whether the
+model constructed that argument or transport lost it. A cross-eval alias error
+also recovered with the runtime's ordinary `ReferenceError`. Neither is yet a
+model-negative or admitted trajectory.
+
+The first relevance-first folklore pilot was stopped early after the child
+`screenEvidence` tried malformed ad hoc NL calls and then wrote a case-specific
+JS relation table. That source variant is a diagnostic, not training data;
+curriculum is revising the screening contract toward direct typed judgments
+and source-coherent groups. The initial 0.9 GB ledger budget was also too
+small for long application traces: Cave v1b hit a unit-local cgroup OOM near
+127 turns. Future long diagnostics use at least 1.5 GB when ledger headroom
+permits. This is a collection resource issue, not a language deadline.
+
+Fresh pinned one-case queues with canonical replay and exact controls are
+sealed for Cave conditional-anchor v2, Protocol typed metric handoff, and
+Witness provenance/quote revision. Independent source review is recorded for
+each; launch them sequentially under the Pop low-priority ledger after the
+first plain pilot, keeping the GPU trainer dominant. Treaty now has 32 exact
+controls and an independent source/oracle receipt; its next live queue is not
+yet launched. Sol is authoring Semantic Procedure Compiler; Astra is authoring
+Turn Window Adjudicator, both with DECOMPOSITION before source and substantial
+distinct NL call graphs. Source validity and checks do not grant training
+admission.
+
 ## 01:15 CEST: deep pseudocode source contract, wider source readiness, R5 handoff preparation
 
 The owner clarified that the additive semantic cohort should resemble larger
