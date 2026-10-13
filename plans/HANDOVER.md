@@ -52,15 +52,25 @@ ledger's wrapper setting alone did not reach the container) and declares a
 frozen plan: the shared parent deleted `neuralese_weight` and `value_margin`.
 The active relaunch uses `resume-v12-frozen.json`, an exact copy of the already
 recorded resolved recipe in the run directory, and the pinned frozen runtime.
-It passed the previous OOM at 8363 and reached step8374 with
-`cuda_allocator_config=expandable_segments:True`; verify it passes 8552 before
-considering capacity solved. Pop also found a training/eval prompt gap: r3
+It passed the previous OOM at 8363 and the preflight stop at 8552, reaching
+step8555 with `cuda_allocator_config=expandable_segments:True`. Continue
+monitoring later large windows for actual OOM. Pop also found a training/eval prompt gap: r3
 program-header rows have no generic system turn, but the full-prompt held eval
 gives one case a 16,126-character system turn and five tool schemas. Run a
 protected program-header eval A/B to isolate the prompt effect; the full-prompt
 score remains the deployment result. The DGX coordinator decision
 for the future lineage remains a mixed direct SFT + E2E run after projection
 fit, with no direct-stage plateau wait.
+
+DGX accepted the prompt A/B. Pop SHA-verified the exact step-8000 best
+checkpoint (SHA-256 `ef0602b40a52f4573893dfba41456bd3eca2599bd16eb1373f699107897c3dd2`),
+clean heads, recipe plan and 1.4 GiB QAD HF cache at
+`/mnt/external/natlang-development-data/pop-step8000-prompt-ab/` on DGX.
+The manually launched QAD run has no original container-launch receipt; its
+export-source reconstruction is explicitly labelled in that bundle. DGX owns
+the equal-checkpoint/equal-seed full versus program-header eval; Pop kept its
+GPU training active rather than run a CPU strict export that the memory ledger
+could not admit concurrently. Await DGX's think/repeat/success breakdown.
 
 ## 16:55 CEST: Pop generation and corpus sync
 
