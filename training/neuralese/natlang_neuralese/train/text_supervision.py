@@ -61,6 +61,12 @@ FAILED_TOOL_FEEDBACK = (re.compile(r'\Arejected\b'), re.compile(r'Nothing else f
                         re.compile(r', so it is not the result'))
 
 
+def failed_feedback(body):
+    """True when a tool-response body (the text after ``<tool_response>``) is a runtime failure form."""
+    body = body.lstrip()
+    return any(pattern.search(body) for pattern in FAILED_TOOL_FEEDBACK)
+
+
 def failed_assistant_mask(ids, labels, decode):
     """Per-token 1 on assistant turns (reasoning and reply) whose following tool response(s) are a runtime failure
     (``FAILED_TOOL_FEEDBACK``), else 0; ``ids`` and ``labels`` (``chat_roles`` codes) are aligned, ``decode`` maps token
@@ -87,7 +93,7 @@ def failed_assistant_mask(ids, labels, decode):
                 probe += 1
             text = decode(list(ids[run:probe]))
             body = text.split('<tool_response>', 1)[-1].lstrip()
-            if any(pattern.search(body) for pattern in FAILED_TOOL_FEEDBACK):
+            if failed_feedback(body):
                 failed = True
         if failed:
             for position in range(start, end):
