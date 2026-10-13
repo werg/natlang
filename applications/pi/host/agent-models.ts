@@ -26,6 +26,8 @@ export type AgentModelSettings = {
   maxTokens?: number;
   /** The runtime's Neuralese store, which a Neuralese server's blocks are archived in. */
   store?: NeuraleseStore;
+  /** Sampling temperature sent with every request that sets none (pi-ai transport). Default: none sent. */
+  temperature?: number;
 };
 
 export type AgentModels = { models: Models; ref: { provider: string; modelId: string } };
@@ -66,7 +68,16 @@ export function agentModels(settings: AgentModelSettings): AgentModels {
       compat: { thinkingFormat: 'chat-template', chatTemplateKwargs: { enable_thinking: { $var: 'thinking.enabled' } },
         supportsDeveloperRole: false, supportsStore: false, supportsReasoningEffort: false,
         maxTokensField: 'max_tokens' } } as never],
-    api: transport === 'natlang' ? natlangApi((_model, { reasoning, owner }) => driver(reasoning, owner), store) : openAICompletionsApi(),
+    api: transport === 'natlang' ? natlangApi((_model, { reasoning, owner }) => driver(reasoning, owner), store) :
+      withTemperature(openAICompletionsApi(), settings.temperature),
   }));
   return { models, ref: { provider: 'agent', modelId } };
+}
+
+/** `api` with `temperature` as the default of every request's options (unchanged when undefined). */
+function withTemperature<A extends { stream: (...args: any[]) => unknown; streamSimple: (...args: any[]) => unknown }>(api: A, temperature: number | undefined): A {
+  if (temperature === undefined) return api;
+  const options = (given: { temperature?: number } | undefined) => ({ ...given, temperature: given?.temperature ?? temperature });
+  return { ...api, stream: (model: unknown, context: unknown, given?: { temperature?: number }) => api.stream(model, context, options(given)),
+    streamSimple: (model: unknown, context: unknown, given?: { temperature?: number }) => api.streamSimple(model, context, options(given)) };
 }
