@@ -284,7 +284,7 @@ def test_shared_resume_handoff_allows_epoch_only_neuralese_direct_budget_change(
 def test_shared_resume_handoff_requires_changed_package_code(tmp_path, monkeypatch):
     output, recipe, recipe_path, heads, stage_inputs, code = shared_resume_fixture(tmp_path, monkeypatch)
     current_package(tmp_path, monkeypatch, content=b"pinned trainer code\n")
-    with pytest.raises(ValueError, match="package_code has not changed"):
+    with pytest.raises(ValueError, match="requires changed shared package code"):
         LAUNCHER.validate_existing_shared_resume(
             output, recipe, recipe_path, heads, stage_inputs, "cuda", code, handoff=True)
 
