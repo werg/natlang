@@ -71,13 +71,47 @@ function stages(entry) {
   if (functions.length) return functions.map((fn, index) => {
     const name = String(fn.name ?? `stage_${index + 1}`).replace(/[^A-Za-z0-9_]/g, '_');
     const instructions = paragraphs(fn.instructions ?? fn.numbered_instructions ?? fn.purpose).join('\n');
-    return { name, instructions };
+    return { name, instructions, signature: fn.signature };
   }).filter(fn => fn.instructions);
   const chain = Array.isArray(entry.call_chain) ? entry.call_chain.slice(1) : [];
   return (entry.steps ?? []).map((step, index) => ({
     name: String(chain[index] ?? `stage_${index + 1}`).replace(/[^A-Za-z0-9_]/g, '_'),
     instructions: String(step).replace(/^\s*\d+\.\s*/, ''),
   }));
+}
+function runtimeStageArgs(step, entry) {
+  if (!entry.typed_inputs || !step.signature) return { item: 'string', context: 'string' };
+  const signature = /^[^(]+\(([^)]*)\)\s*->\s*([A-Za-z_][A-Za-z0-9_]*)$/.exec(step.signature);
+  if (!signature) throw Error(`${entry.id}: invalid named stage signature ${step.signature}`);
+  const args = Object.fromEntries(signature[1].split(',').map(part => {
+    const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/.exec(part);
+    if (!match) throw Error(`${entry.id}: invalid stage argument ${part}`);
+    return [match[1], match[2]];
+  }));
+  return args;
+}
+function runtimeTypeFile(entry) {
+  if (!entry.typed_inputs) return null;
+  const bundle = /^([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(entry.typed_inputs.bundle ?? '')?.[1];
+  if (!bundle) throw Error(`${entry.id}: missing typed bundle alias`);
+  // The authored stage signatures retain their actual named types. The source
+  // fixture provides concrete data; these common structural aliases avoid
+  // pretending an external directory service is implemented in generated TS.
+  return `export type ${bundle} = { files: unknown; records: unknown[]; context: unknown };\n` +
+    `export type Inquiry = { question: string; scope: string[]; requestedOutput: string };\n` +
+    `export type EvidenceUnit = { id: string; path: string; text: string };\n` +
+    `export type RelationDecision = { status: string; evidenceIds: string[]; detail: string };\n` +
+    `export type WorkItem = { id: string; kind: string };\n` +
+    `export type StageState = { records: EvidenceUnit[]; relations: RelationDecision[]; open: WorkItem[]; done: string[] };\n`;
+}
+function scopedLiteral(entry) {
+  const literal = entry.scoped_lambda ?? entry.lambda;
+  if (!literal || typeof literal !== 'object') return null;
+  const callPath = Array.isArray(entry.call_path) ? entry.call_path : [];
+  const literalIndex = callPath.findIndex(name => /runtime literal|scoped literal/i.test(String(name)));
+  const placement = literal.placement ?? (literalIndex > 0 ? callPath[literalIndex - 1] : undefined);
+  return { placement, signature: literal.signature,
+    instructions: paragraphs(literal.instructions).join(' ') };
 }
 function reference(entry, fixture, typed, expected) {
   const paths = Object.keys(fixture).sort();
@@ -99,6 +133,8 @@ return await nl<${typed}>\`Synthesize the typed final result for the captured ob
     children: [
       ...paths.map(path => ({ match: basename(path), expected_reads: [basename(path)],
         calls: [['read_file', { path: basename(path) }], returnCall(fixture[path])] })),
+      { match: 'An iterative process has been running for a while.',
+        value: { verdict: 'continue', reason: 'The finite current-item frontier shrinks by one on each step.' } },
       { match: 'Synthesize the typed final result', expected_soft_input: 'notes', value: expected },
     ],
   };
@@ -119,13 +155,20 @@ function render(entry, provider) {
       (typeof declaredType !== 'string' || !declaredType.trim() || declaredType.length > 1000))
     throw Error(`${id}: invalid declared return_type`);
   const typed = declaredType ?? returnType(expected);
-  const lambda = paragraphs(entry.scoped_lambda ?? entry.lambda?.instructions ?? entry.lambda);
-  const loop = paragraphs(entry.iteration ?? entry.iteration_termination ?? entry.scale_plan?.iteration);
+  const literal = scopedLiteral(entry);
+  const lambda = paragraphs(literal?.instructions);
+  const loop = paragraphs(entry.iteration?.termination ?? entry.iteration_termination ?? entry.scale_plan?.iteration);
+  const fullPlan = Array.isArray(entry.functions) && Array.isArray(entry.steps) ?
+    entry.steps.map(step => String(step).replace(/^\s*\d+\.\s*/, '')) : [];
   const contract = paragraphs(entry.output_contract);
   const prefix = entry.operation ? `Operation: ${entry.operation}.\n` : '';
   const instructions = `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
-    `Carry out these stages over the supplied data, preserving exact source references. The callable stages are children of solve; call them on the current scoped item and context as needed:\n` +
+    `Carry out these stages over the supplied data, preserving exact source references. ` +
+    `Call ${steps[0].name} from solve; each later named stage is a child of the preceding stage and is called from within that active stage. ` +
+    (entry.typed_inputs ? `Pass the typed bundle, inquiry, and carried StageState through the chain:\n` :
+      `Pass the current scoped item and context through the chain:\n`) +
     steps.map((step, index) => `${index + 1}. ${step.name}: ${step.instructions}`).join('\n') + '\n\n' +
+    (fullPlan.length ? `Whole-program control flow:\n${fullPlan.map((step, index) => `${index + 1}. ${step}`).join('\n')}\n\n` : '') +
     `For each current item, formulate a focused typed natural-language function literal with a short numbered instruction plan. ` +
     `Capture only the current task criterion and pass that item's content and the necessary carried state as arguments. ` +
     `Do not substitute a keyword test for the semantic relation.\n` +
@@ -135,20 +178,31 @@ function render(entry, provider) {
     `Use exact code only for reading, ordering, serialization, and checks; the domain judgments belong in natural-language calls. ` +
     `Return the result specified by the output contract, grounded in the supplied sources.`;
   const files = { 'solve.nl': nlFile({ args: {}, returns: typed ?? 'string', description: title, kind: 'directory-reducer', instructions }) };
-  for (const step of steps) {
+  const typeFile = runtimeTypeFile(entry);
+  if (typeFile) files['types.ts'] = typeFile;
+  let stageFolder = 'solve';
+  for (const [index, step] of steps.entries()) {
     const name = step.name;
-    const scoped = entry.lambda?.placement === step.name && typeof entry.lambda?.instructions === 'string'
-      ? `\nAt this stage, formulate an ad hoc typed natural-language literal ${entry.lambda.signature ?? ''} for the current item. Use this short plan: ${entry.lambda.instructions} Pass the current item and relevant context as arguments; keep source IDs in the finding.` : '';
-    files[`solve/${name}.nl`] = nlFile({ args: { item: 'string', context: 'string' }, returns: 'string',
-      description: `${title}: ${step.name}`, instructions: `${step.instructions}${scoped}\nApply the semantic rule to the supplied current item and context. Return a concise grounded finding with source identity.` });
+    const next = steps[index + 1]?.name;
+    const scoped = literal?.placement === step.name && literal.instructions
+      ? `\nAt this stage, formulate an ad hoc typed natural-language literal ${literal.signature ?? ''} for the current item. Use this short plan: ${literal.instructions} Pass the current item and relevant context as arguments; keep source IDs in the finding.` : '';
+    const delegate = next ? `\nAfter making this stage's finding, call the child ${next} within this active call. Pass the finding and the current source-linked state to that child; return its result together with this stage's evidence.` : '';
+    stageFolder += `/${name}`;
+    files[`${stageFolder}.nl`] = nlFile({ args: runtimeStageArgs(step, entry),
+      returns: entry.typed_inputs ? 'StageState' : 'string',
+      description: `${title}: ${step.name}`, instructions: `${step.instructions}${scoped}${delegate}\nApply the semantic rule to the supplied ${entry.typed_inputs ? 'bundle, inquiry, and prior state' : 'current item and context'}. Return a grounded ${entry.typed_inputs ? 'StageState with preserved source identities and carried work' : 'finding with source identity'}.` });
   }
   const filePaths = fixture ? Object.keys(fixture) : [];
   const hasScopedCollection = filePaths.length >= 3 &&
     new Set(filePaths.map(path => basename(path))).size === filePaths.length;
-  const admission = hasScopedCollection && typed ? 'runnable_candidate_pending_reference_and_semantic_review' :
-    'held_missing_scoped_collection_or_exact_typed_oracle';
+  const generationReady = entry.generation_ready === true || entry.admission?.generation_ready === true;
+  const candidate = hasScopedCollection && typed && (pilotAstra || generationReady);
+  const admission = candidate ? (pilotAstra ? 'diagnostic_seed_only' :
+    'runnable_candidate_pending_reference_and_semantic_review') :
+    hasScopedCollection && typed ? 'held_design_only_pending_expanded_fixture_review' :
+      'held_missing_scoped_collection_or_exact_typed_oracle';
   const sourceGroup = `semantic-stack:${provider}:${id}`;
-  const caseRow = hasScopedCollection && typed ? curriculumCase({
+  const caseRow = candidate ? curriculumCase({
     family: 'semantic_stack_authored', shape: id, variant: 'source-v1', splitGroup: sourceGroup,
     slice: 'iterate', domain: 'other', mode: 'single_call', inline: 'required', iterate: 'required',
     evidence: { world: [title, rule], retrieved: Object.keys(fixture), background: [] },
