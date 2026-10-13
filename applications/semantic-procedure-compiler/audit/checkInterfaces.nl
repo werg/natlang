@@ -17,3 +17,7 @@ returns: InterfaceFinding[]
    precise reason and source witnesses. Exact signatures/path validation is separate from these semantic joins.
 6. Keep genuine independent branches independent: custody, readiness and queue status remain distinct
    fields even where a source document names the same actor in all three clauses.
+
+7. Cite original policy obligations with Witness and actual emitted caller/child text with
+   generatedEvidence. Bind generated paths from the corresponding module and validate exact spans.
+   A generated body cannot be disguised as an original source record quotation.

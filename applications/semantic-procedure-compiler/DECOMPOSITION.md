@@ -104,3 +104,23 @@ separate gates. Source/replay preparation never grants training admission; model
 roughly48 live samples per variant or recorded measurement debt.
 
 Current source foundation:28 authored NL modules /620physical lines,33connected visible clauses,6scenario histories,5different consumed scoped judgment sites and30declaredcall edges. Parser/type checks pass. Full typed generated-program witness, independentoracle/comparator qualification and liveexecution remain pending.
+
+
+## Independent-review correction: symbolic replay must expose generated divergence
+
+Astra found that the first symbolic guard interpreter could read the ideal source model and silently
+correct an incorrectly emitted guard. The revised guard stage invokes two independent scoped NL
+judgments: actual emitted-body interpretation uses actual atoms and code text, while source-required
+interpretation uses a separate sourceAtoms channel and governing meanings. Their permissions/effects
+and actual local decisions have distinct typed fields; matchesSource is an explicit comparison.
+Replay preserves the actual emitted effects even when wrong, and applies source-required effects only
+to the independent reference state. Generated evidence uses typed path/quote spans separate from
+original source Witness citations. The station-global hazard input belongs to ST; personal queue and
+brief acknowledgment remain actor-owned.
+
+This runner is symbolic NL interpretation of emitted bodies, not invocation of the generated named
+callables. Exact parser/type validity and symbolic scenario certificates do not grant generated-runtime
+execution credit. Actual generated-program invocation and live behavior remain separate qualification
+work. Original fixture/oracle source facts are unchanged by this correction.
+
+Revised source after peer findings:28NL /656physical lines; independent emitted/required judgments share one guardsite but return separate consumed contributions. Source parser/type and quickgate pass.

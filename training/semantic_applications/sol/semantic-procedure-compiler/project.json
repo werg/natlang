@@ -308,11 +308,12 @@
           "atoms": "StateAtom[]",
           "branch": "BranchPlan",
           "model": "ProcedureModel",
-          "module": "GeneratedModule"
+          "module": "GeneratedModule",
+          "sourceAtoms": "StateAtom[]"
         },
         "returns": "GuardDecision",
         "kind": "function",
-        "owned_delta": "Judge one generated rule against actor-owned state and source-governed event-time prerequisites."
+        "owned_delta": "Independently interpret actual emitted behavior and source-required behavior, preserving mismatched effects and evidence domains."
       },
       {
         "path": "scenarios/replayStep.nl",
@@ -510,7 +511,7 @@
     },
     {
       "site": "scenarios/replayStep/judgeGuard.nl",
-      "consumed_by": "GuardDecision value/effects updates ScenarioFrontier atoms and actual traced permission."
+      "consumed_by": "Actual emitted value/effects updates ScenarioFrontier.atoms; independent sourceRequiredValue/effects updates sourceAtoms; matchesSource detects divergence."
     }
   ],
   "iteration_reducers": [
@@ -549,5 +550,6 @@
   "generation_ready": false,
   "training_admission": false,
   "model_facing_debt": "0live samples; source, generatedpolicy and callable interface variant need roughly48live samples after source qualification.",
-  "nl_line_count": 620
+  "nl_line_count": 656,
+  "scenario_execution_scope": "Symbolic NL interpretation of actual generated bodies; generated callable runtime invocation remains pending."
 }

@@ -1,28 +1,44 @@
 ---
-description: Judge one generated rule against actor-owned state and source-governed event-time prerequisites.
+description: Interpret emitted behavior independently, then compare a separate source-required judgment.
 args:
   event: ScenarioEvent
   atoms: StateAtom[]
+  sourceAtoms: StateAtom[]
   branch: BranchPlan
   model: ProcedureModel
   module: GeneratedModule
 returns: GuardDecision
 ---
-1. Capture branch, governing rule/exception clauses, actor-owned atoms and the generated module's
-   actual guard/effect wording. Keep event time separate from when evidence became known.
-2. In eval declare GuardJudgment with value:boolean|null, satisfiedPremiseIds:string[], missingPremiseIds:
-   string[], waivedPremiseIds:string[], effects:{key:string;subject:string;value:string|number|boolean|null;
-   known:boolean;establishedAt:number|null;witnesses:{sourceId:string;path:string;quote:string}[]}[],
-   reason:string and witnesses:{sourceId:string;path:string;quote:string}[].
-   Construct a scoped NL rule literal and directly await it on the original changing ScenarioEvent.
-3. Its instructions are: evaluate active prerequisites for this actor/time; apply only the source-scoped
-   waivers; distinguish contradictory facts from missing evidence; interpret the actual generated guard
-   and effects, and return the next typed state contributions or the explicit blocked/unknown reason.
-4. Consume value and effects in GuardDecision. A source-supported emergency queue waiver contributes
-   waivedPremiseIds without adding a queue-completed atom. Custody alone contributes no readiness fact.
-5. Reject a future clearance as support for an earlier permission. A source scenario can include a later
-   event that enables a later attempt, while its earlier denied action remains in the trace unchanged.
-6. Record LocalDecision with the actual event/rule IDs, returned premise/effect distinction and exact
-   source witnesses. Nonempty source-grounded effects require exact support; unsupported effects remain unresolved.
-7. Return ruleId, eventId, actual judgment fields and localDecision. The caller applies these returned
-   atoms directly; a separately invented state transition cannot substitute for literal consumption.
+1. Prepare emittedContext containing only the actual generated module text, its schema, actual atoms
+   and original scenario event evidence. Exclude ideal BranchPlan meanings and governing model rules
+   from this literal's context. It must interpret what the emitted body does, including wrong effects.
+2. In eval declare StateEffect as {key:string;subject:string;value:string|number|boolean|null;
+   known:boolean;establishedAt:number|null;witnesses:{sourceId:string;path:string;quote:string}[]}.
+   Declare EmittedJudgment with value:boolean|null, effects:StateEffect[], reason:string,
+   generatedQuotes:string[], witnesses:{sourceId:string;path:string;quote:string}[]. Construct a
+   scoped NL emitted-behavior literal over emittedContext and directly await it on event.
+3. Its instructions are: symbolically interpret the actual emitted guard/effect wording against
+   this event and actual state; preserve unconditional permissions or lost prerequisites exactly as
+   emitted; return resulting effects and exact generated text quotes, without repairing the body.
+4. Bind its generatedQuotes to module.path as GeneratedSpan evidence and validate each quote against
+   module.text. Keep original event/state quotations in the original Witness domain. An absent exact
+   code quote is unresolved evidence, not permission to cite emitted code as an original source record.
+5. Separately prepare requiredContext with the governing branch, selected source clauses/exceptions,
+   sourceAtoms and original event evidence. Declare RequiredJudgment with value:boolean|null,
+   effects:StateEffect[], satisfiedPremiseIds:string[], missingPremiseIds:string[], waivedPremiseIds:
+   string[], reason:string and witnesses:{sourceId:string;path:string;quote:string}[]. Construct a
+   second scoped NL source-requirement literal and directly await it on the same original event.
+6. Its instructions are: judge active source-required prerequisites at this actor/event time; apply
+   only source-scoped waivers; retain custody/readiness independence, station-global hazard ownership,
+   false versus unknown, and the source-required state effects. The actual emitted decision is excluded
+   from its context, and it cannot inherit a fabricated atom from the emitted-state channel.
+7. Consume emitted.value/effects as GuardDecision.value/effects; consume required.value/effects as
+   sourceRequiredValue/sourceRequiredEffects. Compare returned permissions, actor/key/time effects
+   and known/unknown distinctions, preserving semantic equivalence rather than prose byte equality.
+   Return matchesSource=false for an established divergence or null for a missing decisive comparison.
+8. Record distinct actual local decisions for the two literal results. Preserve generatedEvidence
+   separately from original witnesses. A failed generated interpretation remains in the emitted trace,
+   while its source-required judgment supplies the counterexample repair obligation.
+9. Return ruleId, eventId, both value/effect channels, matchesSource, actual premise distinctions,
+   original witnesses, generatedEvidence, reason, localDecision and sourceLocalDecision. Parent replay
+   applies each effect collection only to its own state channel; neither can silently correct the other.

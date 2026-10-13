@@ -7,7 +7,7 @@ args:
 returns: ScenarioSuiteResult
 ---
 1. For each original ScenarioInput initialize ScenarioFrontier with its initial atoms, actual event
-   IDs ordered by explicit times, empty traces, the actual generated program and selected semantic model.
+   IDs ordered by explicit times, independent copies atoms/sourceAtoms, empty traces, the actual generated program and selected semantic model.
 2. Invoke replayStep.iterateOn(frontier) with measure remainingEventIds.length until empty. Each step
    consumes one event and returns new actor/time-indexed state plus actual guard decision contributions.
 3. Keep scenarios independent. A safety acknowledgment established in one history cannot be reused
@@ -18,3 +18,7 @@ returns: ScenarioSuiteResult
    including missing state propagation or emitted guards that do not match their selected source plans.
 6. Preserve adversarial scenarios even if the current generated candidate fails them. A failed source
    interpretation is a repair target, not permission to omit an inconvenient scenario from the suite.
+
+7. This stage performs symbolic NL interpretation of emitted module bodies, not runtime invocation
+   of those generated callables. Keep that scope explicit. Carry emitted state separately from
+   source-required state so a bad generated effect cannot contaminate its own reference judgment.
