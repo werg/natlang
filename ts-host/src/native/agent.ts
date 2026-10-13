@@ -3,7 +3,7 @@ import { formatType } from './types.js';
 import type { Type, TypeEnv } from './types.js';
 import { MISSING, Reject, coerce, isLive, liveId, liveLabel, problems } from './values.js';
 import type { Value } from './values.js';
-import { COMPACTION_NOTE_CHARS, type NativeResult, type NativeSession } from './runtime.js';
+import { COMPACTION_NOTE_CHARS, runSeedKey, type NativeResult, type NativeSession } from './runtime.js';
 import { undeclaredServiceType } from './introspection.js';
 import type { ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
@@ -584,7 +584,7 @@ export class NativeToolAgent {
     });
     return graphNode(trace, 'model_turn', { call_id: callId, turn, temperature: this.options.temperature ?? null,
       seed: session.runtime.seedPolicy.mode === 'backend' ? null : deriveSeed(session.runtime.seedPolicy.root!,
-        session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'model-turn', turn - 1),
+        runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turn - 1),
       completion_tokens: response.completion_tokens ?? null, text_chars: (response.text ?? '').length,
       calls: (response.calls ?? []).map(call => Array.isArray(call) ? call[0] : (call as { name?: string }).name ?? null) },
       [{ node: invocationNodeId(callId), port: 'invocation' }, ...reads], turnId);
@@ -1123,7 +1123,7 @@ export class NativeToolAgent {
           ...(availableTools !== allTools && this.options.promptRendering !== 'program-header' ? { tool_choice: 'required' as const } : {}),
           ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
-            deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'model-turn', turns),
+            deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turns),
           max_tokens: statedWindow === null ? limit :
             Math.max(1, Math.min(limit ?? statedWindow, statedWindow - Math.ceil(estimate(availableTools)) - REPLY_MARGIN)) };
         response = await (turnOptions ? this.driver(turnRequest, session.runtime.signal, turnOptions) :
@@ -1240,7 +1240,7 @@ export class NativeToolAgent {
         const answer = await (review.driver ?? this.driver)({ messages: review.driver && review.driver !== this.driver ? fork : renderPromptMessages(fork, this.options.promptRendering),
           tools: this.options.promptRendering === 'program-header' && (!review.driver || review.driver === this.driver) ? [] : this.reviewTools(),
           temperature: 0, seed: session.runtime.seedPolicy.mode === 'backend' ? null :
-            deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'review', turns),
+            deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, 'review', turns),
           max_tokens: budget }, session.runtime.signal);
         turns++; tokens += answer.completion_tokens === undefined ? budget ?? 0 : Math.max(1, answer.completion_tokens);
         const audit: Record<string, unknown> = { proposal: this.proposals.length - 1, call_index: index,

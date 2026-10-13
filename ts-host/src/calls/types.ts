@@ -53,6 +53,8 @@ export type CallRecord = {
   /** Which eval of the parent call was running when this call started (0-based), when a parent eval started it. */
   parent_action_index: number | null;
   task_id: string; program_id: string | null; build_hash: string | null;
+  /** A root run's logical name (`curriculum-reference`, `native-run`): runs of one kind share it, each under its own call ID. */
+  run_label?: string;
   /** The program's directory on this machine, when known: where offline work reloads the definition from. */
   program_root: string | null;
   definition: DefinitionIdentity;

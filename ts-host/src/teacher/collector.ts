@@ -1331,7 +1331,9 @@ export function programRow(record: ProgramRecord, modelId: string, runId: string
 
 export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   promptRendering?: PromptRendering;
-  maxTurns?: number; temperature?: number; rootSeed: number; runId: string; signal?: AbortSignal; fileTools?: FileToolSurface;
+  maxTurns?: number; temperature?: number; rootSeed: number; signal?: AbortSignal; fileTools?: FileToolSurface;
+  /** The root call's ID, unique per run; `runLabel` is the logical name runs of one kind share (NativeRuntimeOptions). */
+  runId: string; runLabel?: string;
   /** Explicitly disable or provide the call store for bounded replays; default collection still records normally. */
   calls?: import('../runtime/runtime.js').NatlangRuntimeOptions['calls'];
   /** Optional Neuralese store/port for source-authentic inline soft-body collection and replay. */
@@ -1409,7 +1411,8 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     // Never invent a model return action from an eval-computed value.
     exactHostTraceCapture: { definitionSources: [], inputArguments: [], captureOutput: true,
       captureAllOutputs: true, maxBytes: 1_048_576 },
-    seedPolicy: { mode: 'derived', root: options.rootSeed }, runId: options.runId, signal: options.signal });
+    seedPolicy: { mode: 'derived', root: options.rootSeed }, runId: options.runId,
+    ...(options.runLabel !== undefined ? { runLabel: options.runLabel } : {}), signal: options.signal });
   registerTrace(options.runId, runtime.trace);
   try {
     let result: Awaited<ReturnType<typeof runtime.run>>;

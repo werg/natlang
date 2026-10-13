@@ -96,6 +96,8 @@ export class CallCapture {
 
   constructor(readonly store: CallStoreLike, readonly settings: CallStoreSettings, readonly base: {
     callId: string; parentCallId: string | null; parentActionIndex: number | null; taskId: string; programId: string | null;
+    /** A root run's logical name (several runs share it; each has its own call ID). */
+    runLabel?: string | null;
     buildHash: string | null; programRoot: string | null; definition: DefinitionIdentity;
     model: { id: string | null; revision: string | null }; exclude?: readonly string[] }) {
     this.executor = { kind: 'agent', model_id: base.model.id, model_revision: base.model.revision };
@@ -107,6 +109,7 @@ export class CallCapture {
       const definition = this.base.definition;
       this.store.begin?.({ callId: this.base.callId, parentCallId: this.base.parentCallId, parentActionIndex: this.base.parentActionIndex,
         taskId: this.base.taskId, programId: this.base.programId, programRoot: this.base.programRoot,
+        ...(this.base.runLabel ? { runLabel: this.base.runLabel } : {}),
         definition: { id: definition.id, name: definition.name, source: definition.source, key: definition.key, interface: definition.interface,
           site: definition.site }, modelId: this.base.model.id, startedAt: this.startedAt, auditOf: this.auditOf });
     } catch (error) { reportStoreFailure(this.store, error); }
@@ -216,6 +219,7 @@ export class CallCapture {
       const record: CallRecord = {
         version: CALLS_VERSION, call_id: this.base.callId, parent_call_id: this.base.parentCallId,
         parent_action_index: this.base.parentActionIndex, task_id: this.base.taskId, program_id: this.base.programId,
+        ...(this.base.runLabel ? { run_label: this.base.runLabel } : {}),
         build_hash: this.base.buildHash, program_root: this.base.programRoot, definition, executor: this.executor,
         inputs: this.inputs, captures: this.captures, capture_writes: this.captureWrites, output,
         outcome: result.outcome, detail: result.detail.slice(0, 4000), started_at: this.startedAt, ended_at: new Date().toISOString(),

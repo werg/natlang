@@ -132,6 +132,8 @@ export class CallStore {
     const columns = (this.db.prepare('PRAGMA table_info(calls)').all() as { name: string }[]).map(column => column.name);
     if (!columns.includes('pid')) this.db.exec('ALTER TABLE calls ADD COLUMN pid INTEGER');
     if (!columns.includes('process_scope')) this.db.exec('ALTER TABLE calls ADD COLUMN process_scope TEXT');
+    if (!columns.includes('run_label')) this.db.exec('ALTER TABLE calls ADD COLUMN run_label TEXT');
+    this.db.exec('CREATE INDEX IF NOT EXISTS calls_run_label ON calls(run_label)');
     const caseColumns = (this.db.prepare('PRAGMA table_info(cases)').all() as { name: string }[]).map(column => column.name);
     if (!caseColumns.includes('live_compared')) this.db.exec('ALTER TABLE cases ADD COLUMN live_compared INTEGER NOT NULL DEFAULT 0');
     if (!caseColumns.includes('live_worse')) this.db.exec('ALTER TABLE cases ADD COLUMN live_worse INTEGER NOT NULL DEFAULT 0');
@@ -213,13 +215,13 @@ export class CallStore {
       const definition = record.definition;
       this.db.prepare(`INSERT OR REPLACE INTO calls (call_id, parent_call_id, parent_action_index, task_id, program_id, build_hash,
         program_root, definition_id, definition_name, definition_source, definition_key, interface_hash, site, executor, model_id, case_hash,
-        outcome, started_at, ended_at, wall_ms, tokens_in, tokens_out, model_requests, evals, approach_hash, audit_of, record_hash, events_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        outcome, started_at, ended_at, wall_ms, tokens_in, tokens_out, model_requests, evals, approach_hash, audit_of, record_hash, events_hash, run_label)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         record.call_id, record.parent_call_id, record.parent_action_index, record.task_id, record.program_id, record.build_hash,
         record.program_root, definition.id, definition.name, definition.source, definition.key, definition.interface, definition.site,
         record.executor.kind, record.executor.model_id, record.executor.case_hash ?? null, record.outcome, record.started_at, record.ended_at,
         record.cost.wall_ms, record.cost.tokens_in, record.cost.tokens_out, record.cost.model_requests, record.cost.evals,
-        record.approach.hash, record.audit_of ?? null, recordHash, eventsHash);
+        record.approach.hash, record.audit_of ?? null, recordHash, eventsHash, record.run_label ?? null);
       const link = this.db.prepare('INSERT OR IGNORE INTO call_blobs (call_id, hash, kind) VALUES (?, ?, ?)');
       link.run(record.call_id, recordHash, 'record');
       if (eventsHash) link.run(record.call_id, eventsHash, 'events');
@@ -235,12 +237,14 @@ export class CallStore {
   /** A row for a call that has started, so running calls show in listings; `record` replaces it when the call ends. */
   begin(row: { callId: string; parentCallId: string | null; parentActionIndex: number | null; taskId: string; programId: string | null;
     programRoot: string | null; definition: { id: string; name: string; source: string | null; key: string; interface: string; site: string };
-    modelId: string | null; startedAt: string; auditOf: string | null }): void {
+    modelId: string | null; startedAt: string; auditOf: string | null; runLabel?: string }): void {
     this.db.prepare(`INSERT OR IGNORE INTO calls (call_id, parent_call_id, parent_action_index, task_id, program_id, program_root, definition_id,
-      definition_name, definition_source, definition_key, interface_hash, site, executor, model_id, outcome, started_at, audit_of, record_hash, pid, process_scope)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent', ?, 'running', ?, ?, '', ?, ?)`).run(row.callId, row.parentCallId, row.parentActionIndex,
+      definition_name, definition_source, definition_key, interface_hash, site, executor, model_id, outcome, started_at, audit_of, record_hash, pid, process_scope,
+      run_label)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent', ?, 'running', ?, ?, '', ?, ?, ?)`).run(row.callId, row.parentCallId, row.parentActionIndex,
       row.taskId, row.programId, row.programRoot, row.definition.id, row.definition.name, row.definition.source, row.definition.key,
-      row.definition.interface, row.definition.site, row.modelId, row.startedAt, row.auditOf, this.medium.process.pid, this.medium.process.scope);
+      row.definition.interface, row.definition.site, row.modelId, row.startedAt, row.auditOf, this.medium.process.pid, this.medium.process.scope,
+      row.runLabel ?? null);
   }
 
   /** Remove the row of a call that started and will not be recorded. */

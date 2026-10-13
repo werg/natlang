@@ -1,5 +1,5 @@
 import { TypeScriptEnvironment } from './environment.js';
-import { NativeRuntime as PlatformRuntime, type NativeOutcome, type NativeRuntimeOptions } from './native/runtime.js';
+import { NativeRuntime as PlatformRuntime, runIdentity, type NativeOutcome, type NativeRuntimeOptions } from './native/runtime.js';
 import { CallCapture, definitionKey, interfaceHash, type CallStoreLike } from './calls/recorder.js';
 import type { DefinitionIdentity } from './calls/types.js';
 import { formatType } from './native/types.js';
@@ -20,13 +20,15 @@ export type NodeNativeRuntimeOptions = Partial<NativeRuntimeOptions> & Pick<Natl
  * The lambda interpreter bound to the invocation kernel and a standalone task. Used by fixtures and
  * tests that drive one lambda directly; applications call natlang functions inside `runtime.run`.
  * The root run is recorded in the call store like a kernel call, with the run ID as its call ID, so its children link to
- * it (the teacher collector's runs are in the store with the rest).
+ * it (the teacher collector's runs are in the store with the rest). The run ID is unique per run (a fresh one when none
+ * is given); the run's logical name (`runLabel`) is kept on the record as `run_label`.
  */
 export class NodeNativeRuntime extends PlatformRuntime {
   private readonly recording: { capture?: CallCapture };
   private readonly store?: CallStoreLike;
   private readonly rootOptions: NodeNativeRuntimeOptions;
   constructor(options: NodeNativeRuntimeOptions = {}) {
+    options = { ...options, ...runIdentity(options) };
     // Calls this one makes run in the task, so the task holds what they are shown of the services too.
     const taskFrame = options.frame ?? new NatlangTask(new NatlangRuntime({ services: options.services, agent: options.agent,
       exactHostTraceCapture: options.exactHostTraceCapture, neuralese: options.neuralese,
@@ -34,7 +36,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
       { serviceDeclarations: options.declarations, serviceScopes: options.serviceScopes }).frame;
     // This standalone invocation is the caller of its kernel children. Without its
     // identity the trace incorrectly records every first-level child as another root.
-    const frame = options.frame ? taskFrame : { ...taskFrame, parentCallId: options.runId ?? 'native-run' };
+    const frame = options.frame ? taskFrame : { ...taskFrame, parentCallId: options.runId! };
     const recording: { capture?: CallCapture } = {};
     super({ ...options, environment: options.environment ?? new TypeScriptEnvironment({ mode: 'fresh' }),
       frame, hooks: options.hooks ?? kernelHooks, services: options.services ?? frame.task.services,
@@ -78,7 +80,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
         interface: interfaceHash(node.codebase), site: 'named', subtype: node.subtype, params, returns,
         instructions: { complete: false, reason: 'excluded' }, types: node.typesSrc, ...(node.readout ? { readout: node.readout } : {}) };
       const task = this.frame?.task;
-      const capture = new CallCapture(store, store.settings(), { callId: this.options.runId ?? 'native-run',
+      const capture = new CallCapture(store, store.settings(), { callId: this.options.runId, runLabel: this.options.runLabel ?? null,
         parentCallId: this.rootOptions.parentCallId ?? null, parentActionIndex: null, taskId: task?.id ?? 'native',
         programId: null, buildHash: null, programRoot: task?.runtime.options.programRoot ?? null, definition: identity,
         model: { id: this.rootOptions.modelId ?? 'undeclared:native-run', revision: null } });

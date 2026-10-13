@@ -62,7 +62,13 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
   /** Sees each service call this runtime wraps, with its exact arguments and result (a standalone run's call record). */
   observeEffect?: (event: EffectEvent) => void;
   maxActions?: number; maxToolCalls?: number;
-  runId?: string; seedId?: string; signal?: AbortSignal; timeoutMs?: number;
+  /**
+   * The root call's ID: unique per run (it keys the call record, its children's parent link and the trace). Without one a
+   * fresh `native-run:<uuid>` is used. `runLabel` is the logical name shared by runs of one kind (`curriculum-reference`),
+   * kept on the call record; derived seeds use `seedId`, else the label, else the run ID, so a unique ID leaves them as
+   * they were under the shared name.
+   */
+  runId?: string; runLabel?: string; seedId?: string; signal?: AbortSignal; timeoutMs?: number;
   exactHostTraceCapture?: { definitionSources: string[]; inputArguments: string[]; captureOutput?: boolean; captureAllOutputs?: boolean; maxBytes: number };
   sourceRevision?: string; parentCallId?: string;
   /** Task frame of this invocation (task, caller chain, parent call). */
@@ -528,10 +534,27 @@ function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Pro
   });
 }
 
+/** The logical name of a run started without a run ID. */
+export const DEFAULT_RUN_LABEL = 'native-run';
+
+/**
+ * A run's identity: its unique root call ID and its logical name. A run without an ID gets a fresh one under the label
+ * `native-run`.
+ */
+export function runIdentity(options: { runId?: string; runLabel?: string }): { runId: string; runLabel?: string } {
+  const runLabel = options.runLabel ?? (options.runId === undefined ? DEFAULT_RUN_LABEL : undefined);
+  const runId = options.runId ?? `${runLabel}:${globalThis.crypto.randomUUID()}`;
+  return { runId, ...(runLabel !== undefined ? { runLabel } : {}) };
+}
+
+/** What a run's derived seeds are keyed by: its seed ID, else its logical name, else its run ID (see `runIdentity`). */
+export const runSeedKey = (options: { runId: string; runLabel?: string; seedId?: string }): string =>
+  options.seedId ?? options.runLabel ?? options.runId;
+
 export class NativeRuntime {
   readonly events: HostEvent[] = [];
   readonly trace: NativeTraceRecorder;
-  readonly options: { maxActions?: number; maxToolCalls?: number; runId: string; seedId?: string; returnErrorText?: ReturnErrorText };
+  readonly options: { maxActions?: number; maxToolCalls?: number; runId: string; runLabel?: string; seedId?: string; returnErrorText?: ReturnErrorText };
   readonly seedPolicy: { mode: 'derived' | 'backend'; root?: number };
   readonly environment: EvalEnvironment;
   readonly agent?: NativeAgent;
@@ -555,8 +578,9 @@ export class NativeRuntime {
   constructor(options: NativeRuntimeOptions) {
     this.displayLiveId = options.frame ? scopedLiveIdentity(options.frame.task) : createLiveIdentity();
     this.untrusted = options.frame ? scopedUntrusted(options.frame.task) : new UntrustedRegistry(hostUntrusted);
-    this.options = { maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: options.runId ?? 'native-run', seedId: options.seedId,
-      returnErrorText: options.returnErrorText };
+    const run = runIdentity(options);
+    this.options = { maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: run.runId,
+      ...(run.runLabel !== undefined ? { runLabel: run.runLabel } : {}), seedId: options.seedId, returnErrorText: options.returnErrorText };
     for (const [name, value] of Object.entries({ maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls }))
       if (value !== undefined && (!Number.isInteger(value) || value < 1)) throw new RangeError(`${name} must be a positive integer`);
     this.episodeBudget = options.sharedEpisodeBudget ?? { used: 0 };

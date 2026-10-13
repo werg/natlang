@@ -349,7 +349,19 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
 
 // ---- Build-time verification -----------------------------------------------------------------
 
-const REFERENCE_OPTIONS = { contextTokens: 16384, maxTurns: 60, rootSeed: 0, runId: 'curriculum-reference' };
+const REFERENCE_OPTIONS = { contextTokens: 16384, maxTurns: 60, rootSeed: 0 };
+const REFERENCE_LABEL = 'curriculum-reference';
+
+/**
+ * A reference run's identity: each case's opening render and replay is its own root call, so the call store keeps one
+ * record per case (a shared ID made every run replace the last one's root). The ID is derived from the case and the
+ * system prompt, so a replay of the same case is reproducible; the shared name stays as the run's label, which also
+ * keys its derived seeds as before.
+ */
+function referenceRun(record: ProgramRecord, systemPrompt: string, phase: 'opening' | 'replay'): { runId: string; runLabel: string } {
+  return { runId: `${REFERENCE_LABEL}:${phase}:${record.id}:${sha256(recordDigest(record) + '\n' + systemPrompt).slice(0, 16)}`,
+    runLabel: REFERENCE_LABEL };
+}
 
 /** The opening the model would see (user message and pre-filled scope exchanges), without running a model. */
 export async function renderOpening(record: ProgramRecord, systemPrompt: string): Promise<string> {
@@ -358,7 +370,7 @@ export async function renderOpening(record: ProgramRecord, systemPrompt: string)
     if (!opening) opening = openingText(request.messages as Message[]);
     return { calls: [['return_result', { status: 'failed', reason: 'The opening render stops before the first model turn.' }]] };
   };
-  await executeProgram(record, driver, { ...REFERENCE_OPTIONS, systemPrompt });
+  await executeProgram(record, driver, { ...REFERENCE_OPTIONS, ...referenceRun(record, systemPrompt, 'opening'), systemPrompt });
   return opening;
 }
 
@@ -473,7 +485,7 @@ export async function replayReference(record: CurriculumRecord, systemPrompt: st
         ...(response.reasoning ? { reasoning: response.reasoning } : {}) } });
     return response;
   };
-  const run = await executeProgram(record, driver, { ...REFERENCE_OPTIONS, systemPrompt });
+  const run = await executeProgram(record, driver, { ...REFERENCE_OPTIONS, ...referenceRun(record, systemPrompt, 'replay'), systemPrompt });
   return { run, trajectory };
 }
 
