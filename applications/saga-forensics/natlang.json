@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/saga-forensics",
+  "version": "0.1.0",
+  "description": "Natural-language reconstruction and contingent repair of an immutable distributed transaction snapshot.",
+  "include": ["README.md", "DECOMPOSITION.md", "types.ts", "investigate.nl", "investigate", "tsconfig.json"],
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}

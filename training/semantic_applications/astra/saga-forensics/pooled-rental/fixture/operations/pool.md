@@ -1,0 +1,2 @@
+[S01] Warehouse WH has exactly five individually interchangeable kits at this snapshot's origin, none initially reserved or handed over. Committed reservations subtract free units; handover transfers reserved units to in-use custody without restoring free units; release restores only unused reserved units.
+[S02] The target orders are OA and OB. Maintenance reservation OM is not a target order and must remain reserved. No kit has been returned in this snapshot; do not infer a return from a cancellation.

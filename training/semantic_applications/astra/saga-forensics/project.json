@@ -1,0 +1,481 @@
+{
+  "schema": "natlang.semantic-application-source/1",
+  "id": "astra-app-saga-forensics-v1",
+  "source_root": "applications/saga-forensics",
+  "entry": "investigate.nl",
+  "entry_kind": "directory-reducer",
+  "request_type": "InvestigationRequest",
+  "result_type": "ForensicReport",
+  "fixture_root": "training/semantic_applications/astra/saga-forensics/pooled-rental/fixture",
+  "request_path": "training/semantic_applications/astra/saga-forensics/pooled-rental/request.json",
+  "oracle_path": "training/semantic_applications/astra/saga-forensics/pooled-rental/oracle.json",
+  "source_world_split_key": "astra-application-saga-pooled-rental-v1",
+  "program_files": [
+    "DECOMPOSITION.md",
+    "README.md",
+    "investigate.d.nl.ts",
+    "investigate.nl",
+    "investigate/adjudicate.nl",
+    "investigate/adjudicate/advanceLedger.nl",
+    "investigate/adjudicate/advanceLedger/assessEvidence.nl",
+    "investigate/audit.nl",
+    "investigate/audit/challengePolicy.nl",
+    "investigate/correlate.nl",
+    "investigate/correlate/alignTime.nl",
+    "investigate/correlate/alignTime/interpretClock.nl",
+    "investigate/correlate/bindAttempts.nl",
+    "investigate/correlate/bindAttempts/compareRequestMeaning.nl",
+    "investigate/correlate/bindAttempts/compareRequestMeaning/resolveKeyScope.nl",
+    "investigate/correlate/deriveCausality.nl",
+    "investigate/inventory.nl",
+    "investigate/inventory/interpretDocument.nl",
+    "investigate/repair.nl",
+    "investigate/repair/chooseObservation.nl",
+    "investigate/repair/chooseObservation/partitionAnswers.nl",
+    "investigate/repair/deriveObligations.nl",
+    "investigate/repair/searchPolicy.nl",
+    "investigate/repair/searchPolicy/expandFrontier.nl",
+    "investigate/repair/searchPolicy/expandFrontier/assessAction.nl",
+    "investigate/repair/searchPolicy/expandFrontier/assessAction/interpretCompensationScope.nl",
+    "natlang.json",
+    "tsconfig.json",
+    "types.ts"
+  ],
+  "fixture_files": [
+    "contracts/cancellation.md",
+    "contracts/evidence.md",
+    "contracts/identity.md",
+    "contracts/repair.md",
+    "journals/bank-a.md",
+    "journals/bank-b.md",
+    "journals/refund-a.md",
+    "journals/stock-a.md",
+    "journals/stock-b-maintenance.md",
+    "manifest.json",
+    "operations/clock.md",
+    "operations/handover-cancel.md",
+    "operations/pool.md",
+    "operations/source-boundary.md",
+    "queries/bank-observations.md",
+    "receipts/bank-a.md",
+    "receipts/stock-a.md"
+  ],
+  "typed_call_graph": {
+    "nodes": [
+      {
+        "path": "investigate.nl",
+        "args": {
+          "request": "InvestigationRequest"
+        },
+        "returns": "ForensicReport",
+        "owned_delta": "Reconstruct a distributed saga and propose an evidence-backed contingent repair."
+      },
+      {
+        "path": "investigate/adjudicate.nl",
+        "args": {
+          "index": "EvidenceIndex",
+          "correlation": "Correlation"
+        },
+        "returns": "EffectLedger",
+        "owned_delta": "Reduce distinct effect candidates into a ledger of committed and bounded-unknown outcomes."
+      },
+      {
+        "path": "investigate/adjudicate/advanceLedger.nl",
+        "args": {
+          "state": "LedgerState"
+        },
+        "returns": "LedgerState",
+        "owned_delta": "Own one evidence assessment and append one reconciled effect before shrinking the frontier."
+      },
+      {
+        "path": "investigate/adjudicate/advanceLedger/assessEvidence.nl",
+        "args": {
+          "candidate": "EffectCandidate",
+          "index": "EvidenceIndex",
+          "correlation": "Correlation"
+        },
+        "returns": "EvidenceAssessment",
+        "owned_delta": "Classify observations under the source evidence contract and preserve genuine outcome uncertainty."
+      },
+      {
+        "path": "investigate/audit.nl",
+        "args": {
+          "request": "InvestigationRequest",
+          "index": "EvidenceIndex",
+          "correlation": "Correlation",
+          "ledger": "EffectLedger",
+          "repairResult": "RepairPolicy"
+        },
+        "returns": "ForensicReport",
+        "owned_delta": "Replay every proposed outcome branch and challenge the forensic reconstruction."
+      },
+      {
+        "path": "investigate/audit/challengePolicy.nl",
+        "args": {
+          "request": "InvestigationRequest",
+          "index": "EvidenceIndex",
+          "correlation": "Correlation",
+          "ledger": "EffectLedger",
+          "repairResult": "RepairPolicy",
+          "accounting": "BranchAccounting[]"
+        },
+        "returns": "AuditFinding[]",
+        "owned_delta": "Seek source-backed counterexamples to identity, repair safety and minimality."
+      },
+      {
+        "path": "investigate/correlate.nl",
+        "args": {
+          "index": "EvidenceIndex",
+          "request": "InvestigationRequest"
+        },
+        "returns": "Correlation",
+        "owned_delta": "Join scoped request identity, normalized time and explicit causal references."
+      },
+      {
+        "path": "investigate/correlate/alignTime.nl",
+        "args": {
+          "index": "EvidenceIndex",
+          "asOfGlobalTime": "number"
+        },
+        "returns": "Timeline",
+        "owned_delta": "Interpret clock clauses and normalize only events covered by those clauses."
+      },
+      {
+        "path": "investigate/correlate/alignTime/interpretClock.nl",
+        "args": {
+          "clock": "string",
+          "clauses": "EvidenceAtom[]"
+        },
+        "returns": "ClockRelation",
+        "owned_delta": "Resolve one clock mapping and its scope across restarts."
+      },
+      {
+        "path": "investigate/correlate/bindAttempts.nl",
+        "args": {
+          "index": "EvidenceIndex"
+        },
+        "returns": "IdentityPartition",
+        "owned_delta": "Build request identities by combining payload meaning with the correct deduplication scope."
+      },
+      {
+        "path": "investigate/correlate/bindAttempts/compareRequestMeaning.nl",
+        "args": {
+          "left": "Attempt",
+          "right": "Attempt",
+          "clauses": "EvidenceAtom[]"
+        },
+        "returns": "IdentityDecision",
+        "owned_delta": "Judge business payload equivalence, then apply the separately interpreted key scope."
+      },
+      {
+        "path": "investigate/correlate/bindAttempts/compareRequestMeaning/resolveKeyScope.nl",
+        "args": {
+          "left": "Attempt",
+          "right": "Attempt",
+          "payload": "PayloadRelation",
+          "clauses": "EvidenceAtom[]"
+        },
+        "returns": "IdentityDecision",
+        "owned_delta": "Apply namespace guarantees without conflating restart, tenant and epoch."
+      },
+      {
+        "path": "investigate/correlate/deriveCausality.nl",
+        "args": {
+          "index": "EvidenceIndex",
+          "identity": "IdentityPartition",
+          "timeline": "Timeline"
+        },
+        "returns": "CausalEdge[]",
+        "owned_delta": "Create witnessed directed links from explicit execution, retry and compensation relations."
+      },
+      {
+        "path": "investigate/inventory.nl",
+        "args": {
+          "request": "InvestigationRequest"
+        },
+        "returns": "EvidenceIndex",
+        "owned_delta": "Reduce the manifest-listed source documents to witnessed evidence atoms."
+      },
+      {
+        "path": "investigate/inventory/interpretDocument.nl",
+        "args": {
+          "document": "SourceDocument"
+        },
+        "returns": "EvidenceAtom[]",
+        "owned_delta": "Identify source assertions and preserve their exact scope and quotation."
+      },
+      {
+        "path": "investigate/repair.nl",
+        "args": {
+          "request": "InvestigationRequest",
+          "index": "EvidenceIndex",
+          "correlation": "Correlation",
+          "ledger": "EffectLedger"
+        },
+        "returns": "RepairPolicy",
+        "owned_delta": "Derive rollback obligations, select discriminating observations and search legal repair policies."
+      },
+      {
+        "path": "investigate/repair/chooseObservation.nl",
+        "args": {
+          "index": "EvidenceIndex",
+          "correlation": "Correlation",
+          "ledger": "EffectLedger",
+          "obligations": "ObligationGraph"
+        },
+        "returns": "ObservationPlan",
+        "owned_delta": "Choose source-authorized queries whose answer partitions are sufficient for the repair."
+      },
+      {
+        "path": "investigate/repair/chooseObservation/partitionAnswers.nl",
+        "args": {
+          "queryAtoms": "EvidenceAtom[]",
+          "effect": "Effect",
+          "correlation": "Correlation",
+          "clauses": "EvidenceAtom[]"
+        },
+        "returns": "ObservationChoice",
+        "owned_delta": "Interpret one query answer at a time and build a repair-relevant outcome partition."
+      },
+      {
+        "path": "investigate/repair/deriveObligations.nl",
+        "args": {
+          "request": "InvestigationRequest",
+          "index": "EvidenceIndex",
+          "correlation": "Correlation",
+          "ledger": "EffectLedger"
+        },
+        "returns": "ObligationGraph",
+        "owned_delta": "Compute cancellation entitlements across handover boundaries and shared stock ownership."
+      },
+      {
+        "path": "investigate/repair/searchPolicy.nl",
+        "args": {
+          "context": "SearchContext"
+        },
+        "returns": "RepairPolicy",
+        "owned_delta": "Build complete contingent candidates by a finite obligation frontier and choose the least costly valid policy."
+      },
+      {
+        "path": "investigate/repair/searchPolicy/expandFrontier.nl",
+        "args": {
+          "state": "RepairSearchState"
+        },
+        "returns": "RepairSearchState",
+        "owned_delta": "Discharge one obligation in every supported outcome branch using assessed action extensions."
+      },
+      {
+        "path": "investigate/repair/searchPolicy/expandFrontier/assessAction.nl",
+        "args": {
+          "action": "RepairAction",
+          "obligation": "Obligation",
+          "conditions": "PolicyBranch[\"conditions\"]",
+          "context": "SearchContext"
+        },
+        "returns": "ActionAssessment",
+        "owned_delta": "Judge a proposed compensation against entitlement, custody, identity and observation prerequisites."
+      },
+      {
+        "path": "investigate/repair/searchPolicy/expandFrontier/assessAction/interpretCompensationScope.nl",
+        "args": {
+          "action": "RepairAction",
+          "obligation": "Obligation",
+          "conditions": "PolicyBranch[\"conditions\"]",
+          "context": "SearchContext"
+        },
+        "returns": "ActionAssessment",
+        "owned_delta": "Use a narrow scoped judgment to interpret the rollback boundary for one proposed action."
+      }
+    ],
+    "edges": [
+      {
+        "caller": "investigate.nl",
+        "callee": "investigate/adjudicate.nl"
+      },
+      {
+        "caller": "investigate/adjudicate.nl",
+        "callee": "investigate/adjudicate/advanceLedger.nl"
+      },
+      {
+        "caller": "investigate/adjudicate/advanceLedger.nl",
+        "callee": "investigate/adjudicate/advanceLedger/assessEvidence.nl"
+      },
+      {
+        "caller": "investigate.nl",
+        "callee": "investigate/audit.nl"
+      },
+      {
+        "caller": "investigate/audit.nl",
+        "callee": "investigate/audit/challengePolicy.nl"
+      },
+      {
+        "caller": "investigate.nl",
+        "callee": "investigate/correlate.nl"
+      },
+      {
+        "caller": "investigate/correlate.nl",
+        "callee": "investigate/correlate/alignTime.nl"
+      },
+      {
+        "caller": "investigate/correlate/alignTime.nl",
+        "callee": "investigate/correlate/alignTime/interpretClock.nl"
+      },
+      {
+        "caller": "investigate/correlate.nl",
+        "callee": "investigate/correlate/bindAttempts.nl"
+      },
+      {
+        "caller": "investigate/correlate/bindAttempts.nl",
+        "callee": "investigate/correlate/bindAttempts/compareRequestMeaning.nl"
+      },
+      {
+        "caller": "investigate/correlate/bindAttempts/compareRequestMeaning.nl",
+        "callee": "investigate/correlate/bindAttempts/compareRequestMeaning/resolveKeyScope.nl"
+      },
+      {
+        "caller": "investigate/correlate.nl",
+        "callee": "investigate/correlate/deriveCausality.nl"
+      },
+      {
+        "caller": "investigate.nl",
+        "callee": "investigate/inventory.nl"
+      },
+      {
+        "caller": "investigate/inventory.nl",
+        "callee": "investigate/inventory/interpretDocument.nl"
+      },
+      {
+        "caller": "investigate.nl",
+        "callee": "investigate/repair.nl"
+      },
+      {
+        "caller": "investigate/repair.nl",
+        "callee": "investigate/repair/chooseObservation.nl"
+      },
+      {
+        "caller": "investigate/repair/chooseObservation.nl",
+        "callee": "investigate/repair/chooseObservation/partitionAnswers.nl"
+      },
+      {
+        "caller": "investigate/repair.nl",
+        "callee": "investigate/repair/deriveObligations.nl"
+      },
+      {
+        "caller": "investigate/repair.nl",
+        "callee": "investigate/repair/searchPolicy.nl"
+      },
+      {
+        "caller": "investigate/repair/searchPolicy.nl",
+        "callee": "investigate/repair/searchPolicy/expandFrontier.nl"
+      },
+      {
+        "caller": "investigate/repair/searchPolicy/expandFrontier.nl",
+        "callee": "investigate/repair/searchPolicy/expandFrontier/assessAction.nl"
+      },
+      {
+        "caller": "investigate/repair/searchPolicy/expandFrontier/assessAction.nl",
+        "callee": "investigate/repair/searchPolicy/expandFrontier/assessAction/interpretCompensationScope.nl"
+      }
+    ]
+  },
+  "scoped_literals": [
+    {
+      "site": "investigate/correlate/bindAttempts/compareRequestMeaning.nl",
+      "changing_input": "One attempt pair",
+      "captured_context": "Applicable payload rules and the two request meanings",
+      "result_type": "PayloadRelation",
+      "consumed_by": "resolveKeyScope consumes sameMeaning and differingFields",
+      "invocation": "Directly await each structured NL literal result; no finite-choice operation."
+    },
+    {
+      "site": "investigate/adjudicate/advanceLedger/assessEvidence.nl",
+      "changing_input": "One relevant evidence atom",
+      "captured_context": "Candidate identity and evidence-strength clauses",
+      "result_type": "ObservationJudgment",
+      "consumed_by": "Observation strengths determine possibleStatuses",
+      "invocation": "Directly await each structured NL literal result; no finite-choice operation."
+    },
+    {
+      "site": "investigate/repair/chooseObservation/partitionAnswers.nl",
+      "changing_input": "One listed query answer",
+      "captured_context": "Effect proposition, processing boundary, query coverage and retry clause",
+      "result_type": "QueryAnswer",
+      "consumed_by": "Returned partition determines sufficient and branch conditions",
+      "invocation": "Directly await each structured NL literal result; no finite-choice operation."
+    },
+    {
+      "site": "investigate/repair/searchPolicy/expandFrontier/assessAction/interpretCompensationScope.nl",
+      "changing_input": "One proposed action",
+      "captured_context": "Relevant obligation quantities, protected effects, rollback clauses and branch evidence",
+      "result_type": "ActionAssessment",
+      "consumed_by": "assessAction consumes permitted and necessaryQuantity; expansion retains or rejects action",
+      "invocation": "Directly await each structured NL literal result; no finite-choice operation."
+    }
+  ],
+  "iteration_reducers": [
+    {
+      "caller": "investigate/inventory.nl",
+      "kind": "directory-reducer",
+      "frontier": "Manifest-listed nested source documents",
+      "owned_delta": "Witnessed atoms and per-document coverage",
+      "termination": "Each listed document visited once"
+    },
+    {
+      "caller": "investigate/adjudicate.nl",
+      "step": "investigate/adjudicate/advanceLedger.nl",
+      "kind": "iterateOn",
+      "measure": "state.pending.length",
+      "owned_delta": "One assessed effect or rejection appended; one candidate removed"
+    },
+    {
+      "caller": "investigate/repair/searchPolicy.nl",
+      "step": "investigate/repair/searchPolicy/expandFrontier.nl",
+      "kind": "iterateOn",
+      "measure": "state.remainingObligationIds.length",
+      "owned_delta": "One obligation discharged across all supported outcome branches"
+    }
+  ],
+  "comparison_spec": {
+    "schema_version": 1,
+    "mode": "source-grounded-invariant-and-policy-replay",
+    "canonical_oracle_witness": true,
+    "generated_identifiers": "Compare alpha-equivalent action IDs and dependency references.",
+    "ordered_fields": [
+      "Causal edge beforeId/afterId direction",
+      "Action prerequisite relation dependsOn (set of directed references)"
+    ],
+    "unordered_collections": [
+      "identity.groups and their member IDs",
+      "identity.pairDecisions",
+      "timeline.events",
+      "causalEdges",
+      "ledger.effects",
+      "repair.candidate.commonActions",
+      "repair.candidate.branches",
+      "branchAccounting",
+      "currentCashPossibilities",
+      "witness collections"
+    ],
+    "exact_fields": "Source IDs, quantity/unit, normalized numbers, namespace bindings, effect/cause references and branch status are exact.",
+    "semantic_fields": "Explanations and alternative valid action placement receive independent source-grounded review. Branch-independent actions may be copied into all mutually exclusive branches.",
+    "verifier_status": "External exact identity/number/branch/dependency/conservation checker authored; positive and negative reference validation pending. Semantic witness support still requires independent review."
+  },
+  "services": [],
+  "provenance": {
+    "author": "semantic_slate_astra",
+    "kind": "original fictional evidence and original NL application",
+    "license": "Repository license; no external source material"
+  },
+  "readiness": {
+    "source_loader_checked": true,
+    "typed_declarations_checked": true,
+    "independent_oracle_review": false,
+    "exact_result_replay": false,
+    "live_qualified": false,
+    "training_admitted": false
+  },
+  "model_facing_debt": "All 23 authored NL files and typed interfaces are unmeasured; collect live diagnostic and approximately 48 samples per adopted presentation before adoption.",
+  "fixture_document_count": 16,
+  "fixture_clause_count": 40,
+  "external_verifier_path": "training/semantic_applications/astra/saga-forensics/verify-result.mjs"
+}

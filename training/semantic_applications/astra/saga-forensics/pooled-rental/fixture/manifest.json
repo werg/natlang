@@ -1,0 +1,92 @@
+{
+  "caseId": "pooled-rental-v1",
+  "documents": [
+    {
+      "id": "C-ID",
+      "path": "contracts/identity.md",
+      "roleHint": "contract"
+    },
+    {
+      "id": "C-EV",
+      "path": "contracts/evidence.md",
+      "roleHint": "contract"
+    },
+    {
+      "id": "C-CANCEL",
+      "path": "contracts/cancellation.md",
+      "roleHint": "contract"
+    },
+    {
+      "id": "C-REPAIR",
+      "path": "contracts/repair.md",
+      "roleHint": "contract"
+    },
+    {
+      "id": "O-CLOCK",
+      "path": "operations/clock.md",
+      "roleHint": "observation"
+    },
+    {
+      "id": "O-POOL",
+      "path": "operations/pool.md",
+      "roleHint": "observation"
+    },
+    {
+      "id": "J-SA",
+      "path": "journals/stock-a.md",
+      "roleHint": "journal"
+    },
+    {
+      "id": "R-SA",
+      "path": "receipts/stock-a.md",
+      "roleHint": "receipt"
+    },
+    {
+      "id": "J-SBM",
+      "path": "journals/stock-b-maintenance.md",
+      "roleHint": "journal"
+    },
+    {
+      "id": "J-PA",
+      "path": "journals/bank-a.md",
+      "roleHint": "journal"
+    },
+    {
+      "id": "R-PA",
+      "path": "receipts/bank-a.md",
+      "roleHint": "receipt"
+    },
+    {
+      "id": "J-PB",
+      "path": "journals/bank-b.md",
+      "roleHint": "journal"
+    },
+    {
+      "id": "O-HC",
+      "path": "operations/handover-cancel.md",
+      "roleHint": "observation"
+    },
+    {
+      "id": "J-RA",
+      "path": "journals/refund-a.md",
+      "roleHint": "journal"
+    },
+    {
+      "id": "Q-BANK",
+      "path": "queries/bank-observations.md",
+      "roleHint": "observation"
+    },
+    {
+      "id": "O-BOUND",
+      "path": "operations/source-boundary.md",
+      "roleHint": "observation"
+    }
+  ],
+  "source_scope": "Immutable fictional snapshot; document IDs and clause IDs are visible source references.",
+  "output_contract": {
+    "effectIdentity": "Use the named committed effect IDs in the source; an unexecuted attempt remains an attempt ID, not an invented effect.",
+    "unordered": "Identity groups, ledger entries, immediate independent actions and observation outcome branches are sets; source-directed edges and within-branch dependency sequences preserve direction.",
+    "derivedIdentifiers": "A generated policy node/action ID may be any unique string; it is not an oracle fact.",
+    "nullMeaning": "Unknown monetary or quantity facts are null, never zero by default."
+  }
+}

@@ -1,0 +1,3 @@
+[C07] Each kit rents for 40 units of money. For a cancellation received after signed handover, the unhanded kits are refundable and releasable; handed-over rental shares remain payable. A cancellation received before handover would void every rental share, even if a later mistaken handover required a separate recovery. Compare actual global times.
+[C08] An order's security deposit is a separate effect from rental payment. It remains held while that order has any kit in carrier or customer custody; cancellation is not return evidence.
+[C09] Refund only the remaining entitled amount after confirmed refunds for the same cause. Do not treat an unresolved refund as zero, and do not settle a deposit with a rental refund.

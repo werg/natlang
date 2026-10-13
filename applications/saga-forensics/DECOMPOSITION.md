@@ -1,6 +1,6 @@
 # Saga Forensics — application decomposition
 
-Status: architecture for independent review; no runnable or training claim. Program ID: `astra-app-saga-forensics-v1`.
+Status: first authored slice implemented and source-loader checked; live execution and independent source/oracle review pending. Program ID: `astra-app-saga-forensics-v1`.
 
 ## Behavior and scope
 
@@ -28,44 +28,32 @@ The output contract supplies identifiers, category vocabularies, order semantics
 The following names describe responsibilities, not a uniform pipeline. Every child physically belongs to its caller's companion folder. A root may invoke independent sibling branches, but a child never assumes access to its sibling.
 
 ```text
+investigate/adjudicate/advanceLedger/assessEvidence.nl
+investigate/adjudicate/advanceLedger.nl
+investigate/adjudicate.nl
+investigate/audit/challengePolicy.nl
+investigate/audit.nl
+investigate/correlate/alignTime/interpretClock.nl
+investigate/correlate/alignTime.nl
+investigate/correlate/bindAttempts/compareRequestMeaning/resolveKeyScope.nl
+investigate/correlate/bindAttempts/compareRequestMeaning.nl
+investigate/correlate/bindAttempts.nl
+investigate/correlate/deriveCausality.nl
+investigate/correlate.nl
+investigate/inventory/interpretDocument.nl
+investigate/inventory.nl
+investigate/repair/chooseObservation/partitionAnswers.nl
+investigate/repair/chooseObservation.nl
+investigate/repair/deriveObligations.nl
+investigate/repair/searchPolicy/expandFrontier/assessAction/interpretCompensationScope.nl
+investigate/repair/searchPolicy/expandFrontier/assessAction.nl
+investigate/repair/searchPolicy/expandFrontier.nl
+investigate/repair/searchPolicy.nl
+investigate/repair.nl
 investigate.nl
-investigate/
-  inventory.nl
-  inventory/
-    interpretJournal.nl
-    interpretReceipt.nl
-    interpretContract.nl
-  correlate.nl
-  correlate/
-    alignTime.nl
-    alignTime/interpretClockClause.nl
-    bindAttempts.nl
-    bindAttempts/compareRequestMeaning.nl
-    bindAttempts/compareRequestMeaning/resolveKeyScope.nl
-    deriveCausality.nl
-    deriveCausality/justifyEdge.nl
-  adjudicate.nl
-  adjudicate/
-    evaluateEvidence.nl
-    evaluateEvidence/interpretObservationStrength.nl
-    reconcileEffect.nl
-    reconcileEffect/distinguishReplay.nl
-    resolveConflict.nl
-  repair.nl
-  repair/
-    deriveObligations.nl
-    deriveObligations/interpretRollbackBoundary.nl
-    searchPolicy.nl
-    searchPolicy/expandFrontier.nl
-    searchPolicy/expandFrontier/assessCandidate.nl
-    searchPolicy/expandFrontier/assessCandidate/interpretCompensationScope.nl
-    chooseObservation.nl
-    chooseObservation/compareAnswers.nl
-  audit.nl
-  audit/challengePolicy.nl
 ```
 
-Estimated size: about 30 `.nl` functions, 650–900 substantive natural-language lines, plus typed contracts. Count is a planning estimate; merge responsibilities if they do not create distinct information. The deepest repair branch is six active semantic calls, while inventory is a three-way folder reducer and correlation is a join of distinct analyses. A stage that only forwards data will be removed or classified as plumbing.
+First implemented slice: 23 `.nl` functions, 535 source lines including frontmatter, plus typed declarations. The earlier 30-function/650–900-line estimate was an architecture estimate; several proposed helpers were merged into their owning semantic stage when they would only have forwarded state. The deepest repair branch has six active named calls plus a consumed local literal. Inventory reduces source collections; correlation joins independently owned time, identity and causal analyses. Live traces must still demonstrate these authored contributions.
 
 ## Typed state and ownership
 
@@ -114,8 +102,19 @@ No policy implementation in a TypeScript helper, hidden gold-backed service or h
 
 ## Concrete first world and quality gates
 
-The first world will contain 28–36 connected facts across two sagas sharing a reservation pool and a payment namespace migration. A lost acknowledgment, an intentional retry, changed request meaning under one reused key, an observed compensation, a shipment boundary and an unresolved receipt must all alter the resulting policy. Each fact has a documented downstream consumer; irrelevant padding is excluded.
+The first world contains 40 connected clauses in 16 nested source documents across two sagas sharing a reservation pool, tenant-scoped bank keys and warehouse epoch changes. A lost acknowledgment, an intentional retry, changed request meaning under one reused key, an observed compensation, a shipment boundary and an unresolved receipt must all alter the resulting policy. Each fact has a documented downstream consumer; irrelevant padding is excluded.
 
 At least three source-preserving task variants will ask for reconstruction, repair and a discriminating observation. These are views of one world and share one split group. At least one counterfactual changes the correct business effect despite similar surface wording, and another changes the permissible repair without changing gross totals.
 
 Before generation readiness: parse/type/callable-graph checks; independent manual source/oracle review; exact reference replay and negative verifier mutations; source-visibility check; then live execution of actual NL sources. The live review measures active-parent nesting, meaningful owned deltas, consumed dynamic literals and all branch outcomes. About 48 samples per adopted model-facing presentation remain required; one successful run is a diagnostic. Training admission is separate.
+
+## Implemented-slice responsibility consolidation
+
+- `interpretDocument` extracts witnessed atoms from all source roles; journal/receipt/contract differences remain semantic classifications, without three repetitive file wrappers.
+- `advanceLedger` combines reconciliation and replay accounting after its `assessEvidence` child; conflicts stay explicit in ledger state.
+- `deriveCausality` owns edge construction directly; there is no per-edge forwarding helper.
+- `deriveObligations` owns the complete cancellation/price/custody join. Its result is consumed by observation planning and search.
+- `expandFrontier` owns candidate construction; `assessAction` owns validity and calls `interpretCompensationScope` for the local rollback judgment.
+- No TypeScript policy helper exists. `types.ts` contains declarations only. Any later external checker consumes results and evidence without synthesizing a repair.
+
+Some earlier table names describe responsibilities now consolidated above rather than extra callable files. The file graph is the authoritative implemented graph. The first-world oracle is a canonical semantic witness; independent actions can be delayed into every observation branch when dependencies and final effects remain equivalent.

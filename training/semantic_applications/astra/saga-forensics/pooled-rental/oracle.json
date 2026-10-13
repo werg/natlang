@@ -1,0 +1,260 @@
+{
+  "schema": "natlang.saga-forensics-oracle/1",
+  "training_admission": false,
+  "independently_reviewed": false,
+  "current_cash_possibilities": [
+    92,
+    132
+  ],
+  "common_final_cash": 52,
+  "final_stock": {
+    "free": 3,
+    "inUse": 1,
+    "reserved": 1,
+    "protectedEffectIds": [
+      "SM"
+    ]
+  },
+  "global_event_times": {
+    "CA": 30,
+    "CB": 30,
+    "HA": 25,
+    "RA1": 32
+  },
+  "duplicate_attempt_groups": [
+    [
+      "IA1",
+      "IA2"
+    ],
+    [
+      "PA1",
+      "PA2"
+    ]
+  ],
+  "independent_same_key_groups": [
+    [
+      "IA1",
+      "IM1"
+    ],
+    [
+      "PA1",
+      "PB1"
+    ]
+  ],
+  "rejected_attempts": [
+    "PBX"
+  ],
+  "refund_entitlements": {
+    "OA": 40,
+    "OB": 40
+  },
+  "protected_deposit": {
+    "effectId": "DEPA",
+    "amount": 12
+  },
+  "observation": {
+    "queryId": "FINAL",
+    "cost": 2,
+    "branches": [
+      {
+        "outcome": "committed",
+        "newRefundAWrite": false
+      },
+      {
+        "outcome": "definitive-absent",
+        "newRefundAWrite": true,
+        "amount": 40,
+        "tenant": "ALPHA",
+        "key": "refund-A",
+        "subjectEffectId": "PAYA"
+      }
+    ]
+  },
+  "minimum_worst_case_writes": 4,
+  "derivation": [
+    "W local time plus20 gives cancellation30 after handover25, so OA has one unused40 rental share; OB has one unused40 share.",
+    "ALPHA and BETA pay-7 are independent; PA2 repeats PAYA; PBX is incompatible and rejected. Stock E1/E2 slot-4 are independent; IA2 repeats SA.",
+    "OA deposit12 remains due to custody of1kit. Release SAunused1 and SB1; preserve SM1; free becomes3.",
+    "Confirmed charges total132. REFA may already have reduced this to92. FinalArefund40 plusBrefund40 always leaves52.",
+    "QUICK31 predates refund intent32 and boundary33; FINAL34 distinguishes both worlds. After committed skip; after definitiveabsence reuse refund-A.",
+    "Three branch-independent necessary writes plus at most one conditional A refund write gives a minimum worst-case count of four. Their placement before or after observation does not affect this bound."
+  ],
+  "branch_independent_action_requirements": [
+    {
+      "kind": "release",
+      "subjectEffectId": "SA",
+      "quantity": 1,
+      "unit": "kits",
+      "orderId": "OA",
+      "causeId": "CA",
+      "tenant": null,
+      "key": null
+    },
+    {
+      "kind": "release",
+      "subjectEffectId": "SB",
+      "quantity": 1,
+      "unit": "kits",
+      "orderId": "OB",
+      "causeId": "CB",
+      "tenant": null,
+      "key": null
+    },
+    {
+      "kind": "refund",
+      "subjectEffectId": "PAYB",
+      "tenant": "BETA",
+      "key": "refund-B",
+      "quantity": 40,
+      "unit": "money",
+      "orderId": "OB",
+      "causeId": "CB"
+    }
+  ],
+  "comparison_semantics": {
+    "canonical_witness": true,
+    "independent_action_timing": "Required actions may occur before observation or in every outcome branch when their prerequisites and final effects are identical.",
+    "action_and_policy_ids": "Arbitrary unique generated identifiers; compare business effects and dependencies.",
+    "observations": "Minimize total observation cost after worst-case writes; selected FINAL is sufficient and QUICK is not.",
+    "prose": "Source-grounded semantic review, not byte equality."
+  },
+  "confirmed_cash": 132,
+  "current_stock": {
+    "free": 1,
+    "inUse": 1,
+    "reserved": 3
+  },
+  "uncertain_refund_ledger_id": "RA1",
+  "uncertain_refund_amount": 40,
+  "protected_effect_ids": [
+    "DEPA",
+    "SM"
+  ],
+  "effect_invariants": [
+    {
+      "ledgerId": "SA",
+      "effectId": "SA",
+      "orderId": "OA",
+      "kind": "reservation",
+      "quantity": 2,
+      "unit": "kits",
+      "possibleStatuses": [
+        "committed"
+      ]
+    },
+    {
+      "ledgerId": "SB",
+      "effectId": "SB",
+      "orderId": "OB",
+      "kind": "reservation",
+      "quantity": 1,
+      "unit": "kits",
+      "possibleStatuses": [
+        "committed"
+      ]
+    },
+    {
+      "ledgerId": "SM",
+      "effectId": "SM",
+      "orderId": "OM",
+      "kind": "reservation",
+      "quantity": 1,
+      "unit": "kits",
+      "possibleStatuses": [
+        "committed"
+      ]
+    },
+    {
+      "ledgerId": "PAYA",
+      "effectId": "PAYA",
+      "orderId": "OA",
+      "kind": "rental",
+      "quantity": 80,
+      "unit": "money",
+      "possibleStatuses": [
+        "committed"
+      ]
+    },
+    {
+      "ledgerId": "PAYB",
+      "effectId": "PAYB",
+      "orderId": "OB",
+      "kind": "rental",
+      "quantity": 40,
+      "unit": "money",
+      "possibleStatuses": [
+        "committed"
+      ]
+    },
+    {
+      "ledgerId": "DEPA",
+      "effectId": "DEPA",
+      "orderId": "OA",
+      "kind": "deposit",
+      "quantity": 12,
+      "unit": "money",
+      "possibleStatuses": [
+        "committed"
+      ]
+    },
+    {
+      "ledgerId": "RA1",
+      "effectId": null,
+      "orderId": "OA",
+      "kind": "refund",
+      "quantity": 40,
+      "unit": "money",
+      "possibleStatuses": [
+        "committed",
+        "absent"
+      ]
+    }
+  ],
+  "absent_branch_action_requirement": {
+    "kind": "refund",
+    "subjectEffectId": "PAYA",
+    "quantity": 40,
+    "unit": "money",
+    "tenant": "ALPHA",
+    "key": "refund-A",
+    "orderId": "OA",
+    "causeId": "CA"
+  },
+  "attempt_ids": [
+    "IA1",
+    "IA2",
+    "IB1",
+    "IM1",
+    "PA1",
+    "PA2",
+    "DA1",
+    "PB1",
+    "PBX",
+    "RA1"
+  ],
+  "identity_groups": [
+    [
+      "IA1",
+      "IA2"
+    ],
+    [
+      "IB1"
+    ],
+    [
+      "IM1"
+    ],
+    [
+      "PA1",
+      "PA2"
+    ],
+    [
+      "DA1"
+    ],
+    [
+      "PB1"
+    ],
+    [
+      "RA1"
+    ]
+  ]
+}

@@ -1,0 +1,3 @@
+[C04] A warehouse message marked acknowledged means the worker accepted a request. Only the stock ledger's committed effect establishes reserved units. Repeated acknowledgments are not additional effects.
+[C05] A bank committed receipt establishes a monetary effect. A client intent or missing client acknowledgment does not establish either execution or nonexecution. A bank receipt quoting an existing bank effect ID may be another report of that effect.
+[C06] A printed dispatch manifest is not a physical handover. Only a signed carrier handover establishes transferred custody. A stock reservation consumed by handover cannot be released as unused stock.

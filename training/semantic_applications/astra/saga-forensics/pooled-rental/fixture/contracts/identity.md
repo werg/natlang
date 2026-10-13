@@ -1,0 +1,3 @@
+[C01] Stock deduplication is scoped by warehouse, epoch and key. A repeat in that same scope with the same request meaning refers to one reservation effect. Reusing a key in a different epoch can create a different reservation.
+[C02] Bank deduplication is scoped by tenant and key, and survives processor restarts. Equal key strings belonging to different tenants are independent. Equal tenant/key with incompatible payment meaning is rejected without a new effect.
+[C03] Payload equality means the same business order, effect kind and quantity or amount; cosmetic client prose is irrelevant. A mismatch cannot be repaired by assuming the latest payload replaced the original.

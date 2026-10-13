@@ -1,0 +1,2 @@
+[B01] This investigation's as-of time is global 34. The snapshot contains all stock commits, handovers, target rental charges, deposits and confirmed refund receipts relevant to OA and OB. Its one deliberately incomplete fact is the outcome of ALPHA/refund-A described in I11.
+[B02] The repair policy is a proposed value, not a claim that its actions already occurred. Report the current cash possibilities and the common final cash/stock state after each fully executed policy branch. Do not execute external effects during investigation.

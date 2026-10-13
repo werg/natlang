@@ -1,0 +1,15 @@
+{
+  "caseId": "pooled-rental-v1",
+  "targetOrders": [
+    "OA",
+    "OB"
+  ],
+  "asOfGlobalTime": 34,
+  "objective": "minimum-worst-case-external-writes",
+  "requiredPostconditions": [
+    "Honor source-supported rental cancellation entitlements.",
+    "Protect the handed-over OA kit, its deposit and the maintenance reservation.",
+    "Resolve refund-A through an authorized observation branch without duplicate refund.",
+    "Account for all five stock units and all monetary effects."
+  ]
+}

@@ -1,0 +1,3 @@
+[Q01] Query QUICK costs 1 and returns the bank's immutable history only through global time 31. It reports no refund-A entry. It returns the same answer whether REFA commits at time 33 or no effect occurs.
+[Q02] Query FINAL costs 2 and covers refund-A through global time 34, after its processing boundary. It returns either committed(REFA,40) or definitive-absent(refund-A). These outcomes distinguish the two supported bank worlds.
+[Q03] No refund intent or committed refund exists for OB. A fresh OB rental refund must use tenant BETA, key refund-B and reference PAYB; it is a new authorized write rather than a retry of refund-A.

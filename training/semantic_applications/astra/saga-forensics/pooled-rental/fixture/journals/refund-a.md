@@ -1,0 +1,2 @@
+[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33.
+[I11] The client then lost contact and has no acknowledgment for RA1. There are exactly two still-supported bank outcomes for refund-A: a committed 40 refund REFA, or definitively no effect after the boundary. No partial refund or different amount is possible under this supplied contract.
