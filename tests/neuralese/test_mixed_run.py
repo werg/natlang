@@ -108,7 +108,12 @@ def test_both_lines_hand_off_into_the_same_mixed_run():
         assert recipe['e2e_mix']['token_choice'] == recipe['e2e_mix']['writer'] == {'lr': 3e-06, 'optimizer': 'muon'}
     base = resolve_recipe_data(recipes / 'neuralese-e2e-v1.json')
     assert 'parent_readiness' not in base
-    assert mixed['lfm']['e2e_mix']['records'] == base['input_bindings']['e2e_records']
+    manifest = json.loads((recipes.parents[1] / 'corpus-manifests' /
+                           'neuralese-e2e-cohort-20261013-v3.json').read_text())
+    files = {item['path']: item['sha256'] for item in manifest['files']}
+    for role in ('records', 'pieces'):
+        assert mixed['lfm']['e2e_mix'][role] == {
+            'path': manifest['path'] + '/' + role + '.jsonl', 'sha256': files[role + '.jsonl']}
 
 
 def test_neuralese_spans_with_an_edge_become_context_only_merged_with_declared_spans(tmp_path):

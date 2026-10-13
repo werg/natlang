@@ -554,6 +554,14 @@ continuation): the TCP comes on (identity, `optimizer_added`), P replaces the wr
 `dgx-projection`), and `e2e_mix` is added. Mellum v4 switches as soon as its P is fitted and the dragnet gives a stable
 recipe (planned with the DGX ops agent; no plateau wait). LFM does the same from its running lineage.
 
+**Mixed corpus binding (supervisor, 2026-10-13 evening).** Both mixed launch recipes bind the admitted immutable
+`neuralese-e2e-cohort-20261013-v3` records and pieces: 207,698 records in 26,675 chains, 106,380 authenticated edges
+(96,322 train / 10,058 held), and 103 families. The local manifest verifier checked all six files successfully
+on DGX on 2026-10-13 at 18:19 UTC; the registry records inherited splits and drops cross-split edges and train
+edges sharing held source groups. This resolves the handover's request to use v3 for mixed training. The controlled
+`diag-e2e-lfm-u10006-v2stream-*` C-rate arms retain v2, their existing checkpoints and their original examples.
+The coverage percentages below measure v2 and must not be relabelled as a new v3 coverage measurement.
+
 **Neuralese outputs in direct samples (owner question, 2026-10-13).** Owner preference: e2e trains every Neuralese
 output, and direct trains everything else. Owner agreed: map uncovered positions through the TCP (option B, h
 detached), and get as much e2e as possible.
