@@ -273,3 +273,23 @@ current values are the detached chosen-token embedding plus C(h).
    Muon with a scale relative to the parameter norm.
 3. The gradient through the mixture: consumer CE moves the producer's base readout distribution, which is also the
    token readout while TCP is near the identity.
+
+### Corrected C6 final measurement (DGX supervisor, 2026-10-13 20:41 UTC)
+
+The C=3e-6 arm completed 400 updates. Commit cb05d0b9 repairs the history-confounded
+reader loss gate: compare V with embeddings of the actual emitted tokens from
+the identical producer states, lengths and framing. Independently generated
+text remains a separate report; no legacy gap qualifies this criterion.
+
+A separate exact step-400 continuation ran zero optimizer updates (empty
+train.jsonl), restoring all 166 optimizer entries with none initialized.
+Output: runs/e2e-collapse-dragnet-20261012/v2stream-c3e-6-matched-eval/.
+Held: 22/22 matched reader traces, zero trace errors, V CE 0.974193592,
+matched-token CE 0.981922267, V minus matched tokens -0.007728675.
+Shuffled CE 1.126807547; zeroed CE 1.169153476. Overall held token CE
+0.424596501 versus the original parent reference 0.527920407. Drift did not
+stop; the behaviour report passed. Train pairs: 6/6, V minus matched tokens
++0.006504319. These results support C=3e-6 as a stable candidate, without
+claiming qualification from 22 readers or certifying autonomous stopping/tasks.
+Finish the other declared rate arms and compare under this repaired protocol;
+let the requeued full/PH/marker LFM task diagnostic finish before another GPU arm.
