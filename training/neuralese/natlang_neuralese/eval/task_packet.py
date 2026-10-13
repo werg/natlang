@@ -43,6 +43,8 @@ def _text(value: Any) -> str:
 
 def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) -> str:
     """Use explicit terminal evidence; repeated action-shape counts alone are not a failure label."""
+    if finish and finish.get('status') == 'repetition' and finish.get('resource_limit_reason') == 'identical_turn_limit':
+        return 'repetition'
     if result is None:
         if finish and finish.get("resource_limit_reason") in {"case_wall_budget", "model_request_budget"}:
             return "budget_exhaustion"

@@ -403,6 +403,41 @@ def partial_metrics(entry):
     return metrics
 
 
+class IdenticalTurnLimit(Exception):
+    """The same action saw the same observation repeatedly in one invocation."""
+
+
+def identical_turn_streak(entry, limit):
+    """Find an exact no-progress suffix in a single-case durable checkpoint.
+
+    An action appearing again on another item is not a stall. Require the same
+    invocation, tool call and preceding observation for every turn in the
+    suffix; this works even though the request hash changes as history grows.
+    """
+    if not limit or entry.get('count', 1) != 1:
+        return None
+    for job in resolve_entry_jobs(entry):
+        path = Path(entry['jobs']) / f"{job['key']}.partial.json"
+        try:
+            turns = json.loads(path.read_text()).get('turns', [])
+        except (OSError, ValueError):
+            continue
+        if len(turns) < limit:
+            continue
+        signatures = []
+        for turn in turns[-limit:]:
+            calls = (turn.get('response') or {}).get('calls')
+            observed = (turn.get('last_tool_observation') or {}).get('content_sha256')
+            if not calls or not observed or not turn.get('invocation_id'):
+                break
+            signatures.append((turn['invocation_id'], json.dumps(calls, sort_keys=True), observed))
+        if len(signatures) == limit and len(set(signatures)) == 1:
+            return {'saved_turns': len(turns), 'invocation_id': signatures[0][0],
+                    'action_sha256': hashlib.sha256(signatures[0][1].encode()).hexdigest(),
+                    'observation_sha256': signatures[0][2]}
+    return None
+
+
 def retry_deadline(entry):
     """Provider minimum delays survive exhausted retries, timeouts, and supervisor restarts."""
     deadline = 0
@@ -433,7 +468,8 @@ def failure_cooldown(streak):
 def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-27B',
               provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0,
               no_observation_seconds=0, max_batch_cases=5, provider_request_config=None,
-              server=None, chat_completions_url=None, api_key_env=None, chat_request_config=None):
+              server=None, chat_completions_url=None, api_key_env=None, chat_request_config=None,
+              identical_turn_limit=0):
     if provider and (server or chat_completions_url or api_key_env):
         raise ValueError('Pi provider and external HTTP controls are mutually exclusive')
     if (chat_completions_url or api_key_env) and not server:
@@ -492,7 +528,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         for line in journal.read_text().splitlines():
             row = json.loads(line)
             if row.get('event') == 'finish' and not row.get('batch_key'):
-                failure_streak = 0 if row['status'] in {'complete', 'complete_with_skips', 'skipped'} else failure_streak + 1
+                failure_streak = 0 if (row['status'] in {'complete', 'complete_with_skips', 'skipped', 'repetition'} or
+                                       row.get('resource_limit_reason') == 'model_request_budget') else failure_streak + 1
                 next_allowed_at = row.get('next_allowed_at', 0)
     journal.parent.mkdir(parents=True, exist_ok=True)
     def record(value):
@@ -617,6 +654,12 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                         break
                     except subprocess.TimeoutExpired:
                         current = partial_metrics(entry)
+                        repeated = identical_turn_streak(entry, identical_turn_limit)
+                        if repeated:
+                            limit_reason = 'identical_turn_limit'
+                            record({'event': 'repetition_detected', 'key': entry['key'], 'time': time.time(),
+                                    'limit': identical_turn_limit, **repeated})
+                            raise IdenticalTurnLimit('same action and observation repeated without progress')
                         decode = local_decode_progress() if not remote else None
                         decoding = decode is not None and previous_decode is not None and decode > previous_decode
                         previous_decode = decode
@@ -657,8 +700,9 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                     limit_reason = 'case_wall_budget'
                     raise subprocess.TimeoutExpired(command, case_seconds)
                 status = 'complete' if code == 0 else 'incomplete'
-            except (subprocess.TimeoutExpired, TimeoutError) as error:
-                status, code = ('no_observation_limit' if isinstance(error, TimeoutError) else 'timeout'), None
+            except (subprocess.TimeoutExpired, TimeoutError, IdenticalTurnLimit) as error:
+                status, code = ('repetition' if isinstance(error, IdenticalTurnLimit) else
+                                'no_observation_limit' if isinstance(error, TimeoutError) else 'timeout'), None
                 child.terminate()
                 try:
                     child.wait(timeout=10)
@@ -692,7 +736,10 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         elif status == 'complete' and not accounting['complete']:
             # A successful process exit is not proof that the exact job rows reached the merged output.
             status = 'incomplete_export'
-        failure_streak = 0 if status in {'complete', 'complete_with_skips', 'skipped'} else failure_streak + 1
+        # Deterministic task limits are not upstream-provider failures; a
+        # cooldown before an unrelated next item only wastes the queue slot.
+        failure_streak = 0 if (status in {'complete', 'complete_with_skips', 'skipped', 'repetition'} or
+                               limit_reason == 'model_request_budget') else failure_streak + 1
         next_allowed_at = max(time.time() + failure_cooldown(failure_streak), retry_deadline(entry)) if failure_streak else 0
         record({'event': 'finish', 'key': entry['key'], 'status': status, 'exit_code': code,
                 'observation_policy': OBSERVATION_POLICY_VERSION,
@@ -738,6 +785,8 @@ if __name__ == '__main__':
     parser.add_argument('--min-free-mib', type=int, default=0, help='stop before a case if filesystem free space falls below this floor; zero disables')
     parser.add_argument('--no-observation-seconds', type=int, default=0,
                         help='optional collection silence ceiling; zero (default) disables; never diagnoses stuckness; excludes explicit retry waits')
+    parser.add_argument('--identical-turn-limit', type=int, default=0,
+                        help='stop a single case after this many exact repeats of action and observation in one invocation; zero disables')
     parser.add_argument('--max-batch-cases', type=int, default=5, help='explicit local queue batch ceiling; request concurrency remains separate')
     parser.add_argument('--execution-plans', action='store_true')
     parser.add_argument('--reasoning-effort', default='low')
@@ -750,6 +799,8 @@ if __name__ == '__main__':
         parser.error('--min-free-mib must not be negative')
     if args.no_observation_seconds < 0:
         parser.error('--no-observation-seconds must not be negative')
+    if args.identical_turn_limit < 0:
+        parser.error('--identical-turn-limit must not be negative')
     if args.model_concurrency is not None and args.model_concurrency < 1:
         parser.error('--model-concurrency must be positive')
     def stop(signum, frame):
@@ -758,4 +809,5 @@ if __name__ == '__main__':
     raise SystemExit(run_queue(args.queue, args.journal, args.runtime, args.case_seconds, args.model_id, args.provider,
               args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib,
               args.no_observation_seconds, args.max_batch_cases, args.provider_request_config,
-              args.server, args.chat_completions_url, args.api_key_env, args.chat_request_config))
+              args.server, args.chat_completions_url, args.api_key_env, args.chat_request_config,
+              args.identical_turn_limit))

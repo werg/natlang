@@ -77,10 +77,10 @@ def parse_task_eval(value):
         raise ValueError('task_eval.cases must be distinct nonnegative row indices')
     for key, default in (('case_seconds', 7200), ('max_model_requests', 128), ('max_turns', 160), ('workers', 8),
                          ('min_successes', 0), ('noise_successes', 0), ('noise_repeats', 2),
-                         ('max_consecutive_failures', 3), ('max_pending', 2)):
+                         ('max_consecutive_failures', 3), ('max_pending', 2), ('identical_turn_limit', 0)):
         spec.setdefault(key, default)
         if isinstance(spec[key], bool) or not isinstance(spec[key], int) or spec[key] < (
-                0 if key in ('min_successes', 'noise_successes') else 1):
+                0 if key in ('min_successes', 'noise_successes', 'identical_turn_limit') else 1):
             raise ValueError(f'task_eval.{key} must be a positive integer')
     reference = spec.setdefault('reference_successes', None)
     if reference is not None and (isinstance(reference, bool) or not isinstance(reference, int) or reference < 0):
@@ -231,7 +231,8 @@ class TaskEval:
                 children.append((subprocess.Popen(
                     [sys.executable, str(self.repo / 'scripts' / 'run_bonsai_queue.py'), str(queue), str(journal),
                      '--runtime', str(self.spec.get('runtime') or self.repo / 'ts-host'), '--server', url,
-                     '--chat-completions-url', url + '/v1/chat/completions', '--model-concurrency', '2'],
+                     '--chat-completions-url', url + '/v1/chat/completions', '--model-concurrency', '2',
+                     '--identical-turn-limit', str(self.spec['identical_turn_limit'])],
                     cwd=self.repo, env=env, stdout=log, stderr=subprocess.STDOUT), log))
             codes = []
             for child, log in children:
