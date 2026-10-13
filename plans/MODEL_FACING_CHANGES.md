@@ -214,3 +214,7 @@ did not settle future intent. Family version 3 now gives every churn-negative
 ticket an explicit plan to stay or renew. Extend the live comparison to both
 criteria before admitting new versions. Hold the old ambiguous ticket's native
 decision and preference label from training.
+
+## Semantic stack authored program presentation — 2026-10-13
+
+The new semantic-stack source adapter renders independently authored domain programs as a typed directory-reducer root, named natural-language stages, a current-item scoped ad hoc `nl` literal, and a structural `iterateOn` reference. Its child prompt asks for a numbered semantic plan and source-grounded finding. This is a new model-facing presentation; exact scripted Program/2 replay only checks source/runtime validity. The sealed 36-case Astra seed pilot at `/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/astra-seed-pilot-36` is **diagnostic only**, with no training or trace admission and no claim that its 3–4-record fixtures meet final size/call-depth targets. **Measurement debt:** sample about 48 live executor cases per presentation variant, inspect actual call depth, per-item literal formulation, source grounding, return types, rejections and case success, then refine the presentation before adopting it in the main corpus. Expanded multi-record fixtures require independent semantic oracle review, source decontamination, and explicit corpus admission.

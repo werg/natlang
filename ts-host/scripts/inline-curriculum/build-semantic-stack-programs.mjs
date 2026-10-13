@@ -2,7 +2,7 @@
 /** Materialize independently authored semantic-stack programs without inventing gold. */
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { nlFile, curriculumCase, evalCall, returnCall } from './lib.mjs';
 import { verifyCases } from '../../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
@@ -13,11 +13,12 @@ const catalogs = [
   join(root, 'training/semantic_stack/sol_programs.json'),
 ];
 const args = process.argv.slice(2);
-if (args.length !== 2 || args[0] !== '--out' || !args[1])
-  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY');
+const pilotAstra = args[2] === '--pilot-astra';
+if ((args.length !== 2 && !(args.length === 3 && pilotAstra)) || args[0] !== '--out' || !args[1])
+  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra]');
 const output = resolve(args[1]);
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
-const safeId = id => typeof id === 'string' && /^[a-z][a-z0-9-]{4,100}$/.test(id);
+const safeId = id => typeof id === 'string' && /^[a-z][a-z0-9_-]{4,100}$/.test(id);
 const shortText = (value, label, id, minimum = 12) => {
   if (typeof value !== 'string' || value.trim().length < minimum)
     throw Error(`${id}: missing substantive ${label}`);
@@ -36,6 +37,10 @@ function sourceFixture(entry) {
       throw Error(`${entry.id}: unsafe fixture path ${path}`);
     if (typeof content !== 'string' || !content.trim()) throw Error(`${entry.id}: empty fixture ${path}`);
     out[path] = content;
+  }
+  if (Array.isArray(fixture.records)) for (const record of fixture.records) {
+    if (typeof record?.path !== 'string' || out[record.path] !== record.text)
+      throw Error(`${entry.id}: source_fixture.records differs from files map`);
   }
   return Object.keys(out).length ? out : null;
 }
@@ -92,8 +97,8 @@ return await nl<${typed}>\`Synthesize the typed final result for the captured ob
   return {
     root: [evalCall(code), returnCall(expected)],
     children: [
-      ...paths.map(path => ({ match: path, expected_reads: [path],
-        calls: [['read_file', { path }], returnCall(fixture[path])] })),
+      ...paths.map(path => ({ match: basename(path), expected_reads: [basename(path)],
+        calls: [['read_file', { path: basename(path) }], returnCall(fixture[path])] })),
       { match: 'Synthesize the typed final result', expected_soft_input: 'notes', value: expected },
     ],
   };
@@ -137,12 +142,15 @@ function render(entry, provider) {
     files[`solve/${name}.nl`] = nlFile({ args: { item: 'string', context: 'string' }, returns: 'string',
       description: `${title}: ${step.name}`, instructions: `${step.instructions}${scoped}\nApply the semantic rule to the supplied current item and context. Return a concise grounded finding with source identity.` });
   }
-  const admission = fixture && typed ? 'runnable_candidate_pending_reference_and_semantic_review' :
-    'held_missing_concrete_fixture_or_exact_typed_oracle';
+  const filePaths = fixture ? Object.keys(fixture) : [];
+  const hasScopedCollection = filePaths.length >= 3 &&
+    new Set(filePaths.map(path => basename(path))).size === filePaths.length;
+  const admission = hasScopedCollection && typed ? 'runnable_candidate_pending_reference_and_semantic_review' :
+    'held_missing_scoped_collection_or_exact_typed_oracle';
   const sourceGroup = `semantic-stack:${provider}:${id}`;
-  const caseRow = fixture && typed ? curriculumCase({
+  const caseRow = hasScopedCollection && typed ? curriculumCase({
     family: 'semantic_stack_authored', shape: id, variant: 'source-v1', splitGroup: sourceGroup,
-    slice: 'iterate', domain, mode: 'followup', inline: 'required', iterate: 'required',
+    slice: 'iterate', domain: 'other', mode: 'single_call', inline: 'required', iterate: 'required',
     evidence: { world: [title, rule], retrieved: Object.keys(fixture), background: [] },
     minimumSequence: [
       'read the task contract and inspect the current item only',
@@ -162,6 +170,7 @@ function render(entry, provider) {
     caseRow.source_groups = [sourceGroup];
     caseRow.source_revisions = ['semantic-stack-authored-v1'];
     caseRow.generation.collection = 'teacher';
+    caseRow.generation.source_domain = domain;
     caseRow.generation.source_quality = 'Authored program and fixture. Exact source/reference and independent semantic review required before training admission.';
     caseRow.collection_guidance = { training_admission: false,
       review_scope: 'source-reference-replay-and-sampled-action-semantic-review' };
@@ -172,12 +181,13 @@ function render(entry, provider) {
 await mkdir(output, { recursive: false });
 const rendered = [], ids = new Set(), domainsByProvider = new Map();
 const signaturesByProvider = new Map();
-for (const [index, path] of catalogs.entries()) {
+for (const [index, path] of (pilotAstra ? catalogs.slice(0, 1) : catalogs).entries()) {
   const provider = index ? 'sol' : 'astra';
   const raw = await readFile(path);
   const parsed = JSON.parse(raw);
   const entries = Array.isArray(parsed) ? parsed : parsed.programs;
-  if (!Array.isArray(entries) || entries.length < 100) throw Error(`${provider}: catalog needs at least 100 programs`);
+  if (!Array.isArray(entries) || entries.length < (pilotAstra ? 1 : 100))
+    throw Error(`${provider}: catalog needs at least ${pilotAstra ? 1 : 100} programs`);
   domainsByProvider.set(provider, new Set());
   signaturesByProvider.set(provider, new Set());
   for (const entry of entries) {
@@ -205,22 +215,33 @@ for (const [index, path] of catalogs.entries()) {
     }
     rendered.push(program);
   }
-  if (domainsByProvider.get(provider).size < 15)
+  if (domainsByProvider.get(provider).size < (pilotAstra ? 1 : 15))
     throw Error(`${provider}: fewer than 15 distinct domains`);
   await writeFile(join(output, `${provider}-catalog.sha256`), `${sha(raw)}  ${path}\n`);
 }
-const caseRows = rendered.filter(item => item.caseRow).map(item => item.caseRow);
+const candidateRows = rendered.filter(item => item.caseRow).map(item => item.caseRow);
+const verification = candidateRows.length ? await verifyCases(candidateRows, TOOLS_PROMPT) : [];
+const verified = new Map(verification.map(item => [item.id, item]));
+const caseRows = candidateRows.filter(row => verified.get(row.id)?.ok);
 const sourceText = caseRows.map(row => JSON.stringify(row)).join('\n') + (caseRows.length ? '\n' : '');
 await writeFile(join(output, 'source-candidates.ir.jsonl'), sourceText);
 const review = {
   schema: 'natlang.semantic-stack-source-review/1',
-  programs: rendered.length, runnable_candidates: caseRows.length,
+  partial_pilot: pilotAstra,
+  programs: rendered.length, runnable_candidates: candidateRows.length,
+  reference_verified_candidates: caseRows.length,
   held: rendered.length - caseRows.length,
   domains: Object.fromEntries([...domainsByProvider].map(([provider, domains]) => [provider, [...domains].sort()])),
   source_sha256: sha(sourceText), teacher_observations: 0, training_admission: false,
-  cases: rendered.map(({ id, provider, domain, admission, sourceGroup }) =>
-    ({ id, provider, domain, source_group: sourceGroup, status: admission })),
+  cases: rendered.map(({ id, provider, domain, admission, sourceGroup, caseRow }) => {
+    const proof = caseRow ? verified.get(caseRow.id) : undefined;
+    return { id, provider, domain, source_group: sourceGroup,
+      status: proof ? (proof.ok ? admission : 'held_reference_replay_failed') : admission,
+      ...(proof ? { reference_ok: proof.ok, reference_problems: proof.problems,
+        opening_sha256: proof.opening_sha256 } : {}) };
+  }),
 };
 await writeFile(join(output, 'source-review.json'), JSON.stringify(review, null, 2) + '\n');
 console.log(JSON.stringify({ output, programs: rendered.length, candidates: caseRows.length,
-  held: review.held, source_sha256: review.source_sha256 }));
+  held: review.held, reference_failures: candidateRows.length - caseRows.length,
+  source_sha256: review.source_sha256 }));
