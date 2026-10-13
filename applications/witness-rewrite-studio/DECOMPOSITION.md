@@ -8,7 +8,7 @@ The whole editing algorithm and all semantic policy are natural-language functio
 
 ## Source organization and typed ownership
 
-The implementation has 27 `.nl` modules and 710 lines of numbered NL pseudocode. `types.ts` defines data only. Each stage records its own source-backed contribution before calling a deeper specialist. The root consumes the returned analysis, proposals and audits; it does not redo their judgments from raw text.
+The implementation has 27 `.nl` modules and 713 lines of numbered NL pseudocode. `types.ts` defines data only. Each stage records its own source-backed contribution before calling a deeper specialist. The root consumes the returned analysis, proposals and audits; it does not redo their judgments from raw text.
 
 | Unit | Source | Owned NL transformation |
 | --- | --- | --- |

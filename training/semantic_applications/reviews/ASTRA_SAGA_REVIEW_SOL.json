@@ -1,0 +1,89 @@
+{
+  "schema": "natlang.application-independent-semantic-review/1",
+  "reviewer": "semantic_slate_sol",
+  "project": "astra-app-saga-forensics-v1",
+  "source_commit": "4b53a35b",
+  "fixture_content_sha256": "bfec4e5e0bebed0acd7032fd3c8fc7e8b8bc1ad1bb255189d08cfe93344a8658",
+  "oracle_sha256": "8427fc796687a96ca0b6a4d4a357d130f62d02b28ff17643ea9c98af64a23a0f",
+  "reference_report_sha256": "26d03d3c1defb92af9469578b6cf1c6eacad69fb6d470d2391ebe0cb2a89fd40",
+  "source_oracle_status": "pass",
+  "open_source_oracle_findings": [],
+  "reviewed_joins": [
+    "Warehouse epoch and bank tenant key namespaces are distinct.",
+    "Cosmetic retries alias existing effects; incompatible PBX has no effect.",
+    "Acknowledgment and repeated receipts do not add effects.",
+    "W-clock offset places cancellations after signed handover.",
+    "Printed dispatch is not transferred custody.",
+    "Unused OA share and whole OB share are refundable; deposit separate.",
+    "Signed custody consumes one reserved kit and protects deposit.",
+    "Maintenance remains outside target compensation.",
+    "Unknown refund is two-world information, not zero.",
+    "FINAL reaches processing boundary; QUICK cannot license retry.",
+    "Branch-dependent refund preserves original key, tenant, payment and cancellation cause.",
+    "Every branch conserves five kits and all charged/refunded money."
+  ],
+  "independent_arithmetic": {
+    "confirmedCash": 132,
+    "currentCashPossibilities": [
+      92,
+      132
+    ],
+    "currentStock": {
+      "free": 1,
+      "inUse": 1,
+      "reserved": 3
+    },
+    "finalStock": {
+      "free": 3,
+      "inUse": 1,
+      "reserved": 1
+    },
+    "feasible_action_subsets_by_world": {
+      "committed": [
+        {
+          "writes": 3,
+          "actions": [
+            "refundB",
+            "releaseA",
+            "releaseB"
+          ],
+          "finalCash": 52,
+          "finalFree": 3
+        }
+      ],
+      "absent": [
+        {
+          "writes": 4,
+          "actions": [
+            "refundA",
+            "refundB",
+            "releaseA",
+            "releaseB"
+          ],
+          "finalCash": 52,
+          "finalFree": 3
+        }
+      ]
+    },
+    "minimumWorstCaseWrites": 4,
+    "commonFinalCash": 52,
+    "clockTimes": {
+      "CA": 30,
+      "CB": 30,
+      "HA": 25,
+      "RA1": 32
+    },
+    "observation_lower_bound": "Different required action subsets across worlds prohibit one unobserved uniform policy; QUICK has identical answers; FINAL cost2 separates both."
+  },
+  "full_reference_review": "Read typed attempts, scopes, event times, directed causal relations, effect rows, answer partitions, source coverage and policy/accounting. All consistent with fixture. External exact checker accepts this report.",
+  "external_checker_scope_holds": [
+    "Current checker does not independently validate all attempt payload/scope attributes.",
+    "Current checker does not independently validate all observation answer partitions or causal edges.",
+    "SourceCoverage is checked for document identities, not complete clause/atom membership.",
+    "Exact quotation existence is not semantic witness entailment."
+  ],
+  "generation_preparation_source_review": true,
+  "actual_application_execution": false,
+  "live_contribution_review": false,
+  "training_admission": false
+}

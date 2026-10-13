@@ -95,7 +95,8 @@ export type MeaningDependency = {
   premiseId: string;
   consumerId: string;
   relation: 'knowledge' | 'physical' | 'motivation' | 'callback' | 'authority';
-  necessary: boolean;
+  necessary: boolean | null;
+  affected: boolean | null;
   witnesses: Witness[];
 };
 export type Obligation = {

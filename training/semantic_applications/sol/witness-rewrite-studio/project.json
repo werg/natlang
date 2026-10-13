@@ -1,7 +1,7 @@
 {
   "schema": "natlang.semantic-application-source/1",
   "id": "sol-app-witness-rewrite-studio-v1",
-  "domain": "narrative-revision-and-epistemic-continuity",
+  "domain": "actor",
   "status": "authored_pending_independent_review_and_execution",
   "entry": "studio.nl",
   "program_files": [
@@ -580,5 +580,30 @@
   },
   "model_facing_debt": "27 new NL bodies and their types are unmeasured; first full-project live diagnostic before broader generation, then approximately48samples per adopted presentation.",
   "external_verifier_path": "training/semantic_applications/sol/witness-rewrite-studio/verify-result.mjs",
-  "nl_line_count": 710
+  "nl_line_count": 713,
+  "scoped_literals": [
+    {
+      "site": "world/parseFrames/interpretFrame.nl",
+      "consumed_by": "EventView asserted/observation/reported meanings plus FrameIndex.localDecisions, consumed by authority and actor information branches."
+    },
+    {
+      "site": "epistemics/checkDialogue/resolveLicensing.nl",
+      "consumed_by": "DialogueDecision status/informationPath/localDecision propagated through KnowledgeIndex and knowledge audit."
+    },
+    {
+      "site": "studio/impact/closureStep.nl",
+      "consumed_by": "MeaningDependency necessary/affected nullable fields and ImpactFrontier.localDecisions; impact computes definite and possible affected closure."
+    },
+    {
+      "site": "proposals/simulate.nl",
+      "consumed_by": "Replay.claimJudgment retained and audit consumes unsupportedIds as coverage findings."
+    },
+    {
+      "site": "studio/repairStep/compareCandidates.nl",
+      "consumed_by": "CandidateChoice selectedCandidateIds/equivalentAlternatives/localDecisions consumed by the folder repair reducer."
+    }
+  ],
+  "reference_path": "training/semantic_applications/sol/witness-rewrite-studio/harbor-retcon/reference-packet.json",
+  "reference_role": "Canonical full typed witness; not a trajectory or evidence that inline decisions actually ran.",
+  "semantic_domain": "narrative-revision-and-epistemic-continuity"
 }

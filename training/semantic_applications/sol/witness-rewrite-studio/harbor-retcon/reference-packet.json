@@ -1,0 +1,238 @@
+{
+  "baseRevision": "647fbd2636a6c76bd37b75e4698c0b5ce61bda6266ec8e065c5e4d42a188688c",
+  "requestId": "R01",
+  "selectedProposalIds": [
+    "P1"
+  ],
+  "edits": [
+    {
+      "id": "P1-S05",
+      "sourceId": "S05",
+      "sourcePath": "acts/two/E05.md",
+      "sceneId": "E05",
+      "oldQuote": "F_DELIVERY: Ada physically hands original L01 to Mara, who opens it and reads F_LOCATION and F_SIGNAL. Ada no longer holds L01.",
+      "replacement": "F_ORAL: Ada tells Mara, \"Ivo waits inside the Tide Room and leaves at the night tide bell.\" Mara hears and understands both facts. Ada retains original L01; Mara does not read or receive it.",
+      "removedFactIds": [
+        "F_DELIVERY"
+      ],
+      "addedMeanings": [
+        "Accurate oral transmission of F_LOCATION and F_SIGNAL with Ada retaining L01."
+      ],
+      "witnesses": [
+        {
+          "sourceId": "S05",
+          "path": "acts/two/E05.md",
+          "quote": "F_DELIVERY: Ada physically hands original L01 to Mara, who opens it and reads F_LOCATION and F_SIGNAL. Ada no longer holds L01."
+        }
+      ]
+    },
+    {
+      "id": "P1-S07",
+      "sourceId": "S07",
+      "sourcePath": "acts/two/E07.md",
+      "sceneId": "E07",
+      "oldQuote": "F_ROUTE_READ: Mara says to Bo, \"I read the original letter: Ivo is inside the Tide Room and leaves at the night tide bell. I will use this real gate key to reach him.\"",
+      "replacement": "F_ROUTE_ORAL: Mara says to Bo, \"Ada told me Ivo is inside the Tide Room and leaves at the night tide bell. I will use this real gate key to reach him.\"",
+      "removedFactIds": [
+        "F_ROUTE_READ"
+      ],
+      "addedMeanings": [
+        "Mara accurately identifies oral acquisition."
+      ],
+      "witnesses": [
+        {
+          "sourceId": "S07",
+          "path": "acts/two/E07.md",
+          "quote": "F_ROUTE_READ: Mara says to Bo, \"I read the original letter: Ivo is inside the Tide Room and leaves at the night tide bell. I will use this real gate key to reach him.\""
+        }
+      ]
+    },
+    {
+      "id": "P1-S09",
+      "sourceId": "S09",
+      "sourcePath": "acts/three/E09.md",
+      "sceneId": "E09",
+      "oldQuote": "F_CALLBACK_DELIVERY: Mara says to Ada, \"You carried that blue-sealed letter into my hands; I choose to trust you now, even though I still do not know why you hesitated.\"",
+      "replacement": "F_CALLBACK_MESSAGE: Mara says to Ada, \"You carried that blue-sealed letter's message to me; I choose to trust you now, even though I still do not know why you hesitated.\"",
+      "removedFactIds": [
+        "F_CALLBACK_DELIVERY"
+      ],
+      "addedMeanings": [
+        "Trust callback preserves message meaning without physical custody claim."
+      ],
+      "witnesses": [
+        {
+          "sourceId": "S09",
+          "path": "acts/three/E09.md",
+          "quote": "F_CALLBACK_DELIVERY: Mara says to Ada, \"You carried that blue-sealed letter into my hands; I choose to trust you now, even though I still do not know why you hesitated.\""
+        }
+      ]
+    }
+  ],
+  "unchangedSceneIds": [
+    "E01",
+    "E02",
+    "E03",
+    "E04",
+    "E06",
+    "E08"
+  ],
+  "preservedUncertaintyIds": [
+    "U_MOTIVE"
+  ],
+  "obligationCoverage": [
+    {
+      "obligationId": "OD_CHANGE",
+      "status": "satisfied",
+      "sourceIds": [
+        "D01",
+        "D02",
+        "S05",
+        "P1"
+      ]
+    },
+    {
+      "obligationId": "OK_INFO",
+      "status": "satisfied",
+      "sourceIds": [
+        "C01",
+        "S02",
+        "S05",
+        "P1"
+      ]
+    },
+    {
+      "obligationId": "OK_READ",
+      "status": "satisfied",
+      "sourceIds": [
+        "D03",
+        "S07",
+        "S05",
+        "P1"
+      ]
+    },
+    {
+      "obligationId": "OM_RESCUE",
+      "status": "satisfied",
+      "sourceIds": [
+        "C02",
+        "C03",
+        "S06",
+        "S08",
+        "S05"
+      ]
+    },
+    {
+      "obligationId": "OC_CALLBACK",
+      "status": "satisfied",
+      "sourceIds": [
+        "D04",
+        "S01",
+        "S09",
+        "P1"
+      ]
+    },
+    {
+      "obligationId": "OA_MOTIVE",
+      "status": "satisfied",
+      "sourceIds": [
+        "D03",
+        "M01",
+        "M02",
+        "S09"
+      ]
+    },
+    {
+      "obligationId": "OP_KEY",
+      "status": "satisfied",
+      "sourceIds": [
+        "C02",
+        "S03",
+        "S06",
+        "S08"
+      ]
+    },
+    {
+      "obligationId": "OS_CAST",
+      "status": "satisfied",
+      "sourceIds": [
+        "D03",
+        "S05",
+        "P1"
+      ]
+    },
+    {
+      "obligationId": "OP_COPY",
+      "status": "satisfied",
+      "sourceIds": [
+        "D03",
+        "C01",
+        "C02",
+        "S04",
+        "P1"
+      ]
+    }
+  ],
+  "rejectedProposals": [
+    {
+      "candidateId": "P2",
+      "violatedObligationIds": [
+        "OS_CAST"
+      ],
+      "reason": "Adds Orin to E05 despite the selected participant and no-arrival restriction."
+    },
+    {
+      "candidateId": "P3",
+      "violatedObligationIds": [
+        "OK_INFO",
+        "OK_READ"
+      ],
+      "reason": "Mara has no information path for her confident later destination/signal and reading claims."
+    },
+    {
+      "candidateId": "P4",
+      "violatedObligationIds": [
+        "OK_INFO",
+        "OS_CAST"
+      ],
+      "reason": "Bo neither knows the contents nor belongs to E05; a report cannot originate the facts."
+    },
+    {
+      "candidateId": "P5",
+      "violatedObligationIds": [
+        "OP_COPY"
+      ],
+      "reason": "Creates prohibited copy L02 rather than the requested oral communication."
+    },
+    {
+      "candidateId": "P6",
+      "violatedObligationIds": [
+        "OK_READ",
+        "OC_CALLBACK"
+      ],
+      "reason": "Oral route fixes access but leaves E07 false reading and E09 physical-delivery claims."
+    },
+    {
+      "candidateId": "P7",
+      "violatedObligationIds": [
+        "OA_MOTIVE"
+      ],
+      "reason": "Definitive motive confession rules out personal advantage and violates protected U_MOTIVE."
+    }
+  ],
+  "unresolved": [],
+  "sourceChecks": [
+    {
+      "id": "canonical-exact-patch-witness",
+      "valid": true,
+      "detail": "Exact quote/path/nonoverlap independently checked; this reference is not an application execution."
+    }
+  ],
+  "consumedLocalDecisionIds": [
+    "frame:S05",
+    "licensing:S07",
+    "dependency:OD_CHANGE:OK_READ",
+    "replay-claim:P1",
+    "tradeoff:COMP_RETCON"
+  ]
+}
