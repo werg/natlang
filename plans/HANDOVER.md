@@ -1,5 +1,50 @@
 # Continuation guide — updated 2026-10-13
 
+## 23:58 CEST: Pop trainer resumed; application-scale source work
+
+Pop QAD trainer `natlang-pop-qad-broad-main-v14.service` is active again from
+its last complete checkpoint at step ~13640, with GPU near full use. A discarded
+semantic source-loader probe (exact PID 3352689, shell 3352688) remained
+outside the memory ledger for 83 minutes and held ~2.17 GiB. It drove the
+guard below its RAM floor; the guard stopped the trainer with only five seconds
+of grace because checkpoint telemetry was written under container `HOME=/tmp`
+and invisible to the host. The partial `checkpoint.pending` did not resume;
+about 280 steps since the last complete checkpoint were lost. Those exact
+orphan PIDs were stopped; available RAM recovered. Shared ledger fix
+`8f6f5242` gives unmeasured high-priority experiment checkpoints 90 seconds
+of grace, including planned unit stops. Guard restarted and 51 ledger tests
+plus quick gate passed. Full `check-main` is queued under Pop ledger as
+`natlang-pop-check-main-20261013-2155`, currently blocked by live trainer RAM;
+DGX has its own current-main full check queued. Do not claim full verification
+until one runs.
+
+The additive large-program slate is now source code, not just plans: Saga
+Forensics has 23 `.nl` modules / 535 source lines, 22 call edges, 16 connected
+documents / 40 facts and a separate invariant checker; Witness Rewrite Studio
+has 27 `.nl` modules / 710 lines, 31 call edges, 26 connected documents and
+five scoped NL literals whose typed results feed later policy. Both exact
+project trees package and load. **Neither is ready for teacher or training
+admission**: full typed reference witnesses, independent semantic review and
+actual live execution remain. Cave Mission and Protocol Meaning Debugger are
+being authored. Preserve all valid old simpler cases; the new applications
+must use deep numbered natural-language pseudocode, not crisp policy code.
+Witness model-facing live measurement debt is recorded in
+`plans/MODEL_FACING_CHANGES.md`; Saga's debt was already recorded.
+
+V7 ecology's child-contract failure is a presentation issue. A v8 narrow
+scope-decision queue was sealed, but its first launch failed before a model call
+because the one-line source was queued at index 1 (`source range exceeds frozen
+batch`). Curriculum author is repairing the builder and will supply an immutable
+replacement; launch one low-priority Luna diagnostic then inspect the nested
+child's actual return and consumed field. Sol008's corrected-runtime retry
+produced an exact structurally matching final answer, but the generated code
+hard-coded source-specific arrays, so hold that **trajectory** for idiomatic
+regeneration; do not hold its task source or mark a model failure. A separate
+six-case plain-mode diagnostic cohort is sealed but not yet launched. Ordinary
+five Luna workers and Gemini are active; continue monitoring/admitting useful
+work while trainer runs. All these shared changes through `eb90d82a` are on
+origin/main and DGX was briefed.
+
 ## 23:30 CEST: application-scale NL slate and v7 Luna diagnostics
 
 Owner clarified that the existing 220 drafted cases remain eligible when
