@@ -1,0 +1,3 @@
+[Q01] ECHO can be used at J for cost1 energy. It reports the east-facing chamber structure: answer ribbed means the sample-side ribbed approach lies to global east; answer smooth means that approach lies to global west. These are the only answers in this complete world.
+[Q02] ECHO resolves the deep chamber structure beyond the water gates and is unaffected by the repeated blue circles. The probe faces fixed global east, not robot-relative right. Its answer therefore changes between the two surviving Amber export conventions.
+[Q03] An ECHO observation leaves location, gear and the physical map unchanged. Repeating it returns the same answer and incurs its cost again.

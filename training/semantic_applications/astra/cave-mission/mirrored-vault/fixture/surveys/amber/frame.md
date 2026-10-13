@@ -1,0 +1,3 @@
+[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost.
+[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin.
+[F05] Neither surviving export metadata nor the other survey notes determine which convention was used for this Amber scan. Both conventions must remain possible until a listed observation distinguishes them.

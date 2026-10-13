@@ -1,0 +1,4 @@
+[P04] The E-J corridor is wide and traversable in both directions, cost1 per movement. It remains usable with the sample carrier full.
+[P05] The global J-EW and J-WW water gates each cost1 energy to cross outward. The current survey is complete about these gates: there is no reverse traversal even with a rope or empty carrier.
+[P06] The chimney anchor at J lies on the same global side as the sample chamber V. Rig-east attaches the sole spool to the eastern anchor; rig-west attaches it to the western anchor. The other anchor terminates in a blind shaft and cannot bring the robot back from V.
+[P07] Rigging can be performed only at J and costs1 energy. Once rigged, the spool cannot be recovered, transferred or rigged again. Rigging an anchor is possible on either side but does not reveal whether that side reaches V.

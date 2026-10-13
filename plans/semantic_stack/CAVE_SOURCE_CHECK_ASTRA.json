@@ -1,0 +1,292 @@
+{
+  "schema": "natlang.semantic-application-author-check/1",
+  "author": "semantic_slate_astra",
+  "application": "astra-app-cave-mission-v1",
+  "source_loader": {
+    "nodes": 25,
+    "edges": 24,
+    "types": 43,
+    "passed": true
+  },
+  "typed_reference": {
+    "passed": true,
+    "type": "AuditedMission"
+  },
+  "verifier_controls": {
+    "scope": "External exact mechanism controls; no NL application execution",
+    "passed": true,
+    "checks": [
+      {
+        "name": "canonical full typed certificate",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "unordered collections permuted",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "generated IDs alpha renamed",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "object property ordering",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "wrong mirror",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "world reflected: binding A",
+          "world reflected: binding B",
+          "world reflected: binding V",
+          "world reflected: binding X",
+          "world reflected: directed passages",
+          "world reflected: sample/rig",
+          "frame alternatives complete",
+          "outcome count echo",
+          "answer domain echo",
+          "answer world partition echo",
+          "answer world partition echo",
+          "outcome count echo",
+          "answer domain echo",
+          "answer world partition echo",
+          "answer world partition echo",
+          "actual branch echo",
+          "replay chronology reflected",
+          "replay state reflected",
+          "unreachable policy nodes"
+        ]
+      },
+      {
+        "name": "drop physical world",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "world count",
+          "frame alternatives complete",
+          "replay world coverage",
+          "answer world partition entry",
+          "answer domain echo",
+          "answer world partition echo",
+          "unreachable policy nodes"
+        ]
+      },
+      {
+        "name": "wrong irreversible rig",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "chimney anchor direct-chimney",
+          "replay state direct"
+        ]
+      },
+      {
+        "name": "GLOW substituted for ECHO",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "outcome count echo",
+          "answer domain echo",
+          "answer world partition echo",
+          "answer world partition echo",
+          "actual branch echo",
+          "replay chronology direct",
+          "replay state direct",
+          "outcome count echo",
+          "answer domain echo",
+          "answer world partition echo",
+          "answer world partition echo",
+          "actual branch echo",
+          "replay chronology reflected",
+          "replay state reflected",
+          "unreachable policy nodes",
+          "minimax energy"
+        ]
+      },
+      {
+        "name": "full carrier narrow exit",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "full carrier tunnel direct-chimney",
+          "cost direct-chimney",
+          "action source direct-home",
+          "unsupported move direct-home",
+          "cost direct-home"
+        ]
+      },
+      {
+        "name": "reverse gate",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "unsupported move direct-tunnel",
+          "cost direct-tunnel",
+          "action source direct-pickup",
+          "pickup precondition",
+          "action source direct-chimney",
+          "unsupported move direct-chimney",
+          "cost direct-chimney"
+        ]
+      },
+      {
+        "name": "rope reused",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "rig precondition",
+          "goal direct",
+          "replay state direct"
+        ]
+      },
+      {
+        "name": "invented low movement cost",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "cost direct-chimney",
+          "replay state direct"
+        ]
+      },
+      {
+        "name": "missing observed branch",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "outcome count echo",
+          "answer domain echo",
+          "outcome count echo",
+          "answer domain echo",
+          "actual branch echo",
+          "replay chronology reflected",
+          "replay state reflected",
+          "unreachable policy nodes"
+        ]
+      },
+      {
+        "name": "discard world without observation",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "answer world partition entry",
+          "outcome count echo",
+          "answer domain echo",
+          "answer world partition echo",
+          "answer world partition entry",
+          "actual branch entry",
+          "replay chronology reflected",
+          "replay state reflected",
+          "unreachable policy nodes"
+        ]
+      },
+      {
+        "name": "wrong source quotation",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "report/policy/nodes/0/action/witnesses/0: witness"
+        ]
+      },
+      {
+        "name": "omitted relevant clause",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "coverage MISSION"
+        ]
+      },
+      {
+        "name": "unsupported fixed landmark",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "unsupported fixed landing"
+        ]
+      },
+      {
+        "name": "undirected gate model",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "world direct: directed passages"
+        ]
+      },
+      {
+        "name": "fabricated replay success",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "replay state direct"
+        ]
+      },
+      {
+        "name": "cyclic policy",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "cycle direct",
+          "replay chronology direct",
+          "replay state direct",
+          "unreachable policy nodes"
+        ]
+      },
+      {
+        "name": "incorrect minimax claim",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "minimax energy"
+        ]
+      }
+    ]
+  },
+  "shared_source_replay": {
+    "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/astra-cave-project-package-v1",
+    "scope": "Shared-loader full typed canonical source-validity replay only"
+  },
+  "independent_review_pending": true,
+  "live_execution": false,
+  "training_admitted": false,
+  "hashes": {
+    "training/semantic_applications/astra/cave-mission/project.json": "6effaf1ba18bb10715fd412d6aee28595c76391b9797dec181b85c703e8c054c",
+    "training/semantic_applications/astra/cave-mission/verify-result.mjs": "ff4a6cc5a4a7c2900e7bc971798c9659393c14bf0ff9d25c01e847415d18a06c",
+    "training/semantic_applications/astra/cave-mission/check-verifier.mjs": "06f0327feb2809b1415be85537eb5a7cd8d48d49957702105f4cb7f7dbfdccb4",
+    "training/semantic_applications/astra/cave-mission/mirrored-vault/reference-report.json": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90",
+    "training/semantic_applications/astra/cave-mission/mirrored-vault/oracle.json": "652c18267e79c61c0b2b12d4626e979578a880b81f2c03c955e0248f2036c786"
+  },
+  "limitations": [
+    "Exact quote/path membership is not semantic entailment.",
+    "Passage-condition, source-fact and finding prose requires independent review.",
+    "Full application call/literal execution is not credited by canonical reference replay."
+  ]
+}

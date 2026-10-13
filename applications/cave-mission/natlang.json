@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/cave-mission",
+  "version": "0.1.0",
+  "description": "Natural-language frame reconciliation and all-world belief-state mission planning over a closed fictional cave.",
+  "include": ["README.md", "DECOMPOSITION.md", "types.ts", "planMission.nl", "planMission", "tsconfig.json"],
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}

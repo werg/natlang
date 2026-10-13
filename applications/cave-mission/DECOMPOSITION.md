@@ -1,109 +1,71 @@
-# Cave Mission — application decomposition
+# Cave Mission — implemented decomposition
 
-Status: architecture for independent review; no runnable or training claim. Program ID: `astra-app-cave-mission-v1`.
+Status: source-only application; no live execution or training admission. Program `astra-app-cave-mission-v1`.
 
-## Behavior
+## Typed natural-language ownership
 
-Compile conflicting local survey notes into a set of still-possible cave maps, then construct a mission policy that succeeds under every supported map. The policy may make an observation before choosing a route. It must preserve the distinction between an unobserved corridor, a blocked corridor and a corridor that does not exist. Inputs include nested survey directories, frame conventions, landmark descriptions, crossing affordances, instrument observations, gear state and a source-defined energy allowance.
+The application reconciles two uncertain coordinate frames, derives physical worlds, explores a belief-state graph and constructs a policy whose every observation outcome returns a sealed sample. All decisions live in numbered NL functions. The visible TypeScript file contains declarations only. The external checker replays a supplied policy and checks exact arithmetic/topology; it never selects an action or interprets evidence for the application.
 
-The result is a contingent policy and an evidence-backed model set, not a single guessed map. The application controls no physical robot. All geometry and mission rules describe a closed fictional world.
+Actual size: 25 NL files, 539 total lines, 355 body lines and 172 numbered steps; 43 named typed contracts. Four branches own survey interpretation, world construction, all-outcome planning and independent replay. The initial architecture was reduced from 29 proposed modules by folding small phrase interpretations into their owning functions; there are no placeholder stages.
 
-Natural-language stages own map interpretation, source reconciliation, affordance judgment, observation choice and planning. Exact arithmetic and transition checks remain verifiers or narrow services. Existing Folder, `nl`, `iterateOn`, callable-folder and service abstractions supply the mechanism.
+## Callable graph and stage deltas
 
-## Module graph
+Companion folders define visibility. Every row below is an actual file; `project.json` records all 24 parent-child edges and exact signatures.
 
-```text
-planMission.nl
-planMission/
-  survey.nl
-  survey/
-    readFrame.nl
-    readFrame/interpretOrientation.nl
-    readPassages.nl
-    readPassages/interpretPassageClaim.nl
-    readAffordances.nl
-    readAffordances/interpretGearScope.nl
-  reconcileMaps.nl
-  reconcileMaps/
-    bindLandmarks.nl
-    bindLandmarks/compareLandmarkMeaning.nl
-    alignFrames.nl
-    alignFrames/assessAnchorPair.nl
-    buildWorlds.nl
-    buildWorlds/extendHypothesis.nl
-    buildWorlds/extendHypothesis/resolveContradiction.nl
-  designPolicy.nl
-  designPolicy/
-    expandBeliefState.nl
-    expandBeliefState/availableActions.nl
-    expandBeliefState/availableActions/judgeCrossing.nl
-    expandBeliefState/predictObservation.nl
-    expandBeliefState/predictObservation/interpretSensorScope.nl
-    evaluateBranches.nl
-    evaluateBranches/chooseObservation.nl
-    evaluateBranches/chooseObservation/comparePartitions.nl
-    closePolicy.nl
-  auditMission.nl
-  auditMission/replayBranch.nl
-  auditMission/replayBranch/challengeAssumption.nl
-```
-
-Estimated size: 29 meaningful `.nl` functions and 650–850 NL lines, plus substantial typed contracts. Reconciliation explores world hypotheses; planning explores belief states and observation partitions. They are different state machines, not two repetitions of a generic per-record loop. Deep nested judgments occur where frame alignment or crossing scope actually needs them.
-
-## Typed contracts and owned deltas
-
-| Unit | Input → owned result | Semantic transformation |
+| Callable | Input → result | Owned semantic delta |
 |---|---|---|
-| `survey` | `Folder, MissionRequest → SurveyEvidence` | Interpret each survey folder in its own frame and provenance context. |
-| `readFrame` | `SourceDocument, FrameContext → FrameAssertion[]` | Separate heading conventions, origin claims, handedness and local restart notes. |
-| `interpretOrientation` | `OrientationPhrase, Anchors → OrientationConstraint` | Resolve observer-facing versus map-facing directions and which frame they modify. |
-| `readPassages` | `SourceDocument, LocalFrame → PassageAssertion[]` | Distinguish traversal, line of sight, attempted entry, conditional opening and inferred adjacency. |
-| `readAffordances` | `GearDescriptions, PassageDescriptions → AffordanceClaim[]` | Interpret who or what can cross under which carried-state conditions. |
-| `bindLandmarks` | `SurveyEvidence → LandmarkPartition` | Decide whether differently named landmarks are the same physical place; retain plausible alternatives. |
-| `alignFrames` | `LandmarkPartition, FrameAssertions → FrameHypotheses` | Join anchor pairs and orientation scope into candidate transforms. |
-| `assessAnchorPair` | `AnchorPair, LocalDescriptions → AnchorAssessment` | Reject same-looking but context-incompatible anchors before exact coordinate calculations. |
-| `buildWorlds` | `FrameHypotheses, PassageAssertions → WorldSet` | Extend partial maps, classify contradictions and preserve all supported alternatives. |
-| `resolveContradiction` | `ConflictingClaims, SourceContext → ContradictionDelta` | Distinguish stale state, different referent, perspective and actual inconsistent evidence. |
-| `designPolicy` | `WorldSet, MissionState → BeliefPolicy` | Search a finite graph of location, gear, energy and remaining knowledge. |
-| `availableActions` | `BeliefState, AffordanceClaims → ActionCandidates` | Determine actions known safe and actions requiring an observation before commitment. |
-| `judgeCrossing` | `Passage, GearState, ModelSubset → CrossingDecision` | Interpret clearance, direction and one-use gear semantics for the current carried state. |
-| `predictObservation` | `Query, BeliefState → ObservationPartition` | Derive what each sensor answer would mean in each possible world. |
-| `interpretSensorScope` | `SensorClause, Target, Context → ObservationMeaning` | Separate a nondetection from proof of absence and respect orientation or occlusion restrictions. |
-| `evaluateBranches` | `ExpandedBeliefGraph → PolicyValues` | Propagate successful/failed branches and compare worst-case mission cost without choosing a single favored world. |
-| `chooseObservation` | `CompetingPartitions, MissionGoal → QueryDecision` | Prefer a query that separates action-relevant worlds; explain a superficially informative but useless query. |
-| `closePolicy` | `PolicyValues, BeliefGraph → BeliefPolicy` | Construct complete observation branches and witness every terminal goal/return state. |
-| `auditMission` | `Policy, WorldSet, Evidence → AuditedMission` | Challenge frame assumptions and replay every surviving world through the policy. |
+| `planMission/auditMission/replayBranch/challengeAssumption.nl` | `MissionAction, RobotState, WorldModel, SurveyEvidence → CrossingDecision` | Independently rejudge one action against its world and carried-state premises. |
+| `planMission/auditMission/replayBranch.nl` | `WorldModel, MissionRequest, SurveyEvidence, BeliefPolicy → WorldReplay` | Execute a proposed policy as pure state transitions in one declared world. |
+| `planMission/auditMission.nl` | `MissionRequest, SurveyEvidence, WorldSet, PlanningResult → AuditedMission` | Replay the chosen policy in every supported physical world and challenge its assumptions. |
+| `planMission/designPolicy/closePolicy.nl` | `BeliefGraph, StateValue[], MissionRequest → BeliefPolicy` | Project winning decisions into a complete rooted observation policy without changing them. |
+| `planMission/designPolicy/evaluateBranches/settleValue.nl` | `ValueFrontier → ValueFrontier` | Own one all-outcome dynamic-programming value and its chosen action. |
+| `planMission/designPolicy/evaluateBranches.nl` | `BeliefGraph, MissionRequest → StateValue[]` | Propagate winning values in increasing-energy order over the positive-cost belief DAG. |
+| `planMission/designPolicy/expandBeliefState/availableActions/judgeCrossing.nl` | `MissionAction, RobotState, WorldModel, GearRule[] → CrossingDecision` | Invoke a carried-state scope judgment for one directed passage in one world. |
+| `planMission/designPolicy/expandBeliefState/availableActions.nl` | `BeliefState, WorldSet, SurveyEvidence → StateExpansion` | Generate physically legal action candidates and their deterministic state changes across the belief. |
+| `planMission/designPolicy/expandBeliefState/predictObservation/interpretSensorScope.nl` | `SensorRule, WorldModel, RobotState → SensorWorldAnswer` | Judge one sensor answer against the feature it can actually observe in one physical world. |
+| `planMission/designPolicy/expandBeliefState/predictObservation.nl` | `MissionAction, BeliefState, WorldSet, SurveyEvidence → ObservationPartition` | Build the actual observation partition by consuming scoped sensor meanings for every world. |
+| `planMission/designPolicy/expandBeliefState.nl` | `BeliefFrontier → BeliefFrontier` | Expand one belief state with physical actions and source-supported observation partitions. |
+| `planMission/designPolicy.nl` | `MissionRequest, SurveyEvidence, WorldSet → PlanningResult` | Explore the finite belief-state graph and solve its all-outcome cost recurrence. |
+| `planMission/reconcileMaps/alignFrames/assessAnchorPair.nl` | `LandmarkMention, LandmarkMention, Point, LandmarkPartition → AnchorAssessment` | Check a proposed coordinate binding against identity evidence rather than appearance alone. |
+| `planMission/reconcileMaps/alignFrames.nl` | `SurveyEvidence, LandmarkPartition → FrameHypothesis[]` | Apply finite basis alternatives and test them against independent anchors. |
+| `planMission/reconcileMaps/bindLandmarks.nl` | `SurveyEvidence → LandmarkPartition` | Use scoped description judgments to separate genuine anchors from repeated visual markers. |
+| `planMission/reconcileMaps/buildWorlds/extendHypothesis/resolveContradiction.nl` | `PassageAssertion[], FrameHypothesis, SurveyEvidence → AnchorAssessment` | Decide whether overlapping survey claims genuinely conflict under one proposed transform. |
+| `planMission/reconcileMaps/buildWorlds/extendHypothesis.nl` | `WorldFrontier → WorldFrontier` | Translate one hypothesis into a directed, conditioned world model and reconcile overlapping reports. |
+| `planMission/reconcileMaps/buildWorlds.nl` | `SurveyEvidence, FrameHypothesis[] → WorldConstruction` | Construct and retain each consistent physical map through a shrinking hypothesis frontier. |
+| `planMission/reconcileMaps.nl` | `SurveyEvidence → WorldSet` | Join landmarks and frame alternatives into all supported physical worlds. |
+| `planMission/survey/readEquipment.nl` | `SourceClause[] → EquipmentSurvey` | Recover resource transitions and the distinct scopes of available observations. |
+| `planMission/survey/readFrames/interpretConvention.nl` | `SourceClause[], SourceClause[] → FrameAlternative[]` | Translate one frame convention into explicit origin and basis alternatives. |
+| `planMission/survey/readFrames.nl` | `SourceClause[] → FrameSurvey` | Interpret coordinate frames and inventory landmarks before choosing any physical alignment. |
+| `planMission/survey/readPassages.nl` | `SourceClause[] → PassageAssertion[]` | Distinguish directed movement, geometric adjacency and known absence in passage descriptions. |
+| `planMission/survey.nl` | `MissionRequest → SurveyEvidence` | Reduce nested survey collections into distinct frame, passage and equipment assertions. |
+| `planMission.nl` | `MissionRequest → AuditedMission` | Reconcile uncertain cave maps and produce an all-world mission policy. |
 
-Core types include `SourceDocument`, `Witness`, `FrameConstraint`, `LandmarkHypothesis`, `WorldModel`, `BeliefState`, `ObservationPartition`, `ActionDelta`, `PolicyNode`, `BranchFailure` and `AuditedMission`. Every inferred edge or affordance carries exact source quotations. Unknown direction or clearance is an explicit unresolved variant, never a default numeric coordinate or empty description.
+## Different state machines
 
-## Structured pseudocode commitments
+1. The nested folder reducer preserves all 31 clause IDs and witnesses, then joins frame, passage, equipment and sensor interpretations. Document counts alone confer no depth.
+2. Landmark judgments distinguish the unique origin disk from duplicated blue circles. A directly awaited scoped NL literal owns same/different/unresolved decisions consumed by frame alignment.
+3. World construction uses a shrinking frame-hypothesis frontier. The two u conventions survive as different directed physical maps. Unknown evidence is retained separately from a contradicted hypothesis.
+4. Belief search keys location, energy, sample state, rope state and remaining world IDs. Each `iterateOn` step expands one exact state; its finite universe comes from source locations/gear, energies0..9 and nonempty world subsets. A source energy allowance is a problem fact, not a runtime cap.
+5. Scoped crossing decisions gate physical transitions. Scoped sensor judgments produce the actual answer partition. Every outcome must remain in the AND branch. A one-cell observation whose only effect spends energy is safely omitted.
+6. Positive source costs give a lower-energy dependency DAG. A separate reducer settles minimax values in increasing-energy order; each action wins only when all outcomes win. Choice compares worst energy, then worst observation count.
+7. Policy closure projects selected edges without inventing routes. Per-world audit invokes a separate scoped challenge and consumes its nextRobot, then checks terminal sample/resource state and all-world coverage.
 
-1. Reduce the actual nested survey folders using their local frame records. Invoke different interpretation branches for frame, passage and gear evidence. Preserve the record-to-fact ownership map.
-2. Iterate landmark candidate pairs. A scoped typed NL literal compares the two descriptions with the current anchor context; consume its same/different/unresolved result to modify the candidate partition.
-3. Build map hypotheses through `iterateOn` over a finite assignment frontier. An extension resolves one previously unassigned anchor/frame alternative. Impossible assignments are retained as explicit counterexamples with the conflicting source clauses.
-4. Explore belief states with a worklist. A state key consists of location, remaining world IDs, source-defined energy and gear state. Each iteration removes one not-yet-expanded state; newly discovered states come from the finite source-defined universe. Termination is exhaustion or a proved complete goal policy, not an arbitrary number of model turns.
-5. Inside `judgeCrossing`, formulate an NL literal specific to the carried gear and passage language. Its typed decision must gate whether a traversal edge is inserted.
-6. Inside `predictObservation`, invoke a separate literal for each instrument/target scope. Its model partition must become the actual observation branches; a prompt that describes a literal without calling it earns no credit.
-7. Propagate branch values across the finite belief graph. A policy wins only if every supported observation outcome wins. Compare exact energy/path costs after semantic legality is established.
-8. `auditMission` replays the proposed policy against all remaining worlds and asks a local counterexample literal to challenge each dependence on orientation, visibility or gear consumption. A failed branch returns the first unsupported assumption and its evidence path.
+The final AuditedMission exposes worlds, policy, replays, findings and source coverage. Survey, full graph and values remain typed internal outputs in the trajectory; duplicating the entire search graph in the user certificate adds no decision.
 
-## Exact seams
+## Exact seams and justification
 
-- **Folder snapshots and stable IDs:** exact input mechanism; no interpretation.
-- **Grid transforms and distance arithmetic:** apply an already selected finite transform; never choose a frame from ambiguous language.
-- **State identity and set operations:** exact serialization, deduplication and subset checks; never decide which worlds are supported.
-- **Transition verifier:** check a proposed action against the formal world and carried state, preserving resource conservation and one-use effects. It returns counterexamples, not the next action.
-- **Witness verifier:** check exact quote/path membership; independent semantic review checks entailment.
-- **Policy verifier:** enumerate the declared possible worlds and execute all observation branches to verify coverage, termination and the stated objective. Natural-language planning creates the candidate policy.
+- Existing Folder/loader: immutable bytes, paths and callable visibility.
+- Type declarations: exact shape validation, no executable policy.
+- Ordinary arithmetic/set operations inside generated stage code: apply already interpreted transforms and state identities.
+- External `verify-result.mjs`: independently replay supplied actions in both fixture worlds, check source IDs/quotes, exact transforms/directions, sensor partitions, rope and carrier transitions, chronology and objective. It cannot certify quotation entailment or prose explanations; those require independent semantic review.
+- External `check-verifier.mjs`: four equivalent positives and seventeen deliberate corruptions qualify verifier mechanism only.
 
-The source-defined energy allowance is part of the problem world. It is not a runtime budget or a cap on reasoning.
+No crisp planning engine, semantic regex interpreter or service chooses the policy. Reference-report.json is a hand-authored full typed witness outside model-visible roots.
 
-## First connected world
+## Connected first world
 
-The first source world will have 28–36 relevant facts across three survey teams, two plausible map alignments, a duplicated landmark description, a temporary one-way water gate and gear whose bulk changes which passages are traversable. Two sensors have different observation scopes: one can discriminate the route-relevant map ambiguity; the other returns the same observation in both surviving worlds. A successful plan must gather the right evidence before consuming the only return-enabling resource.
+Ten nested documents contain 31 connected clauses. Lost handedness leaves east/west sample routes unresolved. A unique disk anchors the origin while repeated blue circles cannot identify a landing. ECHO observes the east chamber's structure; GLOW observes a repeated surface mark and cannot separate worlds. Rigging consumes the only spool and reveals nothing. Water gates are one-way. Picking up the sealed sample prevents tunnel return, making the correctly rigged wide chimney necessary. Therefore the observation must precede the irreversible rope/route commitment. Both eight-action branches cost nine and return with zero energy.
 
-The exact oracle accepts equivalent policy encodings that preserve all world branches, legal transitions, mission goals and optimality requirements. Node names and prose explanations are not gold spellings. An incomplete observation branch, silently discarded world or unsafe retry is a semantic failure even if one sampled route succeeds.
+## Qualification
 
-## Readiness
-
-First prove typed/callable-folder integrity, source visibility, independent source-oracle derivation and exact verifier positive/negative cases. Then execute the actual NL application live and inspect stage deltas, literal consumption, structural iteration and branch coverage. Adoption requires the repository's model-facing measurement gate; training admission remains separate. The entire project and its scenario variants share their declared source-world split identities.
+Source loader, typed reference and twenty-one external checker controls pass. Independent source/oracle review is pending. No named stage or scoped literal has live invocation credit. The manifest keeps source-only status, shared source-world split identity and separate model-facing debt until live qualification.

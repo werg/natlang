@@ -1,0 +1,3 @@
+[B01] These files describe the complete current passage, gear and sensor rules. No water-gate reversal, map change, battery recharge or sample relocation occurs during the mission.
+[B02] Exactly one of the two Amber export conventions describes the physical world. An unobserved convention is not a third map, and lack of a branch observation does not mean that the branch is blocked or absent.
+[B03] A policy may make different moves after ECHO answers, but it must include every possible answer. An action before observation must be legal and preserve possible mission success in both supported worlds.
