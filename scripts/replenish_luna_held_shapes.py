@@ -82,6 +82,14 @@ def active(unit):
                           check=False).returncode == 0
 
 
+def active_luna_workers():
+    result = subprocess.run(['systemctl', '--user', 'list-units', '--type=service',
+                             '--state=running', '--plain', '--no-legend'],
+                            check=True, capture_output=True, text=True)
+    units = [line.split()[0] for line in result.stdout.splitlines() if line.split()]
+    return sum(unit.startswith('natlang-pop-luna-') and '-w' in unit for unit in units)
+
+
 def complete(campaign):
     manifest = json.loads((campaign / 'campaign-manifest.json').read_text())
     repair = manifest.get('repair_cycle', False)
@@ -142,6 +150,12 @@ def complete(campaign):
 
 
 def launch_queue(queue_dir, unit):
+    # The worker cap is global across overlapping campaigns and retries. The
+    # memory ledger constrains RAM independently; it is not a concurrency cap.
+    if active_luna_workers() >= WORKERS:
+        print(json.dumps({'event': 'deferred_parallelism', 'unit': unit,
+                          'active_luna_workers': WORKERS}), flush=True)
+        return False
     command = ['python3', 'scripts/run_bonsai_queue.py', str(queue_dir / 'queue.jsonl'),
                str(queue_dir / 'journal.jsonl'), '--runtime', str(RUNTIME),
                '--case-seconds', '1800', '--provider', 'openai-codex',

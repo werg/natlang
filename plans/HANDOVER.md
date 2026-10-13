@@ -69,6 +69,12 @@ This production path built s52030: 862 verified source cases from 22 families,
 criteria reducers. Workers 01-03 launched beside the two CUAD retries;
 workers 04-06 await RAM admission and are retried by the standing timer.
 No s52030 output is admitted to training without its separate quality review.
+The first overlapping launch briefly ran seven Luna units because RAM
+admission alone did not enforce the owner's six-worker setting. Pop stopped
+the exact s52030 worker-05 unit, preserving its journal and partial, and added
+a global active-Luna slot check across campaigns and retries. A production
+replenisher pass relaunched worker-05 as another slot freed and deferred
+worker-06 at exactly six active units. The timer stays enabled.
 
 ## 19:25 CEST: QAD continuation and reasoning/template dragnet
 
