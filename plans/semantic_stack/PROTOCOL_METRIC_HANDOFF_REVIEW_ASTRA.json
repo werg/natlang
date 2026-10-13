@@ -1,0 +1,707 @@
+{
+  "schema": "semantic-application-source-delta-review/1",
+  "reviewer": "semantic_slate_astra",
+  "application": "sol-app-protocol-meaning-debugger-v1",
+  "source_commit": "d8631762",
+  "source_verdict": "pass",
+  "semantic_handoff": [
+    "interpretMetric owns the symbolic counted term, denominator, aggregation and displayed wording from the selected definition.",
+    "metrics independently joins that actual reading to visible C_METRIC raw outcome meanings and returns operational code, counted proposition and display-label compatibility.",
+    "plans consumes returned numeratorOutcome; interpretScope consumes countedMeaning and label compatibility.",
+    "U counts fail/unsuccessful outcomes while displaying success percentage: misleading but executable. TARGET/L count pass/success and are compatible.",
+    "Required unresolved code, denominator or aggregation prevents execution; the target question does not overwrite implementation wording."
+  ],
+  "independent_raw_reference_checks": [
+    {
+      "trial": "BASE",
+      "owner": "TARGET",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "BASE",
+      "owner": "L",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "BASE",
+      "owner": "U",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "BASE",
+      "owner": "TARGET",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "BASE",
+      "owner": "L",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "BASE",
+      "owner": "U",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_ANCHOR",
+      "owner": "TARGET",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_ANCHOR",
+      "owner": "L",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_ANCHOR",
+      "owner": "U",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A2",
+        "B1",
+        "B2",
+        "A3"
+      ],
+      "numerator": 3,
+      "denominator": 4,
+      "percent": 75.0,
+      "passed": true
+    },
+    {
+      "trial": "P_ANCHOR",
+      "owner": "TARGET",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_ANCHOR",
+      "owner": "L",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_ANCHOR",
+      "owner": "U",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_INTERACTION",
+      "owner": "TARGET",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_INTERACTION",
+      "owner": "L",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_INTERACTION",
+      "owner": "U",
+      "repaired": false,
+      "included": [
+        "A"
+      ],
+      "selected": [
+        "A2",
+        "A3"
+      ],
+      "numerator": 1,
+      "denominator": 2,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_INTERACTION",
+      "owner": "TARGET",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_INTERACTION",
+      "owner": "L",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_INTERACTION",
+      "owner": "U",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_METRIC",
+      "owner": "TARGET",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 4,
+      "denominator": 4,
+      "percent": 100.0,
+      "passed": true
+    },
+    {
+      "trial": "P_METRIC",
+      "owner": "L",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 4,
+      "denominator": 4,
+      "percent": 100.0,
+      "passed": true
+    },
+    {
+      "trial": "P_METRIC",
+      "owner": "U",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 0,
+      "denominator": 4,
+      "percent": 0.0,
+      "passed": true
+    },
+    {
+      "trial": "P_METRIC",
+      "owner": "TARGET",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 4,
+      "denominator": 4,
+      "percent": 100.0,
+      "passed": true
+    },
+    {
+      "trial": "P_METRIC",
+      "owner": "L",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 4,
+      "denominator": 4,
+      "percent": 100.0,
+      "passed": true
+    },
+    {
+      "trial": "P_METRIC",
+      "owner": "U",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 4,
+      "denominator": 4,
+      "percent": 100.0,
+      "passed": true
+    },
+    {
+      "trial": "P_POP",
+      "owner": "TARGET",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_POP",
+      "owner": "L",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_POP",
+      "owner": "U",
+      "repaired": false,
+      "included": [
+        "A"
+      ],
+      "selected": [
+        "A1",
+        "A2"
+      ],
+      "numerator": 0,
+      "denominator": 2,
+      "percent": 0.0,
+      "passed": true
+    },
+    {
+      "trial": "P_POP",
+      "owner": "TARGET",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_POP",
+      "owner": "L",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_POP",
+      "owner": "U",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_RETRY",
+      "owner": "TARGET",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_RETRY",
+      "owner": "L",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_RETRY",
+      "owner": "U",
+      "repaired": false,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_RETRY",
+      "owner": "TARGET",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_RETRY",
+      "owner": "L",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    },
+    {
+      "trial": "P_RETRY",
+      "owner": "U",
+      "repaired": true,
+      "included": [
+        "A",
+        "B"
+      ],
+      "selected": [
+        "A1",
+        "A2",
+        "B1",
+        "B2"
+      ],
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50.0,
+      "passed": true
+    }
+  ],
+  "exact_comparison_review": "Symbolic/prose roles require presence and source witnesses, not exact paraphrase equality. Fixed label-compatibility values reflect the declared typed relation. Operational codes and source artifact identities remain exact. Actual two-stage runtime contribution needs a live trace.",
+  "hashes": {
+    "applications/protocol-meaning-debugger/metrics.nl": "aca699d93fa7eb3030c32b75683a7884857521ebf6f4e27113652414bc667c38",
+    "applications/protocol-meaning-debugger/metrics/interpretMetric.nl": "c5bb3da6256354e77e869f9c2c5c139cffdcbf96b21ba2fb3fe273a56e2dee41",
+    "applications/protocol-meaning-debugger/plans.nl": "d7966b814aaa0ed53703fda606653d74e6367a0c58ed6b43f3d6d30179455ef2",
+    "applications/protocol-meaning-debugger/debug/compare/interpretScope.nl": "8292f9b7677780670315544de31504a696408baa9b72f8be55bbbde6fc5b0c5e",
+    "applications/protocol-meaning-debugger/types.ts": "d77b56c1cbb7c4828c656c5b927fac8580f3a653c5358385137a661bca58869e",
+    "training/semantic_applications/sol/protocol-meaning-debugger/verify-result.mjs": "eeab3cf4bd8ecb6561e319ab3ffd7a4c18d6f6652be2bd1d5d72bdb97f98b562",
+    "training/semantic_applications/sol/protocol-meaning-debugger/field-signal/oracle.json": "acd4dfa382c33c3697083019059ca26b4b6404d2e10aef593ba15adf65de09ce",
+    "training/semantic_applications/sol/protocol-meaning-debugger/field-signal/reference-report.json": "27fd0fa62dd31c58e81f5eec7568251c6d5b9c2cab485c69d88d27002ecd2eab"
+  },
+  "training_admission": false,
+  "live_qualification": false
+}

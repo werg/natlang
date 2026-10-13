@@ -1,0 +1,90 @@
+{
+  "schema": "semantic-application-source-delta-review/1",
+  "reviewer": "semantic_slate_astra",
+  "application": "sol-witness-rewrite-studio-harbor-retcon",
+  "scope": "Independent source-role and typed provenance-handoff delta review; original fixture/oracle unchanged.",
+  "source_verdict": "pass",
+  "findings": [
+    "Original scene and recollection SourceRecords form the event frontier; canon/instructions supply frame declarations and remain context.",
+    "The interpretFrame literal returns actual semantic distinctions and quote text; parent binds immutable source ID/path and invokes exact witness check before consumption.",
+    "Each nonempty semantic contribution and frame declaration requires at least one nonempty exact supporting quotation; absent support stays unresolved.",
+    "Controlling canon is interpreted directly in evaluateAuthority, retaining source role instead of inventing scene EventViews."
+  ],
+  "literal_contribution": "Returned asserted/observed/reported meanings change EventView and later authority/knowledge stages. This is source inspection, not evidence of successful live execution.",
+  "controls": [
+    {
+      "name": "canonical",
+      "expected": true,
+      "actual": true,
+      "passed": true,
+      "issues": []
+    },
+    {
+      "name": "set permutation",
+      "expected": true,
+      "actual": true,
+      "passed": true,
+      "issues": []
+    },
+    {
+      "name": "altered exact quote",
+      "expected": false,
+      "actual": false,
+      "passed": true,
+      "issues": [
+        "exact-original-edit-witnesses"
+      ]
+    },
+    {
+      "name": "foreign witness identity",
+      "expected": false,
+      "actual": false,
+      "passed": true,
+      "issues": [
+        "exact-original-edit-witnesses"
+      ]
+    },
+    {
+      "name": "wrong original span",
+      "expected": false,
+      "actual": false,
+      "passed": true,
+      "issues": [
+        "edit-oldQuote:S05",
+        "exact-patch-checks"
+      ]
+    },
+    {
+      "name": "missing obligation",
+      "expected": false,
+      "actual": false,
+      "passed": true,
+      "issues": [
+        "obligation-coverage-set"
+      ]
+    },
+    {
+      "name": "wrong selected proposal",
+      "expected": false,
+      "actual": false,
+      "passed": true,
+      "issues": [
+        "selected-proposal-identity"
+      ]
+    }
+  ],
+  "hashes": {
+    "applications/witness-rewrite-studio/world/parseFrames.nl": "0a78d1d87bc27b1259bba35812e9ebaf7d27a4beb015f3ffd5ded36d23a61cc9",
+    "applications/witness-rewrite-studio/world/parseFrames/readFrameDeclarations.nl": "5c58b8ec116b296547f834a58120d1b0c254abc3483997954e6969e338dce394",
+    "applications/witness-rewrite-studio/world/parseFrames/interpretFrame.nl": "b11c7eeb6509babea154a5e24641920b885cad418c03e85aa08f909a8ee89582",
+    "applications/witness-rewrite-studio/world/evaluateAuthority.nl": "93daf2249ccf9e3a2bf777affa516ab777b1a8cc2bb9cce45aec416b2daf4981",
+    "training/semantic_applications/sol/witness-rewrite-studio/verify-result.mjs": "cf7f4aacdbb4ad2bc00f76872114054a89db8e6122dbac0e52032e890a4b8a04"
+  },
+  "package": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/witness-app-corrected-package-v1",
+  "limits": [
+    "External verifier checks final edit/source invariants; intermediate source-role entailment and actual literal consumption require live trace review.",
+    "No training admission or live qualification."
+  ],
+  "training_admission": false,
+  "live_qualification": false
+}
