@@ -12,7 +12,9 @@ The complete machine-readable designs are the primary artifact. The source-pool 
 
 ## Expansion progress after the first cohort
 
-The catalog now contains **24 substantial authored fixtures** of at least 24 records each. Thirteen have passed independent source/oracle review and exact checks: the original eight plus archives-02 through archives-06. Eleven archaeology and folklore expansions await independent review. The remaining 96 retain explicit expansion specifications and are held as seed-only. Every program still requires live executor qualification and training admission. The first-cohort discussion below records its original eight cases.
+The catalog now contains **80 substantial authored fixture views** of at least 24 records each. Thirteen have passed independent source/oracle review and exact checks. The others are held pending independent review/replay; 40 designs remain seed-only. Recent programs share coherent domain worlds with `world_family_id`; distinct program views do not count as independent worlds. Every program still requires live executor qualification and training admission. The first-cohort discussion below records its original eight cases.
+
+Four strongly patterned worlds (archaeology-02/03/05 and folklore-04) are explicitly tagged diagnostic-first rather than mass-generation priority. Calendar-year dating permits deposition earlier in the same floor-construction year; object biography evidence now explicitly states manufacture location.
 
 ## Natlang decomposition before implementation
 
