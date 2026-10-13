@@ -1,0 +1,504 @@
+{
+  "schema": "natlang.semantic-application-source/1",
+  "id": "sol-app-protocol-meaning-debugger-v1",
+  "source_root": "applications/protocol-meaning-debugger",
+  "domain": "relational",
+  "semantic_domain": "protocol-provenance-and-causal-measurement-debugging",
+  "entry": "debug.nl",
+  "entry_kind": "directory-reducer",
+  "request_type": "ProtocolRequest",
+  "snapshot_type": "ProtocolInput",
+  "result_type": "DebugReport",
+  "request_path": "training/semantic_applications/sol/protocol-meaning-debugger/field-signal/request.json",
+  "snapshot_path": "training/semantic_applications/sol/protocol-meaning-debugger/field-signal/input.json",
+  "input_bindings": {
+    "request": {
+      "from": "request_path"
+    },
+    "input": {
+      "from": "snapshot_path"
+    }
+  },
+  "fixture_root": "training/semantic_applications/sol/protocol-meaning-debugger/field-signal/fixture",
+  "fixture_files": [
+    "archive/success-definition.md",
+    "controls/authorization.md",
+    "data/BASE.json",
+    "data/P_ANCHOR.json",
+    "data/P_INTERACTION.json",
+    "data/P_METRIC.json",
+    "data/P_POP.json",
+    "data/P_RETRY.json",
+    "data/identity.md",
+    "implementations/L/bindings.md",
+    "implementations/U/bindings.md",
+    "implementations/U/metric.md",
+    "implementations/U/population.md",
+    "implementations/U/timing.md",
+    "probes/BASE.md",
+    "probes/P_ANCHOR.md",
+    "probes/P_INTERACTION.md",
+    "probes/P_METRIC.md",
+    "probes/P_POP.md",
+    "probes/P_RETRY.md",
+    "protocol/target.md"
+  ],
+  "oracle_path": "training/semantic_applications/sol/protocol-meaning-debugger/field-signal/oracle.json",
+  "reference_path": "training/semantic_applications/sol/protocol-meaning-debugger/field-signal/reference-report.json",
+  "reference_role": "Full typed canonical source witness; no actual application execution or runtime contribution credit.",
+  "source_world_split_key": "sol-application-world:field-signal-protocol-v1",
+  "program_files": [
+    "debug.nl",
+    "debug/compare.nl",
+    "debug/compare/interpretScope.nl",
+    "debug/hypotheses.nl",
+    "debug/intake.nl",
+    "debug/intake/interpretQuestion.nl",
+    "debug/investigateStep.nl",
+    "debug/investigateStep/interpretOutcome.nl",
+    "debug/localize.nl",
+    "debug/repair.nl",
+    "debug/repair/auditRepair.nl",
+    "debug/report.nl",
+    "lineage.nl",
+    "lineage/resolveIdentity.nl",
+    "metrics.nl",
+    "metrics/interpretMetric.nl",
+    "plans.nl",
+    "populations.nl",
+    "probes.nl",
+    "probes/choose.nl",
+    "probes/predict.nl",
+    "readEvidence.nl",
+    "timing.nl",
+    "types.ts",
+    "services.d.ts",
+    "natlang.json",
+    "tsconfig.json"
+  ],
+  "typed_call_graph": {
+    "nodes": [
+      {
+        "path": "debug.nl",
+        "args": {
+          "request": "ProtocolRequest",
+          "input": "ProtocolInput"
+        },
+        "returns": "DebugReport",
+        "kind": "directory-reducer",
+        "owned_delta": "Investigate numerical coincidence through protocol lineage and discriminating interventions."
+      },
+      {
+        "path": "debug/compare.nl",
+        "args": {
+          "question": "Question",
+          "baseline": "PlanState"
+        },
+        "returns": "Contrast[]",
+        "kind": "function",
+        "owned_delta": "Compare propositions and materialized choices before interpreting numeric agreement."
+      },
+      {
+        "path": "debug/compare/interpretScope.nl",
+        "args": {
+          "question": "Question",
+          "dimension": "'population' | 'anchor' | 'window' | 'metric' | 'lineage'",
+          "baseline": "PlanState"
+        },
+        "returns": "Contrast",
+        "kind": "function",
+        "owned_delta": "Judge one semantic contrast under captured question and source lineage."
+      },
+      {
+        "path": "debug/hypotheses.nl",
+        "args": {
+          "contrasts": "Contrast[]",
+          "baseline": "PlanState"
+        },
+        "returns": "Hypothesis[]",
+        "kind": "function",
+        "owned_delta": "Build source-backed mechanisms that counterfactual trials can distinguish."
+      },
+      {
+        "path": "debug/intake.nl",
+        "args": {
+          "request": "ProtocolRequest",
+          "input": "ProtocolInput"
+        },
+        "returns": "Intake",
+        "kind": "function",
+        "owned_delta": "Recover source ownership and the intended measurement question."
+      },
+      {
+        "path": "debug/intake/interpretQuestion.nl",
+        "args": {
+          "request": "ProtocolRequest",
+          "index": "EvidenceIndex"
+        },
+        "returns": "Question",
+        "kind": "function",
+        "owned_delta": "Specify the target proposition before comparing implementation numbers."
+      },
+      {
+        "path": "debug/investigateStep.nl",
+        "args": {
+          "state": "InvestigationState",
+          "context": "InvestigationContext"
+        },
+        "returns": "InvestigationState",
+        "kind": "directory-reducer",
+        "owned_delta": "Consume one probe and update hypotheses from returned semantic evidence."
+      },
+      {
+        "path": "debug/investigateStep/interpretOutcome.nl",
+        "args": {
+          "context": "InvestigationContext",
+          "hypotheses": "Hypothesis[]",
+          "candidate": "ProbeCandidate"
+        },
+        "returns": "ProbeOutcome",
+        "kind": "function",
+        "owned_delta": "Interpret a probe result under captured mechanisms and controls."
+      },
+      {
+        "path": "debug/localize.nl",
+        "args": {
+          "context": "InvestigationContext",
+          "state": "InvestigationState"
+        },
+        "returns": "Diagnosis",
+        "kind": "function",
+        "owned_delta": "Localize first semantic divergences by lineage and discriminating probe contributions."
+      },
+      {
+        "path": "debug/repair.nl",
+        "args": {
+          "context": "InvestigationContext",
+          "state": "InvestigationState",
+          "diagnosis": "Diagnosis"
+        },
+        "returns": "RepairReplay | null",
+        "kind": "function",
+        "owned_delta": "Propose the smallest definition repair that restores the intended proposition."
+      },
+      {
+        "path": "debug/repair/auditRepair.nl",
+        "args": {
+          "context": "InvestigationContext",
+          "state": "InvestigationState",
+          "diagnosis": "Diagnosis",
+          "proposal": "RepairProposal"
+        },
+        "returns": "RepairReplay",
+        "kind": "function",
+        "owned_delta": "Rebind repaired definitions and rerun every discriminating trial through the same NL materialization."
+      },
+      {
+        "path": "debug/report.nl",
+        "args": {
+          "context": "InvestigationContext",
+          "state": "InvestigationState",
+          "diagnosis": "Diagnosis",
+          "repair": "RepairReplay | null"
+        },
+        "returns": "DebugReport",
+        "kind": "function",
+        "owned_delta": "Return diagnosis, exact experiment receipts and bounded repair evidence."
+      },
+      {
+        "path": "lineage.nl",
+        "args": {
+          "index": "EvidenceIndex",
+          "request": "ProtocolRequest"
+        },
+        "returns": "Lineage",
+        "kind": "function",
+        "owned_delta": "Bind actual implementation roles to selected source definitions."
+      },
+      {
+        "path": "lineage/resolveIdentity.nl",
+        "args": {
+          "left": "DefinitionClause",
+          "right": "DefinitionClause",
+          "index": "EvidenceIndex"
+        },
+        "returns": "AliasDecision",
+        "kind": "function",
+        "owned_delta": "Judge definition identity under revision, role and execution context."
+      },
+      {
+        "path": "metrics.nl",
+        "args": {
+          "ownerId": "string",
+          "lineage": "Lineage",
+          "question": "Question"
+        },
+        "returns": "MetricView",
+        "kind": "function",
+        "owned_delta": "Resolve numerator polarity, denominator and aggregation as separate meanings."
+      },
+      {
+        "path": "metrics/interpretMetric.nl",
+        "args": {
+          "ownerId": "string",
+          "clause": "DefinitionClause",
+          "codingClauses": "DefinitionClause[]",
+          "question": "Question"
+        },
+        "returns": "MetricView",
+        "kind": "function",
+        "owned_delta": "Interpret metric wording under local outcome coding and target scope."
+      },
+      {
+        "path": "plans.nl",
+        "args": {
+          "intake": "Intake",
+          "lineage": "Lineage",
+          "trial": "TrialData",
+          "request": "ProtocolRequest"
+        },
+        "returns": "PlanState",
+        "kind": "function",
+        "owned_delta": "Materialize the three source-bound protocol meanings for one trial."
+      },
+      {
+        "path": "populations.nl",
+        "args": {
+          "ownerId": "string",
+          "trial": "TrialData",
+          "lineage": "Lineage",
+          "question": "Question"
+        },
+        "returns": "PopulationView",
+        "kind": "function",
+        "owned_delta": "Interpret inclusion and data availability separately for each trial unit."
+      },
+      {
+        "path": "probes.nl",
+        "args": {
+          "context": "InvestigationContext",
+          "state": "InvestigationState"
+        },
+        "returns": "ProbeCandidate[]",
+        "kind": "function",
+        "owned_delta": "Construct an admissible experiment agenda with materialized predictions."
+      },
+      {
+        "path": "probes/choose.nl",
+        "args": {
+          "candidates": "ProbeCandidate[]",
+          "hypotheses": "Hypothesis[]"
+        },
+        "returns": "string | null",
+        "kind": "function",
+        "owned_delta": "Choose the next admissible probe by semantic discrimination and cost."
+      },
+      {
+        "path": "probes/predict.nl",
+        "args": {
+          "context": "InvestigationContext",
+          "seed": "ProbeSeed",
+          "hypotheses": "Hypothesis[]"
+        },
+        "returns": "ProbePrediction",
+        "kind": "function",
+        "owned_delta": "Rebind trial facts and predict each hypothesis through the existing semantic departments."
+      },
+      {
+        "path": "readEvidence.nl",
+        "args": {
+          "documents": "ProtocolRecord[]"
+        },
+        "returns": "EvidenceIndex",
+        "kind": "function",
+        "owned_delta": "Interpret nested protocol documents without merging same-named revisions."
+      },
+      {
+        "path": "timing.nl",
+        "args": {
+          "ownerId": "string",
+          "trial": "TrialData",
+          "lineage": "Lineage",
+          "question": "Question"
+        },
+        "returns": "TimingView",
+        "kind": "function",
+        "owned_delta": "Bind exact event-relative windows without substituting a convenient timestamp."
+      }
+    ],
+    "edges": [
+      {
+        "caller": "debug.nl",
+        "callee": "debug/intake.nl"
+      },
+      {
+        "caller": "debug.nl",
+        "callee": "lineage.nl"
+      },
+      {
+        "caller": "debug.nl",
+        "callee": "plans.nl"
+      },
+      {
+        "caller": "debug.nl",
+        "callee": "debug/compare.nl"
+      },
+      {
+        "caller": "debug.nl",
+        "callee": "debug/hypotheses.nl"
+      },
+      {
+        "caller": "debug.nl",
+        "callee": "debug/investigateStep.nl"
+      },
+      {
+        "caller": "debug.nl",
+        "callee": "debug/localize.nl"
+      },
+      {
+        "caller": "debug.nl",
+        "callee": "debug/repair.nl"
+      },
+      {
+        "caller": "debug.nl",
+        "callee": "debug/report.nl"
+      },
+      {
+        "caller": "debug/intake.nl",
+        "callee": "readEvidence.nl"
+      },
+      {
+        "caller": "debug/intake.nl",
+        "callee": "debug/intake/interpretQuestion.nl"
+      },
+      {
+        "caller": "lineage.nl",
+        "callee": "lineage/resolveIdentity.nl"
+      },
+      {
+        "caller": "plans.nl",
+        "callee": "populations.nl"
+      },
+      {
+        "caller": "plans.nl",
+        "callee": "timing.nl"
+      },
+      {
+        "caller": "plans.nl",
+        "callee": "metrics.nl"
+      },
+      {
+        "caller": "metrics.nl",
+        "callee": "metrics/interpretMetric.nl"
+      },
+      {
+        "caller": "debug/compare.nl",
+        "callee": "debug/compare/interpretScope.nl"
+      },
+      {
+        "caller": "probes.nl",
+        "callee": "probes/predict.nl"
+      },
+      {
+        "caller": "probes/predict.nl",
+        "callee": "plans.nl"
+      },
+      {
+        "caller": "debug/investigateStep.nl",
+        "callee": "probes.nl"
+      },
+      {
+        "caller": "debug/investigateStep.nl",
+        "callee": "probes/choose.nl"
+      },
+      {
+        "caller": "debug/investigateStep.nl",
+        "callee": "debug/investigateStep/interpretOutcome.nl"
+      },
+      {
+        "caller": "debug/repair.nl",
+        "callee": "debug/repair/auditRepair.nl"
+      },
+      {
+        "caller": "debug/repair/auditRepair.nl",
+        "callee": "readEvidence.nl"
+      },
+      {
+        "caller": "debug/repair/auditRepair.nl",
+        "callee": "lineage.nl"
+      },
+      {
+        "caller": "debug/repair/auditRepair.nl",
+        "callee": "plans.nl"
+      },
+      {
+        "caller": "debug/repair/auditRepair.nl",
+        "callee": "probes/predict.nl"
+      }
+    ]
+  },
+  "scoped_literals": [
+    {
+      "site": "lineage/resolveIdentity.nl",
+      "consumed_by": "AliasDecision relation selects the actual DefinitionLink graph."
+    },
+    {
+      "site": "populations.nl",
+      "consumed_by": "PopulationView includedUnitIds/excluded feeds ExecutablePlan row membership."
+    },
+    {
+      "site": "metrics/interpretMetric.nl",
+      "consumed_by": "MetricView numeratorOutcome feeds real exact receipt arithmetic."
+    },
+    {
+      "site": "debug/compare/interpretScope.nl",
+      "consumed_by": "Contrast relation/mechanism feeds hypothesis construction."
+    },
+    {
+      "site": "debug/investigateStep/interpretOutcome.nl",
+      "consumed_by": "ProbeOutcome supported/rejected/inconclusive IDs update InvestigationState and diagnosis."
+    }
+  ],
+  "iteration_reducers": [
+    {
+      "caller": "debug.nl",
+      "step": "debug/investigateStep.nl",
+      "kind": "directory-reducer",
+      "state": "InvestigationState",
+      "measure": "pendingSeedIds.length",
+      "termination": "All hypotheses and required controls settled, or finite seed universe exhausted."
+    }
+  ],
+  "services": [
+    {
+      "binding": "measurementLab",
+      "declaration": "services.d.ts",
+      "host_implementation": "applications/protocol-meaning-debugger/host/measurementLab.ts",
+      "semantic_policy": false,
+      "methods": [
+        "evaluate",
+        "checkWitnesses",
+        "checkRepairs",
+        "applyDefinitions"
+      ]
+    }
+  ],
+  "provenance": {
+    "author": "semantic_slate_sol",
+    "kind": "Original fictional field-device evidence, protocols, probes and NL application.",
+    "license": "Repository license; no external source."
+  },
+  "readiness": {
+    "source_loader_checked": true,
+    "typed_declarations_checked": true,
+    "independent_oracle_review": false,
+    "exact_result_replay": false,
+    "live_qualified": false,
+    "training_admitted": false
+  },
+  "generation_ready": false,
+  "training_admission": false,
+  "model_facing_debt": "All23NL bodies/types unmeasured; first full-project diagnostic and about48samples per adopted presentation pending.",
+  "nl_line_count": 569,
+  "external_verifier_path": "training/semantic_applications/sol/protocol-meaning-debugger/verify-result.mjs"
+}

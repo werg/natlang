@@ -1,0 +1,1076 @@
+{
+  "caseId": "field-signal-v1",
+  "documents": [
+    {
+      "id": "C_TARGET",
+      "path": "protocol/target.md",
+      "text": "ID C_TARGET. Controlling protocol TARGET for this fictional device trial.\n[C_Q] Question: what percentage of attempted signal detections succeed in the defined launch cohort and commissioning-relative interval?\n[C_POP] Include every unit whose first accepted commissioning event is at or before global time0. First telemetry availability is not commissioning eligibility. A device can belong even if it first reports later.\n[C_ANCHOR] Anchor each included unit at its first accepted commissioning event. Rejected commissioning attempts and later calibration do not move the origin.\n[C_WINDOW] Count attempts at offsets0 through2 days relative to that anchor, inclusive at both ends.\n[C_METRIC] Pool all included attempts; success percentage is100 times the number of pass outcomes divided by all included attempts. A pass is a successful signal detection. A fail is an unsuccessful detection. An empty denominator yields null, never0.\nPopulation, anchor, window and metric meanings are independent roles. Exact baseline percentage equality does not establish semantic equivalence.\n",
+      "sha256": "0ede33f75832e48126a8d3dd7c03e7398ef20363228e81b22a8404c6bfd50607"
+    },
+    {
+      "id": "L_BIND",
+      "path": "implementations/L/bindings.md",
+      "text": "ID L_BIND. Selected implementation L, immutable baseline binding.\n[L_EXEC] Population uses C_POP, anchor uses C_ANCHOR, window uses C_WINDOW and metric uses C_METRIC from protocol/target.md. L directly implements TARGET. A later archive copy with the same display name is not bound by L.\nL's selected definition identities remain explicit when trial data change.\n",
+      "sha256": "0d52c3462c25e085b6ac309fe69f1e9e876d0a153aeeda8ec1e52249e7445ac4"
+    },
+    {
+      "id": "U_POP_DOC",
+      "path": "implementations/U/population.md",
+      "text": "ID U_POP_DOC. Selected definition owned by U.\n[U_POP] Include units whose firstTelemetryTime is at or before global time0. Late telemetry units are outside this implementation cohort.\n",
+      "sha256": "a00083d7c76d73d04eebc45e7ef45af662bae8eb1ed1598db665bd06e1d0b6c1"
+    },
+    {
+      "id": "U_TIME_DOC",
+      "path": "implementations/U/timing.md",
+      "text": "ID U_TIME_DOC. Selected definition owned by U.\n[U_ANCHOR] Anchor each included unit at its first accepted calibration event, not its commissioning event.\n[U_WINDOW] Use offsets0 through2 days inclusive, exactly as C_WINDOW defines the numeric bounds.\n",
+      "sha256": "fb5119f1bb1f225862c350ee9f614148101f529e4755aaeebd1b7d614d494026"
+    },
+    {
+      "id": "U_METRIC_DOC",
+      "path": "implementations/U/metric.md",
+      "text": "ID U_METRIC_DOC. Selected definition owned by U.\n[U_METRIC] Report100 times fail outcomes divided by all included attempts, pooling attempts. Display the result as success percentage.\n",
+      "sha256": "260122a30b53a46e4f794c688d6b5bf3abd518b47bbf87da8488ab25c158afaa"
+    },
+    {
+      "id": "U_BIND",
+      "path": "implementations/U/bindings.md",
+      "text": "ID U_BIND. Selected implementation U, immutable baseline binding.\n[U_EXEC] Population uses U_POP from implementations/U/population.md. Anchor uses U_ANCHOR and window U_WINDOW from implementations/U/timing.md. Metric uses U_METRIC from implementations/U/metric.md.\n[U_ALIAS] The display term ready means telemetry available for U_POP but commissioned for C_POP. These are different predicates, not aliases. This selected execution does not use archive/success-definition.md.\n",
+      "sha256": "c9e2f4c03af83b548a997f048f87fd70c9a05f3fa5ca78a26e432f4f99ded82d"
+    },
+    {
+      "id": "ARCHIVE_OLD",
+      "path": "archive/success-definition.md",
+      "text": "ID ARCHIVE_OLD. Archived definition, not selected by L, U or TARGET.\n[OLD_SUCCESS] The historical display name success percentage once meant failures as a fraction of attempts. This file is not a runtime binding. Similar names are not artifact identity. Repairing this archive cannot repair the selected U metric.\n",
+      "sha256": "ca6b634143e9a0c8f7adf5879a01a4725d52a91ca1c1eba68d0c47afe6a18948"
+    },
+    {
+      "id": "CONTROL",
+      "path": "controls/authorization.md",
+      "text": "ID CONTROL. Probe and repair authority.\n[P_SCOPE] Only the five supplied trial seeds may be used. Their typed snapshots are complete; omitted measurements are absent rather than unobserved. Each permitted seed changes only its declared unit events, telemetry or raw outcome facts. Definitions and artifact bindings remain fixed during investigation.\n[P_REQUIRED] Consume all five seeds, including the rejected-retry control and the interacting coincidence control. A headline equality in the interaction trial does not reject independently supported mechanisms.\n[P_COST] Every seed costs1; when equally discriminating choose ascending seed ID. This is probe order, not event order.\n[R_SCOPE] Only U's three selected definition files population.md, timing.md and metric.md may be repaired. Keep clause identities U_POP/U_ANCHOR/U_METRIC and the existing execution bindings. Do not edit TARGET, L, archive, window bounds or raw trial data.\n[R_MIN] Minimize distinct selected definition sites edited after all source-backed semantic causes are covered. All three roles must agree with TARGET for baseline and every supplied trial; matching numbers alone is insufficient.\n[OUTPUT] Contrast IDs CP_POP, CP_ANCHOR, CP_WINDOW, CP_METRIC correspond to those roles. Hypothesis IDs HP_POP, HP_ANCHOR, HP_METRIC correspond to the three differing roles. Root cause definition IDs are U_POP, U_ANCHOR, U_METRIC. Repair proposal ID REPAIR_U; edit IDs FIX_POP, FIX_ANCHOR, FIX_METRIC. Generated local-decision IDs are arbitrary unique strings and require real trace consumption.\n",
+      "sha256": "8195033db026899f925e065791285c885803b8876b6343f524b7e50f3e518231"
+    },
+    {
+      "id": "DATA_BASE",
+      "path": "data/BASE.json",
+      "text": "{\"id\":\"BASE\",\"units\":[{\"unitId\":\"A\",\"commissioningEvents\":[{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"A-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0},{\"unitId\":\"B\",\"commissioningEvents\":[{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0}],\"readings\":[{\"id\":\"A1\",\"unitId\":\"A\",\"time\":0,\"outcome\":\"pass\"},{\"id\":\"A2\",\"unitId\":\"A\",\"time\":1,\"outcome\":\"pass\"},{\"id\":\"B1\",\"unitId\":\"B\",\"time\":0,\"outcome\":\"fail\"},{\"id\":\"B2\",\"unitId\":\"B\",\"time\":1,\"outcome\":\"fail\"}]}\n",
+      "sha256": "b8b5267428cfb30b9578285ca2be29d0b4045a1b26c9039f661f1a78253c1ea3"
+    },
+    {
+      "id": "NOTE_BASE",
+      "path": "probes/BASE.md",
+      "text": "ID NOTE_BASE. A succeeds on both attempts; B fails on both. Commissioning, calibration and telemetry availability coincide, concealing population/anchor differences while complementary pooled outcomes both yield50percent.\n",
+      "sha256": "cebf3af6d20b4081f5d3dc36aa595aac8fe5701c8835035df620f301f7da838d"
+    },
+    {
+      "id": "DATA_P_POP",
+      "path": "data/P_POP.json",
+      "text": "{\"id\":\"P_POP\",\"units\":[{\"unitId\":\"A\",\"commissioningEvents\":[{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"A-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0},{\"unitId\":\"B\",\"commissioningEvents\":[{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":1}],\"readings\":[{\"id\":\"A1\",\"unitId\":\"A\",\"time\":0,\"outcome\":\"pass\"},{\"id\":\"A2\",\"unitId\":\"A\",\"time\":1,\"outcome\":\"pass\"},{\"id\":\"B1\",\"unitId\":\"B\",\"time\":1,\"outcome\":\"fail\"},{\"id\":\"B2\",\"unitId\":\"B\",\"time\":2,\"outcome\":\"fail\"}]}\n",
+      "sha256": "9ca6042d84dabf8c2033c9a4f532dbc4db4f0518fc2c261585ea3668cc44e12f"
+    },
+    {
+      "id": "NOTE_P_POP",
+      "path": "probes/P_POP.md",
+      "text": "ID NOTE_P_POP. B telemetry begins at1; its failure readings occur at1 and2. Commissioning and calibration remain0. This exercises population availability independently of the event anchor.\n",
+      "sha256": "7d29ed0f1da023705065b62f3d663636f57b79352a78e4701680b79db0fa85f6"
+    },
+    {
+      "id": "DATA_P_ANCHOR",
+      "path": "data/P_ANCHOR.json",
+      "text": "{\"id\":\"P_ANCHOR\",\"units\":[{\"unitId\":\"A\",\"commissioningEvents\":[{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"A-CAL0\",\"time\":1,\"accepted\":true}],\"firstTelemetryTime\":0},{\"unitId\":\"B\",\"commissioningEvents\":[{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0}],\"readings\":[{\"id\":\"A1\",\"unitId\":\"A\",\"time\":0,\"outcome\":\"pass\"},{\"id\":\"A2\",\"unitId\":\"A\",\"time\":1,\"outcome\":\"pass\"},{\"id\":\"B1\",\"unitId\":\"B\",\"time\":0,\"outcome\":\"fail\"},{\"id\":\"B2\",\"unitId\":\"B\",\"time\":1,\"outcome\":\"fail\"},{\"id\":\"A3\",\"unitId\":\"A\",\"time\":3,\"outcome\":\"fail\"}]}\n",
+      "sha256": "22b96d6a0473ae67ebae9198434599fb0e435b5aeab1970069edf275b8891503"
+    },
+    {
+      "id": "NOTE_P_ANCHOR",
+      "path": "probes/P_ANCHOR.md",
+      "text": "ID NOTE_P_ANCHOR. A calibration moves to1, while commissioning remains0. A3 at3 fails: outside the commissioning window, inside the calibration window. Population telemetry remains0.\n",
+      "sha256": "53ac2a13daeb05f7f0cfd7aed77f8a822d23e518e84fce7dbf6dd053d78b9df9"
+    },
+    {
+      "id": "DATA_P_METRIC",
+      "path": "data/P_METRIC.json",
+      "text": "{\"id\":\"P_METRIC\",\"units\":[{\"unitId\":\"A\",\"commissioningEvents\":[{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"A-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0},{\"unitId\":\"B\",\"commissioningEvents\":[{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0}],\"readings\":[{\"id\":\"A1\",\"unitId\":\"A\",\"time\":0,\"outcome\":\"pass\"},{\"id\":\"A2\",\"unitId\":\"A\",\"time\":1,\"outcome\":\"pass\"},{\"id\":\"B1\",\"unitId\":\"B\",\"time\":0,\"outcome\":\"pass\"},{\"id\":\"B2\",\"unitId\":\"B\",\"time\":1,\"outcome\":\"pass\"}]}\n",
+      "sha256": "1b56278cf5d7ae553d56c0b98221a35db46236b4669bd2164051f2ef8bf1af23"
+    },
+    {
+      "id": "NOTE_P_METRIC",
+      "path": "probes/P_METRIC.md",
+      "text": "ID NOTE_P_METRIC. Both B outcomes become pass; all membership and event times remain baseline. This isolates numerator polarity.\n",
+      "sha256": "23cfc110e83b89752a744fa24d88cbfc2cfa1cd93645933e87f9c1baf2ccf043"
+    },
+    {
+      "id": "DATA_P_RETRY",
+      "path": "data/P_RETRY.json",
+      "text": "{\"id\":\"P_RETRY\",\"units\":[{\"unitId\":\"A\",\"commissioningEvents\":[{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true},{\"eventId\":\"A-COM-REJECTED\",\"time\":5,\"accepted\":false}],\"calibrationEvents\":[{\"eventId\":\"A-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0},{\"unitId\":\"B\",\"commissioningEvents\":[{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0}],\"readings\":[{\"id\":\"A1\",\"unitId\":\"A\",\"time\":0,\"outcome\":\"pass\"},{\"id\":\"A2\",\"unitId\":\"A\",\"time\":1,\"outcome\":\"pass\"},{\"id\":\"B1\",\"unitId\":\"B\",\"time\":0,\"outcome\":\"fail\"},{\"id\":\"B2\",\"unitId\":\"B\",\"time\":1,\"outcome\":\"fail\"}]}\n",
+      "sha256": "08fd7530244ba940be35c5c3c76774eb4dfdb826935279e2a8a3992be633be43"
+    },
+    {
+      "id": "NOTE_P_RETRY",
+      "path": "probes/P_RETRY.md",
+      "text": "ID NOTE_P_RETRY. A has a rejected commissioning retry at5; its accepted commissioning stays0. No clause grants a rejected retry authority to reset the anchor. All raw readings remain baseline.\n",
+      "sha256": "f7b669da6e25dc08434816c068bbaa0998d6564efdb0ef288dd26e14811c6d89"
+    },
+    {
+      "id": "DATA_P_INTERACTION",
+      "path": "data/P_INTERACTION.json",
+      "text": "{\"id\":\"P_INTERACTION\",\"units\":[{\"unitId\":\"A\",\"commissioningEvents\":[{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"A-CAL0\",\"time\":1,\"accepted\":true}],\"firstTelemetryTime\":0},{\"unitId\":\"B\",\"commissioningEvents\":[{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":1}],\"readings\":[{\"id\":\"A1\",\"unitId\":\"A\",\"time\":0,\"outcome\":\"pass\"},{\"id\":\"A2\",\"unitId\":\"A\",\"time\":1,\"outcome\":\"pass\"},{\"id\":\"B1\",\"unitId\":\"B\",\"time\":1,\"outcome\":\"fail\"},{\"id\":\"B2\",\"unitId\":\"B\",\"time\":2,\"outcome\":\"fail\"},{\"id\":\"A3\",\"unitId\":\"A\",\"time\":3,\"outcome\":\"fail\"}]}\n",
+      "sha256": "12898fb9135479e2dfbbf2ad1e5a24ed9373b8cbd3cc546b446e238c753a484b"
+    },
+    {
+      "id": "NOTE_P_INTERACTION",
+      "path": "probes/P_INTERACTION.md",
+      "text": "ID NOTE_P_INTERACTION. B late telemetry excludes it from U; A later calibration changes its window. U counts failures on A2/A3, yielding the same50percent as TARGET on A1/A2/B1/B2. Matching numbers conceal different units, readings, anchors and numerator propositions.\n",
+      "sha256": "c784e532cbb470ed4e2ebefdbb39955c715d1fc78360892aa1f482592f5cabd4"
+    },
+    {
+      "id": "DATA_ID",
+      "path": "data/identity.md",
+      "text": "ID DATA_ID. Raw source identity convention.\nEach data/<trial>.json has source ID DATA_<trial>; its id names the trial. A/B identify corresponding physical units across independent counterfactual snapshots, not additional units combined into one run. Each row ID identifies an attempt within its trial. Typed input transports exactly these same raw values and attaches their source witnesses. The JSON source text is controlling observation data.\nAll numeric event and reading times are global days. accepted:true denotes an actual accepted event; accepted:false denotes a rejected attempt, which creates no accepted commissioning.\n",
+      "sha256": "9a3d7030b55439681237cbbc2686400e9ed32c936b3c6729502b14b6b4ef081a"
+    }
+  ],
+  "baseline": {
+    "id": "BASE",
+    "units": [
+      {
+        "unitId": "A",
+        "commissioningEvents": [
+          {
+            "eventId": "A-COM0",
+            "time": 0,
+            "accepted": true,
+            "witnesses": [
+              {
+                "sourceId": "DATA_BASE",
+                "path": "data/BASE.json",
+                "quote": "{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}"
+              }
+            ]
+          }
+        ],
+        "calibrationEvents": [
+          {
+            "eventId": "A-CAL0",
+            "time": 0,
+            "accepted": true,
+            "witnesses": [
+              {
+                "sourceId": "DATA_BASE",
+                "path": "data/BASE.json",
+                "quote": "{\"eventId\":\"A-CAL0\",\"time\":0,\"accepted\":true}"
+              }
+            ]
+          }
+        ],
+        "firstTelemetryTime": 0,
+        "witnesses": [
+          {
+            "sourceId": "DATA_BASE",
+            "path": "data/BASE.json",
+            "quote": "{\"unitId\":\"A\",\"commissioningEvents\":[{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"A-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0}"
+          }
+        ]
+      },
+      {
+        "unitId": "B",
+        "commissioningEvents": [
+          {
+            "eventId": "B-COM0",
+            "time": 0,
+            "accepted": true,
+            "witnesses": [
+              {
+                "sourceId": "DATA_BASE",
+                "path": "data/BASE.json",
+                "quote": "{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}"
+              }
+            ]
+          }
+        ],
+        "calibrationEvents": [
+          {
+            "eventId": "B-CAL0",
+            "time": 0,
+            "accepted": true,
+            "witnesses": [
+              {
+                "sourceId": "DATA_BASE",
+                "path": "data/BASE.json",
+                "quote": "{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}"
+              }
+            ]
+          }
+        ],
+        "firstTelemetryTime": 0,
+        "witnesses": [
+          {
+            "sourceId": "DATA_BASE",
+            "path": "data/BASE.json",
+            "quote": "{\"unitId\":\"B\",\"commissioningEvents\":[{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0}"
+          }
+        ]
+      }
+    ],
+    "readings": [
+      {
+        "id": "A1",
+        "unitId": "A",
+        "time": 0,
+        "outcome": "pass",
+        "witnesses": [
+          {
+            "sourceId": "DATA_BASE",
+            "path": "data/BASE.json",
+            "quote": "{\"id\":\"A1\",\"unitId\":\"A\",\"time\":0,\"outcome\":\"pass\"}"
+          }
+        ]
+      },
+      {
+        "id": "A2",
+        "unitId": "A",
+        "time": 1,
+        "outcome": "pass",
+        "witnesses": [
+          {
+            "sourceId": "DATA_BASE",
+            "path": "data/BASE.json",
+            "quote": "{\"id\":\"A2\",\"unitId\":\"A\",\"time\":1,\"outcome\":\"pass\"}"
+          }
+        ]
+      },
+      {
+        "id": "B1",
+        "unitId": "B",
+        "time": 0,
+        "outcome": "fail",
+        "witnesses": [
+          {
+            "sourceId": "DATA_BASE",
+            "path": "data/BASE.json",
+            "quote": "{\"id\":\"B1\",\"unitId\":\"B\",\"time\":0,\"outcome\":\"fail\"}"
+          }
+        ]
+      },
+      {
+        "id": "B2",
+        "unitId": "B",
+        "time": 1,
+        "outcome": "fail",
+        "witnesses": [
+          {
+            "sourceId": "DATA_BASE",
+            "path": "data/BASE.json",
+            "quote": "{\"id\":\"B2\",\"unitId\":\"B\",\"time\":1,\"outcome\":\"fail\"}"
+          }
+        ]
+      }
+    ]
+  },
+  "probeSeeds": [
+    {
+      "id": "P_POP",
+      "data": {
+        "id": "P_POP",
+        "units": [
+          {
+            "unitId": "A",
+            "commissioningEvents": [
+              {
+                "eventId": "A-COM0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_POP",
+                    "path": "data/P_POP.json",
+                    "quote": "{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "calibrationEvents": [
+              {
+                "eventId": "A-CAL0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_POP",
+                    "path": "data/P_POP.json",
+                    "quote": "{\"eventId\":\"A-CAL0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "firstTelemetryTime": 0,
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_POP",
+                "path": "data/P_POP.json",
+                "quote": "{\"unitId\":\"A\",\"commissioningEvents\":[{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"A-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0}"
+              }
+            ]
+          },
+          {
+            "unitId": "B",
+            "commissioningEvents": [
+              {
+                "eventId": "B-COM0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_POP",
+                    "path": "data/P_POP.json",
+                    "quote": "{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "calibrationEvents": [
+              {
+                "eventId": "B-CAL0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_POP",
+                    "path": "data/P_POP.json",
+                    "quote": "{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "firstTelemetryTime": 1,
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_POP",
+                "path": "data/P_POP.json",
+                "quote": "{\"unitId\":\"B\",\"commissioningEvents\":[{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":1}"
+              }
+            ]
+          }
+        ],
+        "readings": [
+          {
+            "id": "A1",
+            "unitId": "A",
+            "time": 0,
+            "outcome": "pass",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_POP",
+                "path": "data/P_POP.json",
+                "quote": "{\"id\":\"A1\",\"unitId\":\"A\",\"time\":0,\"outcome\":\"pass\"}"
+              }
+            ]
+          },
+          {
+            "id": "A2",
+            "unitId": "A",
+            "time": 1,
+            "outcome": "pass",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_POP",
+                "path": "data/P_POP.json",
+                "quote": "{\"id\":\"A2\",\"unitId\":\"A\",\"time\":1,\"outcome\":\"pass\"}"
+              }
+            ]
+          },
+          {
+            "id": "B1",
+            "unitId": "B",
+            "time": 1,
+            "outcome": "fail",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_POP",
+                "path": "data/P_POP.json",
+                "quote": "{\"id\":\"B1\",\"unitId\":\"B\",\"time\":1,\"outcome\":\"fail\"}"
+              }
+            ]
+          },
+          {
+            "id": "B2",
+            "unitId": "B",
+            "time": 2,
+            "outcome": "fail",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_POP",
+                "path": "data/P_POP.json",
+                "quote": "{\"id\":\"B2\",\"unitId\":\"B\",\"time\":2,\"outcome\":\"fail\"}"
+              }
+            ]
+          }
+        ]
+      },
+      "changedPremiseIds": [
+        "B-firstTelemetryTime",
+        "B1-time",
+        "B2-time"
+      ],
+      "cost": 1,
+      "allowed": true,
+      "witnesses": [
+        {
+          "sourceId": "NOTE_P_POP",
+          "path": "probes/P_POP.md",
+          "quote": "ID NOTE_P_POP. B telemetry begins at1; its failure readings occur at1 and2. Commissioning and calibration remain0. This exercises population availability independently of the event anchor."
+        }
+      ]
+    },
+    {
+      "id": "P_ANCHOR",
+      "data": {
+        "id": "P_ANCHOR",
+        "units": [
+          {
+            "unitId": "A",
+            "commissioningEvents": [
+              {
+                "eventId": "A-COM0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_ANCHOR",
+                    "path": "data/P_ANCHOR.json",
+                    "quote": "{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "calibrationEvents": [
+              {
+                "eventId": "A-CAL0",
+                "time": 1,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_ANCHOR",
+                    "path": "data/P_ANCHOR.json",
+                    "quote": "{\"eventId\":\"A-CAL0\",\"time\":1,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "firstTelemetryTime": 0,
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_ANCHOR",
+                "path": "data/P_ANCHOR.json",
+                "quote": "{\"unitId\":\"A\",\"commissioningEvents\":[{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"A-CAL0\",\"time\":1,\"accepted\":true}],\"firstTelemetryTime\":0}"
+              }
+            ]
+          },
+          {
+            "unitId": "B",
+            "commissioningEvents": [
+              {
+                "eventId": "B-COM0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_ANCHOR",
+                    "path": "data/P_ANCHOR.json",
+                    "quote": "{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "calibrationEvents": [
+              {
+                "eventId": "B-CAL0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_ANCHOR",
+                    "path": "data/P_ANCHOR.json",
+                    "quote": "{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "firstTelemetryTime": 0,
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_ANCHOR",
+                "path": "data/P_ANCHOR.json",
+                "quote": "{\"unitId\":\"B\",\"commissioningEvents\":[{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0}"
+              }
+            ]
+          }
+        ],
+        "readings": [
+          {
+            "id": "A1",
+            "unitId": "A",
+            "time": 0,
+            "outcome": "pass",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_ANCHOR",
+                "path": "data/P_ANCHOR.json",
+                "quote": "{\"id\":\"A1\",\"unitId\":\"A\",\"time\":0,\"outcome\":\"pass\"}"
+              }
+            ]
+          },
+          {
+            "id": "A2",
+            "unitId": "A",
+            "time": 1,
+            "outcome": "pass",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_ANCHOR",
+                "path": "data/P_ANCHOR.json",
+                "quote": "{\"id\":\"A2\",\"unitId\":\"A\",\"time\":1,\"outcome\":\"pass\"}"
+              }
+            ]
+          },
+          {
+            "id": "B1",
+            "unitId": "B",
+            "time": 0,
+            "outcome": "fail",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_ANCHOR",
+                "path": "data/P_ANCHOR.json",
+                "quote": "{\"id\":\"B1\",\"unitId\":\"B\",\"time\":0,\"outcome\":\"fail\"}"
+              }
+            ]
+          },
+          {
+            "id": "B2",
+            "unitId": "B",
+            "time": 1,
+            "outcome": "fail",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_ANCHOR",
+                "path": "data/P_ANCHOR.json",
+                "quote": "{\"id\":\"B2\",\"unitId\":\"B\",\"time\":1,\"outcome\":\"fail\"}"
+              }
+            ]
+          },
+          {
+            "id": "A3",
+            "unitId": "A",
+            "time": 3,
+            "outcome": "fail",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_ANCHOR",
+                "path": "data/P_ANCHOR.json",
+                "quote": "{\"id\":\"A3\",\"unitId\":\"A\",\"time\":3,\"outcome\":\"fail\"}"
+              }
+            ]
+          }
+        ]
+      },
+      "changedPremiseIds": [
+        "A-calibration-time",
+        "A3-presence"
+      ],
+      "cost": 1,
+      "allowed": true,
+      "witnesses": [
+        {
+          "sourceId": "NOTE_P_ANCHOR",
+          "path": "probes/P_ANCHOR.md",
+          "quote": "ID NOTE_P_ANCHOR. A calibration moves to1, while commissioning remains0. A3 at3 fails: outside the commissioning window, inside the calibration window. Population telemetry remains0."
+        }
+      ]
+    },
+    {
+      "id": "P_METRIC",
+      "data": {
+        "id": "P_METRIC",
+        "units": [
+          {
+            "unitId": "A",
+            "commissioningEvents": [
+              {
+                "eventId": "A-COM0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_METRIC",
+                    "path": "data/P_METRIC.json",
+                    "quote": "{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "calibrationEvents": [
+              {
+                "eventId": "A-CAL0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_METRIC",
+                    "path": "data/P_METRIC.json",
+                    "quote": "{\"eventId\":\"A-CAL0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "firstTelemetryTime": 0,
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_METRIC",
+                "path": "data/P_METRIC.json",
+                "quote": "{\"unitId\":\"A\",\"commissioningEvents\":[{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"A-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0}"
+              }
+            ]
+          },
+          {
+            "unitId": "B",
+            "commissioningEvents": [
+              {
+                "eventId": "B-COM0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_METRIC",
+                    "path": "data/P_METRIC.json",
+                    "quote": "{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "calibrationEvents": [
+              {
+                "eventId": "B-CAL0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_METRIC",
+                    "path": "data/P_METRIC.json",
+                    "quote": "{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "firstTelemetryTime": 0,
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_METRIC",
+                "path": "data/P_METRIC.json",
+                "quote": "{\"unitId\":\"B\",\"commissioningEvents\":[{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0}"
+              }
+            ]
+          }
+        ],
+        "readings": [
+          {
+            "id": "A1",
+            "unitId": "A",
+            "time": 0,
+            "outcome": "pass",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_METRIC",
+                "path": "data/P_METRIC.json",
+                "quote": "{\"id\":\"A1\",\"unitId\":\"A\",\"time\":0,\"outcome\":\"pass\"}"
+              }
+            ]
+          },
+          {
+            "id": "A2",
+            "unitId": "A",
+            "time": 1,
+            "outcome": "pass",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_METRIC",
+                "path": "data/P_METRIC.json",
+                "quote": "{\"id\":\"A2\",\"unitId\":\"A\",\"time\":1,\"outcome\":\"pass\"}"
+              }
+            ]
+          },
+          {
+            "id": "B1",
+            "unitId": "B",
+            "time": 0,
+            "outcome": "pass",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_METRIC",
+                "path": "data/P_METRIC.json",
+                "quote": "{\"id\":\"B1\",\"unitId\":\"B\",\"time\":0,\"outcome\":\"pass\"}"
+              }
+            ]
+          },
+          {
+            "id": "B2",
+            "unitId": "B",
+            "time": 1,
+            "outcome": "pass",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_METRIC",
+                "path": "data/P_METRIC.json",
+                "quote": "{\"id\":\"B2\",\"unitId\":\"B\",\"time\":1,\"outcome\":\"pass\"}"
+              }
+            ]
+          }
+        ]
+      },
+      "changedPremiseIds": [
+        "B1-outcome",
+        "B2-outcome"
+      ],
+      "cost": 1,
+      "allowed": true,
+      "witnesses": [
+        {
+          "sourceId": "NOTE_P_METRIC",
+          "path": "probes/P_METRIC.md",
+          "quote": "ID NOTE_P_METRIC. Both B outcomes become pass; all membership and event times remain baseline. This isolates numerator polarity."
+        }
+      ]
+    },
+    {
+      "id": "P_RETRY",
+      "data": {
+        "id": "P_RETRY",
+        "units": [
+          {
+            "unitId": "A",
+            "commissioningEvents": [
+              {
+                "eventId": "A-COM0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_RETRY",
+                    "path": "data/P_RETRY.json",
+                    "quote": "{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              },
+              {
+                "eventId": "A-COM-REJECTED",
+                "time": 5,
+                "accepted": false,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_RETRY",
+                    "path": "data/P_RETRY.json",
+                    "quote": "{\"eventId\":\"A-COM-REJECTED\",\"time\":5,\"accepted\":false}"
+                  }
+                ]
+              }
+            ],
+            "calibrationEvents": [
+              {
+                "eventId": "A-CAL0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_RETRY",
+                    "path": "data/P_RETRY.json",
+                    "quote": "{\"eventId\":\"A-CAL0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "firstTelemetryTime": 0,
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_RETRY",
+                "path": "data/P_RETRY.json",
+                "quote": "{\"unitId\":\"A\",\"commissioningEvents\":[{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true},{\"eventId\":\"A-COM-REJECTED\",\"time\":5,\"accepted\":false}],\"calibrationEvents\":[{\"eventId\":\"A-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0}"
+              }
+            ]
+          },
+          {
+            "unitId": "B",
+            "commissioningEvents": [
+              {
+                "eventId": "B-COM0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_RETRY",
+                    "path": "data/P_RETRY.json",
+                    "quote": "{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "calibrationEvents": [
+              {
+                "eventId": "B-CAL0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_RETRY",
+                    "path": "data/P_RETRY.json",
+                    "quote": "{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "firstTelemetryTime": 0,
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_RETRY",
+                "path": "data/P_RETRY.json",
+                "quote": "{\"unitId\":\"B\",\"commissioningEvents\":[{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":0}"
+              }
+            ]
+          }
+        ],
+        "readings": [
+          {
+            "id": "A1",
+            "unitId": "A",
+            "time": 0,
+            "outcome": "pass",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_RETRY",
+                "path": "data/P_RETRY.json",
+                "quote": "{\"id\":\"A1\",\"unitId\":\"A\",\"time\":0,\"outcome\":\"pass\"}"
+              }
+            ]
+          },
+          {
+            "id": "A2",
+            "unitId": "A",
+            "time": 1,
+            "outcome": "pass",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_RETRY",
+                "path": "data/P_RETRY.json",
+                "quote": "{\"id\":\"A2\",\"unitId\":\"A\",\"time\":1,\"outcome\":\"pass\"}"
+              }
+            ]
+          },
+          {
+            "id": "B1",
+            "unitId": "B",
+            "time": 0,
+            "outcome": "fail",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_RETRY",
+                "path": "data/P_RETRY.json",
+                "quote": "{\"id\":\"B1\",\"unitId\":\"B\",\"time\":0,\"outcome\":\"fail\"}"
+              }
+            ]
+          },
+          {
+            "id": "B2",
+            "unitId": "B",
+            "time": 1,
+            "outcome": "fail",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_RETRY",
+                "path": "data/P_RETRY.json",
+                "quote": "{\"id\":\"B2\",\"unitId\":\"B\",\"time\":1,\"outcome\":\"fail\"}"
+              }
+            ]
+          }
+        ]
+      },
+      "changedPremiseIds": [
+        "A-rejected-commissioning-retry"
+      ],
+      "cost": 1,
+      "allowed": true,
+      "witnesses": [
+        {
+          "sourceId": "NOTE_P_RETRY",
+          "path": "probes/P_RETRY.md",
+          "quote": "ID NOTE_P_RETRY. A has a rejected commissioning retry at5; its accepted commissioning stays0. No clause grants a rejected retry authority to reset the anchor. All raw readings remain baseline."
+        }
+      ]
+    },
+    {
+      "id": "P_INTERACTION",
+      "data": {
+        "id": "P_INTERACTION",
+        "units": [
+          {
+            "unitId": "A",
+            "commissioningEvents": [
+              {
+                "eventId": "A-COM0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_INTERACTION",
+                    "path": "data/P_INTERACTION.json",
+                    "quote": "{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "calibrationEvents": [
+              {
+                "eventId": "A-CAL0",
+                "time": 1,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_INTERACTION",
+                    "path": "data/P_INTERACTION.json",
+                    "quote": "{\"eventId\":\"A-CAL0\",\"time\":1,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "firstTelemetryTime": 0,
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_INTERACTION",
+                "path": "data/P_INTERACTION.json",
+                "quote": "{\"unitId\":\"A\",\"commissioningEvents\":[{\"eventId\":\"A-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"A-CAL0\",\"time\":1,\"accepted\":true}],\"firstTelemetryTime\":0}"
+              }
+            ]
+          },
+          {
+            "unitId": "B",
+            "commissioningEvents": [
+              {
+                "eventId": "B-COM0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_INTERACTION",
+                    "path": "data/P_INTERACTION.json",
+                    "quote": "{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "calibrationEvents": [
+              {
+                "eventId": "B-CAL0",
+                "time": 0,
+                "accepted": true,
+                "witnesses": [
+                  {
+                    "sourceId": "DATA_P_INTERACTION",
+                    "path": "data/P_INTERACTION.json",
+                    "quote": "{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}"
+                  }
+                ]
+              }
+            ],
+            "firstTelemetryTime": 1,
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_INTERACTION",
+                "path": "data/P_INTERACTION.json",
+                "quote": "{\"unitId\":\"B\",\"commissioningEvents\":[{\"eventId\":\"B-COM0\",\"time\":0,\"accepted\":true}],\"calibrationEvents\":[{\"eventId\":\"B-CAL0\",\"time\":0,\"accepted\":true}],\"firstTelemetryTime\":1}"
+              }
+            ]
+          }
+        ],
+        "readings": [
+          {
+            "id": "A1",
+            "unitId": "A",
+            "time": 0,
+            "outcome": "pass",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_INTERACTION",
+                "path": "data/P_INTERACTION.json",
+                "quote": "{\"id\":\"A1\",\"unitId\":\"A\",\"time\":0,\"outcome\":\"pass\"}"
+              }
+            ]
+          },
+          {
+            "id": "A2",
+            "unitId": "A",
+            "time": 1,
+            "outcome": "pass",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_INTERACTION",
+                "path": "data/P_INTERACTION.json",
+                "quote": "{\"id\":\"A2\",\"unitId\":\"A\",\"time\":1,\"outcome\":\"pass\"}"
+              }
+            ]
+          },
+          {
+            "id": "B1",
+            "unitId": "B",
+            "time": 1,
+            "outcome": "fail",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_INTERACTION",
+                "path": "data/P_INTERACTION.json",
+                "quote": "{\"id\":\"B1\",\"unitId\":\"B\",\"time\":1,\"outcome\":\"fail\"}"
+              }
+            ]
+          },
+          {
+            "id": "B2",
+            "unitId": "B",
+            "time": 2,
+            "outcome": "fail",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_INTERACTION",
+                "path": "data/P_INTERACTION.json",
+                "quote": "{\"id\":\"B2\",\"unitId\":\"B\",\"time\":2,\"outcome\":\"fail\"}"
+              }
+            ]
+          },
+          {
+            "id": "A3",
+            "unitId": "A",
+            "time": 3,
+            "outcome": "fail",
+            "witnesses": [
+              {
+                "sourceId": "DATA_P_INTERACTION",
+                "path": "data/P_INTERACTION.json",
+                "quote": "{\"id\":\"A3\",\"unitId\":\"A\",\"time\":3,\"outcome\":\"fail\"}"
+              }
+            ]
+          }
+        ]
+      },
+      "changedPremiseIds": [
+        "B-firstTelemetryTime",
+        "B1-time",
+        "B2-time",
+        "A-calibration-time",
+        "A3-presence"
+      ],
+      "cost": 1,
+      "allowed": true,
+      "witnesses": [
+        {
+          "sourceId": "NOTE_P_INTERACTION",
+          "path": "probes/P_INTERACTION.md",
+          "quote": "ID NOTE_P_INTERACTION. B late telemetry excludes it from U; A later calibration changes its window. U counts failures on A2/A3, yielding the same50percent as TARGET on A1/A2/B1/B2. Matching numbers conceal different units, readings, anchors and numerator propositions."
+        }
+      ]
+    }
+  ]
+}

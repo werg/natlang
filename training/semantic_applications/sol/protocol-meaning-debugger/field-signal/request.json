@@ -1,0 +1,12 @@
+{
+  "caseId": "field-signal-v1",
+  "targetProtocolId": "TARGET",
+  "leftImplementationId": "L",
+  "rightImplementationId": "U",
+  "allowedRepairPaths": [
+    "implementations/U/population.md",
+    "implementations/U/timing.md",
+    "implementations/U/metric.md"
+  ],
+  "objective": "minimum-distinct-selected-definition-sites-after-semantic-coverage"
+}

@@ -1,0 +1,2120 @@
+{
+  "schema": "natlang.protocol-meaning-oracle/1",
+  "caseId": "field-signal-v1",
+  "source_world_split_key": "sol-application-world:field-signal-protocol-v1",
+  "baseline": {
+    "TARGET": {
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50
+    },
+    "L": {
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50
+    },
+    "U": {
+      "numerator": 2,
+      "denominator": 4,
+      "percent": 50
+    }
+  },
+  "probe_numeric_invariants": {
+    "P_POP": {
+      "TARGET": [
+        2,
+        4,
+        50
+      ],
+      "L": [
+        2,
+        4,
+        50
+      ],
+      "U": [
+        0,
+        2,
+        0
+      ]
+    },
+    "P_ANCHOR": {
+      "TARGET": [
+        2,
+        4,
+        50
+      ],
+      "L": [
+        2,
+        4,
+        50
+      ],
+      "U": [
+        3,
+        4,
+        75
+      ]
+    },
+    "P_METRIC": {
+      "TARGET": [
+        4,
+        4,
+        100
+      ],
+      "L": [
+        4,
+        4,
+        100
+      ],
+      "U": [
+        0,
+        4,
+        0
+      ]
+    },
+    "P_RETRY": {
+      "TARGET": [
+        2,
+        4,
+        50
+      ],
+      "L": [
+        2,
+        4,
+        50
+      ],
+      "U": [
+        2,
+        4,
+        50
+      ]
+    },
+    "P_INTERACTION": {
+      "TARGET": [
+        2,
+        4,
+        50
+      ],
+      "L": [
+        2,
+        4,
+        50
+      ],
+      "U": [
+        1,
+        2,
+        50
+      ]
+    }
+  },
+  "root_cause_definitions": {
+    "population": "U_POP",
+    "anchor": "U_ANCHOR",
+    "metric": "U_METRIC"
+  },
+  "equivalent_role": "window",
+  "minimum_definition_edits": 3,
+  "required_probe_ids": [
+    "P_POP",
+    "P_ANCHOR",
+    "P_METRIC",
+    "P_RETRY",
+    "P_INTERACTION"
+  ],
+  "canonical_edits": [
+    {
+      "id": "FIX_POP",
+      "sourceId": "U_POP_DOC",
+      "path": "implementations/U/population.md",
+      "oldQuote": "[U_POP] Include units whose firstTelemetryTime is at or before global time0. Late telemetry units are outside this implementation cohort.",
+      "replacement": "[U_POP] Include every unit whose first accepted commissioning event is at or before global time0. First telemetry availability does not determine eligibility.",
+      "targetDefinitionId": "U_POP",
+      "witnesses": [
+        {
+          "sourceId": "U_POP_DOC",
+          "path": "implementations/U/population.md",
+          "quote": "[U_POP] Include units whose firstTelemetryTime is at or before global time0. Late telemetry units are outside this implementation cohort."
+        }
+      ]
+    },
+    {
+      "id": "FIX_ANCHOR",
+      "sourceId": "U_TIME_DOC",
+      "path": "implementations/U/timing.md",
+      "oldQuote": "[U_ANCHOR] Anchor each included unit at its first accepted calibration event, not its commissioning event.",
+      "replacement": "[U_ANCHOR] Anchor each included unit at its first accepted commissioning event. Rejected commissioning attempts and later calibration do not move the origin.",
+      "targetDefinitionId": "U_ANCHOR",
+      "witnesses": [
+        {
+          "sourceId": "U_TIME_DOC",
+          "path": "implementations/U/timing.md",
+          "quote": "[U_ANCHOR] Anchor each included unit at its first accepted calibration event, not its commissioning event."
+        }
+      ]
+    },
+    {
+      "id": "FIX_METRIC",
+      "sourceId": "U_METRIC_DOC",
+      "path": "implementations/U/metric.md",
+      "oldQuote": "[U_METRIC] Report100 times fail outcomes divided by all included attempts, pooling attempts. Display the result as success percentage.",
+      "replacement": "[U_METRIC] Report100 times pass outcomes divided by all included attempts, pooling attempts. Display the result as success percentage.",
+      "targetDefinitionId": "U_METRIC",
+      "witnesses": [
+        {
+          "sourceId": "U_METRIC_DOC",
+          "path": "implementations/U/metric.md",
+          "quote": "[U_METRIC] Report100 times fail outcomes divided by all included attempts, pooling attempts. Display the result as success percentage."
+        }
+      ]
+    }
+  ],
+  "interaction_meaning": "Equal percentages with different cohorts, selected attempts, anchors and numerator polarity are coincidence, not semantic equivalence.",
+  "repaired_probe_percentages": {
+    "BASE": 50,
+    "P_POP": 50,
+    "P_ANCHOR": 50,
+    "P_METRIC": 100,
+    "P_RETRY": 50,
+    "P_INTERACTION": 50
+  },
+  "generation_ready": false,
+  "training_admission": false,
+  "plan_invariants": {
+    "BASE": {
+      "TARGET": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "TARGET",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "L": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "L",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "U": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-CAL0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-CAL0"
+          }
+        ],
+        "executable": {
+          "implementationId": "U",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "fail"
+        },
+        "populationDefinitionId": "U_POP",
+        "metricDefinitionId": "U_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      }
+    },
+    "P_POP": {
+      "TARGET": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "TARGET",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "L": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "L",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "U": {
+        "includedUnitIds": [
+          "A"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-CAL0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-CAL0"
+          }
+        ],
+        "executable": {
+          "implementationId": "U",
+          "includedUnitIds": [
+            "A"
+          ],
+          "anchorByUnit": {
+            "A": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "fail"
+        },
+        "populationDefinitionId": "U_POP",
+        "metricDefinitionId": "U_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2"
+          ],
+          "numerator": 0,
+          "denominator": 2,
+          "percent": 0.0
+        }
+      }
+    },
+    "P_ANCHOR": {
+      "TARGET": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "TARGET",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "L": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "L",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "U": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 1,
+            "eventId": "A-CAL0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-CAL0"
+          }
+        ],
+        "executable": {
+          "implementationId": "U",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 1,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "fail"
+        },
+        "populationDefinitionId": "U_POP",
+        "metricDefinitionId": "U_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A2",
+            "B1",
+            "B2",
+            "A3"
+          ],
+          "numerator": 3,
+          "denominator": 4,
+          "percent": 75.0
+        }
+      }
+    },
+    "P_METRIC": {
+      "TARGET": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "TARGET",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 4,
+          "denominator": 4,
+          "percent": 100.0
+        }
+      },
+      "L": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "L",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 4,
+          "denominator": 4,
+          "percent": 100.0
+        }
+      },
+      "U": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-CAL0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-CAL0"
+          }
+        ],
+        "executable": {
+          "implementationId": "U",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "fail"
+        },
+        "populationDefinitionId": "U_POP",
+        "metricDefinitionId": "U_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 0,
+          "denominator": 4,
+          "percent": 0.0
+        }
+      }
+    },
+    "P_RETRY": {
+      "TARGET": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "TARGET",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "L": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "L",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "U": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-CAL0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-CAL0"
+          }
+        ],
+        "executable": {
+          "implementationId": "U",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "fail"
+        },
+        "populationDefinitionId": "U_POP",
+        "metricDefinitionId": "U_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      }
+    },
+    "P_INTERACTION": {
+      "TARGET": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "TARGET",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "L": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "L",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "U": {
+        "includedUnitIds": [
+          "A"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 1,
+            "eventId": "A-CAL0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-CAL0"
+          }
+        ],
+        "executable": {
+          "implementationId": "U",
+          "includedUnitIds": [
+            "A"
+          ],
+          "anchorByUnit": {
+            "A": 1
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "fail"
+        },
+        "populationDefinitionId": "U_POP",
+        "metricDefinitionId": "U_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A2",
+            "A3"
+          ],
+          "numerator": 1,
+          "denominator": 2,
+          "percent": 50.0
+        }
+      }
+    }
+  },
+  "repaired_plan_invariants": {
+    "BASE": {
+      "TARGET": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "TARGET",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "L": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "L",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "U": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "U",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "U_POP",
+        "metricDefinitionId": "U_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      }
+    },
+    "P_POP": {
+      "TARGET": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "TARGET",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "L": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "L",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "U": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "U",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "U_POP",
+        "metricDefinitionId": "U_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      }
+    },
+    "P_ANCHOR": {
+      "TARGET": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "TARGET",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "L": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "L",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "U": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "U",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "U_POP",
+        "metricDefinitionId": "U_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      }
+    },
+    "P_METRIC": {
+      "TARGET": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "TARGET",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 4,
+          "denominator": 4,
+          "percent": 100.0
+        }
+      },
+      "L": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "L",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 4,
+          "denominator": 4,
+          "percent": 100.0
+        }
+      },
+      "U": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "U",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "U_POP",
+        "metricDefinitionId": "U_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 4,
+          "denominator": 4,
+          "percent": 100.0
+        }
+      }
+    },
+    "P_RETRY": {
+      "TARGET": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "TARGET",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "L": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "L",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "U": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "U",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "U_POP",
+        "metricDefinitionId": "U_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      }
+    },
+    "P_INTERACTION": {
+      "TARGET": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "TARGET",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "L": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "L",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "C_POP",
+        "metricDefinitionId": "C_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      },
+      "U": {
+        "includedUnitIds": [
+          "A",
+          "B"
+        ],
+        "anchors": [
+          {
+            "unitId": "A",
+            "time": 0,
+            "eventId": "A-COM0"
+          },
+          {
+            "unitId": "B",
+            "time": 0,
+            "eventId": "B-COM0"
+          }
+        ],
+        "executable": {
+          "implementationId": "U",
+          "includedUnitIds": [
+            "A",
+            "B"
+          ],
+          "anchorByUnit": {
+            "A": 0,
+            "B": 0
+          },
+          "window": {
+            "start": 0,
+            "end": 2,
+            "includeStart": true,
+            "includeEnd": true
+          },
+          "numeratorOutcome": "pass"
+        },
+        "populationDefinitionId": "U_POP",
+        "metricDefinitionId": "U_METRIC",
+        "metricDenominator": "attempts",
+        "metricAggregation": "pooled-percentage",
+        "receipt": {
+          "selectedReadingIds": [
+            "A1",
+            "A2",
+            "B1",
+            "B2"
+          ],
+          "numerator": 2,
+          "denominator": 4,
+          "percent": 50.0
+        }
+      }
+    }
+  },
+  "exact_scope": "Authored typed role, identity, numeric and source-span invariants; independent semantics and live stage contributions remain required.",
+  "lineage_link_invariants": [
+    {
+      "implementationId": "TARGET",
+      "consumerClauseId": "C_Q",
+      "definitionClauseId": "C_POP",
+      "role": "population"
+    },
+    {
+      "implementationId": "TARGET",
+      "consumerClauseId": "C_Q",
+      "definitionClauseId": "C_ANCHOR",
+      "role": "anchor"
+    },
+    {
+      "implementationId": "TARGET",
+      "consumerClauseId": "C_Q",
+      "definitionClauseId": "C_WINDOW",
+      "role": "window"
+    },
+    {
+      "implementationId": "TARGET",
+      "consumerClauseId": "C_Q",
+      "definitionClauseId": "C_METRIC",
+      "role": "metric"
+    },
+    {
+      "implementationId": "L",
+      "consumerClauseId": "L_EXEC",
+      "definitionClauseId": "C_POP",
+      "role": "population"
+    },
+    {
+      "implementationId": "L",
+      "consumerClauseId": "L_EXEC",
+      "definitionClauseId": "C_ANCHOR",
+      "role": "anchor"
+    },
+    {
+      "implementationId": "L",
+      "consumerClauseId": "L_EXEC",
+      "definitionClauseId": "C_WINDOW",
+      "role": "window"
+    },
+    {
+      "implementationId": "L",
+      "consumerClauseId": "L_EXEC",
+      "definitionClauseId": "C_METRIC",
+      "role": "metric"
+    },
+    {
+      "implementationId": "U",
+      "consumerClauseId": "U_EXEC",
+      "definitionClauseId": "U_POP",
+      "role": "population"
+    },
+    {
+      "implementationId": "U",
+      "consumerClauseId": "U_EXEC",
+      "definitionClauseId": "U_ANCHOR",
+      "role": "anchor"
+    },
+    {
+      "implementationId": "U",
+      "consumerClauseId": "U_EXEC",
+      "definitionClauseId": "U_WINDOW",
+      "role": "window"
+    },
+    {
+      "implementationId": "U",
+      "consumerClauseId": "U_EXEC",
+      "definitionClauseId": "U_METRIC",
+      "role": "metric"
+    }
+  ],
+  "selected_clause_ids": [
+    "C_POP",
+    "C_ANCHOR",
+    "C_WINDOW",
+    "C_METRIC",
+    "U_POP",
+    "U_ANCHOR",
+    "U_WINDOW",
+    "U_METRIC"
+  ]
+}

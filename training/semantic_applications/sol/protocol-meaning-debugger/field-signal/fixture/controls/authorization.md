@@ -1,0 +1,7 @@
+ID CONTROL. Probe and repair authority.
+[P_SCOPE] Only the five supplied trial seeds may be used. Their typed snapshots are complete; omitted measurements are absent rather than unobserved. Each permitted seed changes only its declared unit events, telemetry or raw outcome facts. Definitions and artifact bindings remain fixed during investigation.
+[P_REQUIRED] Consume all five seeds, including the rejected-retry control and the interacting coincidence control. A headline equality in the interaction trial does not reject independently supported mechanisms.
+[P_COST] Every seed costs1; when equally discriminating choose ascending seed ID. This is probe order, not event order.
+[R_SCOPE] Only U's three selected definition files population.md, timing.md and metric.md may be repaired. Keep clause identities U_POP/U_ANCHOR/U_METRIC and the existing execution bindings. Do not edit TARGET, L, archive, window bounds or raw trial data.
+[R_MIN] Minimize distinct selected definition sites edited after all source-backed semantic causes are covered. All three roles must agree with TARGET for baseline and every supplied trial; matching numbers alone is insufficient.
+[OUTPUT] Contrast IDs CP_POP, CP_ANCHOR, CP_WINDOW, CP_METRIC correspond to those roles. Hypothesis IDs HP_POP, HP_ANCHOR, HP_METRIC correspond to the three differing roles. Root cause definition IDs are U_POP, U_ANCHOR, U_METRIC. Repair proposal ID REPAIR_U; edit IDs FIX_POP, FIX_ANCHOR, FIX_METRIC. Generated local-decision IDs are arbitrary unique strings and require real trace consumption.
