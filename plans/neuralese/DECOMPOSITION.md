@@ -182,3 +182,15 @@ or model prompt changes. Hashing and row streaming remain crisp mechanisms.
 PublishTrainingUnion requires nonempty training output for every declared
 rendering/tokenizer before a receipt can grant training admission. A zero-output
 build is an implementation failure to repair, not an empty source-data decision.
+
+## Account for trajectories without authenticated edges — 2026-10-13
+
+AccountForMinedRows preserves the existing whole-trajectory mining policy:
+1. Authenticate producer-to-consumer references using the existing exact verifier.
+2. Keep every record of each trajectory that has at least one authenticated edge.
+3. For every other record, retain an existing failure reason or record that its
+   trajectory has no authenticated producer-to-consumer edge.
+4. Count those trajectories and rows in the shard receipt; retain original sources.
+The Python miner is crisp accounting over the verifier's output. This adds no
+eligibility rule, prompt, renderer change or new training admission. A completed
+zero-edge conversion must not look like lost or unprocessed input.

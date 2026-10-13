@@ -189,6 +189,13 @@ def derive(stem, records, pieces, conversion, omissions, tokenizer):
                               'writer_split': (w or {}).get('split')})
     chains = {e['trajectory'] for e in edges}
     kept = [r for r in records if trajectory_of(r) in chains]
+    without_edges = set(groups) - chains
+    accounted_ids = {item.get('id') for item in omissions}
+    for r in records:
+        if trajectory_of(r) in without_edges and r.get('id') not in accounted_ids:
+            omissions.append({'id': r.get('id'), 'stage': 'select_edge',
+                              'trajectory': trajectory_of(r),
+                              'reason': 'trajectory_has_no_authenticated_producer_consumer_edge'})
     used = set()
 
     def walk(v):
@@ -200,6 +207,8 @@ def derive(stem, records, pieces, conversion, omissions, tokenizer):
     for r in kept: walk(r.get('messages')); walk(r.get('target'))
     stats = {'converted': True, 'rows': len(records), 'kept_records': len(kept), 'edges': len(edges), 'chains': len(chains),
              'trajectories': len(groups), 'trajectories_failed_authentication': failed,
+             'trajectories_without_edges': len(without_edges),
+             'records_without_edges': sum(len(groups[t]) for t in without_edges),
              'conversion_sites': {k: v for k, v in conversion.get('sites', {}).items() if 'child' in k or 'inline' in k or 'soft' in k or 'typed' in k},
              'by_family': {}}
     fam = collections.defaultdict(lambda: {'records': 0, 'edges': 0, 'chains': set(), 'supervised_tokens': 0, 'edge_kinds': collections.Counter()})
