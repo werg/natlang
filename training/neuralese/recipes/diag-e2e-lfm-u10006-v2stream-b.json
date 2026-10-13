@@ -37,7 +37,7 @@
       "$delete": true
      },
      "direct_base_snapshot": "/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
-     "memory_gb": 9,
+     "memory_gb": 16,
      "latent_step_in_backward": false,
      "token_choice_optimizer": "muon",
      "token_choice_lr": 3e-06,

@@ -193,6 +193,41 @@ the handover type or its argument schema is a string; any other named type still
 
 ## Open hypotheses (in order)
 
+### Supervision audit, 2026-10-13 evening
+
+The streamed C-rate arms `v2stream-c3e-6` and `v2stream-c3e-5` both stopped
+before update 79 completed, not after the declared 400 updates. Their
+`e2e/failure.json` files identify the same reader record,
+`teacher-program:d47d21d2d5dae617c828:decision:0017`, and a CUDA allocation
+failure at the recipe's 9 GiB cap despite 12.18/17.79 GiB of device headroom.
+Both saved an emergency checkpoint at cursor 79 before applying that update.
+Resume these exact checkpoints and optimizer/RNG states with a 16 GiB envelope;
+this changes allocation capacity only. The recipe runner must permit the
+operational envelope change that the recurrence trainer already excludes from
+its objective identity. The launch wrapper's `wait; echo exit=$?` reported
+`exit=0` despite a failed Docker command; use the container's actual exit status
+for resumed jobs.
+
+The actual training logs already contain the gradient diagnostic. In each of
+the three rate arms' first 20 updates, 11 have nonzero correction gradients,
+11 have nonzero `down.weight` gradients, and 10 have nonzero `up.weight` and
+producer-hidden gradients. The first correction-bearing update is step 1:
+`down.weight` learns while the zero-initialized correction yields zero hidden
+gradient. By step 4, the hidden gradient is nonzero. Thus a disconnected
+correction or permanently blocked producer gradient is ruled out on these
+observed updates. Updates with no written dependency have no correction
+gradient; backbone norms alone also include reader/token losses and do not
+isolate the producer path. Evidence: each arm's `e2e/train.jsonl`;
+the compact audit is `/home/werg/data/supervisor-sweep-evidence2.log`.
+The separate `e2elead-gdiag-t` unit was a repeatedly preempted pytest run,
+not the actual first-20-update measurement; it was stopped to free memory.
+
+Held value loss at step 50 is 0.877 (C=3e-6) / 0.881 (C=3e-5), versus
+0.859 at entry. These are incomplete measurements; complete the matched sweep
+and report T_self before choosing the mixed run's correction rate. The older
+mixture-gradient discussion above describes the retired implementation;
+current values are the detached chosen-token embedding plus C(h).
+
 1. Writer rate: ruled in by arm B (V−T flat at writer 3e-6). Evidence: the NeuraleseProjection moves 0.024–0.040 per update on Muon at 3e-4, about 100× the TCP's step,
    and its zero-initialised `down` matrices get fixed-norm orthogonalised steps regardless of gradient size (Muon on a
    near-identity residual). Round 4 arm B.
