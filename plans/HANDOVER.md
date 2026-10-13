@@ -2,6 +2,26 @@
 
 ## 23:05 CEST: independent 200-program target and live source gates
 
+### Authoring quality correction
+
+The 220 count is a count of distinct semantic program *ideas*, not 220
+substantial, independent ready tasks. Both authors' self-audits found
+inventive examples (manuscript descent versus marginal borrowing; separate
+character beliefs under misinformation; nested-quotation deixis; retcon
+propagation), but also templated execution structure and thin fixtures.
+Astra's 120 use one five-stage scaffold; 54 worlds include many reused views.
+Sol's 100 use one generic stage outline; 90 are five questions each over 18
+shared worlds, often with only four to six decisive records despite 24 files.
+The live v5/v6b pass-through stages confirm that call count alone overstates
+semantic depth. Authors are marking shallow cases held, auditing connected
+relevant evidence and decision depth across both catalogs, and enriching
+weak exemplars before production selection. Strong concepts can remain while
+the actual task must require meaningful joins, scoped decisions and used
+stage outputs. An additional source-visibility leak was found in inferred
+root types with gold-derived dynamic map keys (archives04/ecology06); hold
+those cases until generic typed maps or source-authored taxonomies replace
+the leaked answer keys.
+
 The owner clarified that Astra and GPT-6.1 Sol each have the **same** brief,
 independently, for at least 100 substantive natlang programs each. The
 catalogs currently contain 120 Astra and 100 Sol programs across 40 disjoint
