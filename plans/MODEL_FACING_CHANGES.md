@@ -192,3 +192,16 @@ returned answers were independently reviewed; seven clear aliases are recorded
 in `conservative-equivalence-review-v1.json` and remain nonadmission evidence
 pending the native source-review route. Do not accept mismatched answer types
 because two models call them equivalent.
+
+## Workbench ticket blocking negatives — 2026-10-13
+
+Two s52027 `workbench_tickets` answer rejections exposed a synthetic label that
+could disagree with the visible ticket: the negative blocking bank included an
+empty sentence, so a broken report that never loads could be labelled
+`blocking=false` without any visible continuation or workaround. A second
+negative phrase said only "No rush," which did not clearly establish continued
+work. The generator now makes both negatives explicit. **Measurement debt:**
+compare about 48 live workbench ticket cases from the old and revised banks in
+the next teacher window, including the model's per-ticket judgements and exact
+totals. Existing s52027 cases retain their original source and labels; do not
+retroactively treat the ambiguous old examples as negative training targets.

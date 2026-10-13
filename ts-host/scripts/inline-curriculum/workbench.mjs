@@ -43,7 +43,7 @@ const TICKETS = {
     blocking: { ask: 'Is the customer\'s work blocked right now by what ticket describes (no workaround)?', key: 'work blocked right now',
       clause: 'describe work that is blocked right now', yes: ['Our whole team is stuck until this is sorted.', 'We cannot ship anything today because of this.',
         'Nobody on our side can work right now.', 'This stops our month-end close completely.'],
-      no: ['', 'It is not urgent; we have a workaround for now.', 'No rush, whenever you get to it.', 'It is not blocking us, but it is annoying.',
+      no: ['Our other work can continue while this is fixed; we are not blocked.', 'It is not urgent; we have a workaround for now.', 'No rush; we have a manual way to keep working until this is fixed.', 'It is not blocking us, but it is annoying.',
         'We can live with it for a few weeks.'] },
   },
   fill: { feature: ['the reports', 'the dashboard', 'the export', 'the calendar sync', 'the search', 'the invoice view'],
@@ -328,7 +328,9 @@ export function semanticCollection(seed, index, domainName) {
     return [['a', worldA], ['b', worldB]].map(([variant, world]) => {
       const items = world.map(x => ({ ...x, text: render(new Random(seed, `text:${shape}:${x.id}:${JSON.stringify(x.labels)}`), d, x, x.labels) }));
       const expected = evaluate(d, req, items);
-      return curriculumCase({ family: `workbench_${d.name}`, shape, variant, pairGroup: `workbench:${shape}`,
+      const program = curriculumCase({ family: `workbench_${d.name}`,
+        familyVersion: d.name === 'tickets' ? 2 : 1,
+        shape, variant, pairGroup: `workbench:${shape}`,
         slice: 'inline_placement', domain: 'other', mode: 'single_call', inline,
         evidence: { world: items.map(x => `${x.id}: ${JSON.stringify(x.labels)}`), retrieved: [], background: [] },
         minimumSequence: ['narrow the collection with the crisp helpers or fields', 'judge each remaining item in its own nl call for every semantic criterion',
@@ -337,6 +339,8 @@ export function semanticCollection(seed, index, domainName) {
         root: { name: d.root, args: {}, returns,
           instructions: `${text} Use ${d.service}.${d.plural}() for the data. Judge what each ${d.noun} says from its text, one ${d.noun} at a time; compute counts, filters and totals exactly.` },
         files: libraryFiles(d, items), inputs: {}, expected });
+      if (d.name === 'tickets') program.source_revisions.push('workbench-ticket-blocking-negatives/2');
+      return program;
     });
   }
   throw new Error(`no discriminating workbench request for ${seed}:${index}`);
