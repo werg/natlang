@@ -265,10 +265,57 @@ function checkedStageSpecs(entry, steps) {
         !variant.types || !Array.isArray(variant.numbered_plan) ||
         typeof variant.direct_await_idiom !== 'string')
       throw Error(`${entry.id}: stage variant does not match a scoped stage`);
+    const handoff = variant.typed_evidence_handoff;
+    const overriddenTypes = handoff ? new Set(['FinalSemanticState', 'StageInput1', 'StageInput2',
+      'StageInput3', 'StageInput4', 'StageInput5']) : new Set();
     for (const [name, body] of Object.entries(variant.types)) {
-      if (Object.hasOwn(spec.types, name) || typeof body !== 'string' || !body.startsWith('{'))
+      if ((Object.hasOwn(spec.types, name) && !overriddenTypes.has(name)) ||
+          typeof body !== 'string' || !body.startsWith('{'))
         throw Error(`${entry.id}: invalid variant type ${name}`);
-      spec.types[name] = body;
+      if (!name.startsWith('StageInput')) spec.types[name] = body;
+    }
+    if (handoff) {
+      if (handoff.schema !== 'semantic-typed-evidence-handoff/1' ||
+          !['readStudyPlots', 'buildInteractionGraph'].every((name, index) =>
+            spec.stages[index]?.name === name && handoff[`stage${index + 1}`]?.name === name) ||
+          !['StageInput1', 'StageInput2', 'StageInput3', 'StageInput4', 'StageInput5']
+            .every(name => typeof variant.types[name] === 'string') ||
+          !['StageInput2', 'StageInput3', 'StageInput4', 'StageInput5']
+            .every(name => !/\b(?:EvidenceBatch|EvidenceRecord|relatedRecords|\btext\s*:)/.test(variant.types[name])) ||
+          !/\bpriorCompletedState\s*:\s*FinalSemanticState\b/.test(variant.types.TypedStageContext ?? '') ||
+          /\b(?:EvidenceBatch|EvidenceRecord|relatedRecords|\btext\s*:)/.test(variant.types.TypedStageContext ?? '') ||
+          !/\binteractionAssertions\s*:\s*InteractionAssertion\[\]/.test(variant.types.StageInput2) ||
+          !/\bedgeDecisions\s*:\s*EdgeDecision\[\]/.test(variant.types.StageInput3) ||
+          !/\bedgeDecisions\s*:\s*EdgeDecision\[\]/.test(variant.types.StageInput5) ||
+          !/\bedgeDecisions\s*:\s*EdgeDecision\[\]/.test(spec.types.FinalSemanticState))
+        throw Error(`${entry.id}: invalid typed evidence handoff contract`);
+      for (const [index, stage] of spec.stages.entries()) {
+        stage.input_type = variant.types[`StageInput${index + 1}`];
+      }
+      spec.stages[2].numbered_plan = [
+        '1. Read only input.prior.interactionAssertions, edgeDecisions and interactionEdges plus context.priorCompletedState typed contributions and exact witness snippets.',
+        '2. Assess whether each established directed edge expresses an actual causal effect or merely an association under the stated typed observations. Preserve unresolved edge decisions rather than inventing an effect.',
+        '3. Append source-grounded causalAssessments for this batch, preserving edge direction, canonical entity keys and exact witnesses.',
+        '4. Call interpretObservationScope with BatchIdentity, TypedStageContext and the actual typed prior fields; return its complete FinalSemanticState.',
+      ];
+      for (const index of [0, 1]) {
+        const stage = spec.stages[index], replacement = handoff[`stage${index + 1}`];
+        stage.numbered_plan = replacement.numbered_plan;
+        stage.new_semantic_transformation = replacement.new_contribution;
+        stage.scoped_literal_required = true;
+        stage.scoped_literal_plan = [replacement.idiom_preconditions,
+          replacement.direct_await_idiom, handoff.exact_vs_semantic];
+        stage.owned_contribution.type = index === 0 ? 'InteractionAssertion[]' :
+          'InteractionEdge[] with one source-bound EdgeDecision per assertion';
+        stage.no_op_policy = index === 0 ?
+          'Only an empty source folder has no assertion decision; every actual record has one source-bound assertion, including background or unresolved.' :
+          'Only an empty typed assertion list has no edge decision; every actual assertion has one source-bound decision, including no_relation or unresolved.';
+      }
+      for (const stage of spec.stages.slice(2)) {
+        stage.source_evidence_obligation =
+          'Use typed assertions, decisions, edges and exact witness snippets from current and completed state.';
+      }
+      spec.typedEvidenceHandoff = handoff;
     }
     stage.numbered_plan = variant.numbered_plan;
     // Replace the old decision's semantic meaning as well as its recipe. A
@@ -295,7 +342,7 @@ function checkedStageSpecs(entry, steps) {
           !carried.stage5_no_op_policy.trim() ||
           carried.root_numbered_plan.length < 3 || carried.stage5_numbered_plan.length < 3)
         throw Error(`${entry.id}: invalid cross-folder typed accumulation contract`);
-      spec.types.StageContext = carried.StageContext;
+      spec.types.StageContext = handoff ? variant.types.TypedStageContext : carried.StageContext;
       const last = spec.stages.at(-1);
       last.numbered_plan = carried.stage5_numbered_plan;
       last.no_op_policy = carried.stage5_no_op_policy;
@@ -354,6 +401,7 @@ function render(entry, provider) {
   if (steps.length < 3) throw Error(`${id}: need at least three distinct stages`);
   const stageSpec = stageSpecsMode ? checkedStageSpecs(entry, steps) : null;
   const crossFolder = stageSpec && variant?.program_id === id ? variant.cross_folder_accumulation : null;
+  const typedHandoff = stageSpec?.typedEvidenceHandoff;
   const entityIdentity = stageSpec && variant?.program_id === id ? variant.entity_identity_contract : null;
   if (entityIdentity && ['join_key', 'source_quotes', 'scope'].some(key =>
     typeof entityIdentity[key] !== 'string' || !entityIdentity[key].trim()))
@@ -412,7 +460,9 @@ function render(entry, provider) {
   const stageInstructions = stageSpec ? `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
     identityInstruction +
     (identities ? `Source ID binding (attach id and path to every EvidenceRecord, and use these exact IDs in the result):\n${identities.map(({ id, path }) => `${id}: ${path}`).join('\n')}\n\n` : '') +
-    (crossFolder ?
+    (crossFolder && typedHandoff ?
+      `Use iterateOn over sorted source folders with a shrinking unprocessed-folder frontier. Initialize completedState:FinalSemanticState = ${JSON.stringify(crossFolder.initial_state)}. For each folder, bind every source ID and path from the visible source table, make a typed EvidenceBatch of {id,path,text} records, and call ${steps[0].name} with StageInput1 {batch,context:{objective,rule,priorCompletedState:completedState},prior:{stageAbsences:[]}}. Stage1 reads current EvidenceRecords. Stages2–5 receive BatchIdentity and typed prior decisions, edges and witness snippets. Exact root mechanism checks one assertion decision per current record and verifies every returned witness quote against its identified source record. Use the semantic returned contributions to build the result. Follow this exact typed state plan:\n${crossFolder.root_numbered_plan.join('\n')}\n` :
+    crossFolder ?
       `Use iterateOn over sorted source folders with a shrinking unprocessed-folder frontier. Initialize completedState:FinalSemanticState = ${JSON.stringify(crossFolder.initial_state)}. For each folder, build a typed EvidenceBatch of {id,path,text} records and call ${steps[0].name} with StageInput1 {batch,context:{objective,rule,relatedRecords,priorCompletedState:completedState},prior:{stageAbsences:[]}}. Follow this exact typed state plan:\n${crossFolder.root_numbered_plan.join('\n')}\n` :
       entry.typed_inputs ? `Read the supplied directory snapshot and inquiry into the authored typed bundle. Call ${steps[0].name} with StageInput1 {bundle,inquiry,prior:{${stageSpec.no_op_field ?? 'stageAbsences'}:[]}}. The named stages must each add their own source-backed typed contribution before calling the next stage within the active call. Synthesize the declared answer from the returned FinalSemanticState, not by re-solving from the raw folder.\n` :
       `Use iterateOn over the sorted source folders. Each step builds a typed EvidenceBatch of {id,path,text} records for one current folder and calls ${steps[0].name} with StageInput1 {batch,context,prior:{stageAbsences:[]}}. Append the returned FinalSemanticState to the loop's collected states, then advance the folder frontier; the unprocessed-folder count decreases by one until all folders are consumed. Each named stage adds its owned, source-linked contribution and passes that accumulated state to its child. Synthesize the declared result from all collected states, preserving cross-folder evidence and unresolved claims.\n`) +
@@ -447,16 +497,19 @@ function render(entry, provider) {
       stageFolder += `/${name}`;
       const plan = owned.numbered_plan.join('\n');
       const literalPlan = owned.scoped_literal_required ?
-        `\nFormulate and invoke a scoped typed natural-language literal; pass its returned decision into ${owned.owned_contribution.field}.\n${paragraphs(owned.scoped_literal_plan).join('\n')}` : '';
+        `\nFormulate and invoke a scoped typed natural-language literal; use its actual returned decision in this stage's typed contribution.\n${paragraphs(owned.scoped_literal_plan).join('\n')}` : '';
       const carriedPlan = crossFolder ?
         `\nCross-folder state: ${crossFolder.stage_ownership_plan.join(' ')}\n` : '';
+      const handoffPlan = typedHandoff ?
+        `\nTyped evidence boundary: ${index === 0 ? 'Only this stage reads EvidenceRecord.text. Bind source ID/path in parent scope and pass actual returned InteractionAssertion objects to the child.' :
+          'Use BatchIdentity and prior typed contributions with exact witness snippets.'} ${typedHandoff.exact_vs_semantic}\n` : '';
       files[`${stageFolder}.nl`] = nlFile({ args: { input: `StageInput${index + 1}` },
         returns: 'FinalSemanticState', description: `${title}: ${name}`,
         instructions: `${plan}\nOwned new semantic contribution: ${owned.owned_contribution.field}: ${owned.owned_contribution.type}.\n` +
           identityInstruction +
           `Transformation: ${owned.new_semantic_transformation}\n` +
           `Evidence: ${owned.source_evidence_obligation}\nInvariant: ${owned.invariant}\n` +
-          `No applicable evidence: ${owned.no_op_policy}${literalPlan}${carriedPlan}\n` +
+          `No applicable evidence: ${owned.no_op_policy}${literalPlan}${carriedPlan}${handoffPlan}\n` +
           (next ? `Pass the accumulated typed contributions to child ${next} within this active call and return its complete FinalSemanticState.\n` :
             `Return the complete FinalSemanticState with every earlier contribution preserved.\n`) });
       continue;
