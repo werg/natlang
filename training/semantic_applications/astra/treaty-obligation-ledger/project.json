@@ -542,7 +542,7 @@
     ],
     "exact_fields": "Snapshot dates, event-boundary consequences, status/quantity/permission fields, source IDs, proof/defeat reference integrity and preservation of independent support.",
     "semantic_fields": "Norm condition interpretation, authority scope entailment, proof meaning, inclusion-minimality argument and explanation prose require independent semantic review.",
-    "verifier_status": "27 controls pass:6 equivalent positives,21 corruptions; no NL execution credit."
+    "verifier_status": "32 controls pass:6 equivalent positives,26 corruptions; no NL execution credit."
   },
   "services": [],
   "provenance": {
@@ -554,8 +554,8 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "exact_checker_controls_passed": 27,
-    "independent_oracle_review": false,
+    "exact_checker_controls_passed": 32,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
@@ -576,5 +576,11 @@
   "source_replay": {
     "path": "/tmp/astra-treaty-source-replay-v2",
     "scope": "Shared loader full typed canonical source-validity replay; no NL execution or admission."
+  },
+  "independent_review": {
+    "path": "training/semantic_applications/reviews/ASTRA_TREATY_REVIEW_SOL.json",
+    "commit": "ae10e425",
+    "sha256": "176b8a13444cdd054f55a2632e1e3d8daaf4d9db78cb8fc937563594de6b1d72",
+    "scope": "Independent source/oracle/typed proof flow and exact domain review; no live or training admission."
   }
 }

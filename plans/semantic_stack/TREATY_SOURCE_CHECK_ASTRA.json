@@ -283,16 +283,61 @@
         "issues": [
           "coverage CHARTER"
         ]
+      },
+      {
+        "name": "unknown background clause premise",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "background source domain"
+        ]
+      },
+      {
+        "name": "unknown background fact premise",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "background source domain"
+        ]
+      },
+      {
+        "name": "unknown background authority premise",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "background authority domain"
+        ]
+      },
+      {
+        "name": "unknown background proof premise",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "background proof domain"
+        ]
+      },
+      {
+        "name": "invalid background premise kind",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "background premise kind"
+        ]
       }
     ]
   },
-  "independent_review_pending": true,
+  "independent_review_pending": false,
   "live_execution": false,
   "training_admitted": false,
   "hashes": {
-    "training/semantic_applications/astra/treaty-obligation-ledger/project.json": "17d46ca5120398c786a8dd59e5b1e70b7a1b8d389af5b5ce36d596492b790dd3",
-    "training/semantic_applications/astra/treaty-obligation-ledger/verify-result.mjs": "6d84d9650c141df1f785053b35d951b7c40d4701df3c148126b6b911f2255bf1",
-    "training/semantic_applications/astra/treaty-obligation-ledger/check-verifier.mjs": "b2ee83433451c9808e7469e83fe9855be56bb22e091f8efed715764fa338c99c",
+    "training/semantic_applications/astra/treaty-obligation-ledger/project.json": "bcb6d863b632b9866798d6fef45e687f56a5ab471dc020f940aad4cddb738573",
+    "training/semantic_applications/astra/treaty-obligation-ledger/verify-result.mjs": "7a02c7367597451cfa4a861aca55bf24078e73be889e7bd726d8a34ebcb8da31",
+    "training/semantic_applications/astra/treaty-obligation-ledger/check-verifier.mjs": "b67e824326d4caf4d6a6b93b555c52f43c6a289fa1ebf61c61ddfcd46bbf978d",
     "training/semantic_applications/astra/treaty-obligation-ledger/three-locks/reference-report.json": "bf69cd9fc7d47a80c6eaece3e28153dce300cf9677cd351ab52e2c9a343abf71",
     "training/semantic_applications/astra/treaty-obligation-ledger/three-locks/oracle.json": "9e3cc8d7964e40a23527c9ee28a054b4bd54cdc9c9ac97e24009f97ba82974bf"
   },
@@ -300,5 +345,15 @@
     "path": "/tmp/astra-treaty-source-replay-v2",
     "passed": true,
     "scope": "Full canonical typed witness only"
+  },
+  "independent_checker_correction": {
+    "reviewer": "semantic_slate_sol",
+    "defect": "Changed-support backgroundPremises admitted foreign IDs.",
+    "resolution": "Validate clause/fact source IDs, authority IDs and before/after proof domains; reject unknown premise kind. Five new corruption controls pass."
+  },
+  "independent_review": {
+    "path": "training/semantic_applications/reviews/ASTRA_TREATY_REVIEW_SOL.json",
+    "sha256": "176b8a13444cdd054f55a2632e1e3d8daaf4d9db78cb8fc937563594de6b1d72",
+    "commit": "ae10e425"
   }
 }

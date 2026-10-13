@@ -30,4 +30,6 @@ run('cyclic justification',false,r=>r.ledgers[0].proofs[0].premises.push({kind:'
 run('unauthorized circular disappears',false,r=>r.compiled.rejectedClauseIds=r.compiled.rejectedClauseIds.filter(x=>x!=='O01'));
 run('missing audit authority result',false,r=>r.audits[0].authorityFindings=[]);
 run('source coverage omitted',false,r=>r.sourceCoverage[0].clauseIds.pop());
+for(const kind of ['clause','fact','authority','proof'])run('unknown background '+kind+' premise',false,r=>r.deltas.find(d=>d.changed).support.backgroundPremises=[{kind,id:'NO_SUCH_ID'}]);
+run('invalid background premise kind',false,r=>r.deltas.find(d=>d.changed).support.backgroundPremises=[{kind:'invented',id:'A01'}]);
 console.log(JSON.stringify({scope:'External exact mechanism controls only; no NL application execution',passed:checks.every(c=>c.passed),checks},null,2));if(checks.some(c=>!c.passed))process.exitCode=1;
