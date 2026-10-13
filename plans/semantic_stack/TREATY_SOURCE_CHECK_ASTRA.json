@@ -1,0 +1,304 @@
+{
+  "schema": "natlang.semantic-application-author-check/1",
+  "author": "semantic_slate_astra",
+  "application": "astra-app-treaty-obligation-ledger-v1",
+  "composition": {
+    "nl_files": 28,
+    "nl_total_lines": 571,
+    "nl_body_lines": 351,
+    "numbered_steps": 166,
+    "type_aliases": 39,
+    "scoped_literal_sites": 5,
+    "visible_crisp_policy_lines": 0
+  },
+  "loader": {
+    "nodes": 28,
+    "edges": 27,
+    "types": 39,
+    "passed": true
+  },
+  "typed_reference": {
+    "type": "LedgerReport",
+    "passed": true,
+    "entries": 24,
+    "proofs": 28,
+    "defeats": 6
+  },
+  "verifier_controls": {
+    "scope": "External exact mechanism controls only; no NL application execution",
+    "passed": true,
+    "checks": [
+      {
+        "name": "canonical typed certificate",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "unordered proof/ledger collections",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "object property order",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "alpha renamed proof and authority references",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "alpha renamed norm references",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "equivalent explanation prose",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "retroactive toll amount",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "amount S34[\"T1\",\"Alder\",\"Birch\",\"toll\"]"
+        ]
+      },
+      {
+        "name": "erase open rescue uncertainty",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "status S34[\"T1\",\"Alder\",\"Birch\",\"toll\"]",
+          "justification classification S34[\"T1\",\"Alder\",\"Birch\",\"toll\"]",
+          "delta snapshot/status"
+        ]
+      },
+      {
+        "name": "reservation borrowed by beneficiary",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "status S34[\"T1\",\"Alder\",\"Birch\",\"translation\"]",
+          "justification classification S34[\"T1\",\"Alder\",\"Birch\",\"translation\"]",
+          "delta snapshot/status",
+          "delta changed flag",
+          "changed premise support"
+        ]
+      },
+      {
+        "name": "ignore own-debtor reservation",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "status S34[\"T2\",\"Birch\",\"Cedar\",\"translation\"]",
+          "justification classification S34[\"T2\",\"Birch\",\"Cedar\",\"translation\"]",
+          "delta snapshot/status",
+          "delta changed flag",
+          "changed premise support"
+        ]
+      },
+      {
+        "name": "follow overlong board order",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "board authority sunset"
+        ]
+      },
+      {
+        "name": "draft changes effective rate",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "prospective rate"
+        ]
+      },
+      {
+        "name": "admit reciprocal tariff grant",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "unsupported authority admitted"
+        ]
+      },
+      {
+        "name": "authority proof self-support",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "cyclic authority proof"
+        ]
+      },
+      {
+        "name": "future certification in earlier ledger",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "future evidence leakage"
+        ]
+      },
+      {
+        "name": "lose independent notice proof",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "missing independent source support S34[\"T1\",\"Alder\",\"Birch\",\"notice\"]"
+        ]
+      },
+      {
+        "name": "wrong debtor-beneficiary direction",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "business key coverage S35",
+          "proof business key",
+          "proof business key",
+          "missing entry",
+          "extraneous audits",
+          "delta snapshot/status"
+        ]
+      },
+      {
+        "name": "omit a requested business obligation",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "business key coverage S34",
+          "proof business key",
+          "missing entry",
+          "extraneous audits",
+          "delta business coverage",
+          "delta snapshot/status",
+          "delta changed flag",
+          "changed premise support"
+        ]
+      },
+      {
+        "name": "wrong snapshot cutoff",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "snapshot time"
+        ]
+      },
+      {
+        "name": "late-evidence change erased",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "delta changed flag"
+        ]
+      },
+      {
+        "name": "omit receipt premise from change support",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "changed premise support"
+        ]
+      },
+      {
+        "name": "invented quotation",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "report/deltas/0/witnesses/0: witness"
+        ]
+      },
+      {
+        "name": "dangling proof reference",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "entry proof ownership",
+          "entry defeat ownership",
+          "missing independent source support S34[\"T1\",\"Alder\",\"Birch\",\"toll\"]",
+          "malformed certificate: Cannot read properties of undefined (reading 'amount')"
+        ]
+      },
+      {
+        "name": "cyclic justification",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "cyclic justification"
+        ]
+      },
+      {
+        "name": "unauthorized circular disappears",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "rejected clause coverage"
+        ]
+      },
+      {
+        "name": "missing audit authority result",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "audit authority findings"
+        ]
+      },
+      {
+        "name": "source coverage omitted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "coverage CHARTER"
+        ]
+      }
+    ]
+  },
+  "independent_review_pending": true,
+  "live_execution": false,
+  "training_admitted": false,
+  "hashes": {
+    "training/semantic_applications/astra/treaty-obligation-ledger/project.json": "17d46ca5120398c786a8dd59e5b1e70b7a1b8d389af5b5ce36d596492b790dd3",
+    "training/semantic_applications/astra/treaty-obligation-ledger/verify-result.mjs": "6d84d9650c141df1f785053b35d951b7c40d4701df3c148126b6b911f2255bf1",
+    "training/semantic_applications/astra/treaty-obligation-ledger/check-verifier.mjs": "b2ee83433451c9808e7469e83fe9855be56bb22e091f8efed715764fa338c99c",
+    "training/semantic_applications/astra/treaty-obligation-ledger/three-locks/reference-report.json": "bf69cd9fc7d47a80c6eaece3e28153dce300cf9677cd351ab52e2c9a343abf71",
+    "training/semantic_applications/astra/treaty-obligation-ledger/three-locks/oracle.json": "9e3cc8d7964e40a23527c9ee28a054b4bd54cdc9c9ac97e24009f97ba82974bf"
+  },
+  "source_replay": {
+    "path": "/tmp/astra-treaty-source-replay-v2",
+    "passed": true,
+    "scope": "Full canonical typed witness only"
+  }
+}

@@ -1,0 +1,580 @@
+{
+  "schema": "natlang.semantic-application-source/1",
+  "id": "astra-app-treaty-obligation-ledger-v1",
+  "source_root": "applications/treaty-obligation-ledger",
+  "entry": "reconcileLedger.nl",
+  "entry_kind": "directory-reducer",
+  "request_type": "LedgerRequest",
+  "result_type": "LedgerReport",
+  "fixture_root": "training/semantic_applications/astra/treaty-obligation-ledger/three-locks/fixture",
+  "request_path": "training/semantic_applications/astra/treaty-obligation-ledger/three-locks/request.json",
+  "oracle_path": "training/semantic_applications/astra/treaty-obligation-ledger/three-locks/oracle.json",
+  "reference_path": "training/semantic_applications/astra/treaty-obligation-ledger/three-locks/reference-report.json",
+  "external_verifier_path": "training/semantic_applications/astra/treaty-obligation-ledger/verify-result.mjs",
+  "external_verifier_export": "verifyCandidate",
+  "source_world_split_key": "astra-application-treaty-three-locks-v1",
+  "program_files": [
+    "reconcileLedger/auditLedger/replayJustification/challengeAuthority.nl",
+    "reconcileLedger/auditLedger/replayJustification.nl",
+    "reconcileLedger/auditLedger.nl",
+    "reconcileLedger/buildAuthority/deriveDelegation/assessCompetence.nl",
+    "reconcileLedger/buildAuthority/deriveDelegation/detectUnsupportedCycle.nl",
+    "reconcileLedger/buildAuthority/deriveDelegation.nl",
+    "reconcileLedger/buildAuthority.nl",
+    "reconcileLedger/compileNorms/classifyChange/resolveTarget.nl",
+    "reconcileLedger/compileNorms/classifyChange.nl",
+    "reconcileLedger/compileNorms/interpretConditions.nl",
+    "reconcileLedger/compileNorms.nl",
+    "reconcileLedger/evaluateSlices/applySnapshot/classifyObligation.nl",
+    "reconcileLedger/evaluateSlices/applySnapshot/propagateRetraction.nl",
+    "reconcileLedger/evaluateSlices/applySnapshot/seedApplicability/judgeScope.nl",
+    "reconcileLedger/evaluateSlices/applySnapshot/seedApplicability.nl",
+    "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier/deriveConsequences.nl",
+    "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier/resolveDefeat.nl",
+    "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier.nl",
+    "reconcileLedger/evaluateSlices/applySnapshot.nl",
+    "reconcileLedger/evaluateSlices.nl",
+    "reconcileLedger/explainDelta/compareCertificates.nl",
+    "reconcileLedger/explainDelta/minimizeSupport/pruneSupportPass.nl",
+    "reconcileLedger/explainDelta/minimizeSupport.nl",
+    "reconcileLedger/explainDelta.nl",
+    "reconcileLedger/indexArchive/interpretEvent.nl",
+    "reconcileLedger/indexArchive/interpretInstrument.nl",
+    "reconcileLedger/indexArchive.nl",
+    "reconcileLedger.nl",
+    "types.ts",
+    "natlang.json",
+    "tsconfig.json"
+  ],
+  "fixture_files": [
+    "accession/birch.md",
+    "amendments/rate-adopted.md",
+    "amendments/rate-draft.md",
+    "charter/competence.md",
+    "compact/base.md",
+    "controls/evidence.md",
+    "discovered/rescue-dispatch.md",
+    "events/transits.md",
+    "manifest.json",
+    "offices/birch-circular.md",
+    "offices/reciprocal-grants.md",
+    "orders/flood.md"
+  ],
+  "metadata_files": [
+    "README.md",
+    "DECOMPOSITION.md"
+  ],
+  "typed_call_graph": {
+    "nodes": [
+      {
+        "path": "reconcileLedger/auditLedger/replayJustification/challengeAuthority.nl",
+        "args": {
+          "proof": "Justification",
+          "authority": "AuthoritySet",
+          "archive": "Archive"
+        },
+        "returns": "AuthorityAssessment",
+        "owned_delta": "Challenge whether a final normative proof reaches sufficient root competence in the correct scope."
+      },
+      {
+        "path": "reconcileLedger/auditLedger/replayJustification.nl",
+        "args": {
+          "entry": "LedgerEntry",
+          "ledger": "SliceLedger",
+          "archive": "Archive",
+          "authority": "AuthoritySet"
+        },
+        "returns": "ProofAudit",
+        "owned_delta": "Replay one obligation's premise DAG and challenge each authority dependence."
+      },
+      {
+        "path": "reconcileLedger/auditLedger.nl",
+        "args": {
+          "request": "LedgerRequest",
+          "archive": "Archive",
+          "authority": "AuthoritySet",
+          "compiled": "CompiledNorms",
+          "ledgers": "SliceLedger[]",
+          "deltas": "CertificateDelta[]"
+        },
+        "returns": "LedgerReport",
+        "owned_delta": "Independently audit authority paths, proof closure and snapshot-preserving ledger changes."
+      },
+      {
+        "path": "reconcileLedger/buildAuthority/deriveDelegation/assessCompetence.nl",
+        "args": {
+          "claim": "CompetenceClaim",
+          "parents": "AuthorityProof[]",
+          "archive": "Archive"
+        },
+        "returns": "AuthorityAssessment",
+        "owned_delta": "Judge a claimed grant against the acts, territory and onward power of its supported parents."
+      },
+      {
+        "path": "reconcileLedger/buildAuthority/deriveDelegation/detectUnsupportedCycle.nl",
+        "args": {
+          "pending": "CompetenceClaim[]",
+          "proofs": "AuthorityProof[]",
+          "archive": "Archive"
+        },
+        "returns": "AuthorityRejection[]",
+        "owned_delta": "Identify unrooted citation cycles and claims whose required parent was never supported."
+      },
+      {
+        "path": "reconcileLedger/buildAuthority/deriveDelegation.nl",
+        "args": {
+          "state": "AuthorityFrontier"
+        },
+        "returns": "AuthorityFrontier",
+        "owned_delta": "Consume one rooted grant or one unsupported finite dependency component."
+      },
+      {
+        "path": "reconcileLedger/buildAuthority.nl",
+        "args": {
+          "archive": "Archive"
+        },
+        "returns": "AuthoritySet",
+        "owned_delta": "Derive competence from charter roots and reject unsupported delegation components."
+      },
+      {
+        "path": "reconcileLedger/compileNorms/classifyChange/resolveTarget.nl",
+        "args": {
+          "instrument": "Instrument",
+          "clause": "Clause",
+          "archive": "Archive"
+        },
+        "returns": "TargetResolution",
+        "owned_delta": "Resolve clause, actor and action references before any source change is applied."
+      },
+      {
+        "path": "reconcileLedger/compileNorms/classifyChange.nl",
+        "args": {
+          "instrument": "Instrument",
+          "archive": "Archive",
+          "authority": "AuthoritySet"
+        },
+        "returns": "ChangeRelation[]",
+        "owned_delta": "Classify amendment, reservation and interpretation by their actual legal target and authority."
+      },
+      {
+        "path": "reconcileLedger/compileNorms/interpretConditions.nl",
+        "args": {
+          "clause": "Clause",
+          "archive": "Archive"
+        },
+        "returns": "Condition[]",
+        "owned_delta": "Preserve conjunctive prerequisites, open evidence and source-declared exceptions."
+      },
+      {
+        "path": "reconcileLedger/compileNorms.nl",
+        "args": {
+          "archive": "Archive",
+          "authority": "AuthoritySet"
+        },
+        "returns": "CompiledNorms",
+        "owned_delta": "Compile source-supported duties and scoped changes while retaining rejected instruments."
+      },
+      {
+        "path": "reconcileLedger/evaluateSlices/applySnapshot/classifyObligation.nl",
+        "args": {
+          "key": "ObligationKey",
+          "proofs": "Justification[]",
+          "defeats": "DefeatDecision[]",
+          "snapshot": "Snapshot"
+        },
+        "returns": "LedgerEntry",
+        "owned_delta": "Classify a business obligation from all surviving proofs and scoped defeat alternatives."
+      },
+      {
+        "path": "reconcileLedger/evaluateSlices/applySnapshot/propagateRetraction.nl",
+        "args": {
+          "state": "ClosureState",
+          "invalidatedProofIds": "string[]"
+        },
+        "returns": "RetractionDelta",
+        "owned_delta": "Remove a changed premise's dependent proof cone while preserving alternative support."
+      },
+      {
+        "path": "reconcileLedger/evaluateSlices/applySnapshot/seedApplicability/judgeScope.nl",
+        "args": {
+          "norm": "Norm",
+          "trip": "Transit",
+          "snapshot": "Snapshot",
+          "archive": "Archive",
+          "authority": "AuthoritySet"
+        },
+        "returns": "Applicability",
+        "owned_delta": "Judge one norm's event-time scope and snapshot-visible conditions with a scoped NL literal."
+      },
+      {
+        "path": "reconcileLedger/evaluateSlices/applySnapshot/seedApplicability.nl",
+        "args": {
+          "snapshot": "Snapshot",
+          "trip": "Transit",
+          "compiled": "CompiledNorms",
+          "archive": "Archive",
+          "authority": "AuthoritySet"
+        },
+        "returns": "Applicability[]",
+        "owned_delta": "Join each norm with the requested trip, party roles and available evidence."
+      },
+      {
+        "path": "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier/deriveConsequences.nl",
+        "args": {
+          "application": "Applicability",
+          "state": "ClosureState"
+        },
+        "returns": "ProofDelta",
+        "owned_delta": "Materialize supported or unresolved proof edges from one applicability judgment."
+      },
+      {
+        "path": "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier/resolveDefeat.nl",
+        "args": {
+          "candidate": "{targetProofId:string;defeatingNormId:string;applicationId:string}",
+          "state": "ClosureState"
+        },
+        "returns": "DefeatDecision",
+        "owned_delta": "Judge one scoped override using authority, role, time and exception structure."
+      },
+      {
+        "path": "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier.nl",
+        "args": {
+          "state": "ClosureState"
+        },
+        "returns": "ClosureState",
+        "owned_delta": "Own one consequence/defeat delta in the finite stratified justification frontier."
+      },
+      {
+        "path": "reconcileLedger/evaluateSlices/applySnapshot.nl",
+        "args": {
+          "previous": "SliceLedger | null",
+          "snapshot": "Snapshot",
+          "archive": "Archive",
+          "compiled": "CompiledNorms",
+          "authority": "AuthoritySet",
+          "tripIds": "string[]"
+        },
+        "returns": "SliceLedger",
+        "owned_delta": "Seed current applicability, retract invalid premises and settle the affected obligation closure."
+      },
+      {
+        "path": "reconcileLedger/evaluateSlices.nl",
+        "args": {
+          "request": "LedgerRequest",
+          "archive": "Archive",
+          "compiled": "CompiledNorms",
+          "authority": "AuthoritySet"
+        },
+        "returns": "SliceLedger[]",
+        "owned_delta": "Evaluate ordered knowledge snapshots while preserving historical transit and norm times."
+      },
+      {
+        "path": "reconcileLedger/explainDelta/compareCertificates.nl",
+        "args": {
+          "before": "SliceLedger",
+          "after": "SliceLedger"
+        },
+        "returns": "CertificateDelta[]",
+        "owned_delta": "Identify actual obligation and justification changes without conflating new IDs with new meaning."
+      },
+      {
+        "path": "reconcileLedger/explainDelta/minimizeSupport/pruneSupportPass.nl",
+        "args": {
+          "state": "SupportPassState"
+        },
+        "returns": "SupportPassState",
+        "owned_delta": "Try one finite deletion pass using actual scoped sufficiency judgments over the affected proof cone."
+      },
+      {
+        "path": "reconcileLedger/explainDelta/minimizeSupport.nl",
+        "args": {
+          "delta": "CertificateDelta",
+          "before": "SliceLedger",
+          "after": "SliceLedger",
+          "archive": "Archive"
+        },
+        "returns": "MinimalSupport",
+        "owned_delta": "Derive inclusion-minimal newly available evidence for one observed certificate change."
+      },
+      {
+        "path": "reconcileLedger/explainDelta.nl",
+        "args": {
+          "ledgers": "SliceLedger[]",
+          "archive": "Archive",
+          "compiled": "CompiledNorms"
+        },
+        "returns": "CertificateDelta[]",
+        "owned_delta": "Compare adjacent evidence snapshots by stable business identity and proof provenance."
+      },
+      {
+        "path": "reconcileLedger/indexArchive/interpretEvent.nl",
+        "args": {
+          "document": "SourceDocument",
+          "clauses": "Clause[]"
+        },
+        "returns": "EventInterpretation",
+        "owned_delta": "Interpret trips, evidence content and evidence arrival without changing event time."
+      },
+      {
+        "path": "reconcileLedger/indexArchive/interpretInstrument.nl",
+        "args": {
+          "document": "SourceDocument",
+          "clauses": "Clause[]"
+        },
+        "returns": "Instrument[]",
+        "owned_delta": "Separate an instrument's claimed act, issuer, adoption and temporal scope."
+      },
+      {
+        "path": "reconcileLedger/indexArchive.nl",
+        "args": {
+          "request": "LedgerRequest"
+        },
+        "returns": "Archive",
+        "owned_delta": "Read nested instrument and event collections without collapsing their distinct date roles."
+      },
+      {
+        "path": "reconcileLedger.nl",
+        "args": {
+          "request": "LedgerRequest"
+        },
+        "returns": "LedgerReport",
+        "owned_delta": "Reconcile authority, event-time duties and knowledge-snapshot changes in a fictional federation."
+      }
+    ],
+    "edges": [
+      {
+        "caller": "reconcileLedger/auditLedger/replayJustification.nl",
+        "callee": "reconcileLedger/auditLedger/replayJustification/challengeAuthority.nl"
+      },
+      {
+        "caller": "reconcileLedger/auditLedger.nl",
+        "callee": "reconcileLedger/auditLedger/replayJustification.nl"
+      },
+      {
+        "caller": "reconcileLedger.nl",
+        "callee": "reconcileLedger/auditLedger.nl"
+      },
+      {
+        "caller": "reconcileLedger/buildAuthority/deriveDelegation.nl",
+        "callee": "reconcileLedger/buildAuthority/deriveDelegation/assessCompetence.nl"
+      },
+      {
+        "caller": "reconcileLedger/buildAuthority/deriveDelegation.nl",
+        "callee": "reconcileLedger/buildAuthority/deriveDelegation/detectUnsupportedCycle.nl"
+      },
+      {
+        "caller": "reconcileLedger/buildAuthority.nl",
+        "callee": "reconcileLedger/buildAuthority/deriveDelegation.nl"
+      },
+      {
+        "caller": "reconcileLedger.nl",
+        "callee": "reconcileLedger/buildAuthority.nl"
+      },
+      {
+        "caller": "reconcileLedger/compileNorms/classifyChange.nl",
+        "callee": "reconcileLedger/compileNorms/classifyChange/resolveTarget.nl"
+      },
+      {
+        "caller": "reconcileLedger/compileNorms.nl",
+        "callee": "reconcileLedger/compileNorms/classifyChange.nl"
+      },
+      {
+        "caller": "reconcileLedger/compileNorms.nl",
+        "callee": "reconcileLedger/compileNorms/interpretConditions.nl"
+      },
+      {
+        "caller": "reconcileLedger.nl",
+        "callee": "reconcileLedger/compileNorms.nl"
+      },
+      {
+        "caller": "reconcileLedger/evaluateSlices/applySnapshot.nl",
+        "callee": "reconcileLedger/evaluateSlices/applySnapshot/classifyObligation.nl"
+      },
+      {
+        "caller": "reconcileLedger/evaluateSlices/applySnapshot.nl",
+        "callee": "reconcileLedger/evaluateSlices/applySnapshot/propagateRetraction.nl"
+      },
+      {
+        "caller": "reconcileLedger/evaluateSlices/applySnapshot/seedApplicability.nl",
+        "callee": "reconcileLedger/evaluateSlices/applySnapshot/seedApplicability/judgeScope.nl"
+      },
+      {
+        "caller": "reconcileLedger/evaluateSlices/applySnapshot.nl",
+        "callee": "reconcileLedger/evaluateSlices/applySnapshot/seedApplicability.nl"
+      },
+      {
+        "caller": "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier.nl",
+        "callee": "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier/deriveConsequences.nl"
+      },
+      {
+        "caller": "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier.nl",
+        "callee": "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier/resolveDefeat.nl"
+      },
+      {
+        "caller": "reconcileLedger/evaluateSlices/applySnapshot.nl",
+        "callee": "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier.nl"
+      },
+      {
+        "caller": "reconcileLedger/evaluateSlices.nl",
+        "callee": "reconcileLedger/evaluateSlices/applySnapshot.nl"
+      },
+      {
+        "caller": "reconcileLedger.nl",
+        "callee": "reconcileLedger/evaluateSlices.nl"
+      },
+      {
+        "caller": "reconcileLedger/explainDelta.nl",
+        "callee": "reconcileLedger/explainDelta/compareCertificates.nl"
+      },
+      {
+        "caller": "reconcileLedger/explainDelta/minimizeSupport.nl",
+        "callee": "reconcileLedger/explainDelta/minimizeSupport/pruneSupportPass.nl"
+      },
+      {
+        "caller": "reconcileLedger/explainDelta.nl",
+        "callee": "reconcileLedger/explainDelta/minimizeSupport.nl"
+      },
+      {
+        "caller": "reconcileLedger.nl",
+        "callee": "reconcileLedger/explainDelta.nl"
+      },
+      {
+        "caller": "reconcileLedger/indexArchive.nl",
+        "callee": "reconcileLedger/indexArchive/interpretEvent.nl"
+      },
+      {
+        "caller": "reconcileLedger/indexArchive.nl",
+        "callee": "reconcileLedger/indexArchive/interpretInstrument.nl"
+      },
+      {
+        "caller": "reconcileLedger.nl",
+        "callee": "reconcileLedger/indexArchive.nl"
+      }
+    ]
+  },
+  "scoped_literals": [
+    {
+      "site": "reconcileLedger/buildAuthority/deriveDelegation/assessCompetence.nl",
+      "changing_input": "One claimed delegation and rooted parent scope",
+      "result_type": "AuthorityAssessment",
+      "consumed_by": "Permitted result creates or rejects an authority proof.",
+      "invocation": "Directly await typed scoped NL literal; returned fields change owned state."
+    },
+    {
+      "site": "reconcileLedger/evaluateSlices/applySnapshot/seedApplicability/judgeScope.nl",
+      "changing_input": "One norm, trip and knowledge snapshot",
+      "result_type": "Applicability",
+      "consumed_by": "Applies and condition truths seed consequence/defeat construction.",
+      "invocation": "Directly await typed scoped NL literal; returned fields change owned state."
+    },
+    {
+      "site": "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier/resolveDefeat.nl",
+      "changing_input": "One target proof and proposed scoped override",
+      "result_type": "DefeatDecision",
+      "consumed_by": "Actual targeted defeat feeds obligation classification.",
+      "invocation": "Directly await typed scoped NL literal; returned fields change owned state."
+    },
+    {
+      "site": "reconcileLedger/explainDelta/minimizeSupport/pruneSupportPass.nl",
+      "changing_input": "One candidate premise deletion and affected proof cone",
+      "result_type": "SupportJudgment",
+      "consumed_by": "Sufficient true replaces candidateIds and appends removedIds; false/null preserves candidate.",
+      "invocation": "Directly await typed scoped NL literal; returned fields change owned state."
+    },
+    {
+      "site": "reconcileLedger/auditLedger/replayJustification/challengeAuthority.nl",
+      "changing_input": "One actually used proof path",
+      "result_type": "AuthorityAssessment",
+      "consumed_by": "Returned competence judgment determines independent audit validity.",
+      "invocation": "Directly await typed scoped NL literal; returned fields change owned state."
+    }
+  ],
+  "iteration_reducers": [
+    {
+      "caller": "reconcileLedger/indexArchive.nl",
+      "kind": "directory-reducer",
+      "frontier": "Manifest-listed nested instrument/event/evidence documents"
+    },
+    {
+      "caller": "reconcileLedger/buildAuthority.nl",
+      "step": "reconcileLedger/buildAuthority/deriveDelegation.nl",
+      "kind": "iterateOn",
+      "measure": "pending.length",
+      "owned_delta": "One rooted grant or finite unsupported component"
+    },
+    {
+      "caller": "reconcileLedger/evaluateSlices/applySnapshot.nl",
+      "step": "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier.nl",
+      "kind": "iterateOn",
+      "measure": "pendingApplicationIds.length",
+      "owned_delta": "One consequence/defeat delta in a finite source-justified stratum"
+    },
+    {
+      "caller": "reconcileLedger/explainDelta/minimizeSupport.nl",
+      "step": "reconcileLedger/explainDelta/minimizeSupport/pruneSupportPass.nl",
+      "kind": "iterateOn",
+      "measure": "candidateIds.length",
+      "stop": "settled=true after a deletion-free pass",
+      "owned_delta": "A finite support-deletion pass whose continuing result strictly shrinks candidates"
+    }
+  ],
+  "comparison_spec": {
+    "mode": "source-grounded-ledger-and-proof-invariants",
+    "canonical_oracle_witness": true,
+    "generated_identifiers": "Norm, application, authority and justification IDs are alpha-equivalent consistent references. Source clause/trip/party/action IDs are exact.",
+    "unordered_collections": [
+      "Ledgers keyed by snapshot",
+      "Entries keyed by business identity",
+      "Proofs and premises",
+      "Independent support IDs",
+      "Authority proofs/rejections",
+      "Norms",
+      "Deltas keyed by business identity",
+      "Minimal source-support sets",
+      "Source coverage",
+      "Witnesses"
+    ],
+    "ordered_fields": [
+      "Directed debtor/beneficiary roles",
+      "Authority parent direction",
+      "Proof dependency direction",
+      "Before/after snapshot identity"
+    ],
+    "exact_fields": "Snapshot dates, event-boundary consequences, status/quantity/permission fields, source IDs, proof/defeat reference integrity and preservation of independent support.",
+    "semantic_fields": "Norm condition interpretation, authority scope entailment, proof meaning, inclusion-minimality argument and explanation prose require independent semantic review.",
+    "verifier_status": "27 controls pass:6 equivalent positives,21 corruptions; no NL execution credit."
+  },
+  "services": [],
+  "provenance": {
+    "author": "semantic_slate_astra",
+    "kind": "Original fictional institutional rules and original NL application",
+    "license": "Repository license; no external law or source material"
+  },
+  "readiness": {
+    "source_loader_checked": true,
+    "typed_declarations_checked": true,
+    "typed_reference_checked": true,
+    "exact_checker_controls_passed": 27,
+    "independent_oracle_review": false,
+    "exact_result_replay": true,
+    "live_qualified": false,
+    "training_admitted": false
+  },
+  "composition": {
+    "nl_files": 28,
+    "nl_total_lines": 571,
+    "nl_body_lines": 351,
+    "numbered_steps": 166,
+    "type_aliases": 39,
+    "scoped_literal_sites": 5,
+    "visible_crisp_policy_lines": 0
+  },
+  "fixture_document_count": 11,
+  "fixture_clause_count": 37,
+  "reference_scope": "Full typed canonical source-validity witness only; not an executed trajectory or byte-equality oracle for alternative proof encodings.",
+  "model_facing_debt": "All28 NL functions and typed interfaces are unmeasured; source-only until live qualification and approximately48 samples per adopted presentation.",
+  "source_replay": {
+    "path": "/tmp/astra-treaty-source-replay-v2",
+    "scope": "Shared loader full typed canonical source-validity replay; no NL execution or admission."
+  }
+}
