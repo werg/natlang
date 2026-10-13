@@ -106,14 +106,38 @@ async function runVariant({ lib, root, functionPath, records, samples, concurren
     mean_ms: n ? Math.round(sum('ms') / n) : 0, errors, rows };
 }
 
+const FITS = 'ab-replay: the inputs reached the model';
+/** Recorded inputs the function at `root` still accepts: each is invoked once with a model that stops at its first turn. */
+export async function fittingRecords(lib, root, functionPath, records) {
+  const fn = lib.loadNatlang(join(root, functionPath), root);
+  const params = fn[Symbol.for('natlang.callable')].definition.params;
+  const fit = [], misfit = {};
+  for (const record of records) {
+    const runtime = lib.createNatlangRuntime({ calls: false, model: { driver: () => { throw new Error(FITS); } } });
+    const args = params.map(param => record.inputs?.[param.name]);
+    while (args.length && args[args.length - 1] === undefined) args.pop();
+    let message = '';
+    try { await runtime.run(() => fn(...args)); } catch (caught) { message = caught instanceof Error ? caught.message : String(caught); }
+    finally { runtime.close?.(); }
+    if (message.includes(FITS)) fit.push(record);
+    else { const kind = message.slice(0, 160) || 'returned without a model'; misfit[kind] = (misfit[kind] ?? 0) + 1; }
+  }
+  return { fit, misfit };
+}
+
 /**
  * The A/B replay. `options.driver` is the executor (a model driver); `options.oldRoot`/`options.newRoot` are the two
  * program folders; `options.records` the recorded calls (already selected or raw).
  */
 export async function abReplay(options) {
   const lib = await import(options.dist ?? dist);
-  const records = selectRecords(options.records, options.functionPath, { name: options.name });
-  if (!records.length) throw new Error(`no recorded calls of ${options.functionPath}`);
+  const selected = selectRecords(options.records, options.functionPath, { name: options.name });
+  if (!selected.length) throw new Error(`no recorded calls of ${options.functionPath}`);
+  // Only inputs both variants accept (a recorded call from an older signature is left out and counted).
+  const oldFit = await fittingRecords(lib, options.oldRoot, options.functionPath, selected);
+  const { fit: records, misfit } = await fittingRecords(lib, options.newRoot, options.functionPath, oldFit.fit);
+  for (const [kind, count] of Object.entries(oldFit.misfit)) misfit[`old: ${kind}`] = count;
+  if (!records.length) throw new Error(`none of the ${selected.length} recorded inputs of ${options.functionPath} fits both variants: ${JSON.stringify(misfit)}`);
   const samples = options.samples ?? 48, concurrency = options.concurrency ?? 8;
   const common = { lib, functionPath: options.functionPath, records, samples, concurrency, driver: options.driver, runtimeOptions: options.runtime };
   const [oldVariant, newVariant] = await Promise.all([
@@ -121,7 +145,7 @@ export async function abReplay(options) {
   const label = options.label ?? options.functionPath;
   const brief = v => `${v.ok}/${v.n} valid, ${v.exact}/${v.n} equal to recorded, ${v.mean_turns} turns`;
   return { version: 'natlang.ab-replay/1', label, function: options.functionPath, old: options.oldLabel, new: options.newLabel,
-    executor: options.executor, distinct_inputs: records.length, samples, created_at: new Date().toISOString(),
+    executor: options.executor, distinct_inputs: records.length, recorded_inputs: selected.length, misfit, samples, created_at: new Date().toISOString(),
     row: `${label}: old ${brief(oldVariant)}; new ${brief(newVariant)} (n=${samples}/variant, ${records.length} recorded inputs, ${options.executor ?? 'executor'})`,
     variants: { old: oldVariant, new: newVariant } };
 }
