@@ -128,7 +128,7 @@ const staged = `${output}.building-${process.pid}-${randomUUID()}`;
 const authoredOutput = `${output}.authored-actions.jsonl`;
 const stagedAuthored = `${authoredOutput}.building-${process.pid}-${randomUUID()}`;
 const handle = await open(staged, 'wx');
-let authoredHandle, accepted = 0, rejected = 0, turns = 0, authoredActions = 0;
+let authoredHandle, accepted = 0, rejected = 0, turns = 0, approvedTurns = 0, replayedTurns = 0, authoredActions = 0;
 try { for await (const row of jsonlRows(input)) {
   seen.add(row.id);
   if (verifiedQualityReview) {
@@ -150,7 +150,12 @@ try { for await (const row of jsonlRows(input)) {
   accepted += result.acceptedRows; rejected += result.rejectedRows;
   for (const missed of result.unlinked)
     console.error(`  ${missed.id}: not used, ${missed.outcomes} action outcomes could not be linked to their decisions`);
-  for (const turn of result.turns) { await handle.writeFile(JSON.stringify(turn) + '\n'); turns++; }
+  for (const turn of result.turns) {
+    await handle.writeFile(JSON.stringify(turn) + '\n');
+    turns++;
+    if (turn.training_admission?.approved) approvedTurns++;
+    if (turn.training_admission?.reason === 'student replay prefix is not a teacher correction') replayedTurns++;
+  }
   if (result.authored_actions.length) {
     authoredHandle ??= await open(stagedAuthored, 'wx');
     for (const action of result.authored_actions) {
@@ -173,7 +178,7 @@ if ([...(review?.holds ?? []), ...(review?.approvals ?? [])].some(item => !seen.
   throw new Error('semantic review references absent input trajectory');
 }
 await handle.close(); await authoredHandle?.close();
-console.error(`${accepted} rows -> ${turns} turns (${rejected} rows not used); ${authoredActions} held authored actions`);
+console.error(`${accepted} rows -> ${turns} turn records (${approvedTurns} eligible, ${replayedTurns} replayed context, ${rejected} rows not used); ${authoredActions} held authored actions`);
 if (values.replace) {
   await rename(staged, output);
   if (authoredHandle) await rename(stagedAuthored, authoredOutput);
@@ -195,4 +200,6 @@ if (values.replace) {
   if (authoredHandle) await unlink(stagedAuthored);
 }
 console.log(JSON.stringify({ output, ...(authoredActions ? { authored_actions_output: authoredOutput } : {}),
-  accepted_rows: accepted, rejected_rows: rejected, training_decisions: turns, authored_actions_held: authoredActions }));
+  accepted_rows: accepted, rejected_rows: rejected, training_decisions: turns,
+  eligible_decisions: approvedTurns, replayed_context_decisions: replayedTurns,
+  authored_actions_held: authoredActions }));

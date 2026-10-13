@@ -42,8 +42,11 @@ had a transport failure from the old 180-second bridge cap. Pop raised it to
 included its 23 replayed prefix turns. `prepare_recovery_teacher_queue.py` now
 budgets 24 live continuation turns beyond replay. The corrected 47-turn Luna
 schedule retry finished after one live turn with an exact-answer rejection;
-Step 5's 47-turn retry is still running. The four unique fallback successes
-are mechanically pinned, but all outputs remain review-only. Broad
+Step 5's 47-turn retry passed the exact oracle. Five unique fallback successes
+are mechanically pinned in `step5-fallback-accepted-parents-v2.review-candidates.jsonl`.
+Native materialization yields 11 eligible live decisions from 69 records;
+54 replayed-prefix decisions and four other live decisions are held. All outputs
+remain review-only. Broad
 s52027 and Gemini generation continue under the Pop guard's low-priority
 admission; v11 reached at least update 6278 at full GPU utilization.
 

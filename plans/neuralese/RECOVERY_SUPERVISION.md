@@ -63,11 +63,15 @@ fixed 24-turn cap counted the 23 replayed prefix turns, leaving only one live
 teacher turn. This is a collection-budget defect, not a model result. The queue
 preparer now adds 24 live continuation turns to the replay prefix (and scales
 the request budget). A 47-turn Luna continuation finished with an exact-answer
-rejection after one live turn. A 47-turn Step 5 continuation is running under
-the longer bridge cap. The canonical fallback source is the five-row
-`handoffs.luna-rejected.ir.jsonl` produced by the exact selector. Four successful
-fallback parents are pinned in `step5-fallback-accepted-parents.review-candidates.jsonl`;
-they remain review-only until native decision audit and split/source checks.
+rejection after one live turn. The 47-turn Step 5 continuation passed the exact
+oracle after one live turn. The canonical fallback source is the five-row
+`handoffs.luna-rejected.ir.jsonl` produced by the exact selector. All five
+successful fallback parents are pinned in
+`step5-fallback-accepted-parents-v2.review-candidates.jsonl`. Native
+materialization emitted 69 turn records: 54 replayed prefix decisions are held,
+11 live decisions are eligible before semantic review, and four live decisions
+are held for checker or return-value reasons. The set remains review-only until
+native decision audit and split/source checks.
 The quiesced case and duplicate success may be compared as independent positive
 trajectories, but neither is a Luna model-negative or causal preference label.
 
