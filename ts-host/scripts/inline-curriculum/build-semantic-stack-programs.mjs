@@ -213,6 +213,11 @@ function checkedStageSpecs(entry, steps) {
     return null;
   const state = spec.types?.FinalSemanticState ?? '';
   const ownedFields = new Set();
+  const noOpField = spec.no_op_field ?? 'stageAbsences';
+  if (typeof noOpField !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(noOpField) ||
+      !new RegExp(`\\b${noOpField}\\s*:\\s*StageAbsence\\[\\]`).test(state) ||
+      typeof spec.types?.StageAbsence !== 'string')
+    throw Error(`${entry.id}: stage no-op needs a typed source-grounded absence in FinalSemanticState`);
   if (!entry.typed_inputs && !/^\{[^}]*\bid\s*:\s*string\b/.test(spec.types?.EvidenceRecord ?? ''))
     throw Error(`${entry.id}: typed EvidenceRecord must carry the visible source ID`);
   for (const [index, stage] of spec.stages.entries()) {
@@ -220,6 +225,7 @@ function checkedStageSpecs(entry, steps) {
     const input = stage.input_type ?? '';
     if (stage.name !== steps[index].name || stage.child !== (steps[index + 1]?.name ?? null) ||
         typeof field !== 'string' || ownedFields.has(field) || !new RegExp(`\\b${field}\\s*:`).test(state) ||
+        !new RegExp(`\\b${noOpField}\\s*:\\s*StageAbsence\\[\\]`).test(input) ||
         [...ownedFields].some(previous => !new RegExp(`\\b${previous}\\s*:`).test(input)) ||
         new RegExp(`\\b${field}\\s*:`).test(input) ||
         !Array.isArray(stage.numbered_plan) || stage.numbered_plan.length < 3 ||
@@ -321,7 +327,7 @@ function render(entry, provider) {
     `Return the result specified by the output contract, grounded in the supplied sources.`;
   const stageInstructions = stageSpec ? `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
     (identities ? `Source ID binding (attach id and path to every EvidenceRecord, and use these exact IDs in the result):\n${identities.map(({ id, path }) => `${id}: ${path}`).join('\n')}\n\n` : '') +
-    (entry.typed_inputs ? `Read the supplied directory snapshot and inquiry into the authored typed bundle. Call ${steps[0].name} with StageInput1 {bundle,inquiry,prior:{}}. The named stages must each add their own source-backed typed contribution before calling the next stage within the active call. Synthesize the declared answer from the returned FinalSemanticState, not by re-solving from the raw folder.\n` :
+    (entry.typed_inputs ? `Read the supplied directory snapshot and inquiry into the authored typed bundle. Call ${steps[0].name} with StageInput1 {bundle,inquiry,prior:{${stageSpec.no_op_field ?? 'stageAbsences'}:[]}}. The named stages must each add their own source-backed typed contribution before calling the next stage within the active call. Synthesize the declared answer from the returned FinalSemanticState, not by re-solving from the raw folder.\n` :
       `Use iterateOn over the sorted source folders. Each step builds a typed EvidenceBatch of {id,path,text} records for one current folder and calls ${steps[0].name} with StageInput1 {batch,context,prior:{stageAbsences:[]}}. Append the returned FinalSemanticState to the loop's collected states, then advance the folder frontier; the unprocessed-folder count decreases by one until all folders are consumed. Each named stage adds its owned, source-linked contribution and passes that accumulated state to its child. Synthesize the declared result from all collected states, preserving cross-folder evidence and unresolved claims.\n`) +
     `The named stages are ${steps.map(step => step.name).join(' → ')}. Their typed inputs, owned contribution fields, source witnesses and plans are in the callable .nl files; read those files when called. A stage with no applicable evidence records a source-grounded absence instead of silently forwarding. An ad hoc natural-language literal counts only when invoked and its decision changes the accumulated state.\n` +
     `Output contract: ${contract.join(' ')}\nUse exact code for file reading, binding, finite iteration, coverage checks and serialization. Semantic judgments belong in the named functions and invoked literals. Return the declared typed answer grounded in their FinalSemanticState.` : null;
