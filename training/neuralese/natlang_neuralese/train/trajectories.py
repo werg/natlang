@@ -71,6 +71,7 @@ import torch
 
 from .memory import cuda_allocated_bytes
 from .write_sites import extract_write_sites, extract_write_sites_from_calls
+from ..common.profiling import UpdateProfiler, backward_phase, region as profile_region
 
 from ..view import TOOLS as VIEW_TOOLS, combine_site, listing_instructions, part_site, plan as view_plan, \
     reject_digest_part, reply_prefix, view_note, view_site
@@ -925,6 +926,10 @@ def main(argv=None):
     parser.add_argument('--token-choice-optimizer', choices=('muon', 'adamw'), default='muon',
                         help='optimizer of the TokenChoiceProjection: muon (its matrices, including the depthwise taps '
                              'whose first row is the identity path, take orthogonalized steps) or adamw (elementwise)')
+    parser.add_argument('--neuralese-projection-optimizer', choices=('muon', 'adamw'), default='muon',
+                        help='optimizer of the NeuraleseProjection (--direct-artifact, the writer): muon (its matrices, '
+                             'including the depthwise taps whose first row is the identity path, take orthogonalized '
+                             'steps of fixed size) or adamw (elementwise, scaled by its own gradient history)')
     parser.add_argument('--task-eval', default=None,
                         help='JSON {"packet": {"path", "sha256"}, "cases", "min_successes", ...} (eval/task_cadence.py)')
     parser.add_argument('--task-eval-every', type=int, default=0,
@@ -1458,6 +1463,8 @@ def main(argv=None):
         from ..serve.direct_write import write_direct
         from ..write import Opened
         from .execution import prefill_write_context
+        write_region = profile_region('update/producer_write')
+        write_region.__enter__()
         pre = prefill_write_context(backbone, heads, context)
         opened = Opened(pre.cache, pre.state, backbone.logits(pre.top[:, None])[:, -1], pre.top)
         crisp = engine._tokens(source) if source else None
@@ -1476,6 +1483,7 @@ def main(argv=None):
                                    engine.stop_ids, length=target, feedback='token',
                                    token_choice_projection=getattr(direct, 'token_choice_projection', None))
         payload = written.complete()[0]
+        write_region.__exit__(None, None, None)
         n = int(payload.shape[1])
         lengths.append(n)
         return payload[0, :n]
@@ -2175,7 +2183,9 @@ def main(argv=None):
                                      # (ids here are kept off Muon: --token-choice-optimizer adamw puts the readout
                                      # projection on elementwise AdamW steps)
                                      | ({id(p) for p in tcp_module.parameters()} if direct is not None and tcp_module is not None
-                                        and args.token_choice_optimizer == 'adamw' else set()),
+                                        and args.token_choice_optimizer == 'adamw' else set())
+                                     | ({id(p) for p in direct.neuralese_projection.parameters()} if direct is not None
+                                        and args.neuralese_projection_optimizer == 'adamw' else set()),
                                      lora_names=lora_names, latent_lrs=latent_lrs, lion=lion,
                                      latent_optimizer='muonsr' if args.latent_optimizer == 'muonsr' else 'lionsr',
                                      latent_options=latent_options)
@@ -2197,11 +2207,10 @@ def main(argv=None):
         with torch.no_grad():
             for name, value in resumed['params'].items():
                 params[name].copy_(value.to(params[name]))
-            for name, value in {**resumed.get('lora', {}), **resumed.get('backbone_trainables', {})}.items():
-                parameters=dict(backbone.hf.named_parameters())
-                if name not in parameters or parameters[name].shape != value.shape:
-                    raise ValueError('resumed backbone parameter mismatch: '+name)
-                parameters[name].copy_(value.to(parameters[name]))
+            # Saved under plain names (backbone_policy.plain_named_tensors): a quantised or latent-parametrised weight
+            # is restored into its parametrization's original, as every other trainer restores it.
+            from .backbone_policy import restore_backbone_trainables
+            restore_backbone_trainables(backbone, {**resumed.get('lora', {}), **resumed.get('backbone_trainables', {})})
         with torch.no_grad():
             backbone.control_rows.copy_(resumed['control_rows'].to(backbone.control_rows))
             if not getattr(backbone, 'tied', True):
@@ -2756,8 +2765,14 @@ def main(argv=None):
                       'scope': 'process-lifetime setup only; future graph collection unchanged'}), flush=True)
     with torch.enable_grad():
         # A stop is observed after a step has run and been checkpointed, never before the first one.
+        # NATLANG_PROFILE_UPDATES=a:b (common/profiling.py, as in direct_sft): torch.profiler over updates a..b
+        # (1-based), breakdown and trace in --out. Each update is finished at the next one's start, so its
+        # evaluation and checkpoint are inside its window.
+        profiler = UpdateProfiler(out)
         loop = TrainingLoop(start_step, args.steps, stop, stop_before_step=False)
         for step in loop:
+            profiler.maybe_finish(step)
+            profiler.begin(step + 1)
             anchor_now[0] = scheduled_anchor(step)
             # One precision point per update (train/quantization.py, sampled by weight; BF16 teachers unaffected).
             if quant is not None:
@@ -3003,7 +3018,7 @@ def main(argv=None):
                     for term in single_terms[1:]:
                         total = total + term
                     single_terms.clear()
-                    with armed:
+                    with armed, profile_region('update/backward'), backward_phase():
                         total.backward()
                         del total
                         staging.backward()
@@ -3118,6 +3133,8 @@ def main(argv=None):
                 entry['token_cache'] = engine._token_cache.stats()
             entry['eval_share'] = eval_share()
             log.write(json.dumps(entry) + "\n")
+            profiler.update_done(step + 1, entry['step_seconds'], writes=entry['writes_this_update'],
+                                 largest_write_context_tokens=entry.get('largest_write_context_tokens'))
             log.flush()
             if step % 10 == 0 or step == args.steps - 1:
                 print(json.dumps(entry), flush=True)
@@ -3186,6 +3203,7 @@ def main(argv=None):
                 if candidate is not None and not stop.requested and saved:
                     publish_best(checkpoint_path, out / 'best-checkpoint.pt')
                     (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
+        profiler.close(max(profiler.updates, default=start_step))
     stop.restore()
     log.close()
     if drift_stopped_at is not None:

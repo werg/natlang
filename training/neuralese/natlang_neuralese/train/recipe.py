@@ -72,7 +72,7 @@ HANDLERS = {
     'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads','direct_artifact_manifest','continue_from','direct_parent_proof'},
                                 'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'backbone_lr', 'backbone_training', 'max_tokens',
                                                'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
-                                               'write_depth', 'tokens_per_vector', 'heads_lr', 'token_choice_lr', 'token_choice_optimizer', 'record_order', 'record_source',
+                                               'write_depth', 'tokens_per_vector', 'heads_lr', 'token_choice_lr', 'token_choice_optimizer', 'neuralese_projection_optimizer', 'record_order', 'record_source',
                                                'family_temperature', 'stream_held_chains', 'stream_probe_chains', 'stream_resident',
                                                'soft_parts', 'distill',
                                                'crisp_weight', 'memory_gb', 'backward_policy', 'graph_memory_gb',

@@ -1,0 +1,65 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "diag-e2e-lfm-u10006-r4-text-heads-3e-4",
+ "extends": "neuralese-e2e-lfm-v1",
+ "description": "Collapse dragnet round 4 (dgx-e2e lead, plans/neuralese/E2E_COLLAPSE.md): round 2's tcp-muon-3e-6 arm (v1 union cohort, family-interleave, TCP Muon 3e-6, heads 3e-4) with instructions pieces as their text (soft_parts text) instead of trained soft prompts: isolates the soft-piece confound in V (soft pieces + values) against T (all text).",
+ "overrides": {
+  "input_bindings": {
+   "direct_artifact": {
+    "path": "runs/pop-lfm-muon-main-v2-export-step10006/manifest.json",
+    "sha256": "3c0a4695f406b074efebb3544e954894b1a1201607b1e3d2926f4bc382ca2525"
+   },
+   "e2e_records": {
+    "path": "runs/neuralese-e2e-union-cohort-20261012-v1/records.jsonl",
+    "sha256": "7fec509602f13d988a5fd7ada62d0b41d7b0f03986b33da8cdcbce6135f67392"
+   },
+   "e2e_pieces": {
+    "path": "runs/neuralese-e2e-union-cohort-20261012-v1/pieces.jsonl",
+    "sha256": "90d194c2d029f81ca17f4accaed5bce4840641fdf014431d03dd21f963c6bd2d"
+   }
+  },
+  "quantization": {
+   "stage_progress": {
+    "e2e": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "stages": {
+   "direct_runtime": {
+    "parameters": {
+     "direct_base_snapshot": "/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f"
+    }
+   },
+   "e2e": {
+    "parameters": {
+     "steps": 60,
+     "eval_every": 10,
+     "checkpoint_every": 60,
+     "task_eval": {
+      "$delete": true
+     },
+     "direct_base_snapshot": "/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+     "memory_gb": 9,
+     "latent_step_in_backward": false,
+     "token_choice_optimizer": "muon",
+     "token_choice_lr": 3e-06,
+     "soft_parts": "text",
+     "record_source": "eager",
+     "record_order": "family-interleave",
+     "train": 769,
+     "family_temperature": {
+      "$delete": true
+     },
+     "stream_held_chains": {
+      "$delete": true
+     },
+     "stream_probe_chains": {
+      "$delete": true
+     }
+    }
+   }
+  }
+ }
+}
