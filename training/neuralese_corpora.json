@@ -61123,6 +61123,17 @@
       ]
     },
     {
+      "id": "luna-held-shapes-s52006-source-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-s52006-source-20261013-v1",
+      "admission": "source-only-nontraining-pending-teacher-and-quality-review",
+      "include": [
+        "source.ir.jsonl",
+        "build-report.json",
+        "provenance.json"
+      ]
+    },
+    {
       "owner": "dgx",
       "source_class": "native-e2e-producer-consumer-records",
       "license": "facts from the source rows (see the source corpora)",
