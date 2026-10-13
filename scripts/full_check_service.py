@@ -10,7 +10,7 @@ runs `full_check_service.py tick`:
    for a full check (matches FULL_CHECK) and names commits contained in the checked commit is answered; each failing
    step or test is routed with the last commit that touched its test file (sent to all). The worktree is removed.
 2. When no run is in progress and origin/main moved since the last run, a clean worktree at origin/main is checked out
-   and `scripts/check-main.sh` runs there as ledger unit natlang-full-check-<sha> (medium priority, resumable: a
+   and `scripts/check-main.sh` runs there as ledger unit natlang-full-check-<sha> (low priority, resumable: a
    preempted run restarts from scratch on relaunch).
 
 State: ~/.local/state/natlang/full-check.json; logs: ~/data/full-check/<sha>.log (kept).
@@ -92,11 +92,11 @@ def launch(state: dict, sha: str) -> None:
     subprocess.run(['systemd-run', '--user', '--collect', '--unit', f'{unit}-launch', '--property=Type=exec', f'--working-directory={REPO}',
                     '-p', f'StandardOutput=append:{ledger_log}', '-p', f'StandardError=append:{ledger_log}',
                     'python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '13', '--reserve-gb', '2',
-                    '--priority', 'medium', '--resumable', '--wait', '86400', '--workdir', str(wt), '--',
+                    '--priority', 'low', '--resumable', '--wait', '86400', '--workdir', str(wt), '--',
                     'sh', '-c', command], check=True, capture_output=True)
     state['running'] = {'sha': sha, 'unit': unit, 'worktree': str(wt), 'log': str(log), 'started': time.time(),
                         'command': f'python3 scripts/memory_ledger.py run --unit {unit} --budget-gb 13 --reserve-gb 2 --priority '
-                                   f'medium --resumable --workdir {wt} -- sh -c "{command}"'}
+                                   f'low --resumable --workdir {wt} -- sh -c "{command}"'}
     save(state)
 
 
