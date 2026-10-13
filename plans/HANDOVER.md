@@ -1,5 +1,30 @@
 # Continuation guide — updated 2026-10-13
 
+## 19:25 CEST: QAD continuation and reasoning/template dragnet
+
+Pop stopped the exact v12 unit after its scheduled step-9240 checkpoint; the
+signal handler also wrote a full optimizer/RNG checkpoint at step 9249. The
+high-priority ledger launched v13 from that checkpoint with the same frozen
+runtime, CUDA envelope and data cursor. Its only recipe change is
+`task_eval_every: 4000` (verified in the emitted direct-SFT command); held
+CE/drift remain at their earlier cadence. The v13 run-local resolved recipe is
+`/srv/storage/natlang-artifacts/neuralese-direct-lfm-qad-broad-20261013-v1/resume-v13-task-eval-cadence.json`,
+SHA-256 `c6a1a124760f6ae0936d09bec76f68202487d02e54db3f953e255978b075b584`.
+The v13 trainer rebuilt its schedule, restored the saved state and advanced
+past update 9260 with the GPU fully occupied; the handoff is live. The ledger
+temporarily preempted one low-priority Luna
+retry to admit training; its waiter will resume when headroom permits.
+
+The shared `chat_roles`/`balanced_position_weights` path gives
+`assistant_reasoning` the same full weight as `assistant_reply`; only tool
+feedback is reduced. This and the actual sampler join rule out an accidental
+global reasoning mask. The controlled DGX full versus program-header eval and
+first-token likelihood check remain outstanding. DGX's full-main check at
+`07c036b1e0` found two TS test failures (`opencode-cli-chat-adapter` retry
+telemetry, `source-backed` empty-corpus materializer); its Python, GPU and TS
+build steps passed. Route those failures to their code owners and keep main
+green.
+
 ## 18:05 CEST: recovery data, s52028 generation, QAD interruption and dragnet
 
 Pop published `pop-static-folder-edit-large-s52027-native-20261013-v1`
