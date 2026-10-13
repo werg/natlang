@@ -11,3 +11,11 @@ The trusted checker accepts the full canonical witness, unordered set permutatio
 The new NL bodies and typed interfaces are unmeasured model-facing source. Independent source/oracle review, actual application execution and roughly48samples per adopted presentation remain pending. All preparation/admission flags remain false except static loader/type checks.
 
 Independent Astra review recomputed all36 original/repaired owner-by-trial plans and accepted source/oracle meanings. It found three exact checker omissions: enclosing trial identity, immutable clause context/marker preservation and original-report quotation checking. These are fixed. Erased retry, changed window, lost marker and four absent-quotation controls reject; an equivalent population-definition paraphrase with real replay witness updates passes. The full control set is4positive and21negative checks. Actual literal invocation and semantic entailment remain separate live gates.
+
+The metric ownership audit found a forwarding parent. The revised child returns symbolic MetricReading;
+the parent makes and consumes a separate scoped OutcomeBinding judgment, returning raw numerator code,
+counted meaning and display compatibility. Downstream numeric execution and contrast construction consume
+those distinct fields. All36 canonical executable plans, trials and numeric receipts are byte-equivalent
+to the previous witness; only typed metric interpretations and declared label-relation invariant fields
+were added. Revised source/type/canonical replay and2positive/8negative metric boundary controls pass.
+Independent delta review and actual literal consumption remain pending; this adds a sixth NL literal site.

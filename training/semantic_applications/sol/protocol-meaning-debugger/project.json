@@ -235,19 +235,18 @@
         },
         "returns": "MetricView",
         "kind": "function",
-        "owned_delta": "Resolve numerator polarity, denominator and aggregation as separate meanings."
+        "owned_delta": "Join symbolic reading with source outcome-code definitions; bind operational numerator and diagnose display compatibility."
       },
       {
         "path": "metrics/interpretMetric.nl",
         "args": {
           "ownerId": "string",
           "clause": "DefinitionClause",
-          "codingClauses": "DefinitionClause[]",
           "question": "Question"
         },
-        "returns": "MetricView",
+        "returns": "MetricReading",
         "kind": "function",
-        "owned_delta": "Interpret metric wording under local outcome coding and target scope."
+        "owned_delta": "Read symbolic counted term, denominator, pooling and displayed label without raw-code binding."
       },
       {
         "path": "plans.nl",
@@ -448,7 +447,7 @@
     },
     {
       "site": "metrics/interpretMetric.nl",
-      "consumed_by": "MetricView numeratorOutcome feeds real exact receipt arithmetic."
+      "consumed_by": "MetricReading countedTerm/denominator/aggregation/displayLabel passed to parent NL outcome binding."
     },
     {
       "site": "debug/compare/interpretScope.nl",
@@ -457,6 +456,10 @@
     {
       "site": "debug/investigateStep/interpretOutcome.nl",
       "consumed_by": "ProbeOutcome supported/rejected/inconclusive IDs update InvestigationState and diagnosis."
+    },
+    {
+      "site": "metrics.nl",
+      "consumed_by": "MetricView numeratorOutcome/counting meaning/display compatibility; plans executable numerator and semantic contrast"
     }
   ],
   "iteration_reducers": [
@@ -494,11 +497,12 @@
     "independent_oracle_review": false,
     "exact_result_replay": false,
     "live_qualified": false,
-    "training_admitted": false
+    "training_admitted": false,
+    "metric_transformation_revision": "Typed source/canonical delta pending independent and live review; numeric fixture facts unchanged."
   },
   "generation_ready": false,
   "training_admission": false,
   "model_facing_debt": "All23NL bodies/types unmeasured; first full-project diagnostic and about48samples per adopted presentation pending.",
-  "nl_line_count": 569,
+  "nl_line_count": 593,
   "external_verifier_path": "training/semantic_applications/sol/protocol-meaning-debugger/verify-result.mjs"
 }

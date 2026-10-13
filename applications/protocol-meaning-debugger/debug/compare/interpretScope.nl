@@ -22,3 +22,8 @@ returns: Contrast
    These fields become the hypothesis premise and later repair coverage, not decorative prose.
 7. An unresolved judgment states the absent premise. Do not substitute a broad claim that all
    pipelines differ somehow when this particular role is source-equivalent.
+
+8. For the metric role, read each returned MetricView.countedMeaning and displayLabelCompatibility
+   together with reading and controlling clauses. Compare the underlying counted proposition, not
+   just its display string or executable code. A misleading label is a supported semantic distinction
+   even when the baseline percentage agrees; code binding supplies the operational test of that claim.
