@@ -720,8 +720,13 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         `${name} is this call's input and already holds the caller's value; use it directly instead of declaring it again.` :
         helperNames.includes(name) ?
           `${name} is already a function in this scope; call ${name}(...) directly and keep its result in a variable with another name, such as ${name}Result.` :
+        // Measured 2026-10-13 (LFM2.5-2.6B, 120 replays each; plans/MODEL_FACING_CHANGES.md): the declaration rewritten
+        // under a new name recovered 71/120, against 57/120 for "already a function" and 53/120 for "already a service".
         serviceNames.includes(name) ?
-          `${name} is already a service in this scope, used through its methods (read_code("${name}") lists them); call them on ${name} directly and keep what they return in a variable with another name, such as ${name}Result.` :
+          `${name} names this scope's ${name} service, so it cannot also name a result; give the result its own name, ` +
+            (binding.initializer && binding.initializer.length <= 160 && !binding.initializer.includes('\n') ?
+              `as in ${binding.kind === 'function' ? 'const' : binding.kind} ${name}Result = ${binding.initializer};` :
+              `such as ${name}Result.`) :
         captureNames.includes(name) ?
           `${name} is already a variable of the enclosing code, captured by this call; use it directly instead of declaring it again.` :
         opaqueNames.includes(name) ?

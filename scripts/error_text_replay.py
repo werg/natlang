@@ -21,6 +21,7 @@ import http.server
 import json
 import re
 import threading
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -44,8 +45,9 @@ def proxy(args) -> None:
             try:
                 with urllib.request.urlopen(request, timeout=3600) as response:
                     payload, status = response.read(), response.status
+                    kind = response.headers.get('Content-Type', 'application/json')
             except urllib.error.HTTPError as error:
-                payload, status = error.read(), error.code
+                payload, status, kind = error.read(), error.code, error.headers.get('Content-Type', 'application/json')
             if method == 'POST' and self.path.endswith('/chat/completions'):
                 def parsed(raw):
                     try:
@@ -57,7 +59,7 @@ def proxy(args) -> None:
                     log.write(json.dumps(row, ensure_ascii=False) + '\n')
                     log.flush()
             self.send_response(status)
-            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Type', kind)
             self.send_header('Content-Length', str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
@@ -116,7 +118,8 @@ def classify(reply: dict, wrong_fields: list[str]) -> str:
     without value; text: no tool call; other: any other tool call."""
     message = (reply.get('choices') or [{}])[0].get('message') or {}
     calls = message.get('tool_calls') or []
-    blob = json.dumps(message, ensure_ascii=False)
+    # The action only: reasoning that quotes the error is not an echo.
+    blob = json.dumps({'content': message.get('content'), 'tool_calls': calls}, ensure_ascii=False)
     if ECHO.search(blob):
         return 'echo'
     if not calls:
@@ -132,6 +135,35 @@ def classify(reply: dict, wrong_fields: list[str]) -> str:
     if name in ('eval', 'read_code', 'read_page'):
         return 'recovered'
     return 'other'
+
+
+def classify_binding(reply: dict, name: str) -> str:
+    """After an invalid-binding error for `name`: recovered (an eval that uses name's members without declaring name),
+    redeclare (declares name again), call_as_function (calls name(...)), return (return_result), text, other."""
+    message = (reply.get('choices') or [{}])[0].get('message') or {}
+    calls = message.get('tool_calls') or []
+    if not calls:
+        return 'text'
+    call = calls[0].get('function') or {}
+    if call.get('name') == 'return_result':
+        return 'return'
+    try:
+        code = json.loads(call.get('arguments') or '{}').get('code') or ''
+    except (ValueError, AttributeError):
+        code = ''
+    if call.get('name') != 'eval':
+        return 'other'
+    if re.search(rf'\b(?:const|let|var)\s+{re.escape(name)}\b', code):
+        return 'redeclare'
+    if re.search(rf'(?<![.\w$]){re.escape(name)}\s*\(', code):
+        return 'call_as_function'
+    if re.search(rf'(?<![.\w$]){re.escape(name)}\s*\.', code):
+        return 'recovered'
+    return 'other'
+
+
+def label(reply: dict, row: dict) -> str:
+    return classify_binding(reply, row['name']) if row.get('classifier') == 'binding' else classify(reply, [])
 
 
 def replay(args) -> None:
@@ -156,34 +188,55 @@ def replay(args) -> None:
                     body['max_tokens'] = args.max_tokens
                 if args.model:
                     body['model'] = args.model
-                jobs.append((row['id'], variant, sample, body))
+                jobs.append((row, variant, sample, body))
     results = []
 
     def run(job):
-        context, variant, sample, body = job
+        row, variant, sample, body = job
         try:
             reply = post(args.url, body)
-            label = classify(reply, [])
+            kind = label(reply, row)
             message = (reply.get('choices') or [{}])[0].get('message')
         except Exception as error:  # noqa: BLE001 - recorded, not counted
-            label, message = 'error', {'error': str(error)}
-        return {'context': context, 'variant': variant, 'sample': sample, 'label': label, 'message': message}
+            kind, message = 'error', {'error': str(error)}
+        return {'context': row['id'], 'variant': variant, 'sample': sample, 'label': kind, 'message': message,
+                **({'classifier': 'binding', 'name': row['name']} if row.get('classifier') == 'binding' else {})}
 
     with concurrent.futures.ThreadPoolExecutor(args.concurrency) as pool:
         for result in pool.map(run, jobs):
             results.append(result)
+            if len(results) % 16 == 0:
+                print(f'{len(results)}/{len(jobs)}', flush=True)
     Path(args.out).write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in results), encoding='utf-8')
+    summary = summarize(results)
+    print(json.dumps(summary, indent=1))
+    Path(args.out).with_suffix('.summary.json').write_text(json.dumps(summary, indent=1))
+
+
+def summarize(results: list[dict]) -> dict:
     summary = {}
     for result in results:
         counts = summary.setdefault(result['variant'], {})
         counts[result['label']] = counts.get(result['label'], 0) + 1
-    for variant, counts in summary.items():
+    for counts in summary.values():
         n = sum(v for k, v in counts.items() if k != 'error')
         counts['n'] = n
         counts['recovered_rate'] = round(counts.get('recovered', 0) / n, 3) if n else None
         counts['echo_rate'] = round(counts.get('echo', 0) / n, 3) if n else None
+    return summary
+
+
+def relabel(args) -> None:
+    """Re-classify stored replies (after a classifier change) and rewrite the summary."""
+    path = Path(args.results)
+    results = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    for result in results:
+        if result['label'] != 'error':
+            result['label'] = label({'choices': [{'message': result['message']}]}, result)
+    path.write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in results), encoding='utf-8')
+    summary = summarize(results)
+    path.with_suffix('.summary.json').write_text(json.dumps(summary, indent=1))
     print(json.dumps(summary, indent=1))
-    Path(args.out).with_suffix('.summary.json').write_text(json.dumps(summary, indent=1))
 
 
 def main(argv=None) -> int:
@@ -209,8 +262,10 @@ def main(argv=None) -> int:
     p.add_argument('--max-tokens', type=int, default=1024)
     p.add_argument('--concurrency', type=int, default=4)
     p.add_argument('--out', required=True)
+    p = sub.add_parser('relabel')
+    p.add_argument('--results', required=True)
     args = parser.parse_args(argv)
-    {'proxy': proxy, 'contexts': contexts, 'replay': replay}[args.command](args)
+    {'proxy': proxy, 'contexts': contexts, 'replay': replay, 'relabel': relabel}[args.command](args)
     return 0
 
 
