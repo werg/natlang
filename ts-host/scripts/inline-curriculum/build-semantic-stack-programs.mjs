@@ -14,9 +14,15 @@ const catalogs = [
 ];
 const args = process.argv.slice(2);
 const pilotAstra = args[2] === '--pilot-astra';
-if ((args.length !== 2 && !(args.length === 3 && pilotAstra)) || args[0] !== '--out' || !args[1])
-  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra]');
+const reviewPath = args[2] === '--review-ids' && args.length === 4 ? resolve(args[3]) : null;
+if ((args.length !== 2 && !(args.length === 3 && pilotAstra) && !reviewPath) || args[0] !== '--out' || !args[1])
+  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --review-ids IDS_JSON]');
 const output = resolve(args[1]);
+const reviewList = reviewPath ? JSON.parse(await readFile(reviewPath, 'utf8')) : [];
+if (!Array.isArray(reviewList) || reviewList.some(id => typeof id !== 'string') ||
+    new Set(reviewList).size !== reviewList.length)
+  throw Error('--review-ids must be a JSON array of distinct program IDs');
+const reviewIds = new Set(reviewList);
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const safeId = id => typeof id === 'string' && /^[a-z][a-z0-9_-]{4,100}$/.test(id);
 const shortText = (value, label, id, minimum = 12) => {
@@ -212,14 +218,17 @@ function render(entry, provider) {
   const hasScopedCollection = filePaths.length >= 3 &&
     new Set(filePaths.map(path => basename(path))).size === filePaths.length;
   const generationReady = entry.generation_ready === true || entry.admission?.generation_ready === true;
-  const candidate = hasScopedCollection && typed && (pilotAstra || generationReady);
-  const admission = candidate ? (pilotAstra ? 'diagnostic_seed_only' :
+  if (reviewIds.has(id) && (!hasScopedCollection || !typed || filePaths.length < 12))
+    throw Error(`${id}: review override requires a typed, expanded source with at least 12 files`);
+  const candidate = hasScopedCollection && typed && (pilotAstra || generationReady || reviewIds.has(id));
+  const admission = candidate ? (reviewIds.has(id) ? 'diagnostic_expanded_source_review_only' : pilotAstra ? 'diagnostic_seed_only' :
     'runnable_candidate_pending_reference_and_semantic_review') :
     hasScopedCollection && typed ? 'held_design_only_pending_expanded_fixture_review' :
       'held_missing_scoped_collection_or_exact_typed_oracle';
   // A catalog may ask several independent questions of one authored world.
   // Keep that whole evidence world in one split, even when program IDs differ.
-  const worldKey = entry.source?.world_group ?? entry.source?.split_unit ?? id;
+  const worldKey = entry.source?.world_group ?? entry.source_fixture?.world_family_id ??
+    entry.source?.split_unit ?? id;
   if (!safeId(String(worldKey).replace(/[:]/g, '-')))
     throw Error(`${id}: invalid source world identity`);
   const sourceGroup = `semantic-stack:${provider}:${worldKey}`;
@@ -296,6 +305,8 @@ for (const [index, path] of (pilotAstra ? catalogs.slice(0, 1) : catalogs).entri
   await writeFile(join(output, `${provider}-catalog.sha256`), `${sha(raw)}  ${path}\n`);
 }
 const candidateRows = rendered.filter(item => item.caseRow).map(item => item.caseRow);
+for (const id of reviewIds) if (!rendered.some(item => item.id === id && item.caseRow))
+  throw Error(`${id}: requested review ID is absent or not a runnable source`);
 const verification = candidateRows.length ? await verifyCases(candidateRows, TOOLS_PROMPT) : [];
 const verified = new Map(verification.map(item => [item.id, item]));
 const caseRows = candidateRows.filter(row => verified.get(row.id)?.ok);
@@ -304,6 +315,7 @@ await writeFile(join(output, 'source-candidates.ir.jsonl'), sourceText);
 const review = {
   schema: 'natlang.semantic-stack-source-review/1',
   partial_pilot: pilotAstra,
+  review_override_ids: [...reviewIds],
   programs: rendered.length, runnable_candidates: candidateRows.length,
   reference_verified_candidates: caseRows.length,
   held: rendered.length - caseRows.length,
