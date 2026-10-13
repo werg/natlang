@@ -37,7 +37,10 @@ Five sibling cases already yielded accepted exact results, so this was not a
 reason to discard the family. Pop raised its future per-case request/collection
 budgets to 768/3600 seconds and added one measured, resultless resource-budget
 retry to the replenisher. The source failure remains a resource-limited
-collection event, never a model-negative or repair preference label.
+collection event, never a model-negative or repair preference label. The
+resultless s52026 case succeeded on its first retry in 2 turns with an exact
+oracle acceptance; this also demonstrates that the first attempt's long path
+was not intrinsic task difficulty.
 
 Source: plans/neuralese/REPETITION_DRAGNET_20261013.md, recommendation 4. Both students loop: the same action and the
 same observation for 8 to 127 turns. The training targets almost never contain a repeated action (0.08–0.10% of
