@@ -222,6 +222,44 @@ the compact audit is `/home/werg/data/supervisor-sweep-evidence2.log`.
 The separate `e2elead-gdiag-t` unit was a repeatedly preempted pytest run,
 not the actual first-20-update measurement; it was stopped to free memory.
 
+The C=3e-6 arm resumed on canonical main with a 16 GiB recipe envelope and
+20 GiB ledger claim. Its log records exact restoration of all 166 optimizer
+entries, with none initialized. Update 79 completed on the original failing
+record (`teacher-program:d47d21d2d5dae617c828:decision:0017`) with zero errors,
+followed by further updates. This localizes the earlier truncation to the
+allocation envelope rather than a rejected training approach.
+
+At update 100, the same 22 held readers report V CE 0.906990, T_self greedy CE
+0.896719 (V minus T_self 0.010271), sampled T_self CE 0.863968, and gold-T CE
+0.723513 (old V minus gold-T 0.183476). There were no self-text errors and two
+cap-hit cases. Overall held token CE was 0.440241 versus the parent 0.527920.
+These are intermediate measurements, not qualification or a rate selection;
+the source is `v2stream-c3e-6/e2e/eval.jsonl`. Keep the two references distinct
+in operational summaries. Evaluation consumed 162.5 of 376 resumed wall seconds
+(43.23%) at that point; retain the declared 50-update diagnostic cadence for
+this matched sweep, and account for the added self-text cost before choosing
+production cadence.
+
+**Producer-history confound discovered in the same audit.** The current V arm
+does not use the same producer history as free T_self. `direct_write_value`
+selects `DirectWriter.forced_sequence` when the source-sized span is known;
+that method feeds gold token IDs through the backbone, then anchors each value
+on that state's chosen token. `SelfText` instead feeds its generated tokens
+back. Thus the numerical gaps above are not isolated representation benefits
+and must not qualify the value channel or determine a rate by themselves.
+
+An exact three-state causal reference using the production `DirectWriter`,
+with C identically zero, confirms the distinction: gold feedback emits token
+IDs [0, 0], while greedy feedback emits [0, 1]. V equals embeddings of its own
+actual emitted IDs exactly (maximum error 0.0); comparing it with the other
+history gives maximum error 1.0. This is structural, without BF16 or optimizer
+noise. Evidence: `/home/werg/data/supervisor-writer-history-identity.log` and
+its script. Add a reader arm built from the exact emitted-token trace of the
+V writer and verify V = T at C=0 on identical histories and lengths. Keep the
+independent free-generation arm explicitly separate; autonomous runtime task
+qualification must still exercise real generation and stopping. The efficient
+teacher-forced training surrogate can continue while this verifier is repaired.
+
 Held value loss at step 50 is 0.877 (C=3e-6) / 0.881 (C=3e-5), versus
 0.859 at entry. These are incomplete measurements; complete the matched sweep
 and report T_self before choosing the mixed run's correction rate. The older
