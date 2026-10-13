@@ -1,0 +1,11 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "diag-mixed-lfm-u10006-p10",
+ "extends": "diag-mixed-lfm-u10006-ratio-base",
+ "description": "Shared u10006 mixed calibration, e2e fraction 0.1; exact common weights/data/precision/settings and fresh optimizer. This is preparation, not a measured ratio selection.",
+ "overrides": {
+  "e2e_mix": {
+   "fraction": 0.1
+  }
+ }
+}
