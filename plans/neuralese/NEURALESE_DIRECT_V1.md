@@ -511,7 +511,51 @@ continuation): the TCP comes on (identity, `optimizer_added`), P replaces the wr
 `dgx-projection`), and `e2e_mix` is added. Mellum v4 switches as soon as its P is fitted and the dragnet gives a stable
 recipe (planned with the DGX ops agent; no plateau wait). LFM does the same from its running lineage.
 
-**Order of work.** (1) The three pending e2e commits land (family interleave and task success, layer staging,
+**Neuralese outputs in direct samples (owner question, 2026-10-13).** Owner preference: e2e trains every Neuralese
+output, and direct trains everything else. Owner agreed: map uncovered positions through the TCP (option B, h
+detached), and get as much e2e as possible.
+
+*Coverage, measured* (union r3 program-header lfm25 train rows × e2e corpus v2; exact join: each direct row's
+`source_record_ids` are the native record ids the e2e corpus uses; a Neuralese output is a value a record's target
+writes (conversion /16 producers, `target_writes`), and its text is the producer's handover source; script and output:
+`runs/e2e-collapse-dragnet-20261012/coverage/`):
+- Rows: 357,632 train rows with 37.19M supervised target tokens.
+  - 83,446 rows (23.3%; 25.8% of target tokens) come from trajectories in e2e corpus v2.
+  - 14,701 of them write at least one value.
+- **Written values in those rows: 1.324M target tokens, 3.6% of all target tokens. 99.96% of them have a mined
+  consumer edge in v2** (14,728 of 14,740 writes; 12 writes, 535 tokens, have none).
+  - By source: static-lambda-rationalized 888k value tokens, bgkit-knowledge 377k, s72 curriculum 32k,
+    foundation-4962 16k.
+  - 4,242 writes are formatted differently in the row (JSON or native argument rendering); their token count comes
+    from tokenising the value alone.
+- **Outside v2:** 104,398 rows (7.52M target tokens, 20.2%) have a `return_result` in their target but come from
+  trajectories that v2 did not mine: native-sft-v13-r2 2.47M, teacher-campaign-evidence 1.83M, the rest of the s72
+  curriculum 1.17M, static-lambda 1.0M, bgkit 0.49M. This is an upper bound on uncovered Neuralese outputs, since a
+  root call's return that no caller reads is not one. The share that are child results read by a caller is what
+  corpus v3's mining (campaign-uncovered and s72 per trajectory, v13-r2, static-curriculum-s7k) decides. Every such
+  pair it mines becomes an edge (miner fixes: dgx-ops).
+
+*Option A (adopted where covered).* In a direct sample, the token span of each written value with a mined edge is
+context-only: the existing `context_only_spans` mechanism (train/direct_sft.py `context_only_mask`), declared per
+document by the union r4 render from the same join. Those positions train only through e2e.
+- The writer's token choice there is still trained: in an e2e update the producer's gold continuation CE
+  (`writer_text_weight` 1.0, trajectories' `gold_replay` → `GradSession.supervised_continuation_loss` on the gold
+  value under its forced write prefix) supervises exactly those tokens, through the TCP readout and the backbone. A
+  covered position therefore gets token CE and consumer CE in the same e2e update, which is the joint objective the
+  e2e stage is designed around.
+- What changes is the rate: a covered value is trained when its chain is drawn in an e2e update (fraction p of the
+  updates, family-balanced), not on every pass of the union.
+
+*Option B (for positions marked as Neuralese outputs without an edge).* Token CE at such a position reads
+lm_head(norm(TCP(h.detach()))). The token prediction trains the TCP only, and h stays free for the value path. Today
+that is 535 tokens; after v3 it is whatever mining cannot pair.
+- Positions not marked at all (writes in trajectories not yet mined) stay ordinary text CE until mining reaches them.
+- Alternatives to compare once the mixed trainer exists: a reduced CE weight at those positions, and PCGrad-style
+  projection of the CE gradient off the consumer-loss gradient on the shared backbone.
+- Measurement plan: short LFM mixed arms (A + B, A + reduced weight, A + PCGrad) at the same p, reporting V−T and crisp
+  CE per wall-hour. The numbers come with the ratio arms.
+
+**Order of work.** (1) Done 2026-10-13 (dde9945b..715565b9): the three e2e commits landed (family interleave and task success, layer staging,
 streaming corpus v2). (2) Extract `train/e2e_edges.py` from trajectories.py, with trajectories.py calling it and its
 tests unchanged. (3) Add `e2e_mix` to direct_sft. (4) Run the ratio arms on LFM. (5) Do the recipes and line parity,
 then the handoffs.
