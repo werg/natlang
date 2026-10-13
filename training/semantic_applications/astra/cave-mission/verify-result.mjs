@@ -3,7 +3,7 @@ const canonical = v => Array.isArray(v) ? v.map(canonical) : v && typeof v === '
 const eq = (a,b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
 const setEq = (a,b) => Array.isArray(a) && Array.isArray(b) && a.length === new Set(a).size && b.length === new Set(b).size && eq([...a].sort(),[...b].sort());
 export function verifyCaveResult(report, oracle, documents, request) {
-  const issues=[]; const check=(v,m)=>{if(!v)issues.push(m);};
+  const issues=[]; const qualityObservations=[]; const check=(v,m)=>{if(!v)issues.push(m);};
   try {
     check(report.caseId===request.caseId,'caseId');
     const docs=new Map(documents.map(d=>[d.id,d]));
@@ -81,12 +81,12 @@ export function verifyCaveResult(report, oracle, documents, request) {
       check(replay&&replay.findings.every(x=>x.kind==='defended'),'replay unresolved finding');
       totals.push({energy:request.initialEnergy-robot.energy,observations});
     }
-    check(used.size===nodes.size,'unreachable policy nodes');
+    if(used.size!==nodes.size)qualityObservations.push({kind:'unused-policy-nodes',nodeIds:[...nodes.keys()].filter(id=>!used.has(id))});
     check(policy.worstCaseEnergy===Math.max(...totals.map(x=>x.energy))&&policy.worstCaseEnergy===oracle.minimum_worst_case_energy,'minimax energy');
     check(policy.worstCaseObservations===Math.max(...totals.map(x=>x.observations))&&policy.worstCaseObservations===oracle.minimum_observations_at_optimum,'minimax observations');
     check(report.findings.every(x=>x.kind==='defended'),'unresolved/defect finding');
   } catch(e){issues.push(`malformed report: ${e.message}`);}
-  return {ok:issues.length===0,issues,semantic_review_required:true,scope:'Exact source-world structure and all-world supplied-policy replay; source quotation entailment and prose remain independently reviewed.'};
+  return {ok:issues.length===0,issues,qualityObservations,semantic_review_required:true,scope:'Exact source-world structure and all-world supplied-policy replay; source quotation entailment and prose remain independently reviewed.'};
 }
 export function verifyCandidate({value,oracle,inputs,fixture}) {
   try {

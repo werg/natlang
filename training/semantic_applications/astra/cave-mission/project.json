@@ -472,7 +472,7 @@
     ],
     "exact_fields": "Source landmark IDs, transforms, directed topology, gear/resource effects, sensor-answer partitions, all-world success and minimax objectives.",
     "semantic_fields": "World fact paraphrases, passage-condition prose, landmark explanations and lower-bound argument require independent source-grounded review.",
-    "verifier_status": "21 mechanism controls pass (4 equivalent positives and 17 corruptions); canonical shared-loader source replay passes; no NL execution credit."
+    "verifier_status": "22 mechanism controls pass (5 equivalent positives and 17 corruptions); unused unreachable policy nodes are quality observations, not semantic failures. Canonical source replay passes; no NL execution credit."
   },
   "services": [],
   "provenance": {
@@ -486,7 +486,7 @@
     "typed_reference_checked": true,
     "independent_oracle_review": false,
     "exact_result_replay": true,
-    "exact_checker_controls_passed": 21,
+    "exact_checker_controls_passed": 22,
     "live_qualified": false,
     "training_admitted": false
   },

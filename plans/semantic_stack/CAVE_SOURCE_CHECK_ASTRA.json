@@ -45,6 +45,13 @@
         "issues": []
       },
       {
+        "name": "benign unreachable terminal",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
         "name": "wrong mirror",
         "expected": false,
         "actual": false,
@@ -67,8 +74,7 @@
           "answer world partition echo",
           "actual branch echo",
           "replay chronology reflected",
-          "replay state reflected",
-          "unreachable policy nodes"
+          "replay state reflected"
         ]
       },
       {
@@ -82,8 +88,7 @@
           "replay world coverage",
           "answer world partition entry",
           "answer domain echo",
-          "answer world partition echo",
-          "unreachable policy nodes"
+          "answer world partition echo"
         ]
       },
       {
@@ -116,7 +121,6 @@
           "actual branch echo",
           "replay chronology reflected",
           "replay state reflected",
-          "unreachable policy nodes",
           "minimax energy"
         ]
       },
@@ -181,8 +185,7 @@
           "answer domain echo",
           "actual branch echo",
           "replay chronology reflected",
-          "replay state reflected",
-          "unreachable policy nodes"
+          "replay state reflected"
         ]
       },
       {
@@ -198,8 +201,7 @@
           "answer world partition entry",
           "actual branch entry",
           "replay chronology reflected",
-          "replay state reflected",
-          "unreachable policy nodes"
+          "replay state reflected"
         ]
       },
       {
@@ -255,8 +257,7 @@
         "issues": [
           "cycle direct",
           "replay chronology direct",
-          "replay state direct",
-          "unreachable policy nodes"
+          "replay state direct"
         ]
       },
       {
@@ -278,9 +279,9 @@
   "live_execution": false,
   "training_admitted": false,
   "hashes": {
-    "training/semantic_applications/astra/cave-mission/project.json": "6effaf1ba18bb10715fd412d6aee28595c76391b9797dec181b85c703e8c054c",
-    "training/semantic_applications/astra/cave-mission/verify-result.mjs": "ff4a6cc5a4a7c2900e7bc971798c9659393c14bf0ff9d25c01e847415d18a06c",
-    "training/semantic_applications/astra/cave-mission/check-verifier.mjs": "06f0327feb2809b1415be85537eb5a7cd8d48d49957702105f4cb7f7dbfdccb4",
+    "training/semantic_applications/astra/cave-mission/project.json": "657665a0e05c2d030bebd3eafff5d4e1eb45ac4fb39e7a4d34f6741852247e5f",
+    "training/semantic_applications/astra/cave-mission/verify-result.mjs": "5be4d8fa2c646d9c73d96adbf8fd2c9991c7b8f40ae04a36ce4f3ed779ea9737",
+    "training/semantic_applications/astra/cave-mission/check-verifier.mjs": "2976ae764e730533cfda88e6a55cb902171107606aa40e0c35a9725966d15db1",
     "training/semantic_applications/astra/cave-mission/mirrored-vault/reference-report.json": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90",
     "training/semantic_applications/astra/cave-mission/mirrored-vault/oracle.json": "652c18267e79c61c0b2b12d4626e979578a880b81f2c03c955e0248f2036c786"
   },
@@ -288,5 +289,10 @@
     "Exact quote/path membership is not semantic entailment.",
     "Passage-condition, source-fact and finding prose requires independent review.",
     "Full application call/literal execution is not credited by canonical reference replay."
-  ]
+  ],
+  "peer_precision_fix": {
+    "reviewer": "semantic_slate_sol",
+    "finding": "Benign unreachable terminal nodes do not change rooted policy behavior.",
+    "resolution": "Record unused nodes as qualityObservations; add equivalent-positive control."
+  }
 }
