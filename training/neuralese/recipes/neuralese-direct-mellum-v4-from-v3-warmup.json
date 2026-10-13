@@ -51,6 +51,11 @@
     "family": null
    },
    "description": "Owner decision 2026-10-12 (REVIEW_20261012 rec. 4): the running direct_sft takes the shared curriculum (direct_sft [0, 0.75], direct_trajectory [0.75, 1.0]) and the nested-family objective at its next --handoff. Pinned: the quantization component it trained with (canonical sha256; curriculum direct_sft [0, 0.35], direct_trajectory [0.35, 0.5]) and no family. The trainer continues the curriculum from its value at the handoff update to 0.75 over the remaining updates (as the data continuation did) and refuses any lambda or member-weight jump (direct_sft.objective_continuation); weights, MuonSR state, update counter and data plan continue."
+  },
+  "stage_parameter_defaults": {
+   "neuralese_direct": {
+    "task_eval_every": 1600
+   }
   }
  }
 }
