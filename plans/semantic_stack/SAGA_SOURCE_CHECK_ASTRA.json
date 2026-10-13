@@ -1,0 +1,197 @@
+{
+  "schema": "semantic-application-author-check/1",
+  "reviewer": "semantic_slate_astra",
+  "independent": false,
+  "project_id": "astra-app-saga-forensics-v1",
+  "source_commit": "4b53a35b with manifest/control follow-up pending",
+  "program_sha256": {
+    "investigate.nl": "11b3420a2b4b4d348e90ebd163dd113ef9c7e1a969bf0d876fd866f2aa0c8365",
+    "investigate/adjudicate.nl": "95ead616c2414b4458ad5a97353610a58109c90b5f35f766f665c67d510dfa66",
+    "investigate/adjudicate/advanceLedger.nl": "eaf633a7b658d75d6b26ce247c5e4a770e7d7fa9931816d4953eca25dfc497a6",
+    "investigate/adjudicate/advanceLedger/assessEvidence.nl": "87cb3576ac06c37b778ebc14c1bfa208bb07eb097e3b427b1bcbb44fc78eba7a",
+    "investigate/audit.nl": "e8a26c45d8d3fbaef7534f0ec63ae83c5451e0eee682fb7372dfb29646b6d9fc",
+    "investigate/audit/challengePolicy.nl": "fa10f93b3c78ca9f215948cfa29b71c93dab0bd144c56c25e52eb46a6e9bc170",
+    "investigate/correlate.nl": "d98ea3b05eae9f6a482ba7ff79bf92d552299227822867aff1e81c7f2b646a47",
+    "investigate/correlate/alignTime.nl": "2ff731087da488ee1540eb4b6c0513eceef3dd180aec9812923a1fe9d69c7a0d",
+    "investigate/correlate/alignTime/interpretClock.nl": "af9e9c1d4306fc66e91cffa4b7c33cb30a300c1c9a31c27cbde99f0bf01f1d94",
+    "investigate/correlate/bindAttempts.nl": "f68feabfaf70752a5a90844fd13c0967739ac6d5878abe608f27e16e3d2d0c2a",
+    "investigate/correlate/bindAttempts/compareRequestMeaning.nl": "e9264cde58a62752a357f4920cda278856b89934582030ce27572187788129a1",
+    "investigate/correlate/bindAttempts/compareRequestMeaning/resolveKeyScope.nl": "546ef9954dad97e8056a98dd7048c7ee3ff07bcf895d62fd8f525ac513b3dad4",
+    "investigate/correlate/deriveCausality.nl": "fd400ef3fe21f56246036ca3fb0c4b82bb4955a59b46857dd181e1e0b23819be",
+    "investigate/inventory.nl": "4a33f2002f8cdc0ce99deaf06609e7ccda9ebba6ce8f9d5663f053d17dd31368",
+    "investigate/inventory/interpretDocument.nl": "2aad3a7542efa78feb5f549901884b0ca4d330eaa1cb6d8338c742dc2406b956",
+    "investigate/repair.nl": "5eb738a9f854d082160b1b668507e1f897c850251c2426c32714584aa4fb388f",
+    "investigate/repair/chooseObservation.nl": "0c4012a30702e50e04b660b9ae3ec604a9bee507e759d91cdca10e8028616e85",
+    "investigate/repair/chooseObservation/partitionAnswers.nl": "516872bb36af93c10d5835f668b5bc228a9cbea1482e1b6894953e1609b6e978",
+    "investigate/repair/deriveObligations.nl": "4ac85ea1a4061b90dcd64d7d6fcc0c75c179e634cc38d158120f971363b8a18e",
+    "investigate/repair/searchPolicy.nl": "e88ca496cd445e3fe343eb711bf10f4f25bbf78330b46b0352ed568831a2d066",
+    "investigate/repair/searchPolicy/expandFrontier.nl": "4934d97b36eca54eaabe1da84f687c2e4d26f0cef90deb26d15f98787b46e866",
+    "investigate/repair/searchPolicy/expandFrontier/assessAction.nl": "cf4b0fafa20030948de0241118d03d6d19c059d79e8f5e8c1a65dc5949974dab",
+    "investigate/repair/searchPolicy/expandFrontier/assessAction/interpretCompensationScope.nl": "9141a45b08121def3e4b003ad9abea0ddcd0d4dce0426ad9dccf5e215f7d87b4",
+    "natlang.json": "8a6bc3ab6c539274c6c9b5422625ce597ca2eb62cc11b6dd78f96bce792c1277",
+    "tsconfig.json": "ec36ea0d1feabe9526c88925d9258f61b56ecb6d99448d8431c67221d8318ba1",
+    "types.ts": "e9917200462432345eefa6a0ddd1c842679c942d7f9e39e858fe3a8dc4476ab6"
+  },
+  "fixture_sha256": {
+    "contracts/cancellation.md": "56949bf6b4dcab95988c452048f1bb24cf3ac646cd4a5d4efc41ffdf879269f2",
+    "contracts/evidence.md": "6316ee03a9676d4d0735c803a64ef0bf507bed962aa184f455878e6cd270ab60",
+    "contracts/identity.md": "89d7f5ea36eff9c14f92e0b24b2eaf4af896f6245f5958758f1f0a7c7ca2c57e",
+    "contracts/repair.md": "f530d3cd59f7900a0cfc6f192eab72a0808b78737b6f5c948386e5a90f353a70",
+    "journals/bank-a.md": "35e4020251cfe7ad1fa45ae1e1cbfd9b6c120b2ab137cbee965ac3b0164f4c2d",
+    "journals/bank-b.md": "9c00d0896aca1f0cee1526990fd7e5dfaae44dda097915299ae8c8f3140ab6d1",
+    "journals/refund-a.md": "ff36f17e6e6db2918ace36631ed4682c11353b6a58de2daeda59dd23048aa5de",
+    "journals/stock-a.md": "dc8aca888e7f3484f7ad8da018e75d13b005d8b711379c86970dc99749eec545",
+    "journals/stock-b-maintenance.md": "023b98ec89a120976a8e5dab5d5f2ef7572a2e594cee86ae8254b4ac87158162",
+    "manifest.json": "e7456d5e6da7979443f8ae4187c3aff7ed59b2c804a431ba0bb0667c46f4e90e",
+    "operations/clock.md": "2988349b61bc76e469e1a1a5e7eb06f8c0eae34de1997d765a5510af23ecc8a5",
+    "operations/handover-cancel.md": "01eb99ced9f39eb3baf32707df251066beb4c31e64aa5dc42270bc7e6286f6ab",
+    "operations/pool.md": "954a4e871fe22ded64d0500de387d3e242ff33259fc2261c96ebd57f71ecf1d8",
+    "operations/source-boundary.md": "0a2bc1953cbfd4ceef13675c5e48e06a44e22350b0abe1c0ed32d2e117e0b50b",
+    "queries/bank-observations.md": "b4e333d6bea56b14e69494ccf641d0ca0930e459df4f760075f64968d7946c49",
+    "receipts/bank-a.md": "a0c63580c5be698687e275cbe067a98ccd250bee68851acae20e240d36467fcc",
+    "receipts/stock-a.md": "df589ddc09efc4b3eed6f7b7d9a208ab19809fc336b1f989a5e786c0c417c931"
+  },
+  "oracle_sha256": "8427fc796687a96ca0b6a4d4a357d130f62d02b28ff17643ea9c98af64a23a0f",
+  "checks": {
+    "source_loader": {
+      "passed": true,
+      "named_nodes": 23,
+      "callable_edges": 22,
+      "inherited_aliases": 35
+    },
+    "typed_declarations_compile": true,
+    "source_documents": 16,
+    "connected_source_clauses": 40,
+    "nl_source_lines": 535,
+    "literal_sites_authored": 4,
+    "structural_iterateOn_sites_authored": 2,
+    "checker_controls": {
+      "scope": "exact checker controls only; no application execution or independent source certification",
+      "passed": 18,
+      "results": [
+        {
+          "name": "canonical projection",
+          "expected": true,
+          "actual": true,
+          "issueCount": 0
+        },
+        {
+          "name": "set permutations and alpha-renamed independent actions",
+          "expected": true,
+          "actual": true,
+          "issueCount": 0
+        },
+        {
+          "name": "equivalent independent writes after observation",
+          "expected": true,
+          "actual": true,
+          "issueCount": 0
+        },
+        {
+          "name": "valid alternate independent action dependency",
+          "expected": true,
+          "actual": true,
+          "issueCount": 0
+        },
+        {
+          "name": "wrong tenant",
+          "expected": false,
+          "actual": false,
+          "issueCount": 2
+        },
+        {
+          "name": "duplicate effect observation counted twice",
+          "expected": false,
+          "actual": false,
+          "issueCount": 2
+        },
+        {
+          "name": "missing outcome branch",
+          "expected": false,
+          "actual": false,
+          "issueCount": 3
+        },
+        {
+          "name": "local clock mistaken for global time",
+          "expected": false,
+          "actual": false,
+          "issueCount": 1
+        },
+        {
+          "name": "early query substituted",
+          "expected": false,
+          "actual": false,
+          "issueCount": 1
+        },
+        {
+          "name": "deposit refunded as rental",
+          "expected": false,
+          "actual": false,
+          "issueCount": 2
+        },
+        {
+          "name": "duplicate refund in committed world",
+          "expected": false,
+          "actual": false,
+          "issueCount": 3
+        },
+        {
+          "name": "cash bookkeeping concealed",
+          "expected": false,
+          "actual": false,
+          "issueCount": 1
+        },
+        {
+          "name": "wrong release quantity",
+          "expected": false,
+          "actual": false,
+          "issueCount": 6
+        },
+        {
+          "name": "invented witness",
+          "expected": false,
+          "actual": false,
+          "issueCount": 4
+        },
+        {
+          "name": "lost protected deposit",
+          "expected": false,
+          "actual": false,
+          "issueCount": 1
+        },
+        {
+          "name": "cyclic dependencies",
+          "expected": false,
+          "actual": false,
+          "issueCount": 2
+        },
+        {
+          "name": "cross-tenant requests merged",
+          "expected": false,
+          "actual": false,
+          "issueCount": 2
+        },
+        {
+          "name": "unobserved refund erased",
+          "expected": false,
+          "actual": false,
+          "issueCount": 1
+        }
+      ]
+    },
+    "quick_check": {
+      "commit": "2326b9b8",
+      "python_ratchets": 22,
+      "typescript": "passed"
+    }
+  },
+  "limitations": [
+    "No live NL application execution yet.",
+    "No independent source/oracle review yet.",
+    "No full ForensicReport reference replay yet.",
+    "Exact quotation presence does not establish semantic support.",
+    "Checker control projections are not complete typed app results and may not be training data."
+  ],
+  "training_admitted": false,
+  "generation_ready": false
+}

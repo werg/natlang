@@ -11,9 +11,6 @@
   "oracle_path": "training/semantic_applications/astra/saga-forensics/pooled-rental/oracle.json",
   "source_world_split_key": "astra-application-saga-pooled-rental-v1",
   "program_files": [
-    "DECOMPOSITION.md",
-    "README.md",
-    "investigate.d.nl.ts",
     "investigate.nl",
     "investigate/adjudicate.nl",
     "investigate/adjudicate/advanceLedger.nl",
@@ -458,7 +455,7 @@
     ],
     "exact_fields": "Source IDs, quantity/unit, normalized numbers, namespace bindings, effect/cause references and branch status are exact.",
     "semantic_fields": "Explanations and alternative valid action placement receive independent source-grounded review. Branch-independent actions may be copied into all mutually exclusive branches.",
-    "verifier_status": "External exact identity/number/branch/dependency/conservation checker authored; positive and negative reference validation pending. Semantic witness support still requires independent review."
+    "verifier_status": "External exact checker passed 18 controls: 4 equivalent positive projections and 14 negative mutations. These are checker controls, not application execution, complete typed report validation or independent semantic certification."
   },
   "services": [],
   "provenance": {
@@ -472,10 +469,15 @@
     "independent_oracle_review": false,
     "exact_result_replay": false,
     "live_qualified": false,
-    "training_admitted": false
+    "training_admitted": false,
+    "exact_checker_controls_passed": 18
   },
   "model_facing_debt": "All 23 authored NL files and typed interfaces are unmeasured; collect live diagnostic and approximately 48 samples per adopted presentation before adoption.",
   "fixture_document_count": 16,
   "fixture_clause_count": 40,
-  "external_verifier_path": "training/semantic_applications/astra/saga-forensics/verify-result.mjs"
+  "external_verifier_path": "training/semantic_applications/astra/saga-forensics/verify-result.mjs",
+  "metadata_files": [
+    "DECOMPOSITION.md",
+    "README.md"
+  ]
 }
