@@ -602,6 +602,7 @@ class GradSession:
         if kind in ("crossEntropy", "logLikelihood"):
             scored = self._score(prompt, rest, leaves, write_terms=kind == "logLikelihood")
             if kind == "crossEntropy":
+                self.supervised_tokens = getattr(self, 'supervised_tokens', 0) + int(scored["token_logp"].numel())
                 return -scored["token_logp"].mean()
             return -(scored["token_logp"].sum() + scored["write_logp"])
         if kind == "selfDistill":
@@ -702,6 +703,9 @@ class GradSession:
         else:
             scored = self._score(prompt, rest, leaves, write_terms=False, **score_options)
         loss = -scored['token_logp'].mean()
+        # A running count of supervised positions (reply, plus the weighted context): hosts report tokens/s from it.
+        self.supervised_tokens = (getattr(self, 'supervised_tokens', 0) + int(scored['token_logp'].numel()) +
+                                  (int(scored['context_logp'].numel()) if context_weight else 0))
         if projection_anchor_weight:
             anchor = scored['projection_anchor_loss']
             loss = loss + projection_anchor_weight * anchor

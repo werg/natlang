@@ -408,3 +408,29 @@ def test_direct_write_context_gets_the_same_gradient_under_the_layer_staged_back
     plain, staged = gradient(False), gradient(True)
     assert float(plain.abs().sum()) > 0
     torch.testing.assert_close(staged, plain, rtol=1e-4, atol=1e-6)
+
+
+def test_the_e2e_objective_embeds_in_a_host_trainer_with_the_hosts_modules(loaded, tmp_path, monkeypatch):
+    """The mixed run (plans/neuralese/NEURALESE_DIRECT_V1.md "The mixed run"): train.direct_sft hosts e2e updates
+    through trajectories' own setup (build_e2e_objective). The objective uses the host's engine and projections, adds
+    no parameters, leaves the host's backbone trainable, and its loss reaches the writer and the backbone."""
+    from natlang_neuralese.train import direct_export
+    from natlang_neuralese.train.trajectories import build_e2e_objective
+    records, pieces, _ = _direct_stand_in(loaded, tmp_path, monkeypatch)
+    host = direct_export.load_direct_artifact(tmp_path)
+    for p in host.engine.backbone.parameters():
+        p.requires_grad_(False)
+    trainable = host.engine.backbone.hf.model.layers[-1].feed_forward.w2.weight
+    trainable.requires_grad_(True)
+    arguments = _direct_arguments(records, pieces, tmp_path / "e2e", tmp_path) + ["--soft-parts", "text",
+                                                                                 "--record-order", "family-interleave"]
+    objective = build_e2e_objective(arguments, engine=host.engine, neuralese_projection=host.neuralese_projection)
+    assert trainable.requires_grad, "the host owns the backbone's trainables"
+    loss, info = objective.loss(0)
+    assert info["record_id"] == "caller" and info["write_lengths"] and info["supervised_tokens"] > 0 and torch.isfinite(loss)
+    loss.backward()
+    assert host.neuralese_projection.stack.blocks[-1].down.weight.grad.abs().sum() > 0
+    assert trainable.grad is not None and trainable.grad.abs().sum() > 0
+    with pytest.raises(ValueError, match="soft-parts text"):
+        build_e2e_objective(_direct_arguments(records, pieces, tmp_path / "e2e2", tmp_path),
+                            engine=host.engine, neuralese_projection=host.neuralese_projection)

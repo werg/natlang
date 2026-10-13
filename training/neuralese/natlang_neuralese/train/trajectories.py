@@ -702,7 +702,71 @@ def family_interleaved_order(records: list, seed, epoch: int) -> list:
     return [row for *_, row in sorted(keyed, key=lambda item: item[:2])]
 
 
-def main(argv=None):
+def build_e2e_objective(argv, *, engine, neuralese_projection, token_choice_projection=None):
+    """The end-to-end edge objective of this trainer for another trainer's loop (the mixed run, owner 2026-10-13;
+    plans/neuralese/NEURALESE_DIRECT_V1.md "The mixed run"): ``argv`` are this trainer's own options (records, pieces,
+    --out for its selections and logs, the e2e settings); ``engine`` and the projections are the host's live modules.
+    The setup is this module's own (one implementation): records, authentication, producers, the direct writer, the
+    consumer reads, the paired held selection. The host owns everything a trainer owns: seeds, backbone policy,
+    quantisation, drift monitor, optimizer and checkpoint. Instructions pieces must be their text (--soft-parts text),
+    so the objective adds no parameters of its own. Returns an ``EmbeddedE2E``."""
+    return main(argv, embed={'engine': engine, 'neuralese_projection': neuralese_projection,
+                             'token_choice_projection': token_choice_projection})
+
+
+class EmbeddedE2E:
+    """One e2e update's loss and the paired held evaluation, for a host trainer (``build_e2e_objective``)."""
+
+    def __init__(self, *, record_at, loss_of, evaluate, evaluate_written, leaves, paired_held, held,
+                 held_probe_accounting, rendering, engine, crisp_weight, lengths, stream_stats, supervised_tokens,
+                 checkpoint_layers):
+        self._supervised_tokens, self._checkpoint_layers = supervised_tokens, checkpoint_layers
+        self._record_at, self._loss_of, self._evaluate, self._evaluate_written = record_at, loss_of, evaluate, evaluate_written
+        self._leaves, self.paired_held, self.held = leaves, paired_held, held
+        self._accounting, self._rendering, self._engine = held_probe_accounting, rendering, engine
+        self.crisp_weight, self._lengths, self.stream_stats = crisp_weight, lengths, stream_stats
+
+    def _rendered(self):
+        import contextlib
+
+        @contextlib.contextmanager
+        def scope():
+            previous = getattr(self._engine, 'prompt_rendering', None)
+            checkpointed = getattr(self._engine.backbone, 'checkpoint_layers', False)  # the host sets its own per update
+            if self._rendering is not None:
+                self._engine.prompt_rendering = self._rendering
+            self._engine.backbone.checkpoint_layers = self._checkpoint_layers
+            try:
+                yield
+            finally:
+                self._engine.prompt_rendering = previous
+                self._engine.backbone.checkpoint_layers = checkpointed
+        return scope()
+
+    def loss(self, cursor):
+        """The training loss of the record at ``cursor`` (one record, the joint backward of the host): the consumer's
+        CE through the written blocks plus its context CE, the producers' gold continuation CE (in the written
+        values' replay), and the crisp term at --crisp-weight. Returns (loss tensor, info)."""
+        with self._rendered():
+            record = self._record_at(cursor)
+            written_before, supervised_before = len(self._lengths), self._supervised_tokens()
+            objective = self._loss_of(record, self._leaves)
+            crisp = self.crisp_weight * self._loss_of(record, {}, soft=False) if self.crisp_weight else None
+        info = {'record_id': record['id'], 'family': record_family(record), 'objective': float(objective.detach()),
+                'crisp': None if crisp is None else float(crisp.detach()),
+                'write_lengths': self._lengths[written_before:],
+                'supervised_tokens': self._supervised_tokens() - supervised_before}
+        return (objective if crisp is None else objective + crisp), info
+
+    def evaluate(self, label):
+        """Paired held readers (V, T, shuffled, zeroed, per family) and the held crisp CE."""
+        with self._rendered():
+            written = self._evaluate_written(label + '-written', self._leaves, self.paired_held, self._accounting)
+            crisp = self._evaluate(label + '-crisp', {}, soft=False)
+        return {'written': written, 'crisp': crisp}
+
+
+def main(argv=None, embed=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--records", required=True, nargs='+',
                         help='records file(s); with --record-source trajectories, cohort directories or their records.jsonl')
@@ -953,6 +1017,15 @@ def main(argv=None):
     apply_consumer_defaults(parser)
     parser.add_argument("--inspect-training-config", action="store_true", help="print effective defaults and overrides without loading models or starting training")
     args = parser.parse_args(argv)
+    embedded = embed is not None
+    if embedded:
+        if args.soft_parts != 'text':
+            raise ValueError('an embedded e2e objective reads instructions pieces as their text (--soft-parts text)')
+        if args.latent_step_in_backward:
+            raise ValueError('an embedded e2e objective leaves the latent step to its host (its optimizer and '
+                             'in-backward hooks); layer-staged backward is this trainer\'s own')
+        args.direct_artifact = args.direct_artifact or 'embedded'
+        args.direct_base_snapshot = args.direct_base_snapshot or 'embedded'
     # One file stays a plain path (the identity of every earlier run); several stay a list.
     args.records = args.records[0] if len(args.records) == 1 else args.records
     args.pieces = args.pieces[0] if len(args.pieces) == 1 else args.pieces
@@ -1067,7 +1140,7 @@ def main(argv=None):
 
     out = Path(args.out)
     checkpoint_path = out / 'checkpoint.pt'
-    if out.exists() and any(out.iterdir()) and not checkpoint_path.exists():
+    if not embedded and out.exists() and any(out.iterdir()) and not checkpoint_path.exists():
         raise ValueError('existing recurrence output has no resumable checkpoint; use a fresh directory')
     out.mkdir(parents=True, exist_ok=True)
     from .trajectory_state import atomic_checkpoint, trajectory_optimizer, validate_resume, validate_continuation, gradient_norm, clip_finite_gradients
@@ -1109,12 +1182,13 @@ def main(argv=None):
                                                   if isinstance(getattr(args, role), list)}},
                                 identity['files'], ('base', 'heads', 'records', 'pieces', 'bank', 'soft_init'))
     direct_parent = None
-    if args.direct_artifact:
+    if args.direct_artifact and not embedded:
         from .direct_export import direct_parent_binding
         direct_parent = direct_parent_binding(args.direct_artifact)
     # mmap: a Mellum full state is ~47 GB; reading it whole into host RAM beside the CUDA copy of the same weights
     # does not fit the unified-memory machine (the checkpoint is replaced atomically, so the mapping stays valid).
-    resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False, mmap=True) if checkpoint_path.exists() else None
+    resumed = (torch.load(checkpoint_path, map_location='cpu', weights_only=False, mmap=True)
+               if checkpoint_path.exists() and not embedded else None)
     new_continuation = resumed is None and bool(args.continue_from)
     def resume_identity_for_saved_parent(state):
         current = dict(identity)
@@ -1174,13 +1248,24 @@ def main(argv=None):
         if new_continuation and (resumed.get('port_config', {}).get('content_transport') != 'raw-identity'
                 or 'content_residual_initialization' not in args.curriculum_change):
             raise ValueError('fresh-zero transition must explicitly declare a previously bypassed raw residual')
-    if args.device.startswith("cuda"):
+    if args.device.startswith("cuda") and not embedded:
         total = torch.cuda.get_device_properties(0).total_memory
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    if not embedded:  # the host owns the process RNG
+        random.seed(args.seed)
+        torch.manual_seed(args.seed)
     direct = None
-    if args.direct_artifact:
+    host_rendering = None
+    if embedded:
+        from types import SimpleNamespace
+        engine = embed['engine']
+        direct = SimpleNamespace(engine=engine, neuralese_projection=embed['neuralese_projection'],
+                                 token_choice_projection=embed.get('token_choice_projection'), manifest=None)
+        engine.token_choice_projection = direct.token_choice_projection
+        host_rendering = getattr(engine, 'prompt_rendering', None)
+        if args.prompt_rendering is not None:
+            engine.prompt_rendering = args.prompt_rendering
+    elif args.direct_artifact:
         from .direct_export import load_direct_artifact
         direct = load_direct_artifact(args.direct_artifact, base_snapshot=args.direct_base_snapshot, device=args.device,
                                       aligned_projection=args.aligned_projection)
@@ -1220,8 +1305,9 @@ def main(argv=None):
     engine.max_block = capacity
     if args.stop_supervision == 'gold-native-boundary' and engine.heads.read_markers:
         raise ValueError('gold native stop supervision requires raw-token-v1')
-    for p in engine.backbone.parameters():
-        p.requires_grad_(False)
+    if not embedded:  # the host owns the backbone's trainables
+        for p in engine.backbone.parameters():
+            p.requires_grad_(False)
     if not 0 <= args.sketch_target_backbone_scale <= 1:
         raise ValueError("sketch target backbone gradient scale must be between 0 and 1")
     if args.sketch_target_weight < 0 or (args.sketch_target_weight and args.sketch_gradient not in ('one_step', 'local_stage')):
@@ -2024,244 +2110,245 @@ def main(argv=None):
                       **({"train_per_cohort": train_per_cohort,
                           "held_strata": {c: len(r) for c, r in cohort_strata_held.items()}} if sampler else {})}), flush=True)
 
-    from .backbone_policy import configure_backbone_training, backbone_trainable_state, resolve_backbone_policy
-    args.backbone_training=resolve_backbone_policy(engine.backbone,args.backbone_training)
-    if args.backbone_training=='lora' and args.rank<1:
-        raise ValueError('explicit LoRA policy requires --rank positive')
-    backbone_named = configure_backbone_training(engine.backbone,args.backbone_training,rank=args.rank or 16)
-    from .quantization import load_component
-    from ..common.paths import root as path_root
-    quant = load_component(args.quantization, root=path_root('repo'))
-    preserve = behaviour = None
-    if quant is not None:
-        installed = quant.install(engine.backbone.hf, layer_count=engine.backbone.num_layers)
-        print(json.dumps({'event': 'quantization_installed', 'groups': installed, 'stage': quant.stage}), flush=True)
-        from .quantization import Behaviour, Preserve
-        if quant.component.get('preserve') and quant.component['preserve'].get('weight', 0) > 0:
-            preserve = Preserve(quant.component['preserve'], quant.stage['id'])
-        if quant.component.get('gate'):
-            behaviour = Behaviour(quant.component['gate'], engine.tokenizer, preserve.held if preserve else None,
-                                  root=path_root('repo'))
-    # The shared drift monitor and guard (train/drift_monitor.py; LINE_PARITY.md: the behaviour gate is the hard
-    # criterion, response KL warns and runs the gate, and stops only at --drift-stop). Its KL reference is the
-    # teacher's held rows, else the model at this stage's start (the direct export), captured once per run directory.
-    from .drift_monitor import DriftMonitor, parse_monitor, setup_monitor
-    behaviour, monitor_held = setup_monitor(parse_monitor(args.monitor), out, engine.backbone.hf, engine.tokenizer,
-                                            behaviour=behaviour, gate_held=preserve.held if preserve else None,
-                                            gate_response_kl=args.gate_response_kl, root=path_root('repo'))
-    drift_monitor = (DriftMonitor(engine.backbone.hf, engine.tokenizer, monitor_held, behaviour, args,
-                                  bf16=(lambda: quant.context('bf16', 0.0)) if quant is not None else None)
-                     if args.drift_rows and monitor_held is not None else None)
-    drift_stopped_at = None
-    if drift_monitor is not None and resumed is not None:
-        drift_monitor.restore(resumed.get('drift_monitor'))
-        if resumed.get('drift_stopped_at') is not None and not new_continuation:
-            raise ValueError(f"the drift guard stopped this stage at update {resumed['drift_stopped_at']} "
-                             f"(drift.jsonl), so it is not resumed: diagnose it, or start a declared continuation")
-    if args.monitor and drift_monitor is None:
-        raise ValueError('--monitor needs --drift-rows and a reference (the monitor\'s data or a teacher)')
-    from ..maple.family import evaluate_members, family_members, member_backward, private_parameters, window_labels
-    family = family_members(engine.backbone)
-    codes = None
-    if args.backbone_training == 'qat':
-        # QAT code dynamics at each periodic evaluation (flips from the base, since the last one, oscillation).
-        from ..maple.ternary import CodeTracker
-        codes = CodeTracker(engine.backbone.hf)
-    if args.member_weight and not family:
-        raise ValueError('--member-weight needs a nested-family student')
-    if args.member_weight:
-        known = {id(p) for _, p in backbone_named}
-        for name, p in private_parameters(engine.backbone):
-            if id(p) not in known:
-                p.requires_grad_(True)
-                backbone_named.append((name, p))
+    if not embedded:  # trainer-only: backbone policy, quantisation, drift monitor, family, optimizer, resume
+        from .backbone_policy import configure_backbone_training, backbone_trainable_state, resolve_backbone_policy
+        args.backbone_training=resolve_backbone_policy(engine.backbone,args.backbone_training)
+        if args.backbone_training=='lora' and args.rank<1:
+            raise ValueError('explicit LoRA policy requires --rank positive')
+        backbone_named = configure_backbone_training(engine.backbone,args.backbone_training,rank=args.rank or 16)
+        from .quantization import load_component
+        from ..common.paths import root as path_root
+        quant = load_component(args.quantization, root=path_root('repo'))
+        preserve = behaviour = None
+        if quant is not None:
+            installed = quant.install(engine.backbone.hf, layer_count=engine.backbone.num_layers)
+            print(json.dumps({'event': 'quantization_installed', 'groups': installed, 'stage': quant.stage}), flush=True)
+            from .quantization import Behaviour, Preserve
+            if quant.component.get('preserve') and quant.component['preserve'].get('weight', 0) > 0:
+                preserve = Preserve(quant.component['preserve'], quant.stage['id'])
+            if quant.component.get('gate'):
+                behaviour = Behaviour(quant.component['gate'], engine.tokenizer, preserve.held if preserve else None,
+                                      root=path_root('repo'))
+        # The shared drift monitor and guard (train/drift_monitor.py; LINE_PARITY.md: the behaviour gate is the hard
+        # criterion, response KL warns and runs the gate, and stops only at --drift-stop). Its KL reference is the
+        # teacher's held rows, else the model at this stage's start (the direct export), captured once per run directory.
+        from .drift_monitor import DriftMonitor, parse_monitor, setup_monitor
+        behaviour, monitor_held = setup_monitor(parse_monitor(args.monitor), out, engine.backbone.hf, engine.tokenizer,
+                                                behaviour=behaviour, gate_held=preserve.held if preserve else None,
+                                                gate_response_kl=args.gate_response_kl, root=path_root('repo'))
+        drift_monitor = (DriftMonitor(engine.backbone.hf, engine.tokenizer, monitor_held, behaviour, args,
+                                      bf16=(lambda: quant.context('bf16', 0.0)) if quant is not None else None)
+                         if args.drift_rows and monitor_held is not None else None)
+        drift_stopped_at = None
+        if drift_monitor is not None and resumed is not None:
+            drift_monitor.restore(resumed.get('drift_monitor'))
+            if resumed.get('drift_stopped_at') is not None and not new_continuation:
+                raise ValueError(f"the drift guard stopped this stage at update {resumed['drift_stopped_at']} "
+                                 f"(drift.jsonl), so it is not resumed: diagnose it, or start a declared continuation")
+        if args.monitor and drift_monitor is None:
+            raise ValueError('--monitor needs --drift-rows and a reference (the monitor\'s data or a teacher)')
+        from ..maple.family import evaluate_members, family_members, member_backward, private_parameters, window_labels
+        family = family_members(engine.backbone)
+        codes = None
+        if args.backbone_training == 'qat':
+            # QAT code dynamics at each periodic evaluation (flips from the base, since the last one, oscillation).
+            from ..maple.ternary import CodeTracker
+            codes = CodeTracker(engine.backbone.hf)
+        if args.member_weight and not family:
+            raise ValueError('--member-weight needs a nested-family student')
+        if args.member_weight:
+            known = {id(p) for _, p in backbone_named}
+            for name, p in private_parameters(engine.backbone):
+                if id(p) not in known:
+                    p.requires_grad_(True)
+                    backbone_named.append((name, p))
 
-    def member_eval_windows():
-        """The held records of the member evaluation, pinned in the run directory at first use: a change of the held
-        selection code (as at Maple recurrence step ~223) must not swap the evaluated records mid-run."""
-        pinned = out / 'member-eval-ids.json'
-        held_by_id = {r['id']: r for r in held}
-        if pinned.exists():
-            ids = [i for i in json.loads(pinned.read_text())['ids'] if i in held_by_id]
-        else:
-            ids = [r['id'] for r in held[:args.member_eval]]
-            pinned.write_text(json.dumps({'ids': ids, 'mask_system': args.member_mask_system}, indent=1) + '\n')
-        return [member_window(held_by_id[i]) for i in ids]
+        def member_eval_windows():
+            """The held records of the member evaluation, pinned in the run directory at first use: a change of the held
+            selection code (as at Maple recurrence step ~223) must not swap the evaluated records mid-run."""
+            pinned = out / 'member-eval-ids.json'
+            held_by_id = {r['id']: r for r in held}
+            if pinned.exists():
+                ids = [i for i in json.loads(pinned.read_text())['ids'] if i in held_by_id]
+            else:
+                ids = [r['id'] for r in held[:args.member_eval]]
+                pinned.write_text(json.dumps({'ids': ids, 'mask_system': args.member_mask_system}, indent=1) + '\n')
+            return [member_window(held_by_id[i]) for i in ids]
 
-    def member_window(record):
-        """The crisp rendering of a record (prompt, tool output and target: whole trajectory), last --member-tokens."""
-        notes = handover_notes(record)
-        messages = crisp_messages(record["messages"], texts, notes) + render(
-            [record["target"]], lambda name: {"type": "text", "text": texts[name]}, notes)
-        tools = record.get("tools") or None
-        tokens = engine._tokens(engine.tokenizer.apply_chat_template(messages, tools=tools, tokenize=False))
-        context = 1
-        if args.member_mask_system and messages and messages[0].get("role") == "system":
-            # The system prompt and tool definitions stay context: identical across records, they taught members
-            # nothing but memorization (and dominated the member evaluation).
-            context = len(engine._tokens(engine.tokenizer.apply_chat_template(messages[:1], tools=tools, tokenize=False)))
-        start = max(0, len(tokens) - args.member_tokens)
-        ids = torch.tensor([tokens[start:]], device=args.device)
-        return ids, window_labels(ids, min(max(1, context - start), ids.shape[1] - 1))
-    lora = [parameter for _,parameter in backbone_named]
-    lora_names = ([name for name,_ in backbone_named]
-                  if args.backbone_training in ('full','qat','latent') else None)
-    qat_named = backbone_named if args.backbone_training=='qat' else []
-    backbone_lr = args.backbone_lr if args.backbone_training in ('full','latent') else args.lora_lr
+        def member_window(record):
+            """The crisp rendering of a record (prompt, tool output and target: whole trajectory), last --member-tokens."""
+            notes = handover_notes(record)
+            messages = crisp_messages(record["messages"], texts, notes) + render(
+                [record["target"]], lambda name: {"type": "text", "text": texts[name]}, notes)
+            tools = record.get("tools") or None
+            tokens = engine._tokens(engine.tokenizer.apply_chat_template(messages, tools=tools, tokenize=False))
+            context = 1
+            if args.member_mask_system and messages and messages[0].get("role") == "system":
+                # The system prompt and tool definitions stay context: identical across records, they taught members
+                # nothing but memorization (and dominated the member evaluation).
+                context = len(engine._tokens(engine.tokenizer.apply_chat_template(messages[:1], tools=tools, tokenize=False)))
+            start = max(0, len(tokens) - args.member_tokens)
+            ids = torch.tensor([tokens[start:]], device=args.device)
+            return ids, window_labels(ids, min(max(1, context - start), ids.shape[1] - 1))
+        lora = [parameter for _,parameter in backbone_named]
+        lora_names = ([name for name,_ in backbone_named]
+                      if args.backbone_training in ('full','qat','latent') else None)
+        qat_named = backbone_named if args.backbone_training=='qat' else []
+        backbone_lr = args.backbone_lr if args.backbone_training in ('full','latent') else args.lora_lr
 
-    def policy_state():
-        return backbone_trainable_state(backbone_named)
-    if args.checkpoint_elide_rng:
-        if not hasattr(backbone, 'elide_checkpoint_rng'):
-            raise ValueError('checkpoint RNG elision is qualified only for the native LFM2 port')
-        backbone.elide_checkpoint_rng()
-    if args.crisp_weight and not lora:
-        raise ValueError('crisp SFT requires a trainable backbone policy')
-    # The writer's own modules (feedback, content projection) learn from the readers of what they write.
-    # Native final normalization is a frozen reference. At full depth the
-    # causal feedback is already exact; learn payload/stop without corrupting it.
-    if args.read_adapter:
-        heads.add_read_adapter()
-    head_named = [(f'heads.{name}', p) for name, p in heads.named_parameters()
-                   if not (not heads.read_markers and (name.startswith('feedback.final_norm.') or name.startswith('content.reference.') or
-                           (heads.cutoff == backbone.num_layers and name.startswith('feedback.'))))] if args.heads_lr and (args.handover == "written" or args.view == "written") else []
-    if direct is not None:
-        # The direct writer's own modules (not the raw-token anchor heads, which the direct path does not train).
-        # The TokenChoiceProjection is the token readout (lm_head(norm(TCP(h)))): its rate is its own
-        # (--token-choice-lr; 0 keeps the identity), since a head-rate step on it moves every token prediction.
-        tcp_lr = args.heads_lr if args.token_choice_lr is None else args.token_choice_lr
-        tcp_module = getattr(direct, 'token_choice_projection', None)
-        if tcp_module is not None and not tcp_lr:
-            for p in tcp_module.parameters():
-                p.requires_grad_(False)
-        head_named = [(f'{key}.{name}', p) for key, module in (('neuralese_projection', direct.neuralese_projection),
-                                                              ('token_choice_projection',
-                                                               tcp_module if tcp_lr else None))
-                      if module is not None for name, p in module.named_parameters()] if args.heads_lr else []
-    head_params = [p for _, p in head_named]
-    if args.train_control_rows:
-        head_params += [backbone.control_rows]
-        head_named += [('backbone.control_rows', backbone.control_rows)]
-        if not getattr(backbone, 'tied', True):
-            head_params += [backbone.control_head_rows]
-            head_named += [('backbone.control_head_rows', backbone.control_head_rows)]
-    for p in head_params:
-        p.requires_grad_(True)
-    latent_lrs, lion, latent_options = {}, [], None
-    if args.latent_optimizer == 'lionsr':
-        if args.optimizer != 'muon' or args.backbone_training != 'latent' or not args.qat_latent_lr:
-            raise ValueError('--latent-optimizer lionsr needs --optimizer muon --backbone-training latent and --qat-latent-lr')
-        from .optim import latent_partition
-        lion = latent_partition([(f'backbone.{n}', q) for n, q in backbone_named], args.qat_latent_lr)
-        print(json.dumps({'event': 'latent_optimizer', 'optimizer': 'lionsr', 'latents': len(lion),
-                          'elements': sum(q.numel() for _, q, *_ in lion), 'lr_row_scale_units': args.qat_latent_lr}),
-              flush=True)
-    elif args.latent_optimizer == 'muonsr':
-        # The direct stage's latent optimizer, split and options (train/optim.py): matrices on MuonSR at --latent-lr;
-        # routers, vectors and narrow matrices stay with the backbone group (AdamW at --backbone-lr).
-        if args.optimizer != 'muon' or args.backbone_training != 'latent' or not args.latent_lr:
-            raise ValueError('--latent-optimizer muonsr needs --optimizer muon --backbone-training latent and --latent-lr')
-        if args.qat_latent_lr:
-            raise ValueError('--latent-optimizer muonsr takes its rate from --latent-lr; --qat-latent-lr is LionSR\'s '
-                             'row-scale rate, so drop it')
-        from .optim import latent_entries, latent_options as latent_options_for, latent_split
-        latent_named, _ = latent_split([(f'backbone.{n}', q) for n, q in backbone_named], 'muonsr')
-        lion = latent_entries(latent_named, 'muonsr', args.latent_lr)
-        latent_options = latent_options_for('muonsr', weight_decay=args.latent_weight_decay, ns=args.latent_ns)
-        print(json.dumps({'event': 'latent_optimizer', 'optimizer': 'muonsr', 'latents': len(lion),
-                          'elements': sum(q.numel() for _, q, *_ in lion), 'lr': args.latent_lr,
-                          'latent_options': latent_options}), flush=True)
-    from .optim import SpikeClip
-    spike = SpikeClip(args.grad_spike_clip) if args.grad_spike_clip else None
-    if args.latent_step_in_backward:
-        if not lion:
-            raise ValueError('--latent-step-in-backward needs --latent-optimizer lionsr or muonsr')
-        if args.batch != 1 or args.backward_policy != 'joint' or args.member_weight:
-            raise ValueError('--latent-step-in-backward needs one backward per update: --batch 1, '
-                             '--backward-policy joint and no --member-weight')
-    if args.qat_latent_lr and args.backbone_training == 'qat':
-        from .adapters import qat_latent_scales
-        latent_lrs = {name: args.qat_latent_lr * scale for name, scale in qat_latent_scales(engine.backbone).items()
-                      if name in set(lora_names or [])}
-        print(json.dumps({'event': 'qat_latent_groups', 'latents': len(latent_lrs),
-                          'lr_min': min(latent_lrs.values(), default=None),
-                          'lr_max': max(latent_lrs.values(), default=None)}), flush=True)
-    optimizer = trajectory_optimizer(args.optimizer, params, lora, head_params,
-                                     vocab_size=backbone.embedding_weight.shape[0], lr=args.lr,
-                                     lora_lr=backbone_lr, heads_lr=args.heads_lr,
-                                     rates=({id(p): tcp_lr for p in tcp_module.parameters()}
-                                            if direct is not None and tcp_module is not None and tcp_lr
-                                            and tcp_lr != args.heads_lr else None),
-                                     embedding_ids={id(backbone.control_rows), id(getattr(backbone, 'control_head_rows', backbone.control_rows))} | {id(p) for m in heads.modules() if isinstance(m, torch.nn.Embedding) for p in m.parameters()}
-                                     # (ids here are kept off Muon: --token-choice-optimizer adamw puts the readout
-                                     # projection on elementwise AdamW steps)
-                                     | ({id(p) for p in tcp_module.parameters()} if direct is not None and tcp_module is not None
-                                        and args.token_choice_optimizer == 'adamw' else set())
-                                     | ({id(p) for p in direct.neuralese_projection.parameters()} if direct is not None
-                                        and args.neuralese_projection_optimizer == 'adamw' else set()),
-                                     lora_names=lora_names, latent_lrs=latent_lrs, lion=lion,
-                                     latent_optimizer='muonsr' if args.latent_optimizer == 'muonsr' else 'lionsr',
-                                     latent_options=latent_options)
-    in_backward = None
-    if args.latent_step_in_backward:
-        in_backward = optimizer.latent
-        in_backward.step_in_backward(gated=True, spike=spike)
-        print(json.dumps({'event': 'latent_step_in_backward', 'latents': len(lion),
-                          'gradient_buffer_bytes_avoided': sum(q.numel() * q.element_size() for _, q, *_ in lion)}),
-              flush=True)
-    from .optim_restore import optimizer_param_names, restore_optimizer_state, declared_added_names, record_restore_report
-    optimizer_named = {**{f'soft.{name}': value for name, value in params.items()},
-                       **({f'backbone.{name}': value for name, value in zip(lora_names, lora)} if lora_names is not None
-                          else {f'lora_{i}': value for i, value in enumerate(lora)}),
-                       **dict(head_named)}
-    if resumed is not None:
-        if set(params) != set(resumed['params']):
-            raise ValueError('recurrence soft-parameter names changed')
-        with torch.no_grad():
-            for name, value in resumed['params'].items():
-                params[name].copy_(value.to(params[name]))
-            # Saved under plain names (backbone_policy.plain_named_tensors): a quantised or latent-parametrised weight
-            # is restored into its parametrization's original, as every other trainer restores it.
-            from .backbone_policy import restore_backbone_trainables
-            restore_backbone_trainables(backbone, {**resumed.get('lora', {}), **resumed.get('backbone_trainables', {})})
-        with torch.no_grad():
-            backbone.control_rows.copy_(resumed['control_rows'].to(backbone.control_rows))
-            if not getattr(backbone, 'tied', True):
-                backbone.control_head_rows.copy_(resumed['control_head_rows'].to(backbone.control_head_rows))
+        def policy_state():
+            return backbone_trainable_state(backbone_named)
+        if args.checkpoint_elide_rng:
+            if not hasattr(backbone, 'elide_checkpoint_rng'):
+                raise ValueError('checkpoint RNG elision is qualified only for the native LFM2 port')
+            backbone.elide_checkpoint_rng()
+        if args.crisp_weight and not lora:
+            raise ValueError('crisp SFT requires a trainable backbone policy')
+        # The writer's own modules (feedback, content projection) learn from the readers of what they write.
+        # Native final normalization is a frozen reference. At full depth the
+        # causal feedback is already exact; learn payload/stop without corrupting it.
+        if args.read_adapter:
+            heads.add_read_adapter()
+        head_named = [(f'heads.{name}', p) for name, p in heads.named_parameters()
+                       if not (not heads.read_markers and (name.startswith('feedback.final_norm.') or name.startswith('content.reference.') or
+                               (heads.cutoff == backbone.num_layers and name.startswith('feedback.'))))] if args.heads_lr and (args.handover == "written" or args.view == "written") else []
         if direct is not None:
-            for key, module in (('neuralese_projection', direct.neuralese_projection),
-                                ('token_choice_projection', getattr(direct, 'token_choice_projection', None))):
-                if module is not None:
-                    module.load_state_dict(resumed[key], strict=True)
-        missing, unexpected = heads.load_state_dict(resumed['heads'], strict=False)
-        if unexpected or any(not k.startswith('read_adapter.') for k in missing):
-            raise ValueError(f'resumed heads differ beyond a new read adapter: {missing} {unexpected}')
-        # Named restore (optim_restore): unchanged groups load exactly as before; a changed trainable set is refused
-        # unless declared. A read adapter declared with --curriculum-change read_adapter counts as added; further
-        # additions are declared with --optimizer-added PREFIX; --optimizer-state fresh is the explicit reset
-        # (continuations only, so a resume never silently re-resets).
-        declared_prefixes = list(args.optimizer_added) + (['heads.read_adapter.'] if 'read_adapter' in args.curriculum_change else [])
-        restore_report = restore_optimizer_state(
-            optimizer, resumed['optimizer'], optimizer_named, declared_added_names(optimizer_named, declared_prefixes),
-            saved_names=resumed.get('optimizer_param_names'),
-            fresh=args.optimizer_state == 'fresh' and new_continuation,
-            learning_rates=({name: args.heads_lr for name, _ in head_named}
-                            if new_continuation and 'heads_lr' in args.curriculum_change else None))
-        record_restore_report(restore_report, out, source=args.continue_from or 'resume')
-        if spike is not None:
-            spike.load_state_dict(resumed.get('grad_spike_clip'))
-        init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
-    if new_continuation and args.content_residual_initialization == 'fresh-zero':
-        from .trajectory_state import initialize_content_residual
-        reset = initialize_content_residual(heads, optimizer)
-        (out / 'curriculum-initialization.json').write_text(json.dumps({
-            'schema': 'natlang.content-residual-initialization/1', 'reset_parameters': reset,
-            'optimizer_reset_scope': reset, 'other_optimizer_and_rng_preserved': True,
-            'parent_sha256': identity['continuation']['checkpoint_sha256'],
-            'initial_content_projection_zero': all(bool(torch.count_nonzero(p) == 0) for p in heads.content.proj.parameters()),
-            'semantic_qualification_inherited': False}, indent=2) + '\n')
-    if not heads.read_markers:
-        heads.configure_frozen_reference()
+            # The direct writer's own modules (not the raw-token anchor heads, which the direct path does not train).
+            # The TokenChoiceProjection is the token readout (lm_head(norm(TCP(h)))): its rate is its own
+            # (--token-choice-lr; 0 keeps the identity), since a head-rate step on it moves every token prediction.
+            tcp_lr = args.heads_lr if args.token_choice_lr is None else args.token_choice_lr
+            tcp_module = getattr(direct, 'token_choice_projection', None)
+            if tcp_module is not None and not tcp_lr:
+                for p in tcp_module.parameters():
+                    p.requires_grad_(False)
+            head_named = [(f'{key}.{name}', p) for key, module in (('neuralese_projection', direct.neuralese_projection),
+                                                                  ('token_choice_projection',
+                                                                   tcp_module if tcp_lr else None))
+                          if module is not None for name, p in module.named_parameters()] if args.heads_lr else []
+        head_params = [p for _, p in head_named]
+        if args.train_control_rows:
+            head_params += [backbone.control_rows]
+            head_named += [('backbone.control_rows', backbone.control_rows)]
+            if not getattr(backbone, 'tied', True):
+                head_params += [backbone.control_head_rows]
+                head_named += [('backbone.control_head_rows', backbone.control_head_rows)]
+        for p in head_params:
+            p.requires_grad_(True)
+        latent_lrs, lion, latent_options = {}, [], None
+        if args.latent_optimizer == 'lionsr':
+            if args.optimizer != 'muon' or args.backbone_training != 'latent' or not args.qat_latent_lr:
+                raise ValueError('--latent-optimizer lionsr needs --optimizer muon --backbone-training latent and --qat-latent-lr')
+            from .optim import latent_partition
+            lion = latent_partition([(f'backbone.{n}', q) for n, q in backbone_named], args.qat_latent_lr)
+            print(json.dumps({'event': 'latent_optimizer', 'optimizer': 'lionsr', 'latents': len(lion),
+                              'elements': sum(q.numel() for _, q, *_ in lion), 'lr_row_scale_units': args.qat_latent_lr}),
+                  flush=True)
+        elif args.latent_optimizer == 'muonsr':
+            # The direct stage's latent optimizer, split and options (train/optim.py): matrices on MuonSR at --latent-lr;
+            # routers, vectors and narrow matrices stay with the backbone group (AdamW at --backbone-lr).
+            if args.optimizer != 'muon' or args.backbone_training != 'latent' or not args.latent_lr:
+                raise ValueError('--latent-optimizer muonsr needs --optimizer muon --backbone-training latent and --latent-lr')
+            if args.qat_latent_lr:
+                raise ValueError('--latent-optimizer muonsr takes its rate from --latent-lr; --qat-latent-lr is LionSR\'s '
+                                 'row-scale rate, so drop it')
+            from .optim import latent_entries, latent_options as latent_options_for, latent_split
+            latent_named, _ = latent_split([(f'backbone.{n}', q) for n, q in backbone_named], 'muonsr')
+            lion = latent_entries(latent_named, 'muonsr', args.latent_lr)
+            latent_options = latent_options_for('muonsr', weight_decay=args.latent_weight_decay, ns=args.latent_ns)
+            print(json.dumps({'event': 'latent_optimizer', 'optimizer': 'muonsr', 'latents': len(lion),
+                              'elements': sum(q.numel() for _, q, *_ in lion), 'lr': args.latent_lr,
+                              'latent_options': latent_options}), flush=True)
+        from .optim import SpikeClip
+        spike = SpikeClip(args.grad_spike_clip) if args.grad_spike_clip else None
+        if args.latent_step_in_backward:
+            if not lion:
+                raise ValueError('--latent-step-in-backward needs --latent-optimizer lionsr or muonsr')
+            if args.batch != 1 or args.backward_policy != 'joint' or args.member_weight:
+                raise ValueError('--latent-step-in-backward needs one backward per update: --batch 1, '
+                                 '--backward-policy joint and no --member-weight')
+        if args.qat_latent_lr and args.backbone_training == 'qat':
+            from .adapters import qat_latent_scales
+            latent_lrs = {name: args.qat_latent_lr * scale for name, scale in qat_latent_scales(engine.backbone).items()
+                          if name in set(lora_names or [])}
+            print(json.dumps({'event': 'qat_latent_groups', 'latents': len(latent_lrs),
+                              'lr_min': min(latent_lrs.values(), default=None),
+                              'lr_max': max(latent_lrs.values(), default=None)}), flush=True)
+        optimizer = trajectory_optimizer(args.optimizer, params, lora, head_params,
+                                         vocab_size=backbone.embedding_weight.shape[0], lr=args.lr,
+                                         lora_lr=backbone_lr, heads_lr=args.heads_lr,
+                                         rates=({id(p): tcp_lr for p in tcp_module.parameters()}
+                                                if direct is not None and tcp_module is not None and tcp_lr
+                                                and tcp_lr != args.heads_lr else None),
+                                         embedding_ids={id(backbone.control_rows), id(getattr(backbone, 'control_head_rows', backbone.control_rows))} | {id(p) for m in heads.modules() if isinstance(m, torch.nn.Embedding) for p in m.parameters()}
+                                         # (ids here are kept off Muon: --token-choice-optimizer adamw puts the readout
+                                         # projection on elementwise AdamW steps)
+                                         | ({id(p) for p in tcp_module.parameters()} if direct is not None and tcp_module is not None
+                                            and args.token_choice_optimizer == 'adamw' else set())
+                                         | ({id(p) for p in direct.neuralese_projection.parameters()} if direct is not None
+                                            and args.neuralese_projection_optimizer == 'adamw' else set()),
+                                         lora_names=lora_names, latent_lrs=latent_lrs, lion=lion,
+                                         latent_optimizer='muonsr' if args.latent_optimizer == 'muonsr' else 'lionsr',
+                                         latent_options=latent_options)
+        in_backward = None
+        if args.latent_step_in_backward:
+            in_backward = optimizer.latent
+            in_backward.step_in_backward(gated=True, spike=spike)
+            print(json.dumps({'event': 'latent_step_in_backward', 'latents': len(lion),
+                              'gradient_buffer_bytes_avoided': sum(q.numel() * q.element_size() for _, q, *_ in lion)}),
+                  flush=True)
+        from .optim_restore import optimizer_param_names, restore_optimizer_state, declared_added_names, record_restore_report
+        optimizer_named = {**{f'soft.{name}': value for name, value in params.items()},
+                           **({f'backbone.{name}': value for name, value in zip(lora_names, lora)} if lora_names is not None
+                              else {f'lora_{i}': value for i, value in enumerate(lora)}),
+                           **dict(head_named)}
+        if resumed is not None:
+            if set(params) != set(resumed['params']):
+                raise ValueError('recurrence soft-parameter names changed')
+            with torch.no_grad():
+                for name, value in resumed['params'].items():
+                    params[name].copy_(value.to(params[name]))
+                # Saved under plain names (backbone_policy.plain_named_tensors): a quantised or latent-parametrised weight
+                # is restored into its parametrization's original, as every other trainer restores it.
+                from .backbone_policy import restore_backbone_trainables
+                restore_backbone_trainables(backbone, {**resumed.get('lora', {}), **resumed.get('backbone_trainables', {})})
+            with torch.no_grad():
+                backbone.control_rows.copy_(resumed['control_rows'].to(backbone.control_rows))
+                if not getattr(backbone, 'tied', True):
+                    backbone.control_head_rows.copy_(resumed['control_head_rows'].to(backbone.control_head_rows))
+            if direct is not None:
+                for key, module in (('neuralese_projection', direct.neuralese_projection),
+                                    ('token_choice_projection', getattr(direct, 'token_choice_projection', None))):
+                    if module is not None:
+                        module.load_state_dict(resumed[key], strict=True)
+            missing, unexpected = heads.load_state_dict(resumed['heads'], strict=False)
+            if unexpected or any(not k.startswith('read_adapter.') for k in missing):
+                raise ValueError(f'resumed heads differ beyond a new read adapter: {missing} {unexpected}')
+            # Named restore (optim_restore): unchanged groups load exactly as before; a changed trainable set is refused
+            # unless declared. A read adapter declared with --curriculum-change read_adapter counts as added; further
+            # additions are declared with --optimizer-added PREFIX; --optimizer-state fresh is the explicit reset
+            # (continuations only, so a resume never silently re-resets).
+            declared_prefixes = list(args.optimizer_added) + (['heads.read_adapter.'] if 'read_adapter' in args.curriculum_change else [])
+            restore_report = restore_optimizer_state(
+                optimizer, resumed['optimizer'], optimizer_named, declared_added_names(optimizer_named, declared_prefixes),
+                saved_names=resumed.get('optimizer_param_names'),
+                fresh=args.optimizer_state == 'fresh' and new_continuation,
+                learning_rates=({name: args.heads_lr for name, _ in head_named}
+                                if new_continuation and 'heads_lr' in args.curriculum_change else None))
+            record_restore_report(restore_report, out, source=args.continue_from or 'resume')
+            if spike is not None:
+                spike.load_state_dict(resumed.get('grad_spike_clip'))
+            init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
+        if new_continuation and args.content_residual_initialization == 'fresh-zero':
+            from .trajectory_state import initialize_content_residual
+            reset = initialize_content_residual(heads, optimizer)
+            (out / 'curriculum-initialization.json').write_text(json.dumps({
+                'schema': 'natlang.content-residual-initialization/1', 'reset_parameters': reset,
+                'optimizer_reset_scope': reset, 'other_optimizer_and_rng_preserved': True,
+                'parent_sha256': identity['continuation']['checkpoint_sha256'],
+                'initial_content_projection_zero': all(bool(torch.count_nonzero(p) == 0) for p in heads.content.proj.parameters()),
+                'semantic_qualification_inherited': False}, indent=2) + '\n')
+        if not heads.read_markers:
+            heads.configure_frozen_reference()
 
     def count_embedding(items, dimensions):
         return sum(1 if kind == 'tok' else dimensions[value] + 2 for kind, value in items)
@@ -2519,6 +2606,31 @@ def main(argv=None):
         return result
 
     leaves = {leaf_ids[name]: p for name, p in params.items()}
+    epoch_order = [None, None]
+
+    def record_at(cursor):
+        """The training record at ``cursor``: the streamed draw, the cohort sampler's, the family-interleaved epoch
+        order's or the file order's (record_order)."""
+        if stream_source is not None:
+            return stream_record(cursor)
+        if sampler is not None:
+            return sampler.record(cursor)
+        if record_order == 'family-interleave':
+            epoch_index = cursor // len(train)
+            if epoch_order[0] != epoch_index:
+                epoch_order[:] = [epoch_index, family_interleaved_order(train, args.seed, epoch_index)]
+            return epoch_order[1][cursor % len(train)]
+        return train[cursor % len(train)]
+    if embedded:
+        anchor_now[0] = args.projection_anchor_weight  # 0 for the direct writer (set with --direct-artifact above)
+        rendering = getattr(engine, 'prompt_rendering', None)
+        engine.prompt_rendering = host_rendering
+        return EmbeddedE2E(record_at=record_at, loss_of=loss_of, evaluate=evaluate, evaluate_written=evaluate_written,
+                           leaves=leaves, paired_held=paired_held, held=held,
+                           held_probe_accounting=held_probe_accounting, rendering=rendering, engine=engine,
+                           crisp_weight=args.crisp_weight, lengths=lengths, stream_stats=stream_stats,
+                           supervised_tokens=lambda: getattr(session, 'supervised_tokens', 0),
+                           checkpoint_layers=args.checkpoint_layers)
     from ..eval.task_cadence import TaskEval, parse_task_eval
     task_eval_spec = parse_task_eval(args.task_eval)
     # Served through this stage's own engine in this process (no second copy of the weights), with the task_eval
@@ -2568,7 +2680,6 @@ def main(argv=None):
     start_step = 0
     if resumed is not None:
         start_step, cursor, errors, used = resumed['step'], resumed['cursor'], resumed['errors'], set(resumed['used'])
-    epoch_order = [None, None]
     # The anchor decays from where this stage began: a resume keeps its origin, a continuation starts a new one.
     anchor_origin = (resumed.get('anchor_origin', start_step) if resumed is not None and not new_continuation
                      else start_step)
@@ -2830,17 +2941,7 @@ def main(argv=None):
             for _ in range(args.batch):
                 if args.device.startswith("cuda"):
                     torch.cuda.reset_peak_memory_stats()
-                if stream_source is not None:
-                    record = stream_record(cursor)
-                elif sampler is not None:
-                    record = sampler.record(cursor)
-                elif record_order == 'family-interleave':
-                    epoch_index = cursor // len(train)
-                    if epoch_order[0] != epoch_index:
-                        epoch_order[:] = [epoch_index, family_interleaved_order(train, args.seed, epoch_index)]
-                    record = epoch_order[1][cursor % len(train)]
-                else:
-                    record = train[cursor % len(train)]
+                record = record_at(cursor)
                 step_record_ids.append(record['id'])
                 cursor += 1
                 geometry_phase_started = time.perf_counter()
