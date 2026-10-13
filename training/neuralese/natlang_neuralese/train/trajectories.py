@@ -411,7 +411,11 @@ def write_value_type(record: dict) -> str:
     kind=parsed.value_type
     if kind=='Neuralese<string>':return 'string'
     if kind=='Neuralese<unknown>' or parsed.descriptor.get('source_encoding')=='json':return 'unknown'
-    raise ValueError('nested writer has unsupported declared value type')
+    # A named Neuralese type whose crisp value is text (the compiler's Neuralese<HandoverNote> compact_history note,
+    # or any writer whose argument schema is a string) is a string write.
+    if kind=='Neuralese<HandoverNote>' or (isinstance(parsed.schema,dict) and parsed.schema.get('type')=='string'):
+        return 'string'
+    raise ValueError(f'nested writer has unsupported declared value type {kind!r}')
 
 
 def target_writes(record: dict) -> set[str]:

@@ -202,3 +202,19 @@ def test_authenticated_read_parts_in_tool_arguments_preserve_writer_ports():
     prompt = render_messages([written], None,
         lambda messages, tools: messages[0]["tool_calls"][0]["function"]["arguments"]["code"], [])
     assert prompt.blocks == [block]
+
+
+def test_handover_note_and_string_schema_writers_are_string_writes():
+    import pytest
+    from natlang_neuralese.train.trajectories import write_value_type
+    def record(kind, schema):
+        marker = {"$write": {"name": "handover:abc", "type": kind, "source": "Task: x. Findings: y."}}
+        return {"messages": [], "tools": [{"type": "function", "function": {"name": "compact_history",
+                "parameters": {"type": "object", "properties": {"note": schema}}}}],
+                "target": {"tool_calls": [{"function": {"name": "compact_history",
+                           "arguments": json.dumps({"note": marker})}}]}}
+    assert write_value_type(record("Neuralese<HandoverNote>", {"type": "string"})) == "string"
+    assert write_value_type(record("Neuralese<HandoverNote>", None)) == "string"
+    assert write_value_type(record("Neuralese<Summary>", {"type": "string", "maxLength": 9})) == "string"
+    with pytest.raises(ValueError, match="Neuralese<Summary>"):
+        write_value_type(record("Neuralese<Summary>", {"type": "object"}))
