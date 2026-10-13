@@ -61,7 +61,7 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
                   'gradient_audit_steps': 0, 'saved_tensor_audit_steps': 0,
                   'gradient_digest_steps': 0, 'state_hash_steps': 0, 'sdpa_backend': 'default', 'family': None,
                   'train_target_tokens': None, 'merge_prefix_rows': False, 'cohort_repeats': None,
-                  'train_min_context_tokens': 0}
+                  'train_min_context_tokens': 0, 'fresh_monitor_reference': False}
 # Train-window geometry (HEADER_EFFICIENCY_20261012.md): a running stage changes it only by a windowing continuation
 # (continuation_mode), which rebuilds the plan it trained on under the saved values.
 # cohort_repeats (the epoch's per-cohort repeat counts) changes which windows an epoch holds, so it moves exactly like
