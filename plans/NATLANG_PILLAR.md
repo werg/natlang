@@ -37,7 +37,8 @@ First window: the first Mellum checkpoint after 2026-10-13 06:00 UTC (DGX traini
 
 0. **Mellum base task-success reference (first, before the teacher starts; it gates the Mellum task bar).** The
    untrained Mellum base (raw-token heads, native full rendering, GPU) on the 16-task cadence subset of
-   `natlang-held-task-packet-v3-20261012`, with two runs (`noise_repeats` 2). About 34 GB, so it runs while training is
+   `natlang-held-task-packet-v3-20261012`, with two runs (`noise_repeats` 2), under the in-run eval's budgets (8 workers, 7200 s and 128 requests per task;
+   DECISIONS.md "Task-eval budgets"). Each run takes up to about 1.5 h (the slowest task). About 34 GB, so it runs while training is
    paused and before `scripts/ensure_teacher.sh`. Until it lands, Mellum's task gate fails with "base
    reference_successes unmeasured" (plans/neuralese/DECISIONS.md, "Held task packet v2"). Command:
 
@@ -46,7 +47,7 @@ First window: the first Mellum checkpoint after 2026-10-13 06:00 UTC (DGX traini
      --priority high --no-resumable --workdir /home/werg/natlang -- sh -c 'HF_HUB_OFFLINE=1 NATLANG_REPO=/home/werg/natlang \
      PYTHONPATH=/home/werg/natlang/training/neuralese .venv-neuralese/bin/python -m natlang_neuralese.eval.task_cadence \
      --heads runs/neuralese-direct-mellum-20261011/heads-raw-token.pt --device cuda --prompt-rendering full \
-     --out runs/heldv3-base-mellum-full --step 0 --spec "{\"packet\":{\"path\":\"runs/natlang-held-task-packet-v3-20261012/cases.jsonl\",\"sha256\":\"535269866aeecc107e3cc8b165790a5b200cdb104884d4994958eee17eb6be95\"},\"cases\":[0,5,10,15,16,21,26,31,32,37,42,47,48,53,58,63],\"workers\":4,\"case_seconds\":600,\"max_model_requests\":48}" \
+     --out runs/heldv3-base-mellum-full --step 0 --spec "{\"packet\":{\"path\":\"runs/natlang-held-task-packet-v3-20261012/cases.jsonl\",\"sha256\":\"535269866aeecc107e3cc8b165790a5b200cdb104884d4994958eee17eb6be95\"},\"cases\":[0,5,10,15,16,21,26,31,32,37,42,47,48,53,58,63],\"workers\":8,\"case_seconds\":7200,\"max_model_requests\":128,\"max_turns\":160}" \
      > runs/heldv3-base-mellum-full.log 2>&1'
    ```
 

@@ -85,9 +85,10 @@
       58,
       63
      ],
-     "case_seconds": 600,
-     "max_model_requests": 48,
-     "workers": 4,
+     "case_seconds": 7200,
+     "max_model_requests": 128,
+     "max_turns": 160,
+     "workers": 8,
      "min_successes": 0,
      "noise_successes": 1,
      "reference_successes": null

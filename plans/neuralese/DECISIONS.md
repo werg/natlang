@@ -1613,6 +1613,47 @@ fixtures, with a pass bar of one success. It is replaced, for qualification and 
   (cases SHA-256 `53526986...`) is v2 with only those four rows' `expected` regenerated from the same draws, all 64
   re-verified by `verifyCases`. neuralese-direct-v2 now evaluates on v3; v2 stays only while the running Mellum v4
   stage still reads it. The LFM base reference on v3 is re-measured below; the Mellum base reference is measured on v3.
+- **Task-eval budgets (2026-10-13, measured; AGENTS.md "No premature limits").** The 600 s wall and 48-request cap
+  bound the LFM2.5-2.6B in 7 of 16 cadence tasks (5 wall, 2 request cap), so the eval measured budget, not capability.
+  Measurement: LFM2.5-2.6B Q6_K on its own llama-server (GPU shared with Mellum v4 training, ~5 tok/s per slot), the
+  v3 cadence subset, the same collector and scorer, with no binding budget (10800 s, 1000 requests/turns),
+  `scripts/held_task_budget_probe.py`, two ledger runs (run-a 8 workers, stopped after 9 tasks to admit v4; run-b the
+  other 7, 7 workers). Results in `<data_nvme>/held-budget-probe/done/run-{a,b}/budget-probe.json`. Every task reached
+  an exact terminal outcome on its own (0 budget exhaustions): **5/16 successes** (cases 26, 37, 48, 53, 63), 6+2
+  invalid_action, 3 semantic_mismatch.
+
+  | case | shape | outcome | seconds | requests |
+  |---|---|---|---|---|
+  | 0 | workbench_tickets | invalid_action | 770 | 11 |
+  | 5 | edit_stream | semantic_mismatch | 765 | 6 |
+  | 10 | logic_entailment_exception | invalid_action | 262 | 4 |
+  | 15 | logic_proof_verifier | invalid_action | 2896 | 23 |
+  | 16 | relational_multihop_qualifier | semantic_mismatch | 650 | 9 |
+  | 21 | relational_late_argmax | invalid_action | 236 | 5 |
+  | 26 | relational_dynamic_snapshot | **success** | 2769 | 10 |
+  | 31 | actor_route_replan | semantic_mismatch | 297 | 11 |
+  | 32 | actor_greenhouse | invalid_action | 240 | 14 |
+  | 37 | iterate_schedule_repair | **success** | 590 | 6 |
+  | 42 | iterate_frontier | invalid_action | 4691 | 13 |
+  | 47 | folder_criteria_reducer | invalid_action | 4868 | 55 |
+  | 48 | composed_process | **success** | 1368 | 10 |
+  | 53 | live_inventory | **success** | 692 | 9 |
+  | 58 | idempotent_retry | invalid_action | 201 | 6 |
+  | 63 | contract_diagnosis | **success** | 1017 | 4 |
+
+  Requests: median 9.5, max 55 (one task above 48; successes need at most 10). Seconds: median 768, max 4868;
+  successes up to 2769 s, so the old 600 s wall cut 4 of the 5 successes. Wall time here is decode throughput on a
+  contended GPU, not capability. The earlier budgeted 2.6B run's 7/16 against 5/16 here is sampling spread
+  between runs, not a budget effect; the 2.6B is not a line reference.
+  **Budgets (in `task_cadence` defaults and the shared `neuralese-direct-v2` task_eval, which v3, Mellum v4 and
+  the LFM v3 line inherit):** `case_seconds` 7200 (1.5x the slowest task), `max_model_requests` 128 (2.3x the most
+  observed), `max_turns` 160, `workers` 8 (16 tasks in two waves; the engine batches requests). Expected in-run
+  eval time is about the slowest task: about 1.4 h at this throughput, about 2.8 h for the first evaluation with
+  its noise repeat. task_eval is an operational stage parameter, so a running lineage picks the budgets up at its
+  next `--handoff` (no new lineage). A base reference uses the same budgets: the Mellum v3 base-reference command
+  (NATLANG_PILLAR item 0) and `scripts/coreweave/jobs/heldv3-base-mellum.json` carry them. Earlier evaluations
+  under 600 s/48 are comparable only as lower bounds. Pop's own recipes (`neuralese-direct-lfm-muon-main-20261012-v3*`,
+  older packet) still declare 600/48 and need the same change from Pop.
 - **Applications:** nldb, pi and the harness bench are not yet in `natlang.program` form with exact scorers. They join
   as further shapes once adapted (v3), not as separate packets.
 

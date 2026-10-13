@@ -7,7 +7,8 @@ from natlang_neuralese.eval.task_cadence import DEFAULT_CASES, parse_task_eval, 
 def test_spec_defaults_to_a_fixed_sixteen_task_subset_and_validates():
     spec = parse_task_eval('{"packet": {"path": "p.jsonl", "sha256": "' + 'a' * 64 + '"}}')
     assert spec['cases'] == list(DEFAULT_CASES) and len(spec['cases']) == 16
-    assert spec['min_successes'] == 0 and spec['noise_successes'] == 0 and spec['workers'] == 4
+    assert spec['min_successes'] == 0 and spec['noise_successes'] == 0 and spec['workers'] == 8
+    assert (spec['case_seconds'], spec['max_model_requests'], spec['max_turns']) == (7200, 128, 160)
     assert spec['reference_successes'] is None
     assert parse_task_eval(None) is None
     with pytest.raises(ValueError):

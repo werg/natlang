@@ -17,9 +17,10 @@ The spec (stage parameter ``task_eval``, JSON):
                   authored_root_eval contract run their authored root, all others run the whole program)
   cases           packet row indices of the fixed subset (default: every third row, 16 of 48)
   prompt_rendering  serving prompt policy; default: the policy the stage's training rows declare
-  case_seconds    wall budget per task (collection resource limit, not a model label; default 600)
-  max_model_requests / max_turns   per-task request and turn budgets (default 48 / 60)
-  workers         tasks executed concurrently (default 4; the engine batches their requests)
+  case_seconds    wall budget per task (collection resource limit, not a model label; default 7200, set from the
+                  2026-10-13 LFM2.5-2.6B measurement in plans/neuralese/DECISIONS.md "Task-eval budgets")
+  max_model_requests / max_turns   per-task request and turn budgets (default 128 / 160)
+  workers         tasks executed concurrently (default 8; the engine batches their requests)
   min_successes   absolute floor on the final evaluation's task successes (default 0)
   reference_successes  the line's base model's successes on this subset under its native rendering
   noise_successes  declared run-to-run noise of the success count on this subset (from repeat runs)
@@ -64,7 +65,7 @@ def parse_task_eval(value):
     if (not isinstance(cases, list) or not cases or len(set(cases)) != len(cases) or
             any(isinstance(i, bool) or not isinstance(i, int) or i < 0 for i in cases)):
         raise ValueError('task_eval.cases must be distinct nonnegative row indices')
-    for key, default in (('case_seconds', 600), ('max_model_requests', 48), ('max_turns', 60), ('workers', 4),
+    for key, default in (('case_seconds', 7200), ('max_model_requests', 128), ('max_turns', 160), ('workers', 8),
                          ('min_successes', 0), ('noise_successes', 0), ('noise_repeats', 2),
                          ('max_consecutive_failures', 3)):
         spec.setdefault(key, default)

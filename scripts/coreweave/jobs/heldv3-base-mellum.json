@@ -38,11 +38,11 @@
   "--step",
   "0",
   "--spec",
-  "{\"packet\":{\"path\":\"runs/natlang-held-task-packet-v3-20261012/cases.jsonl\",\"sha256\":\"535269866aeecc107e3cc8b165790a5b200cdb104884d4994958eee17eb6be95\"},\"cases\":[0,5,10,15,16,21,26,31,32,37,42,47,48,53,58,63],\"workers\":4,\"case_seconds\":600,\"max_model_requests\":48}"
+  "{\"packet\":{\"path\":\"runs/natlang-held-task-packet-v3-20261012/cases.jsonl\",\"sha256\":\"535269866aeecc107e3cc8b165790a5b200cdb104884d4994958eee17eb6be95\"},\"cases\":[0,5,10,15,16,21,26,31,32,37,42,47,48,53,58,63],\"workers\":8,\"case_seconds\":7200,\"max_model_requests\":128,\"max_turns\":160}"
  ],
  "needs": {
   "gpu_memory_gb": 34,
-  "hours": 2,
+  "hours": 4,
   "teacher": false,
   "lineage_owner": "dgx",
   "moves_active_lineage": false
