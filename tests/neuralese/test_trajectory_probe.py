@@ -123,3 +123,12 @@ def test_nested_writer_sites_keep_json_path_and_leaf_schema_for_donor_matching()
     duplicate['value']['other'] = copy.deepcopy(duplicate['value']['access'])
     producers['a']['target']['tool_calls'][0]['function']['arguments'] = json.dumps(duplicate)
     assert 'ambiguous writer names' in aligned_donor(rows[0], rows[1:], producers, kinds)['reason']
+
+
+def test_kindless_pieces_take_the_converters_kind_from_their_name():
+    from natlang_neuralese.train.trajectory_probe import piece_kind
+    assert piece_kind("instructions@0000e09d341c") == "function-body"
+    assert piece_kind("guidance@0123456789ab") == "program-guidance"
+    assert piece_kind("prompt:handover/open") == "system-prompt"
+    assert piece_kind("instructions@0000e09d341c", "system-prompt") == "system-prompt"
+    assert piece_kind("custom-piece") is None

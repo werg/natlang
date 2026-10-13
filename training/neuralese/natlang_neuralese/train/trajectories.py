@@ -1232,6 +1232,7 @@ def main(argv=None):
         raise ValueError('close-token stop training requires explicit --train-control-rows')
     session = GradSession(engine)
 
+    from .trajectory_probe import piece_kind
     texts, piece_kinds = {}, {}
     for pieces_path in as_list(args.pieces):
         with open(pieces_path) as stream:
@@ -1240,7 +1241,7 @@ def main(argv=None):
                 if texts.get(piece["name"], piece["text"]) != piece["text"]:
                     raise ValueError('pieces files disagree on the text of ' + piece["name"])
                 texts[piece["name"]] = piece["text"]
-                piece_kinds[piece["name"]] = piece.get("kind")
+                piece_kinds[piece["name"]] = piece_kind(piece["name"], piece.get("kind"))
     # Record groups, each authenticated on its own (authenticated_recurrence_context_view): one per --records file,
     # or with --record-source trajectories one per trajectory (train/e2e_records.py), so writer names need to be
     # unique within a group and among the groups resident together, not across a whole cohort.

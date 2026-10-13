@@ -81,6 +81,19 @@ def _target_writes(record: Mapping[str, Any]) -> list[dict[str, Any]]:
             for site in extract_write_sites(record)]
 
 
+# The converter (ts-host/src/compiler/neuralese-conversion.ts, soft()) names every soft piece by its kind:
+# instructions@<digest> is a function body, guidance@<digest> program guidance, prompt:<id> a system prompt. Pieces
+# tables written without the kind field (the e2e miner's shards, corpus v2) take it from the name.
+PIECE_KIND_PREFIXES = (("instructions@", "function-body"), ("guidance@", "program-guidance"), ("prompt:", "system-prompt"))
+
+
+def piece_kind(name: str, declared: Any = None) -> Any:
+    """A soft piece's kind: the declared one, else the converter's kind for its name (None for an unknown name)."""
+    if declared is not None:
+        return declared
+    return next((kind for prefix, kind in PIECE_KIND_PREFIXES if name.startswith(prefix)), None)
+
+
 def _function_body_ids(record: Mapping[str, Any], piece_kinds: Mapping[str, Any]) -> tuple[str, ...]:
     found = set()
     for message in record.get("messages", []):
