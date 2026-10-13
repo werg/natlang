@@ -49,6 +49,13 @@ using Step 5 Preview through the official OpenCode CLI bridge solved one proof
 handoff in two turns that Luna had missed; a six-case follow-up is running.
 The OpenCode free model rejects direct API use (HTTP 403, FreeTierError), so
 provider use must stay on the normal CLI bridge and its audited action route.
+The six-case pilot exposed a bridge transport cap: an otherwise active schedule
+request exceeded the bridge's 180-second per-request limit and became a
+transport failure. Pop relaunched the official CLI bridge with a 600-second
+request limit and resumed the saved queue; this is a collection resource bound,
+not a model-negative label. The first alternate actor-route case passed its
+exact oracle in 27 turns. Reinspect the incomplete schedule case after its
+provider retry cooldown before drawing any model-quality conclusion.
 
 The current `natlang.handoff/2` replay presents the state **before** the bad
 decision, with the bad action retained only as provenance. These examples teach
@@ -57,6 +64,21 @@ post-feedback recoveries, where the student has already seen the failed action's
 observation. The seeded-failure pilot above covers the latter form. Keep those
 two training mechanisms labeled separately; use current-student train rollouts
 to expand the post-feedback branch after their serving path is available.
+
+Broad s52027 review at 80 completed cases found 68 exact accepts. Two
+`workbench_tickets` misses exposed an ambiguous synthetic-label combination:
+the task asks which tickets describe work blocked *now*, while a ticket whose
+reports never load may carry a hidden `blocking=false` label unless a separate
+blocking sentence was sampled. The teacher inferred blockage from the broken
+reports and counted an extra ticket. The existing generated task should not
+teach a definitive contrary label for that wording. The source generator in
+`ts-host/scripts/inline-curriculum/workbench.mjs` should give every negative
+blocking example explicit continuation/workaround context (rather than its
+current empty sentence option), then compare roughly 48 live cases before
+adopting the model-facing data change. Do not patch accepted numerical totals:
+the arithmetic must remain exact once the semantic subset is defined. The
+`dataset_workbench` misses in the same window also warrant inspecting the
+specific semantic classifications, not adjusting totals to near matches.
 
 Collection budget finding: s52026's customer shared-inbox deduplication case
 used 192 saved turns and reached 384 nested model requests without a result.
