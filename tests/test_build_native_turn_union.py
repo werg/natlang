@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
 
-from build_native_turn_union import plan_member_rows  # noqa: E402
+from build_native_turn_union import plan_member_rows, _row_identity  # noqa: E402
 import target_set_manifest  # noqa: E402
 
 
@@ -44,6 +44,41 @@ def test_mismatched_tokenizer_twin_identity_cannot_claim_document_id():
     selected, omissions = decide(['mismatch', 'valid'], mismatched | valid)
     assert selected == {('valid', 'doc')}
     assert omissions[('mismatch', 'doc')]['reason'] == 'tokenizer_twin_identity_mismatch'
+
+
+def native_identity(text, source='source:doc', **extra):
+    return _row_identity({'id': 'doc', 'split': 'train', 'source_groups': ['g1'],
+                          'source_record_ids': [source], 'text': text, **extra})
+
+
+def test_backbone_specific_chat_templates_preserve_one_logical_document():
+    paired = member('native', {'lfm': {'doc': native_identity('<|startoftext|><|im_start|>user\nhello')},
+                               'mellum': {'doc': native_identity('<|im_start|>user\nhello')}})
+    selected, omissions = decide(['native'], paired)
+    assert selected == {('native', 'doc')}
+    assert not omissions
+
+
+def test_source_or_context_mismatch_still_rejects_a_tokenizer_twin():
+    left = native_identity('left template')
+    for right in (native_identity('right template', source='other-source'),
+                  native_identity('right template', neuralese_context_attestations=[{'sha256': 'changed'}]),
+                  native_identity('right template', source_records=[{'id': 'source:doc', 'sha256': 'changed'}])):
+        selected, omissions = decide(['native'], member('native', {'lfm': {'doc': left},
+                                                                  'mellum': {'doc': right}}))
+        assert not selected
+        assert omissions[('native', 'doc')]['reason'] == 'tokenizer_twin_identity_mismatch'
+
+
+def test_exact_text_dedup_requires_both_backbone_renderings_to_match():
+    def pair(name, rid, lfm, mellum):
+        return member(name, {tok: {rid: _row_identity({'id': rid, 'split': 'train', 'source_groups': ['g1'],
+                                                       'source_record_ids': [rid], 'text': text})}
+                             for tok, text in [('lfm', lfm), ('mellum', mellum)]})
+    first = pair('first', 'a', 'same lfm', 'mellum a')
+    second = pair('second', 'b', 'same lfm', 'mellum b')
+    selected, _ = decide(['first', 'second'], first | second)
+    assert selected == {('first', 'a'), ('second', 'b')}
 
 
 def test_held_or_decontaminated_copy_does_not_claim_document_id():

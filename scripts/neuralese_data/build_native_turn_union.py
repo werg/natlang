@@ -39,6 +39,7 @@ sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
 from render_native_turn_corpus import canonical, file_sha, role_counter, sha, whole_trajectory_target_tokens  # noqa: E402
+from text_tokenizer_twin import document_identity, IDENTITY_FIELDS, PROVENANCE_FIELDS  # noqa: E402
 
 SCHEMA = 'natlang.native-text-union/2'
 
@@ -68,7 +69,18 @@ def _row_identity(row: dict) -> dict:
         'split': row['split'],
         'source_groups': tuple(sorted(row['source_groups'])),
         'text_sha256': sha(row['text'].encode()),
+        'source_identity_sha256': (sha(canonical(document_identity(row)).encode())
+                                   if row.get('source_record_ids') else None),
     }
+
+
+def _same_twin_identity(left, right):
+    if left.get('source_identity_sha256') is not None or right.get('source_identity_sha256') is not None:
+        return (left['split'] == right['split'] and left['source_groups'] == right['source_groups']
+                and left.get('source_identity_sha256') is not None
+                and left.get('source_identity_sha256') == right.get('source_identity_sha256'))
+    # Legacy rows without source provenance can only prove a twin by exact text.
+    return left == right
 
 
 def _drop(drop: dict, key: tuple[str, str], reason: str, **details) -> None:
@@ -119,11 +131,14 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
                 _drop(drop, key, 'missing_tokenizer_twin', present_in=present_tok)
                 continue
             signatures = [per_tok[tok][rid] for tok in tokenizer_names]
-            if any(identity != signatures[0] for identity in signatures[1:]):
+            if any(not _same_twin_identity(signatures[0], identity) for identity in signatures[1:]):
                 _drop(drop, key, 'tokenizer_twin_identity_mismatch',
-                      tokenizer_text_sha256={tok: per_tok[tok][rid]['text_sha256'] for tok in tokenizer_names})
+                      tokenizer_text_sha256={tok: per_tok[tok][rid]['text_sha256'] for tok in tokenizer_names},
+                      tokenizer_source_identity_sha256={tok: per_tok[tok][rid].get('source_identity_sha256')
+                                                        for tok in tokenizer_names})
                 continue
-            identity = signatures[0]
+            identity = {**signatures[0], 'twin_text_sha256': tuple(
+                (tok, per_tok[tok][rid]['text_sha256']) for tok in tokenizer_names)}
             if identity['split'] == 'train' and set(identity['source_groups']) & held_groups:
                 _drop(drop, key, 'train_document_shares_held_source_group',
                       text_sha256=identity['text_sha256'])
@@ -219,20 +234,22 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
     selected = set()
     seen_text = {}
     for rid, candidate in sorted(selected_by_id.items(), key=lambda item: member_rank[item[1]['member']]):
-        key = (candidate['identity']['split'], candidate['identity']['text_sha256'])
+        key = (candidate['identity']['split'], candidate['identity']['twin_text_sha256'])
         if key in seen_text:
             kept_member, kept_id = seen_text[key]
             if kept_member in supersedes.get(candidate['member'], set()):
                 selected.discard((kept_member, kept_id))
                 _drop(drop, (kept_member, kept_id), 'superseded_exact_duplicate_document',
                       kept_member=candidate['member'], superseded_by=candidate['member'], kept_id=rid,
-                      kept_text_sha256=key[1], omitted_text_sha256=key[1])
+                      kept_text_sha256=candidate['identity']['text_sha256'],
+                      omitted_text_sha256=candidate['identity']['text_sha256'])
                 selected.add((candidate['member'], rid))
                 seen_text[key] = (candidate['member'], rid)
             else:
                 _drop(drop, (candidate['member'], rid), 'exact_duplicate_document',
                       kept_member=kept_member, kept_id=kept_id,
-                      kept_text_sha256=key[1], omitted_text_sha256=key[1])
+                      kept_text_sha256=candidate['identity']['text_sha256'],
+                      omitted_text_sha256=candidate['identity']['text_sha256'])
                 continue
         else:
             seen_text[key] = (candidate['member'], rid)
@@ -306,11 +323,15 @@ def main(argv=None):
     receipt = {'schema': SCHEMA, 'renderings': {}, 'held_groups': len(held_groups), 'held_texts': len(held_texts),
                'member_files': member_files,
                'member_cohorts': dict(sorted(cohorts.items())),
+               'tokenizer_twin_identity': {'fields': list(IDENTITY_FIELDS + PROVENANCE_FIELDS),
+                                           'rendered_text_may_differ': True,
+                                           'exact_text_dedup': 'tuple of all tokenizer text hashes'},
                'member_supersedes': {rendering: {name: sorted(supersedes.get(name, set())) for name in names}
                                      for rendering, names in order.items()},
                'tokenizers': {tok: str(Path(d).resolve()) for tok, d in tokenizer_dirs.items()},
                'code': {str(f.relative_to(ROOT)): file_sha(f) for f in (
-                   Path(__file__).resolve(), ROOT / 'scripts/neuralese_data/render_native_turn_corpus.py')}}
+                   Path(__file__).resolve(), ROOT / 'scripts/neuralese_data/render_native_turn_corpus.py',
+                   ROOT / 'scripts/neuralese_data/text_tokenizer_twin.py')}}
     for rendering in members:
         # Pass 2: index compact row identities in both tokenizer files before resolving any duplicate. This prevents
         # an incomplete or held copy from claiming an ID/text hash before a later complete eligible twin is seen.
@@ -333,6 +354,8 @@ def main(argv=None):
                                           list(tokenizer_dirs), held_groups, held_texts,
                                           member_duplicates=member_duplicates,
                                           member_duplicate_observations=member_duplicate_observations)
+        if not selected:
+            raise ValueError(f'{rendering}: no eligible tokenizer twins; cannot publish an empty training union')
         out = a.out_dir / rendering
         out.mkdir(parents=True, exist_ok=True)
         rendering_receipt = {'members': order[rendering], 'by_tokenizer': {}}

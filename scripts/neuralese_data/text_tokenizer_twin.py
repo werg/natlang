@@ -32,6 +32,17 @@ from pathlib import Path
 
 SCHEMA = "natlang.text-tokenizer-twin/1"
 _G: dict = {}
+IDENTITY_FIELDS = ('id', 'split', 'source_groups', 'source_record_ids')
+PROVENANCE_FIELDS = ('source_records', 'capture_context_augmentation_attestations',
+                     'neuralese_context_attestations', 'source_action_provenance')
+
+
+def document_identity(row):
+    """Tokenizer-independent source identity; text and token boundaries belong to each template."""
+    identity = {key: row.get(key) for key in IDENTITY_FIELDS}
+    identity['source_groups'] = sorted(row.get('source_groups') or [])
+    identity.update({key: row.get(key) or [] for key in PROVENANCE_FIELDS})
+    return identity
 
 
 def file_sha(path: Path) -> str:
@@ -216,7 +227,7 @@ def work(args):
     index, line = args
     row = json.loads(line)
     tc = _G["tc"]
-    ident = {k: row[k] for k in ("id", "split", "source_groups", "source_record_ids")}
+    ident = document_identity(row)
     try:
         messages, target, tools = recover(row)
     except (ValueError, IndexError, SyntaxError, KeyError) as exc:
@@ -333,7 +344,7 @@ def main():
               initargs=(args.source_tokenizer, args.twin_tokenizer, args.renderer_package_root.resolve(), reasoning)) as pool:
         for index, row, omission, stats in pool.imap_unordered(work, lines, chunksize=4):
             results[index] = (row, omission, stats)
-    fields = ("id", "split", "source_groups", "source_record_ids")
+    fields = IDENTITY_FIELDS + PROVENANCE_FIELDS
     with (out / "text-data.jsonl").open("w", encoding="utf-8") as text_f, \
             (out / "omissions.jsonl").open("w", encoding="utf-8") as om_f, \
             (out / "row-stats.jsonl").open("w", encoding="utf-8") as st_f:
@@ -344,12 +355,12 @@ def main():
             text_f.write(json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
             st_f.write(json.dumps({"id": row["id"], "split": row["split"], **stats}, sort_keys=True) + "\n")
     # Per-row identity check against the source, in order.
-    src_ident = [{k: json.loads(line)[k] for k in fields} for _, line in lines]
+    src_ident = [document_identity(json.loads(line)) for _, line in lines]
     twin_ident = []
     with (out / "text-data.jsonl").open(encoding="utf-8") as f:
         for line in f:
             r = json.loads(line)
-            twin_ident.append({k: r[k] for k in fields})
+            twin_ident.append(document_identity(r))
     omitted = sum(1 for r in results if r[1] is not None)
     mismatches = [i for i, (a, b) in enumerate(zip(src_ident, twin_ident)) if a != b]
     tc = _G["tc"]

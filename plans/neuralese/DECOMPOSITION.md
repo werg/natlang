@@ -166,3 +166,19 @@ The natural-language acceptance policy remains the declared same-task comparison
 The crisp verifier checks these exact report invariants. The existing task-report
 adapter carries the packet hash from TaskEval. No serving prompt or training
 objective changes. Legacy reports without packet identity remain pending.
+
+## Logical tokenizer twins and nonempty union publication — 2026-10-13
+
+VerifyTokenizerTwins takes rendered rows for one logical document and returns
+whether they represent the same admitted source:
+1. Require the same document ID, split, source groups and source-record sequence.
+2. Require identical source-record hashes and context/action attestations where
+   present, using the existing tokenizer-twin converter's document identity.
+3. Permit different rendered text and token boundaries: each backbone has its
+   own chat template. Keep both text hashes for exact cross-member deduplication.
+4. Preserve existing held-source and duplicate-ID rules over eligible twins.
+The existing union planner implements these exact verifier checks; no rendering
+or model prompt changes. Hashing and row streaming remain crisp mechanisms.
+PublishTrainingUnion requires nonempty training output for every declared
+rendering/tokenizer before a receipt can grant training admission. A zero-output
+build is an implementation failure to repair, not an empty source-data decision.

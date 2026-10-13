@@ -126,11 +126,14 @@ def build_union(members: list[dict], rev: int, launches: int = 0) -> Path | str 
               '-v', f'{ROOT}:{ROOT}:ro', '-v', f'{root("data_hdd")}:{root("data_hdd")}:ro',
               '-v', f'{root("data_nvme")}:{root("data_nvme")}',
               '-v', f'{out}:{out}']
-    cmd = [sys.executable, str(ROOT / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '10',
+    # Eligible rows now survive twin verification: reserve room for the winner and
+    # dedup indexes as well as both tokenizer identity tables (the failed empty
+    # build never populated those indexes).
+    cmd = [sys.executable, str(ROOT / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '14',
            '--priority', 'low', '--resumable', '--container', unit, '--wait', '86400', '--detach',
            '--workdir', str(ROOT), '--',
            'docker', 'run', '--rm', '--name', unit, '--network', 'none', '--user', f'{os.getuid()}:{os.getgid()}',
-           '--memory', '12g', '-e', 'HOME=/tmp', '-e', 'PYTHONDONTWRITEBYTECODE=1', '-e', 'HF_HUB_OFFLINE=1',
+           '--memory', '16g', '-e', 'HOME=/tmp', '-e', 'PYTHONDONTWRITEBYTECODE=1', '-e', 'HF_HUB_OFFLINE=1',
            *mounts, '-w', str(ROOT), '--entrypoint', 'python3', 'natlang-neuralese:26.09',
            'scripts/neuralese_data/build_native_turn_union.py', '--out-dir', str(out),
            '--tokenizer', f'lfm25={LFM}', '--tokenizer', f'mellum21={MELLUM}', *args]
@@ -150,6 +153,13 @@ def registry_sources(members: list[dict]) -> list[str]:
 def finish_revision(state: dict, build: dict, union: Path) -> None:
     rev, members, skipped, spec, sig = build['rev'], build['members'], build['skipped'], build['spec'], build['signature']
     union_receipt = json.loads((union / 'receipt.json').read_text())
+    renderings = union_receipt.get('renderings') or {}
+    if not renderings or any(not data.get('by_tokenizer') or not data.get('twin_identity_equal')
+                            or any(stats.get('documents', 0) <= 0
+                                   or stats.get('by_split', {}).get('train', {}).get('documents', 0) <= 0
+                                   for stats in data['by_tokenizer'].values())
+                            for data in renderings.values()):
+        raise ValueError(f'{union}: empty or inconsistent training union; registration refused')
     totals = {r: {t: {'documents': s['documents'], 'by_split': s['by_split']} for t, s in v['by_tokenizer'].items()}
               for r, v in union_receipt['renderings'].items()}
     set_id, union_id = f'{tsm.BASE_ID}-r{rev}', f'{UNION_BASE}-r{rev}'
