@@ -6,13 +6,12 @@ collector runs that action, shows its real feedback to the teacher, and grades
 the continuation. Collection does not confer training admission.
 """
 import argparse
-import hashlib
 import json
 from pathlib import Path
+import sys
 
-
-def sha(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex
 
 
 def prepare(source, output, *, line, workers, case_seconds):
@@ -39,7 +38,7 @@ def prepare(source, output, *, line, workers, case_seconds):
         ids.add(row['id'])
     output.mkdir(parents=True)
     manifest = {'schema': 'natlang.recovery-teacher-campaign/1',
-                'line': line, 'source': str(source), 'source_sha256': sha(source),
+                'line': line, 'source': str(source), 'source_sha256': sha256_file_hex(source),
                 'cases': len(rows), 'workers': workers,
                 'selection': 'all train-only seeded failure cases, one per source id',
                 'training_admission': False,
