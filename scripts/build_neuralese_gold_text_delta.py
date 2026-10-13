@@ -80,6 +80,12 @@ def load_pinned_tokenizer(tokenizer_path):
             verify_backend(tokenizer, "PreTrainedTokenizerFast")
         elif expected_class and actual_class != expected_class:
             raise ValueError(f"tokenizer class mismatch: config declares {expected_class}, loader returned {actual_class}")
+        # The TokenizersBackend fallback constructs the fast tokenizer from its
+        # serialized backend. That constructor leaves name_or_path empty, but
+        # the shared chat renderer reads config.json through name_or_path to
+        # bind this checkpoint's declared history-reasoning policy.
+        if not getattr(tokenizer, "name_or_path", None):
+            tokenizer.name_or_path = str(path)
         return tokenizer
 
     if expected_class == "TokenizersBackend" and not backend_path.is_file():

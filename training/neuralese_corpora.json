@@ -61884,6 +61884,56 @@
         "build-report.json",
         "provenance.json"
       ]
+    },
+    {
+      "id": "luna-held-shapes-s52008-source-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-s52008-source-20261013-v1",
+      "admission": "source-only-nontraining; held input worlds excluded from selected teacher queue",
+      "include": [
+        "source.ir.jsonl",
+        "build-report.json",
+        "campaign-manifest.json",
+        "provenance.json"
+      ]
+    },
+    {
+      "id": "luna-held-shapes-s52009-source-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-s52009-source-20261013-v1",
+      "admission": "source-only-nontraining; held input worlds excluded from selected teacher queue",
+      "include": [
+        "source.ir.jsonl",
+        "build-report.json",
+        "campaign-manifest.json",
+        "provenance.json"
+      ]
+    },
+    {
+      "id": "luna-held-shapes-native-turns-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-native-turns-20261013-v1",
+      "include": [
+        "approved-turns.jsonl",
+        "accepted-parents.native.jsonl",
+        "admission-review.json",
+        "parent-selection.json"
+      ],
+      "admission": "exact-native-oracle approved decisions after exact held input-world exclusion; train-only native turns",
+      "training_admission": true,
+      "training_admission_reason": "670 accepted parent programs with all oracle checks true; 50 exact held-world-colliding accepted parents removed; 5195 materializer-approved decision targets; 309 unapproved context rows pruned; no held authored actions",
+      "review_status": "parent exact-oracle + turn trace admission + held-world/content decontamination; render verification pending",
+      "required_conversion": "render native-turn corpus for both LFM and Mellum tokenizers; include in next declared union",
+      "split": "train only; source seed groups disjoint from held seed61012; exact family+inputs/files/services collision exclusion",
+      "source_class": "project-generated inline curriculum and AG News-derived edit stream",
+      "license": "661 synthetic project-generated parent programs; 9 AG News academic-use derived parent programs; factual provenance, no exclusion",
+      "source_corpora": [
+        "luna-held-shapes-s52005-source-20261013-v1",
+        "luna-held-shapes-s52006-source-20261013-v1",
+        "luna-held-shapes-s52007-source-20261013-v1",
+        "luna-held-shapes-s52008-source-20261013-v1",
+        "luna-held-shapes-s52009-source-20261013-v1"
+      ]
     }
   ],
   "coverage_backlog": [

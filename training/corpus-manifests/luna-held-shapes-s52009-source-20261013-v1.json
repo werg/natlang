@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-held-shapes-s52009-source-20261013-v1",
+  "owner": "pop",
+  "path": "runs/luna-held-shapes-s52009-source-20261013-v1",
+  "files": [
+    {
+      "path": "build-report.json",
+      "bytes": 592,
+      "sha256": "48fc50dc75a076a6e869dcf173755dfdf262d7407eaf9f4501831674cebaa1e9"
+    },
+    {
+      "path": "campaign-manifest.json",
+      "bytes": 9173,
+      "sha256": "41e9376673850c956ed1c7325e0bbfd499d7d773920816259c00ebb03d6c7b94"
+    },
+    {
+      "path": "provenance.json",
+      "bytes": 921,
+      "sha256": "d2dc2bd5350746a38b78b68c41660d8e9eae27a68637643b8e5bc0fdd34a0e86"
+    },
+    {
+      "path": "source.ir.jsonl",
+      "bytes": 1898858,
+      "sha256": "1db7c5f3c6b362d74a025f8c577a4a09bac96d5cb3d90bfc8ea3b43edc1a03ed",
+      "lines": 292
+    }
+  ],
+  "bytes": 1909544
+}
