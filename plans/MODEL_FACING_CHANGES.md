@@ -232,3 +232,24 @@ A grouped typed v6 presentation is prepared for live comparison: it iterates ove
 The shared native return checker now considers every compatible arm of a declared record union before reporting a missing required field. This removes a false `return_result needs a complete ...` error on heterogeneously shaped arrays such as Sol060; an exact local regression includes one element of each arm and a true missing-field negative. **Measurement debt:** in the next live teacher window inspect about 48 union-typed returns or all available such returns if fewer, including the Sol060 case, for valid alternate-arm acceptance and true missing-field feedback. Do not infer Sol060 source quality from the earlier failed scripted replay.
 
 The v7 semantic-stack presentation replaces generic deep-stage forwarding with authored typed stage contributions and explicit source IDs on Astra records. It also exposes each catalog's output contract and applies declared per-field comparison rules for set-valued, ordered and prose fields. The renderer statically rejects missing prior-stage fields and type-erased IDs; the comparator leaves witness alternatives for independent review. **Measurement debt:** run a diagnostic live cohort first, then review about 48 complete cases on this exact presentation for actual distinct stage transformations, invoked and consumed scoped literals, per-record source coverage, grounded final answers, request cost and model rejections before production adoption. v5/v6b partial traces and exact source replay do not pay this debt.
+
+The first two v7 live diagnostics each reached roughly 50 turns. In ecology01, the
+parent stage invoked an ad hoc natural-language function, but the generated child
+did not return the required scope decision; the parent then passed an empty
+`scopeDecisions` despite applicable relations. This is a child-contract and
+source-presentation failure, not a negative example for the model. A proposed
+v8 variant will ask for one narrow decision per candidate relation, show a
+direct typed invocation, and require the returned decision to populate the
+stage's owned field. An empty field will need a source-grounded absence when
+there are no candidates. This variant has **zero live samples** and owes about
+48 matched cases before adoption. The v7 ecology case was stopped with its
+diagnostic trace preserved.
+
+In Sol008, the v7 nested stages added and consumed source-quoted inventory,
+rule candidates and licensing decisions; its final answer matched the authored
+gold. The collector then failed before recording an outcome because the
+frozen October 12 runtime lacked the new `semantic-structured` comparator.
+The failure is a runtime-snapshot mismatch, not a model rejection. A new
+immutable runtime snapshot includes the comparator and has passed canonical,
+set-permutation, omission and duplicate probes. The failed attempt remains
+diagnostic; a new queue is sealed against the corrected runtime.

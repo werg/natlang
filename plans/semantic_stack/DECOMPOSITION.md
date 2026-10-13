@@ -45,6 +45,17 @@ The v5 and v6b partial live traces showed source-grounded per-record work, but v
 
 The v7 source renderer reads authored per-stage contribution contracts. Each stage receives a typed prior state containing every earlier owned field, must add its own source-backed field or a reasoned absence, and passes that state to its child. It rejects a missing prior field, a repeated owned field, and an Astra EvidenceRecord without a visible source ID. The renderer preserves Sol's authored passage-witness and work-frontier types. The declared answer comparator accepts only explicitly unordered array paths as sets, retaining multiplicity and ordered tuple endpoints; canonical witness alternatives remain pending independent review. Scripted replay validates source/runtime shape but does not prove any named stage actually contributed in a teacher trajectory. The v7 presentation and comparator need a small live pilot, then about 48 reviewed live cases per adopted model-facing variant. Until then, all v7 rows remain diagnostic candidates with training admission false.
 
+The first v7 Sol008 diagnostic showed source-quoted contributions in all four
+named stages, consumed scoped natural-language decisions, and a final answer
+equal to the authored reference. Its collector then failed because the pinned
+older runtime snapshot did not contain the new comparator. Freeze the runtime
+and bind its manifest hash to every queue before claiming an oracle outcome.
+The ecology01 diagnostic exposed a different issue: a rich scoped child
+decision failed, after which the parent forwarded an empty owned field despite
+applicable relations. The next presentation should use a narrow per-relation
+typed literal and require its returned decision to enter the owned field.
+Neither trace is an admitted training row or a model-negative example.
+
 ## Application-scale semantic projects
 
 The additive high-depth slate is a different source shape: a complete natlang project with roughly 10–30 authored `.nl` files, topic-specific callable folders, explicit typed interfaces, service declarations when outside-world work is needed, and real multi-step tasks. A project manifest selects an immutable source tree, task input snapshot, declared output/checker, provenance and split world. Its adapter snapshots the files into Program/2 without rewriting the author's call graph or forcing a generic chain. The root and modules remain natural-language functions; exact source hashing, path containment, type checking, replay and result checks are crisp. Full teacher trajectories, including child calls and tool outputs, are collected through the existing teacher pipeline. Existing 220 authored programs remain eligible when valid; their difficulty is a mix label, not an admission criterion. New project cases must show actual stage contributions, source visibility and correct outputs before training admission.
