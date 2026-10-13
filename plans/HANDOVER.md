@@ -43,7 +43,13 @@ check passed.
 At 20:55 CEST all six s52029 CUAD extraction trials had exhausted their
 initial 384-request budget with zero result rows. Four exact zero-output
 attempts were reviewed out in `reviewed-exclusions.json`; a hinted and an
-unhinted 768-request durable retry continue as pilots. The unused, unlaunched
+unhinted 768-request retry continue as pilots. These two retries were already
+launched as **fresh attempts** with new seeds: their original partial journals
+were retained but not replayed. The replenisher now fixes this waste for
+future request-budget retries by copying the exact partial/evidence into a
+new jobs directory, verifying evidence hashes and preserving the root seed;
+the collector can then replay saved model responses by request hash. Do not
+retroactively claim the two s52029 pilots got this benefit. The unused, unlaunched
 retry directory was removed. The replenisher formerly stopped at the first
 unfinished campaign, leaving Luna capacity idle. It now tracks at most two
 overlapping campaigns, decontaminates each against all prepared source worlds

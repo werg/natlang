@@ -8,6 +8,7 @@ import collections
 import fcntl
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
@@ -169,6 +170,36 @@ def launch_worker(campaign, seed, number, *, repair=False):
     return launch_queue(campaign / f'worker-{number:02d}', f'{prefix}-w{number:02d}')
 
 
+def copy_partial_for_resume(previous_jobs, retry_jobs, root_seed):
+    """Preserve the collector's exact request journal for a larger budget run.
+
+    The collector replays saved responses by request hash only when the partial
+    provenance still matches, including the root seed. Evidence snapshots are
+    copied with their content hashes; no mutable file is hardlinked.
+    """
+    partials = list(previous_jobs.glob('*.partial.json'))
+    if len(partials) != 1:
+        raise ValueError(f'Expected one resumable partial in {previous_jobs}, got {len(partials)}')
+    partial = partials[0]
+    state = json.loads(partial.read_text())
+    if state.get('version') != 'natlang.teacher_partial.native/1' or not isinstance(state.get('turns'), list):
+        raise ValueError(f'Invalid collector partial: {partial}')
+    if state.get('provenance', {}).get('seed_policy', {}).get('root') != root_seed:
+        raise ValueError(f'Collector partial seed differs from retry seed: {partial}')
+    retry_jobs.mkdir(parents=True, exist_ok=False)
+    for snapshot in state.get('evidence_snapshots') or []:
+        name = snapshot['path']
+        if Path(name).name != name:
+            raise ValueError(f'Unsafe collector evidence path: {name}')
+        source = previous_jobs / name
+        if (source.stat().st_size != snapshot['bytes'] or
+                sha256_file_hex(source) != snapshot['sha256']):
+            raise ValueError(f'Collector evidence changed after partial: {source}')
+        shutil.copy2(source, retry_jobs / name)
+    shutil.copy2(partial, retry_jobs / partial.name)
+    return sha256_file_hex(partial)
+
+
 def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, repair=False):
     """Retry a resultless provider error or measured collection budget exhaustion."""
     if result.get('status') != 'incomplete' or result.get('exit_code') != 2:
@@ -222,17 +253,25 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, 
     retry = worker / f'retry-{ordinal:03d}-{attempt:02d}'
     retry.mkdir(exist_ok=False)
     again = dict(job, output=str(retry / 'results.jsonl'), jobs=str(retry / 'jobs'),
-                 log=str(retry / 'collector.log'), seed=job['seed'] + attempt * 100000)
+                 log=str(retry / 'collector.log'),
+                 seed=job['seed'] if resource_budget else job['seed'] + attempt * 100000)
     if resource_budget:
         again['max_model_requests'] = max(192 if repair else 768,
                                           job['max_model_requests'] * 2)
         again['case_seconds'] = max(1800 if repair else 3600,
                                     job['case_seconds'] * (1 if repair else 2))
+    if resource_budget:
+        try:
+            partial_sha256 = copy_partial_for_resume(last / 'jobs', retry / 'jobs', job['seed'])
+        except Exception:
+            shutil.rmtree(retry)
+            raise
     (retry / 'queue.jsonl').write_text(json.dumps(again, sort_keys=True) + '\n')
     (retry / 'review.json').write_text(json.dumps({
         'schema': 'natlang.teacher-transient-retry/1', 'original_key': job['key'],
         'attempt': attempt, 'error': message,
         'reason': 'observed_model_request_budget' if resource_budget else 'provider_transport',
+        **({'resumed_partial_sha256': partial_sha256, 'seed_preserved': True} if resource_budget else {}),
         'training_admission': False}, indent=2) + '\n')
     prefix = f'natlang-pop-luna-repair-s{seed}' if repair else f'natlang-pop-luna-s{seed}'
     launch_queue(retry, f'{prefix}-w{number:02d}-r{ordinal:03d}-{attempt:02d}')
