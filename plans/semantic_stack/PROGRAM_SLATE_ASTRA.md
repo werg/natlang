@@ -10,6 +10,10 @@ Eight priority programs have **24 manually authored interacting records each**, 
 
 The complete machine-readable designs are the primary artifact. The source-pool integrator owns actual `.nl` materialization, scoped access, native runtime replay, teacher sampling, corpus registration and manifests. Astra owns this catalog and its review. Sol authors a separate catalog in `training/semantic_stack/sol_programs.json`; the domain allocation was coordinated to avoid duplicate task families.
 
+## Expansion progress after the first cohort
+
+The catalog now contains **24 substantial authored fixtures** of at least 24 records each. Thirteen have passed independent source/oracle review and exact checks: the original eight plus archives-02 through archives-06. Eleven archaeology and folklore expansions await independent review. The remaining 96 retain explicit expansion specifications and are held as seed-only. Every program still requires live executor qualification and training admission. The first-cohort discussion below records its original eight cases.
+
 ## Natlang decomposition before implementation
 
 A program starts as a typed natural-language function over a folder snapshot. Its decomposition follows the domain algorithm rather than a shared classify-and-filter template.
@@ -120,3 +124,5 @@ The correct next step is to materialize and sample the eight substantial fixture
 On 2026-10-13, an independent exact-reference review of the eight full fixtures passed: signed graph propagation, stratigraphic edge orientation and cycle enumeration, shortest gallery path, quest reward replay, material composition closure, effective trip calendars, instruction interval precedence, and the independently transcribed chronology edges. The catalog contains 120 unique IDs and 120 distinct operation names, with six entries in every domain. Operation-name uniqueness is a schema check, not a semantic-novelty proof.
 
 The repository quick check passed: 22 Python ratchet tests and the TypeScript check. No live executor or teacher samples were run by this author. The source integrator independently reviews the full fixtures and owns subsequent replay and live qualification. Two seed ambiguities were corrected during author review: the sensory-route traversal now explicitly overlaps the noisy interval, and roster assignment has a stated tie-break for its otherwise interchangeable slots.
+
+The source-pool integrator independently reviewed all eight 24-record fixtures and their semantic oracles on 2026-10-13, requesting no oracle corrections. That review found a separate builder issue: stage files emitted as siblings do not implement the intended deep callable chain. The integrator owns the nested-folder repair and subsequent exact replay/live diagnostic. Catalog source review does not certify that builder or its eventual executions.
