@@ -1,5 +1,30 @@
 # Continuation guide — updated 2026-10-13
 
+## 21:58 CEST: step-12000 behavioural check and semantic-stack expansion
+
+Pop QAD LFM v13 reached step 12000 and resumed after its synchronous held
+task evaluation. Held gold CE was 0.600443, accuracy 0.874372, and response
+KL 1.388241, below the declared 1.5 hard stop but continuing to rise. The
+full-prompt temperature-0.6 task packet scored 0/16: three exact-repetition
+stops, five model-incomplete outcomes, three invalid actions and five semantic
+mismatches, with no infrastructure errors. The five model-incomplete results
+quiesced after repeated immediate EOS on a recovery turn; two inspected cases
+had many preceding repeated failed `eval` actions and visible corrective
+feedback. This does not show a collector reasoning-parser loss. DGX's valid
+same-checkpoint full/program-header/start-marker A/B is still pending; retain
+the train/serve template, training lineage and held eval packet until that
+comparison localizes the failure. Pop GPU remains busy with v13.
+
+For a new curriculum, the owner requested two independent authoring agents,
+Astra and GPT-6.1 Sol, each to produce at least 100 sizable idiomatic natlang
+programs across at least 15 domains, for at least 200 distinct programs total.
+The domains are partitioned to avoid duplicates; a third subagent owns typed
+source materialization, quality review and priority generation integration.
+Require real fixture and exact or graded oracle before any case joins teacher
+generation. The active s52032 source campaign was built from the older vetted
+mix while these new sources are being prepared; it is not evidence the new
+curriculum has been generated yet.
+
 ## 21:45 CEST: CUAD pilots closed, six Luna slots refilled
 
 The two representative s52029 CUAD `folder_extract` pilots have terminal
