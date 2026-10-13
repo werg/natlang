@@ -91,7 +91,11 @@ def test_a_callers_loss_trains_its_childs_write_and_nested_writes_to_the_depth(l
     assert (moved["instructions@grand"] > 0) == grand_moves, "nested writes train to --write-depth levels"
 
 
-def test_held_out_readers_compare_their_written_values_with_another_readers(loaded, latent_sketch_heads, tmp_path):
+@pytest.mark.parametrize('writer_kind', ['sketch', 'direct_identity'])
+def test_held_out_readers_compare_their_written_values_with_another_readers(
+        loaded, latent_sketch_heads, tmp_path, monkeypatch, writer_kind):
+    if writer_kind == 'direct_identity':
+        _direct_stand_in(loaded, tmp_path, monkeypatch, zero_correction=True)
     other = "Line 7 is a late fee under clause 9."
     records = [
         # The child consumes this exact writer. Omitting it correctly holds the
@@ -111,7 +115,9 @@ def test_held_out_readers_compare_their_written_values_with_another_readers(load
     path.write_text("".join(json.dumps(r) + "\n" for r in records))
     pieces.write_text("".join(json.dumps(p) + "\n" for p in PIECES))
     out = tmp_path / "out"
-    assert main(["--records", str(path), "--pieces", str(pieces), "--out", str(out), "--heads", str(latent_sketch_heads), "--device", "cpu", "--steps", "1",
+    model_args = (["--heads", str(latent_sketch_heads)] if writer_kind == 'sketch' else
+                  ["--direct-artifact", str(tmp_path), "--direct-base-snapshot", str(tmp_path)])
+    assert main(["--records", str(path), "--pieces", str(pieces), "--out", str(out), *model_args, "--device", "cpu", "--steps", "1",
                  "--batch", "1", "--eval", "4", "--handover", "written", "--write-depth", "1", "--tokens-per-vector", "1",
                  "--writer-supervision", "native-value", "--writer-length-policy", "native-value",
                  "--stop-supervision", "generated-length", "--writer-text-weight", "0",
@@ -126,6 +132,11 @@ def test_held_out_readers_compare_their_written_values_with_another_readers(load
         assert got["crisp_self_greedy"] > 0 and got["crisp_self_t06"] > 0
         assert got["v_minus_t_self"] == pytest.approx(got["written"] - got["crisp_self_greedy"])
         assert got["v_minus_t_gold"] == got["v_minus_t"]
+        if writer_kind == 'direct_identity':
+            assert got['n_token_matched'] == got['n'] and not got['token_trace_errors']
+            assert got['v_minus_t_token_matched'] == pytest.approx(got['written'] - got['crisp_token_matched'])
+            if label == 'written-init':
+                assert got['v_minus_t_token_matched'] == pytest.approx(0, abs=1e-6)
         for case in got["case_scores"]:
             assert case["crisp_self_greedy"] > 0 and isinstance(case["self_text_cap_hit"], bool)
 
@@ -140,7 +151,7 @@ def _random_projection(width):
     return projection
 
 
-def _direct_stand_in(loaded, tmp_path, monkeypatch):
+def _direct_stand_in(loaded, tmp_path, monkeypatch, zero_correction=False):
     """The shared load_direct_artifact replaced by a stand-in over raw-token heads; returns (records, pieces,
     projections) for a direct-writer end-to-end run."""
     from types import SimpleNamespace
@@ -162,7 +173,8 @@ def _direct_stand_in(loaded, tmp_path, monkeypatch):
         engine = load_engine(heads_checkpoint=str(anchor), device=device)
         torch.manual_seed(0)
         # An aligned P (nonzero), as the e2e stage loads it: the consumer's gradient reaches the child through it.
-        projection = _random_projection(int(engine.backbone.hf.config.hidden_size))
+        width = int(engine.backbone.hf.config.hidden_size)
+        projection = NeuraleseProjection(width) if zero_correction else _random_projection(width)
         projections["neuralese"] = projection
         return SimpleNamespace(engine=engine, neuralese_projection=projection, token_choice_projection=None,
                                manifest={"schema": "test-stand-in"}, projection_alignment=None)

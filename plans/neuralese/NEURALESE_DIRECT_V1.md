@@ -562,6 +562,15 @@ edges sharing held source groups. This resolves the handover's request to use v3
 `diag-e2e-lfm-u10006-v2stream-*` C-rate arms retain v2, their existing checkpoints and their original examples.
 The coverage percentages below measure v2 and must not be relabelled as a new v3 coverage measurement.
 
+**Matched token reference (supervisor, 2026-10-13).** The paired-reader value arm uses source-sized teacher-forced
+producer histories. Its token comparator therefore uses the actual readout choices captured by that same writer,
+embedded at the same positions and with the same framing, states and lengths. At C=0 both reader inputs are equal;
+the paired-reader loss difference must be zero. Independent free-generated text (greedy/T=0.6) stays a separate
+measurement, since feeding its own tokens changes the producer history. The verifier requires complete matching
+trace coverage and leaves old or incomplete measurements pending. This fixes the history confound recorded in
+E2E_COLLAPSE.md; it does not certify native value boundaries, autonomous stopping, or task success, which still
+require their real runtime measurements.
+
 **Neuralese outputs in direct samples (owner question, 2026-10-13).** Owner preference: e2e trains every Neuralese
 output, and direct trains everything else. Owner agreed: map uncovered positions through the TCP (option B, h
 detached), and get as much e2e as possible.

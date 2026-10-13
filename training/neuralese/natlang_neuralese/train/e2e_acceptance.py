@@ -3,9 +3,10 @@
 The requirement (owner decisions 2026-10-11 and 2026-10-12; plans/neuralese/NEURALESE_DIRECT_V1.md "End-to-end
 stage"): consumers reading the producer's Neuralese values (V) against the same consumers reading the producer's
 tokens on the same held producer calls, on loss and on task success, with no drift stop. On loss the tokens are the
-producer's own generated text (T_self, greedy; owner decision 2026-10-13, train/self_text.py): V <= T_self within the
-declared margin (``max_v_minus_t_ce_nats``); T_self sampled at 0.6 and the gold crisp text (gold T, the upper
-reference) are reported only.
+producer's actual emitted tokens on the identical producer states and lengths: V <= that matched token reader
+within the declared margin (``max_v_minus_t_ce_nats``). Independently generated T_self (greedy and sampled at 0.6,
+train/self_text.py) and gold crisp text are reported separately. Forced-history loss does not certify autonomous
+generation or stopping; the task criteria below still require real execution.
 Controls: the same consumers reading a shuffled (fixed factual-disjoint donor) block and a zeroed block. The 48-probe
 behaviour gate is reported only (owner 2026-10-12, plans/REVIEW_20261012.md item 3).
 
@@ -55,7 +56,13 @@ def evaluate(declaration, summary):
     criteria = {}
     paired, held = declaration['paired_reader'], summary.get('written-trained') or {}
     v, t = held.get('written'), held.get('crisp')
-    v_minus_t_self = held.get('v_minus_t_self')  # V - greedy T_self over the rows with self texts
+    # Free T_self has a different autoregressive history from the sized, gold-feedback
+    # value writer. Only the exact emitted-token trace isolates representation loss.
+    matched_complete = (held.get('token_reference') ==
+                        'emitted-token-embeddings-on-identical-producer-states-and-lengths'
+                        and held.get('n_token_matched') == held.get('n') and held.get('n', 0) > 0
+                        and not held.get('token_trace_errors'))
+    v_minus_t_self = held.get('v_minus_t_token_matched') if matched_complete else None
     shuffled, zeroed, n = held.get('shuffled'), held.get('zeroed'), held.get('n', 0)
 
     def criterion(name, measured, passed, **detail):
@@ -65,7 +72,9 @@ def evaluate(declaration, summary):
     criterion('paired_readers', n, n >= paired['min_paired_readers'], required=paired['min_paired_readers'])
     criterion('v_minus_t_ce', v_minus_t_self,
               v_minus_t_self is not None and v_minus_t_self <= paired['max_v_minus_t_ce_nats'],
-              max=paired['max_v_minus_t_ce_nats'], v=v, t_self=held.get('crisp_self_greedy'),
+              max=paired['max_v_minus_t_ce_nats'], v=v, t_self=held.get('crisp_token_matched'),
+              token_reference=held.get('token_reference'), n_token_matched=held.get('n_token_matched'),
+              independent_self_greedy=held.get('crisp_self_greedy'),
               n_self=held.get('n_self'), t_self_t06=held.get('crisp_self_t06'),
               v_minus_t_self_t06=held.get('v_minus_t_self_t06'), t_gold=t,
               v_minus_t_gold=None if v is None or t is None else v - t)

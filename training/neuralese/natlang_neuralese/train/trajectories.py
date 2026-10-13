@@ -66,6 +66,7 @@ import gc
 import time
 import hashlib
 from pathlib import Path
+from contextlib import contextmanager
 
 import torch
 
@@ -1555,6 +1556,18 @@ def main(argv=None, embed=None):
                                     ('token_choice_projection', getattr(direct, 'token_choice_projection', None)))
                 if module is not None}
 
+    token_capture = [None]
+
+    @contextmanager
+    def capture_emitted_tokens():
+        previous = token_capture[0]
+        captured = {}
+        token_capture[0] = captured
+        try:
+            yield captured
+        finally:
+            token_capture[0] = previous
+
     def direct_write_value(context, target, source=None):
         """The end-to-end stage's producer write: the shared direct writer (full backbone per value, one causal-conv
         segment per call, the TokenChoiceProjection's readout deciding the stop) from the site's context, with
@@ -1588,7 +1601,12 @@ def main(argv=None, embed=None):
         write_region.__exit__(None, None, None)
         n = int(payload.shape[1])
         lengths.append(n)
-        return payload[0, :n]
+        result = payload[0, :n]
+        if token_capture[0] is not None:
+            from ..model.neuralese_projection import chosen_token_embedding
+            token_capture[0][id(result)] = chosen_token_embedding(
+                backbone, written.emitted_token_ids())[0, :n]
+        return result
 
     lengths: list[int] = []
     projection_anchor_values: list[float] = []
@@ -2532,7 +2550,7 @@ def main(argv=None, embed=None):
         boundary_terms.clear()
         sites, write_errors, reader_errors, missing_donors = {}, [], [], []
         probe_memo = ProducerMemo(share_producers)
-        with torch.no_grad():
+        with torch.no_grad(), capture_emitted_tokens() as matched_payloads:
             for record in _progress(records, label):
                 try:
                     names, payloads = written_values(record, leaves, memo=probe_memo, reader_only=True)
@@ -2550,9 +2568,9 @@ def main(argv=None, embed=None):
         own, shuffled, groups = [], [], {}
         # The end-to-end acceptance (train/e2e_acceptance.py) compares the same consumers reading tokens (T: the gold
         # crisp text where the values stand) and reading a zeroed block (a control) on these exact rows.
-        crisp_scores, zeroed_scores = [], []
-        # T_self (owner 2026-10-13, the primary comparison): the same crisp reader with each read value as the text its
-        # producer generates itself (train/self_text.py), greedy and sampled at 0.6; gold T stays the upper reference.
+        crisp_scores, zeroed_scores, matched_scores, matched_gaps, matched_errors = [], [], [], [], []
+        # Independent T_self: the same crisp reader with each read value as the text its producer generates
+        # freely (train/self_text.py), greedy and sampled at 0.6; both histories are report-only here.
         from .self_text import SelfText
         self_text = SelfText(engine=engine, session=session, producers=producers, texts=texts,
                              write_depth=args.write_depth, site_prefix=site_prefix,
@@ -2586,6 +2604,17 @@ def main(argv=None, embed=None):
                     reader_errors.append({'id': rid, 'error': str(error)})
                     continue
                 own.append(a)
+                if direct is not None:
+                    missing = [key for key, value in payloads.items() if id(value) not in matched_payloads]
+                    if missing:
+                        matched_errors.append({'id': rid, 'error': 'missing emitted-token trace', 'slots': missing})
+                    else:
+                        try:
+                            matched = reader({key: matched_payloads[id(value)] for key, value in payloads.items()})
+                            matched_scores.append(matched)
+                            matched_gaps.append(a - matched)
+                        except RequestError as error:
+                            matched_errors.append({'id': rid, 'error': str(error)})
                 shuffled.append(b)
                 zeroed_scores.append(z)
                 crisp_scores.append(t)
@@ -2625,7 +2654,7 @@ def main(argv=None, embed=None):
                            'factual_group_set_written_mean': sum(g['written'] for g in group_means)/len(group_means),
                            'factual_group_set_shuffled_mean': sum(g['shuffled'] for g in group_means)/len(group_means)})
         if self_text is not None:
-            # Means over the rows whose self texts were made (n_self); V minus greedy T_self is the primary comparison.
+            # Independent free generation is report-only: its history differs from forced value writing.
             result.update({'n_self': len(self_rows), 'self_text_errors': self_errors,
                            'self_text_cap_hits': sum(bool(c.get('self_text_cap_hit')) for c in result['case_scores'])})
             if self_rows:
@@ -2634,6 +2663,11 @@ def main(argv=None, embed=None):
                                'crisp_self_t06': sum(s for _, _, s in self_rows) / n,
                                'v_minus_t_self': sum(a - g for a, g, _ in self_rows) / n,
                                'v_minus_t_self_t06': sum(a - s for a, _, s in self_rows) / n})
+        result.update({'n_token_matched': len(matched_scores), 'token_trace_errors': matched_errors,
+                       'token_reference': 'emitted-token-embeddings-on-identical-producer-states-and-lengths'})
+        if matched_scores:
+            result.update({'crisp_token_matched': sum(matched_scores) / len(matched_scores),
+                           'v_minus_t_token_matched': sum(matched_gaps) / len(matched_gaps)})
         return result
 
     leaves = {leaf_ids[name]: p for name, p in params.items()}

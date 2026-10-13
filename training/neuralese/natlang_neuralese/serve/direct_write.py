@@ -36,6 +36,7 @@ class DirectWriter:
             raise ValueError('direct writing needs the ordinary readout stop tokens')
         self.history = [opened.top]
         self.payloads, self.states, self.stop_tensors = [], [], []
+        self._emitted_ids, self._sequence_emitted_ids = [], None
         self.stop_logits = []
         self.count, self.done, self.truncated, self.passes = 0, False, False, 0
         from ..model.neuralese_projection import causal_conv_receptive_field
@@ -81,6 +82,7 @@ class DirectWriter:
 
     def advance(self, value, final, cache):
         self.payloads.append(value)
+        self._emitted_ids.append(self.token.detach())
         self.states.append(final)
         self.history.append(final)
         # Past states outside the convolution receptive field remain in the
@@ -139,6 +141,7 @@ class DirectWriter:
             stops.append(stop_logp - torch.log1p(-stop_logp.exp().clamp(max=1 - 1e-7)))
             self.token = logits[:, -1].argmax(-1)
         chosen = torch.cat(chosen, 1)
+        self._sequence_emitted_ids = chosen[:, :self.length].detach()
         stops = [torch.cat(stops, 1)[:, 1:]]
         # The same value as decide(), over the whole write.
         values = self.projection(hidden, segments[:, :-1], anchor=chosen_token_embedding(
@@ -150,6 +153,12 @@ class DirectWriter:
         self.history = list(history[:, -self.history_limit:].unbind(1))
         self.cache, self.count, self.done = cache, self.length, True
         return self
+
+    def emitted_token_ids(self):
+        """Actual readout choices anchoring the values, not forced feedback IDs."""
+        if self._sequence_emitted_ids is not None:
+            return self._sequence_emitted_ids
+        return torch.stack(self._emitted_ids, 1)
 
     def complete(self, temperature=0.0, generator=None):
         if temperature:

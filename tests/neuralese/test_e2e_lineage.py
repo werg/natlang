@@ -59,7 +59,9 @@ def test_an_e2e_lineage_needs_its_acceptance_and_runtime_stage(tmp_path):
 def test_acceptance_compares_values_with_tokens_and_keeps_missing_evidence_pending():
     declaration = json.loads((RECIPES / 'neuralese-e2e-v1.json').read_text())['e2e_acceptance']
     held = {'written': 1.0, 'crisp': 0.9, 'crisp_self_greedy': 1.1, 'v_minus_t_self': -0.1, 'n_self': 40,
-            'shuffled': 1.2, 'zeroed': 1.3, 'n': 40}
+            'shuffled': 1.2, 'zeroed': 1.3, 'n': 40, 'crisp_token_matched': 1.1,
+            'v_minus_t_token_matched': -0.1, 'n_token_matched': 40, 'token_trace_errors': [],
+            'token_reference': 'emitted-token-embeddings-on-identical-producer-states-and-lengths'}
     arm = {'eligible': True, 'case_indices': [0, 3], 'cases': 2}
     summary = {'written-trained': held, 'drift_guard': {'stopped': False},
                'task_eval-init': {**arm, 'task_successes': 1, 'task_success_rate': 0.5},
@@ -73,10 +75,17 @@ def test_acceptance_compares_values_with_tokens_and_keeps_missing_evidence_pendi
     summary['task_eval'] = {**summary['task_eval'], 'task_successes': 0, 'task_success_rate': 0.0}
     summary['task_eval_neuralese'] = {'fused_cases': [0], 'fused_case_successes': {'0': True}}
     assert criteria['v_minus_t_ce']['t_gold'] == 0.9  # gold T is reported, not the bar (owner 2026-10-13)
-    summary['written-trained'] = {**held, 'written': 1.15, 'v_minus_t_self': 0.05}
+    summary['written-trained'] = {**held, 'written': 1.15, 'v_minus_t_token_matched': 0.05}
     criteria, _ = e2e_acceptance.evaluate(declaration, summary)
     assert criteria['v_minus_t_ce']['status'] == 'fail' and criteria['task_success_vs_parent']['status'] == 'fail'
     assert criteria['task_success']['status'] == 'pass'  # V 1/1 against T 1/1 on the fused case
+    summary['written-trained'] = {**held, 'n_token_matched': 39}
+    criteria, _ = e2e_acceptance.evaluate(declaration, summary)
+    assert criteria['v_minus_t_ce']['status'] == 'pending'
+    summary['written-trained'] = {key: value for key, value in held.items()
+                                 if key not in ('token_reference', 'n_token_matched', 'v_minus_t_token_matched')}
+    criteria, _ = e2e_acceptance.evaluate(declaration, summary)
+    assert criteria['v_minus_t_ce']['status'] == 'pending'  # independent generation cannot certify a matched trace
 
 
 def test_family_interleaved_order_spreads_families_and_is_seeded():
