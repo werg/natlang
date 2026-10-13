@@ -401,6 +401,11 @@ class TaskEval:
                    'checkpoint': str(Path(checkpoint).resolve()), 'requested_at': time.time(),
                    'trainer_code_commit': _git_head()}
         _write_json(request_dir / 'request.json', request)
+        queue = request_queue()
+        queue.mkdir(parents=True, exist_ok=True)
+        import hashlib
+        stage = hashlib.sha256(str(self.out.resolve()).encode()).hexdigest()[:8]
+        _write_json(queue / f'{stage}-step-{step:07d}.json', {'request': str(request_dir.resolve())})
         if not weights.exists():
             threading.Thread(target=prune_snapshot, args=(request_dir,), name=f'task-eval-prune-{step}',
                              daemon=True).start()
@@ -472,6 +477,13 @@ def prune_snapshot(request_dir: Path) -> Path:
         _write_json(request_dir / 'snapshot.json', record)
     full.unlink(missing_ok=True)
     return weights
+
+
+def request_queue() -> Path:
+    """Pointers to every pending asynchronous request on this machine (``<data_nvme>/task-eval-queue``), so the
+    dispatcher never walks the runs tree (minutes on the DGX)."""
+    from ..common.paths import root as logical_root
+    return logical_root('data_nvme') / 'task-eval-queue'
 
 
 def pending_requests(stage_out: Path) -> list[Path]:

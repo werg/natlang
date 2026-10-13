@@ -5,8 +5,11 @@
 stage's task-eval.jsonl. The trainer runs in a container without the host's systemd, so launching is this host-side
 dispatcher's job.
 
-  python3 scripts/task_eval_dispatch.py --once              # one pass over runs/
-  python3 scripts/task_eval_dispatch.py --every 120         # keep dispatching (run it as a small ledger service)
+  .venv-neuralese/bin/python scripts/task_eval_dispatch.py --once         # one pass over the request queue
+  .venv-neuralese/bin/python scripts/task_eval_dispatch.py --every 120    # keep dispatching (a small ledger service)
+
+Requests are found through the pointers the trainer writes to ``<data_nvme>/task-eval-queue`` (eval/task_cadence.py
+``request_queue``), never by walking runs/ (minutes on the DGX).
 
 Crisp plumbing (process launch, retry count); where a job runs is the placement policy's decision. CoreWeave sandboxes
 do not yet take eval snapshots (a 24 GB snapshot transfer per evaluation is not built), so every job is placed on
@@ -30,14 +33,19 @@ sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 
 from natlang_neuralese.common.paths import root as logical_root  # noqa: E402
 
-PATTERNS = ('*/*/task-eval/async/step-*/request.json', '*/*/*/task-eval/async/step-*/request.json')
-
-
-def requests(runs: Path) -> list[Path]:
-    found = set()
-    for pattern in PATTERNS:
-        found.update(path.parent for path in runs.glob(pattern))
-    return sorted(found)
+def requests(queue: Path) -> list[Path]:
+    """Request dirs named by the queue's pointers; a pointer whose request is gone (its row landed) is removed."""
+    found = []
+    for pointer in sorted(queue.glob('*.json')) if queue.is_dir() else []:
+        try:
+            request_dir = Path(json.loads(pointer.read_text())['request'])
+        except (OSError, ValueError, KeyError):
+            continue
+        if (request_dir / 'request.json').is_file():
+            found.append(request_dir)
+        else:
+            pointer.unlink(missing_ok=True)
+    return found
 
 
 def unit_name(request_dir: Path, request: dict) -> str:
@@ -100,10 +108,10 @@ def launch(request_dir: Path, request: dict, unit: str, budget: float, dry_run: 
     return {'unit': unit, 'launcher_pid': process.pid, 'budget_gb': budget, 'log': str(log)}
 
 
-def dispatch(runs: Path, *, max_attempts: int = 3, dry_run: bool = False) -> list[dict]:
+def dispatch(queue: Path, *, max_attempts: int = 3, dry_run: bool = False) -> list[dict]:
     from natlang_neuralese.eval.task_cadence import TaskEval
     events = []
-    for request_dir in requests(runs):
+    for request_dir in requests(queue):
         try:
             request = json.loads((request_dir / 'request.json').read_text())
         except (OSError, json.JSONDecodeError):
@@ -144,15 +152,16 @@ def dispatch(runs: Path, *, max_attempts: int = 3, dry_run: bool = False) -> lis
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--runs', type=Path, default=None, help='runs directory (default: the repo\'s runs/)')
+    parser.add_argument('--queue', type=Path, default=None, help='request queue (default: <data_nvme>/task-eval-queue)')
     parser.add_argument('--once', action='store_true')
     parser.add_argument('--every', type=float, default=120.0)
     parser.add_argument('--max-attempts', type=int, default=3)
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args(argv)
-    runs = args.runs or logical_root('repo') / 'runs'
+    from natlang_neuralese.eval.task_cadence import request_queue
+    queue = args.queue or request_queue()
     while True:
-        for event in dispatch(runs, max_attempts=args.max_attempts, dry_run=args.dry_run):
+        for event in dispatch(queue, max_attempts=args.max_attempts, dry_run=args.dry_run):
             print(json.dumps(event), flush=True)
         if args.once:
             return 0

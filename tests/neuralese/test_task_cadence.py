@@ -137,6 +137,7 @@ def test_an_async_evaluation_is_submitted_from_a_weights_only_snapshot_and_lands
     spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'noise_repeats': 1,
                             'async': True})
     evaluator = _light_evaluator(spec, tmp_path)
+    monkeypatch.setattr(task_cadence, 'request_queue', lambda: tmp_path / 'queue')
     slot = tmp_path / 'checkpoint.pt'
     torch.save({'schema': 'natlang.neuralese-direct/1', 'step': 40,
                 'student_parameters': {'backbone.w': torch.ones(2)},
@@ -153,6 +154,7 @@ def test_an_async_evaluation_is_submitted_from_a_weights_only_snapshot_and_lands
     torch.save({'step': 41}, tmp_path / 'next.pt')
     (tmp_path / 'next.pt').replace(slot)  # the next rolling write never touches the snapshot
     assert task_cadence.pending_requests(tmp_path) == [request_dir]
+    assert [json.loads(p.read_text())['request'] for p in (tmp_path / 'queue').iterdir()] == [str(request_dir)]
 
     monkeypatch.setattr(task_cadence.TaskEval, '__init__',
                         lambda self, spec, out, engine, prompt_rendering:
@@ -184,6 +186,7 @@ def test_a_failed_async_job_is_an_ineligible_row_and_pending_ones_are_no_failure
     spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'async': True,
                             'max_consecutive_failures': 2})
     evaluator = _light_evaluator(spec, tmp_path)
+    monkeypatch.setattr(task_cadence, 'request_queue', lambda: tmp_path / 'queue')
     request_dir = tmp_path / 'task-eval' / 'async' / 'step-0000010'
     request_dir.mkdir(parents=True)
     (request_dir / 'request.json').write_text(json.dumps({'step': 10, 'spec': spec, 'stage_out': str(tmp_path),
@@ -215,3 +218,23 @@ def test_handoff_readiness_waits_for_the_candidate_checkpoints_task_evaluation(t
     (tmp_path / 'task-eval' / 'async' / 'step-0000800' / 'request.json').write_text('{}')
     waiting = _task_eval_candidate(tmp_path)
     assert waiting['status'] == 'pending' and waiting['step'] == 800
+
+
+def test_the_dispatcher_finds_requests_through_the_queue_pointers(tmp_path, monkeypatch):
+    import importlib.util
+    import json
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location(
+        'task_eval_dispatch', Path(__file__).resolve().parents[2] / 'scripts' / 'task_eval_dispatch.py')
+    dispatch = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(dispatch)
+    queue, request_dir = tmp_path / 'queue', tmp_path / 'stage' / 'task-eval' / 'async' / 'step-0000400'
+    request_dir.mkdir(parents=True)
+    (request_dir / 'request.json').write_text('{}')
+    queue.mkdir()
+    (queue / 'a-step-0000400.json').write_text(json.dumps({'request': str(request_dir)}))
+    (queue / 'b-step-0000800.json').write_text(json.dumps({'request': str(tmp_path / 'gone')}))
+    assert dispatch.requests(queue) == [request_dir]
+    assert sorted(p.name for p in queue.iterdir()) == ['a-step-0000400.json']  # landed requests drop their pointer
+    (request_dir / 'weights.pt').write_bytes(b'\0' * 2**20)
+    assert dispatch.budget_gb(request_dir) == round(2**20 / 2**30 * 1.3 + 8, 1)
