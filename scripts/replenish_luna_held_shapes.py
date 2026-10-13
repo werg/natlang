@@ -24,7 +24,8 @@ FAMILIES = ('contract_diagnosis', 'workbench_tickets', 'logic_proof_verifier',
             'iterate_schedule_repair', 'relational_late_argmax')
 START_SEED = 52007
 WORKERS = 6
-PER_FAMILY = 20
+PER_FAMILY = {family: (32 if family == 'folder_criteria_reducer' else 16)
+              for family in FAMILIES}
 
 
 def rows(path):
@@ -33,8 +34,12 @@ def rows(path):
 
 def world(row):
     semantics = row.get('semantics', {})
-    return json.dumps([row['family'], {key: semantics.get(key)
-                                      for key in ('inputs', 'files', 'services')}],
+    # Folder reducers expose their decisive contents through folder_files;
+    # operations and other future visible fields also belong to the world.
+    # Gold expectations and oracles are the only semantics fields omitted.
+    visible = {key: value for key, value in semantics.items()
+               if key not in ('expected', 'expected_files', 'oracle', 'files_oracle')}
+    return json.dumps([row['family'], visible],
                       sort_keys=True, separators=(',', ':'))
 
 
@@ -134,7 +139,7 @@ def prepare(campaign, seed, source, excluded):
     for distinct in (True, False):
         for row in eligible:
             family = row['curriculum']['family']
-            if counts[family] >= PER_FAMILY or row['id'] in seen:
+            if counts[family] >= PER_FAMILY[family.removeprefix('curriculum_')] or row['id'] in seen:
                 continue
             if distinct and used_groups.intersection(row['source_groups']):
                 continue
@@ -165,7 +170,7 @@ def prepare(campaign, seed, source, excluded):
                     source_verified_cases=len(source_rows), selected_count=len(selected),
                     selected_by_family=dict(counts), selected_ids=[row['id'] for row in selected],
                     held_path=str(HELD), held_sha256=sha256_file_hex(HELD),
-                    world_exclusion='same family and exact semantics.inputs/files/services against held and earlier sources',
+                    world_exclusion='same family and all visible semantics (including folder_files and operation; excluding gold expected/oracle) against held and earlier sources',
                     training_admission=False, status='generation_only_pending_quality_review')
     (campaign / 'campaign-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     for number in range(1, WORKERS + 1):

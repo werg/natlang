@@ -37,7 +37,7 @@ from .checkpoint_safety import (CheckpointDiskReserve, CheckpointReserveError,
                                 persist_postcommit_recovery,
                                 warmup_checkpoint_size_upper_bound)
 from .projection_anchor import relative_mse_positions, gold_aligned_projection_errors
-from .text_supervision import (ROLE_CODES, TEXT_POSITION_WEIGHT_POLICY,
+from .text_supervision import (ROLE_CODES, TEXT_POSITION_WEIGHT_POLICY, chat_roles,
                                balanced_position_weights, DocumentWindowSampler)
 
 def relative_mse(predicted, target):
@@ -994,33 +994,6 @@ class WindowBackingSpool:
         self.roles = bytearray()
         self.pending.clear()
         self.shards += 1
-
-
-def chat_roles(ids, *, start_id, role_ids, think_open=None, think_close=None,
-               tool_response_prefixes=()):
-    """Per-token chat role of a rendered document: the role named after each ``<|im_start|>``; assistant tokens
-    split into reasoning (inside the think block) and reply. Qwen-style user
-    turns with a tool_response body are semantic tool feedback. Structural
-    start tokens count as 'other'."""
-    codes=array('B');role='other';thinking=False;header=False
-    for position,token in enumerate(ids):
-        if token==start_id:
-            role='other';thinking=False;header=True;codes.append(0);continue
-        if header:
-            role=role_ids.get(token,'other');header=False
-            if role=='user' and any(
-                    len(prefix)>0 and position+1+len(prefix)<=len(ids) and
-                    all(ids[position+1+j]==value for j,value in enumerate(prefix))
-                    for prefix in tool_response_prefixes):
-                role='tool'
-        if role=='assistant':
-            if token==think_open:thinking=True
-            name='assistant_reasoning' if thinking else 'assistant_reply'
-            if token==think_close:thinking=False
-        else:
-            name=role
-        codes.append(ROLE_CODES.index(name))
-    return codes
 
 
 MERGE_KEY_TOKENS = 64

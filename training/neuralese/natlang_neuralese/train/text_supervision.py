@@ -10,6 +10,40 @@ import re
 from array import array
 
 ROLE_CODES = ('other', 'system', 'user', 'tool', 'assistant_reasoning', 'assistant_reply')
+
+
+def chat_roles(ids, *, start_id, role_ids, think_open=None, think_close=None,
+               tool_response_prefixes=()):
+    """Per-token chat roles, including reasoning spans and tool-response bodies."""
+    codes = array('B')
+    role = 'other'
+    thinking = False
+    header = False
+    for position, token in enumerate(ids):
+        if token == start_id:
+            role = 'other'
+            thinking = False
+            header = True
+            codes.append(0)
+            continue
+        if header:
+            role = role_ids.get(token, 'other')
+            header = False
+            if role == 'user' and any(
+                    len(prefix) > 0 and position + 1 + len(prefix) <= len(ids) and
+                    all(ids[position + 1 + j] == value for j, value in enumerate(prefix))
+                    for prefix in tool_response_prefixes):
+                role = 'tool'
+        if role == 'assistant':
+            if token == think_open:
+                thinking = True
+            name = 'assistant_reasoning' if thinking else 'assistant_reply'
+            if token == think_close:
+                thinking = False
+        else:
+            name = role
+        codes.append(ROLE_CODES.index(name))
+    return codes
 TEXT_POSITION_WEIGHT_POLICY = {
     'all_positions_fraction': .5,
     'observed_suffix_fraction': .5,
