@@ -1,5 +1,41 @@
 # Continuation guide — updated 2026-10-14
 
+## 01:46 CEST: deep pseudocode source quality and live typed-handoff findings
+
+The owner reaffirmed that the **new application-scale cohort** should be deep,
+structured natural-language pseudocode, not a file-count exercise or semantic
+decisions hidden in crisp code. Each `.nl` branch names its candidate set,
+source-grounded distinction, typed state delta, child result consumed, and next
+branch/structural termination. Keep the older valid shallow 220 cases eligible
+as useful simpler data. `plans/semantic_stack/PROJECT_SOURCE_CONTRACT.md` is the
+review standard. Turn Window's authored timing/reference slice and Cave v3's
+conditional-binding correction are on main through `e52453a0`; Procedure
+Compiler's full typed checker is still being qualified. No new app has live
+training admission yet.
+
+Ecology typed handoff v12 (`93b57dd2`, cleanup `694226e6`, independent review
+`407a18ad`) passes 23/23 source-reference replays. A pinned Luna diagnostic
+under `natlang-pop-semstack-v12-ecology.service` was stopped after its question
+was answered at 50 turns: the model made per-record scoped NL calls, preserved
+six source-linked `InteractionAssertion` results, and passed typed StageInput2
+and StageInput3 without raw records. It then misclassified two explicit claims
+as unresolved because Stage1 inherited a signed-causality rule that belongs to
+Stage2; Stage2 duplicated one relation by borrowing another assertion's edge;
+Stage3's broad array-valued judgment failed and Stage4 received no assessment.
+The partial is diagnostic evidence only, with no output row or model-negative
+label. v13 should separate extraction from sign judgment, own one edge decision
+per assertion, and use one scoped edge-to-assessment judgment at Stage3. These
+catalog examples are medium-depth typed-handoff practice; do not mistake them
+for the larger authored app cohort. Cave v3 sealed one-case diagnostic is next
+for the low-priority ledger if memory admits.
+
+Pop's step15000 prompt A/B remains on GPU. Program-header pass has completed
+and its noise repeat is underway; full-prompt pass has not finished. Temporary
+CUDA allocation warnings were observed under four concurrent task workers,
+but no OOM-derived result is claimed. Inspect exact outcome rows and traces for
+both arms before training-lineage decisions. The full `check-main` ledger waiter
+has still not executed; quick gate passed after the latest merge/push.
+
 ## 01:35 CEST: QAD drift stop and matched GPU prompt diagnostic
 
 Pop QAD v14 direct SFT stopped automatically at step15600 on its declared
