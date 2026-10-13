@@ -1,5 +1,41 @@
 # Continuation guide — updated 2026-10-13
 
+## 22:39 CEST: s52034 prepared; fourth semantic diagnostic launched
+
+The Luna s52034 retry exposed one more assumption: `prepare` rejected a
+verified-row shard whenever reviewed holds made its row count smaller than
+the original build count. Commit `c4e89f74` centralizes the source report
+check: kept rows equal the verified count; original count equals kept rows
+plus documented `source_review_pending` failures; no held ID appears in the
+kept file; every other failure still aborts. The same-seed retry succeeded:
+854 verified source rows of 856, exactly two documented holds, 100
+source-disjoint selected cases across 18 families, including eight folder
+criteria reducers. Workers await RAM admission. This confirms the source
+recovery path end-to-end. The ordinary timer is paused again only while the
+semantic pilot occupies the low-priority slot.
+
+Full-size semantic pilot v3 found a third *builder* presentation bug: an
+authored parent step `Call inventoryLetters ...` was copied into the
+`inventoryLetters` child body, inducing a self-call. The exact v3 worker was
+stopped; its partial is bug evidence, not model-negative training data.
+Commit `3281393a` renders that step as an imperative child instruction and
+adds a static self-call scan. Full catalog scan and scripted model-visible
+`read_code`/nested-call preflight passed for corrected Astra and Sol chains.
+The v4 queue is freshly sealed on source v9 with the same screened 18; Pop
+paused the ordinary timer, stopped exact s52033 worker 05 with its partial,
+and launched `natlang-pop-luna-semstack-full-v4-w01.service` for two full-size
+cases. Review live model behavior and keep admission false until verified.
+
+Sol's `7b84aea4` expands all 100 programs into 24-record fixtures across
+28 distinct worlds, with shared split groups; 90 remain held pending
+independent semantic/oracle review and source replay. Astra is expanding its
+remaining designs; its first 13 are source-reviewed ready, and cross-review
+is being arranged. The 200-program authoring target is fulfilled, but 200
+generation-ready sources and accepted teacher trajectories are **not** yet
+fulfilled. DGX pushed corrected matched-token neuralese reader comparison
+(`cb05d0b9`); Pop merged it at `2f38d88d`. The active Pop LFM run uses a
+frozen runtime and is unaffected until its next declared handoff.
+
 ## 22:31 CEST: corrected semantic pilot live; Luna source rebuild repaired
 
 Semantic source commits `5129d407`, `93fad573`, `35be7422` and
