@@ -135,6 +135,11 @@ state plus exact verifiers. The rules:
    | Shared base recipes (`neuralese-direct-v*`, `line-parity.json`) | the machine that commits the change, one `decision` |
    | Corpus manifests | the manifest's `owner` field |
 
+   A new handoff recipe of a running lineage sets that line's `active` in
+   `line-parity.json` in the same commit; `check-main.sh --quick` then fails on
+   any setting the two lines' running chains do not share unless it is declared
+   there (owner, 2026-10-13; plans/neuralese/LINE_PARITY.md).
+
 6. **Decisions** stay as they were: one `decision` message per owner decision
    or shared semantic change that the other machine must adopt, pointing at
    the commit; the commit carries the detail.

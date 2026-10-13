@@ -835,7 +835,8 @@ Owner: "I want our recipe to progress for both LFM and Mellum ... with as much u
 - **Same recipe fields.** Both line recipes share every field (stages, data unions, objectives, QAT and nested
   treatment, evaluation cadence, task-success evaluation, gates, acceptance and the handoff criterion) except the
   differences `line-parity.json` declares, each fit-only or backbone-inherent with its reason. Historical one-offs of
-  a running lineage are listed there too and removed once both lines are back on the shared recipe.
+  a running lineage are dated `line_specific` entries there (reason, `date`, `expires`), removed once both lines are
+  back on the shared recipe.
 - **Same moment.** A line moves from direct to e2e when the shared `parent_readiness` of neuralese-e2e-v1 holds on
   its running direct phase (`python -m natlang_neuralese.train.e2e_acceptance readiness --recipe RECIPE
   --direct-stage DIR`): held CE plateau over the last 3 evaluations on one held set (at most 2% relative), no drift
@@ -847,7 +848,10 @@ Owner: "I want our recipe to progress for both LFM and Mellum ... with as much u
   mechanism (data continuation for an active phase, input change for an unstarted one).
 - **Checked in CI.** `tests/neuralese/test_line_parity.py` (in `scripts/check-main.sh --quick`) fails when a line
   recipe differs from the shared base outside the declared list, when a stage declares a recipe for only one line,
-  or when the lines' e2e acceptance or readiness criterion differ.
+  or when the lines' e2e acceptance or readiness criterion differ. It also resolves each line's running handoff chain
+  (`lines.<line>.active`) down to every leaf setting, so a key added to one line's handoff recipe alone fails at push
+  time with "<key> differs between lines (mellum=X, lfm=Y)" until it moves into the shared base or is declared
+  (owner 2026-10-13); a new handoff recipe updates `active` in the same commit.
 - **Changes land on both lines together.** A change to a shared component (nested family, QAT, objectives, data)
   updates the base or both line recipes in the same commit; agents working on one component (e.g. dgx-nested)
   coordinate through coord so neither line runs ahead.

@@ -8,8 +8,11 @@ How it is kept:
 - **Shared bases.** `recipes/neuralese-direct-v2.json` is the direct stage's shared base (data, context, monitor,
   cadence). The end-to-end stage's shared base is `stages.e2e.base` in `training/neuralese/line-parity.json`
   (data and parameters).
-- **Declared differences.** `training/neuralese/line-parity.json` lists each line's next-launch recipe and every
-  allowed difference (`key`, `kind` fit-only | backbone-inherent, `reason`).
+- **Declared differences.** `training/neuralese/line-parity.json` lists each line's next-launch recipe (`recipe`),
+  the leaf recipe of its running lineage (`active`), every allowed difference (`key`, `kind` fit-only |
+  backbone-inherent, `reason`), the lineage keys (identity of one run, not settings) and dated `line_specific`
+  entries for one-offs of a running lineage (`key`|`keys`, `reason`, `date`, `expires`, optional `recipe`); an
+  expired entry fails until it is resolved or renewed with a new reason.
 - **Exact check.** `natlang_neuralese.train.line_parity` (in `scripts/check-main.sh --quick`, via
   `tests/neuralese/test_line_parity.py`) resolves each line's effective configuration and fails on any undeclared
   difference, on a declared difference that no longer differs, and on unequal supervision

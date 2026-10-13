@@ -82,3 +82,63 @@ def test_e2e_lines_share_acceptance_and_readiness():
     config = {**config, 'parent_readiness.held_ce_plateau.max_relative_improvement': 0.1}
     errors, _ = line_parity.compare(parity, 'e2e', 'lfm', kind, config)
     assert len(errors) == 1 and 'parent_readiness' in errors[0]
+
+
+def _repo_copy(tmp_path):
+    import shutil
+    repo = Path(__file__).resolve().parents[2]
+    (tmp_path / 'training' / 'neuralese').mkdir(parents=True)
+    shutil.copytree(RECIPES, tmp_path / 'training' / 'neuralese' / 'recipes')
+    shutil.copy(repo / 'training' / 'neuralese' / 'line-parity.json', tmp_path / 'training' / 'neuralese')
+    shutil.copy(repo / 'training' / 'neuralese_corpora.json', tmp_path / 'training')
+    return tmp_path
+
+
+def test_both_lines_declare_their_running_chain():
+    parity = line_parity.load_parity()
+    for line in line_parity.LINES:
+        assert parity['stages']['direct']['lines'][line].get('active'), line
+
+
+def test_a_key_added_to_one_running_chain_fails(tmp_path):
+    """Owner 2026-10-13: a setting Pop added only to its running LFM handoff chain (task_eval.identical_turn_limit)
+    went unnoticed because only next-launch recipes were compared. The running chains are checked too."""
+    repo = _repo_copy(tmp_path)
+    parity_file = repo / 'training' / 'neuralese' / 'line-parity.json'
+    parity = json.loads(parity_file.read_text())
+    leaf = line_parity._recipe_file(parity['stages']['direct']['lines']['lfm']['active'], repo)
+    recipe = json.loads(leaf.read_text())  # one more handoff setting, on the LFM chain only
+    recipe['overrides'].setdefault('stage_parameter_defaults', {}).setdefault('neuralese_direct', {}).setdefault(
+        'task_eval', {})['identical_turn_limit'] = 3
+    leaf.write_text(json.dumps(recipe))
+    errors = line_parity.check(repo)
+    assert len(errors) == 1, errors
+    assert errors[0].startswith(recipe['id'] + ': direct: stages.*.parameters.task_eval.identical_turn_limit differs '
+                                'between lines (mellum=')
+    assert 'lfm=3' in errors[0] and 'move it to the shared recipe or declare it in line-parity' in errors[0]
+
+
+def test_every_leaf_setting_is_compared():
+    kind, config = line_parity.effective_config({'recipe': parity_active('lfm')})
+    assert any(key.startswith('runtime.package_code.') for key in config)
+    assert 'outputs.directory' in config
+
+
+def parity_active(line):
+    return line_parity.load_parity()['stages']['direct']['lines'][line]['active']
+
+
+def test_line_specific_entries_expire():
+    import datetime
+    errors = line_parity.check(today=datetime.date(2099, 1, 1))
+    assert errors and all('expired on' in e for e in errors)
+
+
+def test_line_specific_entries_need_a_date_and_expiry(tmp_path):
+    repo = _repo_copy(tmp_path)
+    parity_file = repo / 'training' / 'neuralese' / 'line-parity.json'
+    parity = json.loads(parity_file.read_text())
+    parity['line_specific'].append({'stage': 'direct', 'lines': ['lfm'], 'key': 'parameters.seed', 'reason': 'x'})
+    parity_file.write_text(json.dumps(parity))
+    with pytest.raises(ValueError, match='expires'):
+        line_parity.load_parity(repo)

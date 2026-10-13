@@ -261,7 +261,7 @@ def compare(parity, stage, line, kind, config, repo=None, recipe_id=None, other=
                 used.add(id(specific))
                 continue
             values = (config.get(key, '<absent>'), base.get(key, '<absent>'), _value(other[1], key) if other else None)
-            undeclared.setdefault((STAGE_PREFIX.sub('', key), json.dumps(values)), []).append((key, values))
+            undeclared.setdefault((STAGE_PREFIX.sub('', key), json.dumps(values[:2])), []).append((key, values))
             continue
         used.add(id(entry))
         if entry.get('check') == 'tokenizer_twin' and not _twin_registered(base.get(key), config.get(key), repo):
@@ -272,7 +272,7 @@ def compare(parity, stage, line, kind, config, repo=None, recipe_id=None, other=
             errors.append(f'{stage}/{line}: {key} must be a registered tokenizer twin (tokenizer_twin_of) of the '
                           f'shared base\'s input {base.get(key)}')
     for (bare, _), found in undeclared.items():
-        key, (value, base_value, other_value) = found[0]
+        key, (value, base_value, other_value) = next((f for f in found if f[1][2] != '<absent>'), found[0])
         key = key if len(found) == 1 else 'stages.*.' + bare
         errors.append(f'{stage}: ' + difference_message(key, line, value, base_value,
                                                         (other[0], other_value) if other else None))
