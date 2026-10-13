@@ -36,7 +36,10 @@ mechanism and family as well as total accepted count.
 
 First cycle outcome (2026-10-13): Luna completed all nine handoffs, including
 one resultless request-budget retry. Three continuations passed the exact task
-oracle; six failed the answer check. Review packaging yielded 104 native turn
+oracle; five failed the answer check and one quiesced without an exact answer.
+The alternate-teacher selector (`select_repair_fallback.py`) admits only the five
+exact-answer rejections to its next queue, never the quiesced/resource case as a
+model-negative. Review packaging yielded 104 native turn
 candidates and two causally verified same-state preference pairs, all explicitly
 **not admitted**. The accepted actor-route continuation alone took 89 turns;
 its exact final answer is not evidence that every intermediate decision is a
