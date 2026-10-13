@@ -1,0 +1,153 @@
+{
+  "schema": "natlang.independent-integrated-source-review/1",
+  "reviewer": {
+    "agent": "/root/semantic_slate_astra",
+    "coord_identity": "pop-semantic-astra",
+    "role": "independent integration reviewer; Astra author; independent Sol source reviewer"
+  },
+  "reviewed_at": "2026-10-13T20:55:00.639703+00:00",
+  "git_head": "df4216789e4bbf76844f55ed9c0a1a45b156c875",
+  "artifacts": {
+    "plans/semantic_stack/astra-programs.json": "f3e55a8b1327f18a2ad8703ba51e60c5fc35d8b9697b8b666431ae061d9a4359",
+    "training/semantic_stack/sol_programs.json": "057ef22662dd8835b256d6e1be5c252a02fedd2f76bcf29a994c30139ac2b5b9",
+    "ts-host/scripts/inline-curriculum/build-semantic-stack-programs.mjs": "80ae81e8fcecc3d74a583de4a8d3f73f05483faaa0dc88d6d5bb92aedd2a2215",
+    "plans/semantic_stack/SOL_INDEPENDENT_REVIEW_ASTRA.json": "c3079215033a7434ad9bd9e998cc4655e9db33228618bc84d68e0ffa03c78247",
+    "plans/semantic_stack/ASTRA_INDEPENDENT_REVIEW_SOL.json": "f738b90f720e9428b09d78ff78614cc28ea8e872d5e9736d7bde6c768c48cc4b"
+  },
+  "scope": "source preservation, evidence-world grouping, emitted output grading, typed semantic interfaces, grouped live diagnostic observations",
+  "training_admission": false,
+  "live_variant_qualified": false,
+  "world_audit": {
+    "programs": 220,
+    "astra_programs": 120,
+    "astra_worlds": 54,
+    "sol_programs": 100,
+    "sol_worlds": 28,
+    "independent_worlds": 82,
+    "astra_min_evidence_records": 24,
+    "sol_evidence_records_per_world": 24,
+    "sol_query_files_excluded_from_world_content_equality": true,
+    "same_evidence_world_split_across_groups": false,
+    "cross_provider_exact_evidence_collision": false,
+    "held_split_allocation_verified": false,
+    "note": "Group keys consistently bind questions sharing evidence; this is not a claim that future train/held allocation already happened."
+  },
+  "replays": [
+    {
+      "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/grouped-record-candidates-v6b/source-review.json",
+      "sha256": "95e88f5a8c69b84823d8ac32b8a3c3d2a9170c0316ebe0c2a4f5d38e71e05ca1",
+      "programs": 220,
+      "candidates": 23,
+      "passed": 23,
+      "source_sha256": "10e2805060770c036a4000f5c7984de41b7de13be0af4f8f5a7d3f62c55d1d69",
+      "teacher_observations": 0
+    },
+    {
+      "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/astra-independent-review-sol/source-replay-v1/source-review.json",
+      "sha256": "fc17384fea406dd5732646128a28427de8c49300d6ccd00122ef04105c7e5efc",
+      "programs": 220,
+      "candidates": 130,
+      "passed": 130,
+      "source_sha256": "3033c307a843a6bffdf487b4bd897df8c0f284563f36fbfea736655b4eebbfdd",
+      "teacher_observations": 0
+    }
+  ],
+  "findings": [
+    {
+      "id": "AINT-01",
+      "severity": "blocking_before_broad_collection",
+      "status": "open",
+      "title": "Authored semantic equality is dropped by source adapter",
+      "evidence": "grouped-record-candidates-v6b has no semantics.oracle on any of23rows; checkOracle defaults exact. Reversing sol001.correctedClaims or astra-archives-02.clusters preserves the declared set meaning but returned accepted:false, level:exact in actual runtime comparator calls.",
+      "required": "Emit field-specific unordered paths; preserve ordered chronology/path arrays; judge prose and alternative witnesses against source constraints. Exercise positive permutations and negative omitted/extra/wrong-ID mutations."
+    },
+    {
+      "id": "AINT-02",
+      "severity": "source_validity_limit",
+      "status": "documented",
+      "title": "Scripted reference replay bypasses named stages",
+      "evidence": "reference() reads files through scoped literal then synthesizer child returns authored expected; no named helper chain is invoked. Passing replay verifies plumbing/typing/readability and oracle transport, not independent oracle truth or semantic topology.",
+      "required": "Retain independent source-oracle review receipts and live active-parent/stage-contribution checks."
+    },
+    {
+      "id": "AINT-03",
+      "severity": "model_facing_contract_debt",
+      "status": "open",
+      "title": "Sol authored typed witness/frontier structures weakened",
+      "evidence": "runtimeTypeFile replaces RelationDecision proposition/relatedIds/witnesses{path,quote} with status:string/evidenceIds/detail, WorkItem candidateIds/requiredProposition with kind, and domain bundle fields with unknown.",
+      "required": "Preserve useful typed structures or explicitly justify translated contract and measure it; retain exact quote/path witness checks."
+    },
+    {
+      "id": "AINT-04",
+      "severity": "model_facing_contract_debt",
+      "status": "open",
+      "title": "Astra individual-record literal ID alias is implicit",
+      "evidence": "Authored local argument is {id,text}; emitted helper item is EvidenceRecord{path,text}, while instructions say pass current item. Grouped presentation omits that authored signature and avoids this particular mismatch.",
+      "required": "Render explicit id/path adapter or use one record type consistently, then measure changed presentation."
+    },
+    {
+      "id": "AINT-05",
+      "severity": "live_quality_limit",
+      "status": "open",
+      "title": "Deep forwarding calls do not establish meaningful stage contributions",
+      "evidence": "Partial grouped v6b /8 buildVoyages forwards unchanged stageFindings; /9 resolveTemporalClaims creates an unused Neuralese literal and forwards unchanged. inventoryLetters and interpretDatePhrase do show meaningful record-local NL chronology interpretation.",
+      "required": "Inspect sealed trace for distinct named-stage decisions or classify forwarding as plumbing. Do not count unused literals as semantic work."
+    },
+    {
+      "id": "AINT-06",
+      "severity": "live_quality_limit",
+      "status": "pending_sealed_trace",
+      "title": "Grouped per-record coverage not yet sealed",
+      "evidence": "Static types require one finding per record but arrays do not enforce bijection or real IDs. Partial trace preserves record02/03/05/06 paths and correct local relations; results.jsonl was empty at inspection.",
+      "required": "For each batch enforce exact sourcePath bijection, evidence ID resolution, and grounded unresolved claims; inspect whole24-record result and active call parents."
+    }
+  ],
+  "false_negative_reproductions": [
+    {
+      "program": "sol-001",
+      "path": "/correctedClaims",
+      "mutation": "reverse set order",
+      "semantic_equivalent": true,
+      "runtime_accepted": false
+    },
+    {
+      "program": "astra-archives-02",
+      "path": "/clusters",
+      "mutation": "reverse outer cluster set order",
+      "semantic_equivalent": true,
+      "runtime_accepted": false
+    }
+  ],
+  "grouped_variant": {
+    "source": "grouped-record-candidates-v6b",
+    "presentation": "typed folders containing six records in first priority case; not a global fixed-size rule",
+    "source_sha256": "10e2805060770c036a4000f5c7984de41b7de13be0af4f8f5a7d3f62c55d1d69",
+    "first_case": "astra-archives-01",
+    "folders": 4,
+    "records_per_folder": [
+      6,
+      6,
+      6,
+      6
+    ],
+    "partial_trace_only": true,
+    "observed_meaningful_local_relations": [
+      "V1 departure precedes ice landing",
+      "V1 ice landing precedes repair",
+      "V1 loading precedes departure",
+      "V1 loading precedes customs inspection precedes departure"
+    ],
+    "sealed_live_result_reviewed": false
+  },
+  "limitations": [
+    "Astra source-oracle independence comes from Sol receipt; this reviewer does not self-certify authored gold.",
+    "All220 source design and82world identities inspected; current sealed replay evidence covers130 distinct programs, not220.",
+    "Live trace observation is partial and diagnostic, not a trajectory admission or presentation qualification."
+  ],
+  "signature": {
+    "kind": "reviewer-attributed-content-digest",
+    "signed_by": "/root/semantic_slate_astra",
+    "payload_sha256": "fe3fea36bc14df52ca9f63d2456aeeaf952cafefc900c1446e513ebcb97d624b",
+    "canonicalization": "UTF-8 JSON sorted keys compact separators, ensure_ascii=false, excluding signature; attribution is agent review, not a private-key digital signature"
+  }
+}
