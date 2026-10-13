@@ -263,6 +263,7 @@ function checkedStageSpecs(entry, steps) {
     }
     stage.numbered_plan = variant.numbered_plan;
     stage.scoped_literal_plan = [variant.literal_unit, variant.capture_policy,
+      ...paragraphs(variant.idiom_preconditions),
       variant.direct_await_idiom, variant.no_op_criterion, ...variant.invariants];
     stage.no_op_policy = variant.no_op_criterion;
   }
