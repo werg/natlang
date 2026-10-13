@@ -36,6 +36,8 @@ def world(row):
 def source_bindings(manifest):
     if 'source_paths' in manifest:
         return {Path(path): digest for path, digest in manifest['source_paths'].items()}
+    if manifest.get('schema') == 'natlang.recovery-teacher-campaign/1':
+        return {Path(manifest['source']): manifest['source_sha256']}
     return {Path(manifest['source_path']): manifest['source_sha256']}
 
 
