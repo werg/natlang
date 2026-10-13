@@ -33,7 +33,14 @@
      "parameters": {
       "epochs": 1.0,
       "train_target_tokens": 31744,
-      "train_min_context_tokens": 16384
+      "train_min_context_tokens": 16384,
+      "recovery_selection": {
+       "path": "runs/natlang-recovery-selection-r3-20261013-v1/recovery-selection.jsonl",
+       "sha256": "dae1c4567e34c25ac72ff103cc1ab09713e681ba75424b7156f113a0d80bf6c9",
+       "rendering": "whole-trajectory",
+       "rules": ["failed", "empty", "identical"]
+      },
+      "cohort_repeats": {"recovery": 2}
      }
     }
    }
@@ -44,7 +51,14 @@
      "epochs": 1.0,
      "train_target_tokens": 31744,
      "merge_prefix_rows": true,
-     "train_min_context_tokens": 16384
+     "train_min_context_tokens": 16384,
+     "recovery_selection": {
+      "path": "runs/natlang-recovery-selection-r3-20261013-v1/recovery-selection.jsonl",
+      "sha256": "dae1c4567e34c25ac72ff103cc1ab09713e681ba75424b7156f113a0d80bf6c9",
+      "rendering": "program-header",
+      "rules": ["failed", "empty", "identical"]
+     },
+     "cohort_repeats": {"recovery": 2}
     }
    }
   },
