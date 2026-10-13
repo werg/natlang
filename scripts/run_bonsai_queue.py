@@ -28,6 +28,13 @@ OUTPUT_ACCOUNTING_VERSION = 'natlang.supervisor_output_accounting/2'
 OBSERVATION_POLICY_VERSION = 'natlang.collection_observations/1'
 
 
+def jsonl_lines(path):
+    # Only LF delimits JSONL. str.splitlines() also splits valid JSON strings
+    # containing U+2028, which occurs in several curriculum source datasets.
+    with Path(path).open(encoding='utf-8') as stream:
+        yield from stream
+
+
 class ProviderObservations:
     """Read only this child's appended, content-free provider events. Log writes are not progress."""
 
@@ -492,7 +499,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         controls = json.loads(provider_request_config.read_text())
         if not isinstance(controls, dict):
             raise ValueError('provider request config must be a JSON object')
-    entries = [json.loads(line) for line in queue.read_text().splitlines() if line.strip()]
+    entries = [json.loads(line) for line in jsonl_lines(queue) if line.strip()]
     # Validate every batch before starting a collector, including later queue entries.
     for entry in entries:
         count = entry.get('count', 1)
@@ -523,9 +530,9 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
     attempted = set()
     failure_streak, next_allowed_at = 0, 0
     if journal.exists():
-        attempted = {json.loads(line)['key'] for line in journal.read_text().splitlines()
+        attempted = {json.loads(line)['key'] for line in jsonl_lines(journal)
                      if line.strip() and json.loads(line).get('event') == 'finish'}
-        for line in journal.read_text().splitlines():
+        for line in jsonl_lines(journal):
             row = json.loads(line)
             if row.get('event') == 'finish' and not row.get('batch_key'):
                 failure_streak = 0 if (row['status'] in {'complete', 'complete_with_skips', 'skipped', 'repetition'} or
@@ -758,7 +765,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
     # queue whose exact outputs (or explicit source-review skips) are closed.
     latest = {}
     if journal.exists():
-        for line in journal.read_text().splitlines():
+        for line in jsonl_lines(journal):
             if line.strip():
                 event = json.loads(line)
                 if event.get('event') == 'finish':

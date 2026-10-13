@@ -17,7 +17,7 @@ from natlang_neuralese.common.hashing import sha256_file_hex as sha256
 
 
 def rows(path):
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return list(iter_rows(path))
 
 
 def iter_rows(path):

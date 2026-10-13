@@ -55,7 +55,10 @@ REPAIR_EVERY_SEEDS = 8
 
 
 def rows(path):
-    return [json.loads(s) for s in path.read_text().splitlines() if s.strip()]
+    # JSONL uses LF as its record boundary. str.splitlines() also splits on
+    # U+2028 inside a valid JSON string (present in the source datasets).
+    with path.open(encoding='utf-8') as stream:
+        return [json.loads(line) for line in stream if line.strip()]
 
 
 def world(row):
@@ -366,7 +369,7 @@ def prior_groups(current):
             {Path(item['path']).parts[-3]: item['sha256'] for item in manifest['inputs']}
             != TARGET_GROUP_INPUT_HASHES):
         raise ValueError('target r3 source-group exclusion index is stale')
-    groups = {json.loads(line) for line in TARGET_GROUP_INDEX.read_text().splitlines()}
+    groups = {row for row in rows(TARGET_GROUP_INDEX)}
     old = Path('/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1')
     sources = list(old.glob('provider-luna-held-shape-remediation*/source/*.ir.jsonl'))
     sources += list(BASE.glob('provider-luna-held-shapes-s*-v1/source/*.ir.jsonl'))

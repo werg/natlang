@@ -66,6 +66,12 @@ from natlang_neuralese.common.hashing import sha256_file_hex as file_sha, sha256
 from natlang_neuralese.common.jsonio import canonical_json_str as canonical  # noqa: E402
 
 
+def jsonl_lines(path: Path):
+    """Read LF-delimited records; Unicode U+2028 inside JSON strings is data."""
+    with path.open(encoding='utf-8') as stream:
+        yield from stream
+
+
 # ---------------------------------------------------------------- selection
 
 def normalize_text(text: str) -> str:
@@ -119,7 +125,7 @@ def reserved_needles(path: Path) -> list[tuple[str, str]]:
     wanted = {sid for r in reservations['records'] for sid in r.get('source_ids') or []}
     source = ROOT / reservations['source']['path']
     needles = []
-    for line in source.read_text().splitlines():
+    for line in jsonl_lines(source):
         task = json.loads(line)
         if task.get('id') in wanted and isinstance(task.get('state'), str):
             text = reserved_normalize(task['state'])
@@ -405,7 +411,7 @@ def registered_candidate_selection_admission(corpus_id, sources):
             receipt.get('selection_review_pin_correction_sha256') != admission.get('selection_review_pin_correction_sha256')):
         raise ValueError('shared candidate packet verifier returned different pins')
     turns_path = corpus_root / 'turns.jsonl'
-    turn_rows = [json.loads(line) for line in turns_path.read_text().splitlines() if line.strip()]
+    turn_rows = [json.loads(line) for line in jsonl_lines(turns_path) if line.strip()]
     turns_by_id = {row['id']: row for row in turn_rows}
     if len(turns_by_id) != len(turn_rows):
         raise ValueError('registered candidate-selection turn IDs are not unique')
@@ -513,7 +519,7 @@ def select(args, shard_dir: Path):
                     include.add(item.get('id'))
                     include.update(item.get('source_record_ids') or [])
     for path in args.exclude_programs or []:
-        for line in path.read_text().splitlines():
+        for line in jsonl_lines(path):
             if line.strip():
                 item = json.loads(line)
                 exclude.setdefault(item['id'], item.get('reason_code') or 'held_case_excluded')
@@ -1042,7 +1048,7 @@ def main(argv=None):
     for path in a.pieces:
         explicit_piece_bindings.append({'path': str(path), 'bytes': path.stat().st_size,
                                         'sha256': file_sha(path)})
-        for line_number, line in enumerate(path.read_text().splitlines(), 1):
+        for line_number, line in enumerate(jsonl_lines(path), 1):
             if not line.strip():
                 continue
             row = json.loads(line)
@@ -1087,7 +1093,7 @@ def main(argv=None):
     shards = sorted(f.stem for f in shard_dir.glob('*.jsonl'))
     decision_exclude = set()
     for path in a.decision_exclude_ids:
-        decision_exclude.update(json.loads(line)['id'] for line in path.read_text().splitlines() if line.strip())
+        decision_exclude.update(json.loads(line)['id'] for line in jsonl_lines(path) if line.strip())
     full_set = None if full_programs is None else set(full_programs)
     jobs = [(str(shard_dir / f'{s}.jsonl'), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
              a.program_header_as_full, full_set, tuple(a.renderings))
@@ -1129,7 +1135,7 @@ def main(argv=None):
         render_omissions[f"{res['tokenizer']}/full/outside_warmup_sample"] += res.get('full_outside_warmup_sample', 0)
     for name in tokenizers:
         for f in sorted((out / 'work' / 'omissions' / name).glob('*.jsonl')):
-            for line in f.read_text().splitlines():
+            for line in jsonl_lines(f):
                 o = json.loads(line)
                 render_omissions[f"{name}/{o.get('rendering')}/{o['reason'].split(':', 1)[0]}"] += 1
     with open(out / 'selection-omissions.jsonl', 'w') as f:

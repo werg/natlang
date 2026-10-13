@@ -1,5 +1,34 @@
 # Continuation guide — updated 2026-10-13
 
+## 20:15 CEST: live training and Luna source reader repair
+
+Pop QAD LFM direct SFT v13 is active past step 10050. The step-10000 held
+gold CE was 0.645671 with accuracy 0.86376 (step 9000: 0.658766/0.85948);
+task success next runs at step 12000. The same-engine full-prompt held evals at
+steps 8000 and 9000 both remained 0/16 with ten exact loops. The train/eval
+prompt gap (mostly program-header supervision versus full serving), the
+training-only position-zero `<|neuralese|>` marker, and first-token reasoning
+likelihood remain open. No reasoning loss mask was found. DGX owns the
+controlled same-checkpoint A/B; its first run was invalid (full cgroup OOM,
+program-header greedy on stale code). Do not use it to select a model or
+approach. Current v13 declares 16,384 minimum training context tokens, so
+the earlier 1,024-context window bug is fixed for this run.
+
+Luna s52028 is closed. Large CoEdIT `folder_edit` teacher runs with hundreds
+of file operations failed semantic file checks or exhausted requests; exact
+static replay remains separately admitted. The next source mix replaces that
+teacher slot with verifiable `folder_extract`. Campaign s52029 generated 870
+verified source cases and selected 106 source-disjoint cases in 18-item
+worker queues. Its first replenisher pass failed because Python
+`str.splitlines()` treats U+2028 inside a valid JSON string as a record break;
+the source has 870 LF records but 998 `splitlines()` segments. LF-stream
+readers now fix the replenisher, teacher queue, accepted-parent collector and
+native-turn renderer. The resumed replenisher launched workers 01-04;
+workers 05-06 await RAM admission behind high-priority training and retry via
+the ten-minute timer. The first worker result completed; review new
+`folder_extract` outputs before training admission. Full shared check remains
+pending on DGX; Pop quick check passed.
+
 ## 19:25 CEST: QAD continuation and reasoning/template dragnet
 
 Pop stopped the exact v12 unit after its scheduled step-9240 checkpoint; the
