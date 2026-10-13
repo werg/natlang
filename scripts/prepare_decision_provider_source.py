@@ -114,7 +114,10 @@ def read_prior_cases(prior_root):
     # Campaigns may put reservations under lane-* directories. Scan all
     # provider-owned cases.jsonl files so a lane reservation cannot disappear
     # merely because it is nested one level deeper than a root source packet.
-    files = sorted({path.resolve() for path in root.glob('provider-*/**/cases.jsonl')})
+    # Keep the provider-owned logical path for reservation disposition checks.
+    # Some older campaign files are symlinks into artifact storage; resolving
+    # them loses the provider-* ancestor even though they reserve the same IDs.
+    files = sorted({path.absolute() for path in root.glob('provider-*/**/cases.jsonl')})
     program_ids, program_groups = set(), set()
     source_ids, source_groups = set(), set()
     manifests = []
