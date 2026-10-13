@@ -3410,3 +3410,24 @@ For that one campaign, we verified every other pin and resumed its exact
 recorded `run_bonsai_queue.py` command under the memory ledger. New plans use
 the fixed wrapper. A future campaign should pin an immutable wrapper snapshot
 if it must survive changes to the live wrapper code.
+# 2026-10-13 — Restore four-family free-provider decision intake on Pop
+
+DGX registered the immutable 27-dataset decision-source catalog as
+`natlang-decision-sources-catalog-20261004`. Pop synced and verified all 227
+files, then placed the physical catalog at
+`/srv/storage/natlang-development-data/data/decision-sources` behind the
+registered `data/decision-sources` symlink. A local machine profile points
+`data_hdd` to `/srv/storage`. The previously failed builder now produced 3,200
+train decision cases: 800 each from AG News, BoolQ, BoardgameQA, and PubMedQA.
+
+`prepare_decision_provider_source.py` had silently restricted its scope to
+multiple-choice rows even though the provider pool supports binary decisions.
+It now validates `noul` targets and selects them alongside choice cases. The
+prepared pilot has 512 source-disjoint cases, 128 per family; 23 explicit
+source-quality holds and 12 overlong states were omitted with receipts.
+Training admission remains false. Gemini's running CLINC batch14 is left to
+finish; its replenishment timer is paused so the 64-case mixed-family live
+pilot takes the next provider slot. Resume a mixed-family queue after reviewing
+pilot response validity and quality, and avoid returning to uniform CLINC-only
+replenishment by accident. The 800-case AG News-only preparation and the
+three-family preparation were exact subsets or superseded and were deleted.

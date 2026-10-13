@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a bounded, provenance-pinned subset of existing typed choice cases.
+"""Prepare a bounded, provenance-pinned subset of existing typed decision cases.
 
 This script only prepares source inputs. It does not call a provider, launch a
 worker, or grant training admission. Original case bytes/row hashes remain
@@ -9,6 +9,7 @@ model-visible field. All filtering is represented in omissions.jsonl.
 import argparse
 import collections
 import json
+import math
 from pathlib import Path
 import sys
 
@@ -336,7 +337,8 @@ def build(args):
             family = case.get('family')
             if isinstance(family, str):
                 observed_families.add(family)
-            if family not in family_set or case.get('role') != 'train' or case.get('kind') != 'choice':
+            kind = case.get('kind')
+            if family not in family_set or case.get('role') != 'train' or kind not in ('choice', 'noul'):
                 continue
             source_scope_rows += 1
             source_row_keys[case_id] = (case.get('group'), case.get('role'), row_sha)
@@ -371,16 +373,22 @@ def build(args):
             elif len(state) > args.max_state_chars:
                 reasons.append({'code': 'state_exceeds_max_chars', 'state_chars': len(state),
                                 'max_state_chars': args.max_state_chars})
-            if not isinstance(options, list) or any(not isinstance(option, str) for option in options):
-                reasons.append({'code': 'source_quality_invalid_options'})
-            elif len(options) < 2 or (args.max_options is not None and len(options) > args.max_options):
-                reasons.append({'code': 'option_count_out_of_range', 'option_count': len(options),
-                                'min_options': 2, 'max_options': args.max_options,
-                                'max_limit_kind': 'explicit_operator_limit' if args.max_options is not None else None})
-            elif len(set(options)) != len(options):
-                reasons.append({'code': 'source_quality_duplicate_options'})
-            if not isinstance(case.get('answer'), str) or (isinstance(options, list) and case.get('answer') not in options):
-                reasons.append({'code': 'source_quality_answer_not_declared_option'})
+            if kind == 'choice':
+                if not isinstance(options, list) or any(not isinstance(option, str) for option in options):
+                    reasons.append({'code': 'source_quality_invalid_options'})
+                elif len(options) < 2 or (args.max_options is not None and len(options) > args.max_options):
+                    reasons.append({'code': 'option_count_out_of_range', 'option_count': len(options),
+                                    'min_options': 2, 'max_options': args.max_options,
+                                    'max_limit_kind': 'explicit_operator_limit' if args.max_options is not None else None})
+                elif len(set(options)) != len(options):
+                    reasons.append({'code': 'source_quality_duplicate_options'})
+                if not isinstance(case.get('answer'), str) or (isinstance(options, list) and case.get('answer') not in options):
+                    reasons.append({'code': 'source_quality_answer_not_declared_option'})
+            else:
+                answer = case.get('answer')
+                if not (isinstance(answer, bool) or
+                        (isinstance(answer, (int, float)) and math.isfinite(answer) and 0 <= answer <= 1)):
+                    reasons.append({'code': 'source_quality_invalid_binary_target'})
             for key in ('id', 'group', 'source', 'question'):
                 if not isinstance(case.get(key), str) or not case[key]:
                     reasons.append({'code': f'source_quality_missing_{key}'})
@@ -415,7 +423,7 @@ def build(args):
                          if any(not hold['canonical_policy'] for hold in quality_holds[item_id]['holds'])}
     stale_holds = sorted(optional_hold_ids - seen_quality_hold_ids)
     if stale_holds:
-        raise ValueError('source-quality hold receipt contains item IDs not found in the requested train choice scope: '
+        raise ValueError('source-quality hold receipt contains item IDs not found in the requested train decision scope: '
                          + ', '.join(stale_holds))
 
     selected = []
@@ -521,7 +529,7 @@ def build(args):
             'max_options': args.max_options,
             'option_count_policy': ('explicit operator limit applied; this is a selection limit, not a data-quality judgment' if args.max_options is not None else
                                     'no upper option-count source filter; exact rendered visibility/replay and the live provider context budget are checked downstream'),
-            'required_role': 'train', 'required_kind': 'choice',
+            'required_role': 'train', 'required_kinds': ['choice', 'noul'],
             'disjointness': 'case IDs and source groups are checked against every cases.jsonl recursively under prior-root/provider-* and against the selected rows',
             'preservation': 'selected source answers, IDs, groups, and original row hashes are preserved; only explicitly derived shared criteria may be added to prepared model input rows',
             'order': 'source file order within each family, selected in repeated round-robin passes'

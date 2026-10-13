@@ -1,5 +1,30 @@
 # Continuation guide — updated 2026-10-13
 
+## 16:33 CEST: QAD recovery handoff and mixed free-provider intake
+
+Pop v12 (`natlang-pop-qad-broad-main-v12.service`) accepted the checkpoint-safe
+code/windowing handoff from v11 at update 7014. The inherited shared recipe adds
+the pinned r3 recovery selection (cohort repeat 2) and full-system-prompt task
+evaluation. It preserved the optimizer/RNG state and resumed GPU updates beyond
+7100. The one-time window rebuild reread about 40 GB from the 6.2 GB text
+corpus and left the GPU idle for roughly 12 minutes; investigate reuse of
+validated/tokenized windows at later handoffs. The old step-7000 task evaluation
+was stopped after 8/16 cases at the durable checkpoint; the next cadence uses
+the correct full prompt. Held CE at step7000 was 0.698; response KL 1.008 was a
+warning, below the 1.5 stop threshold.
+
+DGX's catalog `natlang-decision-sources-catalog-20261004` is verified on Pop
+(227 files, 1.17 GB), physically on `/srv/storage` behind `data/decision-sources`.
+The refreshed decision source has 3,200 train cases across AG News, BoolQ,
+BoardgameQA, and PubMedQA. Shared preparation now includes binary `noul` cases;
+the 512-case candidate set has 128 per family, with 23 source holds and 12
+overlong states omitted. Gemini CLINC batch14 remains active (153/256 at last
+check). Its replenishment timer is paused while
+`natlang-pop-gemini-four-family-pilot-v1.service` waits for project ownership to
+run a 64-case mixed-family pilot. All provider labels and prepared sources are
+review-only, not admitted training data. Resume mixed-family replenishment after
+validity and semantic review.
+
 ## 15:20 CEST: Pop QAD direct SFT recovery and repair lane
 
 Pop v9 stopped at planned update 6524 **before its forward pass**: the adaptive
