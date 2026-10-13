@@ -2710,7 +2710,8 @@ def main(argv=None, embed=None):
         successes = {str(index): case.get('outcome') == 'task_success'
                      for index, case in zip(summary['case_indices'], detail)}
         return {**{k: summary[k] for k in ('step', 'task_successes', 'cases', 'task_success_rate', 'outcome_counts',
-                                           'eligible', 'complete', 'case_indices', 'reference_successes', 'seconds')},
+                                           'eligible', 'complete', 'packet_sha256', 'case_indices',
+                                           'reference_successes', 'seconds')},
                 'case_successes': successes}
 
     report = dict(resumed['initial_report']) if resumed is not None else {"crisp": evaluate("crisp", {}, soft=False), "soft-init": evaluate("soft-init", leaves)}

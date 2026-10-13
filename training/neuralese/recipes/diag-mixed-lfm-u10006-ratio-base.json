@@ -25,7 +25,7 @@
    }
   },
   "runtime": {
-   "repo_commit": "b64222bca7958132b9f3802f9821085e4f7ea88c",
+   "repo_commit": "fe07eab8c7e5580542d9913ec39db60deb49f2d8",
    "package_code": {
     "__init__.py": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0",
     "artifacts.py": "93fe52d40906981bbcf71da52e782bbcb36651a03e7fd195cae432ccebe00c95",
@@ -171,7 +171,7 @@
     "train/direct_export.py": "b2cd4f7cef8cfd420c11c55faa5f86189945575f84cbc8142a8877d72bdded1c",
     "train/direct_sft.py": "ed0c0c780be256b970f73235b98fb5ed3151a786265c1658c7a80670ffa82566",
     "train/drift_monitor.py": "4bcdc78cb4e539cbd1c4f4733ccf277b4b6dd7609470fbb4eac44c237db05e7e",
-    "train/e2e_acceptance.py": "53117ee2e38786e64c0602c5eff7f3ef72087d990da58621a829631cb3e0606b",
+    "train/e2e_acceptance.py": "dd0bc894c3db3ebd1f2833ad7e506d7d053c55484eae0568e630aeb2c417edc4",
     "train/e2e_records.py": "c0b22034181a7c985919d0718978ef1125ced8b347ca68c1321bb680766aeb3d",
     "train/execution.py": "a847a145e5b4e1987f0c69c8cbc7902406754be8b57e2e37bd1139d8756643b3",
     "train/export_trajectory.py": "5bbc545ff603530fbcc5b5930c6f841c70b09f37732b0f26bd088666250fef14",
@@ -213,7 +213,7 @@
     "train/staging.py": "d826eee727aae24930ba2ebffb782da71c7d18dafc05575a345a4acbb87ebb19",
     "train/text_supervision.py": "03fb6e677aafe06a6c2e5656649375d93559efbd3bc13223013da6f85b48349f",
     "train/text_warmup.py": "267cf5aeb4bc2ef62ce1edec1f2bde30badaf9cab83053a297d3baa5b476800d",
-    "train/trajectories.py": "77e674557c1c1c2a627172c8a570397ea2b8201294390a87227588129c9c159f",
+    "train/trajectories.py": "c55954af77bb040eb316ffc9ceb4fbfb7383253bad84a8163c102b4937028522",
     "train/trajectory_probe.py": "d879db817dad1f923805ad80ee9c98f423ecf35b327bf1698ece4f0df34170c2",
     "train/trajectory_state.py": "c8e1ae7eec7e1168baa06174221cd51a8c0c86022a174a7b2be5239bf60911ba",
     "train/verified_heads_handoff.py": "fe61991aeebf9db005e0ffc5cdc681a4d9f79c443181318ccf01ba6905e7e0e0",

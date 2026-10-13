@@ -154,3 +154,15 @@ Earlier named receipts omitted latent names while saving their full optimizer
 state. Recover only that omission from exact one-parameter latent group names;
 record the recovery explicitly. Unknown slots remain an error. No optimizer
 reset or checkpoint mutation is implied.
+
+## Complete task evidence in E2E acceptance — 2026-10-13
+
+The natural-language acceptance policy remains the declared same-task comparison:
+1. Read the text, value and parent task reports.
+2. Compare only completed, eligible runs of the identical packet and case indices.
+3. For each fused case, require an explicit Boolean outcome in both arms; missing
+   outcomes are unknown, never failed tasks with an assumed zero rate.
+4. Compare measured success rates against the existing declared margins.
+The crisp verifier checks these exact report invariants. The existing task-report
+adapter carries the packet hash from TaskEval. No serving prompt or training
+objective changes. Legacy reports without packet identity remain pending.

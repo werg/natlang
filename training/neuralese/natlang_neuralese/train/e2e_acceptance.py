@@ -30,6 +30,19 @@ def _number(value):
     return type(value) in (int, float) and math.isfinite(value)
 
 
+def _same_task_cases(left, right):
+    """Exact completed task reports of one packet and case sequence."""
+    indices = left.get('case_indices')
+    packet = left.get('packet_sha256')
+    return (left.get('eligible') is True and right.get('eligible') is True
+            and left.get('complete') is True and right.get('complete') is True
+            and isinstance(packet, str) and len(packet) == 64 and packet == right.get('packet_sha256')
+            and isinstance(indices, list) and bool(indices)
+            and all(type(index) is int for index in indices) and len(set(indices)) == len(indices)
+            and indices == right.get('case_indices')
+            and left.get('cases') == right.get('cases') == len(indices))
+
+
 def validate_declaration(declaration):
     if not isinstance(declaration, dict) or set(declaration) - KEYS or not {'paired_reader', 'task_success',
                                                                              'drift'} <= set(declaration):
@@ -90,24 +103,31 @@ def evaluate(declaration, summary):
     task = declaration['task_success']
     t_arm, v_arm = summary.get('task_eval') or {}, summary.get('task_eval_neuralese') or {}
     fused = v_arm.get('fused_cases')
-    if v_arm and fused:
-        v_ok, t_ok = v_arm.get('fused_case_successes', {}), (t_arm.get('case_successes') or {})
-        v_rate = sum(bool(v_ok.get(str(c))) for c in fused) / len(fused)
-        t_rate = sum(bool(t_ok.get(str(c))) for c in fused) / len(fused)
+    v_ok, t_ok = v_arm.get('fused_case_successes') or {}, t_arm.get('case_successes') or {}
+    fused_complete = (_same_task_cases(t_arm, v_arm) and isinstance(fused, list) and bool(fused)
+                      and all(type(c) is int for c in fused) and len(set(fused)) == len(fused)
+                      and set(fused) <= set(t_arm['case_indices'])
+                      and isinstance(v_ok, dict) and isinstance(t_ok, dict)
+                      and all(type(v_ok.get(str(c))) is bool and type(t_ok.get(str(c))) is bool for c in fused))
+    if fused_complete:
+        v_rate = sum(v_ok[str(c)] for c in fused) / len(fused)
+        t_rate = sum(t_ok[str(c)] for c in fused) / len(fused)
         criterion('task_success', t_rate - v_rate, t_rate - v_rate <= task['max_success_drop_vs_t'],
                   max_drop=task['max_success_drop_vs_t'], oracle='exact', fused_cases=len(fused), v=v_rate, t=t_rate)
     else:
         criterion('task_success', None, False, max_drop=task['max_success_drop_vs_t'], oracle='exact',
-                  pending_reason='no V-arm task evaluation with a fused hand-off: the held task subset routes every '
+                  pending_reason='no complete comparable V/T task evidence with explicit fused-case outcomes: '
+                                 'the held task subset routes every '
                                  'child result to crisp root code, so no model reads another call\'s value; it needs '
                                  'held tasks with model-to-model hand-offs and the collector carrying fused edges as '
                                  'Neuralese (runtime/fusion.ts) against the stage\'s server')
     # The same cases on the parent's weights (``task_eval-init``) against the final weights: e2e training must not cost
     # task success on the runtime's text transport.
     parent = summary.get('task_eval-init') or {}
-    measured = bool(t_arm and parent and t_arm.get('eligible') and parent.get('eligible') and
-                    t_arm.get('case_indices') == parent.get('case_indices'))
-    drop = parent.get('task_success_rate', 0) - t_arm.get('task_success_rate', 0) if measured else None
+    measured = (_same_task_cases(t_arm, parent)
+                and all(_number(arm.get('task_success_rate')) and 0 <= arm['task_success_rate'] <= 1
+                        for arm in (t_arm, parent)))
+    drop = parent['task_success_rate'] - t_arm['task_success_rate'] if measured else None
     criterion('task_success_vs_parent', drop, measured and drop <= task['max_success_drop_vs_parent'],
               max_drop=task['max_success_drop_vs_parent'],
               parent=parent.get('task_successes'), final=t_arm.get('task_successes'), cases=t_arm.get('cases'))
@@ -127,8 +147,8 @@ def certificate(declaration, summary_path, *, recipe_sha256, stage, report_path)
             'criteria': criteria, 'reported': reported, 'recipe_sha256': recipe_sha256, 'stage': stage,
             'summary': str(summary_path), 'summary_sha256': sha256_file_hex(summary_path) if summary else None,
             'stage_report': str(report_path),
-            'scope': 'consumers reading values against consumers reading the producer\'s own greedy tokens (T_self; '
-                     'gold T and T_self at 0.6 reported) on the paired held readers, '
+            'scope': 'consumers reading values against matched emitted-token embeddings on identical producer '
+                     'states and lengths (independent T_self and gold text reported) on the paired held readers, '
                      'exact-oracle task success, no drift stop; behaviour gate report-only (owner 2026-10-12)'}
 
 
