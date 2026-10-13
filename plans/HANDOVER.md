@@ -1,5 +1,39 @@
 # Continuation guide — updated 2026-10-13
 
+## 22:31 CEST: corrected semantic pilot live; Luna source rebuild repaired
+
+Semantic source commits `5129d407`, `93fad573`, `35be7422` and
+`5198879a` are on main. The v5 sealed full slate contains 220 authored
+programs, 18 expanded runnable cases (eight Astra, ten Sol) and 202 held
+designs. All 18 exact source reference replays pass. Scripted runtime
+`read_code` and actual nested execution succeeded through six Astra and five
+Sol callable stages, including typed root returns. The priority selector
+bound to v5 hashes emitted exactly those 18, with no teacher results or
+training admission. Do not launch its superseded v1 selection. Astra has
+subsequently expanded 16 more worlds in `18d559c7`; only five of those have
+completed source review, so the v5 sealed selection has not yet changed.
+
+The corrected **full-size** v3 Luna diagnostic queue uses 24-record worlds,
+up to 360 turns/2048 requests and a 5400-second collection resource ceiling.
+Pop stopped exact ordinary s52033 worker 02, preserved its partial, and
+launched low-priority ledger unit
+`natlang-pop-luna-semstack-full-v3-w01.service` on two source-disjoint cases;
+s52033 worker 01 and QAD trainer v14 remain active. The ordinary Luna timer
+is paused during this pilot. Curriculum agent is inspecting live nested calls
+and outcomes. No diagnostic output is admitted yet.
+
+The ordinary Luna replenisher failed while constructing seed s52034 because
+two of 856 `dataset_workbench` cases have factual
+`source_review_pending` holds. Commit `1785b819` invokes the existing
+verified-row filter, logs those two exact IDs and refuses any *other*
+verification failure, preserving 854 eligible cases. Its first retry found
+the campaign directory left by the failed source build and stopped before
+rebuilding. Commit `dbf12b38` makes an incomplete campaign rebuild the same
+seed and prepare it once verified. Re-enable the ordinary timer after the
+semantic pilot frees a slot and confirm s52034 actually materializes; the
+recovery path has not yet been exercised end-to-end. The quick check passed
+for both commits; a current-main full check is pending DGX ledger capacity.
+
 ## 22:25 CEST: 220-program slate, live pilot repair, trainer resumed
 
 The owner's clarified target is **at least 100 distinct programs from each of
