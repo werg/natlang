@@ -3,7 +3,9 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { nlFile, curriculumCase, returnCall } from './lib.mjs';
+import { nlFile, curriculumCase, evalCall, returnCall } from './lib.mjs';
+import { verifyCases } from '../../dist/teacher/curriculum.js';
+import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 
 const root = resolve(import.meta.dirname, '../../..');
 const catalogs = [
@@ -16,8 +18,8 @@ if (args.length !== 2 || args[0] !== '--out' || !args[1])
 const output = resolve(args[1]);
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const safeId = id => typeof id === 'string' && /^[a-z][a-z0-9-]{4,100}$/.test(id);
-const shortText = (value, label, id) => {
-  if (typeof value !== 'string' || value.trim().length < 12)
+const shortText = (value, label, id, minimum = 12) => {
+  if (typeof value !== 'string' || value.trim().length < minimum)
     throw Error(`${id}: missing substantive ${label}`);
   return value.trim();
 };
@@ -48,6 +50,15 @@ function returnType(value) {
   if (typeof value === 'boolean') return 'boolean';
   if (typeof value === 'number' && Number.isFinite(value)) return 'number';
   if (Array.isArray(value) && value.every(item => typeof item === 'string')) return 'string[]';
+  if (Array.isArray(value) && value.length) {
+    const members = value.map(returnType);
+    if (members.every(type => type && type === members[0])) return `${members[0]}[]`;
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const fields = Object.entries(value).map(([name, field]) => [name, returnType(field)]);
+    if (fields.length && fields.every(([name, type]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && type))
+      return `{ ${fields.map(([name, type]) => `${name}: ${type}`).join('; ')} }`;
+  }
   return null; // A catalog must declare a typed output for compound results.
 }
 function stages(entry) {
@@ -57,12 +68,40 @@ function stages(entry) {
     const instructions = paragraphs(fn.instructions ?? fn.numbered_instructions ?? fn.purpose).join('\n');
     return { name, instructions };
   }).filter(fn => fn.instructions);
-  return (entry.steps ?? []).map((step, index) => ({ name: `stage_${index + 1}`, instructions: String(step) }));
+  const chain = Array.isArray(entry.call_chain) ? entry.call_chain.slice(1) : [];
+  return (entry.steps ?? []).map((step, index) => ({
+    name: String(chain[index] ?? `stage_${index + 1}`).replace(/[^A-Za-z0-9_]/g, '_'),
+    instructions: String(step).replace(/^\s*\d+\.\s*/, ''),
+  }));
+}
+function reference(entry, fixture, typed, expected) {
+  const paths = Object.keys(fixture).sort();
+  const code = `const paths = ${JSON.stringify(paths)};
+const semanticRule = ${JSON.stringify(entry.semantic_rule)};
+const objective = ${JSON.stringify(entry.objective)};
+type State = { next: number; notes: string[] };
+const step = async (state: State): Promise<State> => {
+  const currentPath = paths[state.next];
+  const source = folder.snapshot().file(currentPath);
+  const note = await nl.with<string>({ currentPath, semanticRule, objective })\`Read only the supplied current FileHandle. Return its complete text as a grounded note, preserving its path and all evidence relevant to the captured objective and semanticRule. Do not guess about later files.\`(source);
+  return { next: state.next + 1, notes: [...state.notes, note] };
+};
+const done = await iterateOn(step, { next: 0, notes: [] as string[] })
+  .withLimit({ maxSteps: paths.length }).until(state => state.next === paths.length);
+return await nl<${typed}>\`Synthesize the typed final result for the captured objective and semanticRule from the complete collected notes. Preserve source identities and apply the program's declared output contract.\`(done.notes);`;
+  return {
+    root: [evalCall(code), returnCall(expected)],
+    children: [
+      ...paths.map(path => ({ match: path, expected_reads: [path],
+        calls: [['read_file', { path }], returnCall(fixture[path])] })),
+      { match: 'Synthesize the typed final result', expected_soft_input: 'notes', value: expected },
+    ],
+  };
 }
 function render(entry, provider) {
   const id = entry.id;
   if (!safeId(id)) throw Error(`invalid id: ${id}`);
-  const domain = shortText(entry.domain, 'domain', id);
+  const domain = shortText(entry.domain, 'domain', id, 3);
   const title = shortText(entry.title, 'title', id);
   const objective = shortText(entry.objective, 'objective', id);
   const rule = shortText(entry.semantic_rule, 'semantic_rule', id);
@@ -70,9 +109,13 @@ function render(entry, provider) {
   if (steps.length < 3) throw Error(`${id}: need at least three distinct stages`);
   const fixture = sourceFixture(entry);
   const expected = exactExpected(entry);
-  const typed = returnType(expected);
-  const lambda = paragraphs(entry.scoped_lambda ?? entry.lambda);
-  const loop = paragraphs(entry.iteration ?? entry.iteration_termination);
+  const declaredType = entry.return_type ?? entry.oracle?.return_type;
+  if (declaredType !== undefined &&
+      (typeof declaredType !== 'string' || !declaredType.trim() || declaredType.length > 1000))
+    throw Error(`${id}: invalid declared return_type`);
+  const typed = declaredType ?? returnType(expected);
+  const lambda = paragraphs(entry.scoped_lambda ?? entry.lambda?.instructions ?? entry.lambda);
+  const loop = paragraphs(entry.iteration ?? entry.iteration_termination ?? entry.scale_plan?.iteration);
   const contract = paragraphs(entry.output_contract);
   const prefix = entry.operation ? `Operation: ${entry.operation}.\n` : '';
   const instructions = `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
@@ -89,8 +132,10 @@ function render(entry, provider) {
   const files = { 'solve.nl': nlFile({ args: {}, returns: typed ?? 'string', description: title, kind: 'directory-reducer', instructions }) };
   for (const [index, step] of steps.entries()) {
     const name = `step_${index + 1}_${step.name}`.toLowerCase();
+    const scoped = entry.lambda?.placement === step.name && typeof entry.lambda?.instructions === 'string'
+      ? `\nAt this stage, formulate an ad hoc typed natural-language literal ${entry.lambda.signature ?? ''} for the current item. Use this short plan: ${entry.lambda.instructions} Pass the current item and relevant context as arguments; keep source IDs in the finding.` : '';
     files[`solve/${name}.nl`] = nlFile({ args: { item: 'string', context: 'string' }, returns: 'string',
-      description: `${title}: ${step.name}`, instructions: `${step.instructions}\nApply the semantic rule to the supplied current item and context. Return a concise grounded finding with source identity.` });
+      description: `${title}: ${step.name}`, instructions: `${step.instructions}${scoped}\nApply the semantic rule to the supplied current item and context. Return a concise grounded finding with source identity.` });
   }
   const admission = fixture && typed ? 'runnable_candidate_pending_reference_and_semantic_review' :
     'held_missing_concrete_fixture_or_exact_typed_oracle';
@@ -105,10 +150,11 @@ function render(entry, provider) {
       'carry typed child findings through the program-specific stages and structural iteration',
       'synthesize the declared output from grounded findings',
     ],
-    reference: { root: [returnCall(expected)] },
+    reference: reference(entry, fixture, typed, expected),
     root: { name: 'solve', args: {}, returns: typed, kind: 'directory-reducer', instructions },
     files: Object.fromEntries(Object.entries(files).filter(([path]) => path !== 'solve.nl')),
-    inputs: {}, expected, folderFiles: fixture, expectedFiles: fixture,
+    inputs: {}, expected, folderFiles: fixture,
+    expectedFiles: { ...fixture, ...(entry.oracle?.expected_files ?? {}) },
   }) : null;
   if (caseRow) {
     caseRow.id = `semantic-stack:${provider}:${id}`;
@@ -125,6 +171,7 @@ function render(entry, provider) {
 
 await mkdir(output, { recursive: false });
 const rendered = [], ids = new Set(), domainsByProvider = new Map();
+const signaturesByProvider = new Map();
 for (const [index, path] of catalogs.entries()) {
   const provider = index ? 'sol' : 'astra';
   const raw = await readFile(path);
@@ -132,7 +179,13 @@ for (const [index, path] of catalogs.entries()) {
   const entries = Array.isArray(parsed) ? parsed : parsed.programs;
   if (!Array.isArray(entries) || entries.length < 100) throw Error(`${provider}: catalog needs at least 100 programs`);
   domainsByProvider.set(provider, new Set());
+  signaturesByProvider.set(provider, new Set());
   for (const entry of entries) {
+    const signature = JSON.stringify([entry.operation, entry.objective, entry.semantic_rule,
+      entry.steps ?? entry.functions]);
+    if (signaturesByProvider.get(provider).has(signature))
+      throw Error(`${provider}: duplicate semantic program body: ${entry.id}`);
+    signaturesByProvider.get(provider).add(signature);
     const program = render(entry, provider);
     if (ids.has(program.id)) throw Error(`duplicate program id: ${program.id}`);
     ids.add(program.id); domainsByProvider.get(provider).add(program.domain);
