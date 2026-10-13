@@ -19,15 +19,23 @@ const stageSpecsMode = flags.includes('--stage-specs');
 const groupedAstra = flags.includes('--grouped-astra') || stageSpecsMode;
 const reviewAt = flags.indexOf('--review-ids');
 const reviewPath = reviewAt >= 0 && flags[reviewAt + 1] ? resolve(flags[reviewAt + 1]) : null;
-const knownFlags = new Set(['--pilot-astra', '--grouped-astra', '--stage-specs', '--review-ids']);
+const variantAt = flags.indexOf('--stage-variant');
+const variantPath = variantAt >= 0 && flags[variantAt + 1] ? resolve(flags[variantAt + 1]) : null;
+const knownFlags = new Set(['--pilot-astra', '--grouped-astra', '--stage-specs', '--review-ids', '--stage-variant']);
 const selected = flags.filter(flag => knownFlags.has(flag));
-const expectedFlagCount = selected.length + (reviewPath ? 1 : 0);
+const expectedFlagCount = selected.length + (reviewPath ? 1 : 0) + (variantPath ? 1 : 0);
 if (args[0] !== '--out' || !args[1] || flags.length !== expectedFlagCount ||
     (pilotAstra && (stageSpecsMode || groupedAstra || reviewPath)) ||
     (stageSpecsMode && flags.includes('--grouped-astra')) ||
+    (variantPath && !stageSpecsMode) ||
     selected.length !== new Set(selected).size)
-  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --grouped-astra | --stage-specs] [--review-ids IDS_JSON]');
+  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --grouped-astra | --stage-specs] [--review-ids IDS_JSON] [--stage-variant VARIANT_JSON]');
 const output = resolve(args[1]);
+const variantBytes = variantPath ? await readFile(variantPath) : null;
+const variant = variantBytes ? JSON.parse(variantBytes) : null;
+if (variant && (variant.schema !== 'semantic-stage-variant/1' || typeof variant.program_id !== 'string' ||
+    typeof variant.base_catalog_sha256 !== 'string' || typeof variant.base_stage !== 'string'))
+  throw Error('invalid stage variant metadata');
 const reviewList = reviewPath ? JSON.parse(await readFile(reviewPath, 'utf8')) : [];
 if (!Array.isArray(reviewList) || reviewList.some(id => typeof id !== 'string') ||
     new Set(reviewList).size !== reviewList.length)
@@ -215,7 +223,8 @@ function stageSpecTypeFile(entry, spec) {
   return source;
 }
 function checkedStageSpecs(entry, steps) {
-  const spec = entry.stage_specs;
+  const spec = entry.stage_specs && variant?.program_id === entry.id ?
+    structuredClone(entry.stage_specs) : entry.stage_specs;
   if (!spec || spec.schema_version !== 'semantic-stage-contributions/1' ||
       !Array.isArray(spec.stages) || spec.stages.length !== steps.length)
     return null;
@@ -240,6 +249,22 @@ function checkedStageSpecs(entry, steps) {
         typeof stage.new_semantic_transformation !== 'string')
       throw Error(`${entry.id}: invalid owned stage contribution at ${steps[index].name}`);
     ownedFields.add(field);
+  }
+  if (variant?.program_id === entry.id) {
+    const stage = spec.stages.find(item => item.name === variant.base_stage);
+    if (!stage || !stage.scoped_literal_required ||
+        !variant.types || !Array.isArray(variant.numbered_plan) ||
+        typeof variant.direct_await_idiom !== 'string')
+      throw Error(`${entry.id}: stage variant does not match a scoped stage`);
+    for (const [name, body] of Object.entries(variant.types)) {
+      if (Object.hasOwn(spec.types, name) || typeof body !== 'string' || !body.startsWith('{'))
+        throw Error(`${entry.id}: invalid variant type ${name}`);
+      spec.types[name] = body;
+    }
+    stage.numbered_plan = variant.numbered_plan;
+    stage.scoped_literal_plan = [variant.literal_unit, variant.capture_policy,
+      variant.direct_await_idiom, variant.no_op_criterion, ...variant.invariants];
+    stage.no_op_policy = variant.no_op_criterion;
   }
   return spec;
 }
@@ -427,6 +452,7 @@ function render(entry, provider) {
     caseRow.source_ids = [programSourceId];
     caseRow.source_groups = [sourceGroup];
     caseRow.source_revisions = ['semantic-stack-authored-v1'];
+    if (variant?.program_id === id) caseRow.source_revisions.push(`stage-variant:${sha(variantBytes)}`);
     caseRow.generation.collection = 'teacher';
     caseRow.generation.source_domain = domain;
     caseRow.generation.source_quality = 'Authored program and fixture. Exact source/reference and independent semantic review required before training admission.';
@@ -442,6 +468,9 @@ const signaturesByProvider = new Map();
 for (const [index, path] of (pilotAstra ? catalogs.slice(0, 1) : catalogs).entries()) {
   const provider = index ? 'sol' : 'astra';
   const raw = await readFile(path);
+  if (variant?.program_id?.startsWith(`${provider === 'astra' ? 'astra' : 'sol'}-`) &&
+      sha(raw) !== variant.base_catalog_sha256)
+    throw Error(`${variant.program_id}: stage variant base catalog SHA differs from current source`);
   const parsed = JSON.parse(raw);
   const entries = Array.isArray(parsed) ? parsed : parsed.programs;
   if (!Array.isArray(entries) || entries.length < (pilotAstra ? 1 : 100))
@@ -490,6 +519,8 @@ const review = {
   partial_pilot: pilotAstra,
   presentation: stageSpecsMode ? 'owned-typed-stage-contributions' : groupedAstra ?
     'typed-coherent-folder-batches' : 'typed-individual-records',
+  ...(variant ? { stage_variant: { id: variant.id, program_id: variant.program_id,
+    file: variantPath, sha256: sha(variantBytes), base_catalog_sha256: variant.base_catalog_sha256 } } : {}),
   review_override_ids: [...reviewIds],
   programs: rendered.length, runnable_candidates: candidateRows.length,
   reference_verified_candidates: caseRows.length,

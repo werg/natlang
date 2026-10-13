@@ -100,7 +100,11 @@ if (graph?.nodes && graph?.edges) {
     throw Error('typed_call_graph nodes differ from packaged .nl files');
   for (const edge of graph.edges) {
     const folder = edge.caller.replace(/\.nl$/, '');
-    if (!nodes.has(edge.caller) || !nodes.has(edge.callee) || dirname(edge.callee) !== folder)
+    const declaredUses = files[edge.caller]?.match(/^uses:\s*\[([^\]]*)\]/m)?.[1]
+      .split(',').map(value => value.trim()) ?? [];
+    const explicitUse = declaredUses.includes(edge.callee.replace(/\.nl$/, ''));
+    if (!nodes.has(edge.caller) || !nodes.has(edge.callee) ||
+        (dirname(edge.callee) !== folder && !explicitUse))
       throw Error(`noncallable edge: ${edge.caller} -> ${edge.callee}`);
   }
 }
@@ -128,6 +132,17 @@ row.semantics.files = files;
 row.semantics.inputs = inputs;
 row.semantics.folder_files = fixture;
 row.semantics.expected_files = fixture;
+if (Array.isArray(manifest.services)) {
+  row.semantics.services = {};
+  for (const service of manifest.services) {
+    if (typeof service?.binding !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*$/.test(service.binding) ||
+        !Object.hasOwn(files, service.declaration) ||
+        Object.hasOwn(row.semantics.services, service.binding))
+      throw Error('invalid or duplicate external service declaration');
+    const hostPath = await sourcePath(service.host_implementation, 'service host implementation');
+    row.semantics.services[service.binding] = await readFile(hostPath, 'utf8');
+  }
+}
 if (hasFullGold) row.semantics.oracle = { level: 'normalized', normalization: 'semantic-structured',
   comparison_spec: manifest.comparison_spec };
 row.generation.collection = 'teacher';
@@ -143,6 +158,7 @@ const report = { schema: 'natlang.semantic-application-package/1', id: manifest.
   fixture_file_count: Object.keys(fixture).length, graph_edge_count: graph?.edges?.length ?? null,
   manifest: relative(repo, manifestPath), manifest_sha256: sha(manifestBytes),
   oracle_sha256: sha(oracleBytes), input_source_hashes: inputSourceHashes,
+  service_bindings: Object.keys(row.semantics.services ?? {}),
   visible_sha256: fingerprint, source_sha256: sha(Buffer.from(JSON.stringify(row) + '\n')),
   external_verifier_path: manifest.external_verifier_path ?? null,
   note: 'Program source preserves authored bytes and callable paths. Packaging does not admit or execute the case.' };
