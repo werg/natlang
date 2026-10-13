@@ -73,6 +73,52 @@ def _local_artifact_identity(source: str | None) -> dict | None:
             "file_count": len(entries), "sha256": aggregate.hexdigest(), "files": entries}
 
 
+def export_direct(args) -> int:
+    """`--direct-artifact DIR --direct-base-snapshot DIR`: DIR/model.gguf (the trained backbone, control rows merged)
+    and DIR/neuralese.gguf (the direct-v1 projector) for `llama-neuralese-server -m model.gguf --nz neuralese.gguf`."""
+    import torch
+
+    from ..train.direct_export import load_direct_artifact
+    from .gguf import export_direct_heads_gguf, export_model_gguf, export_model_hf, fork_root
+
+    if any(value is not None for value in (args.base, args.lora, args.heads, args.cutoff, args.max_block, args.dialect)):
+        raise ValueError("--direct-artifact takes its model, heads and geometry from the artifact")
+    if not args.direct_base_snapshot:
+        raise ValueError("--direct-artifact needs --direct-base-snapshot")
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=False)
+    manifest_identity = _file_identity(Path(args.direct_artifact) / "manifest.json")
+    restored = load_direct_artifact(args.direct_artifact, base_snapshot=args.direct_base_snapshot, device="cpu",
+                                    dtype=torch.float32)
+    engine = restored.engine
+    with tempfile.TemporaryDirectory() as tmp:
+        hf_dir = export_model_hf(engine.backbone, engine.tokenizer, Path(tmp) / "hf")
+        model_gguf = export_model_gguf(hf_dir, out / "model.gguf", outtype=args.outtype)
+    heads_gguf = export_direct_heads_gguf(engine, out / "neuralese.gguf")
+    fork = fork_root()
+    commit = subprocess.run(["git", "-C", str(fork), "rev-parse", "--verify", "HEAD"], check=False,
+                            capture_output=True, text=True)
+    receipt = {
+        "schema": "natlang-neuralese-export/2",
+        "profile": "direct-v1",
+        "model": str(model_gguf),
+        "heads": str(heads_gguf),
+        "cutoff": int(engine.backbone.num_layers),
+        "max_block": int(engine.max_block),
+        "direct_artifact": {"path": str(Path(args.direct_artifact).resolve()), "manifest": manifest_identity,
+                            "status": restored.manifest.get("status")},
+        "base_snapshot": str(Path(args.direct_base_snapshot).resolve()),
+        "artifacts": {"model_gguf": _file_identity(model_gguf), "heads_gguf": _file_identity(heads_gguf)},
+        "export": {"gguf_outtype": args.outtype, "backbone_load_dtype": "torch.float32", "dialect": engine.dialect,
+                   "stop_ids": sorted(int(i) for i in engine.stop_ids)},
+        "converter": {"fork_root": str(fork), "git_commit": commit.stdout.strip() if commit.returncode == 0 else None},
+        "parity_claim": False,
+    }
+    (out / "export.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    print(json.dumps(receipt), flush=True)
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Export a Neuralese port to llama.cpp GGUF files")
     parser.add_argument("--out", required=True)
@@ -83,7 +129,13 @@ def main(argv=None):
     parser.add_argument("--max-block", type=int, default=None)
     parser.add_argument("--dialect", default=None)
     parser.add_argument("--outtype", default="f32", choices=["f32", "f16", "bf16"])
+    parser.add_argument("--direct-artifact", default=None,
+                        help="a Neuralese direct-v1 serving artifact (train/direct_export.py): exports the trained "
+                             "backbone and the direct-v1 projector instead of --heads")
+    parser.add_argument("--direct-base-snapshot", default=None, help="the base snapshot pinned by --direct-artifact")
     args = parser.parse_args(argv)
+    if args.direct_artifact:
+        return export_direct(args)
 
     import torch
 

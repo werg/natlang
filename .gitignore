@@ -40,3 +40,4 @@ npm-packages/node/examples/
 
 # Machine-local coordination inbox, acknowledgements and artifact sync receipts.
 .coordination/
+.local/

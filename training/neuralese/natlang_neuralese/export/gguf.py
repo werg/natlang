@@ -88,15 +88,23 @@ def export_model_hf(backbone: PortBackbone, tokenizer, out_dir: str | Path) -> P
     out_dir = Path(out_dir)
     weight = backbone.embedding_weight
     ids = [backbone.controls.open_id, backbone.controls.close_id]
+    # An untied head has its own trained marker rows (control_head_rows), which the reference's logits use.
+    head_rows = getattr(backbone, "control_head_rows", None) if not getattr(backbone, "tied", True) else None
+    head = backbone.output_weight if head_rows is not None else None
     saved = weight.data[ids].clone()
+    saved_head = head.data[ids].clone() if head is not None else None
     with torch.no_grad():
         weight.data[ids] = backbone.control_rows.data.to(weight.dtype)
+        if head is not None:
+            head.data[ids] = head_rows.data.to(head.dtype)
     try:
         merged = merged_state_dict(backbone.hf)
         backbone.hf.save_pretrained(out_dir, state_dict=merged) if merged is not None else backbone.hf.save_pretrained(out_dir)
     finally:
         with torch.no_grad():
             weight.data[ids] = saved
+            if head is not None:
+                head.data[ids] = saved_head
     tokenizer.save_pretrained(out_dir)
     return out_dir
 
@@ -204,6 +212,68 @@ def export_heads_gguf(heads: PortHeads, backbone: PortBackbone, out_file: str | 
             writer.add_tensor(name, gguf.quants.quantize(data, qtype), raw_dtype=qtype)
         else:
             writer.add_tensor(name, data)
+    writer.write_header_to_file()
+    writer.write_kv_data_to_file()
+    writer.write_tensors_to_file()
+    writer.close()
+    return Path(out_file)
+
+
+def export_direct_heads_gguf(engine, out_file: str | Path, matrix_type: str = "f32") -> Path:
+    """The direct-v1 projector GGUF (``neuralese.profile = "direct-v1"``) for a restored direct artifact's engine
+    (train/direct_export.load_direct_artifact): the NeuraleseProjection's causal conv stack, the mixture table (the
+    input embedding matrix the reference's ``soft_token_mixture`` multiplies, transposed), the readout stop tokens and
+    the marker IDs. The fork's ``nz_write_direct`` runs the writer of ``serve/direct_write.py``; blocks carry no read
+    markers. ``matrix_type`` stores the mixture table as F32, F16 or Q8_0."""
+    from ..model.neuralese_projection import causal_conv_receptive_field  # noqa: F401  (geometry contract)
+
+    projection = getattr(engine, "neuralese_projection", None)
+    if projection is None:
+        raise ValueError("the engine serves no NeuraleseProjection (load a direct artifact)")
+    if getattr(engine, "token_choice_projection", None) is not None:
+        raise ValueError("the fork does not run the TokenChoiceProjection yet; this artifact cannot be exported")
+    heads, backbone = engine.heads, engine.backbone
+    if heads.read_markers or getattr(heads, "read_adapter", None) is not None:
+        raise ValueError("direct-v1 export needs raw-token heads without markers or a read adapter")
+    if matrix_type not in ("f32", "f16", "q8_0"):
+        raise ValueError("matrix_type is f32, f16 or q8_0")
+    stack = projection.stack
+    config = stack.config
+    norms = {float(block.norm.eps) if block.norm.eps is not None else float(torch.finfo(block.norm.weight.dtype).eps)
+             for block in stack.blocks}
+    if len(norms) != 1:
+        raise ValueError("the conv stack's norms must share one epsilon")
+    width = int(backbone.embedding_weight.shape[1])
+    gguf = _gguf_module()
+    writer = gguf.GGUFWriter(str(out_file), "neuralese")
+    writer.add_string("neuralese.profile", "direct-v1")
+    writer.add_uint32("neuralese.n_embd", width)
+    writer.add_uint32("neuralese.cutoff", int(heads.cutoff))  # the port metadata info reports; writes run full depth
+    writer.add_uint32("neuralese.max_length", int(engine.max_block))
+    writer.add_uint32("neuralese.open_token_id", int(backbone.controls.open_id))
+    writer.add_uint32("neuralese.close_token_id", int(backbone.controls.close_id))
+    writer.add_float32("neuralese.norm_eps", float(backbone.config.norm_eps))
+    writer.add_string("neuralese.dialect", engine.dialect)
+    writer.add_string("neuralese.direct.feedback", "token")
+    writer.add_uint32("neuralese.direct.blocks", int(config["blocks"]))
+    writer.add_uint32("neuralese.direct.kernel", int(config["kernel"]))
+    writer.add_uint32("neuralese.direct.hidden", int(config["hidden"]))
+    writer.add_float32("neuralese.direct.norm_eps", norms.pop())
+    writer.add_array("neuralese.direct.stop_ids", sorted(int(i) for i in engine.stop_ids))
+    table = _np(backbone.embedding_weight.t())  # [d, V]: ggml ne = (V, d)
+    if matrix_type == "f16":
+        writer.add_tensor("nz.direct.table_t", table.astype(np.float16))
+    elif matrix_type == "q8_0":
+        qtype = gguf.GGMLQuantizationType.Q8_0
+        writer.add_tensor("nz.direct.table_t", gguf.quants.quantize(table, qtype), raw_dtype=qtype)
+    else:
+        writer.add_tensor("nz.direct.table_t", table)
+    for index, block in enumerate(stack.blocks):
+        prefix = f"nz.direct.blk.{index}."
+        for name, tensor in (("norm.weight", block.norm.weight), ("taps", block.taps), ("up.weight", block.up.weight),
+                             ("up.bias", block.up.bias), ("down.weight", block.down.weight),
+                             ("down.bias", block.down.bias)):
+            writer.add_tensor(prefix + name, _np(tensor))
     writer.write_header_to_file()
     writer.write_kv_data_to_file()
     writer.write_tensors_to_file()

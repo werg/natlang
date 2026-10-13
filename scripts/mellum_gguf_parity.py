@@ -95,11 +95,34 @@ def cmd_reference(a):
     weight_map = json.loads((Path(a.model) / 'model.safetensors.index.json').read_text())['weight_map']
     handles = {}
 
+    point = None
+    if a.point:
+        # A precision point's deployed weights (train/quantization.py): quantized_value of the selected groups, the
+        # values a deployed GGUF of that point holds (scripts/mellum_deploy_gguf.py).
+        import re
+        import sys as _sys
+        _sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
+        from natlang_neuralese.maple.ternary import quantized_value
+        recipe_path, _, point_name = a.point.partition(':')
+        spec = json.loads(Path(recipe_path).read_text())['quantization']
+        point = next(q for q in spec['points'] if q['name'] == point_name)
+        patterns = {'experts': re.compile(r'^model\.layers\.(\d+)\.mlp\.experts\.\d+\.(gate|up|down)_proj\.weight$'),
+                    'attention': re.compile(r'^model\.layers\.(\d+)\.self_attn\.(q|k|v|o)_proj\.weight$')}
+
     def get(name):
         f = weight_map[name]
         if f not in handles:
             handles[f] = safe_open(str(Path(a.model) / f), framework='pt')
-        return handles[f].get_tensor(name).to(dtype)
+        tensor = handles[f].get_tensor(name)
+        if point is not None:
+            for group, rx in patterns.items():
+                config = point['modules'].get(group)
+                match = rx.match(name)
+                if config and match and config['format'] != 'bf16' and (
+                        not isinstance(point.get('layers'), list) or int(match.group(1)) in point['layers']):
+                    options = {k: v for k, v in config.items() if k != 'format'}
+                    return quantized_value(tensor, config['format'], options).to(dtype)
+        return tensor.to(dtype)
 
     rotary = mm.MellumRotaryEmbedding(config)
     embed = get('model.embed_tokens.weight')
@@ -251,6 +274,8 @@ def main():
     s.add_argument('--dtype', choices=['fp32', 'bf16'], default='fp32',
                    help='bf16: the reference in the checkpoint dtype, as a precision noise floor for the GGUF gap')
     s.add_argument('--tag', default='ref', help='output tag (compare reads ref; another tag can be compared as --tag)')
+    s.add_argument('--point', help='RECIPE.json:POINT: run the precision point\'s deployed weights (quantized_value of '
+                   'its module groups), the reference for a deployed GGUF from scripts/mellum_deploy_gguf.py')
     s.add_argument('--states', help='prompt name: also write its residual stream after each attention and FFN, '
                    '[n_layer][2][T][hidden] float32, to localize a divergence (llama: --states)')
     s = sub.add_parser('llama')
