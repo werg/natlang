@@ -1862,7 +1862,8 @@ def main(argv=None):
             if claim is not None:
                 claim_available = ledger_reusable_bytes(claim['budget_bytes'], claim['host_bytes'],
                                                         allocator_reserved, allocator_allocated,
-                                                        inactive_split_bytes=inactive_split)
+                                                        inactive_split_bytes=inactive_split,
+                                                        margin_bytes=int(0.25 * 2**30) if claim.get('discrete_cuda') else None)
                 available = min(device_available, claim_available)
         else:
             free = total = allocator_reserved = allocator_allocated = None

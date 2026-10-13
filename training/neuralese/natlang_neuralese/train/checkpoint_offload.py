@@ -109,22 +109,27 @@ def _absolute(path) -> Path:
 
 
 def mirror_path(path, settings: OffloadSettings) -> Path | None:
-    """Where ``path`` is mirrored: relative to ~/natlang/runs under the root (``repo/``, ``home/`` for other files of
-    the checkout or the home directory); None outside them."""
+    """Mirror a checkpoint at a stable path preserving its source location."""
     path = _absolute(path)
     repo = Path(os.path.realpath(_paths().root('repo')))
     root = Path(settings.mirror_root)
     for base, prefix in ((repo / 'runs', ()), (repo, ('repo',)), (Path(os.path.realpath(Path.home())), ('home',))):
         if base in path.parents:
             return root.joinpath(*prefix, path.relative_to(base))
+    # An additional active-artifact root can live outside the checkout/home
+    # (Pop uses /srv/storage). Declare it on that machine; keep unknown paths
+    # outside the offload policy.
+    extra = os.environ.get('NATLANG_CHECKPOINT_SOURCE_ROOT')
+    if extra:
+        base = Path(os.path.realpath(extra))
+        if base in path.parents:
+            return root / 'source-root' / path.relative_to(base)
     return None
 
 
 def _mount_of(path: Path) -> Path | None:
-    """The mount point (other than ``/``) the mirror root lives on, or None."""
+    """The mirror root's mount; / is valid when the source is another filesystem."""
     for candidate in (path, *path.parents):
-        if candidate == Path('/'):
-            return None
         if candidate.exists() and os.path.ismount(candidate):
             return candidate
     return None

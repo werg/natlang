@@ -270,8 +270,13 @@ def ledger_claim(unit: str | None = None):
         budget, source = int(float(os.environ['NATLANG_CUDA_MEMORY_GB']) * GIB), 'NATLANG_CUDA_MEMORY_GB'
     if budget is None:
         return None
-    host = (ledger.own_host_usage() if ledger is not None else None) or 0
-    return {'unit': unit, 'budget_bytes': int(budget), 'host_bytes': int(host), 'source': source}
+    discrete_cuda = os.environ.get('NATLANG_DISCRETE_CUDA_MEMORY') == '1'
+    # Pop's CUDA allocation lives outside host RAM. The unified GB10 claim
+    # subtracts host usage from its shared pool; doing so on a discrete card
+    # double-charges the same job and can leave no apparent training headroom.
+    host = 0 if discrete_cuda else ((ledger.own_host_usage() if ledger is not None else None) or 0)
+    return {'unit': unit, 'budget_bytes': int(budget), 'host_bytes': int(host),
+            'discrete_cuda': discrete_cuda, 'source': source}
 
 
 # An uncalibrated no-checkpoint forecast is raw geometry; it is trusted only with this much room to spare.
