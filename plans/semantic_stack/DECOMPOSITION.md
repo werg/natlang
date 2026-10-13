@@ -76,11 +76,16 @@ whole nested chain for every record would exceed the frozen 600-turn collection
 ceiling. This is a source-program decomposition issue, not a model failure.
 
 1. **Screen the whole evidence world (new typed `.nl` callable).** Given the
-   objective, task rule, and all source records, return one source-linked
-   `EvidenceRole` per record: directly queried, dependency or authority,
-   background, or uncertain. A dependency names the record or relation it can
-   change. Uncertain roles stay selected. The screen is a semantic judgment;
-   no keyword or filename classifier chooses relevance.
+   objective, task rule, all source records for context, and one source-folder
+   focus group, return one source-linked `EvidenceRole` per focus record:
+   directly queried, dependency or authority, background, or uncertain. The
+   root combines those groups into one full-world ledger. A dependency names
+   the record or relation it can change. Uncertain roles stay selected. The
+   screen is a semantic judgment; no keyword or filename classifier chooses
+   relevance. The first all-24-at-once live screen led the child to attempt
+   repeated ad hoc calls and then hand-write a case-specific relation table.
+   The smaller focus group is a source-presentation correction; it still sees
+   all records so cross-folder dependencies remain available.
 2. **Process coherent selected groups (existing named chain).** Group selected
    records by their actual folder and declared dependency links. Send each
    group through the named stages as a typed batch. Keep every selected source

@@ -192,7 +192,7 @@ function runtimeTypeFile(entry, grouped, relevance = false) {
     (grouped ? `export type EvidenceBatch = { folderPath: string; records: EvidenceRecord[] };\n` +
       `export type EvidenceBatchFinding = { folderPath: string; findings: EvidenceFinding[] };\n` : '') +
     (relevance ? `export type EvidenceRole = { id: string; path: string; role: 'direct' | 'dependency' | 'background' | 'uncertain'; dependsOn: string[]; reason: string; witnessQuote: string };\n` +
-      `export type EvidenceScreenInput = { records: EvidenceRecord[]; objective: string; rule: string };\n` +
+      `export type EvidenceScreenInput = { records: EvidenceRecord[]; focusRecords: EvidenceRecord[]; objective: string; rule: string };\n` +
       `export type EvidenceSelection = { roles: EvidenceRole[] };\n` : '') +
     `export type EvidenceContext = { objective: string; rule: string; relatedRecords: EvidenceRecord[]; priorFindings: EvidenceFinding[]; stageFindings: EvidenceFinding[] };\n`;
   const declarations = Object.entries(entry.typed_inputs).map(([role, declaration]) => {
@@ -419,8 +419,8 @@ function render(entry, provider) {
   const relevance = relevanceFirst && grouped;
   const relevanceInstructions = relevance ? `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
     (identities ? `Source ID binding (preserve every exact ID and path):\n${identities.map(({ id, path }) => `${id}: ${path}`).join('\n')}\n\n` : '') +
-    `Inventory all source records once as EvidenceRecord {id,path,text}. Call screenEvidence({records,objective,rule}) once for the whole evidence world. Its typed EvidenceSelection must contain exactly one EvidenceRole for each record. The role is a semantic judgment: direct, dependency, background or uncertain; uncertain stays selected.\n` +
-    `Use exact code to check role coverage, path/ID identity, witnessQuote as an exact substring of that record, and that every dependsOn ID exists. Start with direct, dependency and uncertain records, then close that selection over declared dependencies. If a later finding needs a background record, reopen it and record why. Never discard a record solely to meet a resource budget.\n` +
+    `Inventory all source records once as EvidenceRecord {id,path,text}. Partition the inventory into source-folder focus groups. Call screenEvidence({records,focusRecords,objective,rule}) once for each group: records is the complete evidence world for cross-record context, and focusRecords is the current group whose roles are returned. Append the actual typed EvidenceRole values; the combined EvidenceSelection must contain exactly one role for every source record. The role is a semantic judgment: direct, dependency, background or uncertain; uncertain stays selected.\n` +
+    `Use exact code to check whole-world role coverage, path/ID identity, witnessQuote as an exact substring of its record, and that every dependsOn ID exists. Start with direct, dependency and uncertain records, then close that selection over declared dependencies. If a later finding needs a background record, reopen it and record why. Never discard a record solely to meet a resource budget.\n` +
     `Group selected records into coherent EvidenceBatch values by source folder and dependency links. Use iterateOn over the finite group frontier. In each step call ${steps[0].name} with the selected batch and EvidenceContext {objective,rule,relatedRecords,priorFindings,stageFindings:[]}. The child chain is ${steps.map(step => step.name).join(' → ')}; it returns one source-linked EvidenceFinding per selected record in that group. Append those actual findings, advance the unprocessed-group frontier, and synthesize the declared result from the findings plus the complete role ledger. Revisit a background record when a dependency or unresolved finding makes it relevant.\n` +
     `At semantic stages formulate and invoke focused typed natural-language literals on the selected item or relation. Preserve source IDs, paths, quoted evidence and returned decisions. ${lambda.join(' ')}\n` +
     (loop.length ? `Iteration: ${loop.join(' ')}\n` : '') +
@@ -432,10 +432,10 @@ function render(entry, provider) {
   if (relevance) files['solve/screenEvidence.nl'] = nlFile({
     args: { input: 'EvidenceScreenInput' },
     returns: 'EvidenceSelection', description: `${title}: screen evidence roles`,
-    instructions: `1. Read the entire supplied source collection under objective and rule. For each record, decide whether it directly affects the query, supplies a dependency or authority condition for another relevant record, is background, or remains uncertain.\n` +
-      `2. Return one EvidenceRole per input record with its exact id and path. A direct or dependency role cites an exact witnessQuote from that record; give a source-grounded reason and name every dependsOn record ID whose relation may change its meaning.\n` +
+    instructions: `1. Read all records for cross-record authority and dependency context. Judge only focusRecords in this call, deciding whether each directly affects the query, supplies a dependency or authority condition, is background, or remains uncertain.\n` +
+      `2. Add one EvidenceRole per focus record to the typed roles list, preserving its exact id and path. A direct or dependency role cites an exact witnessQuote from that record; give a source-grounded reason and name every dependsOn record ID whose relation may change its meaning.\n` +
       `3. Use uncertain when relevance or authority is genuinely unresolved. Keep uncertain records selected for later stages. Background means only that this record currently has no supported path to the task answer; it does not assert that its content is false.\n` +
-      `4. Check cross-record authority, identity and scope, not just lexical similarity. Return the complete typed role ledger so root can validate coverage and dependency closure.` });
+      `4. Check cross-record authority, identity and scope. Return this focus group's complete typed role ledger to the root, which combines and validates all groups.` });
   let stageFolder = 'solve';
   for (const [index, step] of steps.entries()) {
     const name = step.name;
@@ -528,7 +528,7 @@ function render(entry, provider) {
     caseRow.source_ids = [programSourceId];
     caseRow.source_groups = [sourceGroup];
     caseRow.source_revisions = ['semantic-stack-authored-v1'];
-    if (relevance) caseRow.source_revisions.push('relevance-first-screen-and-selected-batches-v1');
+    if (relevance) caseRow.source_revisions.push('relevance-first-screen-and-selected-batches-v2');
     if (variant?.program_id === id) caseRow.source_revisions.push(`stage-variant:${sha(variantBytes)}`);
     caseRow.generation.collection = 'teacher';
     caseRow.generation.source_domain = domain;
@@ -595,7 +595,7 @@ const review = {
   schema: 'natlang.semantic-stack-source-review/1',
   partial_pilot: pilotAstra,
   presentation: stageSpecsMode ? 'owned-typed-stage-contributions' : relevanceFirst ?
-    'relevance-first-screen-and-selected-batches' : sourceDriven ?
+    'relevance-first-folder-screen-and-selected-batches-v2' : sourceDriven ?
     'source-driven-scoped-decisions' : groupedAstra ?
     'typed-coherent-folder-batches' : 'typed-individual-records',
   ...(variant ? { stage_variant: { id: variant.id, program_id: variant.program_id,
