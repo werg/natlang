@@ -32,7 +32,8 @@
      },
      "parameters": {
       "epochs": 1.0,
-      "train_target_tokens": 31744
+      "train_target_tokens": 31744,
+      "train_min_context_tokens": 16384
      }
     }
    }
@@ -42,7 +43,8 @@
     "parameters": {
      "epochs": 1.0,
      "train_target_tokens": 31744,
-     "merge_prefix_rows": true
+     "merge_prefix_rows": true,
+     "train_min_context_tokens": 16384
     }
    }
   },
@@ -116,6 +118,13 @@
     "direct_sft",
     "direct_trajectory"
    ]
+  },
+  "stage_parameter_defaults": {
+   "neuralese_direct": {
+    "task_eval": {
+     "temperature": 0.6
+    }
+   }
   }
  }
 }
