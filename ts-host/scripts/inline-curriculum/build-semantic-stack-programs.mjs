@@ -115,17 +115,22 @@ function runtimeTypeFile(entry, grouped) {
     (grouped ? `export type EvidenceBatch = { folderPath: string; records: EvidenceRecord[] };\n` +
       `export type EvidenceBatchFinding = { folderPath: string; findings: EvidenceFinding[] };\n` : '') +
     `export type EvidenceContext = { objective: string; rule: string; relatedRecords: EvidenceRecord[]; priorFindings: EvidenceFinding[]; stageFindings: EvidenceFinding[] };\n`;
-  const bundle = /^([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(entry.typed_inputs.bundle ?? '')?.[1];
-  if (!bundle) throw Error(`${entry.id}: missing typed bundle alias`);
-  // The authored stage signatures retain their actual named types. The source
-  // fixture provides concrete data; these common structural aliases avoid
-  // pretending an external directory service is implemented in generated TS.
-  return `export type ${bundle} = { files: unknown; records: unknown[]; context: unknown };\n` +
-    `export type Inquiry = { question: string; scope: string[]; requestedOutput: string };\n` +
-    `export type EvidenceUnit = { id: string; path: string; text: string };\n` +
-    `export type RelationDecision = { status: string; evidenceIds: string[]; detail: string };\n` +
-    `export type WorkItem = { id: string; kind: string };\n` +
-    `export type StageState = { records: EvidenceUnit[]; relations: RelationDecision[]; open: WorkItem[]; done: string[] };\n`;
+  const declarations = Object.entries(entry.typed_inputs).map(([role, declaration]) => {
+    const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[\s\S]+\})\s*$/.exec(declaration);
+    if (!match) throw Error(`${entry.id}: invalid authored ${role} type declaration`);
+    return { role, name: match[1], body: match[2] };
+  });
+  if (new Set(declarations.map(item => item.name)).size !== declarations.length)
+    throw Error(`${entry.id}: duplicate authored type alias`);
+  for (const role of ['bundle', 'inquiry', 'stage_state', 'record', 'evidence_unit', 'relation_decision', 'work_item'])
+    if (!declarations.some(item => item.role === role)) throw Error(`${entry.id}: missing authored ${role} type`);
+  // A source fixture is an immutable path-to-text snapshot. DomainContext is
+  // the explicit task/rule/source scope available to the authored stages.
+  // Every other structure comes from the catalog itself, especially passage
+  // witnesses and finite-frontier candidate IDs; never replace it with unknown.
+  return `export type DirectorySnapshot = Record<string, string>;\n` +
+    `export type DomainContext = { objective: string; semanticRule: string; sourcePaths: string[] };\n` +
+    declarations.map(({ name, body }) => `export type ${name} = ${body};\n`).join('');
 }
 function scopedLiteral(entry) {
   const literal = entry.scoped_lambda ?? entry.lambda;
