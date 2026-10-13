@@ -20,6 +20,13 @@ def rows(path):
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
+def iter_rows(path):
+    with path.open() as stream:
+        for line in stream:
+            if line.strip():
+                yield json.loads(line)
+
+
 def world(row):
     semantics = {key: value for key, value in row['semantics'].items()
                  if key not in ('expected', 'expected_files', 'oracle', 'files_oracle')}
@@ -46,7 +53,9 @@ def main():
     held_groups = {group for row in held_rows for group in row.get('source_groups', [])}
     previous_ids = set()
     for path in args.previous_parents:
-        for parent in rows(path):
+        # Previously admitted snapshots can be hundreds of MB. Only their
+        # identities/worlds are needed; do not retain full trajectories here.
+        for parent in iter_rows(path):
             previous_ids.add(parent['task']['program_ir']['id'])
             seen_worlds.add(world(parent['task']['program_ir']))
     chosen = []
