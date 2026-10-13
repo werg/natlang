@@ -13,12 +13,20 @@ const catalogs = [
   join(root, 'training/semantic_stack/sol_programs.json'),
 ];
 const args = process.argv.slice(2);
-const pilotAstra = args[2] === '--pilot-astra';
-const stageSpecsMode = args[2] === '--stage-specs';
-const groupedAstra = args[2] === '--grouped-astra' || stageSpecsMode;
-const reviewPath = args[2] === '--review-ids' && args.length === 4 ? resolve(args[3]) : null;
-if ((args.length !== 2 && !(args.length === 3 && (pilotAstra || groupedAstra)) && !reviewPath) || args[0] !== '--out' || !args[1])
-  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --grouped-astra | --stage-specs | --review-ids IDS_JSON]');
+const flags = args.slice(2);
+const pilotAstra = flags.includes('--pilot-astra');
+const stageSpecsMode = flags.includes('--stage-specs');
+const groupedAstra = flags.includes('--grouped-astra') || stageSpecsMode;
+const reviewAt = flags.indexOf('--review-ids');
+const reviewPath = reviewAt >= 0 && flags[reviewAt + 1] ? resolve(flags[reviewAt + 1]) : null;
+const knownFlags = new Set(['--pilot-astra', '--grouped-astra', '--stage-specs', '--review-ids']);
+const selected = flags.filter(flag => knownFlags.has(flag));
+const expectedFlagCount = selected.length + (reviewPath ? 1 : 0);
+if (args[0] !== '--out' || !args[1] || flags.length !== expectedFlagCount ||
+    (pilotAstra && (stageSpecsMode || groupedAstra || reviewPath)) ||
+    (stageSpecsMode && flags.includes('--grouped-astra')) ||
+    selected.length !== new Set(selected).size)
+  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --grouped-astra | --stage-specs] [--review-ids IDS_JSON]');
 const output = resolve(args[1]);
 const reviewList = reviewPath ? JSON.parse(await readFile(reviewPath, 'utf8')) : [];
 if (!Array.isArray(reviewList) || reviewList.some(id => typeof id !== 'string') ||

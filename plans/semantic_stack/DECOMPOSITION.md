@@ -48,8 +48,14 @@ The v7 source renderer reads authored per-stage contribution contracts. Each sta
 The first v7 Sol008 diagnostic showed source-quoted contributions in all four
 named stages, consumed scoped natural-language decisions, and a final answer
 equal to the authored reference. Its collector then failed because the pinned
-older runtime snapshot did not contain the new comparator. Freeze the runtime
-and bind its manifest hash to every queue before claiming an oracle outcome.
+older runtime snapshot did not contain the new comparator. A retry on the
+corrected frozen runtime completed with the same exact answer. Trace review
+found that the early stages manually populated case-specific evidence and rule
+arrays in `eval`; the scoped literal consumed those prior decisions, but it did
+not do all the intended semantic work. The result is correct diagnostic
+evidence, held from training until trajectory idiom is reviewed. Freeze the
+runtime and bind its manifest hash to every queue before claiming an oracle
+outcome.
 The ecology01 diagnostic exposed a different issue: a rich scoped child
 decision failed, after which the parent forwarded an empty owned field despite
 applicable relations. The next presentation should use a narrow per-relation
