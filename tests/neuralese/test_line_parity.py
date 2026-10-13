@@ -71,17 +71,17 @@ def test_both_lines_progress_in_lockstep():
         assert all(spec.get('recipe') for spec in declaration['lines'].values()), stage
 
 
-def test_e2e_lines_share_acceptance_and_readiness():
+def test_e2e_lines_share_acceptance():
     parity = line_parity.load_parity()
     for line in line_parity.LINES:
         kind, config = line_parity.effective_config(parity['stages']['e2e']['lines'][line])
         assert kind == 'direct_runtime_qualification+raw_recurrence_training'
-        assert config['parent_readiness.held_ce_plateau.evaluations'] == 3
         assert config['e2e_acceptance.paired_reader.max_v_minus_t_ce_nats'] == 0.0
+        assert not any(key.startswith('parent_readiness') for key in config)
     kind, config = line_parity.effective_config({'recipe': 'neuralese-e2e-lfm-v1'})
-    config = {**config, 'parent_readiness.held_ce_plateau.max_relative_improvement': 0.1}
+    config = {**config, 'e2e_acceptance.paired_reader.max_v_minus_t_ce_nats': 0.1}
     errors, _ = line_parity.compare(parity, 'e2e', 'lfm', kind, config)
-    assert len(errors) == 1 and 'parent_readiness' in errors[0]
+    assert len(errors) == 1 and 'e2e_acceptance' in errors[0]
 
 
 def _repo_copy(tmp_path):

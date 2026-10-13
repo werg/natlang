@@ -18,7 +18,6 @@ from pathlib import Path
 
 SCHEMA = 'natlang.neuralese-e2e-certificate/1'
 KEYS = {'description', 'paired_reader', 'task_success', 'drift', 'reported'}
-READINESS_KEYS = {'description', 'held_ce_plateau', 'no_drift_stop', 'task_success'}
 PAIRED = {'max_v_minus_t_ce_nats', 'min_v_margin_over_shuffled_nats', 'min_v_margin_over_zeroed_nats',
           'min_paired_readers'}
 
@@ -148,128 +147,20 @@ def projection_on_manifold(declaration, report):
     return criteria
 
 
-# Readiness of a direct phase to hand off into the end-to-end lineage (owner 2026-10-12: e2e replaces text-only SFT
-# as soon as it is ready, without waiting for the direct phase's full epoch). Declared once in the shared base recipe
-# (``parent_readiness``), the same for both lines, and read from the running direct phase's own logs.
-
-def validate_readiness(declaration):
-    if not isinstance(declaration, dict) or set(declaration) - READINESS_KEYS or \
-            not {'held_ce_plateau', 'no_drift_stop', 'task_success'} <= set(declaration):
-        raise ValueError('parent_readiness is {held_ce_plateau, no_drift_stop, task_success, description?}')
-    plateau = declaration['held_ce_plateau']
-    if (not isinstance(plateau, dict) or set(plateau) != {'evaluations', 'max_relative_improvement'} or
-            type(plateau['evaluations']) is not int or plateau['evaluations'] < 1 or
-            not _number(plateau['max_relative_improvement'])):
-        raise ValueError('held_ce_plateau is {evaluations: int >= 1, max_relative_improvement: number}')
-    if declaration['no_drift_stop'] is not True:
-        raise ValueError('parent_readiness.no_drift_stop is true')
-    task = declaration['task_success']
-    if (not isinstance(task, dict) or set(task) != {'min_vs_base', 'until_measured'} or
-            not _number(task['min_vs_base']) or task['until_measured'] not in ('blocks', 'reported')):
-        raise ValueError('parent_readiness.task_success is {min_vs_base: number, until_measured: blocks|reported}')
-
-
-def _jsonl(path):
-    path = Path(path)
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()] if path.is_file() else []
-
-
-def _task_eval_candidate(direct_stage):
-    """The in-run task evaluation of the candidate checkpoint (eval/task_cadence.py): the latest step with a task
-    evaluation landed or requested. A requested asynchronous evaluation that has not landed, or an ineligible one,
-    leaves readiness pending (it waits for that checkpoint's result); None when the stage has no task evaluation."""
-    from ..eval.task_cadence import pending_requests
-    rows = [r for r in _jsonl(Path(direct_stage) / 'task-eval.jsonl') if isinstance(r.get('step'), int)]
-    pending = {int(p.name.removeprefix('step-')) for p in pending_requests(direct_stage)}
-    steps = {r['step'] for r in rows} | pending
-    if not steps:
-        return None
-    step = max(steps)
-    landed = [r for r in rows if r['step'] == step]
-    if not landed:
-        return {'status': 'pending', 'step': step,
-                'reason': 'the task evaluation of the candidate checkpoint has not landed (asynchronous job pending)'}
-    row = landed[-1]
-    if not row.get('eligible'):
-        return {'status': 'pending', 'step': step, 'reason': 'the candidate checkpoint\'s task evaluation was '
-                'ineligible (infrastructure); the next cadence evaluates again', 'error': row.get('error')}
-    cases, reference = row.get('cases') or 0, row.get('reference_successes')
-    if not cases or not isinstance(reference, int):
-        return {'status': 'pending', 'step': step, 'reason': 'base reference_successes unmeasured for this line'}
-    return {'step': step, 'rate': row['task_successes'] / cases, 'base_rate': reference / cases,
-            'task_successes': row['task_successes'], 'reference_successes': reference, 'cases': cases}
-
-
-def readiness(declaration, direct_stage):
-    """Whether the direct phase in ``direct_stage`` (its eval.jsonl, drift.jsonl) is ready to hand off.
-
-    Held CE plateau: over the last ``evaluations`` held evaluations on one held set (a data continuation re-measures
-    the base on a new held set; only evaluations sharing the latest base_ce are compared), the relative held CE
-    improvement from the first to the last is at most ``max_relative_improvement``. No drift stop: the latest drift
-    record's guard is not ``stop``. Task success: the phase's latest eligible in-run task evaluation (task-eval.jsonl,
-    eval/task_cadence.py) at the candidate checkpoint at least the base rate (the line's declared reference_successes)
-    + ``min_vs_base``; a pending asynchronous evaluation or an unmeasured base leaves it pending; until the phase
-    measures it, ``until_measured`` says whether its absence blocks or is reported."""
-    validate_readiness(declaration)
-    evals = [e for e in _jsonl(Path(direct_stage) / 'eval.jsonl') if _number(e.get('ce'))]
-    criteria = {}
-    plateau = declaration['held_ce_plateau']
-    same_set = [e for e in evals if evals and e.get('base_ce') == evals[-1].get('base_ce')]
-    window = same_set[-(plateau['evaluations'] + 1):]
-    if len(window) < plateau['evaluations'] + 1:
-        criteria['held_ce_plateau'] = {'status': 'pending', 'evaluations_on_held_set': len(same_set),
-                                       'needed': plateau['evaluations'] + 1}
-    else:
-        first, last = window[0]['ce'], window[-1]['ce']
-        improvement = (first - last) / first if first else 0.0
-        criteria['held_ce_plateau'] = {'status': 'pass' if improvement <= plateau['max_relative_improvement'] else
-                                       'fail', 'relative_improvement': improvement,
-                                       'max': plateau['max_relative_improvement'],
-                                       'steps': [e.get('step') for e in window], 'ce': [e['ce'] for e in window]}
-    drift = _jsonl(Path(direct_stage) / 'drift.jsonl')
-    guard = ((drift[-1].get('behaviour_drift') or {}).get('guard') if drift else None)
-    criteria['no_drift_stop'] = {'status': 'pending' if not drift else ('fail' if guard == 'stop' else 'pass'),
-                                 'guard': guard, 'step': drift[-1].get('step') if drift else None}
-    task = declaration['task_success']
-    measured = (evals[-1].get('task_success') or {}) if evals else {}
-    candidate = _task_eval_candidate(direct_stage)
-    if candidate is not None:
-        criteria['task_success'] = (candidate if candidate.get('status') == 'pending' else
-                                    {**candidate, 'status': 'pass' if candidate['rate'] >= candidate['base_rate'] +
-                                     task['min_vs_base'] else 'fail', 'min_vs_base': task['min_vs_base']})
-    elif _number(measured.get('rate')) and _number(measured.get('base_rate')):
-        criteria['task_success'] = {'status': 'pass' if measured['rate'] >= measured['base_rate'] + task['min_vs_base']
-                                    else 'fail', **measured, 'min_vs_base': task['min_vs_base']}
-    else:
-        criteria['task_success'] = {'status': 'pending' if task['until_measured'] == 'blocks' else 'reported',
-                                    'reason': 'the direct phase reports no held task-success rate yet '
-                                              '(plans/REVIEW_20261012.md item 1)'}
-    ready = all(c['status'] in ('pass', 'reported') for c in criteria.values())
-    return {'schema': 'natlang.neuralese-e2e-readiness/1', 'ready': ready, 'direct_stage': str(direct_stage),
-            'latest_step': evals[-1].get('step') if evals else None, 'criteria': criteria}
-
-
 def main(argv=None):
     import argparse
-    parser = argparse.ArgumentParser(description='End-to-end lineage: readiness of a direct phase to hand off '
-                                                 '(parent_readiness) or acceptance of a finished e2e stage.')
+    parser = argparse.ArgumentParser(description='End-to-end lineage: acceptance of a finished e2e stage.')
     sub = parser.add_subparsers(dest='command', required=True)
-    ready = sub.add_parser('readiness')
-    ready.add_argument('--recipe', type=Path, required=True, help='an e2e recipe (base or line)')
-    ready.add_argument('--direct-stage', type=Path, required=True, help='the running direct phase directory')
     accept = sub.add_parser('acceptance')
     accept.add_argument('--recipe', type=Path, required=True)
     accept.add_argument('--summary', type=Path, required=True, help='the e2e stage summary.json')
     args = parser.parse_args(argv)
     from .recipe import resolve_recipe_data
     recipe = resolve_recipe_data(args.recipe)
-    if args.command == 'readiness':
-        result = readiness(recipe['parent_readiness'], args.direct_stage)
-    else:
-        criteria, reported = evaluate(recipe['e2e_acceptance'], json.loads(args.summary.read_text()))
-        result = {'qualified': all(c['status'] == 'pass' for c in criteria.values()), 'criteria': criteria}
+    criteria, reported = evaluate(recipe['e2e_acceptance'], json.loads(args.summary.read_text()))
+    result = {'qualified': all(c['status'] == 'pass' for c in criteria.values()), 'criteria': criteria}
     print(json.dumps(result, indent=1))
-    return 0 if result.get('ready', result.get('qualified')) else 1
+    return 0 if result['qualified'] else 1
 
 
 if __name__ == '__main__':

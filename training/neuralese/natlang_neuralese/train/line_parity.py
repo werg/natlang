@@ -157,7 +157,7 @@ def recipe_config(recipe):
             _flatten('backbone', {k: v for k, v in recipe['backbone'].items() if k != 'description'}, view)
     flat = (next(iter(views.values())) if len(views) == 1 else
             {f'stages.{sid}.{key}': value for sid, view in views.items() for key, value in view.items()})
-    for key in ('e2e_acceptance', 'parent_readiness'):  # the same acceptance and handoff moment on both lines
+    for key in ('e2e_acceptance',):  # the same acceptance on both lines
         if key in recipe:
             _flatten(key, {k: v for k, v in recipe[key].items() if k != 'description'}, flat)
     for key, value in recipe.items():  # every other leaf setting (runtime, outputs, lineage, continuations, ...)
@@ -169,7 +169,7 @@ def recipe_config(recipe):
 # Top-level members of a multi-stage recipe that the stage views above already cover (or that name the recipe).
 VIEWED_TOP_LEVEL = frozenset({'schema', 'id', 'description', 'extends', 'overrides', 'parity', 'stages',
                               'stage_parameter_defaults', 'input_bindings', 'quantization', 'family', 'backbone',
-                              'e2e_acceptance', 'parent_readiness'})
+                              'e2e_acceptance'})
 
 
 def _twin_registered(base_sha, line_sha, repo):

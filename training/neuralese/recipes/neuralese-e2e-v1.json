@@ -205,17 +205,5 @@
    "written-trained-train",
    "quantization"
   ]
- },
- "parent_readiness": {
-  "description": "When a line's running direct phase hands off into this lineage (owner 2026-10-12: e2e replaces text-only SFT once ready, without waiting for the phase's full epoch). Checked on the direct phase's own logs by train/e2e_acceptance.py readiness; the same criterion and the same moment rule for both lines (lockstep, plans/neuralese/TRAINING_RECIPE.md). Held CE plateau: over the last 3 held evaluations on one held set, at most 2% relative improvement; no drift stop; held task success at least the base's once the direct phase measures it (until then reported, plans/REVIEW_20261012.md item 1). The handoff itself: the phase stops at a checkpoint (--handoff with stop_at, or a signal), that checkpoint is exported (train/direct_export.py), and the line's launch recipe extending neuralese-e2e-<line>-v1 binds the export; this lineage's direct_runtime stage qualifies those exact weights before any e2e update.",
-  "held_ce_plateau": {
-   "evaluations": 3,
-   "max_relative_improvement": 0.02
-  },
-  "no_drift_stop": true,
-  "task_success": {
-   "min_vs_base": 0.0,
-   "until_measured": "reported"
-  }
  }
 }

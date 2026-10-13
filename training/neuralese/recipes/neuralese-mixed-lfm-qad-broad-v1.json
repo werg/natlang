@@ -1,0 +1,60 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "neuralese-mixed-lfm-qad-broad-v1",
+ "extends": "neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix",
+ "description": "The LFM main lineage (neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix) handed off in place into the mixed run (owner decision 2026-10-13), in lockstep with neuralese-mixed-mellum-v4 (same e2e_mix): one --handoff of its running direct_sft at a checkpoint keeps weights, MuonSR state, update counter, data plan, QAT curriculum and RNG; the objective continuation adds e2e_mix (previous: none), the TokenChoiceProjection starts at the identity with fresh optimizer state, and the writer's rate moves to e2e_mix.writer.lr. If the lineage is still in direct_warmup, hand off once direct_sft has started (an objective continuation names the active stage).",
+ "overrides": {
+  "e2e_mix": {
+   "description": "The mixed run (owner decision 2026-10-13; plans/neuralese/NEURALESE_DIRECT_V1.md \"The mixed run\"): the direct stage interleaves e2e producer->consumer updates (train/trajectories.py build_e2e_objective, the e2e stage's edge loss and paired held readers) with its direct updates, on one engine, one NeuraleseProjection (the writer), one TokenChoiceProjection (the token readout, identity-initialised at the handoff) and one optimizer; the precision point, drift monitor, task evaluation and checkpoint are the direct stage's. After direct update i, the e2e cursors floor((i-1)r)..floor(ir)-1 run, r = p/(1-p) (direct_sft.e2e_cursors), so a fraction p of all updates are e2e. fraction 0.25 is a placeholder until measured. The TokenChoiceProjection and the writer train at 3e-6 on Muon (the e2e collapse dragnet's stable rates, plans/neuralese/E2E_COLLAPSE.md). records/pieces and options are neuralese-e2e-v1's e2e stage data and settings (e2e corpus v2, streamed by trajectory); its optimizer, rates, monitor, task evaluation and checkpointing are the host's, and the latents step in the host's backward (no layer-staged backward).",
+   "stages": [
+    "direct_sft",
+    "direct_trajectory"
+   ],
+   "fraction": 0.25,
+   "records": {
+    "path": "runs/neuralese-e2e-cohort-20261012-v2/records.jsonl",
+    "sha256": "40d608d47714d31e54f027e2f7d38e07ac9b764d0df6185f42187b4f844c9c08"
+   },
+   "pieces": {
+    "path": "runs/neuralese-e2e-cohort-20261012-v2/pieces.jsonl",
+    "sha256": "8f420dcd79ee6044012d2323ef06557706989d02dbdc07aa6108d7c9949a7a9a"
+   },
+   "options": {
+    "eval": 32,
+    "max_tokens": 32768,
+    "max_write_vectors": 2048,
+    "prompt_rendering": "full",
+    "write_depth": 1,
+    "tokens_per_vector": 1.0,
+    "writer_supervision": "native-value",
+    "writer_length_policy": "native-value",
+    "stop_supervision": "generated-length",
+    "distill": 0.0,
+    "writer_text_weight": 1.0,
+    "context_weight": 1.0,
+    "feedback_weight": 0.25,
+    "producer_batch_size": 1,
+    "record_source": "trajectories",
+    "family_temperature": 0.5,
+    "stream_held_chains": 4,
+    "stream_probe_chains": 1,
+    "seed": 20261011
+   },
+   "token_choice": {
+    "lr": 3e-06,
+    "optimizer": "muon"
+   },
+   "writer": {
+    "lr": 3e-06,
+    "optimizer": "muon"
+   }
+  },
+  "objective_continuation": {
+   "stage": "direct_sft",
+   "previous": {
+    "e2e_mix": null
+   },
+   "description": "The mixed run joins the active direct_sft (owner decision 2026-10-13): e2e_mix is the only changed objective component (none before); the QAT curriculum and family continue unchanged from the handoff update."
+  }
+ }
+}

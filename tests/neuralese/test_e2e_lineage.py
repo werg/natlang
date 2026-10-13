@@ -1,4 +1,4 @@
-"""The end-to-end lineage (NEURALESE_DIRECT_V1.md "End-to-end stage"): recipe validation, acceptance and readiness."""
+"""The end-to-end lineage (NEURALESE_DIRECT_V1.md "End-to-end stage"): recipe validation and acceptance."""
 import json
 import shutil
 import sys
@@ -75,46 +75,6 @@ def test_acceptance_compares_values_with_tokens_and_keeps_missing_evidence_pendi
     criteria, _ = e2e_acceptance.evaluate(declaration, summary)
     assert criteria['v_minus_t_ce']['status'] == 'fail' and criteria['task_success_vs_parent']['status'] == 'fail'
     assert criteria['task_success']['status'] == 'pass'  # V 1/1 against T 1/1 on the fused case
-
-
-def test_readiness_reads_the_direct_phase_task_evaluation(tmp_path):
-    declaration = json.loads((RECIPES / 'neuralese-e2e-v1.json').read_text())['parent_readiness']
-    stage = tmp_path / 'direct_sft'
-    stage.mkdir()
-    rows = [{'step': s, 'ce': c, 'base_ce': 1.5} for s, c in ((400, 1.0), (800, 0.995), (1200, 0.99), (1600, 0.985))]
-    (stage / 'eval.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
-    (stage / 'drift.jsonl').write_text(json.dumps({'step': 1600, 'behaviour_drift': {'guard': 'ok'}}) + '\n')
-    runs = [{'step': 400, 'task_successes': 2, 'cases': 16, 'eligible': True, 'reference_successes': 4},
-            {'step': 1600, 'task_successes': 3, 'cases': 16, 'eligible': True, 'reference_successes': 4}]
-    (stage / 'task-eval.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in runs))
-    result = e2e_acceptance.readiness(declaration, stage)
-    assert not result['ready'] and result['criteria']['task_success']['status'] == 'fail'
-    runs[-1]['task_successes'] = 4
-    (stage / 'task-eval.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in runs))
-    result = e2e_acceptance.readiness(declaration, stage)
-    assert result['ready'] and result['criteria']['task_success']['status'] == 'pass'
-
-
-def test_readiness_needs_a_held_ce_plateau_on_one_held_set(tmp_path):
-    declaration = json.loads((RECIPES / 'neuralese-e2e-v1.json').read_text())['parent_readiness']
-    stage = tmp_path / 'direct_sft'
-    stage.mkdir()
-    rows = [{'step': 0, 'ce': 2.0, 'base_ce': 2.0}, {'step': 400, 'ce': 1.0, 'base_ce': 1.5},
-            {'step': 800, 'ce': 0.95, 'base_ce': 1.5}]
-    (stage / 'eval.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
-    (stage / 'drift.jsonl').write_text(json.dumps({'step': 800, 'behaviour_drift': {'guard': 'warn'}}) + '\n')
-    result = e2e_acceptance.readiness(declaration, stage)
-    assert not result['ready'] and result['criteria']['held_ce_plateau']['status'] == 'pending'
-    rows += [{'step': 1200, 'ce': 0.94, 'base_ce': 1.5}, {'step': 1600, 'ce': 0.935, 'base_ce': 1.5}]
-    (stage / 'eval.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
-    result = e2e_acceptance.readiness(declaration, stage)
-    assert not result['ready'] and result['criteria']['held_ce_plateau']['status'] == 'fail'  # 1.0 -> 0.935: 6.5%
-    rows += [{'step': 2000, 'ce': 0.932, 'base_ce': 1.5}]
-    (stage / 'eval.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
-    result = e2e_acceptance.readiness(declaration, stage)
-    assert result['ready'] and result['criteria']['task_success']['status'] == 'reported'
-    (stage / 'drift.jsonl').write_text(json.dumps({'step': 2000, 'behaviour_drift': {'guard': 'stop'}}) + '\n')
-    assert not e2e_acceptance.readiness(declaration, stage)['ready']
 
 
 def test_family_interleaved_order_spreads_families_and_is_seeded():
