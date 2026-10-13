@@ -293,3 +293,24 @@ stop; the behaviour report passed. Train pairs: 6/6, V minus matched tokens
 claiming qualification from 22 readers or certifying autonomous stopping/tasks.
 Finish the other declared rate arms and compare under this repaired protocol;
 let the requeued full/PH/marker LFM task diagnostic finish before another GPU arm.
+
+### Mixed-ratio preparation (DGX supervisor, 2026-10-13)
+
+The shared diagnostic recipes diag-mixed-lfm-u10006-p10/p25/p50 inherit
+diag-mixed-lfm-u10006-ratio-base, which extends the existing shared mixed recipe.
+Only fraction differs. They use admitted r3 direct data and v3 E2E edges,
+the exact u10006 aligned projection, and a fresh optimizer at common exported
+weights. This is an explicit diagnostic fork, not a full-state checkpoint resume.
+The 32-direct-update prefix calibrates throughput; it does not satisfy the
+equal-training-wall-time ratio comparison or select a production fraction.
+
+The existing serving loader restores 146/146 parent tensors identically from
+runs/mixed-ratio-lfm-u10006-20261013/u10006-serving-heads.pt (SHA-256
+b448cf9724906ee2cd55d749e08097517f63f122c56d098a6fc6ec176e987720).
+initialization-receipt.json pins the parent manifest/payload/clean anchor.
+Materialization uses the existing backbone_trainables restore interface,
+with tensor equality checked before and after load_engine. Operational preparation
+and verifier logs are under /home/werg/data/dgxops/ratio-heads-*.log.
+Schema validation passed for all three; p10 recipe --plan-only passed using
+--heads runs/mixed-ratio-lfm-u10006-20261013/u10006-serving-heads.pt.
+The recipes remain unlaunched pending the rate sweep and resource window.
