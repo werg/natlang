@@ -6,15 +6,15 @@ Owner request, 2026-10-13: at least 100 distinct, inventive, sizable natlang pro
 
 `astra-programs.json` contains **120 individually authored program designs across 20 domains**, six per domain. Each entry has a concrete objective, distinct semantic operation, source evidence, typed input and output contracts, six named stages, a scoped language literal with numbered instructions, a structured provisional oracle, and a task-specific counterfactual. This is a program design catalog, not a claim of 120 completed live executions.
 
-Eight priority programs have **24 manually authored interacting records each**, with cross-record dependencies and source-grounded expected results. The other 112 have runnable diagnostic seed fixtures and a recorded expansion specification; they remain held for production generation until the expansion is materialized and reviewed. Their seeds do not count as sizable training examples. None of these records is training-admitted or live-teacher-qualified by this document.
+All **120 programs now have authored fixture views with at least 24 records**, spanning **54 distinct source worlds**. Several domain programs share one coherent world but perform different semantic operations; those views count as separate programs and one world. Thirteen cases currently carry generation-ready flags from completed source review; the remaining independently reviewed cases await sealed review/replay receipts. None is training-admitted or live-teacher-qualified by this document.
 
 The complete machine-readable designs are the primary artifact. The source-pool integrator owns actual `.nl` materialization, scoped access, native runtime replay, teacher sampling, corpus registration and manifests. Astra owns this catalog and its review. Sol authors a separate catalog in `training/semantic_stack/sol_programs.json`; the domain allocation was coordinated to avoid duplicate task families.
 
 ## Expansion progress after the first cohort
 
-The catalog now contains **80 substantial authored fixture views** of at least 24 records each. Thirteen have passed independent source/oracle review and exact checks. The others are held pending independent review/replay; 40 designs remain seed-only. Recent programs share coherent domain worlds with `world_family_id`; distinct program views do not count as independent worlds. Every program still requires live executor qualification and training admission. The first-cohort discussion below records its original eight cases.
+All 120 expansion designs are materialized. Sol independently read the 112 cases beyond the original eight and identified nine scope/completeness corrections, all incorporated: calendar-year dating, explicit manufacture location, detection-category precedence, complete unchanged-condition reporting, inclusive transit deadline, single-plume disagreement, receipt quantity semantics, Ren possession role, and intended figure-caption order (plus scope checks across the shared worlds). The source-pool integrator independently reviewed earlier cohorts. The latest sealed-source candidate is `/tmp/astra-review-snapshot-120-final.json`; durable artifacts are this document and `astra-programs.json`.
 
-Four strongly patterned worlds (archaeology-02/03/05 and folklore-04) are explicitly tagged diagnostic-first rather than mass-generation priority. Calendar-year dating permits deposition earlier in the same floor-construction year; object biography evidence now explicitly states manufacture location.
+Four strongly patterned worlds (archaeology-02/03/05 and folklore-04) are explicitly tagged diagnostic-first rather than mass-generation priority. Shared-world IDs and hashes prevent program views from inflating independent-world breadth. Actual helper depth, live semantic outcomes and training admission remain separate gates.
 
 ## Natlang decomposition before implementation
 
@@ -85,7 +85,7 @@ These synthetic seeds establish controllable semantics and exact counterfactuals
 | `astra-games-01` | Eleven-stage unlock chain, two unreachable cycles, misleading mentions and promises. | Reward replay from empty inventory and unreachable strongly connected components. |
 | `astra-manufacturing_quality-03` | Three models, overlapping revisions, a partial withdrawal and sixteen boundary work orders. | Inclusive interval partition, explicit supersession and authority. |
 
-For the remaining 112, each `expansion_recipe` binds the program ID, semantic operation, exact counterfactual intervention and 24-record linked-world construction. Its status is `specified_pending_materialization`. A random seed is not a determinism guarantee for a teacher. Reproducibility means freezing the recipe, provider/generator revision, produced files and oracle hashes. Generation-ready status remains false until those artifacts exist and meet the gates.
+Every `expansion_recipe` now has a materialized source fixture; the recipe remains as provenance and a guide to future variants. Shared worlds use the same logical paths and `world_family_id`. Reproducibility is the frozen source/oracle hash, not a claim that a teacher becomes deterministic from a numeric seed. The original counterfactual text is a design example and must be rebound to the current world IDs before variant generation; that rebinding needs its own answer-change check.
 
 ## Exact checks, teacher judgments and reward
 
@@ -119,7 +119,7 @@ Reviewers should see source evidence and task requirements independently of the 
 - **Oracle-generator common bug:** compare source interpretation against an independently written reference and case-level human/teacher review, especially at interval boundaries and negated conditions.
 - **Premature adoption:** catalog creation, typed source checks and authored replay are distinct from live sampling, source clearance and training admission.
 
-The correct next step is to materialize and sample the eight substantial fixtures first while expanding and reviewing the other 112 program designs. Failures should trigger a broad implementation dragnet—rendering, scope, captures, masks, source access, exact helpers, output typing and oracle ambiguity—before rejecting the program family.
+The next step is to seal independent source/replay receipts for all 120 and sample a semantically varied cohort on the live executor. Failures should trigger a broad implementation dragnet—rendering, scope, captures, masks, source access, exact helpers, output typing and oracle ambiguity—before rejecting the program family.
 
 ## Checks recorded for this revision
 
@@ -128,3 +128,5 @@ On 2026-10-13, an independent exact-reference review of the eight full fixtures 
 The repository quick check passed: 22 Python ratchet tests and the TypeScript check. No live executor or teacher samples were run by this author. The source integrator independently reviews the full fixtures and owns subsequent replay and live qualification. Two seed ambiguities were corrected during author review: the sensory-route traversal now explicitly overlaps the noisy interval, and roster assignment has a stated tie-break for its otherwise interchangeable slots.
 
 The source-pool integrator independently reviewed all eight 24-record fixtures and their semantic oracles on 2026-10-13, requesting no oracle corrections. That review found a separate builder issue: stage files emitted as siblings do not implement the intended deep callable chain. The integrator owns the nested-folder repair and subsequent exact replay/live diagnostic. Catalog source review does not certify that builder or its eventual executions.
+
+Astra also independently reviewed all 90 previously held Sol programs across 18 shared worlds. Eight source-scope corrections were requested and accepted by Sol. The review receipt is `SOL_INDEPENDENT_REVIEW_ASTRA.json`; its hashes will be refreshed against Sol’s explicit structured-output conversion before final source clearance. This cross-review does not count a replay of the authored gold as independent semantic evidence.
