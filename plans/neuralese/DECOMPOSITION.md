@@ -194,3 +194,13 @@ AccountForMinedRows preserves the existing whole-trajectory mining policy:
 The Python miner is crisp accounting over the verifier's output. This adds no
 eligibility rule, prompt, renderer change or new training admission. A completed
 zero-edge conversion must not look like lost or unprocessed input.
+
+## Cancel a queued resource request — 2026-10-13
+
+The caller supplies the unit to cancel; this adds no scheduling decision.
+1. Stop that unit's detached waiting client, if loaded, so it cannot renew the request.
+2. Remove the durable queue entry and record the existing cancellation event.
+3. Leave the execution unit and running claims alone.
+The memory ledger performs these exact systemd and durability operations. Stopping
+only the queue entry allows its still-running client to put it back and prevents
+an immediate relaunch with a corrected reservation.
