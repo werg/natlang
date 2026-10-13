@@ -1,0 +1,1822 @@
+{
+  "schema": "natlang.storage-cleanup/2",
+  "machine": "pop",
+  "date": "2026-10-13",
+  "authority": "Owner requested another storage pass; updated AGENTS.md favors preserving uncertain artifacts by verified relocation.",
+  "before": {
+    "/": {
+      "total": 871603957760,
+      "used": 832761167872,
+      "free": 29959340032
+    },
+    "/srv/storage": {
+      "total": 99523825664,
+      "used": 95939227648,
+      "free": 2550620160
+    }
+  },
+  "after": {
+    "/": {
+      "total": 871603957760,
+      "used": 816240263168,
+      "free": 46480244736
+    },
+    "/srv/storage": {
+      "total": 99523825664,
+      "used": 79527743488,
+      "free": 18962104320
+    }
+  },
+  "net_available_delta_bytes": {
+    "/": 16520904704,
+    "/srv/storage": 16411484160
+  },
+  "exact_dedup_pairs": 88,
+  "dedup_reclaimed_allocated_bytes": 21988429824,
+  "deduplicated": [
+    {
+      "canonical_keep": "/home/werg/natlang/.local/cold-storage-20261013/neuralese-direct-held-task-eval-20261012-v2/pending-checkpoints/direct_sft-step4000/checkpoint.pt",
+      "deduplicate_path": "/home/werg/natlang/.local/cold-storage-20261013/neuralese-direct-held-task-eval-20261012-v2/candidate-step4000-program-header-v1/candidate-checkpoint.pt",
+      "sha256": "cbd1d607305579ac25bdc704b701d02c706222a9b64ef81be62d4cc44f8e9d82",
+      "bytes": 1158366547,
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        52579338
+      ],
+      "reclaimed_allocated_bytes": 1158373376
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v11/recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-final/prefix-recurrence-records.jsonl",
+      "bytes": 263409240,
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1343945
+      ],
+      "reclaimed_allocated_bytes": 263413760
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-v50-proposal-v1/prefix-recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-v50-proposal-v2/prefix-recurrence-records.jsonl",
+      "bytes": 263409240,
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        4329202
+      ],
+      "reclaimed_allocated_bytes": 263413760
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v1/prefix-recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v2/prefix-recurrence-records.jsonl",
+      "bytes": 263409240,
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        4333125
+      ],
+      "reclaimed_allocated_bytes": 263413760
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-assembly-attempt2/prefix-recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-candidate-v3/prefix-recurrence-records.jsonl",
+      "bytes": 263409240,
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        5664711
+      ],
+      "reclaimed_allocated_bytes": 263413760
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/luna-v17-actual-quality-proposal-20261008-v9-portable-context-proposal/assembled-v2/recurrence-records.jsonl",
+      "bytes": 271336477,
+      "sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        7106141
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-v24-v9-three-action-action45-proposal-20261008-v1/assembled/recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v24-v9-three-action-action47-proposal-20261008-v1/assembled/recurrence-records.jsonl",
+      "bytes": 271336477,
+      "sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        6953110
+      ],
+      "reclaimed_allocated_bytes": 271351808
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-v24-v9-three-action-integration-20261008-v1/native-append/recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v24-v9-three-action-integration-20261008-v2/native-append/recurrence-records.jsonl",
+      "bytes": 271336477,
+      "sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        6827253
+      ],
+      "reclaimed_allocated_bytes": 271343616
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/assembled-v2/native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/assembled/native-records.jsonl",
+      "bytes": 334771870,
+      "sha256": "e5c6eefdb9c2a358414f4748b037d3fc2ead43c99dba02e4eb5e3bccc83c848b",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        7108233
+      ],
+      "reclaimed_allocated_bytes": 334778368
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v1/proposed-native-heldout.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v2/proposed-native-heldout.jsonl",
+      "bytes": 122102692,
+      "sha256": "838e4f450651fc95513801f46c635befbd9c22da274339863d63c0fedc79f3f1",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        4333368
+      ],
+      "reclaimed_allocated_bytes": 122109952
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v1/proposed-cumulative-native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v2/proposed-cumulative-native-records.jsonl",
+      "bytes": 305001362,
+      "sha256": "4806a2dd33778f2d18be09db6199ad4ffe9f6e79946131aaa6f35bc35c5c54e8",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        4333233
+      ],
+      "reclaimed_allocated_bytes": 305008640
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v1/proposed-native-train.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v2/proposed-native-train.jsonl",
+      "bytes": 179044092,
+      "sha256": "cfa5866d1c41d9ac221f062d4130fcba1cc00dc3849066985de71d22e8ff4fd7",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        4333360
+      ],
+      "reclaimed_allocated_bytes": 179048448
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v1/diagnostics/cumulative-first-serialization-attempt.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v2/diagnostics/cumulative-first-serialization-attempt.jsonl",
+      "bytes": 301146784,
+      "sha256": "76b4d57936c790b170f0c758c4e74dc84b18bb6457fd40b2a088e46ddef4fad8",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        4333246
+      ],
+      "reclaimed_allocated_bytes": 301154304
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-final/proposed-cumulative-native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v1/inputs/v13-admitted-native-prefix.jsonl",
+      "bytes": 296413442,
+      "sha256": "25050d2990cab96b8f96cb720af7fe20d054df7cca4720afed1831703e142689",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        4331772
+      ],
+      "reclaimed_allocated_bytes": 296419328
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/directory-expansion-20260929/published-v5-preserved/static.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/directory-expansion-20260929/validated-v5.turns.jsonl",
+      "bytes": 341017511,
+      "sha256": "905e787d3677ff4947713fec61a086d9eea484e4ceae79e876f8ffcf1271342d",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1211670
+      ],
+      "reclaimed_allocated_bytes": 341028864
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/directory-expansion-20260929/bundle-v3/static.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/directory-expansion-20260929/stream-validated.turns.jsonl",
+      "bytes": 340546727,
+      "sha256": "8c81a5929b42859be2cf0d005d621d36efae7154d6f367918b014bdf0b67fb8c",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1211314
+      ],
+      "reclaimed_allocated_bytes": 340553728
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/directory-expansion-20260929/validated-v6.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260929-0926/published-v6-preserved/static.turns.jsonl",
+      "bytes": 340665077,
+      "sha256": "8ba43d264fd73dbdfe0d5a42abcd6c41ec0b6004fdd026e99748d8dd74147dd4",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1212573
+      ],
+      "reclaimed_allocated_bytes": 340672512
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-native-gold-text-corpus-20261007-v16-held-proposal-v5-before-split-scope-binding/text.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-native-gold-text-corpus-20261007-v16-held-proposal-v5/text.jsonl",
+      "bytes": 211090136,
+      "sha256": "03834a98bfdcf125605153a2ae1c6f0c237a9f7999d67b5f68a6dd5b8f045066",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o644",
+      "shared_inode": [
+        66311,
+        5769462
+      ],
+      "reclaimed_allocated_bytes": 211095552
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/generation-check-20260929-0926/bundle-v7/static.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260929-0926/validated-v7.turns.jsonl",
+      "bytes": 313492692,
+      "sha256": "04dd750006835c40659ec0b49a218f872d62f1bbbea00f93b82a6e133196f673",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1313991
+      ],
+      "reclaimed_allocated_bytes": 313503744
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/generation-check-20260929-0926/bundle-v7/static.results.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260929-1055/published-v7-preserved/static.results.jsonl",
+      "bytes": 147331294,
+      "sha256": "644292f59f9b39b14b6664a2a6d03cdbf9ffa2a9ee20b7e36ad49909cb27294d",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1313990
+      ],
+      "reclaimed_allocated_bytes": 147337216
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-native-gold-text-corpus-20261007-v12-r2/text.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-native-gold-text-corpus-20261007-v12-r3/text.jsonl",
+      "bytes": 207946971,
+      "sha256": "a35e460b6166ad0fae3c06e39e7a5466ccddc7cb54cecaf6ef444592aef7a91a",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o644",
+      "shared_inode": [
+        66311,
+        4335630
+      ],
+      "reclaimed_allocated_bytes": 207953920
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-native-gold-text-corpus-20261007-v12-r4/text.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-native-gold-text-corpus-20261007-v12-stale-container-renderer-diagnostic/text.jsonl",
+      "bytes": 207946971,
+      "sha256": "a35e460b6166ad0fae3c06e39e7a5466ccddc7cb54cecaf6ef444592aef7a91a",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o644",
+      "shared_inode": [
+        66311,
+        4335951
+      ],
+      "reclaimed_allocated_bytes": 207953920
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1/proposed-cumulative-recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v1/recurrence-records.jsonl",
+      "bytes": 264307731,
+      "sha256": "1c3d4b6b439c7d4f91ecfa8e2ab2ecd8638d6a44fbb26eee4c18c1ea7667d72c",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        5768016
+      ],
+      "reclaimed_allocated_bytes": 264314880
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v2/recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v3/recurrence-records.jsonl",
+      "bytes": 264307731,
+      "sha256": "1c3d4b6b439c7d4f91ecfa8e2ab2ecd8638d6a44fbb26eee4c18c1ea7667d72c",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        5768115
+      ],
+      "reclaimed_allocated_bytes": 264314880
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1/proposed-cumulative-native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v1/native-records.jsonl",
+      "bytes": 308822493,
+      "sha256": "bbfb87f3e626a56c1f16794aa138f8d8a15c18ae66f95d3bf2d59574b94417ed",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        5768023
+      ],
+      "reclaimed_allocated_bytes": 308830208
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v2/native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v3/native-records.jsonl",
+      "bytes": 308822493,
+      "sha256": "bbfb87f3e626a56c1f16794aa138f8d8a15c18ae66f95d3bf2d59574b94417ed",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        5768132
+      ],
+      "reclaimed_allocated_bytes": 308830208
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/dgx-qwen36-high-concurrency-20261002/backlog-1024-v3/bundle/native-reference-rows-v34.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/dgx-qwen36-pool1024-v3-20261002/bundle/native-reference-rows-v34.jsonl",
+      "bytes": 621341107,
+      "sha256": "dd113367155d85f1ef5aee1db41e4eb681b784da4edd3c9ce7570b0b14fa6c8f",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        2006193
+      ],
+      "reclaimed_allocated_bytes": 621346816
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v10/native-heldout.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v10-assembly-attempt3/native-heldout.jsonl",
+      "bytes": 113893620,
+      "sha256": "b40013026d0946e281a21492e4890419507085e97e6558064673b43e09db5821",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1343933
+      ],
+      "reclaimed_allocated_bytes": 113901568
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v10/native-train.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v10-assembly-attempt3/native-train.jsonl",
+      "bytes": 173637269,
+      "sha256": "7597936223c457c958a1986b5b218c04972c1fe6468e218c5c641c623cf5cae4",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1343950
+      ],
+      "reclaimed_allocated_bytes": 173637632
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v10/native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v10-assembly-attempt1/native-records.jsonl",
+      "bytes": 287530889,
+      "sha256": "9427ea272dfb594404b655e5b1d0a821027b1e657450bebe2c26472acacda6be",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1343924
+      ],
+      "reclaimed_allocated_bytes": 287535104
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v10-assembly-attempt2/native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v10-assembly-attempt3/native-records.jsonl",
+      "bytes": 287530889,
+      "sha256": "9427ea272dfb594404b655e5b1d0a821027b1e657450bebe2c26472acacda6be",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1343901
+      ],
+      "reclaimed_allocated_bytes": 287531008
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-v50-proposal-v1/proposed-native-heldout.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-v50-proposal-v2/proposed-native-heldout.jsonl",
+      "bytes": 118375652,
+      "sha256": "26d5a13830300e60989fad8e8f5eb6b45490283435d6c37415defe476c1eef39",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        4329200
+      ],
+      "reclaimed_allocated_bytes": 118382592
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-v50-proposal-v1/proposed-cumulative-native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-v50-proposal-v2/proposed-cumulative-native-records.jsonl",
+      "bytes": 296360719,
+      "sha256": "eddec4d88547f7fb9aeeb63e828e65d291d85c15ab7e6cad211f8140edb70878",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        4329198
+      ],
+      "reclaimed_allocated_bytes": 296366080
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-v50-proposal-v1/proposed-native-train.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-v50-proposal-v2/proposed-native-train.jsonl",
+      "bytes": 177985067,
+      "sha256": "78b24c74daabbdfcb8bc24aad6c40f2db720bdefa8a367cf1839e8da7ccb9d8a",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        4329199
+      ],
+      "reclaimed_allocated_bytes": 177991680
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/generation-check-20260929-1055/bundle-v9/static.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260929-1055/published-v9.turns.jsonl",
+      "bytes": 311530251,
+      "sha256": "8bac8e257b163f7af49842b75df0539ba14aebb113068ea7c3d53bc6ebff44ea",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1190291
+      ],
+      "reclaimed_allocated_bytes": 311541760
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/generation-check-20260929-1055/bundle-v8/static.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260929-1055/published-v8-preserved/static.turns.jsonl",
+      "bytes": 313270248,
+      "sha256": "55f0269f7f59b2c4f17f9ed5fe2f6d12496ed0b9973fcfae9c5e5701a8cbf2ae",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1187436
+      ],
+      "reclaimed_allocated_bytes": 313282560
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/generation-check-20260929-1055/bundle-v8/static.results.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260929-1055/published-v8-preserved/static.results.jsonl",
+      "bytes": 147229538,
+      "sha256": "5ebf87cc47ef146ee4dbf242f83a85c2c3c97d94be882035e9f3d36ebaabbe16",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1187434
+      ],
+      "reclaimed_allocated_bytes": 147234816
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/self-improvement-expansion-20261004/nllb-seed-static-full-v1/translation-references.host-only.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/self-improvement-expansion-20261004/nllb-seed-static-full-v2/translation-references.host-only.jsonl",
+      "bytes": 182077243,
+      "sha256": "d9dd200a7cab13de7e53bc68c63700803c71c5fe233ba52c036d0ddf87c6640d",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        5265431
+      ],
+      "reclaimed_allocated_bytes": 182083584
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/self-improvement-expansion-20261004/nllb-seed-static-full-v1/translation-source-ir.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/self-improvement-expansion-20261004/nllb-seed-static-full-v2/translation-source-ir.jsonl",
+      "bytes": 726712214,
+      "sha256": "413c7d648ba4eef126ae3cf1750cecfdb7b1470cd489e3999d50a3757803e260",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        5246244
+      ],
+      "reclaimed_allocated_bytes": 726716416
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-assembly-attempt1/proposed-native-heldout.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-assembly-attempt2/proposed-native-heldout.jsonl",
+      "bytes": 123854513,
+      "sha256": "304072091fd635ce4da9e3668eb7d09916bfdf2fc2960ecb74df0bd9c69c2fa6",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        5648998
+      ],
+      "reclaimed_allocated_bytes": 123858944
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-candidate-v3/proposed-native-heldout.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1/proposed-native-heldout.jsonl",
+      "bytes": 123854513,
+      "sha256": "304072091fd635ce4da9e3668eb7d09916bfdf2fc2960ecb74df0bd9c69c2fa6",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        5665212
+      ],
+      "reclaimed_allocated_bytes": 123858944
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-assembly-attempt1/proposed-cumulative-native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-assembly-attempt2/proposed-cumulative-native-records.jsonl",
+      "bytes": 307924002,
+      "sha256": "31724e2b57eb72da923d251b356a210e3b0da727688d8f43a203514174df7599",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        5648996
+      ],
+      "reclaimed_allocated_bytes": 307929088
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-assembly-attempt1/proposed-native-train.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-assembly-attempt2/proposed-native-train.jsonl",
+      "bytes": 180214911,
+      "sha256": "2b8720eae31a7970964732dfc8537ba2763e9e9736438d00c61b205fb6904dc1",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        5648997
+      ],
+      "reclaimed_allocated_bytes": 180219904
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/bonsai-followup-20261001-v5/workflow-quality-v4-byte-preserved-stage-v2/quality-v4.static.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/data-lineage-20261002/recipe-v33-current-policy-existing-data-only/run-v12/static-workflowevals.turns.jsonl",
+      "bytes": 2107104156,
+      "sha256": "9b958c6f0f860527ca84d7d3c189bc31f34bb2c9535220278c70688cece446e3",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        1323317
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/lfm-lora/v1/admitted.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/ling-lora/v1/admitted.jsonl",
+      "bytes": 132777327,
+      "sha256": "fe1238e458ecf174ca9ff7fa28590cd488e5fb68cd0d94646600931edd03fe3c",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        4457410
+      ],
+      "reclaimed_allocated_bytes": 132784128
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/lfm-lora/v1/turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/ling-lora/v1/turns.jsonl",
+      "bytes": 453591368,
+      "sha256": "c1a9bf7ca5486faa74fcd524d6f19f1787cafb143127f73679d815c21cfdbb0b",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        4457565
+      ],
+      "reclaimed_allocated_bytes": 453599232
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/data-lineage-20261002/recipe-v33-current-policy-existing-data-only/run-v12/static-directory.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/qasper-visible-v6d/quality-v26-qasper-visible-v6d.static.turns.jsonl",
+      "bytes": 345152094,
+      "sha256": "5c82868ca9bc84a7588176767304423734bbd5f40caf739ca377f641bff60ab7",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        2525645
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/qasper-visible-v6d/published-static.turns.native-check.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/qasper-visible-v6d/quality-v26-qasper-visible-v6d.final-review.turns.jsonl",
+      "bytes": 345152094,
+      "sha256": "5c82868ca9bc84a7588176767304423734bbd5f40caf739ca377f641bff60ab7",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        3288407
+      ],
+      "reclaimed_allocated_bytes": 345161728
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/generation-check-20260930-hourly/hourly-health-next/bonsai-rejection-audit-1823/source-hold-publication-v1/quality-v25.results.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260930-hourly/hourly-health-next/bonsai-rejection-audit-1823/source-hold-publication-v2/quality-v25.static.results.jsonl",
+      "bytes": 134216814,
+      "sha256": "b8daca6370fa43fc1ac30f6852c166a338019b1e377e1f91299830af1fd65e8f",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1321081
+      ],
+      "reclaimed_allocated_bytes": 134221824
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/generation-check-20260930-hourly/hourly-health-next/bonsai-rejection-audit-1823/source-hold-publication-v1/quality-v25.static.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260930-hourly/hourly-health-next/bonsai-rejection-audit-1823/source-hold-publication-v2/quality-v25.static.turns.jsonl",
+      "bytes": 284338922,
+      "sha256": "b74ce7137be1b29f6e7ce8e8c8c871add8d7016844a6409fb629679cb2257eff",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        1321076
+      ],
+      "reclaimed_allocated_bytes": 284344320
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/modern-v2/directory-expansion/quality-v26-modern.eligible.results.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/modern-v2/directory-expansion/quality-v26.modern.eligible.results.jsonl",
+      "bytes": 137009787,
+      "sha256": "efecdb05b432e1e0817bbbbc595bf07030f2bf9db2ffa94c9ae4ca0aea16ca79",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        3313946
+      ],
+      "reclaimed_allocated_bytes": 137015296
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/modern-v2/directory-expansion/quality-v26.modern.eligible.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/modern-v2/staged-publication/quality-v26.static.turns.jsonl",
+      "bytes": 290782493,
+      "sha256": "c0e4252f34eaa931f2db104d4a9fae01f23db670ef7c5ba25cf12df3b8a91858",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        3314624
+      ],
+      "reclaimed_allocated_bytes": 290787328
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/modern-v3/directory-expansion/quality-v26.static.results.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/modern-v3/staged-publication/quality-v26.static.results.jsonl",
+      "bytes": 138002973,
+      "sha256": "49f8c7d9b4b14167d1a3034a94969f8f476a47f0c6f692ad027173ce3eae54e8",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        3288319
+      ],
+      "reclaimed_allocated_bytes": 138010624
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/modern-v3/directory-expansion/quality-v26.static.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/modern-v3/staged-publication/quality-v26.static.turns.jsonl",
+      "bytes": 294233818,
+      "sha256": "1cc1666e161d6805513363e49a0b97325b1d5f110a950a611277daaf0e06237f",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        3288323
+      ],
+      "reclaimed_allocated_bytes": 294244352
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v2/text-build-v2/text.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v2/text-build-v3/text.jsonl",
+      "bytes": 229804333,
+      "sha256": "3ee1882733fb0f84e8b5ab5d1b881e25e86c2b217fb1b7885262636f89784b30",
+      "reason": "Closed immutable evidence/corpus copies with equal full SHA-256; preserve logical paths and seal bytes.",
+      "original_keep_mode": "0o664",
+      "shared_inode": [
+        66311,
+        7358005
+      ],
+      "reclaimed_allocated_bytes": 229810176
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-final/prefix-recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-v50-proposal-v2/prefix-recurrence-records.jsonl",
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "bytes": 263409240,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        1343945
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v2/prefix-recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-candidate-v3/prefix-recurrence-records.jsonl",
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "bytes": 263409240,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        4333125
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/luna-v17-actual-quality-proposal-20261008-v9-portable-context-proposal/assembled-v2/recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v24-v9-three-action-action47-proposal-20261008-v1/assembled/recurrence-records.jsonl",
+      "sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3",
+      "bytes": 271336477,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        7106141
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-native-gold-text-corpus-20261007-v16-held-proposal-v2/text.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-native-gold-text-corpus-20261007-v16-held-proposal-v3/text.jsonl",
+      "sha256": "4d57e8f4ff8d790b0897656ee7753c451d154087206f0a505ee354a8a2bef9a0",
+      "bytes": 210783555,
+      "original_keep_mode": "0o644",
+      "shared_inode": [
+        66311,
+        5768232
+      ],
+      "reclaimed_allocated_bytes": 210788352
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v1/inputs/v13-admitted-native-prefix.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v2/inputs/v13-admitted-native-prefix.jsonl",
+      "sha256": "25050d2990cab96b8f96cb720af7fe20d054df7cca4720afed1831703e142689",
+      "bytes": 296413442,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        4331772
+      ],
+      "reclaimed_allocated_bytes": 296419328
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/generation-check-20260929-0926/validated-v7.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260929-1055/published-v7-preserved/static.turns.jsonl",
+      "sha256": "04dd750006835c40659ec0b49a218f872d62f1bbbea00f93b82a6e133196f673",
+      "bytes": 313492692,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        1313991
+      ],
+      "reclaimed_allocated_bytes": 313507840
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-native-gold-text-corpus-20261007-v12-r3/text.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-native-gold-text-corpus-20261007-v12-stale-container-renderer-diagnostic/text.jsonl",
+      "sha256": "a35e460b6166ad0fae3c06e39e7a5466ccddc7cb54cecaf6ef444592aef7a91a",
+      "bytes": 207946971,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        4335630
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v1/recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v3/recurrence-records.jsonl",
+      "sha256": "1c3d4b6b439c7d4f91ecfa8e2ab2ecd8638d6a44fbb26eee4c18c1ea7667d72c",
+      "bytes": 264307731,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        5768016
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v1/native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v3/native-records.jsonl",
+      "sha256": "bbfb87f3e626a56c1f16794aa138f8d8a15c18ae66f95d3bf2d59574b94417ed",
+      "bytes": 308822493,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        5768023
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v10-assembly-attempt1/native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v10-assembly-attempt3/native-records.jsonl",
+      "sha256": "9427ea272dfb594404b655e5b1d0a821027b1e657450bebe2c26472acacda6be",
+      "bytes": 287530889,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        1343924
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/generation-check-20260929-1055/published-v9.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260929-1055/validated-v9.turns.jsonl",
+      "sha256": "8bac8e257b163f7af49842b75df0539ba14aebb113068ea7c3d53bc6ebff44ea",
+      "bytes": 311530251,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        1190291
+      ],
+      "reclaimed_allocated_bytes": 311541760
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/generation-check-20260929-1055/published-v8-preserved/static.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260929-1055/validated-v8.turns.jsonl",
+      "sha256": "55f0269f7f59b2c4f17f9ed5fe2f6d12496ed0b9973fcfae9c5e5701a8cbf2ae",
+      "bytes": 313270248,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        1187436
+      ],
+      "reclaimed_allocated_bytes": 313282560
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-assembly-attempt2/proposed-native-heldout.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1/proposed-native-heldout.jsonl",
+      "sha256": "304072091fd635ce4da9e3668eb7d09916bfdf2fc2960ecb74df0bd9c69c2fa6",
+      "bytes": 123854513,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        5648998
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-assembly-attempt2/proposed-cumulative-native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-candidate-v3/proposed-cumulative-native-records.jsonl",
+      "sha256": "31724e2b57eb72da923d251b356a210e3b0da727688d8f43a203514174df7599",
+      "bytes": 307924002,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        5648996
+      ],
+      "reclaimed_allocated_bytes": 307929088
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-assembly-attempt2/proposed-native-train.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-candidate-v3/proposed-native-train.jsonl",
+      "sha256": "2b8720eae31a7970964732dfc8537ba2763e9e9736438d00c61b205fb6904dc1",
+      "bytes": 180214911,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        5648997
+      ],
+      "reclaimed_allocated_bytes": 180219904
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/data-lineage-20261002/recipe-v33-current-policy-existing-data-only/run-v12/static-workflowevals.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/static-validation/workflowevals.turns.jsonl",
+      "sha256": "9b958c6f0f860527ca84d7d3c189bc31f34bb2c9535220278c70688cece446e3",
+      "bytes": 2107104156,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        1323317
+      ],
+      "reclaimed_allocated_bytes": 2107150336
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/qasper-visible-v6d/quality-v26-qasper-visible-v6d.static.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/qasper-visible-v6d/quality-v26-qasper-visible-v6d.final-review.turns.jsonl",
+      "sha256": "5c82868ca9bc84a7588176767304423734bbd5f40caf739ca377f641bff60ab7",
+      "bytes": 345152094,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        2525645
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/generation-check-20260930-hourly/hourly-health-next/bonsai-rejection-audit-1823/source-hold-publication-v2/quality-v25.static.results.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260930-hourly/hourly-health-next/bonsai-rejection-audit-1823/source-hold-publication-v3/quality-v25.static.results.jsonl",
+      "sha256": "b8daca6370fa43fc1ac30f6852c166a338019b1e377e1f91299830af1fd65e8f",
+      "bytes": 134216814,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        1321081
+      ],
+      "reclaimed_allocated_bytes": 134221824
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/generation-check-20260930-hourly/hourly-health-next/bonsai-rejection-audit-1823/source-hold-publication-v2/quality-v25.static.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/generation-check-20260930-hourly/hourly-health-next/bonsai-rejection-audit-1823/source-hold-publication-v3/quality-v25.static.turns.jsonl",
+      "sha256": "b74ce7137be1b29f6e7ce8e8c8c871add8d7016844a6409fb629679cb2257eff",
+      "bytes": 284338922,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        1321076
+      ],
+      "reclaimed_allocated_bytes": 284344320
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/modern-v2/directory-expansion/quality-v26.modern.eligible.results.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/modern-v2/staged-publication/quality-v26.static.results.jsonl",
+      "sha256": "efecdb05b432e1e0817bbbbc595bf07030f2bf9db2ffa94c9ae4ca0aea16ca79",
+      "bytes": 137009787,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        3313946
+      ],
+      "reclaimed_allocated_bytes": 137015296
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-v50-proposal-v2/prefix-recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-v50-proposal-v1/prefix-recurrence-records.jsonl",
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "bytes": 263409240,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        1343945
+      ],
+      "reclaimed_allocated_bytes": 263413760
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-candidate-v3/prefix-recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-assembly-attempt2/prefix-recurrence-records.jsonl",
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "bytes": 263409240,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        4333125
+      ],
+      "reclaimed_allocated_bytes": 263413760
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-v24-v9-three-action-action47-proposal-20261008-v1/assembled/recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v24-v9-three-action-action45-proposal-20261008-v1/assembled/recurrence-records.jsonl",
+      "sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3",
+      "bytes": 271336477,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        7106141
+      ],
+      "reclaimed_allocated_bytes": 271347712
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-native-gold-text-corpus-20261007-v12-stale-container-renderer-diagnostic/text.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-native-gold-text-corpus-20261007-v12-r4/text.jsonl",
+      "sha256": "a35e460b6166ad0fae3c06e39e7a5466ccddc7cb54cecaf6ef444592aef7a91a",
+      "bytes": 207946971,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        4335630
+      ],
+      "reclaimed_allocated_bytes": 207953920
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v3/recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v2/recurrence-records.jsonl",
+      "sha256": "1c3d4b6b439c7d4f91ecfa8e2ab2ecd8638d6a44fbb26eee4c18c1ea7667d72c",
+      "bytes": 264307731,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        5768016
+      ],
+      "reclaimed_allocated_bytes": 264314880
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v3/native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v2/native-records.jsonl",
+      "sha256": "bbfb87f3e626a56c1f16794aa138f8d8a15c18ae66f95d3bf2d59574b94417ed",
+      "bytes": 308822493,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        5768023
+      ],
+      "reclaimed_allocated_bytes": 308830208
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v10-assembly-attempt3/native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v10-assembly-attempt2/native-records.jsonl",
+      "sha256": "9427ea272dfb594404b655e5b1d0a821027b1e657450bebe2c26472acacda6be",
+      "bytes": 287530889,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        1343924
+      ],
+      "reclaimed_allocated_bytes": 287535104
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1/proposed-native-heldout.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-candidate-v3/proposed-native-heldout.jsonl",
+      "sha256": "304072091fd635ce4da9e3668eb7d09916bfdf2fc2960ecb74df0bd9c69c2fa6",
+      "bytes": 123854513,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        5648998
+      ],
+      "reclaimed_allocated_bytes": 123858944
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/qasper-visible-v6d/quality-v26-qasper-visible-v6d.final-review.turns.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/qasper-visible-v6d/published-static.turns.native-check.jsonl",
+      "sha256": "5c82868ca9bc84a7588176767304423734bbd5f40caf739ca377f641bff60ab7",
+      "bytes": 345152094,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        2525645
+      ],
+      "reclaimed_allocated_bytes": 345165824
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v13-v50-proposal-v2/prefix-recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-reviewed-restart-cohort-20261007-v15-candidate-v3/prefix-recurrence-records.jsonl",
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "bytes": 263409240,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        1343945
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-v24-v9-three-action-action47-proposal-20261008-v1/assembled/recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v24-v9-three-action-integration-20261008-v2/native-append/recurrence-records.jsonl",
+      "sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3",
+      "bytes": 271336477,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        7106141
+      ],
+      "reclaimed_allocated_bytes": 0
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v3/recurrence-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v4/recurrence-records.jsonl",
+      "sha256": "1c3d4b6b439c7d4f91ecfa8e2ab2ecd8638d6a44fbb26eee4c18c1ea7667d72c",
+      "bytes": 264307731,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        5768016
+      ],
+      "reclaimed_allocated_bytes": 264314880
+    },
+    {
+      "canonical_keep": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v3/native-records.jsonl",
+      "deduplicate_path": "/home/werg/natlang/runs/neuralese-v16-generic-assembler-reproduction-20261007-v4/native-records.jsonl",
+      "sha256": "bbfb87f3e626a56c1f16794aa138f8d8a15c18ae66f95d3bf2d59574b94417ed",
+      "bytes": 308822493,
+      "original_keep_mode": "0o444",
+      "shared_inode": [
+        66311,
+        5768023
+      ],
+      "reclaimed_allocated_bytes": 308830208
+    }
+  ],
+  "relocated": [
+    {
+      "source": "/srv/storage/natlang-artifacts/neuralese-direct-lfm-muon-main-20261012-v1/full_prompt/direct_sft/checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/neuralese-direct-lfm-muon-main-20261012-v1/full_prompt/direct_sft/checkpoint.pt",
+      "bytes": 1158339603,
+      "sha256": "95df1f410977371b863fc0328781932d8b7e3a1f38c507b6da6742db4c196e8f",
+      "source_identity": [
+        280397,
+        1158339603,
+        1791786361939487207
+      ],
+      "mtime": 1791786361.9394872,
+      "time": 1791889501.672265,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/execution/uninterrupted-output/direct_sft/best-checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/execution/uninterrupted-output/direct_sft/best-checkpoint.pt",
+      "bytes": 1158565467,
+      "sha256": "278e1b8698ef313e3059e029cba312d33608b11095962905c1c2f228ad89eba6",
+      "source_identity": [
+        4494421,
+        1158565467,
+        1791802578159270863
+      ],
+      "mtime": 1791802578.1592708,
+      "time": 1791889505.5781822,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/execution/uninterrupted-output/direct_sft/checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/execution/uninterrupted-output/direct_sft/best-checkpoint.pt",
+      "bytes": 1158565467,
+      "sha256": "278e1b8698ef313e3059e029cba312d33608b11095962905c1c2f228ad89eba6",
+      "source_identity": [
+        4494421,
+        1158565467,
+        1791802578159270863
+      ],
+      "mtime": 1791802578.1592708,
+      "time": 1791889505.5781822,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "shared_existing_destination": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/outputs/long/te_fp8/direct_sft/best-checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/outputs/long/te_fp8/direct_sft/best-checkpoint.pt",
+      "bytes": 1158570267,
+      "sha256": "fd35258e114716e7432f0e32c84b3d2cb6d930637b60942e7a8feaf2527188a0",
+      "source_identity": [
+        4365599,
+        1158570267,
+        1791802293585788307
+      ],
+      "mtime": 1791802293.5857882,
+      "time": 1791889509.1825001,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/outputs/long/te_fp8/direct_sft/checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/outputs/long/te_fp8/direct_sft/best-checkpoint.pt",
+      "bytes": 1158570267,
+      "sha256": "fd35258e114716e7432f0e32c84b3d2cb6d930637b60942e7a8feaf2527188a0",
+      "source_identity": [
+        4365599,
+        1158570267,
+        1791802293585788307
+      ],
+      "mtime": 1791802293.5857882,
+      "time": 1791889509.1825001,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "shared_existing_destination": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/a/direct_sft/best-checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/a/direct_sft/best-checkpoint.pt",
+      "bytes": 1158561435,
+      "sha256": "e4a60cbf37f89bdd33a1c8676cfdf113d793cd4987b7e7b881c1c83f60c2b3fe",
+      "source_identity": [
+        4598212,
+        1158561435,
+        1791804619229754062
+      ],
+      "mtime": 1791804619.229754,
+      "time": 1791889512.724967,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/a/direct_sft/checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/a/direct_sft/best-checkpoint.pt",
+      "bytes": 1158561435,
+      "sha256": "e4a60cbf37f89bdd33a1c8676cfdf113d793cd4987b7e7b881c1c83f60c2b3fe",
+      "source_identity": [
+        4598212,
+        1158561435,
+        1791804619229754062
+      ],
+      "mtime": 1791804619.229754,
+      "time": 1791889512.724967,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "shared_existing_destination": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/b/direct_sft/best-checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/b/direct_sft/best-checkpoint.pt",
+      "bytes": 1158561435,
+      "sha256": "e567a377e227aae0ce73774fc868252a2cfdae1b68287bdc0db95169e9ed4ff4",
+      "source_identity": [
+        4599393,
+        1158561435,
+        1791804898763357134
+      ],
+      "mtime": 1791804898.7633572,
+      "time": 1791889516.3291252,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/b/direct_sft/checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/b/direct_sft/best-checkpoint.pt",
+      "bytes": 1158561435,
+      "sha256": "e567a377e227aae0ce73774fc868252a2cfdae1b68287bdc0db95169e9ed4ff4",
+      "source_identity": [
+        4599393,
+        1158561435,
+        1791804898763357134
+      ],
+      "mtime": 1791804898.7633572,
+      "time": 1791889516.3291252,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "shared_existing_destination": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/neuralese-e2e-lfm-qual-u10006/e2e/soft-params.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/neuralese-e2e-lfm-qual-u10006/e2e/soft-params.pt",
+      "bytes": 254629243,
+      "sha256": "eb17223dee21ee82050096d907ff9729ee77c7016b189b1f6bc286243907af8c",
+      "source_identity": [
+        4325443,
+        254629243,
+        1791829600889847112
+      ],
+      "mtime": 1791829600.889847,
+      "time": 1791889517.402475,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/neuralese-e2e-lfm-qual-u10006/e2e/best-checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/neuralese-e2e-lfm-qual-u10006/e2e/best-checkpoint.pt",
+      "bytes": 1714069813,
+      "sha256": "633010016379e17b8c6f4f0250e9a73b9df22470a131bc1e8134ee535ca547e2",
+      "source_identity": [
+        4325438,
+        1714069813,
+        1791829528535970479
+      ],
+      "mtime": 1791829528.5359704,
+      "time": 1791889522.4516606,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/neuralese-e2e-lfm-qual-u10006/e2e/heads.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/neuralese-e2e-lfm-qual-u10006/e2e/heads.pt",
+      "bytes": 609772231,
+      "sha256": "7fe1f53788e0023dd29a636088950f6e1458e56754d253983342183a8f1f83c4",
+      "source_identity": [
+        4325442,
+        609772231,
+        1791829600604847598
+      ],
+      "mtime": 1791829600.6048477,
+      "time": 1791889524.370573,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/neuralese-e2e-lfm-qual-u10006/e2e/checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/neuralese-e2e-lfm-qual-u10006/e2e/best-checkpoint.pt",
+      "bytes": 1714069813,
+      "sha256": "633010016379e17b8c6f4f0250e9a73b9df22470a131bc1e8134ee535ca547e2",
+      "source_identity": [
+        4325438,
+        1714069813,
+        1791829528535970479
+      ],
+      "mtime": 1791829528.5359704,
+      "time": 1791889522.4516606,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "shared_existing_destination": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/pop-lfm-muon-main-v2-export-step10006/checkpoint-step10006.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/pop-lfm-muon-main-v2-export-step10006/checkpoint-step10006.pt",
+      "bytes": 1158369683,
+      "sha256": "4222dda83aa5c9d00b33e8c153c2927996686d11690c8410d40d3774dd596828",
+      "source_identity": [
+        4326690,
+        1158369683,
+        1791824682982377893
+      ],
+      "mtime": 1791824682.982378,
+      "time": 1791889528.5799599,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/pop-lfm-muon-main-v2-export-step10006/artifact/direct-tensors.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/pop-lfm-muon-main-v2-export-step10006/artifact/direct-tensors.pt",
+      "bytes": 579051571,
+      "sha256": "b8e5b111ffe3b635ebba6f09d10942608b923e68c795d866f33f9f6ca27ebae6",
+      "source_identity": [
+        4327184,
+        579051571,
+        1791824982017805694
+      ],
+      "mtime": 1791824982.0178056,
+      "time": 1791889530.8764164,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/pop-lfm-muon-main-v2-export-step9000/artifact/direct-tensors.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/pop-lfm-muon-main-v2-export-step9000/artifact/direct-tensors.pt",
+      "bytes": 579051571,
+      "sha256": "fc5a69c6cd192f22dc3fddb5975ff79279e0e3f793e8c5ad2df700deb90d63eb",
+      "source_identity": [
+        4325434,
+        579051571,
+        1791820807305213586
+      ],
+      "mtime": 1791820807.3052137,
+      "time": 1791889533.1437147,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/neuralese-direct-held-task-eval-20261012-v2/pending-checkpoints/direct_sft-step3033/checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/neuralese-direct-held-task-eval-20261012-v2/pending-checkpoints/direct_sft-step3033/checkpoint.pt",
+      "bytes": 1158364819,
+      "sha256": "e7a54421ae53c35c6d2e2edf9db60aedbab0584e6394261bd64ad1acc01f7d7e",
+      "source_identity": [
+        4364341,
+        1158364819,
+        1791798434981735990
+      ],
+      "mtime": 1791798434.981736,
+      "time": 1791889537.4781477,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/neuralese-direct-held-task-eval-20261012-v2/pending-checkpoints/direct_sft-step4000/checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/neuralese-direct-held-task-eval-20261012-v2/pending-checkpoints/direct_sft-step4000/checkpoint.pt",
+      "bytes": 1158366547,
+      "sha256": "cbd1d607305579ac25bdc704b701d02c706222a9b64ef81be62d4cc44f8e9d82",
+      "source_identity": [
+        4494830,
+        1158366547,
+        1791803673496298122
+      ],
+      "mtime": 1791803673.496298,
+      "time": 1791889542.0826652,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/neuralese-direct-held-task-eval-20261012-v2/candidate-step4000-program-header-v1/candidate-checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/neuralese-direct-held-task-eval-20261012-v2/candidate-step4000-program-header-v1/candidate-checkpoint.pt",
+      "bytes": 1158366547,
+      "sha256": "cbd1d607305579ac25bdc704b701d02c706222a9b64ef81be62d4cc44f8e9d82",
+      "source_identity": [
+        4366635,
+        1158366547,
+        1791808422864028914
+      ],
+      "mtime": 1791808422.864029,
+      "time": 1791889546.6058078,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/neuralese-direct-lfm-muon-main-20261012-v2/direct_sft/best-checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/neuralese-direct-lfm-muon-main-20261012-v2/direct_sft/best-checkpoint.pt",
+      "bytes": 1171028627,
+      "sha256": "836a3771471d0a6804455673008563f297aef8576fc3eeccc90c0cd43e6b7d1e",
+      "source_identity": [
+        4330621,
+        1171028627,
+        1791847638721489943
+      ],
+      "mtime": 1791847638.72149,
+      "time": 1791889551.1077085,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    },
+    {
+      "source": "/srv/storage/natlang-artifacts/neuralese-direct-lfm-muon-main-20261012-v2/direct_sft/checkpoint.pt",
+      "dest": "/home/werg/natlang/.local/cold-storage-20261013/neuralese-direct-lfm-muon-main-20261012-v2/direct_sft/checkpoint.pt",
+      "bytes": 1171029523,
+      "sha256": "003a9101f75308bccf1f793f507344b12fdd0cf6757efea6f8e51d963b7f1c4f",
+      "source_identity": [
+        4330905,
+        1171029523,
+        1791853744800675753
+      ],
+      "mtime": 1791853744.8006759,
+      "time": 1791889555.5748618,
+      "reason": "Inactive finished diagnostic/evaluation/non-QAD artifact retained through SHA-verified move and symlink; critical srv partition has no external archive mount.",
+      "source_is_symlink": true,
+      "placement": "Canonical checkout mount preserves future container access."
+    }
+  ],
+  "offload": {
+    "schema": "natlang.artifact-offload/1",
+    "id": "neuralese-e2e-cohort-20261012-v2",
+    "verification_id": "neuralese-e2e-cohort-20261012-v2--99743f07127f1a85",
+    "snapshot_owner": "dgx",
+    "local_machine": "pop",
+    "mode": "verified-local-mirror-eviction",
+    "attempt_id": "2026-10-13T11:03:53.514157+00:00-pid2226927",
+    "manifest_sha256": "1e582bd8a90ab15e3bfdddd9c712e33c38fbad2516db9d60a70c3bc0825f7a06",
+    "manifest_sha256_encoding": "UTF-8 json.dumps(manifest, sort_keys=True); object identity, not file bytes",
+    "selected_files": [
+      {
+        "path": "records.jsonl",
+        "bytes": 11065656724,
+        "sha256": "40d608d47714d31e54f027e2f7d38e07ac9b764d0df6185f42187b4f844c9c08",
+        "lines": 174608
+      }
+    ],
+    "bytes": 11065656724,
+    "local_file_stats": {
+      "records.jsonl": [
+        66311,
+        1593922,
+        11065656724,
+        1791872940414851863,
+        1791872940415932389
+      ]
+    },
+    "local_hostname": "pop-os",
+    "local_boot_id": "44584c88-cd62-4894-871f-d8d551f44c52",
+    "local_references": {
+      "open_fds": [],
+      "live_job_references": [],
+      "inaccessible_fd_directories": 301
+    },
+    "unlink_permissions": {
+      "/home/werg/natlang/runs/neuralese-e2e-cohort-20261012-v2/records.jsonl": {
+        "parent": "/home/werg/natlang/runs/neuralese-e2e-cohort-20261012-v2",
+        "parent_mode": "0o775",
+        "parent_uid": 1000,
+        "parent_gid": 1000,
+        "write_and_search_access": true
+      }
+    },
+    "remote_verification": {
+      "id": "neuralese-e2e-cohort-20261012-v2",
+      "status": "verified",
+      "checked": 1,
+      "verification_scope": "ssh-remote",
+      "verified_hostname": "mltick",
+      "machine_boot_id": "12e648d4-7090-4786-ae7b-acc1d1c7ddab",
+      "verified_repo": "/home/werg/natlang",
+      "manifest_sha256": "dc3562e81f63d2b28f654db3af80a5beeabd2c107d5f847773492ceb1fa2a55b",
+      "manifest_sha256_encoding": "UTF-8 json.dumps(manifest, sort_keys=True); object identity, not file bytes",
+      "time": "2026-10-13T11:03:34.083575+00:00",
+      "errors": [],
+      "verification_id": "neuralese-e2e-cohort-20261012-v2--99743f07127f1a85"
+    },
+    "restore": "python3 scripts/sync_training_corpora.py restore --machine pop --host dgx --remote-repo /home/werg/natlang --id neuralese-e2e-cohort-20261012-v2 --file records.jsonl",
+    "status": "unlinked",
+    "created_at": "2026-10-13T11:03:53.514227+00:00",
+    "removed_files": [
+      "records.jsonl"
+    ],
+    "completed_at": "2026-10-13T11:03:53.724262+00:00"
+  },
+  "restore": "python3 scripts/sync_training_corpora.py restore --machine pop --host dgx --remote-repo /home/werg/natlang --id neuralese-e2e-cohort-20261012-v2 --file records.jsonl",
+  "policy": "No unique diagnostic/model/corpus content deleted. Closed immutable duplicate payloads share read-only inodes, preserving paths/hashes; future revisions require new files. Inactive diagnostic/non-QAD artifacts use verified symlinks into .local/cold-storage-20261013, visible through canonical checkout container mounts. DGX canonical E2E source is retained and hash-verified, with explicit restore command; slice1 remains local. Active QAD lineage, mirror, generation and protected sources unchanged.",
+  "generic_mapping_false_positive": {
+    "reason": "NATLANG_CHECKPOINT_SOURCE_ROOT is a placement mapping for current QAD offload, not a claim on all old artifacts under that root. Verified both QAD processes actual inputs/output and checked FDs/exact references before moves.",
+    "ignored_references": [
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/neuralese-direct-lfm-muon-main-20261012-v1/full_prompt/direct_sft/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/neuralese-direct-lfm-muon-main-20261012-v1/full_prompt/direct_sft/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/execution/uninterrupted-output/direct_sft/best-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/execution/uninterrupted-output/direct_sft/best-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/execution/uninterrupted-output/direct_sft/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/execution/uninterrupted-output/direct_sft/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/outputs/long/te_fp8/direct_sft/best-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/outputs/long/te_fp8/direct_sft/best-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/outputs/long/te_fp8/direct_sft/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v4-resume-6k-v4/outputs/long/te_fp8/direct_sft/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/a/direct_sft/best-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/a/direct_sft/best-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/a/direct_sft/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/a/direct_sft/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/b/direct_sft/best-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/b/direct_sft/best-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/b/direct_sft/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/fp8-lfm-paired-diagnostics-20261012-v1/run-v6-te-repeatability-2step-v1/outputs/b/direct_sft/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/neuralese-e2e-lfm-qual-u10006/e2e/soft-params.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/neuralese-e2e-lfm-qual-u10006/e2e/soft-params.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/neuralese-e2e-lfm-qual-u10006/e2e/best-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/neuralese-e2e-lfm-qual-u10006/e2e/best-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/neuralese-e2e-lfm-qual-u10006/e2e/heads.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/neuralese-e2e-lfm-qual-u10006/e2e/heads.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/neuralese-e2e-lfm-qual-u10006/e2e/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/neuralese-e2e-lfm-qual-u10006/e2e/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/pop-lfm-muon-main-v2-export-step10006/checkpoint-step10006.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/pop-lfm-muon-main-v2-export-step10006/checkpoint-step10006.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/pop-lfm-muon-main-v2-export-step10006/artifact/direct-tensors.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/pop-lfm-muon-main-v2-export-step10006/artifact/direct-tensors.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/pop-lfm-muon-main-v2-export-step9000/artifact/direct-tensors.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/pop-lfm-muon-main-v2-export-step9000/artifact/direct-tensors.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/neuralese-direct-held-task-eval-20261012-v2/pending-checkpoints/direct_sft-step3033/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/neuralese-direct-held-task-eval-20261012-v2/pending-checkpoints/direct_sft-step3033/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/neuralese-direct-held-task-eval-20261012-v2/pending-checkpoints/direct_sft-step4000/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/neuralese-direct-held-task-eval-20261012-v2/pending-checkpoints/direct_sft-step4000/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/neuralese-direct-held-task-eval-20261012-v2/candidate-step4000-program-header-v1/candidate-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/neuralese-direct-held-task-eval-20261012-v2/candidate-step4000-program-header-v1/candidate-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/neuralese-direct-lfm-muon-main-20261012-v2/direct_sft/best-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/neuralese-direct-lfm-muon-main-20261012-v2/direct_sft/best-checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189021,
+        "path": "/srv/storage/natlang-artifacts/neuralese-direct-lfm-muon-main-20261012-v2/direct_sft/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      },
+      {
+        "pid": 2189278,
+        "path": "/srv/storage/natlang-artifacts/neuralese-direct-lfm-muon-main-20261012-v2/direct_sft/checkpoint.pt",
+        "source": "artifact-directory-reference",
+        "reason": "Verified generic checkpoint placement root; QAD actual inputs/output are different paths."
+      }
+    ]
+  },
+  "validation": {
+    "all_21_relocated_logical_paths_resolve": true,
+    "copy_sha256_verified": true,
+    "remote_manifest_sha256_verified": true,
+    "quick_checks": "21 ratchets passed; ts-host typecheck passed."
+  }
+}
