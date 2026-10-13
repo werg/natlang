@@ -1,0 +1,10 @@
+{
+  "caseId": "glass-garden-v1",
+  "announcedIntentId": "FORK",
+  "responseIntentIds": [
+    "TAKE",
+    "MOVE"
+  ],
+  "initialSnapshot": "before-announcement",
+  "resultScope": "One closed turn, all source-defined consequences settled or explicitly unresolved."
+}

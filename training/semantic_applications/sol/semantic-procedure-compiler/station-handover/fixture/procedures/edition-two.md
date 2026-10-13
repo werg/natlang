@@ -1,0 +1,4 @@
+ID E2. CC signs adoption of edition TWO on day3 and publishes it on day4, effective day5.
+[V2] From day5 TWO replaces only V1 permission prerequisites. Starting requires the named operator's accepted queue turn, current custody of ST, personal acknowledgment of the actual current safety brief, and no uncleared hazard. CUSTODY and HAZARD remain unchanged.
+[BRIEF] Safety acknowledgment is personal to the actor and current brief edition. A token receipt proves custody only. Receiving, forwarding or overhearing a brief does not prove acknowledgment; a recorded explicit acknowledgment does.
+[HISTORY] Later acknowledgment or clearance permits later actions only. It cannot authorize an earlier attempted transmission. A later authentic report can revise knowledge about a past event without changing its actual time.

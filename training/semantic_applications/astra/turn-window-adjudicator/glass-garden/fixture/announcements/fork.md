@@ -1,0 +1,3 @@
+[F01] Ilex announces Fork as intent FORK. First printed part PA targets A1 and proposes3 damage. Second printed part PM targets M1 and proposes2 damage. Both damage parts share the same Fork batch.
+[F02] Fork tracks each announced target instance through a controller change. It does not search for a replacement instance if that target leaves the garden. Target controllers at announcement are stored separately for later rules that explicitly use those captured values.
+[F03] Growth marks are counters only: they do not change integrity, damage or controller, and do not themselves count as damage. Damage and growth quantities are nonnegative integers.

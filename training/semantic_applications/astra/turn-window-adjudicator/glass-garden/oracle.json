@@ -1,0 +1,85 @@
+{
+  "schema": "natlang.semantic-application-invariant-oracle/1",
+  "caseId": "glass-garden-v1",
+  "status": "authored_pending_independent_review",
+  "capturedControllers": {
+    "PA": "Ilex",
+    "PM": "Rowan"
+  },
+  "resumedControllers": {
+    "A1": "Rowan",
+    "M1": "Rowan",
+    "W1": "Ilex"
+  },
+  "resumedAttachment": {
+    "W1": "M1"
+  },
+  "parts": {
+    "PA": {
+      "announcedDamage": 3,
+      "afterCover": 2,
+      "actualDamage": 2,
+      "growthAdded": 0,
+      "discardedTarget": "A1"
+    },
+    "PM": {
+      "announcedDamage": 2,
+      "afterCover": 1,
+      "actualDamage": 0,
+      "growthAdded": 1,
+      "discardedTarget": null
+    }
+  },
+  "finalCreatures": {
+    "M1": {
+      "cardId": "CM",
+      "controller": "Rowan",
+      "integrity": 2,
+      "damage": 0,
+      "growth": 1
+    },
+    "A2": {
+      "cardId": "CA",
+      "controller": "Rowan",
+      "integrity": 2,
+      "damage": 0,
+      "growth": 0
+    }
+  },
+  "discardedInstances": [
+    "A1"
+  ],
+  "finalAttachment": {
+    "W1": "M1"
+  },
+  "ink": {
+    "Ilex": 1,
+    "Rowan": 0
+  },
+  "emittedTriggers": [
+    "RETURN",
+    "SCRIBE"
+  ],
+  "notEmittedTriggers": {
+    "MIRROR": "converted quantity1 below2",
+    "REPRISAL": "source token already spent"
+  },
+  "spentTokens": [
+    "WARD",
+    "RETURN",
+    "SCRIBE",
+    "REPRISAL"
+  ],
+  "remainingTokens": [
+    "MIRROR"
+  ],
+  "windowOrder": [
+    "TAKE",
+    "MOVE",
+    "FORK",
+    "RETURN",
+    "SCRIBE"
+  ],
+  "sourceWorldSplitKey": "astra-turn-window-glass-garden-v1",
+  "trainingAdmission": false
+}

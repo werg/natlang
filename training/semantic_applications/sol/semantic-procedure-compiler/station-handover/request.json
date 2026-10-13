@@ -1,0 +1,14 @@
+{
+  "id": "station-compiler-v1",
+  "outputPackage": "@generated/station-handover",
+  "entryName": "handover",
+  "requiredScenarios": [
+    "NORMAL",
+    "EMERGENCY",
+    "RECEIPT",
+    "HAZARD",
+    "VERSIONS",
+    "PROPOSED"
+  ],
+  "objective": "Compile governing evolving procedure into a typed callable NL folder, then exercise all source histories and return exact witnessed state/guard contributions."
+}

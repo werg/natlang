@@ -76,11 +76,16 @@ whole nested chain for every record would exceed the frozen 600-turn collection
 ceiling. This is a source-program decomposition issue, not a model failure.
 
 1. **Screen the whole evidence world (new typed `.nl` callable).** Given the
-   objective, task rule, and all source records, return one source-linked
-   `EvidenceRole` per record: directly queried, dependency or authority,
-   background, or uncertain. A dependency names the record or relation it can
-   change. Uncertain roles stay selected. The screen is a semantic judgment;
-   no keyword or filename classifier chooses relevance.
+   objective, task rule, all source records for context, and one source-folder
+   focus group, return one source-linked `EvidenceRole` per focus record:
+   directly queried, dependency or authority, background, or uncertain. The
+   root combines those groups into one full-world ledger. A dependency names
+   the record or relation it can change. Uncertain roles stay selected. The
+   screen is a semantic judgment; no keyword or filename classifier chooses
+   relevance. The first all-24-at-once live screen led the child to attempt
+   repeated ad hoc calls and then hand-write a case-specific relation table.
+   The smaller focus group is a source-presentation correction; it still sees
+   all records so cross-folder dependencies remain available.
 2. **Process coherent selected groups (existing named chain).** Group selected
    records by their actual folder and declared dependency links. Send each
    group through the named stages as a typed batch. Keep every selected source
@@ -104,6 +109,18 @@ before it replaces it. If screening selects all 24 records, the program may
 need relation-level grouping or a higher collection resource ceiling; the
 screen must not hide hard evidence to save requests.
 
+The first source-disjoint Sol plain pilot exposed a different handoff problem:
+the root and named stages carried the complete bundle, but an inline
+`RelationDecision` child saw only a narrow prior state and called a later stage
+with a fabricated empty bundle. The transport preserved the source exactly;
+that empty value was model-authored. The opt-in
+`--typed-literal-evidence` variant asks the owning stage to gather supporting
+source-linked evidence from its original bundle, invoke the relation literal
+on that evidence, append its returned typed decision to `StageState.relations`,
+and pass the original bundle to the next named stage. It is a source variant
+awaiting matched live measurement, not an accepted replacement for plain
+generation.
+
 ## Application-scale semantic projects
 
 The additive high-depth slate is a different source shape: a complete natlang project with roughly 10–30 authored `.nl` files, topic-specific callable folders, explicit typed interfaces, service declarations when outside-world work is needed, and real multi-step tasks. A project manifest selects an immutable source tree, task input snapshot, declared output/checker, provenance and split world. Its adapter snapshots the files into Program/2 without rewriting the author's call graph or forcing a generic chain. The root and modules remain natural-language functions; exact source hashing, path containment, type checking, replay and result checks are crisp. Full teacher trajectories, including child calls and tool outputs, are collected through the existing teacher pipeline. Existing 220 authored programs remain eligible when valid; their difficulty is a mix label, not an admission criterion. New project cases must show actual stage contributions, source visibility and correct outputs before training admission.
@@ -111,3 +128,7 @@ The additive high-depth slate is a different source shape: a complete natlang pr
 ### One trusted exact verifier boundary
 
 Application decisions and policy remain in the `.nl` call graph. A project may also declare one external verifier for exact properties of its returned value: source identities, quotations, arithmetic, state conservation and allowed effects. The package snapshots the verifier's repository path and SHA-256 outside the model-visible project. The existing teacher collector calls the pinned verifier with the returned value, authored oracle, and visible input/fixture snapshots; it does not ask the verifier to synthesize an answer. A verifier verdict may accept exact invariants while marking semantic entailment for independent review. The canonical reference replay bypasses this verifier only to prove source/type plumbing; separate canonical and mutation probes qualify the verifier itself. A missing or changed verifier is an infrastructure error and must not become a model-negative row. This crisp boundary is justified by exactness and uses the existing collector/oracle outcome, not a second scheduler or training admission path.
+
+### Typed ecology evidence handoff (opt-in v12)
+
+The folder reducer owns the finite folder frontier and exact source ID/path binding. Its first natural-language stage reads each `EvidenceRecord` and invokes a scoped interpretation literal, producing a typed `InteractionAssertion` for every record, including background or unresolved records. The second stage receives only these typed assertions and exact witness snippets, invokes a scoped relation literal, and returns one `EdgeDecision` per assertion plus established edges. Later natural-language stages assess causal support, edge-specific scope and the global signed graph using the accumulated typed evidence. Only the root appends completed-folder fields and checks quote substrings against the original records. These exact checks are plumbing; relevance, referents, direction, sign, scope and uncertainty stay in natural-language calls. The emitted source variant is separate from the catalog and preserves its fixture, gold and oracle. A source/reference replay proves wiring only; live stage contribution and final semantic correctness remain unqualified.

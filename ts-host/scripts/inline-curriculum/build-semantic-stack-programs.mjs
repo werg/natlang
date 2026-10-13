@@ -18,12 +18,13 @@ const pilotAstra = flags.includes('--pilot-astra');
 const stageSpecsMode = flags.includes('--stage-specs');
 const sourceDriven = flags.includes('--source-driven');
 const relevanceFirst = flags.includes('--relevance-first');
+const typedLiteralEvidence = flags.includes('--typed-literal-evidence');
 const groupedAstra = flags.includes('--grouped-astra') || stageSpecsMode;
 const reviewAt = flags.indexOf('--review-ids');
 const reviewPath = reviewAt >= 0 && flags[reviewAt + 1] ? resolve(flags[reviewAt + 1]) : null;
 const variantAt = flags.indexOf('--stage-variant');
 const variantPath = variantAt >= 0 && flags[variantAt + 1] ? resolve(flags[variantAt + 1]) : null;
-const knownFlags = new Set(['--pilot-astra', '--grouped-astra', '--stage-specs', '--source-driven', '--relevance-first', '--review-ids', '--stage-variant']);
+const knownFlags = new Set(['--pilot-astra', '--grouped-astra', '--stage-specs', '--source-driven', '--relevance-first', '--typed-literal-evidence', '--review-ids', '--stage-variant']);
 const selected = flags.filter(flag => knownFlags.has(flag));
 const expectedFlagCount = selected.length + (reviewPath ? 1 : 0) + (variantPath ? 1 : 0);
 if (args[0] !== '--out' || !args[1] || flags.length !== expectedFlagCount ||
@@ -31,9 +32,10 @@ if (args[0] !== '--out' || !args[1] || flags.length !== expectedFlagCount ||
     (stageSpecsMode && flags.includes('--grouped-astra')) ||
     (sourceDriven && (!groupedAstra || stageSpecsMode)) ||
     (relevanceFirst && !sourceDriven) ||
+    (typedLiteralEvidence && (groupedAstra || stageSpecsMode || sourceDriven || relevanceFirst)) ||
     (variantPath && !stageSpecsMode) ||
     selected.length !== new Set(selected).size)
-  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --grouped-astra [--source-driven [--relevance-first]] | --stage-specs] [--review-ids IDS_JSON] [--stage-variant VARIANT_JSON]');
+  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --grouped-astra [--source-driven [--relevance-first]] | --stage-specs | --typed-literal-evidence] [--review-ids IDS_JSON] [--stage-variant VARIANT_JSON]');
 const output = resolve(args[1]);
 const variantBytes = variantPath ? await readFile(variantPath) : null;
 const variant = variantBytes ? JSON.parse(variantBytes) : null;
@@ -192,7 +194,7 @@ function runtimeTypeFile(entry, grouped, relevance = false) {
     (grouped ? `export type EvidenceBatch = { folderPath: string; records: EvidenceRecord[] };\n` +
       `export type EvidenceBatchFinding = { folderPath: string; findings: EvidenceFinding[] };\n` : '') +
     (relevance ? `export type EvidenceRole = { id: string; path: string; role: 'direct' | 'dependency' | 'background' | 'uncertain'; dependsOn: string[]; reason: string; witnessQuote: string };\n` +
-      `export type EvidenceScreenInput = { records: EvidenceRecord[]; objective: string; rule: string };\n` +
+      `export type EvidenceScreenInput = { records: EvidenceRecord[]; focusRecords: EvidenceRecord[]; objective: string; rule: string };\n` +
       `export type EvidenceSelection = { roles: EvidenceRole[] };\n` : '') +
     `export type EvidenceContext = { objective: string; rule: string; relatedRecords: EvidenceRecord[]; priorFindings: EvidenceFinding[]; stageFindings: EvidenceFinding[] };\n`;
   const declarations = Object.entries(entry.typed_inputs).map(([role, declaration]) => {
@@ -263,10 +265,57 @@ function checkedStageSpecs(entry, steps) {
         !variant.types || !Array.isArray(variant.numbered_plan) ||
         typeof variant.direct_await_idiom !== 'string')
       throw Error(`${entry.id}: stage variant does not match a scoped stage`);
+    const handoff = variant.typed_evidence_handoff;
+    const overriddenTypes = handoff ? new Set(['FinalSemanticState', 'StageInput1', 'StageInput2',
+      'StageInput3', 'StageInput4', 'StageInput5']) : new Set();
     for (const [name, body] of Object.entries(variant.types)) {
-      if (Object.hasOwn(spec.types, name) || typeof body !== 'string' || !body.startsWith('{'))
+      if ((Object.hasOwn(spec.types, name) && !overriddenTypes.has(name)) ||
+          typeof body !== 'string' || !body.startsWith('{'))
         throw Error(`${entry.id}: invalid variant type ${name}`);
-      spec.types[name] = body;
+      if (!name.startsWith('StageInput')) spec.types[name] = body;
+    }
+    if (handoff) {
+      if (handoff.schema !== 'semantic-typed-evidence-handoff/1' ||
+          !['readStudyPlots', 'buildInteractionGraph'].every((name, index) =>
+            spec.stages[index]?.name === name && handoff[`stage${index + 1}`]?.name === name) ||
+          !['StageInput1', 'StageInput2', 'StageInput3', 'StageInput4', 'StageInput5']
+            .every(name => typeof variant.types[name] === 'string') ||
+          !['StageInput2', 'StageInput3', 'StageInput4', 'StageInput5']
+            .every(name => !/\b(?:EvidenceBatch|EvidenceRecord|relatedRecords|\btext\s*:)/.test(variant.types[name])) ||
+          !/\bpriorCompletedState\s*:\s*FinalSemanticState\b/.test(variant.types.TypedStageContext ?? '') ||
+          /\b(?:EvidenceBatch|EvidenceRecord|relatedRecords|\btext\s*:)/.test(variant.types.TypedStageContext ?? '') ||
+          !/\binteractionAssertions\s*:\s*InteractionAssertion\[\]/.test(variant.types.StageInput2) ||
+          !/\bedgeDecisions\s*:\s*EdgeDecision\[\]/.test(variant.types.StageInput3) ||
+          !/\bedgeDecisions\s*:\s*EdgeDecision\[\]/.test(variant.types.StageInput5) ||
+          !/\bedgeDecisions\s*:\s*EdgeDecision\[\]/.test(spec.types.FinalSemanticState))
+        throw Error(`${entry.id}: invalid typed evidence handoff contract`);
+      for (const [index, stage] of spec.stages.entries()) {
+        stage.input_type = variant.types[`StageInput${index + 1}`];
+      }
+      spec.stages[2].numbered_plan = [
+        '1. Read only input.prior.interactionAssertions, edgeDecisions and interactionEdges plus context.priorCompletedState typed contributions and exact witness snippets.',
+        '2. Assess whether each established directed edge expresses an actual causal effect or merely an association under the stated typed observations. Preserve unresolved edge decisions rather than inventing an effect.',
+        '3. Append source-grounded causalAssessments for this batch, preserving edge direction, canonical entity keys and exact witnesses.',
+        '4. Call interpretObservationScope with BatchIdentity, TypedStageContext and the actual typed prior fields; return its complete FinalSemanticState.',
+      ];
+      for (const index of [0, 1]) {
+        const stage = spec.stages[index], replacement = handoff[`stage${index + 1}`];
+        stage.numbered_plan = replacement.numbered_plan;
+        stage.new_semantic_transformation = replacement.new_contribution;
+        stage.scoped_literal_required = true;
+        stage.scoped_literal_plan = [replacement.idiom_preconditions,
+          replacement.direct_await_idiom, handoff.exact_vs_semantic];
+        stage.owned_contribution.type = index === 0 ? 'InteractionAssertion[]' :
+          'InteractionEdge[] with one source-bound EdgeDecision per assertion';
+        stage.no_op_policy = index === 0 ?
+          'Only an empty source folder has no assertion decision; every actual record has one source-bound assertion, including background or unresolved.' :
+          'Only an empty typed assertion list has no edge decision; every actual assertion has one source-bound decision, including no_relation or unresolved.';
+      }
+      for (const stage of spec.stages.slice(2)) {
+        stage.source_evidence_obligation =
+          'Use typed assertions, decisions, edges and exact witness snippets from current and completed state.';
+      }
+      spec.typedEvidenceHandoff = handoff;
     }
     stage.numbered_plan = variant.numbered_plan;
     // Replace the old decision's semantic meaning as well as its recipe. A
@@ -293,7 +342,7 @@ function checkedStageSpecs(entry, steps) {
           !carried.stage5_no_op_policy.trim() ||
           carried.root_numbered_plan.length < 3 || carried.stage5_numbered_plan.length < 3)
         throw Error(`${entry.id}: invalid cross-folder typed accumulation contract`);
-      spec.types.StageContext = carried.StageContext;
+      spec.types.StageContext = handoff ? variant.types.TypedStageContext : carried.StageContext;
       const last = spec.stages.at(-1);
       last.numbered_plan = carried.stage5_numbered_plan;
       last.no_op_policy = carried.stage5_no_op_policy;
@@ -352,6 +401,7 @@ function render(entry, provider) {
   if (steps.length < 3) throw Error(`${id}: need at least three distinct stages`);
   const stageSpec = stageSpecsMode ? checkedStageSpecs(entry, steps) : null;
   const crossFolder = stageSpec && variant?.program_id === id ? variant.cross_folder_accumulation : null;
+  const typedHandoff = stageSpec?.typedEvidenceHandoff;
   const entityIdentity = stageSpec && variant?.program_id === id ? variant.entity_identity_contract : null;
   if (entityIdentity && ['join_key', 'source_quotes', 'scope'].some(key =>
     typeof entityIdentity[key] !== 'string' || !entityIdentity[key].trim()))
@@ -410,7 +460,9 @@ function render(entry, provider) {
   const stageInstructions = stageSpec ? `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
     identityInstruction +
     (identities ? `Source ID binding (attach id and path to every EvidenceRecord, and use these exact IDs in the result):\n${identities.map(({ id, path }) => `${id}: ${path}`).join('\n')}\n\n` : '') +
-    (crossFolder ?
+    (crossFolder && typedHandoff ?
+      `Use iterateOn over sorted source folders with a shrinking unprocessed-folder frontier. Initialize completedState:FinalSemanticState = ${JSON.stringify(crossFolder.initial_state)}. For each folder, bind every source ID and path from the visible source table, make a typed EvidenceBatch of {id,path,text} records, and call ${steps[0].name} with StageInput1 {batch,context:{objective,rule,priorCompletedState:completedState},prior:{stageAbsences:[]}}. Stage1 reads current EvidenceRecords. Stages2–5 receive BatchIdentity and typed prior decisions, edges and witness snippets. Exact root mechanism checks one assertion decision per current record and verifies every returned witness quote against its identified source record. Use the semantic returned contributions to build the result. Follow this exact typed state plan:\n${crossFolder.root_numbered_plan.join('\n')}\n` :
+    crossFolder ?
       `Use iterateOn over sorted source folders with a shrinking unprocessed-folder frontier. Initialize completedState:FinalSemanticState = ${JSON.stringify(crossFolder.initial_state)}. For each folder, build a typed EvidenceBatch of {id,path,text} records and call ${steps[0].name} with StageInput1 {batch,context:{objective,rule,relatedRecords,priorCompletedState:completedState},prior:{stageAbsences:[]}}. Follow this exact typed state plan:\n${crossFolder.root_numbered_plan.join('\n')}\n` :
       entry.typed_inputs ? `Read the supplied directory snapshot and inquiry into the authored typed bundle. Call ${steps[0].name} with StageInput1 {bundle,inquiry,prior:{${stageSpec.no_op_field ?? 'stageAbsences'}:[]}}. The named stages must each add their own source-backed typed contribution before calling the next stage within the active call. Synthesize the declared answer from the returned FinalSemanticState, not by re-solving from the raw folder.\n` :
       `Use iterateOn over the sorted source folders. Each step builds a typed EvidenceBatch of {id,path,text} records for one current folder and calls ${steps[0].name} with StageInput1 {batch,context,prior:{stageAbsences:[]}}. Append the returned FinalSemanticState to the loop's collected states, then advance the folder frontier; the unprocessed-folder count decreases by one until all folders are consumed. Each named stage adds its owned, source-linked contribution and passes that accumulated state to its child. Synthesize the declared result from all collected states, preserving cross-folder evidence and unresolved claims.\n`) +
@@ -419,8 +471,8 @@ function render(entry, provider) {
   const relevance = relevanceFirst && grouped;
   const relevanceInstructions = relevance ? `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
     (identities ? `Source ID binding (preserve every exact ID and path):\n${identities.map(({ id, path }) => `${id}: ${path}`).join('\n')}\n\n` : '') +
-    `Inventory all source records once as EvidenceRecord {id,path,text}. Call screenEvidence({records,objective,rule}) once for the whole evidence world. Its typed EvidenceSelection must contain exactly one EvidenceRole for each record. The role is a semantic judgment: direct, dependency, background or uncertain; uncertain stays selected.\n` +
-    `Use exact code to check role coverage, path/ID identity, witnessQuote as an exact substring of that record, and that every dependsOn ID exists. Start with direct, dependency and uncertain records, then close that selection over declared dependencies. If a later finding needs a background record, reopen it and record why. Never discard a record solely to meet a resource budget.\n` +
+    `Inventory all source records once as EvidenceRecord {id,path,text}. Partition the inventory into source-folder focus groups. Call screenEvidence({records,focusRecords,objective,rule}) once for each group: records is the complete evidence world for cross-record context, and focusRecords is the current group whose roles are returned. Append the actual typed EvidenceRole values; the combined EvidenceSelection must contain exactly one role for every source record. The role is a semantic judgment: direct, dependency, background or uncertain; uncertain stays selected.\n` +
+    `Use exact code to check whole-world role coverage, path/ID identity, witnessQuote as an exact substring of its record, and that every dependsOn ID exists. Start with direct, dependency and uncertain records, then close that selection over declared dependencies. If a later finding needs a background record, reopen it and record why. Never discard a record solely to meet a resource budget.\n` +
     `Group selected records into coherent EvidenceBatch values by source folder and dependency links. Use iterateOn over the finite group frontier. In each step call ${steps[0].name} with the selected batch and EvidenceContext {objective,rule,relatedRecords,priorFindings,stageFindings:[]}. The child chain is ${steps.map(step => step.name).join(' → ')}; it returns one source-linked EvidenceFinding per selected record in that group. Append those actual findings, advance the unprocessed-group frontier, and synthesize the declared result from the findings plus the complete role ledger. Revisit a background record when a dependency or unresolved finding makes it relevant.\n` +
     `At semantic stages formulate and invoke focused typed natural-language literals on the selected item or relation. Preserve source IDs, paths, quoted evidence and returned decisions. ${lambda.join(' ')}\n` +
     (loop.length ? `Iteration: ${loop.join(' ')}\n` : '') +
@@ -432,10 +484,10 @@ function render(entry, provider) {
   if (relevance) files['solve/screenEvidence.nl'] = nlFile({
     args: { input: 'EvidenceScreenInput' },
     returns: 'EvidenceSelection', description: `${title}: screen evidence roles`,
-    instructions: `1. Read the entire supplied source collection under objective and rule. For each record, decide whether it directly affects the query, supplies a dependency or authority condition for another relevant record, is background, or remains uncertain.\n` +
-      `2. Return one EvidenceRole per input record with its exact id and path. A direct or dependency role cites an exact witnessQuote from that record; give a source-grounded reason and name every dependsOn record ID whose relation may change its meaning.\n` +
+    instructions: `1. Read all records for cross-record authority and dependency context. Judge only focusRecords in this call, deciding whether each directly affects the query, supplies a dependency or authority condition, is background, or remains uncertain.\n` +
+      `2. Add one EvidenceRole per focus record to the typed roles list, preserving its exact id and path. A direct or dependency role cites an exact witnessQuote from that record; give a source-grounded reason and name every dependsOn record ID whose relation may change its meaning.\n` +
       `3. Use uncertain when relevance or authority is genuinely unresolved. Keep uncertain records selected for later stages. Background means only that this record currently has no supported path to the task answer; it does not assert that its content is false.\n` +
-      `4. Check cross-record authority, identity and scope, not just lexical similarity. Return the complete typed role ledger so root can validate coverage and dependency closure.` });
+      `4. Check cross-record authority, identity and scope. Return this focus group's complete typed role ledger to the root, which combines and validates all groups.` });
   let stageFolder = 'solve';
   for (const [index, step] of steps.entries()) {
     const name = step.name;
@@ -445,25 +497,30 @@ function render(entry, provider) {
       stageFolder += `/${name}`;
       const plan = owned.numbered_plan.join('\n');
       const literalPlan = owned.scoped_literal_required ?
-        `\nFormulate and invoke a scoped typed natural-language literal; pass its returned decision into ${owned.owned_contribution.field}.\n${paragraphs(owned.scoped_literal_plan).join('\n')}` : '';
+        `\nFormulate and invoke a scoped typed natural-language literal; use its actual returned decision in this stage's typed contribution.\n${paragraphs(owned.scoped_literal_plan).join('\n')}` : '';
       const carriedPlan = crossFolder ?
         `\nCross-folder state: ${crossFolder.stage_ownership_plan.join(' ')}\n` : '';
+      const handoffPlan = typedHandoff ?
+        `\nTyped evidence boundary: ${index === 0 ? 'Only this stage reads EvidenceRecord.text. Bind source ID/path in parent scope and pass actual returned InteractionAssertion objects to the child.' :
+          'Use BatchIdentity and prior typed contributions with exact witness snippets.'} ${typedHandoff.exact_vs_semantic}\n` : '';
       files[`${stageFolder}.nl`] = nlFile({ args: { input: `StageInput${index + 1}` },
         returns: 'FinalSemanticState', description: `${title}: ${name}`,
         instructions: `${plan}\nOwned new semantic contribution: ${owned.owned_contribution.field}: ${owned.owned_contribution.type}.\n` +
           identityInstruction +
           `Transformation: ${owned.new_semantic_transformation}\n` +
           `Evidence: ${owned.source_evidence_obligation}\nInvariant: ${owned.invariant}\n` +
-          `No applicable evidence: ${owned.no_op_policy}${literalPlan}${carriedPlan}\n` +
+          `No applicable evidence: ${owned.no_op_policy}${literalPlan}${carriedPlan}${handoffPlan}\n` +
           (next ? `Pass the accumulated typed contributions to child ${next} within this active call and return its complete FinalSemanticState.\n` :
             `Return the complete FinalSemanticState with every earlier contribution preserved.\n`) });
       continue;
     }
     const scoped = literal?.placement === step.name && literal.instructions
-      ? grouped ? `\nAt this stage, formulate ad hoc typed natural-language literals for the current batch. Use this short plan: ${lambdaInstructions} ${sourceDriven ? 'Invoke a focused literal on each relevant current item or relation, passing only its needed context. Append the actual returned decisions, retaining each source ID and path.' : "Pass the batch's records and relevant context as arguments; keep individual source IDs in each finding."}` :
+      ? typedLiteralEvidence && entry.typed_inputs ?
+        `\nFor each candidate relation this stage owns, gather the supporting EvidenceUnit values from the original bundle, retaining their source paths and exact passage text. Invoke a focused typed natural-language literal on that current relation, its supporting evidence, inquiry, domain context and prior relations. Its return value is a RelationDecision: append the actual returned decision to the carried StageState.relations before calling the next named stage with the original complete bundle. ${literal.instructions} Keep the literal's own result scoped to the relation and preserve unresolved findings when the source does not settle it.` :
+      grouped ? `\nAt this stage, formulate ad hoc typed natural-language literals for the current batch. Use this short plan: ${lambdaInstructions} ${sourceDriven ? 'Invoke a focused literal on each relevant current item or relation, passing only its needed context. Append the actual returned decisions, retaining each source ID and path.' : "Pass the batch's records and relevant context as arguments; keep individual source IDs in each finding."}` :
         `\nAt this stage, formulate an ad hoc typed natural-language literal ${literal.signature ?? ''} for the current item. Use this short plan: ${literal.instructions} Pass the current item and relevant context as arguments; keep source IDs in the finding.` : '';
     const delegate = next ? entry.typed_inputs ?
-      `\nAfter making this stage's finding, call the child ${next} within this active call with bundle, inquiry, and the carried StageState. Return its StageState with this stage's source-linked evidence preserved.` :
+      `\nAfter making this stage's finding, call the child ${next} within this active call with ${typedLiteralEvidence ? 'the original complete bundle' : 'bundle'}, inquiry, and the carried StageState. Return its StageState with this stage's source-linked evidence preserved.` :
       grouped ? sourceDriven ? `\nCall the child ${next} within this active call with the same EvidenceBatch and the accumulated EvidenceContext. Add this stage's actual source-grounded natural-language decisions to stageFindings when it makes one; otherwise pass the existing context. Return the child's complete EvidenceBatchFinding.` :
         `\nAfter making this stage's per-record findings, call the child ${next} within this active call. Pass the same EvidenceBatch and an EvidenceContext whose stageFindings includes this stage's findings. Return the child's EvidenceBatchFinding, with one finding for each batch record and all relevant source identities preserved.` :
       `\nAfter making this stage's finding, call the child ${next} within this active call. Pass the same item and an EvidenceContext whose stageFindings includes this stage's EvidenceFinding; return the child's EvidenceFinding with all relevant source identities preserved.` : '';
@@ -528,7 +585,8 @@ function render(entry, provider) {
     caseRow.source_ids = [programSourceId];
     caseRow.source_groups = [sourceGroup];
     caseRow.source_revisions = ['semantic-stack-authored-v1'];
-    if (relevance) caseRow.source_revisions.push('relevance-first-screen-and-selected-batches-v1');
+    if (relevance) caseRow.source_revisions.push('relevance-first-screen-and-selected-batches-v2');
+    if (typedLiteralEvidence && entry.typed_inputs) caseRow.source_revisions.push('typed-literal-evidence-handoff-v1');
     if (variant?.program_id === id) caseRow.source_revisions.push(`stage-variant:${sha(variantBytes)}`);
     caseRow.generation.collection = 'teacher';
     caseRow.generation.source_domain = domain;
@@ -595,8 +653,9 @@ const review = {
   schema: 'natlang.semantic-stack-source-review/1',
   partial_pilot: pilotAstra,
   presentation: stageSpecsMode ? 'owned-typed-stage-contributions' : relevanceFirst ?
-    'relevance-first-screen-and-selected-batches' : sourceDriven ?
-    'source-driven-scoped-decisions' : groupedAstra ?
+    'relevance-first-folder-screen-and-selected-batches-v2' : sourceDriven ?
+    'source-driven-scoped-decisions' : typedLiteralEvidence ?
+    'typed-literal-evidence-handoff-v1' : groupedAstra ?
     'typed-coherent-folder-batches' : 'typed-individual-records',
   ...(variant ? { stage_variant: { id: variant.id, program_id: variant.program_id,
     file: variantPath, sha256: sha(variantBytes), base_catalog_sha256: variant.base_catalog_sha256 } } : {}),

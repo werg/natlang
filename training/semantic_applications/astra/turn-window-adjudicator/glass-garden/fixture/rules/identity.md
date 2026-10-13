@@ -1,0 +1,4 @@
+[ID01] This is the complete fictional Glass Garden turn. Only Ilex and Rowan are players. A physical card has a stable cardId; each stay in the garden has its own instanceId. Entering from discard creates the explicitly supplied new instance, not the old one.
+[ID02] Changing controller while an instance stays in the garden preserves its instanceId. A captured controller field is not updated by that change. A live current-controller reference reads the resumed board.
+[ID03] Last-known controller means the departing instance's controller immediately before its zone change. A newly created instance does not inherit old damage, growth marks, attachments or unused ability grants unless a rule explicitly grants them.
+[ID04] Aster and Mosaic are the only garden creatures. Mantle, Scribe, Mirror and Reprisal are artifacts, not creatures. A rule asking for another creature ignores artifacts and the subject itself.

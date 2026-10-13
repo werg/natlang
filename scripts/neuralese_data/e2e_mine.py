@@ -148,11 +148,28 @@ def convert_shard(shard: Path, tokenizer, preconverted_pieces=None):
             write_shard(stem, [], {}, [], omissions, {'converted': False, 'error': reason})
             return
         records = [json.loads(l) for l in open(conv) if l.strip()]
+        conversion = json.load(open(summary))
+        unreadable = conversion.get('unreadable', 0)
+        if unreadable or (not records and shard.stat().st_size):
+            emitted_ids = {r.get('id') for r in records}
+            for line in read_lines(shard):
+                if not line.strip(): continue
+                try: rid = json.loads(line).get('id')
+                except (ValueError, AttributeError): rid = None
+                if rid is None or rid not in emitted_ids:
+                    omissions.append({'id': rid, 'stage': 'convert',
+                                      'reason': 'conversion_unreadable_source_json',
+                                      'source_line_sha256': hashlib.sha256(line.encode()).hexdigest()})
+            if not records:
+                write_shard(stem, [], {}, [], omissions,
+                            {'converted': False, 'error': 'conversion_produced_no_records_from_nonempty_source',
+                             'rows': 0, 'input_records': conversion.get('records', 0),
+                             'unreadable_input_records': unreadable})
+                return
         pieces = {}
         for l in open(pieces_path):
             if l.strip():
                 p = json.loads(l); pieces[p['name']] = p['text']
-        conversion = json.load(open(summary))
     return derive(stem, records, pieces, conversion, omissions, tokenizer)
 
 
@@ -206,6 +223,8 @@ def derive(stem, records, pieces, conversion, omissions, tokenizer):
             for x in v: walk(x)
     for r in kept: walk(r.get('messages')); walk(r.get('target'))
     stats = {'converted': True, 'rows': len(records), 'kept_records': len(kept), 'edges': len(edges), 'chains': len(chains),
+             'input_records': conversion.get('records', len(records)),
+             'unreadable_input_records': conversion.get('unreadable', 0),
              'trajectories': len(groups), 'trajectories_failed_authentication': failed,
              'trajectories_without_edges': len(without_edges),
              'records_without_edges': sum(len(groups[t]) for t in without_edges),
