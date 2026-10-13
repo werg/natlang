@@ -25,6 +25,13 @@ telemetry, `source-backed` empty-corpus materializer); its Python, GPU and TS
 build steps passed. Route those failures to their code owners and keep main
 green.
 
+The first DGX prompt A/B attempt cannot be interpreted: its full arm was
+OOM-killed at the 8 GiB cgroup cap before scoring, while its program-header arm
+used a stale checkout that omitted the declared temperature from queued
+requests and therefore ran greedy. Pop's frozen v12 queue correctly carries
+`temperature: 0.6`. DGX was asked to pull current main and rerun sequentially
+with equal seeds/settings, fewer collector workers and sufficient ledger RAM.
+
 ## 18:05 CEST: recovery data, s52028 generation, QAD interruption and dragnet
 
 Pop published `pop-static-folder-edit-large-s52027-native-20261013-v1`
