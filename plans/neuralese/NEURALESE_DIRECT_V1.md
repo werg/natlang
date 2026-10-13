@@ -457,11 +457,64 @@ lines in lockstep (plans/neuralese/TRAINING_RECIPE.md "Two lines in lockstep").
   (`input_bindings.direct_artifact`). History: recipes/HISTORY.md.
 - Acceptance: the recipe's `e2e_acceptance` (section 4 above, with its resolved margins); the behaviour gate is
   reported only (owner 2026-10-12).
-- When a direct phase hands off: the recipe's `parent_readiness` on the running phase's logs (held CE plateau over 3
-  evaluations within 2%, no drift stop, task success once measured), not the end of its epoch.
+- When a direct phase hands off: superseded 2026-10-13 (owner). There is no readiness wait; see "The mixed run" below.
+  The former criterion was the recipe's `parent_readiness` on the running phase's logs (held CE plateau over 3
+  evaluations within 2%, no drift stop, task success once measured).
 - Mechanics qualification: neuralese-e2e-lfm-v1-qual-muon-main-v2-u9000 on Pop (LFM main at update 9000). A Mellum
   arm does not fit beside v4 (Mellum E2E updates peaked at 72-94 GB on 2026-10-11); Mellum's first e2e run is its
   handoff, whose `direct_runtime` stage qualifies the exact weights first.
+
+### The mixed run: direct SFT and e2e edges in one run (owner decision 2026-10-13; design, implementation pending)
+
+Owner: there is no reason to wait for direct-stage readiness before e2e. The only argument against starting e2e at
+once is efficiency (an e2e update costs more than a direct one), and mixing both kinds of update inside one run
+handles that. `parent_readiness` (held-CE plateau, task success at least the base) is dropped as an e2e entry
+condition for both lines. The entry conditions are:
+- (a) the projection is on the manifold: `dgx-projection`'s fit of P(h) to E[chosen] at entry, with its verifier;
+- (b) a stable update recipe from the collapse dragnet (plans/neuralese/E2E_COLLAPSE.md).
+
+**What one run does.** It interleaves two kinds of update at a declared ratio. Both share one optimizer state, the
+TokenChoiceProjection, the writer (P), the drift monitor, the QAT component, the checkpoint and the in-run task
+evaluation:
+- a **direct update**: one packed batch of the union's documents (the direct stage's path: windows, roles,
+  context-only spans, whole-trajectory weights, readout through the TCP), cheap per supervised token;
+- an **e2e update**: one producer→consumer chain from the e2e corpus (the e2e stage's path: the producer writes
+  through the direct writer, the consumer reads the block, consumer CE plus producer and context CE), dearer per
+  supervised token.
+
+**Decomposition** (what each part becomes, and why; the trainer is mechanism, so all of it is crisp code):
+
+| Part | Becomes | Why |
+|---|---|---|
+| Host loop, optimizer, checkpoint, resume, drift monitor, QAT, task eval, layer staging, async eval, checkpoint offload | `train/direct_sft.py`, unchanged in role | It is each line's running trainer (Mellum v4 runs it), so v4 switches in by a handoff of the same lineage, keeping its optimizer state. A third trainer is not allowed. |
+| Direct update | direct_sft's existing batch path (`tensors`, `forward`), unchanged | Already the cheap path at scale. |
+| E2E edge objective | a new module, `train/e2e_edges.py`, holding what trajectories.py's `--direct-artifact` path does for one chain: authenticate the chain (`authenticated_recurrence_context_view`), render (crisp text pieces, `soft_parts text`), the producers' writes through `serve/direct_write` (P(h) once `dgx-projection` lands), the consumer CE through the block (`GradSession.supervised_text_loss`), the producers' gold continuation CE (`writer_text_weight`) and the context CE | Moved out of trajectories.py's main() closure into one component with an explicit constructor (engine, session, texts, config) and two methods, `loss(chain)` and `evaluate(held)` (V, T, shuffled, zeroed, per family, chosen-token match). trajectories.py's direct path then calls the same component, so there is one implementation. Its legacy heads paths stay as they are. |
+| E2E data | `train/e2e_records.py` (streamed corpus v2/v3 by trajectory, CohortDocumentSampler by family^0.5), unchanged | Already shared. |
+| Update kind schedule | a crisp helper: update i is an e2e update iff floor((i+1)·p) > floor(i·p), where p = `e2e_mix.fraction` | Deterministic in the update index, so a resume repeats it exactly with no extra state, and both data cursors are saved in the checkpoint. |
+| Per-module rates | recipe settings: `token_choice_lr`, `token_choice_optimizer`, the writer's rate and optimizer, `latent_lr` | The dragnet's stable values go here (round 2: TCP at 3e-6; round 4: writer rate). One setting serves both update kinds. |
+| Evaluation | the direct stage's held CE (as now) plus the e2e component's paired V/T at each evaluation; `e2e_acceptance` reads those rows | The gate (V at most T, V beats shuffled and zeroed) and the task success use the same cadence. |
+| Efficiency report | per update kind: seconds, supervised tokens, tokens/s; per evaluation: V−T, crisp CE, task success and wall time since the run started | The owner's framing: choose the ratio by improvement per wall-hour. |
+
+**One backward per update.** An update is one kind or the other, never both. Both kinds keep `latent_step_in_backward`
+(one backward per update, latents stepping inside it), and only one kind's graph is alive at a time, so peak memory is
+the larger of the two kinds, not their sum. Both losses are token means, so a direct and an e2e update are on the
+same scale.
+
+**Choosing the ratio.** Short LFM mixed runs at p ∈ {0.1, 0.25, 0.5} (from u10006 with the aligned P and the stable
+recipe), each the same wall time. For each, report seconds per update by kind, supervised tokens/s, and per wall-hour
+the change in V−T, held crisp CE and task success. The recipe declares the p that improves V−T and task success
+fastest per wall-hour without raising crisp CE. Mellum uses the same p (lockstep) unless its measured cost ratio
+differs enough to change the choice, which then becomes a declared backbone-inherent difference in line-parity.json.
+
+**Handoffs.** A line enters the mixed run at a handoff of its running direct phase (`--handoff`, a declared
+continuation): the TCP comes on (identity, `optimizer_added`), P replaces the writer (the fitted artifact from
+`dgx-projection`), and `e2e_mix` is added. Mellum v4 switches as soon as its P is fitted and the dragnet gives a stable
+recipe (planned with the DGX ops agent; no plateau wait). LFM does the same from its running lineage.
+
+**Order of work.** (1) The three pending e2e commits land (family interleave and task success, layer staging,
+streaming corpus v2). (2) Extract `train/e2e_edges.py` from trajectories.py, with trajectories.py calling it and its
+tests unchanged. (3) Add `e2e_mix` to direct_sft. (4) Run the ratio arms on LFM. (5) Do the recipes and line parity,
+then the handoffs.
 
 ## Exact semantics (answers to Pop, pop-f7c5 / pop-b359)
 

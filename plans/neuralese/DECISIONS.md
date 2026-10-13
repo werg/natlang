@@ -1775,3 +1775,20 @@ arm temporarily uses ordinary joint backward (`latent_step_in_backward=false`)
 as an exact reference and productive route; compare its first update and memory
 against the staged implementation before restoring staging. Preserve the main
 u11204 full checkpoint while this arm runs.
+
+## E2E starts without a readiness wait, as a mixed run (owner, 2026-10-13)
+
+- `parent_readiness` (held-CE plateau within 2% over 3 evaluations, task success at least the base) is dropped as
+  the condition for entering e2e, for both lines. The entry conditions are the projection on the manifold
+  (`dgx-projection`'s fit of P(h) to E[chosen token] with its verifier) and a stable update recipe from the e2e
+  collapse dragnet (plans/neuralese/E2E_COLLAPSE.md).
+- E2E runs as a **mixed run**: one run interleaves direct SFT updates (union documents, cheap) and e2e
+  producer→consumer updates (dearer) at a declared ratio `e2e_mix.fraction`. Both share one optimizer state, the TCP,
+  the writer, the drift monitor, the QAT component, the checkpoint and the task evaluation. The host is
+  `train/direct_sft.py` (no third trainer). The e2e objective moves out of trajectories.py into `train/e2e_edges.py`,
+  which both trainers call. The ratio is chosen by improvement per wall-hour (V−T, task success, crisp CE). Design:
+  plans/neuralese/NEURALESE_DIRECT_V1.md, "The mixed run".
+- Mellum v4 switches in at a handoff as soon as its projection is fitted and the recipe is stable (no plateau wait),
+  planned with the DGX ops agent. LFM does the same.
+- Related, the same day: the soft-token mixture is removed as the value (value = learned P(h), `dgx-projection`), and
+  e2e takes no value or manifold auxiliary loss.

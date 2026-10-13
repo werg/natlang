@@ -1,0 +1,59 @@
+# Recovery supervision: a changed action after a no-progress observation (design, 2026-10-13)
+
+Source: plans/neuralese/REPETITION_DRAGNET_20261013.md, recommendation 4. Both students loop: the same action and the
+same observation for 8 to 127 turns. The training targets almost never contain a repeated action (0.08–0.10% of
+supervised turns repeat a call on an identical observation), so the model never sees "this did not move, so do
+something else". This family teaches exactly that turn. It is data for union r4/r5 (both lines; records are
+tokenizer-agnostic) and adds no runtime prompt text (teach in errors, not prompts).
+
+## What a training example is
+
+A trajectory prefix that ends in an observation showing no progress, followed by the supervised next assistant turn,
+which is a **different** action that makes progress. The no-progress turn stays in context and is never a target.
+
+No progress, decided crisply and exactly on the observation (no model judgement needed):
+1. **Identical:** the observation's bytes equal an earlier observation of the same action in the trajectory (after the
+   runtime's own normalisation: the `Stored local` line drops on a rerun).
+2. **Empty:** a successful read that returned an empty collection, `null`, or an empty string (the multihop
+   `graph.outgoing(parent, "owns", 1)` → `[]` loop).
+3. **Failed:** a runtime failure form (`FAILED_TOOL_FEEDBACK` in train/text_supervision.py: rejected action, discarded
+   eval, refused result). These turns are already context-only in training.
+
+## Three sources (in order of cost)
+
+1. **Mined natural recoveries (zero cost).** Scan the registered native-turn corpora (r3/r4 renders, both renderings)
+   for supervised turns whose previous observation is no-progress (1–3 above) and whose action differs from the
+   previous action. These exist (errors followed by fixes, empty reads followed by the other direction) but are a
+   small share. Register them as a sampling group (`recovery`) so the direct trainer's CohortDocumentSampler gives them
+   their own weight, as the owner asked for the agentic tool-loop families (handover §4, union r4). Output: a
+   selection manifest of (document, turn) pairs over existing corpora, not copies.
+2. **Exact repeat-then-change branches (CPU, exact).** For a supervised turn t+1 whose context ends with action a_t
+   and observation o_t, insert k ∈ {1, 2} reruns of a_t before it and take each rerun's observation from the real
+   runtime (`ts-host/src/native/runtime.ts` replay of the trajectory with the call repeated), so the observation bytes
+   are exactly what serving returns (including the existing failure-repeat note where it applies). The target stays the
+   teacher's own a_{t+1}. The inserted assistant turns are declared `context_only_spans` (the existing direct-trainer
+   mechanism, train/direct_sft.py `failed`/`context_only_mask`), so the repeated action is never a target. Only turns
+   where a_t is a read whose rerun is side-effect free qualify (the runtime replay says so; effects are data).
+3. **Authored recovery worlds (static curriculum, CPU).** A curriculum family through
+   `ts-host/scripts/inline-curriculum` (`--authored-plans --supervise-reference-answers`) whose reference plan makes a
+   natural first query that returns empty (the relation is stored in the other direction, the first page is empty, a
+   filter is too narrow), then changes the query on that observation. Exact oracle at the root. Seeded worlds give
+   breadth (relations, pages, filters, schedules); held split by world seed.
+
+## Checks
+
+- Every example's no-progress observation is classified by the exact rules above; the classifier is crisp code with
+  unit tests on the loop cases of the dragnet (multihop owns/owned_by, route_replan `world.look()`, late_argmax
+  `page_count()`, entailment `facts.page(1)`, frontier `graph.links`).
+- The supervised action differs from the no-progress action (exact comparison of the call text after whitespace
+  normalisation).
+- Held split: source 3 by world seed; sources 1–2 inherit the source rows' split, and train branches never come from a
+  document that shares a source group with a held document.
+- Measured effect: the in-run task evaluation's exact-repeat counter (Pop's `identical_turn_limit` instrumentation,
+  f8f9a99c) on the held packet, before and after a run that includes the family. The family is training data, not a
+  model-facing prompt change, so it needs no live A/B before admission; its effect is read from the task cadence.
+
+## Order
+
+Source 1 first (a selection over existing data, adds a sampling group to r4), then source 3 (new breadth, no teacher
+cost), then source 2 (needs the runtime replay harness).
