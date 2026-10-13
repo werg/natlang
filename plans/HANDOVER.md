@@ -37,10 +37,13 @@ reference checks still do not grant training admission without live trace and
 independent semantic quality review.
 
 R5 full union directory now occupies ~29GB on Pop after exact discarded-work
-cleanup; root remains ~31GB free. DGX was asked to complete remote manifest
-verification. Do not switch current training inputs merely because files are
-present; await verified admission/split/source-quality decisions. Monitor disk
-as transfer finishes.
+cleanup; root remains ~31GB free. DGX completed the Pop remote verifier at
+22:28 UTC: all ten union files passed with zero errors against full manifest
+SHA `ca3a03fa3e7380ef7e3ee37fba4b23aa0abcf1ae2c0643e889e6ffe7ac6f238e`;
+the set manifest also passed SHA `40a2f5f8ee9f6491ecfecac72747e724cf0d9a28191dfdf18097f36bb9a887d8`.
+R5 is registered training-admitted on main, but the current Pop v14 stage has a
+frozen input. Plan the R5 handoff at a complete checkpoint/stage boundary and
+retain full optimizer resumability. Monitor disk as subsequent outputs grow.
 
 ## 00:23 CEST: Pop space for R5 corpus transfer
 
