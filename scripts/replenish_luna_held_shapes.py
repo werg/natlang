@@ -198,8 +198,10 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, 
     again = dict(job, output=str(retry / 'results.jsonl'), jobs=str(retry / 'jobs'),
                  log=str(retry / 'collector.log'), seed=job['seed'] + attempt * 100000)
     if resource_budget:
-        again['max_model_requests'] = max(768, job['max_model_requests'] * 2)
-        again['case_seconds'] = max(3600, job['case_seconds'] * 2)
+        again['max_model_requests'] = max(192 if repair else 768,
+                                          job['max_model_requests'] * 2)
+        again['case_seconds'] = max(1800 if repair else 3600,
+                                    job['case_seconds'] * (1 if repair else 2))
     (retry / 'queue.jsonl').write_text(json.dumps(again, sort_keys=True) + '\n')
     (retry / 'review.json').write_text(json.dumps({
         'schema': 'natlang.teacher-transient-retry/1', 'original_key': job['key'],
