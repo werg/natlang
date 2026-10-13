@@ -32,7 +32,10 @@
     },
     "latent_lr": 1e-05,
     "window_execution": "packed",
-    "fp8_training": "triton-experts"
+    "fp8_training": "triton-experts",
+    "task_eval": {
+     "reference_successes": 11
+    }
    }
   },
   "quantization": {
