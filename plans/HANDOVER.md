@@ -1,6 +1,87 @@
 # Continuation guide — updated 2026-10-14
 
+## 01:15 CEST: deep pseudocode source contract, wider source readiness, R5 handoff preparation
+
+The owner clarified that the additive semantic cohort should resemble larger
+natlang applications: deep **numbered natural-language pseudocode** must own
+the consequential decisions and typed state updates. A deep file tree, long
+prompt or decorative lambda is insufficient. `PROJECT_SOURCE_CONTRACT.md` now
+asks reviewers to follow an actual request through distinct branches, an
+iteration, a consumed scoped NL literal and a final audit, and to flag
+case-specific crisp lookup/edge tables or child results ignored in favor of JS
+reconstruction. This is additional source-quality work; correct small cases are
+retained. Source-contract commit `7c96b085` and Witness quote/provenance fix
+`56a193aa` are on origin/main; Pop and DGX were briefed.
+
+The plain semantic builder had failed to render `output_identity_contract`, so
+seven authored ID/case conventions were invisible to teachers. Curriculum fix
+`60b052f3` renders them in the root for all presentation modes and adds an
+opt-in relevance-first screening stage for wide evidence folders. Fresh
+ordinary no-override 220/220 source reference replay passes; Sol's 100 are
+signed generation-ready, and Astra independently checked its 120 exact record
+maps and all seven rendered conventions before signing its readiness receipt.
+None of these source-valid cases is admitted training data yet. The matched
+one-case folklore relevance-first diagnostic is launched under low-priority
+Pop ledger unit `natlang-pop-semantic-relevance-first-folklore-v1.service`, with
+manifest under
+`/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/relevance-first-folklore-diagnostic-v1/`.
+Compare its semantic coverage, actual typed child/literal consumption and turn
+cost against the stopped source-driven baseline before cohort expansion.
+
+The Cave v1b diagnostic was OOM-interrupted at about 127 turns while Pop kept
+the high-priority trainer and ordinary generators. Its partial exposed a
+source ambiguity: `compatible` in anchor judgments must mean consistency
+*conditional on the supplied transform*, rather than proof of actual frame
+identity. Quote integrity also needs exact source binding. Astra is revising a
+new source; v1b is a held diagnostic, neither model-negative nor admitted.
+Witness's corrected boundary source needs a fresh pinned run. Protocol now has
+a substantive typed metric-reading handoff; peer review precedes its live run.
+
+Pop QAD v14 direct SFT remains active at about step 15280, GPU near full use.
+The next full task gate is step 16000; inspect it before changing training.
+The complete step15000 checkpoint and held metrics are available. The R5 full
+union is exact-verified on Pop and registered training-admitted. A declared
+R5 continuation recipe `742f9645` extends the current shared lineage without
+copying a whole recipe. Read-only `--handoff --plan-only` succeeded: it treats
+the active direct SFT as an explicit data continuation, switches its future
+input from R3 to R5, points the unstarted trajectory stage to R5, and retains
+weights/optimizer/RNG lineage. **It has not launched**. Before the actual
+handoff, wait for a complete checkpoint/task gate, review current-shared code
+differences from the frozen v13 runtime, run the full gate under ledger when
+admitted, refresh package hashes if code changed, and update parity's active
+leaf with DGX coordination. Current quick gate passed; full `check-main` is
+still queued low-priority behind trainer RAM. Root has about 30 GB free and
+`/srv/storage` about 12 GB; continue storage monitoring.
+
 ## 00:42 CEST: deep NL application review and live qualification
+
+**00:59 addendum.** v10b ecology's final named `verifyResult` stage at turns
+81–82 reconstructed a global case-specific edge array in JS from raw
+`relatedRecords`. The source passed only the current folder's typed result as
+`prior`, so it did not give final graph work the typed edges from other
+folders. This is a source-graph topology bug, not a model failure. Exact
+`natlang-pop-semantic-ecology-v10b-diag.service` was stopped after its 138-turn
+diagnostic partial; no SFT admission. Shared v11 commit `15433d91` carries
+`FinalSemanticState` and witnesses between folder iterations, with an owned
+stage-5 global audit. Source replay is 20/20, and matched one-case v11b queue
+is sealed. It is queued low-priority as
+`natlang-pop-semantic-ecology-v11b-diag` behind the Cave pilot.
+
+The baseline plain cohort was OOM-interrupted at 439 turns/~104k completion
+tokens on its first case; it remains a diagnostic partial, not a model-negative
+row, and is not being restarted. The source-driven cohort continues; first
+folklore case still has no final result, but live code has far fewer large
+hard-coded snippets and consumes typed child decisions. Cave Mission now has
+independent source/oracle review and 22 external checker controls. Its
+one-case low-ledger diagnostic `natlang-pop-cave-app-diag-v1b.service` is
+active. Both runs are held pending live completion and semantic review.
+
+Witness host-service wrong-shape calls now return one-sentence typed recovery
+errors in shared commit `439ba667`, with authoring/integration skill advice
+and model-facing sample debt. Running frozen Witness diagnostic remains on
+older code; no retroactive live qualification. The previous full-check waiter
+was stopped and cancelled to allow lower-memory Cave/v11 diagnostics to admit;
+fresh `natlang-pop-check-main-20261014-0055` low-priority waiter is queued.
 
 Owner reaffirmed that the additive slate should resemble a sizeable natlang
 codebase, with substantive **deep numbered natural-language pseudocode** rather
@@ -12,9 +93,9 @@ crisp. Astra/Sol authors and curriculum monitor were briefed. Inspect actual
 live code as well as source: large hard-coded JS decision tables do not meet the
 new cohort's idiomatic goal.
 
-Current main is `328d2bdb` after merging DGX's E2E accounting fix; quick gate
-passed and pushed. Pop full `check-main` is still a low-priority ledger waiter,
-`natlang-pop-check-main-20261014-0035-waiter.service`, blocked by trainer RAM;
+The source-contract change was pushed in `328d2bdb` after merging DGX's E2E
+accounting fix; quick gate passed. Pop full `check-main` is still a low-priority
+ledger waiter (current unit named in the addendum), blocked by trainer RAM;
 do not call this full-verified. QAD trainer is active at ~step14635, GPU ~98%,
 and a complete step14080 checkpoint has replaced the earlier truncated pending
 checkpoint. Ordinary Luna, v10b ecology, paired plain/source-driven six-case

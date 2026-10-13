@@ -1,0 +1,70 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "neuralese-direct-lfm-qad-broad-20261014-r5-data-continuation-v1",
+  "extends": "neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix",
+  "description": "Checkpoint-safe R3 to admitted R5 data continuation of the active LFM direct_sft: preserve weights, optimizer, RNG, seen-document accounting and task evaluation; bind the unstarted whole-trajectory phase to R5. Runtime code is explicitly pinned to current shared package and removes retired projection-loss options.",
+  "overrides": {
+    "input_bindings": {
+      "direct_text_program_header": {
+        "path": "runs/natlang-target-union-20261011-r5/program-header/lfm25/text-data.jsonl",
+        "sha256": "5288ae10d5c011e1d0b59929c6ef3251424d23c95e9f082564f7365073cad28d"
+      },
+      "direct_text_program_header_previous": {
+        "path": "runs/natlang-target-union-20261011-r3/program-header/lfm25/text-data.jsonl",
+        "sha256": "0974200754e27da114f429de3142fb3be8500431bcb0837cbea35868ebf30ba9"
+      },
+      "direct_text_trajectory": {
+        "path": "runs/natlang-target-union-20261011-r5/whole-trajectory/lfm25/text-data.jsonl",
+        "sha256": "b7a8a5d5de4e969c7d72353271834dbb383c8eb6260097a169e50273c07606bc"
+      }
+    },
+    "stage_parameter_defaults": {
+      "neuralese_direct": {
+        "task_eval_every": 4000
+      }
+    },
+    "stages": {
+      "direct_sft": {
+        "inputs": {
+          "text_data": "direct_text_program_header",
+          "continued_text_data": "direct_text_program_header_previous"
+        }
+      }
+    },
+    "runtime": {
+      "package_code": {
+        "common/hdd_guard.py": "77e961e26224e5b6e55294b5ab21e1940920d4f8e12f78a0287377be66ca441b",
+        "common/paths.py": "20d478575b36c93dd0743f1568a3a83ea0233b5f594a2889dd6732556f92107d",
+        "common/row_index.py": "e592aa380417424c3018f6d1672a2b961e45c1571a7e49bdec9bc4be11123544",
+        "eval/direct_runtime.py": "819d65d3b7fcec377de8c492bd2611a6fe1ae48fee7710a397c94101e6e57ec5",
+        "eval/task_cadence.py": "f22d9322ca1ccea0fc98a741993d2ea3551abe33263048fa8723ee8169f032d4",
+        "eval/task_packet.py": "90baa6a4ddeadc17467bff56b9ae0a5cddf24c4e0cbd61ce88c06a6315c88735",
+        "export/__init__.py": "1fb2e00b607464ff72102975511c742e6885b8717495f051fe4aaf1b5116bff6",
+        "export/__main__.py": "1501716656ca6806849b2ace9910db60268e99551cb6ebf2bba9c2e6d974cdb7",
+        "export/gguf.py": "0cdf6d22e228b4e8ad7479325586a6c93ad7ea0ee1c142097d0e3556b36789a9",
+        "model/layer_staging.py": "7cf113301e8d601b4b6c6455f0b3a87815870f4539f4332da77831c2692df2fd",
+        "model/neuralese_projection.py": "4707633b7d9a874d7c00eb8db4f0e0352712dbf827880a22a86044726d58bb34",
+        "serve/direct_write.py": "a56c0ee5c0a0daa12d0366863a3b84deb5359ac0996a2263ac26257a62527adc",
+        "serve/grad.py": "276f44e3dbf962aa72caf2b8379274d43c91fba61e61b4110d67594cc9468fe5",
+        "train/direct_export.py": "b2cd4f7cef8cfd420c11c55faa5f86189945575f84cbc8142a8877d72bdded1c",
+        "train/direct_sft.py": "ed0c0c780be256b970f73235b98fb5ed3151a786265c1658c7a80670ffa82566",
+        "train/e2e_acceptance.py": "dd0bc894c3db3ebd1f2833ad7e506d7d053c55484eae0568e630aeb2c417edc4",
+        "train/e2e_records.py": "c0b22034181a7c985919d0718978ef1125ced8b347ca68c1321bb680766aeb3d",
+        "train/line_parity.py": "2d155f59b041c0adfcc4eae02ab0a6c482ae61e7480cd7e59eb425f0318fd558",
+        "train/optim.py": "3f08882da162135dec6fc11bd0146f7aff7019c73037fee7a2fa18e5929c7aa1",
+        "train/optim_restore.py": "7ac363deffd4b96946f7f03da981341544727c6bb4e396b5f71ac2d4f86d6f82",
+        "train/projection_align.py": "176b8a8006e8d17110ca8ee128df2203dac3fcdbc263f75cdc5592e24ecad83e",
+        "train/recipe.py": "88c79f97b614a6e29f0c2d10ffe06e8d75aa62da0463a782f1f792e7bf3c613f",
+        "train/recovery_mining.py": "7debf2181c90bda7407f8ac9d56e5dedeb4f575c26452b41805cccad34a22bee",
+        "train/recovery_selection.py": "7281f9255d8185ae0b3603c361c78b0d1d316d461266807092d2d1096f2540ca",
+        "train/self_text.py": "b7ca470ad2cfe67bd4f9c534b167bb7c48b0ebefccf0d43e91c642ad28a6da05",
+        "train/speed_bench.py": "e9ea08157c7337ed2098f1f0292d054372516597be56c0c84c66795a8b90147f",
+        "train/text_supervision.py": "03fb6e677aafe06a6c2e5656649375d93559efbd3bc13223013da6f85b48349f",
+        "train/text_warmup.py": "267cf5aeb4bc2ef62ce1edec1f2bde30badaf9cab83053a297d3baa5b476800d",
+        "train/trajectories.py": "c55954af77bb040eb316ffc9ceb4fbfb7383253bad84a8163c102b4937028522",
+        "train/trajectory_probe.py": "d879db817dad1f923805ad80ee9c98f423ecf35b327bf1698ece4f0df34170c2",
+        "train/trajectory_state.py": "c8e1ae7eec7e1168baa06174221cd51a8c0c86022a174a7b2be5239bf60911ba"
+      }
+    }
+  }
+}

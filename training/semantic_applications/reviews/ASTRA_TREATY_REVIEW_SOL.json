@@ -1,0 +1,348 @@
+{
+  "schema": "natlang.semantic-application-independent-review/1",
+  "reviewer": "semantic_slate_sol",
+  "application": "astra-treaty-obligation-ledger",
+  "date": "2026-10-14",
+  "source_base_commits": [
+    "b877a526",
+    "c99a3f6b"
+  ],
+  "source_oracle_result": "passed",
+  "external_checker_result": "passed_after_exact_reference_domain_repair",
+  "hashes": {
+    "training/semantic_applications/astra/treaty-obligation-ledger/three-locks/oracle.json": "9e3cc8d7964e40a23527c9ee28a054b4bd54cdc9c9ac97e24009f97ba82974bf",
+    "training/semantic_applications/astra/treaty-obligation-ledger/three-locks/reference-report.json": "bf69cd9fc7d47a80c6eaece3e28153dce300cf9677cd351ab52e2c9a343abf71",
+    "training/semantic_applications/astra/treaty-obligation-ledger/verify-result.mjs": "7a02c7367597451cfa4a861aca55bf24078e73be889e7bd726d8a34ebcb8da31",
+    "training/semantic_applications/astra/treaty-obligation-ledger/three-locks/request.json": "818ce5d75602d9699edf7fa1030ec9b21af06196c1233acf51b1fd1046088e1e"
+  },
+  "fixture_file_sha256": {
+    "accession/birch.md": "fa2b717c2be1f1cc1c05d6f22a1c95c572324829a09c3571c0ec2bd9b41ce51f",
+    "amendments/rate-adopted.md": "12f7c4bc4cdde6f44672a82510cce5837cefbbbb43515eb3bf3b759e89c2c613",
+    "amendments/rate-draft.md": "7ea869a7b4b64094382f0eb715ec8926545426b1c32c7daed27e647855022da6",
+    "charter/competence.md": "42e5fa497dde1c706dd8db3b4604876c56acee0c13dd25dd2906b21e632ac2a2",
+    "compact/base.md": "87ade79777a99517f7201c38be066ce107060c5e73e6f13fe2653228d62738bd",
+    "controls/evidence.md": "6b1de360cd2759bc149def5f9f58d68b38bcafef32989174a28132cd913c7f3a",
+    "discovered/rescue-dispatch.md": "dd6be94192aa71d40a218ac228a53d6db543971e00070c01232d938bc863bab7",
+    "events/transits.md": "9b711900d8f8f10da351aa9c0baac97474f3257762a898f656ef6e2d39aef71f",
+    "manifest.json": "0e2b265dda1df4fc09c90591a161a1956fdb2fcb49c54f0fc5b93f476c71163d",
+    "offices/birch-circular.md": "efd76960354c48393f76cfac55dfb62efe03c362a03c88493f169d273765ab3e",
+    "offices/reciprocal-grants.md": "cc975d81177a14e9a0efcfc6d02a2cb5d759585395b9166bfccbe0f977b1d33d",
+    "orders/flood.md": "05c63a0f5ec7c0fa521069325ed363122f7fa1c53a3c6bfce9d24a026cbe094c"
+  },
+  "nl_source_sha256": {
+    "reconcileLedger/auditLedger/replayJustification/challengeAuthority.nl": "cfa41da80cd9ecf88702f2bcb9e6b8dc84b73142e6949266a9863ee688f9176f",
+    "reconcileLedger/auditLedger/replayJustification.nl": "54392944267183939096796416a7112878b202cb4a086c40864c919a84d3c108",
+    "reconcileLedger/auditLedger.nl": "a9e19596df32ee48ba26734c38d3ee18b043b00feb02322b8e0aeccd31942ec6",
+    "reconcileLedger/buildAuthority/deriveDelegation/assessCompetence.nl": "2acc52d4bb003afbc0e1a84b9f9f1887887f808aa0a2c24ed49b34f0d6a18967",
+    "reconcileLedger/buildAuthority/deriveDelegation/detectUnsupportedCycle.nl": "0ae8610a0d81e7ec8970e9433f8fc9839fe2dac43c2bce46953b94cc230f12d3",
+    "reconcileLedger/buildAuthority/deriveDelegation.nl": "e4072eacdccdb8c1ff7bb0452e7b4ea43b8cf206f59cdc0bfcbc11e36aaac56c",
+    "reconcileLedger/buildAuthority.nl": "438ae481e0179534b79b88ab71eb8631da255e9c792d0a813600373632389a37",
+    "reconcileLedger/compileNorms/classifyChange/resolveTarget.nl": "970ec6784901bd15cc2767a3c13c81502484671b55acade7a31cdba90efe7378",
+    "reconcileLedger/compileNorms/classifyChange.nl": "0d5ad84a7f82eacca393f079cc237003e4f0edd6a55d739691e683a770b9ab66",
+    "reconcileLedger/compileNorms/interpretConditions.nl": "936c6187c4311f4543d4723cf1105e0c550c4cc6e70ea97f87ad02fa8021c113",
+    "reconcileLedger/compileNorms.nl": "6c5bfc33684e72c2eeb0c99b0ef56c256ebe4d05a3dc02946bbad4da165393ec",
+    "reconcileLedger/evaluateSlices/applySnapshot/classifyObligation.nl": "4ea2cee466a58f6e72c053d505c10a6c5c3eb7c22805e7cb8be4a1b0a4d0658c",
+    "reconcileLedger/evaluateSlices/applySnapshot/propagateRetraction.nl": "91eeb0b6a6dbf7d54f324a14e328b58061fea74262a8e07a06f454225eb60560",
+    "reconcileLedger/evaluateSlices/applySnapshot/seedApplicability/judgeScope.nl": "cdd3e53d967bf6bfa2ef170e8650849d9cccd0c26b57c98c2c103c131b2ffd78",
+    "reconcileLedger/evaluateSlices/applySnapshot/seedApplicability.nl": "efaa00944ffa2ce9288960e031ac21d31f36d999035c930a0eb9891ebd7732c1",
+    "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier/deriveConsequences.nl": "7d5db736fe6c91c6c5bc493db74df4eb94250c22d68b4cd770a4a00decf642fb",
+    "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier/resolveDefeat.nl": "a6fdc8d6910f444dd9746d036a2a87049ff1d4444940817e977c1b4c10086542",
+    "reconcileLedger/evaluateSlices/applySnapshot/settleFrontier.nl": "474bf854540352ac7db983b1ef6fd5b738a34166d7db5908f6b364ee326eb7d6",
+    "reconcileLedger/evaluateSlices/applySnapshot.nl": "35d6fa6e9aea4587e7e505b318dda64ec232b12144e85f1b5a93a56a549282c3",
+    "reconcileLedger/evaluateSlices.nl": "226cfc14bd75271cfaca265a190cfde98d1d3ba081b83459bf8f52f2c4be10c0",
+    "reconcileLedger/explainDelta/compareCertificates.nl": "cfaf45aadaa82aac1db910574b24b0e4ec5891e4441e3c2cca0447f5564d1f0e",
+    "reconcileLedger/explainDelta/minimizeSupport/pruneSupportPass.nl": "330ee8ff9fb45f52acfca5834e278e65c27160553122a36e75ffd58d8f48e857",
+    "reconcileLedger/explainDelta/minimizeSupport.nl": "de5b083827fc90bac4bcf972b38cf2a27632b11d482a8bf0f403ff5642012f4e",
+    "reconcileLedger/explainDelta.nl": "4189b9d7e870e46c12bca1236c966bcc5908c8d17ac402cce6f528080f562a0f",
+    "reconcileLedger/indexArchive/interpretEvent.nl": "0c9aab17b9f8187b7cd8f6989edb14b8929265e91bbd1d823b29be4acd57a5e3",
+    "reconcileLedger/indexArchive/interpretInstrument.nl": "d0585cdbb76ec7230ae2f4da4e7e3bbd48afe54b0452efcec666f62cabd3357c",
+    "reconcileLedger/indexArchive.nl": "6ae77ea6236042454922b5092c253b2aa7e10fdb7ec3ac814fa2f3390bd338b3",
+    "reconcileLedger.nl": "c132a2336c74694ab93b5e46999ac7f1b7237fc98514430b2b818a6123892c7e"
+  },
+  "independent_entry_reconstruction": [
+    {
+      "snapshot": "S34",
+      "tripId": "T1",
+      "debtor": "Alder",
+      "beneficiary": "Birch",
+      "action": "toll",
+      "status": "unresolved",
+      "amountAlternatives": [
+        0,
+        10
+      ],
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T1",
+      "debtor": "Alder",
+      "beneficiary": "Birch",
+      "action": "notice",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T1",
+      "debtor": "Alder",
+      "beneficiary": "Birch",
+      "action": "translation",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T1",
+      "debtor": "Birch",
+      "beneficiary": "Alder",
+      "action": "passage",
+      "status": "unresolved",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T2",
+      "debtor": "Birch",
+      "beneficiary": "Cedar",
+      "action": "toll",
+      "status": "active",
+      "amountAlternatives": [
+        12
+      ],
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T2",
+      "debtor": "Birch",
+      "beneficiary": "Cedar",
+      "action": "notice",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T2",
+      "debtor": "Birch",
+      "beneficiary": "Cedar",
+      "action": "translation",
+      "status": "defeated",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T2",
+      "debtor": "Cedar",
+      "beneficiary": "Birch",
+      "action": "passage",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": true
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T3",
+      "debtor": "Cedar",
+      "beneficiary": "Alder",
+      "action": "toll",
+      "status": "active",
+      "amountAlternatives": [
+        12
+      ],
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T3",
+      "debtor": "Cedar",
+      "beneficiary": "Alder",
+      "action": "notice",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T3",
+      "debtor": "Cedar",
+      "beneficiary": "Alder",
+      "action": "translation",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S34",
+      "tripId": "T3",
+      "debtor": "Alder",
+      "beneficiary": "Cedar",
+      "action": "passage",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": true
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T1",
+      "debtor": "Alder",
+      "beneficiary": "Birch",
+      "action": "toll",
+      "status": "defeated",
+      "amountAlternatives": [
+        0
+      ],
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T1",
+      "debtor": "Alder",
+      "beneficiary": "Birch",
+      "action": "notice",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T1",
+      "debtor": "Alder",
+      "beneficiary": "Birch",
+      "action": "translation",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T1",
+      "debtor": "Birch",
+      "beneficiary": "Alder",
+      "action": "passage",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": true
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T2",
+      "debtor": "Birch",
+      "beneficiary": "Cedar",
+      "action": "toll",
+      "status": "active",
+      "amountAlternatives": [
+        12
+      ],
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T2",
+      "debtor": "Birch",
+      "beneficiary": "Cedar",
+      "action": "notice",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T2",
+      "debtor": "Birch",
+      "beneficiary": "Cedar",
+      "action": "translation",
+      "status": "defeated",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T2",
+      "debtor": "Cedar",
+      "beneficiary": "Birch",
+      "action": "passage",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": true
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T3",
+      "debtor": "Cedar",
+      "beneficiary": "Alder",
+      "action": "toll",
+      "status": "active",
+      "amountAlternatives": [
+        12
+      ],
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T3",
+      "debtor": "Cedar",
+      "beneficiary": "Alder",
+      "action": "notice",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T3",
+      "debtor": "Cedar",
+      "beneficiary": "Alder",
+      "action": "translation",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": null
+    },
+    {
+      "snapshot": "S35",
+      "tripId": "T3",
+      "debtor": "Alder",
+      "beneficiary": "Cedar",
+      "action": "passage",
+      "status": "active",
+      "amountAlternatives": null,
+      "permissionRequired": true
+    }
+  ],
+  "independent_entry_count": 24,
+  "source_findings": [
+    "A01/A02 root competence and delegated scope reject mutually cited AL/BI; office notice-wording power does not authorize FREE_A toll waiver.",
+    "RATE12 effective20 prospective: day12 T1 amount10, day22 T2 and day27 T3 amount12; knowledge cutoff35 never moves trip time.",
+    "F authority10..24 clips order through29: T1 ordinary passage closed subject to unresolved/certified rescue; T3 day27 passage required.",
+    "Birch reservation narrows only Birch outgoing translation: T2 defeated, Alder-to-Birch T1 translation unchanged.",
+    "T1 S34 rescue open, not false: toll alternatives0/10 and passage unresolved; S35 receipt reveals preexisting valid dispatch and changes those two consequences.",
+    "N_NOTICE and F02 independently justify one T1 notice business identity; neither rescue nor translation reservation duplicates/removes it.",
+    "R01 rescue content plus R02 new availability is inclusion-minimal relative to stable charter/exception premises for both changed statuses.",
+    "Typed SelectedTerm consumes amendment before duty proof; unknown amount blocks fallback and rate does not create a duplicate duty proof."
+  ],
+  "checker_controls": {
+    "reproduced_authored_positives": 6,
+    "reproduced_authored_negatives": 26,
+    "independent_bad_background_clause_probe": "NO_SUCH_CLAUSE initially accepted; after repair rejects as background source premise domain",
+    "canonical_after_repair": true
+  },
+  "resolved_findings": [
+    {
+      "kind": "exact_reference_domain_omission",
+      "location": "CertificateDelta.support.backgroundPremises",
+      "resolution": "Checks tagged source clause/fact, authority and relevant before/after proof identities, rejecting unknown kinds;5negative controls added."
+    }
+  ],
+  "limitations": [
+    "Exact fields/reference domains and derived status checks do not establish semantic entailment of every proof/authority/condition.",
+    "Actual NL stage/literal execution and value consumption require live trace; named depth and static typed contributions give no execution credit.",
+    "Generated proof/norm IDs and collection order are presentation, not semantic equality; reproduced alpha-renaming positives."
+  ],
+  "live_qualified": false,
+  "training_admission": false
+}

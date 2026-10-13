@@ -24,3 +24,7 @@ returns: PlanState
    selected readings or numerator propositions must remain distinguishable in subsequent comparison.
 8. This department is reused for baseline, counterfactual probes and edited definitions. Reusing
    the same NL materialization prevents a repair from being tested by a simpler disconnected formula.
+
+9. Bind executable.numeratorOutcome from the returned parent MetricView.numeratorOutcome, which
+   joins the child symbolic reading with code definitions. Preserve countedMeaning, reading and
+   displayLabelCompatibility in BoundPlan.metric so a numeric receipt cannot hide label disagreement.

@@ -27,6 +27,11 @@ export function verifyCandidate({value,oracle,inputs,fixture}){
    demand(p.population?.definitionId===expected.populationDefinitionId,label+':population-definition:'+owner);
    demand(bag((p.timing?.anchorByUnit??[]).map(({unitId,time,eventId})=>({unitId,time,eventId})))===bag(expected.anchors),label+':anchors:'+owner);
    demand(p.metric?.numeratorOutcome===expected.executable.numeratorOutcome&&p.metric?.denominator===expected.metricDenominator&&p.metric?.aggregation===expected.metricAggregation&&p.metric?.definitionId===expected.metricDefinitionId,label+':metric:'+owner);
+   const reading=p.metric?.reading;
+   demand(reading?.implementationId===owner&&reading?.definitionId===expected.metricDefinitionId&&reading?.denominator===expected.metricDenominator&&reading?.aggregation===expected.metricAggregation,label+':symbolic-metric-reading:'+owner);
+   demand(typeof reading?.countedTerm==='string'&&reading.countedTerm.length>0&&typeof reading?.displayLabel==='string'&&reading.displayLabel.length>0&&typeof p.metric?.countedMeaning==='string'&&p.metric.countedMeaning.length>0,label+':metric-meaning-presence:'+owner);
+   demand(p.metric?.displayLabelCompatibility===expected.metricDisplayLabelCompatibility,label+':display-label-relation:'+owner);
+   demand(reading?.witnesses?.length>0&&reading?.localDecision?.site==='metrics/interpretMetric.nl'&&p.metric?.localDecisions?.some(d=>d.site==='metrics.nl'&&d.witnesses?.length>0),label+':two-stage-metric-contribution:'+owner);
    demand(same(p.executable?.window,expected.executable.window)&&same(p.executable?.anchorByUnit,expected.executable.anchorByUnit)&&bag(p.executable?.includedUnitIds)===bag(expected.includedUnitIds)&&p.executable?.numeratorOutcome===expected.executable.numeratorOutcome,label+':executable:'+owner);
    const receipts=state.receipts?.filter(r=>r.implementationId===owner)??[];demand(receipts.length===1,label+':receipt-cardinality:'+owner);
    if(receipts.length===1){const r=receipts[0];demand(r.trialId===expectedTrialId&&bag(r.selectedReadingIds)===bag(expected.receipt.selectedReadingIds)&&r.numerator===expected.receipt.numerator&&r.denominator===expected.receipt.denominator&&r.percent===expected.receipt.percent,label+':exact-numeric:'+owner);}

@@ -1,25 +1,26 @@
 ---
-description: Interpret metric wording under local outcome coding and target scope.
+description: Read symbolic numerator wording, denominator scope and displayed label before raw-code binding.
 args:
   ownerId: string
   clause: DefinitionClause
-  codingClauses: DefinitionClause[]
   question: Question
-returns: MetricView
+returns: MetricReading
 ---
-1. Capture the selected clause, coding meanings, target outcome and numerator/denominator scope.
-   Treat operational outcome codes and human display names as separate references to interpret.
-2. In eval declare local MetricJudgment with numeratorOutcome: 'pass' | 'fail' | null, denominator:
-   'attempts' | null, aggregation: 'pooled-percentage' | null, reason: string, witnesses:
-   {sourceId:string;path:string;quote:string}[]. Construct nl.with<MetricJudgment> over clause.meaning.
-3. Its instructions are: identify the counted proposition, included denominator events and pooling
-   rule under captured coding definitions; distinguish detecting the target signal from blocking it;
-   preserve an unstated or conflicting semantic binding as null and cite the controlling clause.
-4. Directly await the literal. Consume each returned field in the MetricView; add unresolved for
-   any required null instead of filling it from the target protocol's different selected definition.
-5. Record localDecision with this site, selected clause ID, the actual interpretation and its witnesses.
-   The caller passes numeratorOutcome to the exact service, so the judgment affects real arithmetic.
-6. Return implementationId, numeratorOutcome, denominator, aggregation, definitionId, localDecisions
-   and unresolved. A misleading label is preserved as a diagnosable mismatch, not corrected invisibly.
-7. The literal's structured result is read directly. No finite-choice scoring of the whole record or
-   string equality over display labels can replace the returned semantic contribution.
+1. Read the selected clause as the implementation's actual instruction. Separate the wording for
+   what it counts from the wording used to display the result and from the target's desired question.
+2. In eval declare MetricReadingJudgment with countedTerm: string | null, denominator: 'attempts' | null,
+   aggregation: 'pooled-percentage' | null, displayLabel: string | null, reason: string, witnesses:
+   {sourceId:string;path:string;quote:string}[]. Capture clause and question as the local context.
+3. Construct nl.with<MetricReadingJudgment> over the selected clause wording. Its instructions are:
+   extract the counted proposition's symbolic term, denominator events, pooling rule and displayed
+   label; keep conflicting or unstated roles null and cite the actual controlling phrases. Read the
+   implementation as written even where its display language differs from the counted proposition.
+4. Directly await the literal. Consume its countedTerm, denominator, aggregation and displayLabel
+   in MetricReading. The child's task is a symbolic source reading; the parent binds the counted
+   term to source-defined operational codes in a separate judgment.
+5. For each required null add an unresolved finding naming the missing role and selected clause ID.
+   A target definition can clarify terminology but cannot replace the implementation's instruction.
+6. Record localDecision with this site, owner and clause ID, the actual returned role distinction and
+   its exact witnesses. Retain the literal's actual output, including a misleading display phrase.
+7. Return implementationId, definitionId, countedTerm, denominator, aggregation, displayLabel,
+   witnesses, localDecision and unresolved. Parent code-binding consumes this complete typed reading.

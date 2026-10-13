@@ -80,3 +80,21 @@ Status: decomposition authored before implementation; all 27 modules and the con
 World, epistemics, physical continuity, motifs, candidate replay and audit are package-root callable departments. `studio` and candidate replay declare their shared `uses` explicitly. Their child folders retain specialist ownership and type inheritance. This avoids treating a reused specialist as an unrelated descendant of a still-loading entrypoint. The manifest is host-only under `training/semantic_applications/sol/witness-rewrite-studio`; it is excluded from model-visible source.
 
 The first live diagnostic exposed a positional service-argument error. The exact service now validates shapes and returns a one-sentence typed recovery instruction; the current running snapshot stays unchanged. The corrected declaration/error presentation is unmeasured and recorded in `plans/MODEL_FACING_CHANGES.md`.
+
+## Provenance-preserving frame boundary revision
+
+The first frozen live diagnostic preserved source identity at intake, then authored helpers projected
+record text and routed context declarations through the scene-event specialist. Those helpers lost
+path/hash provenance before quotation judgments. The trace remains diagnostic and unchanged.
+
+`world/parseFrames/readFrameDeclarations.nl` now owns declared discourse identities, parent scope
+and declaration conflicts from original canon/instruction records. Its typed `FrameDeclarationIndex`
+initializes the frame registry; context records do not become event-processing items.
+`parseFrames` separately passes original selected-scene/recollection `SourceRecord` objects into
+`interpretFrame`, whose scoped NL literal returns semantic arrays and exact quote bytes.
+The named parent binds source IDs and paths from its original record and checks quotations early.
+`evaluateAuthority` interprets controlling canon directly, preserving stable letter/key/bell facts
+without adding canon definitions as scene events. No service decides discourse or source authority.
+
+This is a source/type boundary repair, not a demonstrated live correction. The revised project
+requires a separate pinned diagnostic and roughly48 live samples before model-facing adoption.

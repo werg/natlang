@@ -23,3 +23,9 @@ returns: AuthorityView
    uncertainty. Do not silently hide whichever assertion appears in the shorter file.
 8. Return facts, beliefsOnly and uncertainty. Use entity and temporal results only for compatible
    identity/time joins; neither changes a statement's source authority by itself.
+
+9. Interpret controlling canon records directly into AuthorizedFacts with their visible fact IDs,
+   selected-world scope and exact quotations. Consume declared frames only to bind scope: canon
+   definitions of letter contents, key capabilities and bells are not extra scene EventViews.
+   Bind each canon witness from its original SourceRecord id/path, then check its exact quotation
+   before joining it with selected events. Preserve stable canon even when no scene repeats it.

@@ -1,0 +1,5191 @@
+{
+  "caseId": "three-locks-v1",
+  "authority": {
+    "claims": [
+      {
+        "claimId": "grant-C",
+        "issuer": "charter",
+        "grantee": "C",
+        "actKinds": [
+          "toll",
+          "notice",
+          "translation",
+          "passage",
+          "accept-reservation"
+        ],
+        "territories": [
+          "Upper",
+          "Lower"
+        ],
+        "interval": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "onwardDelegation": false,
+        "parentClaimIds": [],
+        "root": true,
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+          }
+        ]
+      },
+      {
+        "claimId": "grant-Alder-office",
+        "issuer": "charter",
+        "grantee": "Alder-office",
+        "actKinds": [
+          "notice-wording"
+        ],
+        "territories": [
+          "Upper",
+          "Lower"
+        ],
+        "interval": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "onwardDelegation": false,
+        "parentClaimIds": [],
+        "root": true,
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A03] Port offices may standardize the wording of notices they issue. They have no power to waive tolls, suspend another port's duties, change the Compact, or delegate tariff authority."
+          }
+        ]
+      },
+      {
+        "claimId": "grant-Birch-office",
+        "issuer": "charter",
+        "grantee": "Birch-office",
+        "actKinds": [
+          "notice-wording"
+        ],
+        "territories": [
+          "Upper",
+          "Lower"
+        ],
+        "interval": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "onwardDelegation": false,
+        "parentClaimIds": [],
+        "root": true,
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A03] Port offices may standardize the wording of notices they issue. They have no power to waive tolls, suspend another port's duties, change the Compact, or delegate tariff authority."
+          }
+        ]
+      },
+      {
+        "claimId": "grant-Cedar-office",
+        "issuer": "charter",
+        "grantee": "Cedar-office",
+        "actKinds": [
+          "notice-wording"
+        ],
+        "territories": [
+          "Upper",
+          "Lower"
+        ],
+        "interval": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "onwardDelegation": false,
+        "parentClaimIds": [],
+        "root": true,
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A03] Port offices may standardize the wording of notices they issue. They have no power to waive tolls, suspend another port's duties, change the Compact, or delegate tariff authority."
+          }
+        ]
+      },
+      {
+        "claimId": "grant-F",
+        "issuer": "charter",
+        "grantee": "F",
+        "actKinds": [
+          "passage-closure",
+          "notice"
+        ],
+        "territories": [
+          "Upper"
+        ],
+        "interval": {
+          "startInclusive": 10,
+          "endExclusive": 25
+        },
+        "onwardDelegation": false,
+        "parentClaimIds": [],
+        "root": true,
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A04] Flood Board F may impose Upper-reach passage closures and additional notice duties during days10 through24 inclusive. It may neither set tolls nor amend translation duties. Its orders cease at day25 even if an order recites a later end."
+          }
+        ]
+      },
+      {
+        "claimId": "grant-R",
+        "issuer": "charter",
+        "grantee": "R",
+        "actKinds": [
+          "rescue-certification"
+        ],
+        "territories": [
+          "Upper",
+          "Lower"
+        ],
+        "interval": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "onwardDelegation": false,
+        "parentClaimIds": [],
+        "root": true,
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A05] Rescue Controller R may certify that a named trip is an actual rescue. The certification concerns the trip's event time; the archive's later receipt time changes available evidence, not when that trip occurred."
+          }
+        ]
+      },
+      {
+        "claimId": "AL",
+        "issuer": "Alder-office",
+        "grantee": "Birch-office",
+        "actKinds": [
+          "toll-waiver"
+        ],
+        "territories": [
+          "Upper",
+          "Lower"
+        ],
+        "interval": {
+          "startInclusive": 11,
+          "endExclusive": null
+        },
+        "onwardDelegation": true,
+        "parentClaimIds": [
+          "BI"
+        ],
+        "root": false,
+        "witnesses": [
+          {
+            "sourceId": "RECIPROCAL",
+            "path": "offices/reciprocal-grants.md",
+            "quote": "[G01] On day11 Alder office letter AL delegates tariff-waiver power to Birch office, citing only Birch letter BI as its authority."
+          }
+        ]
+      },
+      {
+        "claimId": "BI",
+        "issuer": "Birch-office",
+        "grantee": "Alder-office",
+        "actKinds": [
+          "toll-waiver"
+        ],
+        "territories": [
+          "Upper",
+          "Lower"
+        ],
+        "interval": {
+          "startInclusive": 11,
+          "endExclusive": null
+        },
+        "onwardDelegation": true,
+        "parentClaimIds": [
+          "AL"
+        ],
+        "root": false,
+        "witnesses": [
+          {
+            "sourceId": "RECIPROCAL",
+            "path": "offices/reciprocal-grants.md",
+            "quote": "[G02] Birch letter BI delegates tariff-waiver power to Alder office, citing only AL. Neither letter identifies a charter or Council tariff grant; neither office has one."
+          }
+        ]
+      }
+    ],
+    "proofs": [
+      {
+        "proofId": "authority-C",
+        "claimId": "grant-C",
+        "issuer": "charter",
+        "holder": "C",
+        "actKinds": [
+          "toll",
+          "notice",
+          "translation",
+          "passage",
+          "accept-reservation"
+        ],
+        "territories": [
+          "Upper",
+          "Lower"
+        ],
+        "interval": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "onwardDelegation": false,
+        "premiseProofIds": [],
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+          }
+        ]
+      },
+      {
+        "proofId": "authority-Alder-office",
+        "claimId": "grant-Alder-office",
+        "issuer": "charter",
+        "holder": "Alder-office",
+        "actKinds": [
+          "notice-wording"
+        ],
+        "territories": [
+          "Upper",
+          "Lower"
+        ],
+        "interval": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "onwardDelegation": false,
+        "premiseProofIds": [],
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A03] Port offices may standardize the wording of notices they issue. They have no power to waive tolls, suspend another port's duties, change the Compact, or delegate tariff authority."
+          }
+        ]
+      },
+      {
+        "proofId": "authority-Birch-office",
+        "claimId": "grant-Birch-office",
+        "issuer": "charter",
+        "holder": "Birch-office",
+        "actKinds": [
+          "notice-wording"
+        ],
+        "territories": [
+          "Upper",
+          "Lower"
+        ],
+        "interval": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "onwardDelegation": false,
+        "premiseProofIds": [],
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A03] Port offices may standardize the wording of notices they issue. They have no power to waive tolls, suspend another port's duties, change the Compact, or delegate tariff authority."
+          }
+        ]
+      },
+      {
+        "proofId": "authority-Cedar-office",
+        "claimId": "grant-Cedar-office",
+        "issuer": "charter",
+        "holder": "Cedar-office",
+        "actKinds": [
+          "notice-wording"
+        ],
+        "territories": [
+          "Upper",
+          "Lower"
+        ],
+        "interval": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "onwardDelegation": false,
+        "premiseProofIds": [],
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A03] Port offices may standardize the wording of notices they issue. They have no power to waive tolls, suspend another port's duties, change the Compact, or delegate tariff authority."
+          }
+        ]
+      },
+      {
+        "proofId": "authority-F",
+        "claimId": "grant-F",
+        "issuer": "charter",
+        "holder": "F",
+        "actKinds": [
+          "passage-closure",
+          "notice"
+        ],
+        "territories": [
+          "Upper"
+        ],
+        "interval": {
+          "startInclusive": 10,
+          "endExclusive": 25
+        },
+        "onwardDelegation": false,
+        "premiseProofIds": [],
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A04] Flood Board F may impose Upper-reach passage closures and additional notice duties during days10 through24 inclusive. It may neither set tolls nor amend translation duties. Its orders cease at day25 even if an order recites a later end."
+          }
+        ]
+      },
+      {
+        "proofId": "authority-R",
+        "claimId": "grant-R",
+        "issuer": "charter",
+        "holder": "R",
+        "actKinds": [
+          "rescue-certification"
+        ],
+        "territories": [
+          "Upper",
+          "Lower"
+        ],
+        "interval": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "onwardDelegation": false,
+        "premiseProofIds": [],
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A05] Rescue Controller R may certify that a named trip is an actual rescue. The certification concerns the trip's event time; the archive's later receipt time changes available evidence, not when that trip occurred."
+          }
+        ]
+      }
+    ],
+    "rejected": [
+      {
+        "claimIds": [
+          "AL",
+          "BI"
+        ],
+        "kind": "unsupported-cycle",
+        "reason": "Reciprocal tariff assertions have no rooted competent grant and neither office has onward tariff power.",
+        "witnesses": [
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+          },
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A02] A delegated authority may exercise only the action kind, territory and interval granted. Delegating onward is permitted only when the parent grant explicitly permits onward delegation. Issuing a document does not prove competence."
+          },
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A03] Port offices may standardize the wording of notices they issue. They have no power to waive tolls, suspend another port's duties, change the Compact, or delegate tariff authority."
+          },
+          {
+            "sourceId": "RECIPROCAL",
+            "path": "offices/reciprocal-grants.md",
+            "quote": "[G01] On day11 Alder office letter AL delegates tariff-waiver power to Birch office, citing only Birch letter BI as its authority."
+          },
+          {
+            "sourceId": "RECIPROCAL",
+            "path": "offices/reciprocal-grants.md",
+            "quote": "[G02] Birch letter BI delegates tariff-waiver power to Alder office, citing only AL. Neither letter identifies a charter or Council tariff grant; neither office has one."
+          }
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "compiled": {
+    "norms": [
+      {
+        "normId": "toll",
+        "instrumentId": "N_TOLL",
+        "issuer": "C",
+        "action": "toll",
+        "debtorRole": "operator",
+        "beneficiaryRole": "destination",
+        "namedDebtor": null,
+        "namedBeneficiary": null,
+        "effect": "require",
+        "amount": 10,
+        "effective": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "actorScope": [
+          "Alder",
+          "Birch",
+          "Cedar"
+        ],
+        "reachScope": [
+          "Upper",
+          "Lower"
+        ],
+        "conditions": [],
+        "targetNormIds": [],
+        "authorityProofIds": [
+          "authority-C"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "COMPACT",
+            "path": "compact/base.md",
+            "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+          }
+        ]
+      },
+      {
+        "normId": "notice",
+        "instrumentId": "N_NOTICE",
+        "issuer": "C",
+        "action": "notice",
+        "debtorRole": "operator",
+        "beneficiaryRole": "destination",
+        "namedDebtor": null,
+        "namedBeneficiary": null,
+        "effect": "require",
+        "amount": null,
+        "effective": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "actorScope": [
+          "Alder",
+          "Birch",
+          "Cedar"
+        ],
+        "reachScope": [
+          "Upper",
+          "Lower"
+        ],
+        "conditions": [],
+        "targetNormIds": [],
+        "authorityProofIds": [
+          "authority-C"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "COMPACT",
+            "path": "compact/base.md",
+            "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+          }
+        ]
+      },
+      {
+        "normId": "translation",
+        "instrumentId": "N_TRANSLATE",
+        "issuer": "C",
+        "action": "translation",
+        "debtorRole": "operator",
+        "beneficiaryRole": "destination",
+        "namedDebtor": null,
+        "namedBeneficiary": null,
+        "effect": "require",
+        "amount": null,
+        "effective": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "actorScope": [
+          "Alder",
+          "Birch",
+          "Cedar"
+        ],
+        "reachScope": [
+          "Upper",
+          "Lower"
+        ],
+        "conditions": [],
+        "targetNormIds": [],
+        "authorityProofIds": [
+          "authority-C"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "COMPACT",
+            "path": "compact/base.md",
+            "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+          }
+        ]
+      },
+      {
+        "normId": "passage",
+        "instrumentId": "N_PASSAGE",
+        "issuer": "C",
+        "action": "passage",
+        "debtorRole": "destination",
+        "beneficiaryRole": "operator",
+        "namedDebtor": null,
+        "namedBeneficiary": null,
+        "effect": "permit",
+        "amount": null,
+        "effective": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "actorScope": [
+          "Alder",
+          "Birch",
+          "Cedar"
+        ],
+        "reachScope": [
+          "Upper",
+          "Lower"
+        ],
+        "conditions": [],
+        "targetNormIds": [],
+        "authorityProofIds": [
+          "authority-C"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "COMPACT",
+            "path": "compact/base.md",
+            "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+          }
+        ]
+      },
+      {
+        "normId": "rescue-passage",
+        "instrumentId": "N_PASSAGE",
+        "issuer": "C",
+        "action": "passage",
+        "debtorRole": "destination",
+        "beneficiaryRole": "operator",
+        "namedDebtor": null,
+        "namedBeneficiary": null,
+        "effect": "permit",
+        "amount": null,
+        "effective": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "actorScope": [
+          "Alder",
+          "Birch",
+          "Cedar"
+        ],
+        "reachScope": [
+          "Upper",
+          "Lower"
+        ],
+        "conditions": [
+          {
+            "conditionId": "N_PASSAGE:certified-rescue",
+            "subject": "trip",
+            "predicate": "certified-rescue",
+            "arguments": [],
+            "polarity": "positive",
+            "evidenceMode": "open",
+            "witnesses": [
+              {
+                "sourceId": "COMPACT",
+                "path": "compact/base.md",
+                "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+              }
+            ]
+          }
+        ],
+        "targetNormIds": [],
+        "authorityProofIds": [
+          "authority-C"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "COMPACT",
+            "path": "compact/base.md",
+            "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+          }
+        ]
+      },
+      {
+        "normId": "rescue-exemption",
+        "instrumentId": "N_RESCUE",
+        "issuer": "C",
+        "action": "toll",
+        "debtorRole": "operator",
+        "beneficiaryRole": "destination",
+        "namedDebtor": null,
+        "namedBeneficiary": null,
+        "effect": "exempt",
+        "amount": 0,
+        "effective": {
+          "startInclusive": 0,
+          "endExclusive": null
+        },
+        "actorScope": [
+          "Alder",
+          "Birch",
+          "Cedar"
+        ],
+        "reachScope": [
+          "Upper",
+          "Lower"
+        ],
+        "conditions": [
+          {
+            "conditionId": "N_RESCUE:certified-rescue",
+            "subject": "trip",
+            "predicate": "certified-rescue",
+            "arguments": [],
+            "polarity": "positive",
+            "evidenceMode": "open",
+            "witnesses": [
+              {
+                "sourceId": "COMPACT",
+                "path": "compact/base.md",
+                "quote": "[N_RESCUE] A certified rescue transit is exempt from the toll. The ordinary notice and translation duties still apply. Certification by R establishes rescue; an open claim awaiting that certification leaves the exemption unresolved."
+              }
+            ]
+          }
+        ],
+        "targetNormIds": [
+          "toll"
+        ],
+        "authorityProofIds": [
+          "authority-C"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "COMPACT",
+            "path": "compact/base.md",
+            "quote": "[N_RESCUE] A certified rescue transit is exempt from the toll. The ordinary notice and translation duties still apply. Certification by R establishes rescue; an open claim awaiting that certification leaves the exemption unresolved."
+          }
+        ]
+      },
+      {
+        "normId": "rate12",
+        "instrumentId": "M01",
+        "issuer": "C",
+        "action": "toll",
+        "debtorRole": "operator",
+        "beneficiaryRole": "destination",
+        "namedDebtor": null,
+        "namedBeneficiary": null,
+        "effect": "rate",
+        "amount": 12,
+        "effective": {
+          "startInclusive": 20,
+          "endExclusive": null
+        },
+        "actorScope": [
+          "Alder",
+          "Birch",
+          "Cedar"
+        ],
+        "reachScope": [
+          "Upper",
+          "Lower"
+        ],
+        "conditions": [],
+        "targetNormIds": [
+          "toll"
+        ],
+        "authorityProofIds": [
+          "authority-C"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "RATE_ADOPTED",
+            "path": "amendments/rate-adopted.md",
+            "quote": "[M01] Council C adopts amendment RATE12 on day15, publishes it on day16 and makes it effective on day20. From day20, replace10 with12 in N_TOLL for every covered reach. Other clauses are unchanged."
+          }
+        ]
+      },
+      {
+        "normId": "flood-closure",
+        "instrumentId": "F01",
+        "issuer": "F",
+        "action": "passage",
+        "debtorRole": "destination",
+        "beneficiaryRole": "operator",
+        "namedDebtor": null,
+        "namedBeneficiary": null,
+        "effect": "close",
+        "amount": null,
+        "effective": {
+          "startInclusive": 10,
+          "endExclusive": 25
+        },
+        "actorScope": [
+          "Alder",
+          "Birch",
+          "Cedar"
+        ],
+        "reachScope": [
+          "Upper"
+        ],
+        "conditions": [
+          {
+            "conditionId": "F01:ordinary-traffic",
+            "subject": "trip",
+            "predicate": "ordinary-traffic",
+            "arguments": [],
+            "polarity": "positive",
+            "evidenceMode": "open",
+            "witnesses": [
+              {
+                "sourceId": "FLOOD_ORDER",
+                "path": "orders/flood.md",
+                "quote": "[F01] Flood Board F orders Upper-reach locks closed to ordinary traffic from day10 through day29 in its text. The charter limits the Board's effective authority to days10 through24."
+              }
+            ]
+          }
+        ],
+        "targetNormIds": [
+          "passage"
+        ],
+        "authorityProofIds": [
+          "authority-F"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "FLOOD_ORDER",
+            "path": "orders/flood.md",
+            "quote": "[F01] Flood Board F orders Upper-reach locks closed to ordinary traffic from day10 through day29 in its text. The charter limits the Board's effective authority to days10 through24."
+          }
+        ]
+      },
+      {
+        "normId": "flood-notice",
+        "instrumentId": "F02",
+        "issuer": "F",
+        "action": "notice",
+        "debtorRole": "operator",
+        "beneficiaryRole": "destination",
+        "namedDebtor": null,
+        "namedBeneficiary": null,
+        "effect": "require",
+        "amount": null,
+        "effective": {
+          "startInclusive": 10,
+          "endExclusive": 25
+        },
+        "actorScope": [
+          "Alder",
+          "Birch",
+          "Cedar"
+        ],
+        "reachScope": [
+          "Upper"
+        ],
+        "conditions": [],
+        "targetNormIds": [],
+        "authorityProofIds": [
+          "authority-F"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "FLOOD_ORDER",
+            "path": "orders/flood.md",
+            "quote": "[F02] For Upper-reach trips while this order is competent and effective, the operator must send the same arrival notice to the destination lock port required by N_NOTICE. This is a second justification for one notice duty, not a second notice."
+          }
+        ]
+      },
+      {
+        "normId": "birch-reservation",
+        "instrumentId": "B02",
+        "issuer": "C",
+        "action": "translation",
+        "debtorRole": "operator",
+        "beneficiaryRole": "destination",
+        "namedDebtor": null,
+        "namedBeneficiary": null,
+        "effect": "reserve",
+        "amount": null,
+        "effective": {
+          "startInclusive": 8,
+          "endExclusive": null
+        },
+        "actorScope": [
+          "Birch"
+        ],
+        "reachScope": [
+          "Upper",
+          "Lower"
+        ],
+        "conditions": [],
+        "targetNormIds": [
+          "translation"
+        ],
+        "authorityProofIds": [
+          "authority-C"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "ACCESSION",
+            "path": "accession/birch.md",
+            "quote": "[B02] Birch reserves its own duty to translate notices it sends. Birch still sends ordinary arrival notices and pays applicable tolls."
+          }
+        ]
+      }
+    ],
+    "changes": [
+      {
+        "changeId": "rate",
+        "instrumentId": "M01",
+        "kind": "amend",
+        "target": {
+          "clauseIds": [
+            "N_TOLL"
+          ],
+          "actorScope": [
+            "Alder",
+            "Birch",
+            "Cedar"
+          ],
+          "actionScope": [
+            "toll"
+          ],
+          "unresolved": [],
+          "witnesses": [
+            {
+              "sourceId": "RATE_ADOPTED",
+              "path": "amendments/rate-adopted.md",
+              "quote": "[M01] Council C adopts amendment RATE12 on day15, publishes it on day16 and makes it effective on day20. From day20, replace10 with12 in N_TOLL for every covered reach. Other clauses are unchanged."
+            }
+          ]
+        },
+        "effective": {
+          "startInclusive": 20,
+          "endExclusive": null
+        },
+        "authorityProofIds": [
+          "authority-C"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "RATE_ADOPTED",
+            "path": "amendments/rate-adopted.md",
+            "quote": "[M01] Council C adopts amendment RATE12 on day15, publishes it on day16 and makes it effective on day20. From day20, replace10 with12 in N_TOLL for every covered reach. Other clauses are unchanged."
+          }
+        ],
+        "unresolved": []
+      },
+      {
+        "changeId": "reservation",
+        "instrumentId": "B02",
+        "kind": "reserve",
+        "target": {
+          "clauseIds": [
+            "N_TRANSLATE"
+          ],
+          "actorScope": [
+            "Birch"
+          ],
+          "actionScope": [
+            "translation"
+          ],
+          "unresolved": [],
+          "witnesses": [
+            {
+              "sourceId": "ACCESSION",
+              "path": "accession/birch.md",
+              "quote": "[B02] Birch reserves its own duty to translate notices it sends. Birch still sends ordinary arrival notices and pays applicable tolls."
+            }
+          ]
+        },
+        "effective": {
+          "startInclusive": 8,
+          "endExclusive": null
+        },
+        "authorityProofIds": [
+          "authority-C"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "ACCESSION",
+            "path": "accession/birch.md",
+            "quote": "[B02] Birch reserves its own duty to translate notices it sends. Birch still sends ordinary arrival notices and pays applicable tolls."
+          }
+        ],
+        "unresolved": []
+      },
+      {
+        "changeId": "heading",
+        "instrumentId": "O02",
+        "kind": "interpret",
+        "target": {
+          "clauseIds": [
+            "N_NOTICE"
+          ],
+          "actorScope": [
+            "Birch"
+          ],
+          "actionScope": [
+            "notice"
+          ],
+          "unresolved": [],
+          "witnesses": [
+            {
+              "sourceId": "BIRCH_OFFICE",
+              "path": "offices/birch-circular.md",
+              "quote": "[O02] The same circular suggests writing NOTICE at the top of Birch's outgoing notices. This is a wording exercise and changes no obligation or exemption."
+            }
+          ]
+        },
+        "effective": {
+          "startInclusive": 11,
+          "endExclusive": null
+        },
+        "authorityProofIds": [
+          "authority-Birch-office"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "BIRCH_OFFICE",
+            "path": "offices/birch-circular.md",
+            "quote": "[O02] The same circular suggests writing NOTICE at the top of Birch's outgoing notices. This is a wording exercise and changes no obligation or exemption."
+          }
+        ],
+        "unresolved": []
+      }
+    ],
+    "rejectedClauseIds": [
+      "D01",
+      "O01",
+      "G01",
+      "G02"
+    ],
+    "unresolved": []
+  },
+  "ledgers": [
+    {
+      "snapshot": {
+        "id": "S34",
+        "knowledgeTime": 34
+      },
+      "entries": [
+        {
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "toll"
+          },
+          "status": "unresolved",
+          "amountAlternatives": [
+            0,
+            10
+          ],
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S34-T1-toll-base"
+          ],
+          "defeatingDecisionIds": [
+            "S34-T1-toll-defeat"
+          ],
+          "reason": "S34: T1 toll follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "notice"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S34-T1-notice-base",
+            "S34-T1-notice-board"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S34: T1 notice follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "translation"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S34-T1-translation-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S34: T1 translation follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T1",
+            "debtor": "Birch",
+            "beneficiary": "Alder",
+            "action": "passage"
+          },
+          "status": "unresolved",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S34-T1-passage-base",
+            "S34-T1-passage-rescue"
+          ],
+          "defeatingDecisionIds": [
+            "S34-T1-passage-defeat"
+          ],
+          "reason": "S34: T1 passage follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T2",
+            "debtor": "Birch",
+            "beneficiary": "Cedar",
+            "action": "toll"
+          },
+          "status": "active",
+          "amountAlternatives": [
+            12
+          ],
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S34-T2-toll-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S34: T2 toll follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T2",
+            "debtor": "Birch",
+            "beneficiary": "Cedar",
+            "action": "notice"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S34-T2-notice-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S34: T2 notice follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T2",
+            "debtor": "Birch",
+            "beneficiary": "Cedar",
+            "action": "translation"
+          },
+          "status": "defeated",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S34-T2-translation-base"
+          ],
+          "defeatingDecisionIds": [
+            "S34-T2-translation-reservation"
+          ],
+          "reason": "S34: T2 translation follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T2",
+            "debtor": "Cedar",
+            "beneficiary": "Birch",
+            "action": "passage"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": true,
+          "supportingProofIds": [
+            "S34-T2-passage-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S34: T2 passage follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T3",
+            "debtor": "Cedar",
+            "beneficiary": "Alder",
+            "action": "toll"
+          },
+          "status": "active",
+          "amountAlternatives": [
+            12
+          ],
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S34-T3-toll-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S34: T3 toll follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T3",
+            "debtor": "Cedar",
+            "beneficiary": "Alder",
+            "action": "notice"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S34-T3-notice-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S34: T3 notice follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T3",
+            "debtor": "Cedar",
+            "beneficiary": "Alder",
+            "action": "translation"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S34-T3-translation-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S34: T3 translation follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T3",
+            "debtor": "Alder",
+            "beneficiary": "Cedar",
+            "action": "passage"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": true,
+          "supportingProofIds": [
+            "S34-T3-passage-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S34: T3 passage follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        }
+      ],
+      "proofs": [
+        {
+          "proofId": "S34-T1-toll-base",
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "toll"
+          },
+          "normId": "toll",
+          "supported": true,
+          "amount": 10,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_TOLL"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T1-notice-base",
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "notice"
+          },
+          "normId": "notice",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_NOTICE"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T1-notice-board",
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "notice"
+          },
+          "normId": "flood-notice",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "F02"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-F"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "FLOOD_ORDER",
+              "path": "orders/flood.md",
+              "quote": "[F02] For Upper-reach trips while this order is competent and effective, the operator must send the same arrival notice to the destination lock port required by N_NOTICE. This is a second justification for one notice duty, not a second notice."
+            },
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A04] Flood Board F may impose Upper-reach passage closures and additional notice duties during days10 through24 inclusive. It may neither set tolls nor amend translation duties. Its orders cease at day25 even if an order recites a later end."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T1-translation-base",
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "translation"
+          },
+          "normId": "translation",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_TRANSLATE"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T1-passage-base",
+          "key": {
+            "tripId": "T1",
+            "debtor": "Birch",
+            "beneficiary": "Alder",
+            "action": "passage"
+          },
+          "normId": "passage",
+          "supported": true,
+          "amount": null,
+          "permission": true,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_PASSAGE"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T1-passage-rescue",
+          "key": {
+            "tripId": "T1",
+            "debtor": "Birch",
+            "beneficiary": "Alder",
+            "action": "passage"
+          },
+          "normId": "rescue-passage",
+          "supported": null,
+          "amount": null,
+          "permission": true,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_PASSAGE"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            },
+            {
+              "kind": "clause",
+              "id": "E02"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            },
+            {
+              "sourceId": "CONTROL",
+              "path": "controls/evidence.md",
+              "quote": "[E02] T1's pending certification is genuinely unresolved at S34; absence of the dispatch there is not proof that no valid certification exists. T2 and T3's affirmative ordinary status settles their rescue exception false."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T2-toll-base",
+          "key": {
+            "tripId": "T2",
+            "debtor": "Birch",
+            "beneficiary": "Cedar",
+            "action": "toll"
+          },
+          "normId": "toll",
+          "supported": true,
+          "amount": 12,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_TOLL"
+            },
+            {
+              "kind": "clause",
+              "id": "T02"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            },
+            {
+              "kind": "clause",
+              "id": "M01"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            },
+            {
+              "sourceId": "RATE_ADOPTED",
+              "path": "amendments/rate-adopted.md",
+              "quote": "[M01] Council C adopts amendment RATE12 on day15, publishes it on day16 and makes it effective on day20. From day20, replace10 with12 in N_TOLL for every covered reach. Other clauses are unchanged."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T2-notice-base",
+          "key": {
+            "tripId": "T2",
+            "debtor": "Birch",
+            "beneficiary": "Cedar",
+            "action": "notice"
+          },
+          "normId": "notice",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_NOTICE"
+            },
+            {
+              "kind": "clause",
+              "id": "T02"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T2-translation-base",
+          "key": {
+            "tripId": "T2",
+            "debtor": "Birch",
+            "beneficiary": "Cedar",
+            "action": "translation"
+          },
+          "normId": "translation",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_TRANSLATE"
+            },
+            {
+              "kind": "clause",
+              "id": "T02"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T2-passage-base",
+          "key": {
+            "tripId": "T2",
+            "debtor": "Cedar",
+            "beneficiary": "Birch",
+            "action": "passage"
+          },
+          "normId": "passage",
+          "supported": true,
+          "amount": null,
+          "permission": true,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_PASSAGE"
+            },
+            {
+              "kind": "clause",
+              "id": "T02"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T3-toll-base",
+          "key": {
+            "tripId": "T3",
+            "debtor": "Cedar",
+            "beneficiary": "Alder",
+            "action": "toll"
+          },
+          "normId": "toll",
+          "supported": true,
+          "amount": 12,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_TOLL"
+            },
+            {
+              "kind": "clause",
+              "id": "T03"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            },
+            {
+              "kind": "clause",
+              "id": "M01"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            },
+            {
+              "sourceId": "RATE_ADOPTED",
+              "path": "amendments/rate-adopted.md",
+              "quote": "[M01] Council C adopts amendment RATE12 on day15, publishes it on day16 and makes it effective on day20. From day20, replace10 with12 in N_TOLL for every covered reach. Other clauses are unchanged."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T3-notice-base",
+          "key": {
+            "tripId": "T3",
+            "debtor": "Cedar",
+            "beneficiary": "Alder",
+            "action": "notice"
+          },
+          "normId": "notice",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_NOTICE"
+            },
+            {
+              "kind": "clause",
+              "id": "T03"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T3-translation-base",
+          "key": {
+            "tripId": "T3",
+            "debtor": "Cedar",
+            "beneficiary": "Alder",
+            "action": "translation"
+          },
+          "normId": "translation",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_TRANSLATE"
+            },
+            {
+              "kind": "clause",
+              "id": "T03"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "proofId": "S34-T3-passage-base",
+          "key": {
+            "tripId": "T3",
+            "debtor": "Alder",
+            "beneficiary": "Cedar",
+            "action": "passage"
+          },
+          "normId": "passage",
+          "supported": true,
+          "amount": null,
+          "permission": true,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_PASSAGE"
+            },
+            {
+              "kind": "clause",
+              "id": "T03"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        }
+      ],
+      "defeats": [
+        {
+          "decisionId": "S34-T1-toll-defeat",
+          "targetProofId": "S34-T1-toll-base",
+          "defeatingNormId": "rescue-exemption",
+          "defeated": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_RESCUE"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            },
+            {
+              "kind": "clause",
+              "id": "E02"
+            }
+          ],
+          "reason": "Rescue status is open at S34; certified rescue at S35 exempts the toll and is outside ordinary closure.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_RESCUE] A certified rescue transit is exempt from the toll. The ordinary notice and translation duties still apply. Certification by R establishes rescue; an open claim awaiting that certification leaves the exemption unresolved."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            },
+            {
+              "sourceId": "CONTROL",
+              "path": "controls/evidence.md",
+              "quote": "[E02] T1's pending certification is genuinely unresolved at S34; absence of the dispatch there is not proof that no valid certification exists. T2 and T3's affirmative ordinary status settles their rescue exception false."
+            }
+          ]
+        },
+        {
+          "decisionId": "S34-T1-passage-defeat",
+          "targetProofId": "S34-T1-passage-base",
+          "defeatingNormId": "flood-closure",
+          "defeated": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "F01"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-F"
+            },
+            {
+              "kind": "clause",
+              "id": "E02"
+            }
+          ],
+          "reason": "Rescue status is open at S34; certified rescue at S35 exempts the toll and is outside ordinary closure.",
+          "witnesses": [
+            {
+              "sourceId": "FLOOD_ORDER",
+              "path": "orders/flood.md",
+              "quote": "[F01] Flood Board F orders Upper-reach locks closed to ordinary traffic from day10 through day29 in its text. The charter limits the Board's effective authority to days10 through24."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            },
+            {
+              "sourceId": "CONTROL",
+              "path": "controls/evidence.md",
+              "quote": "[E02] T1's pending certification is genuinely unresolved at S34; absence of the dispatch there is not proof that no valid certification exists. T2 and T3's affirmative ordinary status settles their rescue exception false."
+            }
+          ]
+        },
+        {
+          "decisionId": "S34-T2-translation-reservation",
+          "targetProofId": "S34-T2-translation-base",
+          "defeatingNormId": "birch-reservation",
+          "defeated": true,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "B02"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "clause",
+              "id": "A07"
+            },
+            {
+              "kind": "clause",
+              "id": "T02"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "reason": "Accepted reservation applies to Birch as the translating debtor.",
+          "witnesses": [
+            {
+              "sourceId": "ACCESSION",
+              "path": "accession/birch.md",
+              "quote": "[B01] Birch joins the Compact on day8; Council C accepts this accession and the following single reservation."
+            },
+            {
+              "sourceId": "ACCESSION",
+              "path": "accession/birch.md",
+              "quote": "[B02] Birch reserves its own duty to translate notices it sends. Birch still sends ordinary arrival notices and pays applicable tolls."
+            },
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A07] A reservation accepted at accession narrows only that acceding party's own promised acts, within the accepted reservation text. It grants no power over duties owed by another party."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        }
+      ],
+      "unresolved": []
+    },
+    {
+      "snapshot": {
+        "id": "S35",
+        "knowledgeTime": 35
+      },
+      "entries": [
+        {
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "toll"
+          },
+          "status": "defeated",
+          "amountAlternatives": [
+            0
+          ],
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S35-T1-toll-base"
+          ],
+          "defeatingDecisionIds": [
+            "S35-T1-toll-defeat"
+          ],
+          "reason": "S35: T1 toll follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            },
+            {
+              "sourceId": "RESCUE_DISPATCH",
+              "path": "discovered/rescue-dispatch.md",
+              "quote": "[R01] Rescue Controller R signs dispatch RESCUE_T1 on day11 certifying the planned T1 trip as an actual rescue on day12. The dispatch names T1, Alder and Birch and remains valid at that trip time."
+            },
+            {
+              "sourceId": "RESCUE_DISPATCH",
+              "path": "discovered/rescue-dispatch.md",
+              "quote": "[R02] The archive first receives and authenticates RESCUE_T1 on day35. It is available in evidence snapshot S35, but was unavailable in S34. There are no other newly received premises between these snapshots."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "notice"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S35-T1-notice-base",
+            "S35-T1-notice-board"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S35: T1 notice follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "translation"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S35-T1-translation-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S35: T1 translation follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T1",
+            "debtor": "Birch",
+            "beneficiary": "Alder",
+            "action": "passage"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": true,
+          "supportingProofIds": [
+            "S35-T1-passage-base",
+            "S35-T1-passage-rescue"
+          ],
+          "defeatingDecisionIds": [
+            "S35-T1-passage-defeat"
+          ],
+          "reason": "S35: T1 passage follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            },
+            {
+              "sourceId": "RESCUE_DISPATCH",
+              "path": "discovered/rescue-dispatch.md",
+              "quote": "[R01] Rescue Controller R signs dispatch RESCUE_T1 on day11 certifying the planned T1 trip as an actual rescue on day12. The dispatch names T1, Alder and Birch and remains valid at that trip time."
+            },
+            {
+              "sourceId": "RESCUE_DISPATCH",
+              "path": "discovered/rescue-dispatch.md",
+              "quote": "[R02] The archive first receives and authenticates RESCUE_T1 on day35. It is available in evidence snapshot S35, but was unavailable in S34. There are no other newly received premises between these snapshots."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T2",
+            "debtor": "Birch",
+            "beneficiary": "Cedar",
+            "action": "toll"
+          },
+          "status": "active",
+          "amountAlternatives": [
+            12
+          ],
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S35-T2-toll-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S35: T2 toll follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T2",
+            "debtor": "Birch",
+            "beneficiary": "Cedar",
+            "action": "notice"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S35-T2-notice-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S35: T2 notice follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T2",
+            "debtor": "Birch",
+            "beneficiary": "Cedar",
+            "action": "translation"
+          },
+          "status": "defeated",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S35-T2-translation-base"
+          ],
+          "defeatingDecisionIds": [
+            "S35-T2-translation-reservation"
+          ],
+          "reason": "S35: T2 translation follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T2",
+            "debtor": "Cedar",
+            "beneficiary": "Birch",
+            "action": "passage"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": true,
+          "supportingProofIds": [
+            "S35-T2-passage-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S35: T2 passage follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T3",
+            "debtor": "Cedar",
+            "beneficiary": "Alder",
+            "action": "toll"
+          },
+          "status": "active",
+          "amountAlternatives": [
+            12
+          ],
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S35-T3-toll-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S35: T3 toll follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T3",
+            "debtor": "Cedar",
+            "beneficiary": "Alder",
+            "action": "notice"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S35-T3-notice-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S35: T3 notice follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T3",
+            "debtor": "Cedar",
+            "beneficiary": "Alder",
+            "action": "translation"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": null,
+          "supportingProofIds": [
+            "S35-T3-translation-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S35: T3 translation follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "key": {
+            "tripId": "T3",
+            "debtor": "Alder",
+            "beneficiary": "Cedar",
+            "action": "passage"
+          },
+          "status": "active",
+          "amountAlternatives": null,
+          "permissionRequired": true,
+          "supportingProofIds": [
+            "S35-T3-passage-base"
+          ],
+          "defeatingDecisionIds": [],
+          "reason": "S35: T3 passage follows source event-time scope and snapshot-visible conditions.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        }
+      ],
+      "proofs": [
+        {
+          "proofId": "S35-T1-toll-base",
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "toll"
+          },
+          "normId": "toll",
+          "supported": true,
+          "amount": 10,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_TOLL"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T1-notice-base",
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "notice"
+          },
+          "normId": "notice",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_NOTICE"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T1-notice-board",
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "notice"
+          },
+          "normId": "flood-notice",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "F02"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-F"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "FLOOD_ORDER",
+              "path": "orders/flood.md",
+              "quote": "[F02] For Upper-reach trips while this order is competent and effective, the operator must send the same arrival notice to the destination lock port required by N_NOTICE. This is a second justification for one notice duty, not a second notice."
+            },
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A04] Flood Board F may impose Upper-reach passage closures and additional notice duties during days10 through24 inclusive. It may neither set tolls nor amend translation duties. Its orders cease at day25 even if an order recites a later end."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T1-translation-base",
+          "key": {
+            "tripId": "T1",
+            "debtor": "Alder",
+            "beneficiary": "Birch",
+            "action": "translation"
+          },
+          "normId": "translation",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_TRANSLATE"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T1-passage-base",
+          "key": {
+            "tripId": "T1",
+            "debtor": "Birch",
+            "beneficiary": "Alder",
+            "action": "passage"
+          },
+          "normId": "passage",
+          "supported": true,
+          "amount": null,
+          "permission": true,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_PASSAGE"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T1-passage-rescue",
+          "key": {
+            "tripId": "T1",
+            "debtor": "Birch",
+            "beneficiary": "Alder",
+            "action": "passage"
+          },
+          "normId": "rescue-passage",
+          "supported": true,
+          "amount": null,
+          "permission": true,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_PASSAGE"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            },
+            {
+              "kind": "fact",
+              "id": "R01"
+            },
+            {
+              "kind": "fact",
+              "id": "R02"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-R"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            },
+            {
+              "sourceId": "RESCUE_DISPATCH",
+              "path": "discovered/rescue-dispatch.md",
+              "quote": "[R01] Rescue Controller R signs dispatch RESCUE_T1 on day11 certifying the planned T1 trip as an actual rescue on day12. The dispatch names T1, Alder and Birch and remains valid at that trip time."
+            },
+            {
+              "sourceId": "RESCUE_DISPATCH",
+              "path": "discovered/rescue-dispatch.md",
+              "quote": "[R02] The archive first receives and authenticates RESCUE_T1 on day35. It is available in evidence snapshot S35, but was unavailable in S34. There are no other newly received premises between these snapshots."
+            },
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A05] Rescue Controller R may certify that a named trip is an actual rescue. The certification concerns the trip's event time; the archive's later receipt time changes available evidence, not when that trip occurred."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T2-toll-base",
+          "key": {
+            "tripId": "T2",
+            "debtor": "Birch",
+            "beneficiary": "Cedar",
+            "action": "toll"
+          },
+          "normId": "toll",
+          "supported": true,
+          "amount": 12,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_TOLL"
+            },
+            {
+              "kind": "clause",
+              "id": "T02"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            },
+            {
+              "kind": "clause",
+              "id": "M01"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            },
+            {
+              "sourceId": "RATE_ADOPTED",
+              "path": "amendments/rate-adopted.md",
+              "quote": "[M01] Council C adopts amendment RATE12 on day15, publishes it on day16 and makes it effective on day20. From day20, replace10 with12 in N_TOLL for every covered reach. Other clauses are unchanged."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T2-notice-base",
+          "key": {
+            "tripId": "T2",
+            "debtor": "Birch",
+            "beneficiary": "Cedar",
+            "action": "notice"
+          },
+          "normId": "notice",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_NOTICE"
+            },
+            {
+              "kind": "clause",
+              "id": "T02"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T2-translation-base",
+          "key": {
+            "tripId": "T2",
+            "debtor": "Birch",
+            "beneficiary": "Cedar",
+            "action": "translation"
+          },
+          "normId": "translation",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_TRANSLATE"
+            },
+            {
+              "kind": "clause",
+              "id": "T02"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T2-passage-base",
+          "key": {
+            "tripId": "T2",
+            "debtor": "Cedar",
+            "beneficiary": "Birch",
+            "action": "passage"
+          },
+          "normId": "passage",
+          "supported": true,
+          "amount": null,
+          "permission": true,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_PASSAGE"
+            },
+            {
+              "kind": "clause",
+              "id": "T02"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T3-toll-base",
+          "key": {
+            "tripId": "T3",
+            "debtor": "Cedar",
+            "beneficiary": "Alder",
+            "action": "toll"
+          },
+          "normId": "toll",
+          "supported": true,
+          "amount": 12,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_TOLL"
+            },
+            {
+              "kind": "clause",
+              "id": "T03"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            },
+            {
+              "kind": "clause",
+              "id": "M01"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            },
+            {
+              "sourceId": "RATE_ADOPTED",
+              "path": "amendments/rate-adopted.md",
+              "quote": "[M01] Council C adopts amendment RATE12 on day15, publishes it on day16 and makes it effective on day20. From day20, replace10 with12 in N_TOLL for every covered reach. Other clauses are unchanged."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T3-notice-base",
+          "key": {
+            "tripId": "T3",
+            "debtor": "Cedar",
+            "beneficiary": "Alder",
+            "action": "notice"
+          },
+          "normId": "notice",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_NOTICE"
+            },
+            {
+              "kind": "clause",
+              "id": "T03"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T3-translation-base",
+          "key": {
+            "tripId": "T3",
+            "debtor": "Cedar",
+            "beneficiary": "Alder",
+            "action": "translation"
+          },
+          "normId": "translation",
+          "supported": true,
+          "amount": null,
+          "permission": null,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_TRANSLATE"
+            },
+            {
+              "kind": "clause",
+              "id": "T03"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        },
+        {
+          "proofId": "S35-T3-passage-base",
+          "key": {
+            "tripId": "T3",
+            "debtor": "Alder",
+            "beneficiary": "Cedar",
+            "action": "passage"
+          },
+          "normId": "passage",
+          "supported": true,
+          "amount": null,
+          "permission": true,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_PASSAGE"
+            },
+            {
+              "kind": "clause",
+              "id": "T03"
+            },
+            {
+              "kind": "clause",
+              "id": "C01"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        }
+      ],
+      "defeats": [
+        {
+          "decisionId": "S35-T1-toll-defeat",
+          "targetProofId": "S35-T1-toll-base",
+          "defeatingNormId": "rescue-exemption",
+          "defeated": true,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "N_RESCUE"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            },
+            {
+              "kind": "fact",
+              "id": "R01"
+            },
+            {
+              "kind": "fact",
+              "id": "R02"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-R"
+            }
+          ],
+          "reason": "Rescue status is open at S34; certified rescue at S35 exempts the toll and is outside ordinary closure.",
+          "witnesses": [
+            {
+              "sourceId": "COMPACT",
+              "path": "compact/base.md",
+              "quote": "[N_RESCUE] A certified rescue transit is exempt from the toll. The ordinary notice and translation duties still apply. Certification by R establishes rescue; an open claim awaiting that certification leaves the exemption unresolved."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            },
+            {
+              "sourceId": "RESCUE_DISPATCH",
+              "path": "discovered/rescue-dispatch.md",
+              "quote": "[R01] Rescue Controller R signs dispatch RESCUE_T1 on day11 certifying the planned T1 trip as an actual rescue on day12. The dispatch names T1, Alder and Birch and remains valid at that trip time."
+            },
+            {
+              "sourceId": "RESCUE_DISPATCH",
+              "path": "discovered/rescue-dispatch.md",
+              "quote": "[R02] The archive first receives and authenticates RESCUE_T1 on day35. It is available in evidence snapshot S35, but was unavailable in S34. There are no other newly received premises between these snapshots."
+            },
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A05] Rescue Controller R may certify that a named trip is an actual rescue. The certification concerns the trip's event time; the archive's later receipt time changes available evidence, not when that trip occurred."
+            }
+          ]
+        },
+        {
+          "decisionId": "S35-T1-passage-defeat",
+          "targetProofId": "S35-T1-passage-base",
+          "defeatingNormId": "flood-closure",
+          "defeated": false,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "F01"
+            },
+            {
+              "kind": "clause",
+              "id": "T01"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-F"
+            },
+            {
+              "kind": "fact",
+              "id": "R01"
+            },
+            {
+              "kind": "fact",
+              "id": "R02"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-R"
+            }
+          ],
+          "reason": "Rescue status is open at S34; certified rescue at S35 exempts the toll and is outside ordinary closure.",
+          "witnesses": [
+            {
+              "sourceId": "FLOOD_ORDER",
+              "path": "orders/flood.md",
+              "quote": "[F01] Flood Board F orders Upper-reach locks closed to ordinary traffic from day10 through day29 in its text. The charter limits the Board's effective authority to days10 through24."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+            },
+            {
+              "sourceId": "RESCUE_DISPATCH",
+              "path": "discovered/rescue-dispatch.md",
+              "quote": "[R01] Rescue Controller R signs dispatch RESCUE_T1 on day11 certifying the planned T1 trip as an actual rescue on day12. The dispatch names T1, Alder and Birch and remains valid at that trip time."
+            },
+            {
+              "sourceId": "RESCUE_DISPATCH",
+              "path": "discovered/rescue-dispatch.md",
+              "quote": "[R02] The archive first receives and authenticates RESCUE_T1 on day35. It is available in evidence snapshot S35, but was unavailable in S34. There are no other newly received premises between these snapshots."
+            },
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A05] Rescue Controller R may certify that a named trip is an actual rescue. The certification concerns the trip's event time; the archive's later receipt time changes available evidence, not when that trip occurred."
+            }
+          ]
+        },
+        {
+          "decisionId": "S35-T2-translation-reservation",
+          "targetProofId": "S35-T2-translation-base",
+          "defeatingNormId": "birch-reservation",
+          "defeated": true,
+          "premises": [
+            {
+              "kind": "clause",
+              "id": "B02"
+            },
+            {
+              "kind": "clause",
+              "id": "B01"
+            },
+            {
+              "kind": "clause",
+              "id": "A07"
+            },
+            {
+              "kind": "clause",
+              "id": "T02"
+            },
+            {
+              "kind": "authority",
+              "id": "authority-C"
+            }
+          ],
+          "reason": "Accepted reservation applies to Birch as the translating debtor.",
+          "witnesses": [
+            {
+              "sourceId": "ACCESSION",
+              "path": "accession/birch.md",
+              "quote": "[B01] Birch joins the Compact on day8; Council C accepts this accession and the following single reservation."
+            },
+            {
+              "sourceId": "ACCESSION",
+              "path": "accession/birch.md",
+              "quote": "[B02] Birch reserves its own duty to translate notices it sends. Birch still sends ordinary arrival notices and pays applicable tolls."
+            },
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A07] A reservation accepted at accession narrows only that acceding party's own promised acts, within the accepted reservation text. It grants no power over duties owed by another party."
+            },
+            {
+              "sourceId": "TRANSITS",
+              "path": "events/transits.md",
+              "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+            }
+          ]
+        }
+      ],
+      "unresolved": []
+    }
+  ],
+  "deltas": [
+    {
+      "key": {
+        "tripId": "T1",
+        "debtor": "Alder",
+        "beneficiary": "Birch",
+        "action": "toll"
+      },
+      "beforeSnapshot": "S34",
+      "afterSnapshot": "S35",
+      "beforeStatus": "unresolved",
+      "afterStatus": "defeated",
+      "changed": true,
+      "invalidatedProofIds": [],
+      "newProofIds": [],
+      "support": {
+        "newPremiseIds": [
+          "R01",
+          "R02"
+        ],
+        "backgroundPremises": [
+          {
+            "kind": "clause",
+            "id": "A05"
+          },
+          {
+            "kind": "clause",
+            "id": "E02"
+          },
+          {
+            "kind": "clause",
+            "id": "N_RESCUE"
+          }
+        ],
+        "removedCandidates": [],
+        "minimality": "inclusion-minimal",
+        "reason": "R01 establishes valid rescue content; R02 establishes its newly available evidence at S35. Removing either leaves the changed result unproved at the new knowledge cutoff.",
+        "witnesses": [
+          {
+            "sourceId": "RESCUE_DISPATCH",
+            "path": "discovered/rescue-dispatch.md",
+            "quote": "[R01] Rescue Controller R signs dispatch RESCUE_T1 on day11 certifying the planned T1 trip as an actual rescue on day12. The dispatch names T1, Alder and Birch and remains valid at that trip time."
+          },
+          {
+            "sourceId": "RESCUE_DISPATCH",
+            "path": "discovered/rescue-dispatch.md",
+            "quote": "[R02] The archive first receives and authenticates RESCUE_T1 on day35. It is available in evidence snapshot S35, but was unavailable in S34. There are no other newly received premises between these snapshots."
+          },
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A05] Rescue Controller R may certify that a named trip is an actual rescue. The certification concerns the trip's event time; the archive's later receipt time changes available evidence, not when that trip occurred."
+          },
+          {
+            "sourceId": "CONTROL",
+            "path": "controls/evidence.md",
+            "quote": "[E02] T1's pending certification is genuinely unresolved at S34; absence of the dispatch there is not proof that no valid certification exists. T2 and T3's affirmative ordinary status settles their rescue exception false."
+          }
+        ]
+      },
+      "reason": "Newly available rescue evidence resolves this consequence.",
+      "witnesses": [
+        {
+          "sourceId": "RESCUE_DISPATCH",
+          "path": "discovered/rescue-dispatch.md",
+          "quote": "[R01] Rescue Controller R signs dispatch RESCUE_T1 on day11 certifying the planned T1 trip as an actual rescue on day12. The dispatch names T1, Alder and Birch and remains valid at that trip time."
+        },
+        {
+          "sourceId": "RESCUE_DISPATCH",
+          "path": "discovered/rescue-dispatch.md",
+          "quote": "[R02] The archive first receives and authenticates RESCUE_T1 on day35. It is available in evidence snapshot S35, but was unavailable in S34. There are no other newly received premises between these snapshots."
+        },
+        {
+          "sourceId": "CHARTER",
+          "path": "charter/competence.md",
+          "quote": "[A05] Rescue Controller R may certify that a named trip is an actual rescue. The certification concerns the trip's event time; the archive's later receipt time changes available evidence, not when that trip occurred."
+        },
+        {
+          "sourceId": "CONTROL",
+          "path": "controls/evidence.md",
+          "quote": "[E02] T1's pending certification is genuinely unresolved at S34; absence of the dispatch there is not proof that no valid certification exists. T2 and T3's affirmative ordinary status settles their rescue exception false."
+        }
+      ]
+    },
+    {
+      "key": {
+        "tripId": "T1",
+        "debtor": "Alder",
+        "beneficiary": "Birch",
+        "action": "notice"
+      },
+      "beforeSnapshot": "S34",
+      "afterSnapshot": "S35",
+      "beforeStatus": "active",
+      "afterStatus": "active",
+      "changed": false,
+      "invalidatedProofIds": [],
+      "newProofIds": [],
+      "support": null,
+      "reason": "The relevant duty and its source scope remain unchanged; generated proof IDs do not change business identity.",
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+        }
+      ]
+    },
+    {
+      "key": {
+        "tripId": "T1",
+        "debtor": "Alder",
+        "beneficiary": "Birch",
+        "action": "translation"
+      },
+      "beforeSnapshot": "S34",
+      "afterSnapshot": "S35",
+      "beforeStatus": "active",
+      "afterStatus": "active",
+      "changed": false,
+      "invalidatedProofIds": [],
+      "newProofIds": [],
+      "support": null,
+      "reason": "The relevant duty and its source scope remain unchanged; generated proof IDs do not change business identity.",
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+        }
+      ]
+    },
+    {
+      "key": {
+        "tripId": "T1",
+        "debtor": "Birch",
+        "beneficiary": "Alder",
+        "action": "passage"
+      },
+      "beforeSnapshot": "S34",
+      "afterSnapshot": "S35",
+      "beforeStatus": "unresolved",
+      "afterStatus": "active",
+      "changed": true,
+      "invalidatedProofIds": [],
+      "newProofIds": [
+        "S35-T1-passage-rescue"
+      ],
+      "support": {
+        "newPremiseIds": [
+          "R01",
+          "R02"
+        ],
+        "backgroundPremises": [
+          {
+            "kind": "clause",
+            "id": "A05"
+          },
+          {
+            "kind": "clause",
+            "id": "E02"
+          },
+          {
+            "kind": "clause",
+            "id": "N_PASSAGE"
+          }
+        ],
+        "removedCandidates": [],
+        "minimality": "inclusion-minimal",
+        "reason": "R01 establishes valid rescue content; R02 establishes its newly available evidence at S35. Removing either leaves the changed result unproved at the new knowledge cutoff.",
+        "witnesses": [
+          {
+            "sourceId": "RESCUE_DISPATCH",
+            "path": "discovered/rescue-dispatch.md",
+            "quote": "[R01] Rescue Controller R signs dispatch RESCUE_T1 on day11 certifying the planned T1 trip as an actual rescue on day12. The dispatch names T1, Alder and Birch and remains valid at that trip time."
+          },
+          {
+            "sourceId": "RESCUE_DISPATCH",
+            "path": "discovered/rescue-dispatch.md",
+            "quote": "[R02] The archive first receives and authenticates RESCUE_T1 on day35. It is available in evidence snapshot S35, but was unavailable in S34. There are no other newly received premises between these snapshots."
+          },
+          {
+            "sourceId": "CHARTER",
+            "path": "charter/competence.md",
+            "quote": "[A05] Rescue Controller R may certify that a named trip is an actual rescue. The certification concerns the trip's event time; the archive's later receipt time changes available evidence, not when that trip occurred."
+          },
+          {
+            "sourceId": "CONTROL",
+            "path": "controls/evidence.md",
+            "quote": "[E02] T1's pending certification is genuinely unresolved at S34; absence of the dispatch there is not proof that no valid certification exists. T2 and T3's affirmative ordinary status settles their rescue exception false."
+          }
+        ]
+      },
+      "reason": "Newly available rescue evidence resolves this consequence.",
+      "witnesses": [
+        {
+          "sourceId": "RESCUE_DISPATCH",
+          "path": "discovered/rescue-dispatch.md",
+          "quote": "[R01] Rescue Controller R signs dispatch RESCUE_T1 on day11 certifying the planned T1 trip as an actual rescue on day12. The dispatch names T1, Alder and Birch and remains valid at that trip time."
+        },
+        {
+          "sourceId": "RESCUE_DISPATCH",
+          "path": "discovered/rescue-dispatch.md",
+          "quote": "[R02] The archive first receives and authenticates RESCUE_T1 on day35. It is available in evidence snapshot S35, but was unavailable in S34. There are no other newly received premises between these snapshots."
+        },
+        {
+          "sourceId": "CHARTER",
+          "path": "charter/competence.md",
+          "quote": "[A05] Rescue Controller R may certify that a named trip is an actual rescue. The certification concerns the trip's event time; the archive's later receipt time changes available evidence, not when that trip occurred."
+        },
+        {
+          "sourceId": "CONTROL",
+          "path": "controls/evidence.md",
+          "quote": "[E02] T1's pending certification is genuinely unresolved at S34; absence of the dispatch there is not proof that no valid certification exists. T2 and T3's affirmative ordinary status settles their rescue exception false."
+        }
+      ]
+    },
+    {
+      "key": {
+        "tripId": "T2",
+        "debtor": "Birch",
+        "beneficiary": "Cedar",
+        "action": "toll"
+      },
+      "beforeSnapshot": "S34",
+      "afterSnapshot": "S35",
+      "beforeStatus": "active",
+      "afterStatus": "active",
+      "changed": false,
+      "invalidatedProofIds": [],
+      "newProofIds": [],
+      "support": null,
+      "reason": "The relevant duty and its source scope remain unchanged; generated proof IDs do not change business identity.",
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "key": {
+        "tripId": "T2",
+        "debtor": "Birch",
+        "beneficiary": "Cedar",
+        "action": "notice"
+      },
+      "beforeSnapshot": "S34",
+      "afterSnapshot": "S35",
+      "beforeStatus": "active",
+      "afterStatus": "active",
+      "changed": false,
+      "invalidatedProofIds": [],
+      "newProofIds": [],
+      "support": null,
+      "reason": "The relevant duty and its source scope remain unchanged; generated proof IDs do not change business identity.",
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "key": {
+        "tripId": "T2",
+        "debtor": "Birch",
+        "beneficiary": "Cedar",
+        "action": "translation"
+      },
+      "beforeSnapshot": "S34",
+      "afterSnapshot": "S35",
+      "beforeStatus": "defeated",
+      "afterStatus": "defeated",
+      "changed": false,
+      "invalidatedProofIds": [],
+      "newProofIds": [],
+      "support": null,
+      "reason": "The relevant duty and its source scope remain unchanged; generated proof IDs do not change business identity.",
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "key": {
+        "tripId": "T2",
+        "debtor": "Cedar",
+        "beneficiary": "Birch",
+        "action": "passage"
+      },
+      "beforeSnapshot": "S34",
+      "afterSnapshot": "S35",
+      "beforeStatus": "active",
+      "afterStatus": "active",
+      "changed": false,
+      "invalidatedProofIds": [],
+      "newProofIds": [],
+      "support": null,
+      "reason": "The relevant duty and its source scope remain unchanged; generated proof IDs do not change business identity.",
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "key": {
+        "tripId": "T3",
+        "debtor": "Cedar",
+        "beneficiary": "Alder",
+        "action": "toll"
+      },
+      "beforeSnapshot": "S34",
+      "afterSnapshot": "S35",
+      "beforeStatus": "active",
+      "afterStatus": "active",
+      "changed": false,
+      "invalidatedProofIds": [],
+      "newProofIds": [],
+      "support": null,
+      "reason": "The relevant duty and its source scope remain unchanged; generated proof IDs do not change business identity.",
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "key": {
+        "tripId": "T3",
+        "debtor": "Cedar",
+        "beneficiary": "Alder",
+        "action": "notice"
+      },
+      "beforeSnapshot": "S34",
+      "afterSnapshot": "S35",
+      "beforeStatus": "active",
+      "afterStatus": "active",
+      "changed": false,
+      "invalidatedProofIds": [],
+      "newProofIds": [],
+      "support": null,
+      "reason": "The relevant duty and its source scope remain unchanged; generated proof IDs do not change business identity.",
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "key": {
+        "tripId": "T3",
+        "debtor": "Cedar",
+        "beneficiary": "Alder",
+        "action": "translation"
+      },
+      "beforeSnapshot": "S34",
+      "afterSnapshot": "S35",
+      "beforeStatus": "active",
+      "afterStatus": "active",
+      "changed": false,
+      "invalidatedProofIds": [],
+      "newProofIds": [],
+      "support": null,
+      "reason": "The relevant duty and its source scope remain unchanged; generated proof IDs do not change business identity.",
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "key": {
+        "tripId": "T3",
+        "debtor": "Alder",
+        "beneficiary": "Cedar",
+        "action": "passage"
+      },
+      "beforeSnapshot": "S34",
+      "afterSnapshot": "S35",
+      "beforeStatus": "active",
+      "afterStatus": "active",
+      "changed": false,
+      "invalidatedProofIds": [],
+      "newProofIds": [],
+      "support": null,
+      "reason": "The relevant duty and its source scope remain unchanged; generated proof IDs do not change business identity.",
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    }
+  ],
+  "audits": [
+    {
+      "snapshotId": "S34",
+      "key": {
+        "tripId": "T1",
+        "debtor": "Alder",
+        "beneficiary": "Birch",
+        "action": "toll"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S34-T1-toll-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S34",
+      "key": {
+        "tripId": "T1",
+        "debtor": "Alder",
+        "beneficiary": "Birch",
+        "action": "notice"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S34-T1-notice-base",
+        "S34-T1-notice-board"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        },
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 10,
+            "endExclusive": 25
+          },
+          "supportingProofIds": [
+            "authority-F"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A04] Flood Board F may impose Upper-reach passage closures and additional notice duties during days10 through24 inclusive. It may neither set tolls nor amend translation duties. Its orders cease at day25 even if an order recites a later end."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S34",
+      "key": {
+        "tripId": "T1",
+        "debtor": "Alder",
+        "beneficiary": "Birch",
+        "action": "translation"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S34-T1-translation-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S34",
+      "key": {
+        "tripId": "T1",
+        "debtor": "Birch",
+        "beneficiary": "Alder",
+        "action": "passage"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S34-T1-passage-base",
+        "S34-T1-passage-rescue"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        },
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 10,
+            "endExclusive": 25
+          },
+          "supportingProofIds": [
+            "authority-F"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A04] Flood Board F may impose Upper-reach passage closures and additional notice duties during days10 through24 inclusive. It may neither set tolls nor amend translation duties. Its orders cease at day25 even if an order recites a later end."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S34",
+      "key": {
+        "tripId": "T2",
+        "debtor": "Birch",
+        "beneficiary": "Cedar",
+        "action": "toll"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S34-T2-toll-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S34",
+      "key": {
+        "tripId": "T2",
+        "debtor": "Birch",
+        "beneficiary": "Cedar",
+        "action": "notice"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S34-T2-notice-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S34",
+      "key": {
+        "tripId": "T2",
+        "debtor": "Birch",
+        "beneficiary": "Cedar",
+        "action": "translation"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S34-T2-translation-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S34",
+      "key": {
+        "tripId": "T2",
+        "debtor": "Cedar",
+        "beneficiary": "Birch",
+        "action": "passage"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S34-T2-passage-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S34",
+      "key": {
+        "tripId": "T3",
+        "debtor": "Cedar",
+        "beneficiary": "Alder",
+        "action": "toll"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S34-T3-toll-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S34",
+      "key": {
+        "tripId": "T3",
+        "debtor": "Cedar",
+        "beneficiary": "Alder",
+        "action": "notice"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S34-T3-notice-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S34",
+      "key": {
+        "tripId": "T3",
+        "debtor": "Cedar",
+        "beneficiary": "Alder",
+        "action": "translation"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S34-T3-translation-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S34",
+      "key": {
+        "tripId": "T3",
+        "debtor": "Alder",
+        "beneficiary": "Cedar",
+        "action": "passage"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S34-T3-passage-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S35",
+      "key": {
+        "tripId": "T1",
+        "debtor": "Alder",
+        "beneficiary": "Birch",
+        "action": "toll"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S35-T1-toll-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        },
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-R"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A05] Rescue Controller R may certify that a named trip is an actual rescue. The certification concerns the trip's event time; the archive's later receipt time changes available evidence, not when that trip occurred."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+        },
+        {
+          "sourceId": "RESCUE_DISPATCH",
+          "path": "discovered/rescue-dispatch.md",
+          "quote": "[R01] Rescue Controller R signs dispatch RESCUE_T1 on day11 certifying the planned T1 trip as an actual rescue on day12. The dispatch names T1, Alder and Birch and remains valid at that trip time."
+        },
+        {
+          "sourceId": "RESCUE_DISPATCH",
+          "path": "discovered/rescue-dispatch.md",
+          "quote": "[R02] The archive first receives and authenticates RESCUE_T1 on day35. It is available in evidence snapshot S35, but was unavailable in S34. There are no other newly received premises between these snapshots."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S35",
+      "key": {
+        "tripId": "T1",
+        "debtor": "Alder",
+        "beneficiary": "Birch",
+        "action": "notice"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S35-T1-notice-base",
+        "S35-T1-notice-board"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        },
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 10,
+            "endExclusive": 25
+          },
+          "supportingProofIds": [
+            "authority-F"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A04] Flood Board F may impose Upper-reach passage closures and additional notice duties during days10 through24 inclusive. It may neither set tolls nor amend translation duties. Its orders cease at day25 even if an order recites a later end."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S35",
+      "key": {
+        "tripId": "T1",
+        "debtor": "Alder",
+        "beneficiary": "Birch",
+        "action": "translation"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S35-T1-translation-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S35",
+      "key": {
+        "tripId": "T1",
+        "debtor": "Birch",
+        "beneficiary": "Alder",
+        "action": "passage"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S35-T1-passage-base",
+        "S35-T1-passage-rescue"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        },
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 10,
+            "endExclusive": 25
+          },
+          "supportingProofIds": [
+            "authority-F"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A04] Flood Board F may impose Upper-reach passage closures and additional notice duties during days10 through24 inclusive. It may neither set tolls nor amend translation duties. Its orders cease at day25 even if an order recites a later end."
+            }
+          ]
+        },
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-R"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A05] Rescue Controller R may certify that a named trip is an actual rescue. The certification concerns the trip's event time; the archive's later receipt time changes available evidence, not when that trip occurred."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T01] Trip T1 occurs on day12 in the Upper reach. Its operator is Alder and destination lock port Birch. A rescue claim is open, and R's relevant dispatch has not yet reached the archive by snapshot S34."
+        },
+        {
+          "sourceId": "RESCUE_DISPATCH",
+          "path": "discovered/rescue-dispatch.md",
+          "quote": "[R01] Rescue Controller R signs dispatch RESCUE_T1 on day11 certifying the planned T1 trip as an actual rescue on day12. The dispatch names T1, Alder and Birch and remains valid at that trip time."
+        },
+        {
+          "sourceId": "RESCUE_DISPATCH",
+          "path": "discovered/rescue-dispatch.md",
+          "quote": "[R02] The archive first receives and authenticates RESCUE_T1 on day35. It is available in evidence snapshot S35, but was unavailable in S34. There are no other newly received premises between these snapshots."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S35",
+      "key": {
+        "tripId": "T2",
+        "debtor": "Birch",
+        "beneficiary": "Cedar",
+        "action": "toll"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S35-T2-toll-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S35",
+      "key": {
+        "tripId": "T2",
+        "debtor": "Birch",
+        "beneficiary": "Cedar",
+        "action": "notice"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S35-T2-notice-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S35",
+      "key": {
+        "tripId": "T2",
+        "debtor": "Birch",
+        "beneficiary": "Cedar",
+        "action": "translation"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S35-T2-translation-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S35",
+      "key": {
+        "tripId": "T2",
+        "debtor": "Cedar",
+        "beneficiary": "Birch",
+        "action": "passage"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S35-T2-passage-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T02] Trip T2 occurs on day22 in the Lower reach. Its operator is Birch and destination lock port Cedar. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S35",
+      "key": {
+        "tripId": "T3",
+        "debtor": "Cedar",
+        "beneficiary": "Alder",
+        "action": "toll"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S35-T3-toll-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TOLL] For each transit, its operator port owes its destination lock port a toll of10 credits. The member, reach and event clauses determine applicability."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S35",
+      "key": {
+        "tripId": "T3",
+        "debtor": "Cedar",
+        "beneficiary": "Alder",
+        "action": "notice"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S35-T3-notice-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_NOTICE] For each transit, its operator port must send an arrival notice to its destination lock port. Sending this notice once discharges all sources of this same notice duty for that trip."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S35",
+      "key": {
+        "tripId": "T3",
+        "debtor": "Cedar",
+        "beneficiary": "Alder",
+        "action": "translation"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S35-T3-translation-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_TRANSLATE] For each transit, its operator port must provide its notice in the destination lock port's language. This translation duty is separate from sending the underlying notice."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    },
+    {
+      "snapshotId": "S35",
+      "key": {
+        "tripId": "T3",
+        "debtor": "Alder",
+        "beneficiary": "Cedar",
+        "action": "passage"
+      },
+      "valid": true,
+      "visitedProofIds": [
+        "S35-T3-passage-base"
+      ],
+      "authorityFindings": [
+        {
+          "permitted": true,
+          "reason": "This exact charter-rooted competence supports its cited role and event-time scope.",
+          "narrowedInterval": {
+            "startInclusive": 0,
+            "endExclusive": null
+          },
+          "supportingProofIds": [
+            "authority-C"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "CHARTER",
+              "path": "charter/competence.md",
+              "quote": "[A01] This is a closed fictional federation. Its charter is effective from day0 and has no sunset. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant."
+            }
+          ]
+        }
+      ],
+      "issues": [],
+      "witnesses": [
+        {
+          "sourceId": "COMPACT",
+          "path": "compact/base.md",
+          "quote": "[N_PASSAGE] For each transit, its destination lock port must permit passage to its operator port unless a competent effective closure applies. A certified rescue must be permitted despite a flood closure."
+        },
+        {
+          "sourceId": "TRANSITS",
+          "path": "events/transits.md",
+          "quote": "[T03] Trip T3 occurs on day27 in the Upper reach. Its operator is Cedar and destination lock port Alder. It is affirmatively ordinary non-rescue traffic, with no open rescue claim."
+        }
+      ]
+    }
+  ],
+  "sourceCoverage": [
+    {
+      "sourceId": "CHARTER",
+      "clauseIds": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06",
+        "A07"
+      ]
+    },
+    {
+      "sourceId": "COMPACT",
+      "clauseIds": [
+        "C01",
+        "N_TOLL",
+        "N_NOTICE",
+        "N_TRANSLATE",
+        "N_PASSAGE",
+        "N_RESCUE",
+        "C07"
+      ]
+    },
+    {
+      "sourceId": "ACCESSION",
+      "clauseIds": [
+        "B01",
+        "B02",
+        "B03"
+      ]
+    },
+    {
+      "sourceId": "RATE_DRAFT",
+      "clauseIds": [
+        "D01"
+      ]
+    },
+    {
+      "sourceId": "RATE_ADOPTED",
+      "clauseIds": [
+        "M01",
+        "M02"
+      ]
+    },
+    {
+      "sourceId": "FLOOD_ORDER",
+      "clauseIds": [
+        "F01",
+        "F02",
+        "F03"
+      ]
+    },
+    {
+      "sourceId": "BIRCH_OFFICE",
+      "clauseIds": [
+        "O01",
+        "O02"
+      ]
+    },
+    {
+      "sourceId": "RECIPROCAL",
+      "clauseIds": [
+        "G01",
+        "G02"
+      ]
+    },
+    {
+      "sourceId": "TRANSITS",
+      "clauseIds": [
+        "T01",
+        "T02",
+        "T03"
+      ]
+    },
+    {
+      "sourceId": "RESCUE_DISPATCH",
+      "clauseIds": [
+        "R01",
+        "R02"
+      ]
+    },
+    {
+      "sourceId": "CONTROL",
+      "clauseIds": [
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E05"
+      ]
+    }
+  ],
+  "unresolved": []
+}

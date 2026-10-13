@@ -7,13 +7,19 @@ args:
   landmarks: LandmarkPartition
 returns: AnchorAssessment
 ---
-1. Find the landmark decision for these mentions, accounting for which frame each identifier belongs to.
-   A fixed same-place anchor must agree with the global mention's exact coordinates when they are stated.
-2. If a source decision says the places are different, reject an attempted identity binding even when
-   their visual descriptions or exported coordinate labels resemble one another.
-3. If identity remains unresolved, a matching point can support a transform-specific possible binding,
-   but it does not prove that the transform is the actual one. State that distinction in reason.
-4. An explicitly unique junction anchor may establish translation. A repeated color mark cannot
-   independently establish handedness or disambiguate the lost export convention.
-5. Return compatible, reason and the precise identity/coordinate witnesses. A missing coordinate
-   cannot be replaced by a guessed location just to make an alternative fit.
+1. Interpret compatible as consistency of this proposed binding conditional on the supplied transform.
+   The question is whether these places can be identified in this candidate world; which transform is
+   the actual one remains a separate unresolved choice across the surviving world collection.
+2. Find the landmark decision for these mentions, preserving their frame identities. If both global
+   coordinates and transformedPoint are established, compare them exactly before judging the binding.
+3. Return compatible=false for a coordinate mismatch or a source-established different-place decision.
+   Include the specific coordinate or identity contradiction and its exact source witnesses.
+4. Return compatible=true when the transformed point matches the stated global coordinate and no
+   source-backed different-place constraint excludes this binding. This includes an unresolved actual
+   reflection: the same local place may consistently bind a different global label in another world.
+5. Return compatible=null only when a missing coordinate, identity-scope premise or frame ownership
+   prevents assessing consistency even after conditioning on this candidate transform. State that premise.
+6. A unique junction anchor may establish translation. A reused color mark contributes no new
+   handedness constraint; preserve every candidate transform consistent with the established anchors.
+7. Return the conditional assessment and precise witnesses. The parent consumes true bindings within
+   this hypothesis, retains null assessments for further source review, and rejects only a contradiction.

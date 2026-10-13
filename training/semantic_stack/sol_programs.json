@@ -4,7 +4,7 @@
   "date": "2026-10-13",
   "program_count": 100,
   "domain_count": 20,
-  "publication": "Authored typed NL decompositions, scoped literals, structural iteration and visible source seeds; candidate preparation is not semantic approval or training admission.",
+  "publication": "100 source-valid typed NL candidates eligible for plain teacher generation; independent source/oracle reviews and exact reference replay do not grant live quality qualification or training admission.",
   "programs": [
     {
       "id": "sol-001",
@@ -404,7 +404,7 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_semantic_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "stage_specs": {
         "schema_version": "semantic-stage-contributions/1",
         "review_status": "authored_pending_independent_stage_review_and_live_measurement",
@@ -530,6 +530,12 @@
         ],
         "no_op_field": "absences",
         "initial_prior": "{absences:[]}"
+      },
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
       }
     },
     {
@@ -926,7 +932,7 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_semantic_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "stage_specs": {
         "schema_version": "semantic-stage-contributions/1",
         "review_status": "authored_pending_independent_stage_review_and_live_measurement",
@@ -1052,6 +1058,12 @@
         ],
         "no_op_field": "absences",
         "initial_prior": "{absences:[]}"
+      },
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
       }
     },
     {
@@ -1450,7 +1462,7 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_semantic_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "stage_specs": {
         "schema_version": "semantic-stage-contributions/1",
         "review_status": "authored_pending_independent_stage_review_and_live_measurement",
@@ -1576,6 +1588,12 @@
         ],
         "no_op_field": "absences",
         "initial_prior": "{absences:[]}"
+      },
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
       }
     },
     {
@@ -1965,7 +1983,7 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_semantic_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "stage_specs": {
         "schema_version": "semantic-stage-contributions/1",
         "review_status": "authored_pending_independent_stage_review_and_live_measurement",
@@ -2091,6 +2109,12 @@
         ],
         "no_op_field": "absences",
         "initial_prior": "{absences:[]}"
+      },
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
       }
     },
     {
@@ -2484,7 +2508,7 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_semantic_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "stage_specs": {
         "schema_version": "semantic-stage-contributions/1",
         "review_status": "authored_pending_independent_stage_review_and_live_measurement",
@@ -2610,6 +2634,12 @@
         ],
         "no_op_field": "absences",
         "initial_prior": "{absences:[]}"
+      },
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
       }
     },
     {
@@ -3009,7 +3039,7 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_semantic_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "stage_specs": {
         "schema_version": "semantic-stage-contributions/1",
         "review_status": "authored_pending_independent_stage_review_and_live_measurement",
@@ -3136,6 +3166,12 @@
         ],
         "no_op_field": "absences",
         "initial_prior": "{absences:[]}"
+      },
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
       }
     },
     {
@@ -3522,7 +3558,7 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_semantic_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "stage_specs": {
         "schema_version": "semantic-stage-contributions/1",
         "review_status": "authored_pending_independent_stage_review_and_live_measurement",
@@ -3648,6 +3684,12 @@
         ],
         "no_op_field": "absences",
         "initial_prior": "{absences:[]}"
+      },
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
       }
     },
     {
@@ -4047,7 +4089,7 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_semantic_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "stage_specs": {
         "schema_version": "semantic-stage-contributions/1",
         "review_status": "authored_pending_independent_stage_review_and_live_measurement",
@@ -4174,6 +4216,12 @@
         ],
         "no_op_field": "absences",
         "initial_prior": "{absences:[]}"
+      },
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
       }
     },
     {
@@ -4572,7 +4620,7 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_semantic_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "stage_specs": {
         "schema_version": "semantic-stage-contributions/1",
         "review_status": "authored_pending_independent_stage_review_and_live_measurement",
@@ -4698,6 +4746,12 @@
         ],
         "no_op_field": "absences",
         "initial_prior": "{absences:[]}"
+      },
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
       }
     },
     {
@@ -5090,7 +5144,7 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_semantic_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "stage_specs": {
         "schema_version": "semantic-stage-contributions/1",
         "review_status": "authored_pending_independent_stage_review_and_live_measurement",
@@ -5216,6 +5270,12 @@
         ],
         "no_op_field": "absences",
         "initial_prior": "{absences:[]}"
+      },
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
       }
     },
     {
@@ -5501,7 +5561,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -5615,9 +5675,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ edges: ({ prerequisite: string; dependent: string })[]; optional: (string)[]; order: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-012",
@@ -5902,7 +5968,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -6008,9 +6074,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ preCompatible: (string)[]; preContradicted: (string)[]; postCompatible: (string)[]; nextCheck: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-013",
@@ -6295,7 +6367,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -6407,9 +6479,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ retiredClues: (string)[]; activeClues: (string)[]; resets: ({ eventId: string; component: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-014",
@@ -6694,7 +6772,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -6810,9 +6888,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ conflicts: ({ revisionIds: (string)[] })[]; independent: (string)[]; alternatives: ({ material: string; torqueInstruction: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-015",
@@ -7097,7 +7181,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -7212,9 +7296,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ checks: (string)[]; coverage: ({ checkId: string; failureModes: (string)[] })[]; deferred: string[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-016",
@@ -7499,7 +7589,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -7611,9 +7701,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ directlyMeasured: (string)[]; cautiousHypotheses: (string)[]; unsupportedExpansions: (string)[]; assumptions: ({ claimId: string; addedScope: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-017",
@@ -7898,7 +7994,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -8007,9 +8103,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ compatible: ({ reviewerIds: (string)[] })[]; conflicting: ({ reviewerIds: (string)[] })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-018",
@@ -8294,7 +8396,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -8406,9 +8508,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ differences: ({ replicationId: string; changedStep: string; change: string })[]; equivalences: ({ replicationId: string; replicationName: string; originalName: string })[]; causalStatus: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-019",
@@ -8693,7 +8801,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -8801,9 +8909,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ fulfilled: (string)[]; unsupported: (string)[]; residual: ({ requestId: string; missingOutcome: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-020",
@@ -9088,7 +9202,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -9193,9 +9307,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ assignments: ({ questionId: string; reviewer: string })[]; unmatched: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-021",
@@ -9480,7 +9600,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -9580,9 +9700,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ confounded: (string)[]; targetSpecific: (string)[]; causeProven: boolean }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-022",
@@ -9867,7 +9993,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -9977,9 +10103,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ mapping: ({ sourceObserver: string; sourceDescriptor: string; targetObserver: string; targetDescriptor: string })[]; unanchored: ({ observer: string; descriptor: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-023",
@@ -10264,7 +10396,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -10367,9 +10499,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ completed: (string)[]; reusable: (string)[]; outstanding: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-024",
@@ -10654,7 +10792,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -10768,9 +10906,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ clusters: ({ reportIds: (string)[] })[]; incompatible: ({ reportIds: (string)[] })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-025",
@@ -11055,7 +11199,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -11169,9 +11313,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ discriminating: (string)[]; nondiscriminating: (string)[]; predictions: ({ hypothesisId: string; targetVaries: boolean; comparisonsVary: boolean })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-026",
@@ -11456,7 +11606,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -11555,9 +11705,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ fulfilled: (string)[]; active: string[]; noncommitments: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-027",
@@ -11842,7 +11998,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -11942,9 +12098,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ repairAttempts: (string)[]; pressureReplies: (string)[]; privateIntent: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-028",
@@ -12229,7 +12391,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -12339,9 +12501,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ aliases: ({ names: (string)[] })[]; distinct: (string)[]; unresolved: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-029",
@@ -12626,7 +12794,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -12750,9 +12918,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ originalPath: ({ sender: string; recipient: string })[]; copyRoute: ({ sender: string; recipient: string })[]; unconfirmed: ({ sender: string; recipient: string; artifact: string; missingEvidence: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-030",
@@ -13037,7 +13211,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -13160,9 +13334,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ compatible: ({ accountIds: (string)[]; dimension: string })[]; conflicts: ({ accountIds: (string)[]; dimension: string })[]; dependent: ({ retellingId: string; sourceAccount: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-031",
@@ -13447,7 +13627,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -13553,9 +13733,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ ready: (string)[]; notReady: (string)[]; cues: (string)[]; clockThreshold: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-032",
@@ -13840,7 +14026,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -13942,9 +14128,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ compatible: (string)[]; incompatible: (string)[]; unknown: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-033",
@@ -14229,7 +14421,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -14335,9 +14527,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ order: (string)[]; repairs: (string)[]; unassigned: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-034",
@@ -14622,7 +14820,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -14740,9 +14938,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ adaptations: (string)[]; unexplained: (string)[]; equivalent: ({ apprentice: string; localName: string; teacherName: string })[]; unsupportedEdges: ({ teacher: string; apprentice: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-035",
@@ -15027,7 +15231,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -15127,9 +15331,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ retry: (string)[]; ruledOutContrast: (string)[]; causalCertainty: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-036",
@@ -15414,7 +15624,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -15514,9 +15724,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ actual: (string)[]; imagined: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-037",
@@ -15801,7 +16017,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -15911,9 +16127,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ nameGroups: ({ names: (string)[] })[]; distinct: (string)[]; unresolved: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-038",
@@ -16198,7 +16420,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -16302,9 +16524,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ E1: ({ perspective: string; meaning: string })[]; E2: string; generalization: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-039",
@@ -16589,7 +16817,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -16700,9 +16928,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ transition: ({ earlierOccurrence: string; earlierMeaning: string; laterOccurrence: string; laterMeaning: string })[]; context: (string)[]; excluded: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-040",
@@ -16987,7 +17221,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -17091,9 +17325,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ lost: (string)[]; affected: (string)[]; faithful: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-041",
@@ -17378,7 +17618,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -17493,9 +17733,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ defects: ({ sceneId: string; propId: string; state: string })[]; compatible: ({ sceneId: string; propId: string; state: string })[]; excluded: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-042",
@@ -17780,7 +18026,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -17896,9 +18142,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ leaks: ({ sceneId: string; factId: string })[]; licensed: ({ sceneId: string; factId: string })[]; acquisition: ({ character: string; factId: string; sceneId: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-043",
@@ -18183,7 +18435,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -18290,9 +18542,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ cycle: ({ earlierEvent: string; laterEvent: string })[]; adjacencyConstraints: number }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-044",
@@ -18577,7 +18835,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -18691,9 +18949,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ defects: ({ shotIds: (string)[]; dimension: string })[]; compatibleSubjectiveDifferences: ({ sceneIds: (string)[]; dimension: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-045",
@@ -18978,7 +19242,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -19089,9 +19353,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ affected: (string)[]; unaffected: (string)[]; dependencies: ({ sourceScene: string; dependentScene: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-046",
@@ -19376,7 +19646,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -19496,9 +19766,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ character: ({ passage: string; intention: string })[]; balanceScope: (string)[]; override: ({ generalMarking: string; localMarking: string; passageScope: (string)[] })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-047",
@@ -19783,7 +20059,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -19888,9 +20164,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ chain: ({ cueProducer: string; dependentEntrance: string })[]; excluded: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-048",
@@ -20175,7 +20457,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -20285,9 +20567,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ intentionChanges: ({ afterAttempt: string; oldIntention: string; newIntention: string })[]; executionRepairs: ({ noteId: string; attemptId: string; unmetGoal: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-049",
@@ -20572,7 +20860,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -20683,9 +20971,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ transition: ({ earlierOccurrence: string; earlierRole: string; laterOccurrence: string; laterRole: string })[]; context: (string)[]; excluded: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-050",
@@ -20970,7 +21264,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -21078,9 +21372,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ compatible: (string)[]; incompatible: (string)[]; disclosure: ({ phrase: string; originalTake: string; replacementTake: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-051",
@@ -21365,7 +21665,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -21468,9 +21768,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ clusters: ({ reportIds: (string)[] })[]; separate: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-052",
@@ -21755,7 +22061,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -21855,9 +22161,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ candidate: (string)[]; ruledOut: (string)[]; certainty: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-053",
@@ -22142,7 +22454,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -22240,9 +22552,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ preserving: (string)[]; sacrificing: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-054",
@@ -22527,7 +22845,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -22638,9 +22956,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ current: (string)[]; withdrawn: (string)[]; mereProposals: ({ participant: string; planId: string })[]; unresolved: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-055",
@@ -22925,7 +23249,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -23023,9 +23347,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ questions: (string)[]; irrelevant: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-056",
@@ -23310,7 +23640,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -23416,9 +23746,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ matches: ({ paymentId: string; invoiceId: string })[]; unresolved: (string)[]; unmatchedInvoices: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-057",
@@ -23703,7 +24039,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -23808,9 +24144,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ eligible: (string)[]; incompatible: (string)[]; unknown: (string)[]; eligibleTotal: number }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-058",
@@ -24095,7 +24437,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -24192,9 +24534,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ S1: { servicePeriod: string; billingPeriod: string; paymentPeriod: string }; S2: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-059",
@@ -24479,7 +24827,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -24571,9 +24919,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ X_shared: number; X_private: number; Y_unresolved: number }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-060",
@@ -24858,7 +25212,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -24984,9 +25338,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ chains: ({ cause: string; creditId: string; refundIds: (string)[]; documentedInvoiceIds: (string)[] })[]; settled: number; open: ({ creditId: string; amount: number })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-061",
@@ -25271,7 +25631,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -25370,9 +25730,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ committed: (string)[]; contingent: string[]; proposed: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-062",
@@ -25657,7 +26023,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -25760,9 +26126,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ preferred: (string)[]; unresolved: (string)[]; commuteActive: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-063",
@@ -26047,7 +26419,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -26158,9 +26530,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ divergent: ({ party: string; meaning: string })[]; equivalent: ({ labels: (string)[] })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-064",
@@ -26445,7 +26823,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -26554,9 +26932,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ coherent: (string)[]; incoherent: (string)[]; violation: ({ packageId: string; concessionId: string; missingCondition: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-065",
@@ -26841,7 +27225,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -26948,9 +27332,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ changed: (string)[]; faithful: (string)[]; lost: ({ clauseId: string; lostCondition: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-066",
@@ -27235,7 +27625,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -27342,9 +27732,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ groups: ({ parcelId: string; contactIds: (string)[] })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-067",
@@ -27629,7 +28025,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -27731,9 +28127,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ completed: (string)[]; remaining: (string)[]; unpromised: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-068",
@@ -28018,7 +28420,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -28125,9 +28527,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ contradictions: ({ assuranceId: string; laterRequestId: string })[]; compatible: (string)[]; newGap: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-069",
@@ -28412,7 +28820,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -28519,9 +28927,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ facts: (string)[]; prior: (string)[]; irrelevant: (string)[]; decision: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-070",
@@ -28806,7 +29220,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -28906,9 +29320,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ matching: (string)[]; disanalogous: (string)[]; authority: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-071",
@@ -29193,7 +29613,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -29309,9 +29729,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ compatible: ({ accountIds: (string)[] })[]; samePlace: ({ names: (string)[] })[]; separate: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-072",
@@ -29596,7 +30022,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -29697,9 +30123,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ damageInterval: (string)[]; packagingOnly: (string)[]; responsibility: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-073",
@@ -29984,7 +30416,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -30097,9 +30529,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ executed: ({ orderId: string; executionEvidenceId: string })[]; acknowledgedOnly: (string)[]; condition: ({ orderId: string; requiredEvent: string; relation: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-074",
@@ -30384,7 +30822,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -30493,9 +30931,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ compatible: ({ accountIds: (string)[] })[]; conflicts: ({ accountIds: (string)[] })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-075",
@@ -30780,7 +31224,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -30891,9 +31335,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ calls: ({ portId: string; purpose: string })[]; diversions: (string)[]; unconfirmed: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-076",
@@ -31178,7 +31628,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -31279,9 +31729,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ bridge: (string)[]; countermodel: (string)[]; endorsed: boolean }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-077",
@@ -31566,7 +32022,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -31670,9 +32126,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ equivocation: (string)[]; senses: (string)[]; faithful: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-078",
@@ -31957,7 +32419,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -32064,9 +32526,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ addresses: (string)[]; nonanswers: (string)[]; residual: ({ replyId: string; unansweredQuestion: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-079",
@@ -32351,7 +32819,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -32450,9 +32918,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ consequential: (string)[]; incidental: (string)[]; transfer: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-080",
@@ -32737,7 +33211,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -32841,9 +33315,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ acceptable: (string)[]; rejected: (string)[]; discharged: (string)[]; remaining: string[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-081",
@@ -33128,7 +33608,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -33231,9 +33711,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ compatible: (string)[]; beliefOnly: (string)[]; rule: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-082",
@@ -33518,7 +34004,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -33631,9 +34117,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ discharged: ({ character: string; spellId: string; paymentId: string })[]; outstanding: ({ character: string; spellId: string })[]; invalidPayment: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-083",
@@ -33918,7 +34410,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -34010,9 +34502,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ intent: string; received: string; repair: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-084",
@@ -34297,7 +34795,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -34414,9 +34912,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ affected: (string)[]; preserved: (string)[]; paths: ({ nodes: (string)[] })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-085",
@@ -34701,7 +35205,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -34813,9 +35317,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ before: ({ character: string; belief: string })[]; objective: string; after: ({ character: string; belief: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-086",
@@ -35100,7 +35610,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -35212,9 +35722,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ unreliable: (string)[]; figurative: (string)[]; contradiction: ({ claimId: string; evidenceIds: (string)[]; additionalEvidence: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-087",
@@ -35499,7 +36015,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -35606,9 +36122,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ relations: ({ passageId: string; projectedRelation: string })[]; unsupported: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-088",
@@ -35893,7 +36415,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -35992,9 +36514,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ necessary: (string)[]; unsupported: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-089",
@@ -36279,7 +36807,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -36392,9 +36920,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ strong: ({ laterText: string; earlierText: string })[]; transformation: ({ earlierAgent: string; laterAgent: string; relation: string })[]; weak: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-090",
@@ -36679,7 +37213,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -36800,9 +37334,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ best: (string)[]; partial: (string)[]; contradicted: (string)[]; coverage: ({ readingId: string; evidenceIds: (string)[] })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-091",
@@ -37087,7 +37627,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -37217,9 +37757,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ entries: ({ entryId: string; meaning: string; rainObserved: boolean })[]; meanings: ({ observer: string; descriptor: string; meaning: string })[]; unknown: ({ observer: string; descriptor: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-092",
@@ -37504,7 +38050,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -37615,9 +38161,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ confounded: ({ observer: string; exposureChange: string })[]; supported: ({ observer: string; weatherChange: string })[]; need: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-093",
@@ -37902,7 +38454,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -38016,9 +38568,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ episodes: ({ phaseIds: (string)[] })[]; lulls: (string)[]; newOnsets: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-094",
@@ -38303,7 +38861,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -38413,9 +38971,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ humanFactor: ({ fieldId: string; factor: string })[]; comparison: ({ fieldId: string; gateState: string; outcome: string })[]; rainSeverity: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-095",
@@ -38700,7 +39264,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -38803,9 +39367,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ contradictsContinuousRain: (string)[]; salience: ({ event: string; impact: string })[]; gaps: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-096",
@@ -39090,7 +39660,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -39207,9 +39777,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ affected: (string)[]; paths: ({ nodes: (string)[] })[]; unaffected: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-097",
@@ -39494,7 +40070,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -39604,9 +40180,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ shared: (string)[]; missing: (string)[]; equivalent: ({ reportLabels: (string)[] })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-098",
@@ -39891,7 +40473,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -40002,9 +40584,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ ready: (string)[]; blocked: ({ taskId: string; missingPrerequisite: string })[]; optional: ({ taskId: string; coordination: string })[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-099",
@@ -40289,7 +40877,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -40408,9 +40996,15 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ owner: ({ actionId: string; participant: string })[]; helper: ({ actionId: string; participant: string })[]; reviewer: ({ actionId: string; participant: string })[]; unassigned: (string)[] }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     },
     {
       "id": "sol-100",
@@ -40695,7 +41289,7 @@
         "reason": "First wave covers two distinct operations per domain; second wave completes remaining algorithms after screening."
       },
       "status": "held_expanded_source_pending_independent_structured_oracle_and_reference_review",
-      "generation_ready": false,
+      "generation_ready": true,
       "call_edges": [
         [
           "main",
@@ -40807,23 +41401,29 @@
         }
       },
       "source_fixture_ready": true,
-      "source_review_status": "held_pending_independent_structured_oracle_and_reference_review",
+      "source_review_status": "independently_reviewed_source_oracle_and_exact_reference_pass_plain_generation_preparation",
       "return_type": "{ compatible: ({ requirementIds: (string)[] })[]; conflict: ({ requirementIds: (string)[] })[]; clarification: string }",
-      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered."
+      "ordering_policy": "Only an explicitly chronological route, state transition, valid procedure, or dependency path carries sequence meaning; arrays of matches, relations, groups, assignments and evidence are sets and may be reordered.",
+      "training_admission": false,
+      "generation_readiness": {
+        "presentation": "plain",
+        "receipt": "plans/semantic_stack/SOL_PLAIN_READINESS.json",
+        "scope": "Source-valid candidate for teacher generation; live semantic/comparator review remains required before training admission."
+      }
     }
   ],
   "expanded_fixture_count": 100,
   "seed_design_count": 0,
   "world_count": 28,
   "world_accounting": "First10 have separate authored worlds; remaining90 use18 shared worlds with five genuinely distinct operations each. Preserve common world source groups across all tasks and no cross-split reuse.",
-  "generation_ready_count": 10,
-  "held_expanded_count": 90,
+  "generation_ready_count": 100,
+  "held_expanded_count": 0,
   "structured_oracle_conversion": {
     "affected_programs": 61,
     "all_held_queries_typed": 90,
     "preserved_initial10": true,
     "compound_grammar_remaining": 0,
-    "review_status": "held_until_independent_delta_review_and_source_replay"
+    "review_status": "independent_source_oracle_delta_review_passed_and_full100_plain_reference_replay_passed"
   },
   "stage_spec_count": 10,
   "comparison_spec_count": 100,

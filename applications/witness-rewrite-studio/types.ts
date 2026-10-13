@@ -35,6 +35,7 @@ export type FrameDefinition = {
   sceneIds: string[];
   witnesses: Witness[];
 };
+export type FrameDeclarationIndex = { frames: FrameDefinition[]; contextSourceIds: string[]; unresolved: string[] };
 export type EventView = {
   id: string;
   sceneId: string;

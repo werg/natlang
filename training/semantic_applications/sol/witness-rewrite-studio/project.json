@@ -35,7 +35,8 @@
     "types.ts",
     "services.d.ts",
     "natlang.json",
-    "tsconfig.json"
+    "tsconfig.json",
+    "world/parseFrames/readFrameDeclarations.nl"
   ],
   "decomposition": "DECOMPOSITION.md",
   "typed_call_graph": {
@@ -330,6 +331,15 @@
         "returns": "FrameIndex",
         "kind": "function",
         "owned_delta": "Interpret one event under its inherited speaker and truth scope."
+      },
+      {
+        "path": "world/parseFrames/readFrameDeclarations.nl",
+        "args": {
+          "records": "SourceRecord[]"
+        },
+        "returns": "FrameDeclarationIndex",
+        "kind": "function",
+        "owned_delta": "Extract explicit discourse scope and reconcile declarations without inventing context events."
       }
     ],
     "edges": [
@@ -456,15 +466,34 @@
       {
         "caller": "audit.nl",
         "callee": "audit/checkAmbiguity.nl"
+      },
+      {
+        "caller": "world/parseFrames.nl",
+        "callee": "world/parseFrames/readFrameDeclarations.nl"
       }
     ]
   },
   "scoped_literal_sites": [
-    "world/parseFrames/interpretFrame.nl",
-    "epistemics/checkDialogue/resolveLicensing.nl",
-    "studio/impact/closureStep.nl",
-    "proposals/simulate.nl",
-    "studio/repairStep/compareCandidates.nl"
+    {
+      "site": "world/parseFrames/interpretFrame.nl",
+      "consumed_by": "EventView asserted/observation/reported meanings and parent-bound LocalDecision witnesses"
+    },
+    {
+      "site": "epistemics/checkDialogue/resolveLicensing.nl",
+      "consumed_by": "DialogueDecision.localDecision and licensing judgment"
+    },
+    {
+      "site": "studio/impact/closureStep.nl",
+      "consumed_by": "MeaningDependency necessity/affected fields and ImpactFrontier expansion"
+    },
+    {
+      "site": "proposals/simulate.nl",
+      "consumed_by": "Replay.claimJudgment used by candidate audit"
+    },
+    {
+      "site": "studio/repairStep/compareCandidates.nl",
+      "consumed_by": "CandidateChoice and RepairState.selectedEdits"
+    }
   ],
   "iteration_reducers": [
     {
@@ -505,7 +534,8 @@
     "actual_live_full_project": "pending",
     "live_stage_contributions": "pending",
     "48_sample_measurement": "pending",
-    "exact_mechanics_and_canonical_invariant_check": "Passed canonical positive, set permutation, eight corrupt-output negatives, exact patch application and overlap rejection. This is not an app execution."
+    "exact_mechanics_and_canonical_invariant_check": "Passed canonical positive, set permutation, eight corrupt-output negatives, exact patch application and overlap rejection. This is not an app execution.",
+    "source_revision_note": "New provenance-preserving frame declaration/event routing is source-only pending live variant qualification; existing diagnostic pin unchanged."
   },
   "source_root": "applications/witness-rewrite-studio",
   "entry_kind": "directory-reducer",

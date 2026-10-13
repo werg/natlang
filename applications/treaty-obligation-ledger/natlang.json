@@ -1,0 +1,18 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/treaty-obligation-ledger",
+  "version": "0.1.0",
+  "description": "Natural-language authority, scoped norm and evidence-snapshot obligation reconciliation in a fictional federation.",
+  "include": [
+    "README.md",
+    "DECOMPOSITION.md",
+    "types.ts",
+    "reconcileLedger.nl",
+    "reconcileLedger",
+    "tsconfig.json"
+  ],
+  "engines": {
+    "natlang": ">=0.1.0",
+    "node": ">=22.13.0"
+  }
+}

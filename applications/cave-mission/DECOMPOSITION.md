@@ -68,4 +68,8 @@ Ten nested documents contain 31 connected clauses. Lost handedness leaves east/w
 
 ## Qualification
 
-Source loader, typed reference and twenty-two external checker controls pass. Independent source/oracle review is pending. No named stage or scoped literal has live invocation credit. The manifest keeps source-only status, shared source-world split identity and separate model-facing debt until live qualification.
+Source loader, typed reference and twenty-two external checker controls pass. Original fixture/oracle and canonical policy independently reviewed by Sol (439ba667). The initial live diagnostic confirms several child-result handoffs but exposes conditional-compatibility wording and quote-provenance defects. The separate conditional-anchor-v2 source revision needs peer review and a new pinned diagnostic; no complete live success is credited. The manifest keeps source-only status, shared source-world split identity and separate model-facing debt until live qualification.
+
+## Conditional-anchor-v2 source delta
+
+The NL anchor assessment now decides consistency conditional on one candidate transform: matching source-backed coordinates admit a possible binding, contradictions reject, and missing conditional premises remain unknown. Selection of the actual reflection stays unresolved across worlds. The landmark literal returns semantic judgments and clause-keyed exact quote strings; its parent owns original source ID/path binding and substring checks before consuming the result. Alignment validates returned quotation provenance before inserting conditional bindings. These exact checks do not decide place identity or select a map. No crisp decision engine was added.

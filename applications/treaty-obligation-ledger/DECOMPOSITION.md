@@ -1,6 +1,8 @@
 # Treaty Obligation Ledger — decomposition before implementation
 
-Status: proposed third Astra application; fictional source law only. No runnable, live or training claim.
+Status: implemented third Astra source application; fictional source law only. Loader, declarations, full typed canonical reference and27 verifier controls pass. Independent review and live qualification remain pending; no training admission.
+
+Actual composition: 28 NL files / 571 total lines / 351 body lines / 166 numbered steps; 39 aliases and 5 scoped literal sites. Visible TypeScript contains declarations only.
 
 ## Task and distinct structure
 
@@ -42,13 +44,14 @@ reconcileLedger.nl                         # directory reducer / root
       classifyObligation.nl               # active / defeated / unresolved / unsupported
   explainDelta.nl                         # minimal changed-premise explanations
     compareCertificates.nl                # stable business identity, old/new justification
-    minimizeSupport.nl                    # finite source-subset deletion with proof check
+    minimizeSupport.nl                    # shrinking explanation support
+      pruneSupportPass.nl                 # typed pass + consumed sufficiency NL literal
   auditLedger.nl                          # independent source/proof/scope challenges
     replayJustification.nl                # DAG replay, typed premise references
       challengeAuthority.nl               # scoped NL literal: provenance reaches charter?
 ```
 
-Target: 27 meaningful NL callables, approximately 600–850 total NL lines. The implementation will remove any stage without an independently consumed delta. Most bodies will contain numbered typed pseudocode, branches and explicit update steps; line count does not grant credit.
+The implementation has28 meaningful NL callables. Each body uses numbered typed pseudocode, branches and explicit update steps. Authority reachability, stratified proof settlement and support deletion are separate state machines. Line count does not grant execution credit.
 
 ## Typed ownership
 
@@ -83,6 +86,7 @@ An obligation key is a source-derived tuple of debtor, beneficiary, action kind,
 - `judgeScope`: one norm/event/slice; result gates applicability.
 - `resolveDefeat`: one proposed override + authority/target context; result defeats one proof or preserves it.
 - `challengeAuthority`: one final proof chain + root grants; result becomes an independent audit finding.
+- `pruneSupportPass`: one proposed premise deletion + exact affected proof cone; sufficient=true replaces candidateIds and adds removedIds, whilefalse/null retains the candidate. The parent consumes the changed state in the next pass and final explanation.
 
 Each local function is created with typed `nl.with` captures and directly awaited on its changing input. The returned value must be read by the owning stage. Merely constructing a literal earns no contribution credit.
 

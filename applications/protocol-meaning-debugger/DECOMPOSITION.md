@@ -56,3 +56,17 @@ Status: decomposition authored before implementation. Build the first full appli
 Reused departments (`populations`, `timing`, `metrics`, `plans`) live at package root and are exposed through explicit `uses`; nested specialists retain their own callable folders. Predictions are typed materialized plans and exact receipts, while interpretation remains a returned scoped NL judgment consumed by investigation state.
 
 `plans.nl` is the23rd module: it joins the separately returned population, timing and metric contributions into typed exact evaluation inputs. Investigation caches each immutable seed prediction once and chooses adaptively using current hypothesis status. The repair branch reconstructs definitions and uses a separate edited context, so original cached predictions cannot certify a repair.
+
+## Metric transformation ownership revision
+
+The first authored `metrics` parent selected source context but returned its child's already
+operational MetricView. This revision gives the two stages separate transformations:
+`interpretMetric` owns a symbolic `MetricReading` of counted wording, denominator, aggregation
+and displayed label, without selecting a raw outcome code. `metrics` then joins that reading
+with source coding definitions in a distinct scoped NL binding judgment. It owns numeratorOutcome,
+countedMeaning and displayLabelCompatibility in the returned MetricView. `plans` consumes the
+code for exact execution; comparison consumes the counted meaning and label relation. A misleading
+label remains diagnosable without silently changing the implementation's executable behavior.
+The service still only filters supplied numeric rows and computes supplied polarity arithmetic.
+Canonical witness fields and exact invariant checks are updated; original numeric/source facts
+remain unchanged. Both scoped results require live consumption proof before model-facing adoption.

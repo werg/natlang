@@ -46,6 +46,17 @@ def test_noop_without_hdd(tmp_path, monkeypatch):
     hdd_guard.require_nvme(tmp_path / 'absent' / 'run')
 
 
+def test_auto_hdd_root_on_nonrotating_device_is_not_staged(tmp_path, monkeypatch):
+    monkeypatch.delenv('NATLANG_HDD_PREFIX', raising=False)
+    monkeypatch.setattr(hdd_guard, 'resolve', lambda name: tmp_path)
+    monkeypatch.setattr(hdd_guard, '_rotational', lambda path: False)
+    assert hdd_guard.hdd_prefix() is None
+    assert not hdd_guard.on_hdd(tmp_path / 'run')
+    # Explicit selection remains authoritative for development and real HDDs.
+    monkeypatch.setenv('NATLANG_HDD_PREFIX', str(tmp_path))
+    assert hdd_guard.on_hdd(tmp_path / 'run')
+
+
 def test_stage_input_args_pass_staged_path(hdd, tmp_path):
     from natlang_neuralese.train import recipe
     source = hdd / 'text.jsonl'
