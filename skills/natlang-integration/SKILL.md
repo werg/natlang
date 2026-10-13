@@ -62,4 +62,10 @@ Package and pass the complete original typed source record, including its ID, pa
 
 For wide evidence inputs, qualify a relevance-first callable as a typed semantic stage before using it to reduce deeper calls. Its role ledger must cover every original source ID/path, include uncertain and dependency records, and allow later findings to reopen background records. The exact host validates coverage and quote spans, while the callable judges relevance and authority. Compare live completeness, source-supported outcomes, and request cost against the frozen per-record source before adopting its model-facing wording.
 
+When an authored oracle relies on a derived output identity or serialization convention, render that convention in the model-visible root instructions and verify its exact presence in the frozen source. Source/reference replay can pass even when this wording is absent, so check visibility separately before interpreting live rejections. Treat an absent convention as a source bug, not a model failure.
+
 A nonempty source-grounded semantic contribution requires at least one nonempty supporting quote whose exact source check passes. An empty witness array cannot certify that contribution; retain the missing support as unresolved.
+
+## Observe semantic materialization at both stages
+
+Keep child symbolic interpretation separate from parent operational binding in report types and traces. Exact services receive the parent's resolved code or plan fields, while semantic comparison receives the retained reading and any display-meaning relation. An exact checker can verify owner/clause identities, code/arithmetic consistency and declared invariant fields; it cannot establish source entailment or actual scoped-literal execution. A new typed witness is a canonical form, and its numeric equivalence to an older witness does not qualify revised model-facing stages live.

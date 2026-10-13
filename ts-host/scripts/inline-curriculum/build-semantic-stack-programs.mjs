@@ -17,21 +17,23 @@ const flags = args.slice(2);
 const pilotAstra = flags.includes('--pilot-astra');
 const stageSpecsMode = flags.includes('--stage-specs');
 const sourceDriven = flags.includes('--source-driven');
+const relevanceFirst = flags.includes('--relevance-first');
 const groupedAstra = flags.includes('--grouped-astra') || stageSpecsMode;
 const reviewAt = flags.indexOf('--review-ids');
 const reviewPath = reviewAt >= 0 && flags[reviewAt + 1] ? resolve(flags[reviewAt + 1]) : null;
 const variantAt = flags.indexOf('--stage-variant');
 const variantPath = variantAt >= 0 && flags[variantAt + 1] ? resolve(flags[variantAt + 1]) : null;
-const knownFlags = new Set(['--pilot-astra', '--grouped-astra', '--stage-specs', '--source-driven', '--review-ids', '--stage-variant']);
+const knownFlags = new Set(['--pilot-astra', '--grouped-astra', '--stage-specs', '--source-driven', '--relevance-first', '--review-ids', '--stage-variant']);
 const selected = flags.filter(flag => knownFlags.has(flag));
 const expectedFlagCount = selected.length + (reviewPath ? 1 : 0) + (variantPath ? 1 : 0);
 if (args[0] !== '--out' || !args[1] || flags.length !== expectedFlagCount ||
     (pilotAstra && (stageSpecsMode || groupedAstra || reviewPath)) ||
     (stageSpecsMode && flags.includes('--grouped-astra')) ||
     (sourceDriven && (!groupedAstra || stageSpecsMode)) ||
+    (relevanceFirst && !sourceDriven) ||
     (variantPath && !stageSpecsMode) ||
     selected.length !== new Set(selected).size)
-  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --grouped-astra [--source-driven] | --stage-specs] [--review-ids IDS_JSON] [--stage-variant VARIANT_JSON]');
+  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --grouped-astra [--source-driven [--relevance-first]] | --stage-specs] [--review-ids IDS_JSON] [--stage-variant VARIANT_JSON]');
 const output = resolve(args[1]);
 const variantBytes = variantPath ? await readFile(variantPath) : null;
 const variant = variantBytes ? JSON.parse(variantBytes) : null;
@@ -184,11 +186,14 @@ function runtimeStageArgs(step, entry, grouped) {
   }));
   return args;
 }
-function runtimeTypeFile(entry, grouped) {
+function runtimeTypeFile(entry, grouped, relevance = false) {
   if (!entry.typed_inputs) return `export type EvidenceRecord = { id: string; path: string; text: string };\n` +
     `export type EvidenceFinding = { sourcePath: string; finding: string; evidenceIds: string[]; unresolved: string[] };\n` +
     (grouped ? `export type EvidenceBatch = { folderPath: string; records: EvidenceRecord[] };\n` +
       `export type EvidenceBatchFinding = { folderPath: string; findings: EvidenceFinding[] };\n` : '') +
+    (relevance ? `export type EvidenceRole = { id: string; path: string; role: 'direct' | 'dependency' | 'background' | 'uncertain'; dependsOn: string[]; reason: string; witnessQuote: string };\n` +
+      `export type EvidenceScreenInput = { records: EvidenceRecord[]; objective: string; rule: string };\n` +
+      `export type EvidenceSelection = { roles: EvidenceRole[] };\n` : '') +
     `export type EvidenceContext = { objective: string; rule: string; relatedRecords: EvidenceRecord[]; priorFindings: EvidenceFinding[]; stageFindings: EvidenceFinding[] };\n`;
   const declarations = Object.entries(entry.typed_inputs).map(([role, declaration]) => {
     const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[\s\S]+\})\s*$/.exec(declaration);
@@ -378,6 +383,9 @@ function render(entry, provider) {
   const fullPlan = Array.isArray(entry.functions) && Array.isArray(entry.steps) ?
     entry.steps.map(step => String(step).replace(/^\s*\d+\.\s*/, '')) : [];
   const contract = paragraphs(entry.output_contract);
+  const identityContract = paragraphs(entry.output_identity_contract).join(' ');
+  const visibleIdentityContract = identityContract && !contract.some(part => part.includes(identityContract)) ?
+    `Output identity convention: ${identityContract}\n` : '';
   const prefix = entry.operation ? `Operation: ${entry.operation}.\n` : '';
   const legacyInstructions = `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
     `Carry out these stages over the supplied data, preserving exact source references. ` +
@@ -396,6 +404,7 @@ function render(entry, provider) {
     (lambda.length ? `Scoped child guidance: ${lambda.join(' ')}\n` : '') +
     (loop.length ? `Iteration: ${loop.join(' ')}\n` : '') +
     (contract.length ? `Output contract: ${contract.join(' ')}\n` : '') +
+    visibleIdentityContract +
     `Use exact code only for reading, ordering, serialization, and checks; the domain judgments belong in natural-language calls. ` +
     `Return the result specified by the output contract, grounded in the supplied sources.`;
   const stageInstructions = stageSpec ? `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
@@ -406,11 +415,27 @@ function render(entry, provider) {
       entry.typed_inputs ? `Read the supplied directory snapshot and inquiry into the authored typed bundle. Call ${steps[0].name} with StageInput1 {bundle,inquiry,prior:{${stageSpec.no_op_field ?? 'stageAbsences'}:[]}}. The named stages must each add their own source-backed typed contribution before calling the next stage within the active call. Synthesize the declared answer from the returned FinalSemanticState, not by re-solving from the raw folder.\n` :
       `Use iterateOn over the sorted source folders. Each step builds a typed EvidenceBatch of {id,path,text} records for one current folder and calls ${steps[0].name} with StageInput1 {batch,context,prior:{stageAbsences:[]}}. Append the returned FinalSemanticState to the loop's collected states, then advance the folder frontier; the unprocessed-folder count decreases by one until all folders are consumed. Each named stage adds its owned, source-linked contribution and passes that accumulated state to its child. Synthesize the declared result from all collected states, preserving cross-folder evidence and unresolved claims.\n`) +
     `The named stages are ${steps.map(step => step.name).join(' → ')}. Their typed inputs, owned contribution fields, source witnesses and plans are in the callable .nl files; read those files when called. A stage with no applicable evidence records a source-grounded absence instead of silently forwarding. An ad hoc natural-language literal counts only when invoked and its decision changes the accumulated state.\n` +
-    `Output contract: ${contract.join(' ')}\nUse exact code for file reading, binding, finite iteration, coverage checks and serialization. Semantic judgments belong in the named functions and invoked literals. Return the declared typed answer grounded in their FinalSemanticState.` : null;
-  const instructions = stageInstructions ?? legacyInstructions;
+    `Output contract: ${contract.join(' ')}\n${visibleIdentityContract}Use exact code for file reading, binding, finite iteration, coverage checks and serialization. Semantic judgments belong in the named functions and invoked literals. Return the declared typed answer grounded in their FinalSemanticState.` : null;
+  const relevance = relevanceFirst && grouped;
+  const relevanceInstructions = relevance ? `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
+    (identities ? `Source ID binding (preserve every exact ID and path):\n${identities.map(({ id, path }) => `${id}: ${path}`).join('\n')}\n\n` : '') +
+    `Inventory all source records once as EvidenceRecord {id,path,text}. Call screenEvidence({records,objective,rule}) once for the whole evidence world. Its typed EvidenceSelection must contain exactly one EvidenceRole for each record. The role is a semantic judgment: direct, dependency, background or uncertain; uncertain stays selected.\n` +
+    `Use exact code to check role coverage, path/ID identity, witnessQuote as an exact substring of that record, and that every dependsOn ID exists. Start with direct, dependency and uncertain records, then close that selection over declared dependencies. If a later finding needs a background record, reopen it and record why. Never discard a record solely to meet a resource budget.\n` +
+    `Group selected records into coherent EvidenceBatch values by source folder and dependency links. Use iterateOn over the finite group frontier. In each step call ${steps[0].name} with the selected batch and EvidenceContext {objective,rule,relatedRecords,priorFindings,stageFindings:[]}. The child chain is ${steps.map(step => step.name).join(' → ')}; it returns one source-linked EvidenceFinding per selected record in that group. Append those actual findings, advance the unprocessed-group frontier, and synthesize the declared result from the findings plus the complete role ledger. Revisit a background record when a dependency or unresolved finding makes it relevant.\n` +
+    `At semantic stages formulate and invoke focused typed natural-language literals on the selected item or relation. Preserve source IDs, paths, quoted evidence and returned decisions. ${lambda.join(' ')}\n` +
+    (loop.length ? `Iteration: ${loop.join(' ')}\n` : '') +
+    `Output contract: ${contract.join(' ')}\n${visibleIdentityContract}Use exact code for source reading, identity/coverage checks, grouping and serialization. Relevance, authority, relation interpretation and final semantic judgment belong in the natural-language functions.` : null;
+  const instructions = stageInstructions ?? relevanceInstructions ?? legacyInstructions;
   const files = { 'solve.nl': nlFile({ args: {}, returns: typed ?? 'string', description: title, kind: 'directory-reducer', instructions }) };
-  const typeFile = stageSpec ? stageSpecTypeFile(entry, stageSpec) : runtimeTypeFile(entry, grouped);
+  const typeFile = stageSpec ? stageSpecTypeFile(entry, stageSpec) : runtimeTypeFile(entry, grouped, relevance);
   if (typeFile) files['types.ts'] = typeFile;
+  if (relevance) files['solve/screenEvidence.nl'] = nlFile({
+    args: { input: 'EvidenceScreenInput' },
+    returns: 'EvidenceSelection', description: `${title}: screen evidence roles`,
+    instructions: `1. Read the entire supplied source collection under objective and rule. For each record, decide whether it directly affects the query, supplies a dependency or authority condition for another relevant record, is background, or remains uncertain.\n` +
+      `2. Return one EvidenceRole per input record with its exact id and path. A direct or dependency role cites an exact witnessQuote from that record; give a source-grounded reason and name every dependsOn record ID whose relation may change its meaning.\n` +
+      `3. Use uncertain when relevance or authority is genuinely unresolved. Keep uncertain records selected for later stages. Background means only that this record currently has no supported path to the task answer; it does not assert that its content is false.\n` +
+      `4. Check cross-record authority, identity and scope, not just lexical similarity. Return the complete typed role ledger so root can validate coverage and dependency closure.` });
   let stageFolder = 'solve';
   for (const [index, step] of steps.entries()) {
     const name = step.name;
@@ -503,6 +528,7 @@ function render(entry, provider) {
     caseRow.source_ids = [programSourceId];
     caseRow.source_groups = [sourceGroup];
     caseRow.source_revisions = ['semantic-stack-authored-v1'];
+    if (relevance) caseRow.source_revisions.push('relevance-first-screen-and-selected-batches-v1');
     if (variant?.program_id === id) caseRow.source_revisions.push(`stage-variant:${sha(variantBytes)}`);
     caseRow.generation.collection = 'teacher';
     caseRow.generation.source_domain = domain;
@@ -568,7 +594,8 @@ await writeFile(join(output, 'source-candidates.ir.jsonl'), sourceText);
 const review = {
   schema: 'natlang.semantic-stack-source-review/1',
   partial_pilot: pilotAstra,
-  presentation: stageSpecsMode ? 'owned-typed-stage-contributions' : sourceDriven ?
+  presentation: stageSpecsMode ? 'owned-typed-stage-contributions' : relevanceFirst ?
+    'relevance-first-screen-and-selected-batches' : sourceDriven ?
     'source-driven-scoped-decisions' : groupedAstra ?
     'typed-coherent-folder-batches' : 'typed-individual-records',
   ...(variant ? { stage_variant: { id: variant.id, program_id: variant.program_id,

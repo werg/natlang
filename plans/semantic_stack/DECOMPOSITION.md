@@ -68,6 +68,42 @@ queue indices are zero based. A fresh immutable v8b queue uses index 0; the
 six-case plain cohort was also resealed with indices 0–5 before launch. Both
 queues were range-checked against their exact selected-source line counts.
 
+## Relevance-first collection for wide evidence folders
+
+The first source-driven folklore diagnostic spent about 379 turns on seven of
+24 records. Its natural-language decisions were useful, but repeating the
+whole nested chain for every record would exceed the frozen 600-turn collection
+ceiling. This is a source-program decomposition issue, not a model failure.
+
+1. **Screen the whole evidence world (new typed `.nl` callable).** Given the
+   objective, task rule, and all source records, return one source-linked
+   `EvidenceRole` per record: directly queried, dependency or authority,
+   background, or uncertain. A dependency names the record or relation it can
+   change. Uncertain roles stay selected. The screen is a semantic judgment;
+   no keyword or filename classifier chooses relevance.
+2. **Process coherent selected groups (existing named chain).** Group selected
+   records by their actual folder and declared dependency links. Send each
+   group through the named stages as a typed batch. Keep every selected source
+   ID, path, and quote; stages can call focused ad hoc `nl` literals for the
+   relations that need judgment. The active chain still returns a typed
+   `EvidenceBatchFinding` with all selected inputs accounted for.
+3. **Reconcile coverage and output (root `.nl`).** The root checks whether any
+   background item is needed by a later finding and reopens it if so. It
+   combines the selected findings with the role ledger, preserving unresolved
+   questions. A background label is not evidence that its content is false.
+4. **Exact plumbing.** Code checks that the role ledger covers every source
+   path exactly once, selected groups contain only known paths, dependency
+   links resolve, and returned findings cite visible records. These checks
+   cannot decide which record matters semantically. The source builder emits
+   this as an opt-in immutable variant of the existing Program/2 case; the
+   usual teacher collector, oracle and admission path remain shared.
+
+The frozen per-record diagnostic remains a baseline. The relevance-first
+presentation needs matched live samples and a reviewed correctness result
+before it replaces it. If screening selects all 24 records, the program may
+need relation-level grouping or a higher collection resource ceiling; the
+screen must not hide hard evidence to save requests.
+
 ## Application-scale semantic projects
 
 The additive high-depth slate is a different source shape: a complete natlang project with roughly 10–30 authored `.nl` files, topic-specific callable folders, explicit typed interfaces, service declarations when outside-world work is needed, and real multi-step tasks. A project manifest selects an immutable source tree, task input snapshot, declared output/checker, provenance and split world. Its adapter snapshots the files into Program/2 without rewriting the author's call graph or forcing a generic chain. The root and modules remain natural-language functions; exact source hashing, path containment, type checking, replay and result checks are crisp. Full teacher trajectories, including child calls and tool outputs, are collected through the existing teacher pipeline. Existing 220 authored programs remain eligible when valid; their difficulty is a mix label, not an admission criterion. New project cases must show actual stage contributions, source visibility and correct outputs before training admission.
