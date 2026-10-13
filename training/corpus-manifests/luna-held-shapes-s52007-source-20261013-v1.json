@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-held-shapes-s52007-source-20261013-v1",
+  "owner": "pop",
+  "path": "runs/luna-held-shapes-s52007-source-20261013-v1",
+  "files": [
+    {
+      "path": "build-report.json",
+      "bytes": 592,
+      "sha256": "79458b94b52ec615f46fd86f88630f6cdec044c15e545e58428391e468ace968"
+    },
+    {
+      "path": "provenance.json",
+      "bytes": 850,
+      "sha256": "06e4dd66eafe595a3802b47ff9f03d789a9efa5b4860cced579a3b4c6e11a522"
+    },
+    {
+      "path": "source.ir.jsonl",
+      "bytes": 1899063,
+      "sha256": "29b23bdda753d2f59328b9bdf554c5336080ff8e6be32d0613ebd021db91c0fc",
+      "lines": 292
+    }
+  ],
+  "bytes": 1900505
+}

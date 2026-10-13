@@ -61873,6 +61873,17 @@
       },
       "note": "Clef-flash-distilled inline-lambda programs over new source pools, day 20261013: 420 cases, 2681 decisions ({'clef_skill_routing': 154, 'clef_wellbeing_triage': 108, 'clef_clause_risk': 57, 'clef_edit_review': 101}). Files: *.skeletons (Clef requests), *.answers (Clef outputs with usage), *.ir (cases), *.rows (trajectories), *.turns (native training turns).",
       "consumable_by_direct_stage": false
+    },
+    {
+      "id": "luna-held-shapes-s52007-source-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-s52007-source-20261013-v1",
+      "admission": "source-only-nontraining; 32 held-world-colliding rows excluded from teacher queue",
+      "include": [
+        "source.ir.jsonl",
+        "build-report.json",
+        "provenance.json"
+      ]
     }
   ],
   "coverage_backlog": [
