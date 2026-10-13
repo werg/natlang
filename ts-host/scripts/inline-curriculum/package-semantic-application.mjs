@@ -224,7 +224,8 @@ if (manifest.reference_path) {
 }
 const report = { schema: 'natlang.semantic-application-package/1', id: manifest.id,
   source_status: hasFullGold ? 'candidate_pending_reference_and_semantic_review' :
-    'held_invariant_oracle_requires_external_verifier',
+    exactVerifierHash ? 'held_exact_verifier_bound_semantic_review_pending' :
+      'held_invariant_oracle_requires_external_verifier',
   training_admission: false, program_file_count: Object.keys(files).length,
   nl_file_count: Object.keys(files).filter(path => path.endsWith('.nl')).length,
   fixture_file_count: Object.keys(fixture).length, graph_edge_count: graph?.edges?.length ?? null,

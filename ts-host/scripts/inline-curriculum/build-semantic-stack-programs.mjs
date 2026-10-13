@@ -262,6 +262,9 @@ function checkedStageSpecs(entry, steps) {
       spec.types[name] = body;
     }
     stage.numbered_plan = variant.numbered_plan;
+    // Replace the old decision's semantic meaning as well as its recipe. A
+    // stale summary here can contradict the new literal contract.
+    stage.new_semantic_transformation = variant.literal_unit;
     stage.scoped_literal_plan = [variant.literal_unit, variant.capture_policy,
       ...paragraphs(variant.idiom_preconditions),
       variant.direct_await_idiom, variant.no_op_criterion, ...variant.invariants];
