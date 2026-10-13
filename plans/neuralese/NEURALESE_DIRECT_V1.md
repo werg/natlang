@@ -420,8 +420,12 @@ direct stage (an identity check like the direct stage's).
 **4. The gate is values against tokens.** On held trajectories, each consumer is evaluated twice on the same producer
 calls:
 - (V) reading the producer's Neuralese block;
-- (T) reading the producer's token text (the gold, or the model's own greedy text, to be decided; the model's own is
-  the fair runtime comparison).
+- (T) reading the producer's token text. Decided (owner, 2026-10-13): the primary T is T_self, the text the producer
+  generates itself, free-running from its native write prefix with the writer's own readout and stopped at the native
+  value boundary (`train/self_text.py`; greedy, and sampled at temperature 0.6 with a fixed seed per producer,
+  reported). The consumer's crisp CE with that text where the value stands is `crisp_self_greedy`; the loss criterion
+  is V ≤ T_self greedy (`v_minus_t_self`, `train/e2e_acceptance.py`). Gold T (`crisp`, `v_minus_t_gold`) stays the
+  reported upper reference.
 
 Measured: consumer task success (exact verifiers where the task has them) and consumer CE on the gold continuation.
 - **Passes when:** V is at least as good as T on success, and V's consumer CE is lower than T's by a declared margin,

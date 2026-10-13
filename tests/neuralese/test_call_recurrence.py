@@ -121,6 +121,13 @@ def test_held_out_readers_compare_their_written_values_with_another_readers(load
         got = summary[label]
         assert got["n"] == 2 and got["written"] > 0 and got["shuffled"] > 0 and 0 <= got["written_better"] <= 1
         assert got["written"] != got["shuffled"]
+        # T_self: the same readers with each producer's own generated text, greedy and sampled (owner 2026-10-13).
+        assert got["n_self"] == 2 and not got["self_text_errors"]
+        assert got["crisp_self_greedy"] > 0 and got["crisp_self_t06"] > 0
+        assert got["v_minus_t_self"] == pytest.approx(got["written"] - got["crisp_self_greedy"])
+        assert got["v_minus_t_gold"] == got["v_minus_t"]
+        for case in got["case_scores"]:
+            assert case["crisp_self_greedy"] > 0 and isinstance(case["self_text_cap_hit"], bool)
 
 
 def _random_projection(width):

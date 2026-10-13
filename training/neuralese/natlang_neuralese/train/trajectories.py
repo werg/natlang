@@ -888,6 +888,9 @@ def main(argv=None, embed=None):
                              "read their crisp text (bounds memory: each written value prefills its producer with gradient; 0: all)")
     parser.add_argument("--write-depth", type=int, default=2,
                         help="levels of written values inside written values' producers (1: producers read crisp text)")
+    parser.add_argument("--t-self", action=argparse.BooleanOptionalAction, default=True,
+                        help="paired held readers also read each producer's own generated text (T_self, greedy and "
+                             "t=0.6; train/self_text.py), the primary end-to-end comparison (owner 2026-10-13)")
     parser.add_argument("--only-handover", action="store_true", help="only records that read or write a note")
     parser.add_argument("--view", choices=["preview", "written"], default="preview",
                         help="view parts: the crisp preview, or the view the model writes at view's template write site")
@@ -2548,6 +2551,13 @@ def main(argv=None, embed=None):
         # The end-to-end acceptance (train/e2e_acceptance.py) compares the same consumers reading tokens (T: the gold
         # crisp text where the values stand) and reading a zeroed block (a control) on these exact rows.
         crisp_scores, zeroed_scores = [], []
+        # T_self (owner 2026-10-13, the primary comparison): the same crisp reader with each read value as the text its
+        # producer generates itself (train/self_text.py), greedy and sampled at 0.6; gold T stays the upper reference.
+        from .self_text import SelfText
+        self_text = SelfText(engine=engine, session=session, producers=producers, texts=texts,
+                             write_depth=args.write_depth, site_prefix=site_prefix,
+                             token_choice_projection=getattr(direct, 'token_choice_projection', None)) if args.t_self else None
+        self_rows, self_errors = [], []
         with torch.no_grad():
             for record, names, payloads in sites.values():
                 rid = record['id']
@@ -2579,12 +2589,22 @@ def main(argv=None, embed=None):
                 shuffled.append(b)
                 zeroed_scores.append(z)
                 crisp_scores.append(t)
+                selves = None
+                if self_text is not None:
+                    try:
+                        selves = self_text.scores(record, names, lambda shown: float(
+                            loss_of(shown, {}, soft=False, training_objective=False)))
+                        self_rows.append((a, selves['greedy'], selves['t06']))
+                    except ValueError as error:
+                        self_errors.append({'id': rid, 'error': str(error)[:300]})
                 factual = sorted(source_groups(record))
                 key = tuple(factual)
                 groups.setdefault(key, []).append((a, b))
                 result['case_scores'].append({'id': rid, 'source_groups': factual, 'donor_id': donor_id,
                     'donor_source_groups': sorted(source_groups(donor_record)), 'payload_mapping': mapping,
                     'written': a, 'shuffled': b, 'margin': b - a, 'zeroed': z, 'crisp': t,
+                    'crisp_self_greedy': selves and selves['greedy'], 'crisp_self_t06': selves and selves['t06'],
+                    'self_text_cap_hit': selves and selves['cap_hit'], 'self_texts': selves and selves['texts'],
                     'slot_lengths': [{'recipient': recipient, 'donor': donor,
                                      'own': int(payloads[names[recipient]].shape[0]),
                                      'donor_length': int(donor_payloads[donor_names[donor]].shape[0])}
@@ -2599,10 +2619,21 @@ def main(argv=None, embed=None):
             result.update({'written': sum(own) / len(own), 'shuffled': sum(shuffled) / len(shuffled),
                            'zeroed': sum(zeroed_scores) / len(zeroed_scores), 'crisp': sum(crisp_scores) / len(crisp_scores),
                            'v_minus_t': (sum(own) - sum(crisp_scores)) / len(own),
+                           'v_minus_t_gold': (sum(own) - sum(crisp_scores)) / len(own),
                            'n': len(own), 'written_better': sum(a < b for a, b in zip(own, shuffled)) / len(own),
                            'factual_group_set_means': group_means,
                            'factual_group_set_written_mean': sum(g['written'] for g in group_means)/len(group_means),
                            'factual_group_set_shuffled_mean': sum(g['shuffled'] for g in group_means)/len(group_means)})
+        if self_text is not None:
+            # Means over the rows whose self texts were made (n_self); V minus greedy T_self is the primary comparison.
+            result.update({'n_self': len(self_rows), 'self_text_errors': self_errors,
+                           'self_text_cap_hits': sum(bool(c.get('self_text_cap_hit')) for c in result['case_scores'])})
+            if self_rows:
+                n = len(self_rows)
+                result.update({'crisp_self_greedy': sum(g for _, g, _ in self_rows) / n,
+                               'crisp_self_t06': sum(s for _, _, s in self_rows) / n,
+                               'v_minus_t_self': sum(a - g for a, g, _ in self_rows) / n,
+                               'v_minus_t_self_t06': sum(a - s for a, _, s in self_rows) / n})
         return result
 
     leaves = {leaf_ids[name]: p for name, p in params.items()}

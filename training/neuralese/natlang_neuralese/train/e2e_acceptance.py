@@ -2,12 +2,15 @@
 
 The requirement (owner decisions 2026-10-11 and 2026-10-12; plans/neuralese/NEURALESE_DIRECT_V1.md "End-to-end
 stage"): consumers reading the producer's Neuralese values (V) against the same consumers reading the producer's
-tokens (T, the gold crisp text) on the same held producer calls, on loss and on task success, with no drift stop.
+tokens on the same held producer calls, on loss and on task success, with no drift stop. On loss the tokens are the
+producer's own generated text (T_self, greedy; owner decision 2026-10-13, train/self_text.py): V <= T_self within the
+declared margin (``max_v_minus_t_ce_nats``); T_self sampled at 0.6 and the gold crisp text (gold T, the upper
+reference) are reported only.
 Controls: the same consumers reading a shuffled (fixed factual-disjoint donor) block and a zeroed block. The 48-probe
 behaviour gate is reported only (owner 2026-10-12, plans/REVIEW_20261012.md item 3).
 
 The recipe declares the margins (``e2e_acceptance``); the trainer (train/trajectories.py ``evaluate_written``) reports
-V, T, shuffled and zeroed means on the paired held readers in summary.json ``written-trained``. A criterion whose
+V, T_self (greedy, t0.6), gold T, shuffled and zeroed means on the paired held readers in summary.json ``written-trained``. A criterion whose
 measurement the stage did not produce is ``pending`` and keeps the lineage unqualified: missing evidence never passes.
 """
 from __future__ import annotations
@@ -52,6 +55,7 @@ def evaluate(declaration, summary):
     criteria = {}
     paired, held = declaration['paired_reader'], summary.get('written-trained') or {}
     v, t = held.get('written'), held.get('crisp')
+    v_minus_t_self = held.get('v_minus_t_self')  # V - greedy T_self over the rows with self texts
     shuffled, zeroed, n = held.get('shuffled'), held.get('zeroed'), held.get('n', 0)
 
     def criterion(name, measured, passed, **detail):
@@ -59,9 +63,12 @@ def evaluate(declaration, summary):
                           'measured': measured, **detail}
 
     criterion('paired_readers', n, n >= paired['min_paired_readers'], required=paired['min_paired_readers'])
-    criterion('v_minus_t_ce', None if v is None or t is None else v - t,
-              v is not None and t is not None and v - t <= paired['max_v_minus_t_ce_nats'],
-              max=paired['max_v_minus_t_ce_nats'], v=v, t=t)
+    criterion('v_minus_t_ce', v_minus_t_self,
+              v_minus_t_self is not None and v_minus_t_self <= paired['max_v_minus_t_ce_nats'],
+              max=paired['max_v_minus_t_ce_nats'], v=v, t_self=held.get('crisp_self_greedy'),
+              n_self=held.get('n_self'), t_self_t06=held.get('crisp_self_t06'),
+              v_minus_t_self_t06=held.get('v_minus_t_self_t06'), t_gold=t,
+              v_minus_t_gold=None if v is None or t is None else v - t)
     criterion('v_margin_over_shuffled', None if v is None or shuffled is None else shuffled - v,
               v is not None and shuffled is not None and shuffled - v >= paired['min_v_margin_over_shuffled_nats'],
               min=paired['min_v_margin_over_shuffled_nats'])
@@ -111,7 +118,8 @@ def certificate(declaration, summary_path, *, recipe_sha256, stage, report_path)
             'criteria': criteria, 'reported': reported, 'recipe_sha256': recipe_sha256, 'stage': stage,
             'summary': str(summary_path), 'summary_sha256': sha256_file_hex(summary_path) if summary else None,
             'stage_report': str(report_path),
-            'scope': 'consumers reading values against consumers reading tokens (gold T) on the paired held readers, '
+            'scope': 'consumers reading values against consumers reading the producer\'s own greedy tokens (T_self; '
+                     'gold T and T_self at 0.6 reported) on the paired held readers, '
                      'exact-oracle task success, no drift stop; behaviour gate report-only (owner 2026-10-12)'}
 
 
