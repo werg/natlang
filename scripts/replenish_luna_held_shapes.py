@@ -53,6 +53,11 @@ def active(unit):
 
 def complete(campaign):
     manifest = json.loads((campaign / 'campaign-manifest.json').read_text())
+    exclusions_path = campaign / 'reviewed-exclusions.json'
+    exclusions = json.loads(exclusions_path.read_text()) if exclusions_path.exists() else {}
+    if exclusions and exclusions.get('schema') != 'natlang.generation-reviewed-exclusions/1':
+        raise ValueError(f'Unrecognized reviewed exclusions: {exclusions_path}')
+    excluded = exclusions.get('cases', {})
     pending = False
     for number in range(1, WORKERS + 1):
         worker = campaign / f'worker-{number:02d}'
@@ -84,6 +89,15 @@ def complete(campaign):
         for job in queue:
             result = finished.get(job['key'], {})
             if result.get('status') not in ('complete', 'complete_with_skips') or not result.get('output_accounting', {}).get('complete'):
+                review = excluded.get(job['key'])
+                if review is not None:
+                    accounting = result.get('output_accounting', {})
+                    if (result.get('status') != review.get('finish_status') or
+                            accounting.get('exact_result_rows') != 0 or
+                            accounting.get('output_sha256') != review.get('output_sha256') or
+                            not review.get('reason')):
+                        raise ValueError(f'Reviewed exclusion no longer matches terminal output: {job["key"]}')
+                    continue
                 if retry_transient(campaign, worker, manifest['seed'], number, job, result, retry_dirs):
                     pending = True
                     continue
