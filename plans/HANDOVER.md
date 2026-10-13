@@ -1,5 +1,47 @@
 # Continuation guide — updated 2026-10-14
 
+## 00:42 CEST: deep NL application review and live qualification
+
+Owner reaffirmed that the additive slate should resemble a sizeable natlang
+codebase, with substantive **deep numbered natural-language pseudocode** rather
+than crisp interpretation code. Existing valid shallow catalog sources remain
+eligible. Source contract commit `d478d9f3` adds a review of owned typed
+transformations, named state, scoped NL decisions consumed downstream, distinct
+branches, and finite iterations; exact service and verifier mechanics may stay
+crisp. Astra/Sol authors and curriculum monitor were briefed. Inspect actual
+live code as well as source: large hard-coded JS decision tables do not meet the
+new cohort's idiomatic goal.
+
+Current main is `328d2bdb` after merging DGX's E2E accounting fix; quick gate
+passed and pushed. Pop full `check-main` is still a low-priority ledger waiter,
+`natlang-pop-check-main-20261014-0035-waiter.service`, blocked by trainer RAM;
+do not call this full-verified. QAD trainer is active at ~step14635, GPU ~98%,
+and a complete step14080 checkpoint has replaced the earlier truncated pending
+checkpoint. Ordinary Luna, v10b ecology, paired plain/source-driven six-case
+diagnostics, and first Witness application diagnostic are active. v10b's live
+trace uses explicit case-insensitive entity keys and has consumed a typed scope
+decision; final grading remains pending. In the paired folklore task at turn120,
+source-driven had one >1000-character JS snippet vs baseline seven, and 38 vs30
+NL evals; both runs remain incomplete and the source-driven child still wrote a
+case-specific finding. No cohort adoption or training admission yet.
+
+Witness reached per-record `interpretFrame` NL work. Two wrong-shape calls to
+the trusted `storyEvidence.checkWitnesses` service produced an opaque `flatMap`
+TypeError; the model recovered after reading its declaration. Sol is adding a
+one-sentence argument-shape error at the service boundary and the corresponding
+authoring/integration skill advice. This is a usability bug, not a model-negative
+trajectory. Cave's external checker had a false rejection of a benign
+unreachable terminal node; Astra is repairing it. Treaty Obligation Ledger is a
+third distinct application in progress. Saga/Witness/Cave/Protocol source and
+reference checks still do not grant training admission without live trace and
+independent semantic quality review.
+
+R5 full union directory now occupies ~29GB on Pop after exact discarded-work
+cleanup; root remains ~31GB free. DGX was asked to complete remote manifest
+verification. Do not switch current training inputs merely because files are
+present; await verified admission/split/source-quality decisions. Monitor disk
+as transfer finishes.
+
 ## 00:23 CEST: Pop space for R5 corpus transfer
 
 DGX's exact full R5 transfer initially failed its destination guard: root had
