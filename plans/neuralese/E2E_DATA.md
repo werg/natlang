@@ -120,3 +120,24 @@ campaign-uncovered and s72 redone per trajectory; static-curriculum-s7k b00 (140
 trajectory) and seeds s7011–s7014; v13-r2 (8.4 GB); port-record-calls s3 v1 (~140 GB decompressed), s3 v3, view-ask
 v3. Real-model breadth: Pop's two Luna slots on the shortlist (musique_hops seed 52001, teacher-only families,
 long-text return families, v29 worlds).
+
+### Supervisor audit, 2026-10-13 22:04 UTC
+
+The five sources previously described as never mined have completed shard conversions and are already included in
+the immutable `neuralese-e2e-cohort-20261013-v3` receipt: v13-r2 (54 shards, 4,343 pre-assembly edges),
+campaign-uncovered (20, 3,133), s72 (28, 2,001), static-lambda-v2 (15, 7,539), and bgkit-knowledge (32, 6,871).
+These are conversion counts before assembly deduplication and held-group exclusion, not additional admitted edges.
+None of those sources has an unfinished or failed shard in the current work directory.
+
+Mining execution now uses the canonical checkout for both the Python miner and the TS converter. The retired-worktree
+unit was stopped by exact name and replaced by `e2edata-mine-canonical`, low priority, resumable, 6 GiB; completed
+shard receipts remain intact. The operational inventory is `/home/werg/data/dgxops/mining-progress.json`.
+Remaining work at this observation: 900 port-record-s3-v1 shards and 15 oversized whole-trajectory shards
+(1.2–2.9 GiB each) from the static campaigns. The bounded identity sample contains coherent teacher-program and
+program-IR IDs in the sampled rows; it does not prove whole-file identity or justify splitting a trajectory.
+The oversized inputs remain assigned conversion work, with evidence in
+`/home/werg/data/dgxops/oversized-trajectory-samples.json`; no admission or source deletion follows this audit.
+
+The call-store root-ID collision was fixed in `948fbb40`: a run has a unique root call ID and a separate logical
+`run_label`; seed derivation retains the logical label. Current `runIdentity` and the focused
+`call-store-run-identity.test.mjs` regression cover the mechanism. Do not duplicate this completed repair.
