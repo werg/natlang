@@ -150,6 +150,13 @@ def registry_sources(members: list[dict]) -> list[str]:
 def finish_revision(state: dict, build: dict, union: Path) -> None:
     rev, members, skipped, spec, sig = build['rev'], build['members'], build['skipped'], build['spec'], build['signature']
     union_receipt = json.loads((union / 'receipt.json').read_text())
+    renderings = union_receipt.get('renderings') or {}
+    if not renderings or any(not data.get('by_tokenizer') or not data.get('twin_identity_equal')
+                            or any(stats.get('documents', 0) <= 0
+                                   or stats.get('by_split', {}).get('train', {}).get('documents', 0) <= 0
+                                   for stats in data['by_tokenizer'].values())
+                            for data in renderings.values()):
+        raise ValueError(f'{union}: empty or inconsistent training union; registration refused')
     totals = {r: {t: {'documents': s['documents'], 'by_split': s['by_split']} for t, s in v['by_tokenizer'].items()}
               for r, v in union_receipt['renderings'].items()}
     set_id, union_id = f'{tsm.BASE_ID}-r{rev}', f'{UNION_BASE}-r{rev}'
