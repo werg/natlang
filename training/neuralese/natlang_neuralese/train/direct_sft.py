@@ -60,10 +60,12 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
                   'fp8_training': 'off', 'fp8_recipe': 'delayed', 'fp8_amax_history_len': 16,
                   'gradient_audit_steps': 0, 'saved_tensor_audit_steps': 0,
                   'gradient_digest_steps': 0, 'state_hash_steps': 0, 'sdpa_backend': 'default', 'family': None,
-                  'train_target_tokens': None, 'merge_prefix_rows': False}
+                  'train_target_tokens': None, 'merge_prefix_rows': False, 'cohort_repeats': None}
 # Train-window geometry (HEADER_EFFICIENCY_20261012.md): a running stage changes it only by a windowing continuation
 # (continuation_mode), which rebuilds the plan it trained on under the saved values.
-WINDOWING_KEYS = ('train_target_tokens', 'merge_prefix_rows')
+# cohort_repeats (the epoch's per-cohort repeat counts) changes which windows an epoch holds, so it moves exactly like
+# the window geometry: on the same data by a windowing continuation, or with a data continuation.
+WINDOWING_KEYS = ('train_target_tokens', 'merge_prefix_rows', 'cohort_repeats')
 OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
@@ -116,6 +118,10 @@ def parse(argv=None):
     p.add_argument('--merge-prefix-rows', action=argparse.BooleanOptionalAction, default=False,
                    help='train a decision row that is a prefix of another train row inside that row\'s forward '
                         '(text_warmup.merge_prefix_rows): linear decision chains are forwarded once')
+    p.add_argument('--cohort-repeats', type=json.loads, default=None,
+                   help='JSON {text_cohort: repeats}: in each epoch every document of that cohort (the row field '
+                        'text_cohort; default cohort "native") appears that many times (text_supervision.'
+                        'CohortDocumentSampler); a declared upweighting, e.g. of agentic tool-loop sessions')
     p.add_argument('--batch', type=int, default=1)
     p.add_argument('--eval-batch', type=int, default=1)
     p.add_argument('--eval-every', type=int, default=100)
@@ -447,14 +453,16 @@ def target_bearing(window):
     return roles is None or any(roles[i] in assistant for i in range(window['prefix'], len(window['ids'])))
 
 
-def direct_sampler(targets):
-    """The shared cohort-then-(sampling group-)then-document-then-item sampler, equal cohort weights."""
+def direct_sampler(targets, cohort_repeats=None):
+    """The shared cohort-then-(sampling group-)then-document-then-item sampler, equal cohort weights; an epoch holds
+    each document of a cohort named in ``cohort_repeats`` that many times (--cohort-repeats)."""
     from .text_supervision import CohortDocumentSampler
     cohorts = sorted({w.get('cohort', 'native') for w in targets})
     grouped = any(w.get('sampling_group') is not None for w in targets)
     return CohortDocumentSampler(targets, {c: 1 / len(cohorts) for c in cohorts},
                                  cohort_key=lambda w: w.get('cohort', 'native'), document_key=lambda w: w['document'],
-                                 sampling_group_key=(lambda w: w.get('sampling_group')) if grouped else None)
+                                 sampling_group_key=(lambda w: w.get('sampling_group')) if grouped else None,
+                                 cohort_repeats=cohort_repeats)
 
 
 def _window_length(window):
@@ -479,7 +487,8 @@ def direct_schedule(targets, a, continuation=None):
     packing), then the remaining whole passes over all of this data. ``epochs_covered`` counts seen windows plus this
     data's windows trained so far, over seen plus unseen windows. Returns (sampler, plan)."""
     from .text_supervision import epoch_schedule
-    sampler = direct_sampler(targets)
+    repeats = getattr(a, 'cohort_repeats', None)
+    sampler = direct_sampler(targets, repeats)
     pack = dict(seed=a.seed, length=_window_length, max_tokens=a.batch_tokens, max_items=a.batch)
     if continuation is None:
         return sampler, epoch_schedule(sampler, epochs=a.epochs, updates=None if a.epochs is not None else a.steps,
@@ -492,7 +501,7 @@ def direct_schedule(targets, a, continuation=None):
     plan = [([], seen / total * (i + 1) / consumed) for i in range(consumed)]
     if unseen:
         plan += [(batch, (seen + covered * len(unseen)) / total)
-                 for batch, covered in epoch_schedule(direct_sampler(unseen), epochs=1.0, **pack)]
+                 for batch, covered in epoch_schedule(direct_sampler(unseen, repeats), epochs=1.0, **pack)]
     if a.epochs > 1:
         plan += [(batch, 1.0 + covered) for batch, covered in epoch_schedule(sampler, epochs=a.epochs - 1, **pack)]
     return sampler, plan

@@ -232,3 +232,28 @@ def test_streamed_plan_data_equals_the_trainers_windows(tmp_path):
     _, light_plan = trainer.direct_schedule(light_targets, a)
     assert trainer.plan_documents_sha256(plan) == trainer.plan_documents_sha256(light_plan)
     assert [len(b) for b, _ in plan] == [len(b) for b, _ in light_plan]
+
+
+def test_cohort_repeats_upweight_a_cohort_in_every_epoch_and_continue_with_new_data():
+    """--cohort-repeats: each document of a named cohort appears that many times per epoch (agentic tool-loop
+    sessions, union r4); a continuation onto data with the cohort repeats only its unseen documents."""
+    a = args(cohort_repeats={'agentic-tool-loop': 3})
+    data = corpus(range(30))
+    for w in data:
+        if w['document'] in {'h-1', 'h-2', 'h-3'}:
+            w['cohort'] = 'agentic-tool-loop'
+    _, plan = trainer.direct_schedule(data, a)
+    trained = [w['document'] for batch, _ in plan for w in batch]
+    assert all(trained.count(f'h-{d}') == 3 * 3 for d in (1, 2, 3))  # 3 windows x 3 repeats
+    assert all(trained.count(f'h-{d}') == 3 for d in range(4, 30))
+    assert [c for _, c in plan][-1] == pytest.approx(1.0)
+    _, base = trainer.direct_schedule(data, args())
+    assert len([w for b, _ in base for w in b]) == len(trained) - 2 * 9
+    # Continuation from cohort-free data: the previous plan rebuilds without repeats (no cohort there).
+    previous = corpus(range(10))
+    record, cont = trainer.data_continuation(previous, previous[:2], data, data[:2], consumed=3, previous=None,
+                                             quantization_stage=None, a=a, previous_a=args())
+    unseen_agentic = {w['document'] for w in trainer.continued_unseen(data, record)} & {'h-1', 'h-2', 'h-3'}
+    later = [w['document'] for batch, _ in cont[3:] for w in batch]
+    assert all(later.count(d) == 9 for d in unseen_agentic)
+    assert 'cohort_repeats' in trainer.WINDOWING_KEYS

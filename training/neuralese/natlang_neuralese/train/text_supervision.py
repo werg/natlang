@@ -194,9 +194,17 @@ class CohortDocumentSampler:
 
     Keys explicitly identify the cohort and source document. Several windows or
     target records from one document do not multiply its sampling probability.
+    ``cohort_repeats`` ({cohort: int >= 1}): in an epoch-ordered pass (``epoch``) every draw unit of that cohort
+    appears that many times, each copy shuffled independently with the rest of the pass (a declared upweighting of
+    a cohort in epoch-budgeted stages; cohorts it does not name appear once).
     """
-    def __init__(self, items, cohort_weights=None, *, cohort_key, document_key, sampling_group_key=None):
+    def __init__(self, items, cohort_weights=None, *, cohort_key, document_key, sampling_group_key=None,
+                 cohort_repeats=None):
         grouped = {}
+        if cohort_repeats is not None and (not isinstance(cohort_repeats, dict) or any(
+                not isinstance(k, str) or not k or type(v) is not int or v < 1 for k, v in cohort_repeats.items())):
+            raise ValueError('cohort_repeats maps cohort names to whole repeat counts >= 1')
+        self.cohort_repeats = dict(cohort_repeats or {})
         self.grouped_sampling = sampling_group_key is not None
         self.cohort_key = cohort_key
         sampling_group_cohorts = {}
@@ -256,6 +264,8 @@ class CohortDocumentSampler:
                 'cohort_weights': dict(zip(self.cohorts, self.weights)),
                 'documents': {c: len(d) for c, d in self.documents.items()},
                 'admission_granted': False}
+        if self.cohort_repeats:
+            receipt['epoch_cohort_repeats'] = dict(self.cohort_repeats)
         if self.grouped_sampling:
             receipt.update(sampling_groups={c: len(groups) for c, groups in self.groups.items()},
                            candidate_documents={c: sum(len(group['documents']) for group in groups)
@@ -283,7 +293,7 @@ class CohortDocumentSampler:
                 if self.grouped_sampling and len(candidates) > 1:
                     random.Random(f'{seed}:sampling-group:{cohort}:{group["key"]}').shuffle(candidates)
                     candidates = [candidates[index % len(candidates)]]
-                documents.extend(candidates)
+                documents.extend(candidates * self.cohort_repeats.get(cohort, 1))
         random.Random(f'{seed}:epoch:{index}').shuffle(documents)
         return documents
 

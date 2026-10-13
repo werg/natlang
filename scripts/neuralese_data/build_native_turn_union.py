@@ -247,7 +247,16 @@ def main(argv=None):
     p.add_argument('--member', action='append', required=True, help='NAME:RENDERING:TOKENIZER=PATH')
     p.add_argument('--supersedes', action='append', default=[],
                    help='MEMBER=OLDER_MEMBER; only the named later member may replace the older member')
+    p.add_argument('--cohort', action='append', default=[],
+                   help='MEMBER=COHORT: every row of that member gets text_cohort COHORT (the trainer\'s cohort, e.g. '
+                        'agentic-tool-loop for pi/harness/SWE sessions, upweighted by --cohort-repeats)')
     a = p.parse_args(argv)
+    cohorts = {}
+    for item in a.cohort:
+        member, _, cohort = item.partition('=')
+        if not member or not cohort:
+            p.error(f'invalid --cohort {item!r}; expected MEMBER=COHORT')
+        cohorts[member] = cohort
     t0 = time.time()
     tokenizer_dirs = dict(item.split('=', 1) for item in a.tokenizer)
     members = defaultdict(dict)  # rendering -> [(name, {tok: path})] in order
@@ -296,6 +305,7 @@ def main(argv=None):
                     for rendering, by_name in members.items()}
     receipt = {'schema': SCHEMA, 'renderings': {}, 'held_groups': len(held_groups), 'held_texts': len(held_texts),
                'member_files': member_files,
+               'member_cohorts': dict(sorted(cohorts.items())),
                'member_supersedes': {rendering: {name: sorted(supersedes.get(name, set())) for name in names}
                                      for rendering, names in order.items()},
                'tokenizers': {tok: str(Path(d).resolve()) for tok, d in tokenizer_dirs.items()},
@@ -345,8 +355,14 @@ def main(argv=None):
                     for line, row in rows(members[rendering][name][tok]):
                         if (name, row['id']) not in selected:
                             continue
+                        changed = False
                         if 'corpus' not in row:
                             row['corpus'] = name
+                            changed = True
+                        if name in cohorts and row.get('text_cohort') != cohorts[name]:
+                            row['text_cohort'] = cohorts[name]
+                            changed = True
+                        if changed:
                             line = canonical(row) + '\n'
                         n = len(row['token_ids'])
                         supervised = (n - row['supervised_suffix_start'] if row.get('supervised_suffix_start') is not None
@@ -357,6 +373,12 @@ def main(argv=None):
                             bucket['tokens'] += n
                             bucket['supervised_tokens'] += supervised
                         m[row['split'] + '_documents'] += 1
+                        c = stats.setdefault('by_cohort', {}).setdefault(row.get('text_cohort', 'native'), {
+                            'documents': 0, 'train_documents': 0, 'tokens': 0, 'supervised_tokens': 0})
+                        c['documents'] += 1
+                        c['train_documents'] += row['split'] == 'train'
+                        c['tokens'] += n
+                        c['supervised_tokens'] += supervised
                         stats['documents'] += 1
                         order_check.append((row['id'], row['split'], tuple(row['source_groups'])))
                         dst.write(line if line.endswith('\n') else line + '\n')

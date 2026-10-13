@@ -163,3 +163,11 @@ def test_target_set_signature_pins_supersedes_policy():
     base = {'id': 'new', 'files': {'full': {'lfm': 'new-lfm', 'mellum': 'new-mellum'}}}
     superseding = {**base, 'supersedes': ['old']}
     assert target_set_manifest.signature([base]) != target_set_manifest.signature([superseding])
+
+
+def test_target_set_signature_pins_member_cohorts():
+    import target_set_manifest as tsm
+    member = {'id': 'harness', 'supersedes': [], 'files': {'program-header': {'lfm25': 'a', 'mellum21': 'b'}}}
+    plain = tsm.signature([member])
+    assert tsm.signature([{**member, 'cohort': None}]) == plain
+    assert tsm.signature([{**member, 'cohort': 'agentic-tool-loop'}]) != plain

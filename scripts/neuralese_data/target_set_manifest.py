@@ -61,6 +61,8 @@ def resolve(registry: dict, spec: dict) -> tuple[list[dict], list[dict]]:
     by_id = {c['id']: c for c in corpora}
     superseded = superseded_ids(corpora)
     exclude = {item['id']: item['reason'] for item in spec.get('exclude', [])}
+    # spec 'cohorts': {cohort: [member id, ...]}: the trainer cohort (row text_cohort) of each named member's rows.
+    cohort_of = {m: cohort for cohort, ids in (spec.get('cohorts') or {}).items() for m in ids}
     members, skipped = [], []
     for c in corpora:
         if not isinstance(c.get('renders'), dict) or c['id'].startswith(BASE_ID) or c.get('kind') == 'union':
@@ -85,7 +87,7 @@ def resolve(registry: dict, spec: dict) -> tuple[list[dict], list[dict]]:
         supersedes = c.get('supersedes') or []
         supersedes = [supersedes] if isinstance(supersedes, str) else list(supersedes)
         members.append({'id': c['id'], 'derived_from': c.get('derived_from'), 'supersedes': supersedes,
-                        'files': files,
+                        'files': files, 'cohort': cohort_of.get(c['id']),
                         'stats': {r: {t: (c['renders'].get(r, {}).get(t) or {}).get('by_split') for t in TOKENIZERS}
                                   for r in files}})
     for ext in spec.get('external_members', []):
@@ -99,7 +101,7 @@ def resolve(registry: dict, spec: dict) -> tuple[list[dict], list[dict]]:
         supersedes = ext.get('supersedes') or []
         supersedes = [supersedes] if isinstance(supersedes, str) else list(supersedes)
         members.append({'id': ext['id'], 'registry_ids': ext['registry_ids'], 'supersedes': supersedes,
-                        'note': ext.get('note', ''),
+                        'note': ext.get('note', ''), 'cohort': cohort_of.get(ext['id']),
                         'files': ext['files']})
     return members, skipped
 
@@ -107,7 +109,8 @@ def resolve(registry: dict, spec: dict) -> tuple[list[dict], list[dict]]:
 def signature(members: list[dict]) -> str:
     import hashlib
     key = [(m['id'], sorted(m.get('supersedes') or []),
-            sorted((r, t, p) for r, toks in m['files'].items() for t, p in toks.items())) for m in members]
+            sorted((r, t, p) for r, toks in m['files'].items() for t, p in toks.items()))
+           + ((m['cohort'],) if m.get('cohort') else ()) for m in members]
     return hashlib.sha256(json.dumps(sorted(key)).encode()).hexdigest()
 
 
