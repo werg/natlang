@@ -788,6 +788,17 @@ def status(args):
 def cancel(args):
     """Drop a waiting or requeued entry from the queue (a stale bench, test or duplicate waiter)."""
     unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
+    waiter = unit.removesuffix('.service') + '-waiter.service'
+    loaded = subprocess.run(['systemctl', '--user', 'show', waiter, '-p', 'LoadState', '--value'],
+                            capture_output=True, text=True)
+    if loaded.stdout.strip() == 'loaded':
+        # Stop the renewing client before removing its entry; otherwise its next
+        # admission poll silently restores the cancelled request. The execution
+        # unit has its own cgroup and is deliberately left alone.
+        subprocess.run(['systemctl', '--user', 'stop', waiter], check=True,
+                       capture_output=True, text=True)
+    elif loaded.returncode and loaded.stdout.strip() != 'not-found':
+        raise RuntimeError('cannot inspect detached waiter: ' + loaded.stderr.strip())
     with ledger() as state:
         entry = state.get('waiting', {}).pop(unit, None)
         if entry is not None:

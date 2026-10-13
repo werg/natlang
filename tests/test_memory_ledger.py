@@ -592,6 +592,9 @@ def test_the_guard_relaunches_a_requeued_unit_behind_a_head_that_waits_for_room(
 
 
 def test_cancel_drops_a_queue_entry_and_reset_peak_clears_or_sets_a_family_peak(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    monkeypatch.setattr(ledger.subprocess, 'run', lambda *args, **kwargs:
+                        SimpleNamespace(returncode=0, stdout='not-found\n'))
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     with ledger.ledger() as state:
         state['waiting'] = {'old-bench.service': {'priority': 'low', 'since': 1.0, 'budget': GIB, 'requeued': True}}
@@ -605,6 +608,33 @@ def test_cancel_drops_a_queue_entry_and_reset_peak_clears_or_sets_a_family_peak(
     ledger.reset_peak(type('A', (), {'family': 'fam-x', 'to_gb': None})())
     with ledger.ledger() as state:
         assert 'fam-x' not in state['family_peaks']
+
+
+def test_cancel_stops_renewing_detached_waiter_before_removing_queue_entry(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    with ledger.ledger() as state:
+        state['waiting'] = {'render.service': {'priority': 'low', 'since': 1, 'budget': GIB}}
+        state['claims'] = {'training.service': {'budget': 100 * GIB}}
+    calls = []
+
+    def systemctl(command, **kwargs):
+        calls.append(command)
+        if command[2] == 'show':
+            return SimpleNamespace(returncode=0, stdout='loaded\n')
+        assert command == ['systemctl', '--user', 'stop', 'render-waiter.service']
+        # Simulate the last poll refreshing its request while systemd stops it.
+        with ledger.ledger() as state:
+            assert 'render.service' in state['waiting']
+            state['waiting']['render.service']['since'] = 2
+        return SimpleNamespace(returncode=0, stdout='')
+
+    monkeypatch.setattr(ledger.subprocess, 'run', systemctl)
+    assert ledger.cancel(type('A', (), {'unit': 'render.service'})()) == 0
+    with ledger.ledger() as state:
+        assert state['waiting'] == {}
+        assert state['claims'] == {'training.service': {'budget': 100 * GIB}}
+    assert len(calls) == 2
 
 
 def test_a_unit_backfills_only_behind_a_head_that_preemption_cannot_help():
