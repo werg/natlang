@@ -4,6 +4,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { rateLimited, transportFailure, retryWaitMs, retryAfterMs, providerFinishReason, providerRequestRetryable } from './retry.js';
 import { mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { openAICompatibleModelTurn } from '../model/openai-compatible.js';
 import { createManagedModelSession } from '../model/local-server.js';
@@ -1388,7 +1389,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   // their declarations only (native/external.ts).
   const declarations: Record<string, string> = { ...effects.declarations };
   for (const [name, source] of Object.entries((record.semantics as { services?: Record<string, string> }).services ?? {})) {
-    const external = externalModule(name, source);
+    const external = externalModule(name, source, createRequire(import.meta.url));
     services[name] = external.exports as object;
     declarations[name] = external.declaration;
   }

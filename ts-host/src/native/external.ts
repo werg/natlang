@@ -8,11 +8,14 @@ import ts from 'typescript';
 export type ExternalModule = { exports: Record<string, unknown>; declaration: string };
 
 /** Compile a TypeScript module to run in the host, and derive the declaration the model is shown. */
-export function externalModule(name: string, source: string): ExternalModule {
+export function externalModule(name: string, source: string,
+  requireModule?: (specifier: string) => unknown): ExternalModule {
   const options = { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 };
   const js = ts.transpileModule(source, { compilerOptions: options, fileName: `${name}.ts` }).outputText;
   const module = { exports: {} as Record<string, unknown> };
-  new Function('exports', 'module', js)(module.exports, module);
+  // Trusted host services may import Node builtins (for example crypto for
+  // exact source hashes). TypeScript emits CommonJS require calls here.
+  new Function('exports', 'module', 'require', js)(module.exports, module, requireModule);
   const declared = ts.transpileDeclaration(source, { compilerOptions: options, fileName: `${name}.ts` }).outputText;
   return { exports: module.exports, declaration: declarationNamespace(name, declared) };
 }

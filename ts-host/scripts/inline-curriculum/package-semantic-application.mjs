@@ -138,7 +138,7 @@ const qualityAudit = { schema: 'natlang.semantic-application-quality-observation
   graph_cycle_suspected: graphCycleSuspected,
   declared_scoped_literal_sites: scopedSitePaths.length,
   sites_with_nl_instruction: scopedSitePaths.filter(path => typeof files[path] === 'string' &&
-    /\bnl(?:\.with)?\b/.test(files[path])).length,
+    /\bnl(?:\.with)?\b/i.test(files[path])).length,
   declared_literal_consumers: scopedSites.filter(site => typeof site === 'object' &&
     typeof site.consumed_by === 'string' && site.consumed_by.trim()).length,
   crisp_policy_displacement: 'manual_review_pending',
