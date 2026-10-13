@@ -106,6 +106,12 @@ Fix: the resume uses the shared `backbone_policy.restore_backbone_trainables` (p
 `plain_named_tensors`), as the other trainers do. Confirmed in a real run: arm B, stopped by a preemption after its 60
 updates, resumed on the new code from its step-60 checkpoint and wrote its final report.
 
+### Streamed e2e could not start from the HDD corpus (fixed on main 27de5139)
+
+The recipe launcher stages HDD-resident data inputs to the NVMe cache, but only the bound file. `--record-source
+trajectories` then refused the staged `records.jsonl` for lack of `chains.jsonl` beside it, so no streamed e2e run of
+neuralese-e2e-v1 (both lines) could start from corpus v2. `hdd_guard` now stages declared sidecars with the input.
+
 ### Arm D, step 0: the exact-token hypothesis does not explain V−T (2026-10-13)
 
 Owner hypothesis: the model reads convex blends of embeddings poorly (the embedding space is not a VAE space), so the
@@ -133,7 +139,19 @@ same order, seed and held readers as round 2.
 |---|---|---|---|
 | A `r4-text-heads-3e-4` (writer 3e-4) | 0.599 → 0.544 | 0.471 → 0.617 | 0.362 → 0.387 |
 | B `r4-text-heads-3e-6` (writer 3e-6) | 0.599 → 0.565 | 0.471 → 0.529 | 0.362 → 0.422 |
-| D `d-chosen-heads-3e-4` (E[chosen] + correction, writer 3e-4) | running | 0.4675 at 0 | 0.3622 at 0 |
+| D `d-chosen-heads-3e-4` (E[chosen] + correction, writer 3e-4) | 0.599 → 0.544 | 0.468 → 0.531 | 0.362 → 0.390 |
+| PH `r4-ph-heads-3e-6` (program-header v1.1, writer 3e-6) | 0.443 → 0.469 | not measurable (below) | not measurable |
+
+Arm D, writer 3e-4: V−T 0.106 → 0.141, the same picture as arm A (0.109 → 0.230). The writer rate, not the value
+base, drives the degradation. Arm D at writer 3e-6 is skipped: arm B covers the stable rate.
+
+PH (program-header v1.1, writer 3e-6): held crisp CE starts 0.156 nats lower than the full rendering (0.443 against
+0.599). The parent export was trained in program-header, while e2e ran in full. Under the same updates it drifts up
+slightly (0.443 → 0.469), where full rendering improves (0.599 → 0.565). V and T are not measurable in PH:
+`select_paired_held` proves a reader pair through the producer's function-body soft IDs and its tool-argument schema,
+and the program-header rendering drops both (pieces resolved to text, tools `[]`), so 0 of 453 reader rows are
+eligible. Fix to make: pair on the full-rendering twin (v1.1 has v1's record ids and re-authenticated equal edges)
+and evaluate in PH.
 
 Arm B: with the writer at 3e-6, V−T stays flat (0.109 → 0.107 at step 50, 0.108 at step 60: V 0.510, T 0.402;
 arm A: 0.109 → 0.230). The writer rate
