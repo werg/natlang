@@ -90,6 +90,7 @@
     "drift_gate_every": 300,
     "gate_held_rows": 48,
     "task_eval": {
+     "prompt_rendering": "full",
      "packet": {
       "path": "runs/natlang-held-task-packet-v3-20261012/cases.jsonl",
       "sha256": "535269866aeecc107e3cc8b165790a5b200cdb104884d4994958eee17eb6be95"

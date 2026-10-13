@@ -1062,7 +1062,8 @@ def recipe_handoff_epoch_changes(old_recipe, new_recipe):
 # neuralese_direct train-window geometry (direct_sft.WINDOWING_KEYS, plans/neuralese/HEADER_EFFICIENCY_20261012.md):
 # a handoff may change it on an unfinished direct stage; the trainer continues by a windowing continuation (the plan
 # it trained on rebuilt under the saved geometry, its consumed documents seen, the rest under the new geometry).
-DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'train_min_context_tokens')
+DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'cohort_repeats', 'recovery_selection',
+                               'train_min_context_tokens')
 
 
 def direct_windowing_handoffs(old_recipe, new_recipe, out):

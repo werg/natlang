@@ -166,7 +166,7 @@ def test_a_windowing_continuation_rebuilds_the_trained_plan_and_trains_the_unsee
     stage = {'id': 'direct_sft', 'progress': [0.0, 0.35], 'start': 0, 'end': 'derived'}
     record, plan = trainer.data_continuation(old_targets, held, new_targets, held, consumed=consumed, previous=None,
                                              quantization_stage=stage, a=new_a, previous_a=old_a)
-    unchanged = {'cohort_repeats': None, 'train_min_context_tokens': 0}
+    unchanged = {'cohort_repeats': None, 'recovery_selection': None, 'train_min_context_tokens': 0}
     assert record['windowing'] == {'previous': {'train_target_tokens': None, 'merge_prefix_rows': False, **unchanged},
                                    'current': {'train_target_tokens': 56, 'merge_prefix_rows': True, **unchanged}}
     assert record['held']['rebased'] is False
@@ -211,6 +211,21 @@ def test_the_recipe_handoff_admits_a_window_geometry_change_of_an_unfinished_dir
                                                              'merge_prefix_rows': True}}, 'stages': [stage]}
     changes, old_stripped, new_stripped = runner.direct_windowing_handoffs(old, new, tmp_path)
     assert changes == {'direct_sft': {'train_target_tokens': [None, 31744], 'merge_prefix_rows': [None, True]}}
+    assert old_stripped == new_stripped
+
+
+def test_the_recipe_handoff_admits_recovery_selection_and_cohort_repeats_as_a_windowing_continuation(tmp_path):
+    """A running lineage adopts the recovery sampling group (mined recovery selection, cohort repeats) at a handoff by
+    the trainer's windowing continuation; the recipe check must not refuse it as an identity change (Pop v10, 2026-10-13)."""
+    from natlang_neuralese.train import recipe as runner
+    stage = {'id': 'direct_sft', 'kind': 'neuralese_direct', 'parameters': {'epochs': 1.0}}
+    selection = {'path': 'runs/x/recovery-selection.jsonl', 'sha256': 'ab', 'rendering': 'program-header',
+                 'rules': ['failed', 'empty', 'identical']}
+    old = {'stage_parameter_defaults': {'neuralese_direct': {'tokens': 32768}}, 'stages': [stage]}
+    new = {'stage_parameter_defaults': {'neuralese_direct': {'tokens': 32768, 'recovery_selection': selection,
+                                                             'cohort_repeats': {'recovery': 2}}}, 'stages': [stage]}
+    changes, old_stripped, new_stripped = runner.direct_windowing_handoffs(old, new, tmp_path)
+    assert changes == {'direct_sft': {'cohort_repeats': [None, {'recovery': 2}], 'recovery_selection': [None, selection]}}
     assert old_stripped == new_stripped
 
 

@@ -1792,3 +1792,19 @@ u11204 full checkpoint while this arm runs.
   planned with the DGX ops agent. LFM does the same.
 - Related, the same day: the soft-token mixture is removed as the value (value = learned P(h), `dgx-projection`), and
   e2e takes no value or manifold auxiliary loss.
+
+## Generative evals and serving use the full system prompt (owner, 2026-10-13)
+
+"Even if we train without the system prompt (just for economy) we run our generative evals and inference with the proper
+system prompt, for more realistic better results, for all of our models."
+- `task_eval.prompt_rendering` defaults to `full` (`eval/task_cadence.py parse_task_eval`) and is declared `full` in
+  neuralese-direct-v3 and neuralese-e2e-v1; the former default (the rendering of the stage's training rows) is gone.
+- `train/direct_export.py` serves `full` unless an explicit `serving_prompt_rendering` says otherwise (the parent export
+  of the combined v4 gap passes `full`); `eval/task_packet.py export --serving-prompt-rendering` defaults to `full`.
+- Unchanged by design: the 48-probe behaviour gate and the paired plain-behaviour probes render the probe text with the
+  pinned base tokenizer's chat template (they are model-behaviour probes, not program renderings); `run_bonsai_queue.py`
+  passes an entry's `prompt_rendering` through (the task eval sets it from the spec); the GGUF deploy
+  (`scripts/mellum_deploy_gguf.py`) converts weights only and carries no prompt policy.
+- Measured once: Mellum v4 step-3600 eval in `full` (in the run) beside a program-header one-off of the same checkpoint
+  (MODEL_FACING_CHANGES.md).
+

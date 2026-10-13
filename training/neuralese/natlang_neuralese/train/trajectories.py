@@ -2508,9 +2508,9 @@ def main(argv=None):
     leaves = {leaf_ids[name]: p for name, p in params.items()}
     from ..eval.task_cadence import TaskEval, parse_task_eval
     task_eval_spec = parse_task_eval(args.task_eval)
-    # Served through this stage's own engine in this process (no second copy of the weights), with the serving prompt
-    # policy the engine was restored with (a direct export binds its prompt rendering).
-    task_eval = (TaskEval(task_eval_spec, out, engine, prompt_rendering=getattr(engine, 'prompt_rendering', None) or 'full')
+    # Served through this stage's own engine in this process (no second copy of the weights), with the task_eval
+    # prompt policy (default full: generative evals use the proper system prompt, owner 2026-10-13).
+    task_eval = (TaskEval(task_eval_spec, out, engine, prompt_rendering='full')  # the spec's own setting wins (default full)
                  if task_eval_spec is not None else None)
 
     def task_eval_report(step):

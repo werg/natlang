@@ -1,7 +1,7 @@
 """In-run task-success evaluation (owner decision 2026-10-12): spec parsing, serving policy and the qualification gate."""
 import pytest
 
-from natlang_neuralese.eval.task_cadence import DEFAULT_CASES, parse_task_eval, task_gate, training_prompt_rendering
+from natlang_neuralese.eval.task_cadence import DEFAULT_CASES, parse_task_eval, task_gate
 
 
 def test_spec_defaults_to_a_fixed_sixteen_task_subset_and_validates():
@@ -17,9 +17,12 @@ def test_spec_defaults_to_a_fixed_sixteen_task_subset_and_validates():
         parse_task_eval({'packet': {'path': 'p', 'sha256': 'x'}, 'cases': [1, 1]})
 
 
-def test_serving_policy_follows_the_rows_the_stage_trains_on():
-    assert training_prompt_rendering([{'prompt_rendering': 'program-header'}] * 3 + [{}]) == 'program-header'
-    assert training_prompt_rendering([{}, {}]) == 'full'
+def test_generative_eval_renders_the_full_system_prompt_unless_set_otherwise():
+    packet = {'path': 'p', 'sha256': 's'}
+    assert parse_task_eval({'packet': packet})['prompt_rendering'] == 'full'  # whatever the stage trains on
+    assert parse_task_eval({'packet': packet, 'prompt_rendering': 'program-header'})['prompt_rendering'] == 'program-header'
+    with pytest.raises(ValueError):
+        parse_task_eval({'packet': packet, 'prompt_rendering': 'other'})
 
 
 def test_task_gate_is_relative_to_the_base_and_the_previous_evaluation():

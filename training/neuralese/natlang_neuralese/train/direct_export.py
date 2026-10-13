@@ -561,8 +561,10 @@ def export_direct_checkpoint(checkpoint_path: str | Path, output_dir: str | Path
     options = identity.get("options") or {}
     inputs = identity.get("inputs") or {}
     from ..data.prompt_rendering import checkpoint_prompt_rendering, prompt_rendering_identity
+    # Owner 2026-10-13: a model trained without the system prompt (for economy) is still served and evaluated with
+    # the proper full system prompt; program-header serving is an explicit setting only.
     prompt_mode, prompt_source = checkpoint_prompt_rendering(
-        identity, serving_mode=serving_prompt_rendering)
+        identity, serving_mode=serving_prompt_rendering or "full")
     prompt_contract = prompt_rendering_identity(prompt_mode)
     anchor_value = options.get("heads")
     anchor_path = Path(anchor_value).resolve(strict=True) if anchor_value else None

@@ -1225,13 +1225,11 @@ def main(argv=None):
     # corpus rows (including their JSON text and source arrays) are no longer
     # needed after extracting these producer-declared context masks; keeping
     # them alive needlessly duplicates a large fraction of the corpus in RAM.
-    from ..eval.task_cadence import training_prompt_rendering
-    serving_rendering = training_prompt_rendering(rows)
     del rows
     from ..eval.task_cadence import TaskEval, parse_task_eval
     task_eval_spec = parse_task_eval(a.task_eval)
     # Served through the stage's own engine at the eval cadence, in this process (no second copy of the weights).
-    task_eval = (TaskEval(task_eval_spec, a.out, engine, prompt_rendering=serving_rendering)
+    task_eval = (TaskEval(task_eval_spec, a.out, engine, prompt_rendering='full')  # the spec's own setting wins (default full)
                  if task_eval_spec is not None else None)
     final_task_summary = None
 

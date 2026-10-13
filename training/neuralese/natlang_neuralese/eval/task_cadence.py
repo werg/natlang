@@ -16,7 +16,9 @@ The spec (stage parameter ``task_eval``, JSON):
   packet          {"path", "sha256"}: a registered held task packet (natlang.program records; rows with an
                   authored_root_eval contract run their authored root, all others run the whole program)
   cases           packet row indices of the fixed subset (default: every third row, 16 of 48)
-  prompt_rendering  serving prompt policy; default: the policy the stage's training rows declare
+  prompt_rendering  serving prompt policy for the generative evaluation; default: full, whatever the stage trains on
+                  (owner 2026-10-13: models trained without the system prompt for economy are still evaluated and served
+                  with the proper full system prompt; program-header only as an explicit setting)
   case_seconds    wall budget per task (collection resource limit, not a model label; default 7200, set from the
                   2026-10-13 LFM2.5-2.6B measurement in plans/neuralese/DECISIONS.md "Task-eval budgets")
   max_model_requests / max_turns   per-task request and turn budgets (default 128 / 160)
@@ -92,16 +94,11 @@ def parse_task_eval(value):
         raise ValueError('task_eval.async must be true or false')
     if spec.get('prompt_rendering') not in (None, 'full', 'program-header'):
         raise ValueError('task_eval.prompt_rendering must be full or program-header')
+    spec.setdefault('prompt_rendering', 'full')
     temperature = spec.setdefault('temperature', 0)
     if isinstance(temperature, bool) or not isinstance(temperature, (int, float)) or not 0 <= temperature <= 2:
         raise ValueError('task_eval.temperature must be a number in [0, 2]')
     return spec
-
-
-def training_prompt_rendering(rows) -> str:
-    """The serving policy the stage's training rows declare (undeclared rows are the historical full prompt)."""
-    counts = collections.Counter((row.get('prompt_rendering') or 'full') for row in rows)
-    return counts.most_common(1)[0][0] if counts else 'full'
 
 
 def node_path_env() -> dict:
@@ -135,7 +132,7 @@ class TaskEval:
         from .task_packet import read_jsonl
 
         self.spec, self.out, self.engine = spec, Path(out), engine
-        self.prompt_rendering = spec.get('prompt_rendering') or prompt_rendering
+        self.prompt_rendering = spec.get('prompt_rendering') or prompt_rendering or 'full'
         from ..common.paths import root as logical_root
         # Repo-relative paths resolve against the live checkout (a training run executes a code snapshot that
         # carries neither runs/ nor the built ts-host).

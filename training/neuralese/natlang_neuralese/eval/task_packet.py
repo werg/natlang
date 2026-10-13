@@ -293,7 +293,8 @@ def main(argv: list[str] | None = None) -> None:
     exporter.add_argument("--base-snapshot", type=Path, required=True)
     exporter.add_argument("--launch-receipt", type=Path, required=True)
     exporter.add_argument("--serving-prompt-rendering", choices=("full", "program-header"), default=None,
-                          help="explicit serving policy; required when checkpoint text inputs mix rendering modes")
+                          help="serving policy; default full (owner 2026-10-13: served and evaluated with the full "
+                               "system prompt even when trained without it); program-header only when explicit")
     args = parser.parse_args(argv)
     if args.command == "export":
         print(json.dumps(export_checkpoint(args), indent=2, ensure_ascii=False))
