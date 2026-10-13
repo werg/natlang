@@ -62798,6 +62798,585 @@
       "split": "train only; inherited from source decision rows",
       "required_conversion": "include in next broad LFM union; Mellum twin DGX-owned",
       "license": "inherited from source corpus; factual provenance"
+    },
+    {
+      "id": "natlang-native-turns-e2e-pilot-s41001-render-20261013-v1",
+      "owner": "dgx",
+      "path": "runs/natlang-native-turns-e2e-pilot-s41001-render-20261013-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: neuralese-e2e-cohort-20261012-v2; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "neuralese-e2e-cohort-20261012-v2"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "b379af68a45b1e75bdd215f23c11e6dac4388bb30b49f9f234e3b905860f21f1",
+            "documents": 337,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 337,
+                "supervised_tokens": 14964,
+                "tokens": 2197904,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 8388,
+            "merge_omissions": {
+              "exact_duplicate_document": 7
+            }
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "9d0dcb85a6d21a8bfd5fc902a7a53b3ebdc15bd94f850bbde4f767606d66fdf2",
+            "documents": 337,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 337,
+                "supervised_tokens": 19204,
+                "tokens": 2217012,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 8548,
+            "merge_omissions": {
+              "exact_duplicate_document": 7
+            }
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "cd2e7ae7c0e0b2eb3ccb106f70a754c06f403b574f01eb49b9201301e170ce75",
+            "documents": 7209,
+            "by_split": {
+              "test": {
+                "assistant_tokens": 0,
+                "documents": 17,
+                "supervised_tokens": 936,
+                "tokens": 15240,
+                "tool_tokens": 0
+              },
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 7192,
+                "supervised_tokens": 252854,
+                "tokens": 7459912,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 4473,
+            "merge_omissions": {
+              "exact_duplicate_document": 1079
+            }
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "43237232361a5c3ef44819e23fd62b5d82714e312aa64645502c85122397e652",
+            "documents": 7209,
+            "by_split": {
+              "test": {
+                "assistant_tokens": 0,
+                "documents": 17,
+                "supervised_tokens": 1126,
+                "tokens": 16292,
+                "tool_tokens": 0
+              },
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 7192,
+                "supervised_tokens": 340824,
+                "tokens": 7812351,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 5397,
+            "merge_omissions": {
+              "exact_duplicate_document": 1079
+            }
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "18877b6b30c40a70b3bf3ec84ff21ff0963e6a5c3f6487467fb4dfca9953f732",
+            "documents": 4108,
+            "by_split": {
+              "test": {
+                "assistant_tokens": 3120,
+                "documents": 9,
+                "opening_tokens": 1966,
+                "supervised_tokens": 1154,
+                "tokens": 8534,
+                "tool_tokens": 2623
+              },
+              "train": {
+                "assistant_tokens": 1923329,
+                "documents": 4099,
+                "opening_tokens": 1585421,
+                "supervised_tokens": 337908,
+                "tokens": 4022923,
+                "tool_tokens": 889071
+              }
+            },
+            "max_document_tokens": 4444,
+            "merge_omissions": {
+              "exact_duplicate_document": 508
+            }
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "7aa9297a30957eb810d4cf748891e66c3866f33f6d3591645e6930056f8864c1",
+            "documents": 4108,
+            "by_split": {
+              "test": {
+                "assistant_tokens": 3781,
+                "documents": 9,
+                "opening_tokens": 2171,
+                "supervised_tokens": 1610,
+                "tokens": 9497,
+                "tool_tokens": 2913
+              },
+              "train": {
+                "assistant_tokens": 2153591,
+                "documents": 4099,
+                "opening_tokens": 1586796,
+                "supervised_tokens": 566795,
+                "tokens": 4358263,
+                "tool_tokens": 986858
+              }
+            },
+            "max_document_tokens": 5403,
+            "merge_omissions": {
+              "exact_duplicate_document": 508
+            }
+          }
+        }
+      },
+      "selection": {
+        "omitted:not_approved": 67,
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 8315,
+        "selected:test": 19,
+        "selected:train": 8296,
+        "source_rows": 8382
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 7944,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 7944
+      },
+      "program_header_parity": {
+        "equal": 16576,
+        "retokenization_checked": 16576
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "aa4bf1e0438b5aae110ce42d48916c06898dc0ce99d73e90bddc4210667c0982",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/natlang-native-turns-e2e-pilot-s41001-render-20261013-v1/receipt.json",
+        "sources": {
+          "/home/werg/data/e2e-data/pilot/plans/actor_greenhouse/native.jsonl": {
+            "bytes": 4488276,
+            "sha256": "97d8f6cd7a4e2fd167d41c12d6b8165bb9bdf415ca35211bc61804e8432229b6"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/actor_route_replan/native.jsonl": {
+            "bytes": 4576043,
+            "sha256": "78ceba3394b41790150d4a34245a70599a4af42c5d4d429f71df1c3bf79dee79"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/alfworld_task.building-150423/native.jsonl": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/anli_batch.building-4124576/native.jsonl": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/chat_reply/native.jsonl": {
+            "bytes": 417715,
+            "sha256": "a605215696af1c6b9ba43dcacb5bea3e20eb76a1c3502f19b3cf25c1d91db5de"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/child_opt_out/native.jsonl": {
+            "bytes": 2149443,
+            "sha256": "d94849b56f9fe5834466ccbd9ba083ad032a338e0139f990c5f4dd8605eb418f"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/child_sufficiency/native.jsonl": {
+            "bytes": 2983024,
+            "sha256": "f80dee002ae1c7ac3469fdccde8cb18c739e5ee885b4e1474ccbeb69a6086cde"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/citance_summary/native.jsonl": {
+            "bytes": 1257472,
+            "sha256": "668cfa57595beb2484c113e73f9fc92e4a05cda955776deb05e4a885f1765e8c"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/claims_desk/native.jsonl": {
+            "bytes": 6029896,
+            "sha256": "a027246156fa4fb2610a893790d070ad47f625b338cbfe93cec1bb19cb7b1f2d"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/commaqa_numeric/native.jsonl": {
+            "bytes": 3683022,
+            "sha256": "2a26d82720517af0a727547bf89c3c797b923d9231134f500e31fac570bf1376"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/commaqa_question.building-124877/native.jsonl": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/composed_helpers/native.jsonl": {
+            "bytes": 1413296,
+            "sha256": "75bb2cec3f333e29c91caeb705d052fbe4d2bae041a1d7004e6cc9221d5569c1"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/composed_process/native.jsonl": {
+            "bytes": 849518,
+            "sha256": "4d24cfd0e43b29f9bfeee804175d3ce93d63f79748e1cc8d6774583f79f6fb70"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/constrained_rewrite/native.jsonl": {
+            "bytes": 432581,
+            "sha256": "b36e589a3217fffc089749a34da53a230a8e5ff7569b44c9540100184bf0c9f1"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/constrained_writing/native.jsonl": {
+            "bytes": 412583,
+            "sha256": "efdee657eb8a7061f3d6527859be85bae0b10c8be16e2a694d6dd2087b0f1748"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/contract_desk/native.jsonl": {
+            "bytes": 30060356,
+            "sha256": "8c2c4ceabe86ebbbfda7e93bdded51e809d93bdacf0c0829b2ae0ac34258bcd8"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/contract_diagnosis/native.jsonl": {
+            "bytes": 3761454,
+            "sha256": "6f03451711ffb28886ddf50282790f655737229c8bb241328062a69c8da144b0"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/counterexample_revision/native.jsonl": {
+            "bytes": 911148,
+            "sha256": "38e2dfb9b12db09822a2ec5af78c1e63d78a53b5ca9b1aa94be3b6375740cd53"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/cross_source_folders.building-3939491/native.jsonl": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/dataset_workbench/native.jsonl": {
+            "bytes": 17280043,
+            "sha256": "daae8f99190564708ac2cfcfac069c0974a3048d41b5dbba907acf2cf0978fb3"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/decision_evidence/native.jsonl": {
+            "bytes": 7620152,
+            "sha256": "dc9a50309f0e173638215bd203fe06522cd682f35f893e86542235da69a83b91"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/decision_extract_chain/native.jsonl": {
+            "bytes": 1762672,
+            "sha256": "87d57f8b58aae1d62b5d4162af1ed8a50789cc8488fefbd8d884bbd66a96773f"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/decision_patch/native.jsonl": {
+            "bytes": 7573608,
+            "sha256": "c1b58fb49a3144da33e76cfda18f258f6a9a7de0462c5e0256b28fb11f963b66"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/decision_skill_catalog/native.jsonl": {
+            "bytes": 1909735,
+            "sha256": "550b4a99e7e19859a2c09fabb45f9cce04ae42197bd372dd5e835e656c75178f"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/decision_skills/native.jsonl": {
+            "bytes": 7660817,
+            "sha256": "bb4ef5bb72a88046d07667c73fa98a7fc0b12b5995ff3fb708afbf5d766966bd"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/decision_source_cards/native.jsonl": {
+            "bytes": 3519170,
+            "sha256": "cd52c54c4df858a455c21e850a12d4eba2f6835781697b95069a40c299d50029"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/decision_support/native.jsonl": {
+            "bytes": 7530176,
+            "sha256": "458dcd7efebf9890b069d1c88f9629975d145942797715f6a7c12cae42f2bfd5"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/digest_desk/native.jsonl": {
+            "bytes": 3991340,
+            "sha256": "3848950e953eb73ef75a2d407122db5d3f8c33c26481247dd239588e94ee0de2"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/edit_stream/native.jsonl": {
+            "bytes": 3243345,
+            "sha256": "ccc26244a0c03b5fa11f324c731b1338adecad743c368d50c0d8a5c1fef88186"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/entailment_premises/native.jsonl": {
+            "bytes": 1469824,
+            "sha256": "62ed1a2ba5578d4efe7c1930a2be1f0eb426ee8786fd115dc85cbfe6426f0f29"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/event_retry/native.jsonl": {
+            "bytes": 3241826,
+            "sha256": "7b6e7d716213b5854d3e0187916f834f9583e8ac746f134a03f1ab4a3991bf43"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/folder_criteria_reducer/native.jsonl": {
+            "bytes": 5277452,
+            "sha256": "45472099b00f463f234afab2759745a8a1bcd0a7d5dd0ae743533461be7b0951"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/folder_edit/native.jsonl": {
+            "bytes": 98405205,
+            "sha256": "d6122bc5d936f6f11db4ad0cc198bf530559af1cd63db2e185870c59735a71f3"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/folder_extract/native.jsonl": {
+            "bytes": 5482617019,
+            "sha256": "1c56c6a8c3e1000e05e203f08b589b425ba78871130f7abbe2057c58001808f8"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/folder_find/native.jsonl": {
+            "bytes": 2545331,
+            "sha256": "2b912ffd008bfa3372592a256bdc890be61118a9b8373384a9413bf16408ec4e"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/folder_index/native.jsonl": {
+            "bytes": 29908277,
+            "sha256": "b28ad163e4e95999f4702dead20b505129e10e87b34f81f0abca54bd6a42524c"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/folder_index_inline/native.jsonl": {
+            "bytes": 8797474,
+            "sha256": "8c025b5536390db4675efd1edc150759cc75d25f4cfd2dda41cba9aa3a467b92"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/folder_mixed/native.jsonl": {
+            "bytes": 133123075,
+            "sha256": "8dcd05017b99f6446b9a7fa4812bde4cbd0fe52788783c7717a6cc9ae3db61f6"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/folder_triage/native.jsonl": {
+            "bytes": 98528027,
+            "sha256": "744f7d4c420215722dd2f6a93d69a86d9d78a6ebcfce8cabc096b49fb6268e2b"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/folder_triage_inline/native.jsonl": {
+            "bytes": 11169580,
+            "sha256": "c59f6d3b67d3213190a8566a684b53ea8a6272fb9bada36919f3bc38f7d96026"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/folio_batch.building-4102355/native.jsonl": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/folio_entailment.building-4005791/native.jsonl": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/idempotent_retry/native.jsonl": {
+            "bytes": 1996824,
+            "sha256": "ad2b10593b2cb384f22f2cc048e6dfc809f971d6a154c364978ffe9344e7232a"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/inline_cohort_policy/native.jsonl": {
+            "bytes": 2154428,
+            "sha256": "348856273fd675dc66d5fe98209b0d3963f7650c77453305836860d0aac0767b"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/inline_late_binding/native.jsonl": {
+            "bytes": 4024682,
+            "sha256": "30f51f0413b957c3beb74b34a4f21bb31255690de12a973493bb15b0065cc3a8"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/inline_multi_capture/native.jsonl": {
+            "bytes": 6342575,
+            "sha256": "f7b324d52d6d9aab7a99e9a4949ae8ca444039dbc485fe3ac1a1b334f2e86810"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/inline_review_each/native.jsonl": {
+            "bytes": 4731764,
+            "sha256": "f12da99697cbfc9986ddd43556bca25be7e142c878e2052c1ce6d0e24a0f0327"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/inline_structured_extract/native.jsonl": {
+            "bytes": 2630102,
+            "sha256": "c1bcd5a3e6272db2e6c0337c01c25b207baf4f6e479d7475ee052890e8c0dc9c"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/inline_union_target/native.jsonl": {
+            "bytes": 3432461,
+            "sha256": "822882ad2cc600ed18adffa823599d062487ccf0866715dd1701778995c95169"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/iterate_frontier/native.jsonl": {
+            "bytes": 2312383,
+            "sha256": "d9dfc16f8acce2bafb01f8604b96f046d417e15187a287831e9f4ae543353a8d"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/iterate_schedule_repair/native.jsonl": {
+            "bytes": 3140530,
+            "sha256": "eaecd6493cd1aac7e7e15fc11fcf6db68c8bcc20c0f90ad45cac516b2edaf47b"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/knowledge_evidence/native.jsonl": {
+            "bytes": 38996227,
+            "sha256": "42709e5ffa2d7787acf4198f2c2ea1e67016e16a127bf85d76c33900dc9da649"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/knowledge_research/native.jsonl": {
+            "bytes": 1779569,
+            "sha256": "01a313ebda35ce6a9ea6bb3e1877a79188c772d2c53bac3b24e2b8684ff3c114"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/kqapro_question/native.jsonl": {
+            "bytes": 1143455,
+            "sha256": "b9c4e146345141beae8b227367bb65b6e0a91f4c628b0cf83a83398977b87757"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/labeled_judgments/native.jsonl": {
+            "bytes": 5150567,
+            "sha256": "6b155d40392e376557bedc9201ab4286ddab90f606dec8eb9b935639069e8f5f"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/live_inventory/native.jsonl": {
+            "bytes": 1387304,
+            "sha256": "da4d11e5acc3acc4ed3ca80f41b487fde92b338d08fe11f727312d7c330bac1f"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/logic_abduction_test/native.jsonl": {
+            "bytes": 1997864,
+            "sha256": "2621425a5608591bcb7185bbcbf71c3fead272f6b14a523e0ae5e8ec0d73ded1"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/logic_entailment_exception/native.jsonl": {
+            "bytes": 2122884,
+            "sha256": "4f1741b4d95e514a4fb2beece0a9eaa7a6366533a68a94866e2d6c9ae1b0dccc"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/logic_proof_verifier/native.jsonl": {
+            "bytes": 2035780,
+            "sha256": "9966302b9bae0b8fb1f826dfa9bf7499c6c230a223c28916ccdd22fcd6bb0598"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/loop_rewrite/native.jsonl": {
+            "bytes": 2637980,
+            "sha256": "5f9b54604a30a31c69637bbaea013ebd36466cc0af848a3e6c91cb673af3c957"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/memory_answer/native.jsonl": {
+            "bytes": 5009261,
+            "sha256": "a4e90f81143d6ee36ef27afe55ece382d7cd33700b372473af60a85a308b0466"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/named_versus_inline/native.jsonl": {
+            "bytes": 3171442,
+            "sha256": "db84405e04d82ac2fc2a27170142d7f26c1bec579de437b94b745cff549c0856"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/paged_late_row/native.jsonl": {
+            "bytes": 1499582,
+            "sha256": "8a3770bd21907c1558c3c8c102918bda1eec02795d80ff20eeede046ca524bf8"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/parallel_labels/native.jsonl": {
+            "bytes": 4243884,
+            "sha256": "1f5bbd12e381b8bb7fade6e845ca13f5edc71306928667e4c3e395d293b68e3c"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/people_chain/native.jsonl": {
+            "bytes": 41597524,
+            "sha256": "f40068a39c4d4f5de85007bce843cd7abdc3c338295b65378302fb94e63b98a6"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/people_lookup/native.jsonl": {
+            "bytes": 9328006,
+            "sha256": "5bf357fa707731bbc737305d9926d454b8d55ccf51c34405334f21a33be49e92"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/policy_after_measure/native.jsonl": {
+            "bytes": 1796088,
+            "sha256": "6cbf22d77b2f2645fb0775b53439529aae88931b035082d10fb90c88e20d4022"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/prontoqa_proof/native.jsonl": {
+            "bytes": 2500139,
+            "sha256": "c5234f3efa929ee70908787ad9b64e4c2e52d954c7220eee20338d7890e5fb15"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/prontoqa_search/native.jsonl": {
+            "bytes": 2254594,
+            "sha256": "42943ca3db27c4561298bd583721cbcdb897275701786ff516b00e68f1ae2d9b"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/proofwriter_question/native.jsonl": {
+            "bytes": 1800342,
+            "sha256": "393dc4b64e8cb286c9819876b0a68ceed37e7a07fbfe381926d592fe1d3632ed"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/recurrence_graphs/native.jsonl": {
+            "bytes": 2031732,
+            "sha256": "62310d1f0fb6a0b81b8ca58a78a9e557bf0d70e04aecc1a49dde834423a5ad5b"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/recurrence_inline_graphs/native.jsonl": {
+            "bytes": 2532472,
+            "sha256": "956f8da05035f93ac7ab75b2a06e4302164f5f3f40efcdcbd506ea291177fdc9"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/recursion_rewrite/native.jsonl": {
+            "bytes": 2640310,
+            "sha256": "51a6b5fa4128767ad25d58a45bf62ca81ac3bad8cb2d28930462a6a62d775e07"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/reducer_apply/native.jsonl": {
+            "bytes": 6688131,
+            "sha256": "d68352a1c4f3ae3e486da6eb4595f119891b1c5d4c10ca87ee40ff3f45f28448"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/relational_dynamic_snapshot/native.jsonl": {
+            "bytes": 1688940,
+            "sha256": "3d3134e9cae95dc4ac4c6d366f3e82e894ad04100c72192a925311f76896cbdf"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/relational_late_argmax/native.jsonl": {
+            "bytes": 2019905,
+            "sha256": "2b5a816248231f09c03fa9b0bf9d05c2a087d0452279221418928193a3aea560"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/relational_multihop_qualifier/native.jsonl": {
+            "bytes": 1939115,
+            "sha256": "6fbb04d8caa9fe9472cb25d0f2024dc2bdaa0a7a64faa7a1b3a052a232490f6f"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/relational_policy_inline/native.jsonl": {
+            "bytes": 7885319,
+            "sha256": "0d465218330a8b407e5dae7a598e66e6c448fc72b454eaf46ef32643e57ab9ad"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/repo_answer/native.jsonl": {
+            "bytes": 2090723,
+            "sha256": "d886143db81fab9f64b5f7fa091d37992e96e31aefc235232af54ffd9cc6317e"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/scienceworld_task.building-130282/native.jsonl": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/scoped_module_discovery/native.jsonl": {
+            "bytes": 943676,
+            "sha256": "8a4e405fd186c43fee20eac900a2a0841c984cd120467b289b2b8c50e90f5f83"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/stateful_dates/native.jsonl": {
+            "bytes": 1281727,
+            "sha256": "66a2bbb39c9811d540ebd407619b707751431832a1f4bc3e981cbdaf7c98e216"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/story_answer/native.jsonl": {
+            "bytes": 1081382,
+            "sha256": "4f7fa47e5f27bdf3234bbcc339ad265bab6a6316025882b3b089b95408f1e0d5"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/story_choice/native.jsonl": {
+            "bytes": 1508376,
+            "sha256": "471bd186a7572c57eebee325c5875f08d338a9db2d391eff59850e1fa851ecd5"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/textworld_iterate/native.jsonl": {
+            "bytes": 18429066,
+            "sha256": "28f6ce0127423ecb39423afffa7748a7b18bee6708713ba905a7fe0c35440a9b"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/textworld_quest/native.jsonl": {
+            "bytes": 3723943,
+            "sha256": "3525c65161fa25b1015bd147f2baf15359b263fbffbdf3b4641818ec29c60ecc"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/web_research/native.jsonl": {
+            "bytes": 1507971,
+            "sha256": "316da6298c98fd3c9d90fb3a68928338f89b73c52544d44fdc582d834afde88a"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/workbench_applicants/native.jsonl": {
+            "bytes": 16718331,
+            "sha256": "9007b9afda0962ff855bcc696613a1a353e62f9ef0de4f6b76dda7d9e09aa127"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/workbench_reviews/native.jsonl": {
+            "bytes": 16044359,
+            "sha256": "c4c21bca12281130b71d3b386f7014e4146b85020834fcfda98c758ae2165673"
+          },
+          "/home/werg/data/e2e-data/pilot/plans/workbench_tickets/native.jsonl": {
+            "bytes": 15218489,
+            "sha256": "7ab73ef6c2cf01eec85451b5457e210d6bd7b07f3b0ffe9b888e1b4b8ddb85f1"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": "Direct-SFT rendering of the e2e cohort v2 source static-curriculum-pilot-s41001 (/home/werg/data/e2e-data/pilot/plans/*/native.jsonl, 90 families). Held packet v3 visible-world check: 0 collisions. Registered by dgx-union-r4 for union r4."
     }
   ],
   "coverage_backlog": [
