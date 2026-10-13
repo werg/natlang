@@ -58,7 +58,7 @@ The final AuditedMission exposes worlds, policy, replays, findings and source co
 - Type declarations: exact shape validation, no executable policy.
 - Ordinary arithmetic/set operations inside generated stage code: apply already interpreted transforms and state identities.
 - External `verify-result.mjs`: independently replay supplied actions in both fixture worlds, check source IDs/quotes, exact transforms/directions, sensor partitions, rope and carrier transitions, chronology and objective. It cannot certify quotation entailment or prose explanations; those require independent semantic review.
-- External `check-verifier.mjs`: four equivalent positives and seventeen deliberate corruptions qualify verifier mechanism only.
+- External `check-verifier.mjs`: five equivalent positives and seventeen deliberate corruptions qualify verifier mechanism only.
 
 No crisp planning engine, semantic regex interpreter or service chooses the policy. Reference-report.json is a hand-authored full typed witness outside model-visible roots.
 
@@ -68,4 +68,4 @@ Ten nested documents contain 31 connected clauses. Lost handedness leaves east/w
 
 ## Qualification
 
-Source loader, typed reference and twenty-one external checker controls pass. Independent source/oracle review is pending. No named stage or scoped literal has live invocation credit. The manifest keeps source-only status, shared source-world split identity and separate model-facing debt until live qualification.
+Source loader, typed reference and twenty-two external checker controls pass. Independent source/oracle review is pending. No named stage or scoped literal has live invocation credit. The manifest keeps source-only status, shared source-world split identity and separate model-facing debt until live qualification.

@@ -13,6 +13,7 @@ check('canonical full typed certificate',true);
 check('unordered collections permuted',true,r=>{r.worlds.worlds.reverse();r.policy.nodes.reverse();r.replays.reverse();r.sourceCoverage.reverse();for(const w of r.worlds.worlds){w.passages.reverse();w.frame.bindings.reverse();}for(const n of r.policy.nodes){n.outcomes.reverse();for(const o of n.outcomes)o.worldIds.reverse();}});
 check('generated IDs alpha renamed',true,r=>{const worlds=new Set(r.worlds.worlds.map(w=>w.worldId));const nodes=new Set(r.policy.nodes.map(n=>n.nodeId));const actions=new Set(r.policy.nodes.filter(n=>n.action).map(n=>n.action.actionId));const rename=v=>typeof v==='string'&&(worlds.has(v)||nodes.has(v)||actions.has(v))?'renamed:'+v:v;const walk=v=>Array.isArray(v)?v.map(walk):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,walk(x)])):rename(v);Object.assign(r,walk(r));});
 check('object property ordering',true,r=>{const reverse=v=>Array.isArray(v)?v.map(reverse):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).reverse().map(([k,x])=>[k,reverse(x)])):v;Object.assign(r,reverse(r));});
+check('benign unreachable terminal',true,r=>r.policy.nodes.push({nodeId:'unused-terminal',stateId:'unused-state',terminal:true,action:null,outcomes:[]}));
 check('wrong mirror',false,r=>r.worlds.worlds[1].frame.transform.uVector.x=1);
 check('drop physical world',false,r=>r.worlds.worlds.pop());
 check('wrong irreversible rig',false,r=>r.policy.nodes.find(n=>n.nodeId==='direct-rig').action.rigSide='west');
