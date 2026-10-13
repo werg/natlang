@@ -13,6 +13,12 @@ controlled same-checkpoint A/B; its first run was invalid (full cgroup OOM,
 program-header greedy on stale code). Do not use it to select a model or
 approach. Current v13 declares 16,384 minimum training context tokens, so
 the earlier 1,024-context window bug is fixed for this run.
+At step 11000, held gold CE improved to 0.600528 and accuracy to 0.87654;
+response KL reached 1.33107, approaching the declared 1.5 stop. DGX's
+independent step-8000 full-prompt/no-marker probe measured first-token
+P(`<think>`) around 0.00014–0.00054, confirming that the raw absence of
+thinking is a model distribution effect under that prompt, not response
+parsing. Its program-header and marker comparisons are still outstanding.
 
 Luna s52028 is closed. Large CoEdIT `folder_edit` teacher runs with hundreds
 of file operations failed semantic file checks or exhausted requests; exact
@@ -50,7 +56,11 @@ future request-budget retries by copying the exact partial/evidence into a
 new jobs directory, verifying evidence hashes and preserving the root seed;
 the collector can then replay saved model responses by request hash. Do not
 retroactively claim the two s52029 pilots got this benefit. The unused, unlaunched
-retry directory was removed. The replenisher formerly stopped at the first
+retry directory was removed. Four reviewed zero-output original `jobs/`
+directories (workers 01, 02, 05, 06) had no repair or training consumer and
+were removed after their units stopped, reclaiming 361,399,367 bytes; their
+exact exclusion receipts, append-only journals and empty result files remain.
+The replenisher formerly stopped at the first
 unfinished campaign, leaving Luna capacity idle. It now tracks at most two
 overlapping campaigns, decontaminates each against all prepared source worlds
 and groups, and defers the repair cycle until its preceding campaigns close.
