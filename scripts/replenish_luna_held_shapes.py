@@ -394,8 +394,19 @@ def build_source(campaign, seed):
     source.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(['node', 'ts-host/scripts/inline-curriculum/build.mjs',
                     '--seed', str(seed), '--shapes', '8', '--split', 'train',
-                    '--families', ','.join(FAMILIES), '--out', str(source)],
+                    '--families', ','.join(FAMILIES), '--allow-failures',
+                    '--out', str(source)],
                    cwd=ROOT, check=True)
+    report = json.loads(Path(str(source) + '.report.json').read_text())
+    unexpected = [failure for failure in report['failures']
+                  if failure['problems'] != ['reference not admitted: source_review_pending']]
+    if unexpected:
+        source.unlink(missing_ok=True)
+        raise ValueError(f'unexpected source verification failures: {unexpected}')
+    if report['failures']:
+        print(json.dumps({'event': 'source_review_excluded', 'seed': seed,
+                          'cases': len(report['failures']),
+                          'ids': [failure['id'] for failure in report['failures']]}), flush=True)
     return source
 
 
