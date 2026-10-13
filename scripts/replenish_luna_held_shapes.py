@@ -574,10 +574,11 @@ def main():
             return
         # One slow source shape must not leave the other teacher slots idle.
         # Every prepared campaign's source worlds/groups enter prior_worlds and
-        # prior_groups, so a second overlapping campaign stays decontaminated.
-        # Bound the overlap to two campaigns; repair cycles still require the
-        # preceding campaigns to close before their outputs are reviewed.
-        if len(pending_campaigns) >= 2:
+        # prior_groups, so overlapping campaigns stay decontaminated.
+        # Bound the overlap to three campaigns so a stalled pilot plus a
+        # draining ordinary campaign can still replenish free worker slots.
+        # Repair cycles still require their preceding campaigns to close.
+        if len(pending_campaigns) >= 3 or active_luna_workers() >= WORKERS:
             return
         if campaigns and not pending_campaigns and run_repair_cycle(campaigns):
             return

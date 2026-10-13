@@ -60,10 +60,16 @@ retry directory was removed. Four reviewed zero-output original `jobs/`
 directories (workers 01, 02, 05, 06) had no repair or training consumer and
 were removed after their units stopped, reclaiming 361,399,367 bytes; their
 exact exclusion receipts, append-only journals and empty result files remain.
-The replenisher formerly stopped at the first
-unfinished campaign, leaving Luna capacity idle. It now tracks at most two
-overlapping campaigns, decontaminates each against all prepared source worlds
-and groups, and defers the repair cycle until its preceding campaigns close.
+The unhinted expanded pilot (worker 04) eventually completed after 309 fresh
+replies but was rejected: it returned five positive clauses where the gold
+count is three; the quote reviewer accepted 15/20 CSV rows while marking all
+five positives unverified. Retain it only for the concrete repair-cycle
+consumer; the parent is not eligible for SFT. The hinted pilot (worker 03)
+remains active at this note.
+The replenisher formerly stopped at the first unfinished campaign, leaving
+Luna capacity idle. It first allowed two overlapping campaigns; every
+prepared source enters world/group decontamination, and repair cycles wait
+for their preceding campaigns to close.
 This production path built s52030: 862 verified source cases from 22 families,
 104 selected across 18 families, including eight successful-style folder
 criteria reducers. Workers 01-03 launched beside the two CUAD retries;
@@ -75,6 +81,12 @@ the exact s52030 worker-05 unit, preserving its journal and partial, and added
 a global active-Luna slot check across campaigns and retries. A production
 replenisher pass relaunched worker-05 as another slot freed and deferred
 worker-06 at exactly six active units. The timer stays enabled.
+After s52030 drained to its last workers, the two-campaign overlap limit
+again left free slots beside one lingering CUAD pilot. The limit is now three
+prepared campaigns, gated also on the global six-worker count. The production
+pass built s52031 with 852 verified source cases and 104 decontaminated
+selected cases; two workers launched, four deferred at the six-worker cap.
+This is generation only, not training admission.
 
 ## 19:25 CEST: QAD continuation and reasoning/template dragnet
 
