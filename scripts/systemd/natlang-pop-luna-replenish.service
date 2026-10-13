@@ -1,0 +1,8 @@
+[Unit]
+Description=Replenish Pop Luna curriculum generation
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/werg/natlang
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/replenish_luna_held_shapes.py
+
