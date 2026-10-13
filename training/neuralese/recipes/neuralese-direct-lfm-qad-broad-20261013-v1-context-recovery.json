@@ -2,12 +2,11 @@
   "schema": "natlang.neuralese-training-recipe/1",
   "id": "neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery",
   "extends": "neuralese-direct-lfm-qad-broad-20261013-v1-measured-task-eval",
-  "description": "Operational and windowing handoff at the completed step-2000 full checkpoint: retain 16384 tokens of preceding task context in long training windows; evaluate at temperature 0.6 and stop exact eight-turn no-progress loops. Same data, optimizer, weights and objective. Parent eval remains a separately comparable greedy record.",
+  "description": "Operational handoff at the completed step-2000 full checkpoint. Inherit the shared direct-v3 16384-token training-context floor and task-eval temperature 0.6; stop exact eight-turn no-progress loops. Data, weights, optimizer and objective stay in the same lineage. The preceding greedy evaluation remains a separately comparable record.",
   "overrides": {
     "stage_parameter_defaults": {
       "neuralese_direct": {
         "task_eval": {
-          "temperature": 0.6,
           "identical_turn_limit": 8
         }
       }
@@ -202,18 +201,6 @@
         "train/write_sites.py": "71b42b7989597f33610c65151558d5c3f42b13345ffb638e1a74818f51e5a5cf",
         "view.py": "4ee2b3d93cac3df4e154a539a2b2dc7eddeb25efb6e58982b79daaadde27c4dd",
         "write.py": "a93b47350bbf40c93d7a8a213739c081471b42d2d6994374dfc2304ea61a356e"
-      }
-    },
-    "stages": {
-      "direct_sft": {
-        "parameters": {
-          "train_min_context_tokens": 16384
-        }
-      },
-      "direct_trajectory": {
-        "parameters": {
-          "train_min_context_tokens": 16384
-        }
       }
     }
   }
