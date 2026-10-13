@@ -62749,6 +62749,33 @@
       "supersedes": [
         "natlang-native-turns-4962-wholetraj-render-20261012-v2"
       ]
+    },
+    {
+      "id": "luna-held-shapes-s52012-s52017-native-turns-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-s52012-s52017-native-turns-20261013-v1",
+      "include": [
+        "approved-turns.jsonl",
+        "accepted-parents.native.jsonl",
+        "admission-review.json",
+        "parent-selection-review.json"
+      ],
+      "admission": "exact native oracle and materializer-approved decisions; train only",
+      "training_admission": true,
+      "training_admission_reason": "719 source-bound exact-oracle accepted parents across six closed seeds52012-52017; 4526 approved decisions; 238 unapproved context turns pruned; held visible worlds/source groups and all earlier accepted parents excluded",
+      "review_status": "all exact checks true; seven families first and last target tools inspected; candidate materialization excluded",
+      "required_conversion": "render LFM and Mellum twins; include in next broad union",
+      "split": "train only; held world and source groups excluded",
+      "source_class": "project-generated inline curriculum",
+      "license": "project-generated",
+      "source_campaigns": [
+        "provider-luna-held-shapes-s52012-v1",
+        "provider-luna-held-shapes-s52013-v1",
+        "provider-luna-held-shapes-s52014-v1",
+        "provider-luna-held-shapes-s52015-v1",
+        "provider-luna-held-shapes-s52016-v1",
+        "provider-luna-held-shapes-s52017-v1"
+      ]
     }
   ],
   "coverage_backlog": [
