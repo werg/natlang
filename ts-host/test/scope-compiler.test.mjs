@@ -219,7 +219,8 @@ test('redeclaring an injected name names its kind and the fix for that kind', ()
   const message = (code, options) => compileScopeSnippet(code, options).diagnostics
     .filter(item => item.code === 'invalid-binding').map(item => item.message).join('\n');
   assert.match(message('const shipments = shipments.page(1);', { serviceBindings: ['shipments'] }),
-    /^shipments is already a service in this scope, used through its methods \(read_code\("shipments"\) lists them\); call them on shipments directly and keep what they return in a variable with another name, such as shipmentsResult\.$/);
+    /^shipments names this scope's shipments service, so it cannot also name a result; give the result its own name, as in const shipmentsResult = shipments\.page\(1\);$/);
+  assert.match(message('let shipments;', { serviceBindings: ['shipments'] }), /give the result its own name, such as shipmentsResult\.$/);
   assert.doesNotMatch(message('const shipments = shipments.page(1);', { serviceBindings: ['shipments'] }), /function/);
   assert.match(message('const plan = plan(1);', { helperBindings: ['plan'] }), /^plan is already a function in this scope; call plan\(\.\.\.\) directly/);
   assert.match(message('const ids = [1];', { inputBindings: ['ids'] }), /^ids is this call's input and already holds the caller's value/);

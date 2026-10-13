@@ -51,7 +51,7 @@ test('a result sent under another argument name is told to use value', async () 
   const { results, value } = await script([
     ['return_result', { status: 'success', verdict: 'hello' }],
     ['return_result', { status: 'success', value: 'hello' }]]);
-  assert.match(results[0], /the result in the value argument \(this return_result put it in "verdict"\)/);
+  assert.equal(results[0].split('\n')[1], 'return_result needs the string itself as its value argument.');
   assert.equal(value, 'hello');
 });
 
