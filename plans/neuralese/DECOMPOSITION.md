@@ -194,6 +194,9 @@ AccountForMinedRows preserves the existing whole-trajectory mining policy:
 The Python miner is crisp accounting over the verifier's output. This adds no
 eligibility rule, prompt, renderer change or new training admission. A completed
 zero-edge conversion must not look like lost or unprocessed input.
+Record unreadable source rows before authentication. A nonempty input producing
+no parsed records is a failed conversion, not a successful zero-edge trajectory;
+keep independently converted rows from a partly unreadable input.
 
 ## Cancel a queued resource request — 2026-10-13
 
