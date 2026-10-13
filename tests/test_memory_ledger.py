@@ -49,7 +49,7 @@ def test_floor_breach_stops_the_lowest_priority_newest_unit():
 
 def test_outstanding_demand_is_unspent_budget(monkeypatch):
     monkeypatch.setattr(ledger, 'mem_available', lambda: 40 * GIB)
-    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(): {'a.service': 2 * GIB, 'b.service': 12 * GIB}[unit])
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False: {'a.service': 2 * GIB, 'b.service': 12 * GIB}[unit])
     now = ledger.time.time()
     state = {'claims': {'a.service': claim('experiment', 10, 0, now), 'b.service': claim('experiment', 10, 0, now)},
              'events': []}
@@ -59,7 +59,7 @@ def test_outstanding_demand_is_unspent_budget(monkeypatch):
 
 
 def test_claims_of_finished_units_are_released(monkeypatch):
-    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(): None)
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False: None)
     state = {'claims': {'done.service': claim('experiment', 4, 0, 0)}, 'events': []}
     assert ledger.live_claims(state, {}) == {}
     assert state['claims'] == {} and state['events'][-1]['event'] == 'released'
@@ -87,7 +87,7 @@ def test_a_running_claim_reserves_only_a_fraction_of_its_unspent_budget_after_ra
     # Oversubscription: the teacher at 56 of its 62 GiB, a CPU job at 2 of 30, a young job still ramping.
     monkeypatch.setattr(ledger, 'mem_available', lambda: 30 * GIB)
     use = {'teacher.service': 56 * GIB, 'young.service': 2 * GIB, 'cpu.service': 2 * GIB}
-    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(): use[unit])
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False: use[unit])
     now = ledger.time.time()
     state = {'claims': {'teacher.service': dict(claim('service', 62, 0, now - 7200), gpu=True),
                         'cpu.service': claim('experiment', 30, 0, now - 7200),
@@ -189,7 +189,7 @@ def test_the_guard_walks_again_after_a_pause_when_the_last_walk_freed_little(mon
 def test_a_held_budget_counts_in_full_however_long_the_job_has_run(monkeypatch):
     # The warm-up grows to more sequence passes on its own schedule and checks MemFree before each update.
     monkeypatch.setattr(ledger, 'mem_available', lambda: 30 * GIB)
-    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(): 38 * GIB)
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False: 38 * GIB)
     now = ledger.time.time()
     state = {'claims': {'warmup.service': dict(claim('experiment', 42, 0, now - 7200), peak=38 * GIB,
                                                peak_since=now - 7200, hold_budget=True)}, 'events': []}
@@ -332,7 +332,7 @@ def running(cls, budget, used, priority=None, age=3600, **extra):
 def test_admission_is_by_real_headroom_so_claims_may_exceed_the_machine(monkeypatch):
     # 87 GiB claimed, 5 used: the old claim-sum rule refused a 40 GiB GPU job on a 121 GiB machine
     monkeypatch.setattr(ledger, 'mem_available', lambda: 110 * GIB)
-    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(): 5 * GIB)
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False: 5 * GIB)
     now = ledger.time.time()
     state = {'claims': {'cpu.service': claim('experiment', 87, 0, now - 3600)}, 'events': []}
     free, _ = ledger.headroom(state, {})
@@ -410,7 +410,7 @@ def test_the_guard_preempts_for_the_queue_head_then_relaunches_when_room_returns
     monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
     available = [30 * GIB]
     monkeypatch.setattr(ledger, 'mem_available', lambda: available[0])
-    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(): 30 * GIB)
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False: 30 * GIB)
     calls, launched = [], []
     monkeypatch.setattr(ledger, 'terminate', lambda unit, container: calls.append(unit))
     monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec['unit']) or 0)
@@ -481,9 +481,9 @@ def test_a_waiting_run_registers_in_the_queue_before_any_slow_cache_walk(monkeyp
     monkeypatch.setattr(ledger, 'mem_available', lambda: 50 * GIB)
     monkeypatch.setattr(ledger, 'reclaimable', lambda: 40 * GIB)
     monkeypatch.setattr(ledger, 'start_release', lambda: None)
-    args = type('A', (), {'budget_gb': 96, 'reserve_gb': 8, 'unit': 'e2e', 'priority': 'high', 'cls': 'experiment', 'wait': 0,
+    args = type('A', (), {'cuda_budget_gb': None, 'budget_gb': 96, 'reserve_gb': 8, 'unit': 'e2e', 'priority': 'high', 'cls': 'experiment', 'wait': 0,
                           'host_max_gb': None, 'workdir': '.', 'env': [], 'stop_seconds': None, 'command': ['x'],
-                          'resumable': None, 'hold_budget': False, 'oom_policy': 'stop'})()
+                          'resumable': None, 'hold_budget': False, 'oom_policy': 'stop', 'cuda_budget_gb': None})()
     seen = []
     def peek(_):
         with ledger.ledger() as state:
@@ -629,7 +629,7 @@ def guard_env(monkeypatch, tmp_path, available, usage):
     monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
     monkeypatch.setattr(ledger, 'reclaimable', lambda: 0)
     monkeypatch.setattr(ledger, 'mem_available', lambda: available[0])
-    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(): usage.get(unit))
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False: usage.get(unit))
     monkeypatch.setattr(ledger, 'container_running', lambda n: False)
     monkeypatch.setattr(ledger, 'unit_containers', lambda unit, command=None, extra=(): [])
     calls = []
@@ -695,7 +695,7 @@ def test_run_does_not_backfill_into_room_the_head_is_about_to_get(monkeypatch, t
     monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
     monkeypatch.setattr(ledger, 'reclaimable', lambda: 0)
     monkeypatch.setattr(ledger, 'mem_available', lambda: 30 * GIB)
-    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(): 0)
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False: 0)
     launched = []
     monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec['unit']) or 0)
     now = ledger.time.time()
@@ -704,7 +704,7 @@ def test_run_does_not_backfill_into_room_the_head_is_about_to_get(monkeypatch, t
                                               'budget': 12 * GIB, 'reserve': 8 * GIB}}
 
     def args(unit, budget):
-        return type('A', (), {'budget_gb': budget, 'reserve_gb': 8, 'unit': unit, 'priority': 'low', 'cls': 'collection',
+        return type('A', (), {'cuda_budget_gb': None, 'budget_gb': budget, 'reserve_gb': 8, 'unit': unit, 'priority': 'low', 'cls': 'collection',
                               'wait': 0, 'resumable': True, 'host_max_gb': None, 'oom_policy': 'stop', 'workdir': '.',
                               'env': [], 'stop_seconds': None, 'command': ['x'], 'hold_budget': False,
                               'container': []})()
@@ -831,12 +831,12 @@ def test_small_jobs_start_beside_a_big_trainer_with_proportional_reserves(monkey
     monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
     monkeypatch.setattr(ledger, 'reclaimable', lambda: 0)
     monkeypatch.setattr(ledger, 'mem_available', lambda: 8 * GIB)
-    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(): 0)
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False: 0)
     launched = []
     monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec) or 0)
 
     def args(unit, budget, reserve=None):
-        return type('A', (), {'budget_gb': budget, 'reserve_gb': reserve, 'unit': unit, 'priority': 'medium',
+        return type('A', (), {'cuda_budget_gb': None, 'budget_gb': budget, 'reserve_gb': reserve, 'unit': unit, 'priority': 'medium',
                               'cls': 'experiment', 'wait': 0, 'resumable': True, 'host_max_gb': None,
                               'oom_policy': 'stop', 'workdir': '.', 'env': [], 'stop_seconds': None, 'command': ['x'],
                               'hold_budget': False, 'container': []})()
