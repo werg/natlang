@@ -1,0 +1,61 @@
+{
+  "caseId": "three-locks-v1",
+  "documents": [
+    {
+      "id": "CHARTER",
+      "path": "charter/competence.md",
+      "roleHint": "charter"
+    },
+    {
+      "id": "COMPACT",
+      "path": "compact/base.md",
+      "roleHint": "compact"
+    },
+    {
+      "id": "ACCESSION",
+      "path": "accession/birch.md",
+      "roleHint": "accession"
+    },
+    {
+      "id": "RATE_DRAFT",
+      "path": "amendments/rate-draft.md",
+      "roleHint": "amendments"
+    },
+    {
+      "id": "RATE_ADOPTED",
+      "path": "amendments/rate-adopted.md",
+      "roleHint": "amendments"
+    },
+    {
+      "id": "FLOOD_ORDER",
+      "path": "orders/flood.md",
+      "roleHint": "orders"
+    },
+    {
+      "id": "BIRCH_OFFICE",
+      "path": "offices/birch-circular.md",
+      "roleHint": "offices"
+    },
+    {
+      "id": "RECIPROCAL",
+      "path": "offices/reciprocal-grants.md",
+      "roleHint": "offices"
+    },
+    {
+      "id": "TRANSITS",
+      "path": "events/transits.md",
+      "roleHint": "events"
+    },
+    {
+      "id": "RESCUE_DISPATCH",
+      "path": "discovered/rescue-dispatch.md",
+      "roleHint": "discovered"
+    },
+    {
+      "id": "CONTROL",
+      "path": "controls/evidence.md",
+      "roleHint": "controls"
+    }
+  ],
+  "source_scope": "Original closed fictional institutional rules; external law has no role."
+}

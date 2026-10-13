@@ -1,0 +1,2 @@
+[R01] Rescue Controller R signs dispatch RESCUE_T1 on day11 certifying the planned T1 trip as an actual rescue on day12. The dispatch names T1, Alder and Birch and remains valid at that trip time.
+[R02] The archive first receives and authenticates RESCUE_T1 on day35. It is available in evidence snapshot S35, but was unavailable in S34. There are no other newly received premises between these snapshots.

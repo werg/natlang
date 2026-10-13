@@ -14,7 +14,7 @@ This is a versioned rule and justification system. It does not choose a route, p
 
 The **Three Locks Compact** covers ports Alder, Birch and Cedar and two river reaches, Upper and Lower. The charter grants the council tariff authority and delegates only notice wording to port offices. A flood board temporarily controls passage restrictions in the Upper reach. The compact creates toll, flood-notice and safe-passage duties, while a rescue exception requires documented rescue status. Birch accedes with a reservation about its own notice translations, which cannot waive another port's notice to Birch. A council amendment changes toll rates prospectively. An office circular attempts a tariff exemption outside its delegation. A signed rescue dispatch arrives after an initial docket but concerns an earlier trip; a later amendment cannot retroactively change that earlier trip. A board order sunsets before the final trip. Reciprocal office letters purport to delegate tariff powers to each other and must remain unsupported.
 
-At least 32 connected clauses across charter, competence grants, accession, compact schedules, amendments, orders, office circulars, trip events and discovered evidence. Each clause will be linked to an actual authority, applicability, defeat, derivation or delta consumer; no filler records. The request compares three trip times and one evidence-snapshot update, with a proof certificate for every active, defeated and unresolved obligation.
+The initial snapshot now has 37 connected clauses across charter, competence grants, accession, compact schedules, amendments, orders, office circulars, trip events and discovered evidence. Each clause will be linked to an actual authority, applicability, defeat, derivation or delta consumer; no filler records. The request compares three trip times and one evidence-snapshot update, with a proof certificate for every active, defeated and unresolved obligation.
 
 ## Intended callable graph
 
@@ -61,7 +61,7 @@ Target: 27 meaningful NL callables, approximately 600–850 total NL lines. The 
 | Delta explanation | `CertificateDelta`, `PremiseCut`, `StableSupport` | Explain which new evidence changes status and which apparently relevant later instrument does not. |
 | Audit | `LedgerCertificate`, `AuthorityChallenge`, `AuditFinding` | Replay proof edges from source premises, inspect temporal/competence scope and expose unsupported cycles. |
 
-An obligation key is a source-derived tuple of debtor, beneficiary, action kind, event ID and governing clause. Generated proof/node IDs are arbitrary consistent references. Distinct proofs for one obligation are retained; retracting one proof does not retract the obligation if another remains.
+An obligation key is a source-derived tuple of debtor, beneficiary, action kind, event ID and source-defined action. Generated proof/node IDs are arbitrary consistent references. Distinct proofs for one obligation are retained; retracting one proof does not retract the obligation if another remains.
 
 ## Algorithms in natural language
 

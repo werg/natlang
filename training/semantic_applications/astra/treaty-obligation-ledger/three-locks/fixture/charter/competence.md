@@ -1,0 +1,7 @@
+[A01] This is a closed fictional federation. Council C alone may create, amend or repeal Compact toll, notice, translation and passage duties for member ports. A power must trace to this charter; mutual assertions of authority cannot create a root grant.
+[A02] A delegated authority may exercise only the action kind, territory and interval granted. Delegating onward is permitted only when the parent grant explicitly permits onward delegation. Issuing a document does not prove competence.
+[A03] Port offices may standardize the wording of notices they issue. They have no power to waive tolls, suspend another port's duties, change the Compact, or delegate tariff authority.
+[A04] Flood Board F may impose Upper-reach passage closures and additional notice duties during days10 through24 inclusive. It may neither set tolls nor amend translation duties. Its orders cease at day25 even if an order recites a later end.
+[A05] Rescue Controller R may certify that a named trip is an actual rescue. The certification concerns the trip's event time; the archive's later receipt time changes available evidence, not when that trip occurred.
+[A06] Adopted Council changes control from their stated effective time. A circulated draft has no force. A later rate change is prospective unless the Council explicitly authorizes retroactivity; no instrument here does so.
+[A07] A reservation accepted at accession narrows only that acceding party's own promised acts, within the accepted reservation text. It grants no power over duties owed by another party.
