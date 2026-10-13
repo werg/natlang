@@ -72,6 +72,17 @@ the equal-checkpoint/equal-seed full versus program-header eval; Pop kept its
 GPU training active rather than run a CPU strict export that the memory ledger
 could not admit concurrently. Await DGX's think/repeat/success breakdown.
 
+The Step 5 repair cohort yielded three exact accepted handoffs from eight
+attempts. Shared native materialization produced 12 approved turns and three
+context-only replay turns; the shared preference builder replay-verified three
+chosen/rejected decision pairs with no skips or protected held source-group
+overlap. Registered `pop-step5-repair-pairs-s52027-v1` for DPO/preference use
+only. These handoffs replace the failed decision before execution, so they are
+branch corrections, not observed post-error recovery; the five wrong-answer
+outcomes are excluded. The approved native SFT turns need their own quality
+review before training admission. Genuine observed-error recovery remains in
+the 384-case static loop/recursion corpus.
+
 ## 16:55 CEST: Pop generation and corpus sync
 
 The QAD direct SFT v12 handoff is training past update 7,500 with the GPU

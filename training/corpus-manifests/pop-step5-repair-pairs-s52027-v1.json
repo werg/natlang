@@ -1,0 +1,53 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-step5-repair-pairs-s52027-v1",
+  "owner": "pop",
+  "path": "runs/step5-repair-pairs-s52027-v1",
+  "files": [
+    {
+      "path": "accepted-three-native.jsonl",
+      "bytes": 1381310,
+      "sha256": "6e39ccfff2effabc35ac17bdbfef912d6dc3d08210fafabb9f5c9dcacaf01532",
+      "lines": 15
+    },
+    {
+      "path": "accepted-three.jsonl",
+      "bytes": 937205,
+      "sha256": "fa243ca14c7a2158c7c33fb99b962531bafa4a02b7e9f8fe9cf75855646141d7",
+      "lines": 3
+    },
+    {
+      "path": "admission-review.json",
+      "bytes": 1104,
+      "sha256": "18eb9a588b10f62440dd6a88447602220b694162628676cb8b984bd1f8e1762e"
+    },
+    {
+      "path": "campaign-manifest.json",
+      "bytes": 657,
+      "sha256": "7e8e7e8cdc7e840d8f543b9bd8ac7b2beeed4b0873adf3782b4dec630b58f2a3"
+    },
+    {
+      "path": "pairs-three.jsonl",
+      "bytes": 97308,
+      "sha256": "d107915b7fab490cc454c3437e00f61286e435f1e60a30541eeb89d224f256b3",
+      "lines": 3
+    },
+    {
+      "path": "pairs-three.jsonl.audit.jsonl",
+      "bytes": 705,
+      "sha256": "267460acfaa88a7911f0873b799e2719e3a6ebb4c37ea0ad03a1d46b348c53b9",
+      "lines": 3
+    },
+    {
+      "path": "pairs-three.jsonl.manifest.json",
+      "bytes": 2150,
+      "sha256": "3e99067e3561e0cb72d03f3d62b93837a143f51cbbe16ecc3e7809316e537fef"
+    },
+    {
+      "path": "quality-review.json",
+      "bytes": 914,
+      "sha256": "1ef0a7fcd90f6b463d1e3c5aa5718f3d3e9a559e1504d1e078ab7e271aae9999"
+    }
+  ],
+  "bytes": 2421353
+}

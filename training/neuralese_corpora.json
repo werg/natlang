@@ -63742,6 +63742,32 @@
       "source_campaigns": [
         "static-recovery-compile-runtime-s62000-v1"
       ]
+    },
+    {
+      "id": "pop-step5-repair-pairs-s52027-v1",
+      "owner": "pop",
+      "path": "runs/step5-repair-pairs-s52027-v1",
+      "include": [
+        "accepted-three.jsonl",
+        "accepted-three-native.jsonl",
+        "campaign-manifest.json",
+        "pairs-three.jsonl",
+        "pairs-three.jsonl.audit.jsonl",
+        "pairs-three.jsonl.manifest.json",
+        "quality-review.json",
+        "admission-review.json"
+      ],
+      "source_class": "Step 5 teacher branch-correction preference pairs from failed Luna decisions",
+      "license": "project-generated traces; upstream source licenses inherited from s52027 train cases",
+      "split": "train only; six pair source groups have zero overlap with protected held packet v3",
+      "admission": "three exact accepted handoffs became three replay-verified chosen/rejected preference pairs; five answer misses excluded",
+      "training_admission": true,
+      "training_admission_reason": "DPO/preference scope only: pair builder replayed and verified all three chosen decisions and rejected failures; no protected held source-group overlap. The 12 approved native SFT turns remain separately unadmitted by this review.",
+      "required_conversion": "render the three pairs for the declared LFM/Mellum preference trainer; do not treat branch replacements as post-error recovery or admit the five missed teacher outcomes",
+      "review_status": "admission-review.json records exact source, runtime, oracle, split and semantic classification",
+      "derived_from": [
+        "provider-luna-held-shapes-s52027-v1"
+      ]
     }
   ],
   "coverage_backlog": [
