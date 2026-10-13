@@ -1,0 +1,73 @@
+{
+  "schema": "natlang.semantic-application-live-source-review/1",
+  "reviewer": "semantic_slate_astra",
+  "application": "astra-app-cave-mission-v1",
+  "variant": "conditional-binding-table-v3",
+  "parent_source_commit": "cb1e5403",
+  "defect": "Frozen v2 child conditional A/EW and B/WW assessments returned true, but parent projected A\u2192A/B\u2192B; passage reconciliation also conflated unknown actual reflection with conditional consistency.",
+  "repair": [
+    "Immediate parent-owned typed row records original pair/transform and actual assessment.",
+    "Named accepted rows project before source-local naming; candidate rows remain authoritative for true/false/null handling.",
+    "Passage consistency evaluated under the supplied complete hypothesis."
+  ],
+  "changed_source_hashes": {
+    "applications/cave-mission/types.ts": "3acffa4258e7965c9a0573ba199696c7760f6c2ef940e925b3263b174c19bf5f",
+    "applications/cave-mission/planMission/reconcileMaps/alignFrames.nl": "2cb131a192076eee92073dfd652ced41901f3575170e41c227aa9277809dbc3c",
+    "applications/cave-mission/planMission/reconcileMaps/buildWorlds/extendHypothesis/resolveContradiction.nl": "97f98a027792d3011fe6a69ab84827dc6ac6c745e7159e41600985e59d2e06c8"
+  },
+  "composition": {
+    "nl_files": 25,
+    "nl_total_lines": 585,
+    "nl_body_lines": 401,
+    "numbered_steps": 182,
+    "type_aliases": 44,
+    "visible_crisp_policy_lines": 0
+  },
+  "peer_review": {
+    "reviewer": "semantic_slate_sol",
+    "verdict": "Source delta accepted; no false-rejection/completeness blocker for original world.",
+    "live_credit": false
+  },
+  "canonical_replay": {
+    "path": "training/semantic_applications/astra/cave-mission/mirrored-vault/reference-report.json",
+    "sha256": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90",
+    "reference_ok": true,
+    "reference_problems": [],
+    "opening_sha256": "73ccb7372f05505f701948e211724f01137717004dbb241052e7bee47a1066a4",
+    "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+  },
+  "original_controls": {
+    "passed": true,
+    "count": 22
+  },
+  "targeted_binding_controls": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "named pair replaced by local ID",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "world direct: binding A",
+          "world direct: binding B",
+          "world reflected: binding A",
+          "world reflected: binding B"
+        ]
+      },
+      {
+        "name": "accepted named binding dropped",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "world direct: binding domain"
+        ]
+      }
+    ]
+  },
+  "fixture_oracle_reference_changed": false,
+  "remaining_gate": "Pinned live diagnostic must show actual returned rows consumed into named bindings and downstream world construction.",
+  "live_qualified": false,
+  "training_admitted": false
+}

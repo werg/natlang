@@ -494,10 +494,10 @@
   "fixture_clause_count": 31,
   "composition": {
     "nl_files": 25,
-    "nl_total_lines": 558,
-    "nl_body_lines": 374,
-    "numbered_steps": 177,
-    "type_aliases": 43,
+    "nl_total_lines": 585,
+    "nl_body_lines": 401,
+    "numbered_steps": 182,
+    "type_aliases": 44,
     "visible_crisp_policy_lines": 0
   },
   "reference_scope": "Full typed canonical source-validity witness, separate from actual callable execution. Equivalent policies are replayed rather than compared bytewise.",
@@ -513,21 +513,21 @@
     "scope": "Independent source/oracle, exact lower-bound and policy-equivalence review. No actual application execution or training admission."
   },
   "source_variant": {
-    "id": "conditional-anchor-v2",
-    "parent_source_commit": "c4df5263",
+    "id": "conditional-binding-table-v3",
+    "parent_source_commit": "cb1e5403",
     "changes": [
-      "Conditional compatibility is distinct from actual-world identification.",
-      "Landmark literal returns semantic content and clause-keyed quotes; parent binds/checks exact provenance.",
-      "Alignment consumes only validated conditional assessments."
+      "Parent stores actual child assessment with original candidate IDs/frames and transform in ConditionalAnchorBinding[].",
+      "Named bindings project accepted table rows; local-label identity is restricted to source-established locally named chambers without candidate rows.",
+      "Passage consistency is judged conditional on the supplied complete hypothesis."
     ],
     "fixture_oracle_reference_changed": false,
     "independent_source_review": true,
     "live_qualified": false,
-    "canonical_reference_replay": {
-      "path": "/tmp/astra-cave-conditional-v2",
-      "passed": true
-    },
     "reviewer": "semantic_slate_sol",
-    "review_scope": "Three changed NL bodies peer-reviewed; requested relation union precision applied. No new live credit."
+    "review_scope": "Pair-result table, projection/fallback and conditional passage judgment independently reviewed; no source blocker or live credit.",
+    "canonical_reference_replay": {
+      "path": "/tmp/astra-cave-v3-package",
+      "passed": true
+    }
   }
 }

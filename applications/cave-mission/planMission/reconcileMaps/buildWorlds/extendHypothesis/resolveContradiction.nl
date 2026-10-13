@@ -6,15 +6,23 @@ args:
   survey: SurveyEvidence
 returns: AnchorAssessment
 ---
-1. Compare the claims after applying hypothesis bindings, keeping their original frame and witnesses.
-   Similar endpoint strings in different frames are not automatically the same physical corridor.
-2. Distinguish existence, direction and carried-state permission. A present narrow tunnel and a rule
-   blocking a full carrier describe compatible facts; they do not require deleting the tunnel.
-3. Treat explicit one-way flow as a directional constraint. A physically adjacent return endpoint does
-   not override a source statement that reverse travel is unavailable.
-4. Read temporal scope before asserting inconsistency. The first fixture is explicitly a stable current
-   world; do not invent a later water reversal to reconcile a forbidden return route.
-5. Return compatible only when all claims can hold together under the interpreted scopes. Otherwise
-   explain the exact conflicting premises with their witnesses so the rejected hypothesis is reviewable.
-6. If a missing scope would decide compatibility, return compatible:null with that unresolved premise
-   in reason; the caller must preserve it as unresolved rather than claiming the map was disproved.
+1. Condition the entire judgment on the supplied hypothesis: its transform and bindings define this
+   candidate physical world. Read the original frame ownership of each claim, then translate its
+   endpoints through those bindings. The actual-world choice remains unresolved across hypotheses.
+2. Check whether any claim still lacks a required endpoint binding or source scope even within this
+   hypothesis. If so, retain the precise missing premise for compatible:null with exact witnesses.
+3. Compare claims about the same interpreted physical passage. Distinguish existence, direction,
+   carried-state permission and cost. A present narrow tunnel and a rule blocking a full carrier can
+   both hold; an explicit absent passage and present passage in the same scope cannot.
+4. Interpret one-way statements in their source direction. Read temporal scope before combining
+   apparently opposed movement claims. The current-world boundary governs when the evidence supplies
+   one; scope differences justify compatibility only when supported by the actual source clauses.
+5. Return compatible:false only for a witnessed contradiction that persists under this supplied
+   hypothesis, with the exact conflicting premises. Uncertainty over which complete hypothesis is
+   actual is separate from this conditional consistency judgment.
+6. Return compatible:true when all translated claims can hold together in this candidate world and
+   no required conditional premise is missing. Include the source witnesses that establish the shared
+   endpoints and the compatible directional, existence and carried-state scopes.
+7. Return compatible:null only for the specific missing conditional premise identified above. Keep
+   all quotes exact. The caller consumes true into this world's topology, false into rejection, and
+   null into unresolved evidence requiring repair before successful planning.

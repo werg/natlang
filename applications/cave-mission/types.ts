@@ -20,6 +20,10 @@ export type GearRule = { ruleId: string; subject: string; condition: string; con
 export type SensorRule = { sensorId: string; availableAt: string; cost: number; answerDescriptions: { answer: string; meaning: string }[]; scope: string; witnesses: Witness[] };
 export type EquipmentSurvey = { gear: GearRule[]; sensors: SensorRule[]; unresolved: string[] };
 export type AnchorAssessment = { compatible: boolean | null; reason: string; witnesses: Witness[] };
+export type ConditionalAnchorBinding = {
+  alternativeId: string; localId: string; localFrame: string; globalId: string; globalFrame: string;
+  transformedPoint: Point; assessment: AnchorAssessment;
+};
 export type SensorWorldAnswer = { worldId: string; answer: string | null; reason: string; witnesses: Witness[] };
 export type SurveyEvidence = {
   manifest: SourceManifest; documents: SourceDocument[]; clauses: SourceClause[];
