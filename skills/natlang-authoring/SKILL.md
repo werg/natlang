@@ -63,3 +63,7 @@ Keep search overlays separate from authored source. Load a compatible artifact e
 For embedding in an application, pair this skill with `natlang-integration` when available; this skill is usable on its own.
 
 Persistent eval helpers support TypeScript `as const` assertions for literal and tuple results; the assertion needs no captured type binding. Other referenced named types must remain available in the call scope.
+
+## Recover from service argument-shape errors
+
+A service declaration defines its positional arguments. When a service error gives the expected typed call, inspect that method with `read_code`, bind each declared argument separately, and retry the stated positional invocation. For the story witness service, use `storyEvidence.checkWitnesses(snapshot, witnesses)` with a `SourceSnapshot` and a `Witness[]`. Keep this recovery in the boundary error and skill guidance; the application prompt need not enumerate invalid call forms. Natural-language stages still decide what the witnesses mean; the service verifies their exact source identity and quotation.
