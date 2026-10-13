@@ -310,6 +310,12 @@ def test_stop_grace_scales_with_the_familys_measured_checkpoint():
     assert 450 < mellum < 500 and 20 < lfm < 40 and probe == ledger.GRACE_MIN
     explicit = {'stop_seconds': 600, 'stop_seconds_explicit': True}
     assert ledger.grace_seconds('natlang-lfm-warmup-1200.service', explicit, sizes, throughput) == 600
+    # Containerized trainers can write checkpoint telemetry under HOME=/tmp, invisible to the host ledger.
+    # They still need enough time for an emergency optimizer-state checkpoint on memory-pressure stops.
+    high_unmeasured = {'class': 'experiment', 'priority': 'high'}
+    low_unmeasured = {'class': 'experiment', 'priority': 'low'}
+    assert ledger.grace_seconds('natlang-new-trainer.service', high_unmeasured, sizes, throughput) == 90
+    assert ledger.grace_seconds('natlang-new-trainer.service', low_unmeasured, sizes, throughput) == ledger.GRACE_MIN
     assert ledger.write_throughput([]) == ledger.DEFAULT_THROUGHPUT
 
 

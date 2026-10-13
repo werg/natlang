@@ -82,6 +82,12 @@ EMERGENCY_GB = 3
 CHECKPOINT_WRITES = os.path.expanduser(os.environ.get('NATLANG_CHECKPOINT_WRITES',
                                                       '~/.local/state/natlang/checkpoint-writes.jsonl'))
 GRACE_MIN, GRACE_MARGIN, GRACE_SLACK = 5.0, 2.0, 15.0
+# A training container may set HOME=/tmp and write its checkpoint timing log
+# there, outside the host guard's namespace.  Until a shared timing sample is
+# available, still give high-priority experiments time to finish an atomic
+# optimizer checkpoint.  The separate emergency-memory threshold can end this
+# grace early when the host is genuinely at risk.
+UNMEASURED_HIGH_EXPERIMENT_GRACE = 90.0
 DEFAULT_THROUGHPUT = 150e6  # bytes/s when nothing was measured yet (v3: 46.8 GB in ~250 s, ~190 MB/s)
 
 
@@ -616,12 +622,14 @@ def launch(spec):
     # names, else one named like the unit (wrapper scripts that `docker run --name <unit>`; '-' ignores none).
     container = container_name(spec['command']) or unit.removesuffix('.service')
     # --stop-seconds: a planned stop (systemctl stop) waits this long for the job to checkpoint before its container
-    # is killed (a 47 GB latent+optimizer checkpoint takes minutes). The guard's pressure stops stay short.
+    # is killed (a 47 GB latent+optimizer checkpoint takes minutes). Pressure stops use the same measured grace,
+    # or a 90-second fallback for a high-priority experiment whose telemetry is hidden inside its container.
     if spec.get('stop_seconds') is not None:
         stop_seconds = spec['stop_seconds']
     else:
         writes = checkpoint_writes()
-        stop_seconds = max(30.0, grace_seconds(unit, {}, family_state_bytes(writes), write_throughput(writes)))
+        stop_seconds = max(30.0, grace_seconds(unit, claim_for(spec), family_state_bytes(writes),
+                                               write_throughput(writes)))
     command += ['-E', f'NATLANG_LEDGER_UNIT={unit}', '-p', f'TimeoutStopSec={int(stop_seconds) + 30}',
                 '-p', f'ExecStopPost=-/usr/bin/docker stop -t {int(stop_seconds)} ' + ' '.join(
                     dict.fromkeys([container, *spec.get('containers', ())]))]
@@ -931,7 +939,11 @@ def grace_seconds(unit, claim, sizes, throughput):
     if claim.get('stop_seconds_explicit'):
         return float(claim['stop_seconds'])
     state = sizes.get(family(unit), 0)
-    return max(GRACE_MIN, GRACE_SLACK + GRACE_MARGIN * state / throughput) if state else GRACE_MIN
+    if state:
+        return max(GRACE_MIN, GRACE_SLACK + GRACE_MARGIN * state / throughput)
+    if claim.get('class') == 'experiment' and priority_of(claim) >= PRIORITIES['high']:
+        return UNMEASURED_HIGH_EXPERIMENT_GRACE
+    return GRACE_MIN
 
 
 def guard(args):
