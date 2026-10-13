@@ -14,11 +14,11 @@ returns: ScenarioSuiteResult
    as state in another; they share governed procedure source, not executed event facts.
 4. Call checkOutcome(input, completedFrontier, model). Consume its satisfied/violated observable
    lists, uncertainty and exact witnesses; a final generic pass label cannot replace the returned traces.
-5. Return verdicts and unresolved. Revision targets arise from actual generated-program divergence,
-   including missing state propagation or emitted guards that do not match their selected source plans.
-6. Preserve adversarial scenarios even if the current generated candidate fails them. A failed source
+5. Preserve adversarial scenarios even if the current generated candidate fails them. A failed source
    interpretation is a repair target, not permission to omit an inconvenient scenario from the suite.
 
-7. This stage performs symbolic NL interpretation of emitted module bodies, not runtime invocation
+6. This stage performs symbolic NL interpretation of emitted module bodies, not runtime invocation
    of those generated callables. Keep that scope explicit. Carry emitted state separately from
    source-required state so a bad generated effect cannot contaminate its own reference judgment.
+7. Return verdicts and unresolved. Revision targets arise from actual generated-program divergence,
+   including missing state propagation or emitted guards that do not match their selected source plans.

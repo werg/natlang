@@ -13,11 +13,11 @@ returns: InterfaceFinding[]
    parent. A final output field cannot conceal an unused earlier decision and a re-derived answer.
 4. Preserve nullable findings where the source remains unresolved. A parent's boolean readiness slot
    cannot represent a child's unknown evidence without an explicit typed uncertainty alternative.
-5. Return one InterfaceFinding per relevant caller/callee/field with preserved true,false or null,
-   precise reason and source witnesses. Exact signatures/path validation is separate from these semantic joins.
-6. Keep genuine independent branches independent: custody, readiness and queue status remain distinct
+5. Keep genuine independent branches independent: custody, readiness and queue status remain distinct
    fields even where a source document names the same actor in all three clauses.
 
-7. Cite original policy obligations with Witness and actual emitted caller/child text with
+6. Cite original policy obligations with Witness and actual emitted caller/child text with
    generatedEvidence. Bind generated paths from the corresponding module and validate exact spans.
    A generated body cannot be disguised as an original source record quotation.
+7. Return one InterfaceFinding per relevant caller/callee/field with preserved true,false or null,
+   precise reason and source witnesses. Exact signatures/path validation is separate from these semantic joins.

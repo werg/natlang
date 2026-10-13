@@ -18,7 +18,7 @@ returns: ModulePlan[]
    consumed by that parent's own transformation; a stage that merely relays the final packet is merged.
 6. Preserve multiple independent call paths: edition selection, source exception binding, actor readiness,
    custody updates, permission guards and counterexample audit should not become one uniform chain.
-7. Return complete ModulePlans with responsibility, ruleIds, typed interfaces, ownedFields, calls,
-   boundaries, branches and witnesses. Writing uses these returned plans, not a fixed file template.
-8. Retain an unresolved model finding in the responsible branch plan. Lowering cannot make the source
+7. Retain an unresolved model finding in the responsible branch plan. Lowering cannot make the source
    more determinate merely because a generated TypeScript signature prefers a nonnullable value.
+8. Return complete ModulePlans with responsibility, ruleIds, typed interfaces, ownedFields, calls,
+   boundaries, branches and witnesses. Writing uses these returned plans, not a fixed file template.
