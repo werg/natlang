@@ -115,7 +115,7 @@ def prior_worlds(current):
     # These are prior *sources*, not only successful outputs: never resample
     # a world just because a previous model attempt failed.
     old = Path('/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1')
-    for source in old.glob('provider-luna-held-shape-remediation-s5200*-v1/source/*.ir.jsonl'):
+    for source in old.glob('provider-luna-held-shape-remediation*/source/*.ir.jsonl'):
         worlds.update(world(row) for row in rows(source))
     for source in BASE.glob('provider-luna-held-shapes-s*-v1/source/*.ir.jsonl'):
         if current in source.parents:
