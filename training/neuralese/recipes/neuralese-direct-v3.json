@@ -122,7 +122,8 @@
   "stage_parameter_defaults": {
    "neuralese_direct": {
     "task_eval": {
-     "temperature": 0.6
+     "temperature": 0.6,
+     "identical_turn_limit": 8
     }
    }
   }

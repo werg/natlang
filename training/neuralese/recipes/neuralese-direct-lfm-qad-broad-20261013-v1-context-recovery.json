@@ -4,13 +4,6 @@
   "extends": "neuralese-direct-lfm-qad-broad-20261013-v1-measured-task-eval",
   "description": "Operational handoff at the completed step-2000 full checkpoint. Inherit the shared direct-v3 16384-token training-context floor and task-eval temperature 0.6; stop exact eight-turn no-progress loops. Data, weights, optimizer and objective stay in the same lineage. The preceding greedy evaluation remains a separately comparable record.",
   "overrides": {
-    "stage_parameter_defaults": {
-      "neuralese_direct": {
-        "task_eval": {
-          "identical_turn_limit": 8
-        }
-      }
-    },
     "runtime": {
       "package_code": {
         "__init__.py": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0",
