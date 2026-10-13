@@ -322,6 +322,15 @@ function render(entry, provider) {
   const steps = stages(entry);
   if (steps.length < 3) throw Error(`${id}: need at least three distinct stages`);
   const stageSpec = stageSpecsMode ? checkedStageSpecs(entry, steps) : null;
+  const entityIdentity = stageSpec && variant?.program_id === id ? variant.entity_identity_contract : null;
+  if (entityIdentity && ['join_key', 'source_quotes', 'scope'].some(key =>
+    typeof entityIdentity[key] !== 'string' || !entityIdentity[key].trim()))
+    throw Error(`${id}: incomplete entity identity contract`);
+  const identityInstruction = entityIdentity ?
+    `Entity identity: ${entityIdentity.join_key} ${entityIdentity.source_quotes} ${entityIdentity.scope} ` +
+    `Exact graph-join step: define entityKey(name: string) = name.toLowerCase(). ` +
+    `Apply entityKey to both endpoints of inherited and newly returned edges, assessments and decisions ` +
+    `before graph insertion or lookup, and to final entity names. Do not transform witnesses[].quote.\n` : '';
   const fixture = sourceFixture(entry);
   const identities = fixture ? recordIdentityBindings(entry, fixture) : null;
   const expected = exactExpected(entry);
@@ -365,6 +374,7 @@ function render(entry, provider) {
     `Use exact code only for reading, ordering, serialization, and checks; the domain judgments belong in natural-language calls. ` +
     `Return the result specified by the output contract, grounded in the supplied sources.`;
   const stageInstructions = stageSpec ? `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
+    identityInstruction +
     (identities ? `Source ID binding (attach id and path to every EvidenceRecord, and use these exact IDs in the result):\n${identities.map(({ id, path }) => `${id}: ${path}`).join('\n')}\n\n` : '') +
     (entry.typed_inputs ? `Read the supplied directory snapshot and inquiry into the authored typed bundle. Call ${steps[0].name} with StageInput1 {bundle,inquiry,prior:{${stageSpec.no_op_field ?? 'stageAbsences'}:[]}}. The named stages must each add their own source-backed typed contribution before calling the next stage within the active call. Synthesize the declared answer from the returned FinalSemanticState, not by re-solving from the raw folder.\n` :
       `Use iterateOn over the sorted source folders. Each step builds a typed EvidenceBatch of {id,path,text} records for one current folder and calls ${steps[0].name} with StageInput1 {batch,context,prior:{stageAbsences:[]}}. Append the returned FinalSemanticState to the loop's collected states, then advance the folder frontier; the unprocessed-folder count decreases by one until all folders are consumed. Each named stage adds its owned, source-linked contribution and passes that accumulated state to its child. Synthesize the declared result from all collected states, preserving cross-folder evidence and unresolved claims.\n`) +
@@ -387,6 +397,7 @@ function render(entry, provider) {
       files[`${stageFolder}.nl`] = nlFile({ args: { input: `StageInput${index + 1}` },
         returns: 'FinalSemanticState', description: `${title}: ${name}`,
         instructions: `${plan}\nOwned new semantic contribution: ${owned.owned_contribution.field}: ${owned.owned_contribution.type}.\n` +
+          identityInstruction +
           `Transformation: ${owned.new_semantic_transformation}\n` +
           `Evidence: ${owned.source_evidence_obligation}\nInvariant: ${owned.invariant}\n` +
           `No applicable evidence: ${owned.no_op_policy}${literalPlan}\n` +
