@@ -320,3 +320,75 @@ declaration is in §6; admission is the owner's and both recipe owners' decision
   to the teacher.
 - Record size: a record carries its whole prefix (median about 160k characters before views). Target sampling
   bounds the count. The trainer's `max_tokens` drops records that remain too long in crisp form.
+
+## 9. First matrix run (2026-10-12/13, DGX)
+
+The §6.3 table on 20 pi tasks (`applications/pi/tasks/`: the 6 original tasks plus 14 added in ebe44a05, 6 Python, 7
+JavaScript and 1 natlang-flavoured; each hidden check fails on the shipped repository and passes with a reference fix
+kept out of the tree). Driver: `scripts/harness_bench_matrix.py` (one ledger unit per checkpoint: a llama.cpp executor,
+the student on `natlang_neuralese.serve`, `natlang run applications/pi -- eval` per configuration, `matrix.json` and
+`matrix.md` with pass, status, seconds, requests, tool calls, calls pi rejected, turns with unparsed call markup, valid
+first call and the largest prompt). Raw outputs: `/home/werg/data/harness-bench/matrix-20261012/` and
+`/mnt/external/harness-bench/foreign-tools-20261012/`.
+
+Setup. Student LFM2.5-350M (base revision 9e6c6ccf), bf16 on CUDA, 32k context, 4,096 max tokens. Executor
+LFM2.5-2.6B Q6_K on the llama.cpp fork (no Qwen server on DGX). pi runs with `--phases crisp --tools crisp`
+(pi-durable's TypeScript task kinds and tools, 3ca8760b/85bb9655): with the natural-language phases a 2.6B executor
+failed the generation `prepare` phase twice in 8 minutes and the student was never called. Each task runs on a temp
+copy, its file tools confined to that copy (7c20ec74).
+
+| checkpoint | configuration | passed | mean s | requests | tool calls (rejected) | unparsed call turns | valid first call | ended |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| base LFM2.5-350M, greedy, 8 min | student alone | 0/20 | 3.0 | 36 | 17 (8) | 0 | 2/20 | 20 answered |
+| base LFM2.5-350M, greedy, 8 min | student + text companion | 0/20 | 2.0 | 27 | 7 (3) | 0 | 2/20 | 20 answered |
+| Pop LFM Muon main-v2 step 10006, T=0.6, 6 min | student alone | 0/20 | 189.9 | 2,544 | 2,528 (1) | 4 | 16/20 | 15 answered, 5 timed out |
+| Pop LFM Muon main-v2 step 10006, T=0.6, 6 min | student + text companion | 0/20 | 182.6 | 1,430 | 1,412 (2) | 1 | 13/20 | 14 answered, 6 timed out |
+| teacher alone | | pending: no teacher endpoint on DGX | | | | | | |
+| student + Neuralese companion and views | | pending: direct writer not qualified (exports are `direct-writer-pending`) | | | | | | |
+| student + oracle companion | | pending: not implemented | | | | | | |
+
+Export `runs/pop-lfm-muon-main-v2-export-step10006` (manifest 3c0a4695…, program-header rendering). The local v8 export
+(`luna-…-v8/direct-export-v2`, step 1000) was not run: the base and Pop rows already show the blockers below, and the
+memory queue allowed one unit at a time.
+
+Diagnoses (a 0 is a bug until proven otherwise):
+
+1. Executor capacity, not the student: natural-language pi phases on a 2.6B executor never reached the student. Fixed
+   for the bench by `--phases crisp --tools crisp`; the natural-language arm needs a teacher-size executor.
+2. Program-header serving dropped pi's tool schemas (the rendered prompt had pi's system text and no `List of tools`;
+   the student called `read_file` and wrote unparsed `<|tool_call_start|>` text). Pop fixed it (95bc6eca); measured on
+   step 10006, old vs new serving: rejected calls 80 → 0, unparsed call turns 12 → 1, valid first call 11/20 → 17/20,
+   success 0/20 both (MODEL_FACING_CHANGES.md).
+3. Greedy decoding: pi sends no temperature and the server default is greedy; the Muon student then repeated one call
+   100-185 times per task (e.g. `read src/pool.js` 165 times). pi has `--temperature` now (09baae1e). At T=0.6 the
+   student still repeats an earlier identical call in 93-95% of its calls. Rendering of a call and its result was
+   checked on `/v1/neuralese/render` (the call renders as `<|tool_call_start|>[read(path='src/pool.js')]`, the result
+   as a `tool` turn, tools listed). Remaining cause: the training rendering matches serving (the step-10006 input,
+   `natlang-target-union-20261011-r2-context-recovery-v1/program-header/lfm25`, holds 3,809 rows of the pi twin
+   `harness-bench-swe-rebench-openhands-pi-text-v2` with pi's system prompt, tool schemas, `<|tool_call_start|>[read(…)]`
+   calls and `tool` turns, as served), but these are 2.8% of 136,191 rows, and the student reproduces their openings
+   without conditioning on results: `read README.md`, then `python -m pytest tests/ -v` repeated, on JavaScript repos
+   too. Undertrained on pi trajectories, not a rendering bug; more harness_bench data and target-turn weight (§6) is
+   the fix.
+4. Base LFM2.5-350M answers in one turn without a tool call on 18/20 tasks ("the provided tools do not include …").
+   Ruled out: the tool schemas reach it (`List of tools` rendered, full rendering), wrapped vs flat schemas, pi's vs a
+   one-line system prompt vs none (0/8 tool-call replies each at T=0.7). A capability limit of the base on this prompt.
+5. Isolation bug found and fixed: the base student wrote `applications/pi/README.md` in the shared checkout through an
+   absolute path from the system prompt's docs section. eval confines file tools to the task copy and refuses a copy
+   inside the checkout (7c20ec74).
+6. Memory queue: a 13.5 GB full-check unit at the queue head that could not fit blocked every later unit for hours
+   (twice); I cancelled the stale queued checks (no running work lost). The companion halves the Muon student's requests
+   (2,544 → 1,430) without changing success.
+
+Commands:
+
+```sh
+python3 scripts/memory_ledger.py run --unit harness-matrix-<label> --budget-gb 7.5 --reserve-gb 2 --priority medium -- \
+  python3 scripts/harness_bench_matrix.py --label <label> --student-base <LFM2.5-350M snapshot> \
+    [--student-artifact <direct export>] --out <dir> --minutes 6 --student-memory-gb 4 \
+    --extra "--phases crisp --tools crisp --temperature 0.6"
+```
+
+Next: raise the pi cohort's share and target-turn weight in the LFM direct-SFT continuation (and re-render more pi
+twins), then rerun this matrix on that export; the teacher-alone row when a teacher endpoint is up; the
+natural-language-phase arm with a teacher-size executor; the v8 export for completeness.
