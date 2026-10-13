@@ -73,3 +73,5 @@ A service declaration defines its positional arguments. When a service error giv
 ## Carry exact provenance through semantic calls
 
 Pass the original typed source record to a named evidence interpreter. Give context/declaration parsing and event interpretation separate typed responsibilities when they produce different data. A scoped NL judgment may return meaning arrays and exact quote bytes; its parent binds witness source ID and path from the original record, then checks quotation containment before consuming those findings. If exact witness checks fail, retain an unresolved evidence finding and inspect the original record rather than inventing provenance. Context canon remains input to authority interpretation even when it is excluded from an event frontier.
+
+A nonempty source-grounded semantic contribution requires at least one nonempty supporting quote whose exact source check passes. An empty witness array cannot certify that contribution; retain the missing support as unresolved.

@@ -15,7 +15,8 @@ returns: FrameDeclarationIndex
 4. For every declaration, choose exact quotation bytes from this record. Bind Witness.sourceId
    from record.id and Witness.path from record.path. Check those witnesses immediately with
    storyEvidence.checkWitnesses({revision: record.sha256, records: [record]}, witnesses).
-5. Retain only declaration witnesses whose exact checks pass. If the source does not decide a
+5. Require at least one nonempty exact supporting quotation for each retained declaration.
+   Retain only declaration witnesses whose exact checks pass. If the source does not decide a
    kind, owner or parent, record the missing premise in unresolved; preserve explicit null owners
    for narrator-established selected frames rather than inventing a speaking character.
 6. Merge compatible repeated declarations of the same frame identity. Union explicitly assigned

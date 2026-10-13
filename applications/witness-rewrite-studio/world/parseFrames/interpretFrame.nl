@@ -19,6 +19,8 @@ returns: FrameIndex
    arrays and exact quotes from record.text. For each returned quote, this parent constructs a Witness
    with sourceId=record.id and path=record.path from the original SourceRecord, then calls
    storyEvidence.checkWitnesses({revision: record.sha256, records: [record]}, witnesses).
+   For each nonempty asserted, observed or reported contribution require at least one exact
+   supporting quote; a missing quote becomes unresolved rather than a witnessed meaning.
    Consume the returned meaning arrays only with the exact passing witnesses. A failed quote check
    becomes an unresolved evidence finding and cannot license a source-grounded asserted meaning.
 6. Put ambiguity explanations in unresolved. A literal cannot invent an omniscient narrator to
