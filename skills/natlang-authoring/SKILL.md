@@ -81,3 +81,7 @@ A nonempty source-grounded semantic contribution requires at least one nonempty 
 ## Separate symbolic readings from operational bindings
 
 When one semantic stage reads source terminology and its parent materializes an executable plan, give the child a typed symbolic reading and the parent a distinct typed binding contribution. A parent's scoped NL judgment joins that reading with visible code definitions and compares displayed wording with counted meaning. Preserve disagreement as a diagnosis without silently repairing an implementation. The executable uses the returned binding; comparison consumes the symbolic reading and meaning relation. Missing or conflicting definitions remain unresolved rather than selecting a code by label.
+
+## Compile evolving prose as a semantic application
+
+Separate source edition/authority selection, rule/exception interpretation, carried state inference, callable/literal lowering, NL module writing and scenario execution into typed transformations. Preserve historical event-time clauses alongside later replacements, and retain duties outside a scoped waiver. Generated guards return actual typed state effects consumed by scenario replay; a correct source model cannot certify an emitted body that dropped those rules. Diagnose earliest divergence and revise generated policy or its missing state handoff, keeping original authority/evidence unchanged. Missing authority or decisive evidence remains unresolved rather than becoming a fabricated default.

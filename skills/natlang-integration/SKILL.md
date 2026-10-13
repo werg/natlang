@@ -71,3 +71,7 @@ A nonempty source-grounded semantic contribution requires at least one nonempty 
 ## Observe semantic materialization at both stages
 
 Keep child symbolic interpretation separate from parent operational binding in report types and traces. Exact services receive the parent's resolved code or plan fields, while semantic comparison receives the retained reading and any display-meaning relation. An exact checker can verify owner/clause identities, code/arithmetic consistency and declared invariant fields; it cannot establish source entailment or actual scoped-literal execution. A new typed witness is a canonical form, and its numeric equivalence to an older witness does not qualify revised model-facing stages live.
+
+## Keep generated policy distinct from exact compiler services
+
+Use existing parser/type/callable-folder mechanisms for generated NL source, immutable source identity and exact file serialization. Semantic edition/rule selection, exception composition, lowering boundaries and guard effects stay in NL. Package the actual generated module bytes and their carried state/guard traces separately from the original governed model. A typed generated-folder witness or static contribution audit is not live execution proof; independent scenario entailment and literal-to-state consumption remain separate gates. Generated-source revisions are private proposals with explicit unresolved failures.

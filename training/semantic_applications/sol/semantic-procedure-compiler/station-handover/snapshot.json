@@ -1,0 +1,775 @@
+{
+  "revision": "03b011cd334717c0ff444d877ee64b5de4850ff9ea9f09ba19be20ff76c95bea",
+  "records": [
+    {
+      "id": "AUTH",
+      "path": "authority/charter.md",
+      "text": "ID AUTH. Closed fictional radio-club procedure authority.\n[A01] Club Committee CC alone adopts or replaces station safety and custody procedures. An adopted edition applies from its explicit effective day, not publication day.\n[A02] Duty coordinator DC can confirm emergency priority and waive the queue prerequisite for that confirmed emergency only. DC cannot waive safety acknowledgment, custody or hazard clearance.\n[A03] Operator recollections and habit notes have no adoption force. There are no unlisted policy changes or additional competent waiver grants.\n",
+      "sha256": "826c70d05826d74056085bf77548dddc043f97d6c36ccb29948b909a01e8a5a6"
+    },
+    {
+      "id": "E1",
+      "path": "procedures/edition-one.md",
+      "text": "ID E1. CC adopted edition ONE on day0, effective day0.\n[V1] Edition ONE permits a named operator to start a transmission when that operator owns the station token and has an accepted queue turn. ONE does not require a separate safety acknowledgment.\n[CUSTODY] There is one station token ST. Only its current actual holder has custody. A witnessed completed handover changes holder; a proposed transfer does not. Appearance of a similar brass token is not identity with ST.\n[HAZARD] A known uncleared station hazard blocks starting a transmission under every edition. An unresolved decisive hazard finding leaves permission unresolved. Only an actual signed clearance by maintenance M establishes clearance.\n",
+      "sha256": "c6d62352a4ef170bd18190e858382b98b117ea6cde00a0c8ce0e8bd6870d6dfb"
+    },
+    {
+      "id": "E2",
+      "path": "procedures/edition-two.md",
+      "text": "ID E2. CC signs adoption of edition TWO on day3 and publishes it on day4, effective day5.\n[V2] From day5 TWO replaces only V1 permission prerequisites. Starting requires the named operator's accepted queue turn, current custody of ST, personal acknowledgment of the actual current safety brief, and no uncleared hazard. CUSTODY and HAZARD remain unchanged.\n[BRIEF] Safety acknowledgment is personal to the actor and current brief edition. A token receipt proves custody only. Receiving, forwarding or overhearing a brief does not prove acknowledgment; a recorded explicit acknowledgment does.\n[HISTORY] Later acknowledgment or clearance permits later actions only. It cannot authorize an earlier attempted transmission. A later authentic report can revise knowledge about a past event without changing its actual time.\n",
+      "sha256": "031571cb66960410a56452fc9b896d33fc1c21c876d4107d02ef7bb5b712ad0a"
+    },
+    {
+      "id": "EM",
+      "path": "procedures/emergency.md",
+      "text": "ID EM. DC signs the emergency appendix on day5; it has effect from day5 within A02 authority.\n[WAIVER] A DC-confirmed emergency transmission need not have an accepted queue turn. This removes only the queue prerequisite, preserving ST custody, current safety acknowledgment and hazard clearance under TWO.\n[WAIVER_EFFECT] Waiving the queue condition does not mark a queue turn completed and does not supply its normal scheduling effects for later ordinary transmissions.\n",
+      "sha256": "bc3d70df45e179c4fe3ebab51f08f6242b1e6e57399419765967b61536997a1f"
+    },
+    {
+      "id": "HABIT",
+      "path": "procedures/habit.md",
+      "text": "ID HABIT. Operator reminiscence recorded day6; not adopted by CC.\n[OLD_HABIT] Past operators sometimes called token receipt the safety check and skipped queue turns for any urgent-sounding message. This is a report of habits, not an adopted rule or valid DC confirmation.\n",
+      "sha256": "5b9e64fd41bbb35bca5278ae3c99837559db5c3c30afb1ac3e6ed9262318756d"
+    },
+    {
+      "id": "IDENT",
+      "path": "definitions/identity.md",
+      "text": "ID IDENT. Source-visible identities and input truth convention.\n[I01] Ada,Bo,Cy and M are distinct people; CC and DC are distinct authority roles. ST and rehearsal token RT are distinct objects.\n[I02] Every scenario begins with separate stated facts; scenario states never carry into another history. Numeric times are integer global days.\n[I03] A source explicitly stating not acknowledged is a false readiness fact. A genuinely absent acknowledgment record leaves that fact unknown. False and unknown are different guard outcomes.\n[I04] Events explicitly report actual acts unless labeled proposed or reported. Each event's actor and time are preserved through state transitions and witness joins.\n",
+      "sha256": "68d4fd1c20ef4527b9420f8a875e03f10a155b3907c5f2e075f7ff2f797256b4"
+    },
+    {
+      "id": "OUTPUT",
+      "path": "controls/output.md",
+      "text": "ID OUTPUT. Compile the selected procedure into a callable NL application and return full typed CompilePacket.\n[O01] Keep historical permission before day5 and revised permission from day5. Generate substantive named functions and invoked scoped rule literals, with typed actor/time/custody/readiness/queue/hazard state and concrete returned consumers.\n[O02] Return actual generated module texts, rule/source-to-module mapping, scenario guard decisions and before/after state traces. A final label alone is insufficient.\n[O03] Exact source IDs are AUTH,E1,E2,EM,HABIT,IDENT,OUTPUT and scenario source IDs. Clause IDs,actors,ST/RT,scenario/event IDs are exact. Generated module/proof/decision IDs can differ with consistent references and source-grounded behavior.\n[O04] Permission is true when all active necessary conditions hold, false with an affirmative failed condition, and null when an otherwise decisive condition is genuinely unknown. Preserve false vs null in emitted guards and traces.\n[O05] Unchanged independent facts survive a transfer: the new holder does not inherit another person's acknowledgment or queue turn. No external broadcasting law applies to this closed fictional world.\n",
+      "sha256": "424ddaabb4fcfbaa9bf8d3f328f85c2a4f91a08c172b1d133bda0082e574607c"
+    },
+    {
+      "id": "SN",
+      "path": "scenarios/normal.md",
+      "text": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer.\n",
+      "sha256": "46fda428aa6c239cb02657562f4935f03446ea53faeebedbc75241771a81ef60"
+    },
+    {
+      "id": "SE",
+      "path": "scenarios/emergency.md",
+      "text": "ID SE. Scenario EMERGENCY at day6.\n[SE1] Bo holds ST, personally acknowledged current brief and has signed hazard clearance; Bo explicitly has no accepted queue turn.\n[SE2] DC actually confirms this named transmission EM_ATTEMPT as an emergency before its day6 attempt. No queue event occurs before or after the waiver in this history.\n",
+      "sha256": "95443fb4179105c68616b4185811c10738c0c74246031709757d04f305d22bc6"
+    },
+    {
+      "id": "SR",
+      "path": "scenarios/receipt.md",
+      "text": "ID SR. Scenario RECEIPT at day6.\n[SR1] Cy receives ST with an authentic completed custody receipt and has accepted queue and signed hazard clearance. The current safety brief was delivered, but acknowledgment is genuinely unknown.\n[SR2] DC confirms this named transmission R_ATTEMPT as emergency before Cy attempts it at day6. The custody receipt contains no statement about Cy's acknowledgment.\n",
+      "sha256": "9cd46f0b70cc0979127c337fd867dd3c88f3918d92ac5e74312c22fec310f842"
+    },
+    {
+      "id": "SH",
+      "path": "scenarios/hazard.md",
+      "text": "ID SH. Scenario HAZARD at days6..8.\n[SH1] Ada owns ST, has accepted queue and personal current-brief acknowledgment. At day6 an actual hazard report establishes an uncleared fault; Ada attempts H_EARLY at day7.\n[SH2] Maintenance M actually signs clearance H_CLEAR at day8; Ada then attempts H_LATE at day8. The clearance is not effective earlier and no prior clearance exists.\n",
+      "sha256": "e9154474e4f1078fdccb0a31a953b86be2dc145d5f4395157ea746fa27e3056e"
+    },
+    {
+      "id": "SV",
+      "path": "scenarios/versions.md",
+      "text": "ID SV. Scenario VERSIONS across the replacement boundary.\n[SV1] Bo has ST custody, accepted queue, signed hazard clearance and explicitly no safety acknowledgment throughout this history.\n[SV2] Bo attempts V_EARLY at day4 and V_LATE at day6. The day4 publication of TWO does not move its day5 effective boundary.\n",
+      "sha256": "f00028eb738771af7e0d3cfc499bec88f500f0f4686022682d009956f924bbf9"
+    },
+    {
+      "id": "SP",
+      "path": "scenarios/proposed.md",
+      "text": "ID SP. Scenario PROPOSED at day6.\n[SP1] Ada actually holds ST. Cy holds only rehearsal RT, has accepted queue, personal acknowledgment and hazard clearance. Ada merely proposes giving ST to Cy; no actual transfer occurs.\n[SP2] Cy cites OLD_HABIT and attempts P_ATTEMPT at day6. No DC confirmation is made. The rehearsal token resemblance and proposed handover do not establish actual custody of ST.\n",
+      "sha256": "105f162c738a268a18d71a2e3c5eae19c62e5cba4819f965dee3f09dd77f4a35"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "NORMAL",
+      "initial": [
+        {
+          "key": "custody",
+          "subject": "Ada",
+          "value": "ST",
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SN",
+              "path": "scenarios/normal.md",
+              "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+            }
+          ]
+        },
+        {
+          "key": "queueAccepted",
+          "subject": "Ada",
+          "value": true,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SN",
+              "path": "scenarios/normal.md",
+              "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+            }
+          ]
+        },
+        {
+          "key": "briefAcknowledged",
+          "subject": "Ada",
+          "value": true,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SN",
+              "path": "scenarios/normal.md",
+              "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+            }
+          ]
+        },
+        {
+          "key": "unclearedHazard",
+          "subject": "Ada",
+          "value": false,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SN",
+              "path": "scenarios/normal.md",
+              "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+            }
+          ]
+        },
+        {
+          "key": "custody",
+          "subject": "Bo",
+          "value": null,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SN",
+              "path": "scenarios/normal.md",
+              "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+            }
+          ]
+        },
+        {
+          "key": "queueAccepted",
+          "subject": "Bo",
+          "value": true,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SN",
+              "path": "scenarios/normal.md",
+              "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+            }
+          ]
+        },
+        {
+          "key": "briefAcknowledged",
+          "subject": "Bo",
+          "value": false,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SN",
+              "path": "scenarios/normal.md",
+              "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+            }
+          ]
+        },
+        {
+          "key": "unclearedHazard",
+          "subject": "Bo",
+          "value": false,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SN",
+              "path": "scenarios/normal.md",
+              "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "N_ATTEMPT",
+          "time": 6,
+          "actor": "Ada",
+          "meaning": "Actual transmission attempt.",
+          "witnesses": [
+            {
+              "sourceId": "SN",
+              "path": "scenarios/normal.md",
+              "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+            }
+          ]
+        },
+        {
+          "id": "N_TRANSFER",
+          "time": 7,
+          "actor": "Ada",
+          "meaning": "Actual ST handover from Ada to Bo.",
+          "witnesses": [
+            {
+              "sourceId": "SN",
+              "path": "scenarios/normal.md",
+              "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+            }
+          ]
+        },
+        {
+          "id": "N_BO",
+          "time": 7,
+          "actor": "Bo",
+          "meaning": "Transmission attempt after actual handover.",
+          "witnesses": [
+            {
+              "sourceId": "SN",
+              "path": "scenarios/normal.md",
+              "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+            }
+          ]
+        }
+      ],
+      "requiredObservables": [
+        "Judge each attempt at its time; preserve independent facts through actual handover."
+      ],
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "id": "EMERGENCY",
+      "initial": [
+        {
+          "key": "custody",
+          "subject": "Bo",
+          "value": "ST",
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SE",
+              "path": "scenarios/emergency.md",
+              "quote": "ID SE. Scenario EMERGENCY at day6.\n[SE1] Bo holds ST, personally acknowledged current brief and has signed hazard clearance; Bo explicitly has no accepted queue turn.\n[SE2] DC actually confirms this named transmission EM_ATTEMPT as an emergency before its day6 attempt. No queue event occurs before or after the waiver in this history."
+            }
+          ]
+        },
+        {
+          "key": "queueAccepted",
+          "subject": "Bo",
+          "value": false,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SE",
+              "path": "scenarios/emergency.md",
+              "quote": "ID SE. Scenario EMERGENCY at day6.\n[SE1] Bo holds ST, personally acknowledged current brief and has signed hazard clearance; Bo explicitly has no accepted queue turn.\n[SE2] DC actually confirms this named transmission EM_ATTEMPT as an emergency before its day6 attempt. No queue event occurs before or after the waiver in this history."
+            }
+          ]
+        },
+        {
+          "key": "briefAcknowledged",
+          "subject": "Bo",
+          "value": true,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SE",
+              "path": "scenarios/emergency.md",
+              "quote": "ID SE. Scenario EMERGENCY at day6.\n[SE1] Bo holds ST, personally acknowledged current brief and has signed hazard clearance; Bo explicitly has no accepted queue turn.\n[SE2] DC actually confirms this named transmission EM_ATTEMPT as an emergency before its day6 attempt. No queue event occurs before or after the waiver in this history."
+            }
+          ]
+        },
+        {
+          "key": "unclearedHazard",
+          "subject": "Bo",
+          "value": false,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SE",
+              "path": "scenarios/emergency.md",
+              "quote": "ID SE. Scenario EMERGENCY at day6.\n[SE1] Bo holds ST, personally acknowledged current brief and has signed hazard clearance; Bo explicitly has no accepted queue turn.\n[SE2] DC actually confirms this named transmission EM_ATTEMPT as an emergency before its day6 attempt. No queue event occurs before or after the waiver in this history."
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "EM_CONFIRM",
+          "time": 6,
+          "actor": "DC",
+          "meaning": "Actual emergency confirmation for EM_ATTEMPT before attempt.",
+          "witnesses": [
+            {
+              "sourceId": "SE",
+              "path": "scenarios/emergency.md",
+              "quote": "ID SE. Scenario EMERGENCY at day6.\n[SE1] Bo holds ST, personally acknowledged current brief and has signed hazard clearance; Bo explicitly has no accepted queue turn.\n[SE2] DC actually confirms this named transmission EM_ATTEMPT as an emergency before its day6 attempt. No queue event occurs before or after the waiver in this history."
+            }
+          ]
+        },
+        {
+          "id": "EM_ATTEMPT",
+          "time": 6,
+          "actor": "Bo",
+          "meaning": "Named emergency attempt.",
+          "witnesses": [
+            {
+              "sourceId": "SE",
+              "path": "scenarios/emergency.md",
+              "quote": "ID SE. Scenario EMERGENCY at day6.\n[SE1] Bo holds ST, personally acknowledged current brief and has signed hazard clearance; Bo explicitly has no accepted queue turn.\n[SE2] DC actually confirms this named transmission EM_ATTEMPT as an emergency before its day6 attempt. No queue event occurs before or after the waiver in this history."
+            }
+          ]
+        }
+      ],
+      "requiredObservables": [
+        "Scope queue waiver without supplying queue completion or waiving other prerequisites."
+      ],
+      "witnesses": [
+        {
+          "sourceId": "SE",
+          "path": "scenarios/emergency.md",
+          "quote": "ID SE. Scenario EMERGENCY at day6.\n[SE1] Bo holds ST, personally acknowledged current brief and has signed hazard clearance; Bo explicitly has no accepted queue turn.\n[SE2] DC actually confirms this named transmission EM_ATTEMPT as an emergency before its day6 attempt. No queue event occurs before or after the waiver in this history."
+        }
+      ]
+    },
+    {
+      "id": "RECEIPT",
+      "initial": [
+        {
+          "key": "custody",
+          "subject": "Cy",
+          "value": "ST",
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SR",
+              "path": "scenarios/receipt.md",
+              "quote": "ID SR. Scenario RECEIPT at day6.\n[SR1] Cy receives ST with an authentic completed custody receipt and has accepted queue and signed hazard clearance. The current safety brief was delivered, but acknowledgment is genuinely unknown.\n[SR2] DC confirms this named transmission R_ATTEMPT as emergency before Cy attempts it at day6. The custody receipt contains no statement about Cy's acknowledgment."
+            }
+          ]
+        },
+        {
+          "key": "queueAccepted",
+          "subject": "Cy",
+          "value": true,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SR",
+              "path": "scenarios/receipt.md",
+              "quote": "ID SR. Scenario RECEIPT at day6.\n[SR1] Cy receives ST with an authentic completed custody receipt and has accepted queue and signed hazard clearance. The current safety brief was delivered, but acknowledgment is genuinely unknown.\n[SR2] DC confirms this named transmission R_ATTEMPT as emergency before Cy attempts it at day6. The custody receipt contains no statement about Cy's acknowledgment."
+            }
+          ]
+        },
+        {
+          "key": "briefAcknowledged",
+          "subject": "Cy",
+          "value": null,
+          "known": false,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SR",
+              "path": "scenarios/receipt.md",
+              "quote": "ID SR. Scenario RECEIPT at day6.\n[SR1] Cy receives ST with an authentic completed custody receipt and has accepted queue and signed hazard clearance. The current safety brief was delivered, but acknowledgment is genuinely unknown.\n[SR2] DC confirms this named transmission R_ATTEMPT as emergency before Cy attempts it at day6. The custody receipt contains no statement about Cy's acknowledgment."
+            }
+          ]
+        },
+        {
+          "key": "unclearedHazard",
+          "subject": "Cy",
+          "value": false,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SR",
+              "path": "scenarios/receipt.md",
+              "quote": "ID SR. Scenario RECEIPT at day6.\n[SR1] Cy receives ST with an authentic completed custody receipt and has accepted queue and signed hazard clearance. The current safety brief was delivered, but acknowledgment is genuinely unknown.\n[SR2] DC confirms this named transmission R_ATTEMPT as emergency before Cy attempts it at day6. The custody receipt contains no statement about Cy's acknowledgment."
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "R_CONFIRM",
+          "time": 6,
+          "actor": "DC",
+          "meaning": "Actual emergency confirmation for R_ATTEMPT.",
+          "witnesses": [
+            {
+              "sourceId": "SR",
+              "path": "scenarios/receipt.md",
+              "quote": "ID SR. Scenario RECEIPT at day6.\n[SR1] Cy receives ST with an authentic completed custody receipt and has accepted queue and signed hazard clearance. The current safety brief was delivered, but acknowledgment is genuinely unknown.\n[SR2] DC confirms this named transmission R_ATTEMPT as emergency before Cy attempts it at day6. The custody receipt contains no statement about Cy's acknowledgment."
+            }
+          ]
+        },
+        {
+          "id": "R_ATTEMPT",
+          "time": 6,
+          "actor": "Cy",
+          "meaning": "Attempt with authentic custody receipt and unknown acknowledgment.",
+          "witnesses": [
+            {
+              "sourceId": "SR",
+              "path": "scenarios/receipt.md",
+              "quote": "ID SR. Scenario RECEIPT at day6.\n[SR1] Cy receives ST with an authentic completed custody receipt and has accepted queue and signed hazard clearance. The current safety brief was delivered, but acknowledgment is genuinely unknown.\n[SR2] DC confirms this named transmission R_ATTEMPT as emergency before Cy attempts it at day6. The custody receipt contains no statement about Cy's acknowledgment."
+            }
+          ]
+        }
+      ],
+      "requiredObservables": [
+        "Keep unknown readiness independent from proved custody."
+      ],
+      "witnesses": [
+        {
+          "sourceId": "SR",
+          "path": "scenarios/receipt.md",
+          "quote": "ID SR. Scenario RECEIPT at day6.\n[SR1] Cy receives ST with an authentic completed custody receipt and has accepted queue and signed hazard clearance. The current safety brief was delivered, but acknowledgment is genuinely unknown.\n[SR2] DC confirms this named transmission R_ATTEMPT as emergency before Cy attempts it at day6. The custody receipt contains no statement about Cy's acknowledgment."
+        }
+      ]
+    },
+    {
+      "id": "HAZARD",
+      "initial": [
+        {
+          "key": "custody",
+          "subject": "Ada",
+          "value": "ST",
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SH",
+              "path": "scenarios/hazard.md",
+              "quote": "ID SH. Scenario HAZARD at days6..8.\n[SH1] Ada owns ST, has accepted queue and personal current-brief acknowledgment. At day6 an actual hazard report establishes an uncleared fault; Ada attempts H_EARLY at day7.\n[SH2] Maintenance M actually signs clearance H_CLEAR at day8; Ada then attempts H_LATE at day8. The clearance is not effective earlier and no prior clearance exists."
+            }
+          ]
+        },
+        {
+          "key": "queueAccepted",
+          "subject": "Ada",
+          "value": true,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SH",
+              "path": "scenarios/hazard.md",
+              "quote": "ID SH. Scenario HAZARD at days6..8.\n[SH1] Ada owns ST, has accepted queue and personal current-brief acknowledgment. At day6 an actual hazard report establishes an uncleared fault; Ada attempts H_EARLY at day7.\n[SH2] Maintenance M actually signs clearance H_CLEAR at day8; Ada then attempts H_LATE at day8. The clearance is not effective earlier and no prior clearance exists."
+            }
+          ]
+        },
+        {
+          "key": "briefAcknowledged",
+          "subject": "Ada",
+          "value": true,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SH",
+              "path": "scenarios/hazard.md",
+              "quote": "ID SH. Scenario HAZARD at days6..8.\n[SH1] Ada owns ST, has accepted queue and personal current-brief acknowledgment. At day6 an actual hazard report establishes an uncleared fault; Ada attempts H_EARLY at day7.\n[SH2] Maintenance M actually signs clearance H_CLEAR at day8; Ada then attempts H_LATE at day8. The clearance is not effective earlier and no prior clearance exists."
+            }
+          ]
+        },
+        {
+          "key": "unclearedHazard",
+          "subject": "Ada",
+          "value": true,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SH",
+              "path": "scenarios/hazard.md",
+              "quote": "ID SH. Scenario HAZARD at days6..8.\n[SH1] Ada owns ST, has accepted queue and personal current-brief acknowledgment. At day6 an actual hazard report establishes an uncleared fault; Ada attempts H_EARLY at day7.\n[SH2] Maintenance M actually signs clearance H_CLEAR at day8; Ada then attempts H_LATE at day8. The clearance is not effective earlier and no prior clearance exists."
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "H_EARLY",
+          "time": 7,
+          "actor": "Ada",
+          "meaning": "Attempt before actual clearance.",
+          "witnesses": [
+            {
+              "sourceId": "SH",
+              "path": "scenarios/hazard.md",
+              "quote": "ID SH. Scenario HAZARD at days6..8.\n[SH1] Ada owns ST, has accepted queue and personal current-brief acknowledgment. At day6 an actual hazard report establishes an uncleared fault; Ada attempts H_EARLY at day7.\n[SH2] Maintenance M actually signs clearance H_CLEAR at day8; Ada then attempts H_LATE at day8. The clearance is not effective earlier and no prior clearance exists."
+            }
+          ]
+        },
+        {
+          "id": "H_CLEAR",
+          "time": 8,
+          "actor": "M",
+          "meaning": "Actual signed hazard clearance.",
+          "witnesses": [
+            {
+              "sourceId": "SH",
+              "path": "scenarios/hazard.md",
+              "quote": "ID SH. Scenario HAZARD at days6..8.\n[SH1] Ada owns ST, has accepted queue and personal current-brief acknowledgment. At day6 an actual hazard report establishes an uncleared fault; Ada attempts H_EARLY at day7.\n[SH2] Maintenance M actually signs clearance H_CLEAR at day8; Ada then attempts H_LATE at day8. The clearance is not effective earlier and no prior clearance exists."
+            }
+          ]
+        },
+        {
+          "id": "H_LATE",
+          "time": 8,
+          "actor": "Ada",
+          "meaning": "Attempt after clearance.",
+          "witnesses": [
+            {
+              "sourceId": "SH",
+              "path": "scenarios/hazard.md",
+              "quote": "ID SH. Scenario HAZARD at days6..8.\n[SH1] Ada owns ST, has accepted queue and personal current-brief acknowledgment. At day6 an actual hazard report establishes an uncleared fault; Ada attempts H_EARLY at day7.\n[SH2] Maintenance M actually signs clearance H_CLEAR at day8; Ada then attempts H_LATE at day8. The clearance is not effective earlier and no prior clearance exists."
+            }
+          ]
+        }
+      ],
+      "requiredObservables": [
+        "Later clearance does not retroactively authorize earlier attempt."
+      ],
+      "witnesses": [
+        {
+          "sourceId": "SH",
+          "path": "scenarios/hazard.md",
+          "quote": "ID SH. Scenario HAZARD at days6..8.\n[SH1] Ada owns ST, has accepted queue and personal current-brief acknowledgment. At day6 an actual hazard report establishes an uncleared fault; Ada attempts H_EARLY at day7.\n[SH2] Maintenance M actually signs clearance H_CLEAR at day8; Ada then attempts H_LATE at day8. The clearance is not effective earlier and no prior clearance exists."
+        }
+      ]
+    },
+    {
+      "id": "VERSIONS",
+      "initial": [
+        {
+          "key": "custody",
+          "subject": "Bo",
+          "value": "ST",
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SV",
+              "path": "scenarios/versions.md",
+              "quote": "ID SV. Scenario VERSIONS across the replacement boundary.\n[SV1] Bo has ST custody, accepted queue, signed hazard clearance and explicitly no safety acknowledgment throughout this history.\n[SV2] Bo attempts V_EARLY at day4 and V_LATE at day6. The day4 publication of TWO does not move its day5 effective boundary."
+            }
+          ]
+        },
+        {
+          "key": "queueAccepted",
+          "subject": "Bo",
+          "value": true,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SV",
+              "path": "scenarios/versions.md",
+              "quote": "ID SV. Scenario VERSIONS across the replacement boundary.\n[SV1] Bo has ST custody, accepted queue, signed hazard clearance and explicitly no safety acknowledgment throughout this history.\n[SV2] Bo attempts V_EARLY at day4 and V_LATE at day6. The day4 publication of TWO does not move its day5 effective boundary."
+            }
+          ]
+        },
+        {
+          "key": "briefAcknowledged",
+          "subject": "Bo",
+          "value": false,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SV",
+              "path": "scenarios/versions.md",
+              "quote": "ID SV. Scenario VERSIONS across the replacement boundary.\n[SV1] Bo has ST custody, accepted queue, signed hazard clearance and explicitly no safety acknowledgment throughout this history.\n[SV2] Bo attempts V_EARLY at day4 and V_LATE at day6. The day4 publication of TWO does not move its day5 effective boundary."
+            }
+          ]
+        },
+        {
+          "key": "unclearedHazard",
+          "subject": "Bo",
+          "value": false,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SV",
+              "path": "scenarios/versions.md",
+              "quote": "ID SV. Scenario VERSIONS across the replacement boundary.\n[SV1] Bo has ST custody, accepted queue, signed hazard clearance and explicitly no safety acknowledgment throughout this history.\n[SV2] Bo attempts V_EARLY at day4 and V_LATE at day6. The day4 publication of TWO does not move its day5 effective boundary."
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "V_EARLY",
+          "time": 4,
+          "actor": "Bo",
+          "meaning": "Attempt before TWO effective day5.",
+          "witnesses": [
+            {
+              "sourceId": "SV",
+              "path": "scenarios/versions.md",
+              "quote": "ID SV. Scenario VERSIONS across the replacement boundary.\n[SV1] Bo has ST custody, accepted queue, signed hazard clearance and explicitly no safety acknowledgment throughout this history.\n[SV2] Bo attempts V_EARLY at day4 and V_LATE at day6. The day4 publication of TWO does not move its day5 effective boundary."
+            }
+          ]
+        },
+        {
+          "id": "V_LATE",
+          "time": 6,
+          "actor": "Bo",
+          "meaning": "Attempt under TWO.",
+          "witnesses": [
+            {
+              "sourceId": "SV",
+              "path": "scenarios/versions.md",
+              "quote": "ID SV. Scenario VERSIONS across the replacement boundary.\n[SV1] Bo has ST custody, accepted queue, signed hazard clearance and explicitly no safety acknowledgment throughout this history.\n[SV2] Bo attempts V_EARLY at day4 and V_LATE at day6. The day4 publication of TWO does not move its day5 effective boundary."
+            }
+          ]
+        }
+      ],
+      "requiredObservables": [
+        "Apply governed event-time edition, not publication recency."
+      ],
+      "witnesses": [
+        {
+          "sourceId": "SV",
+          "path": "scenarios/versions.md",
+          "quote": "ID SV. Scenario VERSIONS across the replacement boundary.\n[SV1] Bo has ST custody, accepted queue, signed hazard clearance and explicitly no safety acknowledgment throughout this history.\n[SV2] Bo attempts V_EARLY at day4 and V_LATE at day6. The day4 publication of TWO does not move its day5 effective boundary."
+        }
+      ]
+    },
+    {
+      "id": "PROPOSED",
+      "initial": [
+        {
+          "key": "custody",
+          "subject": "Cy",
+          "value": "RT",
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SP",
+              "path": "scenarios/proposed.md",
+              "quote": "ID SP. Scenario PROPOSED at day6.\n[SP1] Ada actually holds ST. Cy holds only rehearsal RT, has accepted queue, personal acknowledgment and hazard clearance. Ada merely proposes giving ST to Cy; no actual transfer occurs.\n[SP2] Cy cites OLD_HABIT and attempts P_ATTEMPT at day6. No DC confirmation is made. The rehearsal token resemblance and proposed handover do not establish actual custody of ST."
+            }
+          ]
+        },
+        {
+          "key": "queueAccepted",
+          "subject": "Cy",
+          "value": true,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SP",
+              "path": "scenarios/proposed.md",
+              "quote": "ID SP. Scenario PROPOSED at day6.\n[SP1] Ada actually holds ST. Cy holds only rehearsal RT, has accepted queue, personal acknowledgment and hazard clearance. Ada merely proposes giving ST to Cy; no actual transfer occurs.\n[SP2] Cy cites OLD_HABIT and attempts P_ATTEMPT at day6. No DC confirmation is made. The rehearsal token resemblance and proposed handover do not establish actual custody of ST."
+            }
+          ]
+        },
+        {
+          "key": "briefAcknowledged",
+          "subject": "Cy",
+          "value": true,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SP",
+              "path": "scenarios/proposed.md",
+              "quote": "ID SP. Scenario PROPOSED at day6.\n[SP1] Ada actually holds ST. Cy holds only rehearsal RT, has accepted queue, personal acknowledgment and hazard clearance. Ada merely proposes giving ST to Cy; no actual transfer occurs.\n[SP2] Cy cites OLD_HABIT and attempts P_ATTEMPT at day6. No DC confirmation is made. The rehearsal token resemblance and proposed handover do not establish actual custody of ST."
+            }
+          ]
+        },
+        {
+          "key": "unclearedHazard",
+          "subject": "Cy",
+          "value": false,
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SP",
+              "path": "scenarios/proposed.md",
+              "quote": "ID SP. Scenario PROPOSED at day6.\n[SP1] Ada actually holds ST. Cy holds only rehearsal RT, has accepted queue, personal acknowledgment and hazard clearance. Ada merely proposes giving ST to Cy; no actual transfer occurs.\n[SP2] Cy cites OLD_HABIT and attempts P_ATTEMPT at day6. No DC confirmation is made. The rehearsal token resemblance and proposed handover do not establish actual custody of ST."
+            }
+          ]
+        },
+        {
+          "key": "custody",
+          "subject": "Ada",
+          "value": "ST",
+          "known": true,
+          "establishedAt": null,
+          "witnesses": [
+            {
+              "sourceId": "SP",
+              "path": "scenarios/proposed.md",
+              "quote": "ID SP. Scenario PROPOSED at day6.\n[SP1] Ada actually holds ST. Cy holds only rehearsal RT, has accepted queue, personal acknowledgment and hazard clearance. Ada merely proposes giving ST to Cy; no actual transfer occurs.\n[SP2] Cy cites OLD_HABIT and attempts P_ATTEMPT at day6. No DC confirmation is made. The rehearsal token resemblance and proposed handover do not establish actual custody of ST."
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "P_PROPOSAL",
+          "time": 6,
+          "actor": "Ada",
+          "meaning": "Proposed only ST handover, not actual transfer.",
+          "witnesses": [
+            {
+              "sourceId": "SP",
+              "path": "scenarios/proposed.md",
+              "quote": "ID SP. Scenario PROPOSED at day6.\n[SP1] Ada actually holds ST. Cy holds only rehearsal RT, has accepted queue, personal acknowledgment and hazard clearance. Ada merely proposes giving ST to Cy; no actual transfer occurs.\n[SP2] Cy cites OLD_HABIT and attempts P_ATTEMPT at day6. No DC confirmation is made. The rehearsal token resemblance and proposed handover do not establish actual custody of ST."
+            }
+          ]
+        },
+        {
+          "id": "P_ATTEMPT",
+          "time": 6,
+          "actor": "Cy",
+          "meaning": "Attempt citing habit note.",
+          "witnesses": [
+            {
+              "sourceId": "SP",
+              "path": "scenarios/proposed.md",
+              "quote": "ID SP. Scenario PROPOSED at day6.\n[SP1] Ada actually holds ST. Cy holds only rehearsal RT, has accepted queue, personal acknowledgment and hazard clearance. Ada merely proposes giving ST to Cy; no actual transfer occurs.\n[SP2] Cy cites OLD_HABIT and attempts P_ATTEMPT at day6. No DC confirmation is made. The rehearsal token resemblance and proposed handover do not establish actual custody of ST."
+            }
+          ]
+        }
+      ],
+      "requiredObservables": [
+        "Do not equate rehearsal token with ST or proposed transfer with custody."
+      ],
+      "witnesses": [
+        {
+          "sourceId": "SP",
+          "path": "scenarios/proposed.md",
+          "quote": "ID SP. Scenario PROPOSED at day6.\n[SP1] Ada actually holds ST. Cy holds only rehearsal RT, has accepted queue, personal acknowledgment and hazard clearance. Ada merely proposes giving ST to Cy; no actual transfer occurs.\n[SP2] Cy cites OLD_HABIT and attempts P_ATTEMPT at day6. No DC confirmation is made. The rehearsal token resemblance and proposed handover do not establish actual custody of ST."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "schema": "natlang.semantic-procedure-compiler-oracle/1",
+  "requestId": "station-compiler-v1",
+  "independently_reviewed": false,
+  "training_admission": false,
+  "permission_invariants": {
+    "N_ATTEMPT": true,
+    "N_BO": false,
+    "EM_ATTEMPT": true,
+    "R_ATTEMPT": null,
+    "H_EARLY": false,
+    "H_LATE": true,
+    "V_EARLY": true,
+    "V_LATE": false,
+    "P_ATTEMPT": false
+  },
+  "state_invariants": [
+    "N_TRANSFER changes ST holder Ada\u2192Bo without transferring Ada acknowledgment.",
+    "EM_CONFIRM waives queue only for EM_ATTEMPT; queueAccepted remains false.",
+    "R_ATTEMPT briefAcknowledged stays known=false/value=null despite proved custody.",
+    "H_CLEAR clears hazard from time8; H_EARLY remains denied.",
+    "P_PROPOSAL leaves actual ST with Ada; Cy RT remains distinct."
+  ],
+  "governed_rule_invariants": {
+    "ONE_before": 5,
+    "TWO_from": 5,
+    "replaced": [
+      "V1"
+    ],
+    "preserved": [
+      "CUSTODY",
+      "HAZARD"
+    ],
+    "queue_waiver_does_not_waive": [
+      "BRIEF",
+      "CUSTODY",
+      "HAZARD"
+    ],
+    "noncontrolling": [
+      "OLD_HABIT"
+    ]
+  },
+  "comparison_spec": {
+    "unordered_paths": [
+      "/program/modules",
+      "/program/sourceToModule",
+      "/suite/verdicts"
+    ],
+    "ordered_paths": [
+      "/suite/verdicts/*/traces"
+    ],
+    "prose_paths": [
+      "/audit/findings/*",
+      "/model/requirements/rules/*/effectMeaning"
+    ],
+    "notes": "Exact source/action/actor/scenario/event IDs and known truth/permission states; generated IDs/paths may vary consistently. Deep NL generated-source entailment and literal consumption need independent review."
+  },
+  "expected_role": "Source-derived invariant set, not a full typed reference or execution trajectory."
+}

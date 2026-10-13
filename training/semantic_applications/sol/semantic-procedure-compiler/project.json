@@ -1,0 +1,553 @@
+{
+  "schema": "natlang.semantic-application-source/1",
+  "id": "sol-app-semantic-procedure-compiler-v1",
+  "source_root": "applications/semantic-procedure-compiler",
+  "domain": "actor",
+  "semantic_domain": "semantic-procedure-compilation",
+  "entry": "compileProcedure.nl",
+  "entry_kind": "directory-reducer",
+  "request_type": "CompilerRequest",
+  "snapshot_type": "ProcedureSnapshot",
+  "result_type": "CompilePacket",
+  "request_path": "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/request.json",
+  "snapshot_path": "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/snapshot.json",
+  "input_bindings": {
+    "request": {
+      "from": "request_path"
+    },
+    "snapshot": {
+      "from": "snapshot_path"
+    }
+  },
+  "fixture_root": "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/fixture",
+  "fixture_files": [
+    "authority/charter.md",
+    "controls/output.md",
+    "definitions/identity.md",
+    "procedures/edition-one.md",
+    "procedures/edition-two.md",
+    "procedures/emergency.md",
+    "procedures/habit.md",
+    "scenarios/emergency.md",
+    "scenarios/hazard.md",
+    "scenarios/normal.md",
+    "scenarios/proposed.md",
+    "scenarios/receipt.md",
+    "scenarios/versions.md"
+  ],
+  "oracle_path": "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/oracle.json",
+  "source_world_split_key": "sol-app-world:radio-club-procedure-editions-v1",
+  "program_files": [
+    "audit/checkInterfaces.nl",
+    "audit.nl",
+    "compileProcedure/intake/interpretGoal.nl",
+    "compileProcedure/intake.nl",
+    "compileProcedure/packageProgram.nl",
+    "compileProcedure/reviseStep/explainCounterexample.nl",
+    "compileProcedure/reviseStep.nl",
+    "compileProcedure.nl",
+    "editions/resolveSupersession.nl",
+    "editions/selectAuthority.nl",
+    "editions.nl",
+    "lowering/chooseBoundary.nl",
+    "lowering/planBranch.nl",
+    "lowering.nl",
+    "model/inferState.nl",
+    "model/orderDependencies/settleComponent.nl",
+    "model/orderDependencies.nl",
+    "model.nl",
+    "requirements/interpretRule.nl",
+    "requirements/resolveException.nl",
+    "requirements.nl",
+    "scenarios/checkOutcome.nl",
+    "scenarios/replayStep/judgeGuard.nl",
+    "scenarios/replayStep.nl",
+    "scenarios.nl",
+    "writing/writeModule/auditContribution.nl",
+    "writing/writeModule.nl",
+    "writing.nl",
+    "types.ts",
+    "natlang.json",
+    "tsconfig.json"
+  ],
+  "typed_call_graph": {
+    "nodes": [
+      {
+        "path": "audit/checkInterfaces.nl",
+        "args": {
+          "program": "GeneratedProgram",
+          "schema": "StateSchema"
+        },
+        "returns": "InterfaceFinding[]",
+        "kind": "function",
+        "owned_delta": "Judge child/parent state ownership and preserve source ambiguity through generated callable interfaces."
+      },
+      {
+        "path": "audit.nl",
+        "args": {
+          "intake": "Intake",
+          "model": "ProcedureModel",
+          "program": "GeneratedProgram",
+          "suite": "ScenarioSuiteResult"
+        },
+        "returns": "CompilationAudit",
+        "kind": "function",
+        "owned_delta": "Join independent source, interface, contribution and scenario obligations for generated policy."
+      },
+      {
+        "path": "compileProcedure/intake/interpretGoal.nl",
+        "args": {
+          "request": "CompilerRequest",
+          "context": "SourceRecord[]"
+        },
+        "returns": "CompilationGoal",
+        "kind": "function",
+        "owned_delta": "Derive generated-program observables without replacing the source procedure with a rubric."
+      },
+      {
+        "path": "compileProcedure/intake.nl",
+        "args": {
+          "request": "CompilerRequest",
+          "snapshot": "ProcedureSnapshot"
+        },
+        "returns": "Intake",
+        "kind": "function",
+        "owned_delta": "Inventory governing sources, scenario histories and the requested generated behavior."
+      },
+      {
+        "path": "compileProcedure/packageProgram.nl",
+        "args": {
+          "request": "CompilerRequest",
+          "model": "ProcedureModel",
+          "program": "GeneratedProgram",
+          "suite": "ScenarioSuiteResult",
+          "audit": "CompilationAudit",
+          "revisions": "RevisionTarget[]"
+        },
+        "returns": "CompilePacket",
+        "kind": "function",
+        "owned_delta": "Package generated callable NL source with typed model, scenario certificates and remaining defects."
+      },
+      {
+        "path": "compileProcedure/reviseStep/explainCounterexample.nl",
+        "args": {
+          "verdict": "ScenarioVerdict",
+          "program": "GeneratedProgram",
+          "model": "ProcedureModel"
+        },
+        "returns": "RevisionTarget",
+        "kind": "function",
+        "owned_delta": "Identify the first semantic divergence and the missing generated contribution that caused it."
+      },
+      {
+        "path": "compileProcedure/reviseStep.nl",
+        "args": {
+          "state": "RevisionState"
+        },
+        "returns": "RevisionState",
+        "kind": "directory-reducer",
+        "owned_delta": "Repair one demonstrated generated-program divergence on a private folder without changing source policy."
+      },
+      {
+        "path": "compileProcedure.nl",
+        "args": {
+          "request": "CompilerRequest",
+          "snapshot": "ProcedureSnapshot"
+        },
+        "returns": "CompilePacket",
+        "kind": "directory-reducer",
+        "owned_delta": "Compile evolving prose into a typed callable NL program and exercise its semantic obligations."
+      },
+      {
+        "path": "editions/resolveSupersession.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "authority": "AuthorityDecision[]",
+          "exceptions": "SourceRecord[]"
+        },
+        "returns": "EditionSelection",
+        "kind": "function",
+        "owned_delta": "Apply replacement targets without erasing preserved historical clauses or unrelated duties."
+      },
+      {
+        "path": "editions/selectAuthority.nl",
+        "args": {
+          "records": "SourceRecord[]",
+          "context": "SourceRecord[]"
+        },
+        "returns": "AuthorityDecision[]",
+        "kind": "function",
+        "owned_delta": "Judge actual adoption and issuer competence under the source-defined procedure authority."
+      },
+      {
+        "path": "editions.nl",
+        "args": {
+          "intake": "Intake"
+        },
+        "returns": "EditionSelection",
+        "kind": "function",
+        "owned_delta": "Retain governed historical clauses and apply only supported scoped replacements."
+      },
+      {
+        "path": "lowering/chooseBoundary.nl",
+        "args": {
+          "rules": "RuleMeaning[]",
+          "schema": "StateSchema",
+          "goal": "CompilationGoal"
+        },
+        "returns": "CallBoundary",
+        "kind": "function",
+        "owned_delta": "Choose callable ownership from semantic reuse and captured context rather than desired call depth."
+      },
+      {
+        "path": "lowering/planBranch.nl",
+        "args": {
+          "rule": "RuleMeaning",
+          "schema": "StateSchema"
+        },
+        "returns": "BranchPlan",
+        "kind": "function",
+        "owned_delta": "Lower one rule's governed prerequisites into true, false and unknown semantic branches."
+      },
+      {
+        "path": "lowering.nl",
+        "args": {
+          "model": "ProcedureModel",
+          "goal": "CompilationGoal"
+        },
+        "returns": "ModulePlan[]",
+        "kind": "function",
+        "owned_delta": "Partition the semantic procedure into task-specific callable responsibilities and guarded branches."
+      },
+      {
+        "path": "model/inferState.nl",
+        "args": {
+          "requirements": "RequirementSet",
+          "scenarios": "ScenarioInput[]"
+        },
+        "returns": "StateSchema",
+        "kind": "function",
+        "owned_delta": "Infer source-backed typed state ownership with explicit unknown and temporal evidence."
+      },
+      {
+        "path": "model/orderDependencies/settleComponent.nl",
+        "args": {
+          "state": "ComponentFrontier"
+        },
+        "returns": "ComponentFrontier",
+        "kind": "function",
+        "owned_delta": "Settle one dependency component without turning an unresolved policy cycle into a default."
+      },
+      {
+        "path": "model/orderDependencies.nl",
+        "args": {
+          "requirements": "RequirementSet",
+          "schema": "StateSchema"
+        },
+        "returns": "DependencyGraph",
+        "kind": "function",
+        "owned_delta": "Construct and settle the finite source-backed prerequisite and invalidation graph."
+      },
+      {
+        "path": "model.nl",
+        "args": {
+          "intake": "Intake",
+          "requirements": "RequirementSet"
+        },
+        "returns": "ProcedureModel",
+        "kind": "function",
+        "owned_delta": "Derive carried state and causal components from actual procedure predicate needs."
+      },
+      {
+        "path": "requirements/interpretRule.nl",
+        "args": {
+          "clause": "SourceClause",
+          "goal": "CompilationGoal",
+          "selection": "EditionSelection"
+        },
+        "returns": "RuleMeaning",
+        "kind": "function",
+        "owned_delta": "Read one actor, prerequisite and effect under its governed clause scope."
+      },
+      {
+        "path": "requirements/resolveException.nl",
+        "args": {
+          "exceptionClause": "SourceClause",
+          "ruleMeanings": "RuleMeaning[]",
+          "selection": "EditionSelection"
+        },
+        "returns": "ExceptionBinding",
+        "kind": "function",
+        "owned_delta": "Judge what a source exception waives while retaining independent duties outside its scope."
+      },
+      {
+        "path": "requirements.nl",
+        "args": {
+          "intake": "Intake",
+          "selection": "EditionSelection"
+        },
+        "returns": "RequirementSet",
+        "kind": "function",
+        "owned_delta": "Build governed duties and permissions while preserving precisely scoped waived prerequisites."
+      },
+      {
+        "path": "scenarios/checkOutcome.nl",
+        "args": {
+          "input": "ScenarioInput",
+          "completed": "ScenarioFrontier",
+          "model": "ProcedureModel"
+        },
+        "returns": "ScenarioVerdict",
+        "kind": "function",
+        "owned_delta": "Compare observed generated-state behavior with governed scenario obligations and forbidden inferences."
+      },
+      {
+        "path": "scenarios/replayStep/judgeGuard.nl",
+        "args": {
+          "event": "ScenarioEvent",
+          "atoms": "StateAtom[]",
+          "branch": "BranchPlan",
+          "model": "ProcedureModel",
+          "module": "GeneratedModule"
+        },
+        "returns": "GuardDecision",
+        "kind": "function",
+        "owned_delta": "Judge one generated rule against actor-owned state and source-governed event-time prerequisites."
+      },
+      {
+        "path": "scenarios/replayStep.nl",
+        "args": {
+          "state": "ScenarioFrontier"
+        },
+        "returns": "ScenarioFrontier",
+        "kind": "function",
+        "owned_delta": "Consume one scenario event and apply only returned generated-rule decisions to typed state."
+      },
+      {
+        "path": "scenarios.nl",
+        "args": {
+          "inputs": "ScenarioInput[]",
+          "program": "GeneratedProgram",
+          "model": "ProcedureModel"
+        },
+        "returns": "ScenarioSuiteResult",
+        "kind": "function",
+        "owned_delta": "Execute generated semantic branches over independent event histories and inspect their observables."
+      },
+      {
+        "path": "writing/writeModule/auditContribution.nl",
+        "args": {
+          "plan": "ModulePlan",
+          "text": "string",
+          "allPlans": "ModulePlan[]"
+        },
+        "returns": "ContributionAudit",
+        "kind": "function",
+        "owned_delta": "Judge whether emitted policy stages and literal results perform the planned semantic transformation."
+      },
+      {
+        "path": "writing/writeModule.nl",
+        "args": {
+          "plan": "ModulePlan",
+          "model": "ProcedureModel",
+          "allPlans": "ModulePlan[]"
+        },
+        "returns": "GeneratedModule",
+        "kind": "function",
+        "owned_delta": "Emit one substantive natural-language callable with explicit child and literal data flow."
+      },
+      {
+        "path": "writing.nl",
+        "args": {
+          "plans": "ModulePlan[]",
+          "model": "ProcedureModel",
+          "request": "CompilerRequest"
+        },
+        "returns": "GeneratedProgram",
+        "kind": "function",
+        "owned_delta": "Author a typed callable NL program from the actual module plans and semantic branch ownership."
+      }
+    ],
+    "edges": [
+      {
+        "caller": "compileProcedure.nl",
+        "callee": "compileProcedure/intake.nl"
+      },
+      {
+        "caller": "compileProcedure.nl",
+        "callee": "editions.nl"
+      },
+      {
+        "caller": "compileProcedure.nl",
+        "callee": "requirements.nl"
+      },
+      {
+        "caller": "compileProcedure.nl",
+        "callee": "model.nl"
+      },
+      {
+        "caller": "compileProcedure.nl",
+        "callee": "lowering.nl"
+      },
+      {
+        "caller": "compileProcedure.nl",
+        "callee": "writing.nl"
+      },
+      {
+        "caller": "compileProcedure.nl",
+        "callee": "scenarios.nl"
+      },
+      {
+        "caller": "compileProcedure.nl",
+        "callee": "compileProcedure/reviseStep.nl"
+      },
+      {
+        "caller": "compileProcedure.nl",
+        "callee": "audit.nl"
+      },
+      {
+        "caller": "compileProcedure.nl",
+        "callee": "compileProcedure/packageProgram.nl"
+      },
+      {
+        "caller": "compileProcedure/intake.nl",
+        "callee": "compileProcedure/intake/interpretGoal.nl"
+      },
+      {
+        "caller": "editions.nl",
+        "callee": "editions/selectAuthority.nl"
+      },
+      {
+        "caller": "editions.nl",
+        "callee": "editions/resolveSupersession.nl"
+      },
+      {
+        "caller": "requirements.nl",
+        "callee": "requirements/interpretRule.nl"
+      },
+      {
+        "caller": "requirements.nl",
+        "callee": "requirements/resolveException.nl"
+      },
+      {
+        "caller": "model.nl",
+        "callee": "model/inferState.nl"
+      },
+      {
+        "caller": "model.nl",
+        "callee": "model/orderDependencies.nl"
+      },
+      {
+        "caller": "model/orderDependencies.nl",
+        "callee": "model/orderDependencies/settleComponent.nl"
+      },
+      {
+        "caller": "lowering.nl",
+        "callee": "lowering/chooseBoundary.nl"
+      },
+      {
+        "caller": "lowering.nl",
+        "callee": "lowering/planBranch.nl"
+      },
+      {
+        "caller": "writing.nl",
+        "callee": "writing/writeModule.nl"
+      },
+      {
+        "caller": "writing/writeModule.nl",
+        "callee": "writing/writeModule/auditContribution.nl"
+      },
+      {
+        "caller": "scenarios.nl",
+        "callee": "scenarios/replayStep.nl"
+      },
+      {
+        "caller": "scenarios.nl",
+        "callee": "scenarios/checkOutcome.nl"
+      },
+      {
+        "caller": "scenarios/replayStep.nl",
+        "callee": "scenarios/replayStep/judgeGuard.nl"
+      },
+      {
+        "caller": "compileProcedure/reviseStep.nl",
+        "callee": "compileProcedure/reviseStep/explainCounterexample.nl"
+      },
+      {
+        "caller": "compileProcedure/reviseStep.nl",
+        "callee": "writing.nl"
+      },
+      {
+        "caller": "compileProcedure/reviseStep.nl",
+        "callee": "scenarios.nl"
+      },
+      {
+        "caller": "compileProcedure/reviseStep.nl",
+        "callee": "audit.nl"
+      },
+      {
+        "caller": "audit.nl",
+        "callee": "audit/checkInterfaces.nl"
+      }
+    ]
+  },
+  "scoped_literals": [
+    {
+      "site": "editions/selectAuthority.nl",
+      "consumed_by": "AuthorityDecision adopted/competent/scope selects governed clauses."
+    },
+    {
+      "site": "requirements/resolveException.nl",
+      "consumed_by": "ExceptionBinding waivedPrerequisiteIds/retainedDutyIds alters model branches and scenario guards."
+    },
+    {
+      "site": "lowering/chooseBoundary.nl",
+      "consumed_by": "CallBoundary kind/captures/consumerFields alters emitted module responsibilities."
+    },
+    {
+      "site": "writing/writeModule/auditContribution.nl",
+      "consumed_by": "ContributionAudit substantive/field consumers drives actual emitted-module repair."
+    },
+    {
+      "site": "scenarios/replayStep/judgeGuard.nl",
+      "consumed_by": "GuardDecision value/effects updates ScenarioFrontier atoms and actual traced permission."
+    }
+  ],
+  "iteration_reducers": [
+    {
+      "path": "model/orderDependencies/settleComponent.nl",
+      "state": "ComponentFrontier",
+      "measure": "remaining.length",
+      "until": "all inventoried dependencycomponents settled"
+    },
+    {
+      "path": "scenarios/replayStep.nl",
+      "state": "ScenarioFrontier",
+      "measure": "remainingEventIds.length",
+      "until": "all scenarioevents processed"
+    },
+    {
+      "path": "compileProcedure/reviseStep.nl",
+      "state": "RevisionState",
+      "measure": "remainingScenarioIds.length",
+      "until": "all actual failedscenario targets settled asrepaired orunresolved"
+    }
+  ],
+  "provenance": {
+    "license": "Original fictional owner-authored source; repository license applies.",
+    "source": "Sol authored2026-10-14; no external regulations or held packet reused."
+  },
+  "readiness": {
+    "source_loader_checked": true,
+    "typed_declarations_checked": true,
+    "full_typed_reference": "pending",
+    "independent_oracle_review": false,
+    "exact_result_replay": false,
+    "live_qualified": false,
+    "training_admitted": false
+  },
+  "generation_ready": false,
+  "training_admission": false,
+  "model_facing_debt": "0live samples; source, generatedpolicy and callable interface variant need roughly48live samples after source qualification.",
+  "nl_line_count": 620
+}
