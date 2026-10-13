@@ -40,6 +40,20 @@ other suites except one obsolete E2E-readiness test. That test was removed on
 current main 06a88849; current-main full check remains pending. Pop quick
 check passed.
 
+At 20:55 CEST all six s52029 CUAD extraction trials had exhausted their
+initial 384-request budget with zero result rows. Four exact zero-output
+attempts were reviewed out in `reviewed-exclusions.json`; a hinted and an
+unhinted 768-request durable retry continue as pilots. The unused, unlaunched
+retry directory was removed. The replenisher formerly stopped at the first
+unfinished campaign, leaving Luna capacity idle. It now tracks at most two
+overlapping campaigns, decontaminates each against all prepared source worlds
+and groups, and defers the repair cycle until its preceding campaigns close.
+This production path built s52030: 862 verified source cases from 22 families,
+104 selected across 18 families, including eight successful-style folder
+criteria reducers. Workers 01-03 launched beside the two CUAD retries;
+workers 04-06 await RAM admission and are retried by the standing timer.
+No s52030 output is admitted to training without its separate quality review.
+
 ## 19:25 CEST: QAD continuation and reasoning/template dragnet
 
 Pop stopped the exact v12 unit after its scheduled step-9240 checkpoint; the

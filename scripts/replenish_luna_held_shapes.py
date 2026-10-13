@@ -499,6 +499,7 @@ def main():
     with (BASE / '.luna-replenisher.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         campaigns = sorted(BASE.glob('provider-luna-held-shapes-s*-v1'))
+        pending_campaigns = []
         for campaign in campaigns:
             manifest_path = campaign / 'campaign-manifest.json'
             if not manifest_path.exists():
@@ -512,13 +513,20 @@ def main():
                     return
                 raise ValueError(f'Incomplete campaign preparation: {campaign}')
             if not complete(campaign):
-                return
+                pending_campaigns.append(campaign)
         if not BACKFILL.exists():
             prepare_backfill()
             return
         if not complete(BACKFILL):
             return
-        if campaigns and run_repair_cycle(campaigns):
+        # One slow source shape must not leave the other teacher slots idle.
+        # Every prepared campaign's source worlds/groups enter prior_worlds and
+        # prior_groups, so a second overlapping campaign stays decontaminated.
+        # Bound the overlap to two campaigns; repair cycles still require the
+        # preceding campaigns to close before their outputs are reviewed.
+        if len(pending_campaigns) >= 2:
+            return
+        if campaigns and not pending_campaigns and run_repair_cycle(campaigns):
             return
         seed = START_SEED if not campaigns else max(int(p.name.split('-s')[-1].split('-')[0]) for p in campaigns) + 1
         campaign = BASE / f'provider-luna-held-shapes-s{seed}-v1'
