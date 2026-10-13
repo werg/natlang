@@ -59,7 +59,7 @@ def test_the_first_evaluation_repeats_to_measure_noise_and_later_ones_reuse_it(t
     counts = iter([4, 6, 5, 3])
     calls = []
 
-    def execute(run):
+    def execute(run, repeat=0):
         run.mkdir(parents=True, exist_ok=True)
         calls.append(run.name)
         n = next(counts)
@@ -74,6 +74,24 @@ def test_the_first_evaluation_repeats_to_measure_noise_and_later_ones_reuse_it(t
     second = evaluator.run(20)  # 3 successes: within noise of 4, no repeat
     assert calls[-1] == 'step-0000020' and second['repeat_noise'] is None
     assert second['noise_successes'] == 2 and second['previous_successes'] == 4 and second['regressed'] is False
+
+
+def test_sampled_evaluations_send_their_temperature_and_repeat_runs_draw_new_seeds(tmp_path):
+    """REPETITION_DRAGNET_20261013.md: at the default temperature 0 the server decodes greedily, so a repeat run
+    replays the same actions; a declared temperature reaches every queue entry and each repeat gets its own seeds."""
+    from natlang_neuralese.eval.task_cadence import TaskEval
+
+    def queues(**extra):
+        evaluator = TaskEval.__new__(TaskEval)
+        evaluator.spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [3, 7], **extra})
+        evaluator.rows, evaluator.prompt_rendering = [{}, {}], 'program-header'
+        evaluator.subset = tmp_path / 'subset.jsonl'
+        return [[(e.get('temperature'), e['seed']) for e in entries]
+                for repeat in (0, 1) for _, _, entries in evaluator._queues(tmp_path / f'r{repeat}', repeat)]
+    assert queues() == [[(None, 400003)], [(None, 400007)], [(None, 400003)], [(None, 400007)]]
+    assert queues(temperature=0.6) == [[(0.6, 400003)], [(0.6, 400007)], [(0.6, 500003)], [(0.6, 500007)]]
+    with pytest.raises(ValueError):
+        parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'temperature': 3})
 
 
 def test_budget_exhaustion_is_a_model_outcome_and_infrastructure_errors_are_not():
@@ -95,7 +113,7 @@ def test_a_failed_evaluation_is_recorded_and_retried_and_repeated_failures_stop_
     evaluator.prompt_rendering = 'full'
     outcomes = iter(['crash', 'infra', 'ok', 'crash', 'infra'])
 
-    def execute(run):
+    def execute(run, repeat=0):
         run.mkdir(parents=True, exist_ok=True)
         kind = next(outcomes)
         if kind == 'crash':

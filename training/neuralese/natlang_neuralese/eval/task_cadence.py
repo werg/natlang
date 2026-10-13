@@ -26,6 +26,9 @@ The spec (stage parameter ``task_eval``, JSON):
   noise_successes  declared run-to-run noise of the success count on this subset (from repeat runs)
   noise_repeats   runs of the stage's first evaluation (default 2): their spread is the measured noise; the bar
                   uses the larger of the declared and the measured noise
+  temperature     sampling temperature the collector sends (default 0: the server's greedy argmax). At 0 a repeat
+                  run replays the same actions, so its noise is zero by construction; above 0 each repeat run gets
+                  its own seeds (REPETITION_DRAGNET_20261013.md)
 
 The pass bar is relative (coordinator 2026-10-12): the final evaluation is eligible, reaches the base
 (``reference_successes``; an unmeasured reference fails the gate) and ``min_successes``, and is not below the
@@ -89,6 +92,9 @@ def parse_task_eval(value):
         raise ValueError('task_eval.async must be true or false')
     if spec.get('prompt_rendering') not in (None, 'full', 'program-header'):
         raise ValueError('task_eval.prompt_rendering must be full or program-header')
+    temperature = spec.setdefault('temperature', 0)
+    if isinstance(temperature, bool) or not isinstance(temperature, (int, float)) or not 0 <= temperature <= 2:
+        raise ValueError('task_eval.temperature must be a number in [0, 2]')
     return spec
 
 
@@ -176,7 +182,7 @@ class TaskEval:
                 found = row
         return found
 
-    def _queues(self, run: Path) -> list[tuple[Path, Path, list[dict]]]:
+    def _queues(self, run: Path, repeat: int = 0) -> list[tuple[Path, Path, list[dict]]]:
         workers = min(self.spec['workers'], len(self.rows))
         queues = []
         for worker in range(workers):
@@ -192,14 +198,17 @@ class TaskEval:
                                 'max_model_requests': self.spec['max_model_requests'],
                                 'prompt_rendering': self.prompt_rendering,
                                 'max_turns': self.spec['max_turns'], 'request_retries': 1,
-                                'transport_retries': 0, 'seed': 400000 + self.spec['cases'][index],
-                                'text_neuralese_emulation': False})
+                                'transport_retries': 0,
+                                'seed': 400000 + self.spec['cases'][index] + (100000 * repeat if self.spec.get('temperature') else 0),
+                                'text_neuralese_emulation': False,
+                                **({'temperature': self.spec['temperature']}
+                                   if self.spec.get('temperature') else {})})
             queue = directory / 'queue.jsonl'
             queue.write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries), encoding='utf-8')
             queues.append((queue, directory / 'journal.jsonl', entries))
         return queues
 
-    def _execute(self, run: Path) -> tuple[dict, list[int]]:
+    def _execute(self, run: Path, repeat: int = 0) -> tuple[dict, list[int]]:
         """Serve the engine and run every subset task once into ``run``; the exact score and collector exit codes."""
         from ..serve.http import serve
         from .task_packet import read_jsonl, score_rows
@@ -225,7 +234,7 @@ class TaskEval:
             url = f'http://127.0.0.1:{server.server_address[1]}'
             env = node_path_env()
             children = []
-            queues = self._queues(run)
+            queues = self._queues(run, repeat)
             for queue, journal, _ in queues:
                 log = (queue.parent / 'supervisor.log').open('w')
                 children.append((subprocess.Popen(
@@ -284,7 +293,7 @@ class TaskEval:
         repeats, repeat_noise = [], None
         if eligible and self.measured_noise() is None and self.spec.get('noise_repeats', 2) > 1:
             for index in range(1, self.spec.get('noise_repeats', 2)):
-                again, again_codes = self._execute(run.with_name(run.name + f'-repeat{index}'))
+                again, again_codes = self._execute(run.with_name(run.name + f'-repeat{index}'), index)
                 if accounted(again):
                     repeats.append(again['task_successes'])
             if repeats:
