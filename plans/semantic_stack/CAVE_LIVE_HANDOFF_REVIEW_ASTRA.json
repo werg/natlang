@@ -1,0 +1,105 @@
+{
+  "schema": "natlang.semantic-application-live-source-review/1",
+  "reviewer": "semantic_slate_astra",
+  "application": "astra-app-cave-mission-v1",
+  "status": "source_defects_repaired_peer_reviewed_pending_new_live_variant",
+  "trace": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/cave-app-diagnostic-v1/worker-01/case-000/jobs/000000-02b8c53c4a87f6fe.partial.json",
+  "observed_turn_count": 91,
+  "pinned_source_commit": "c4df5263",
+  "attribution_correction": {
+    "finding": "Hard-selected source IDs at turn9 and constructed GearRule[] at turn14 belong to readFrames/readEquipment leaves, not root.",
+    "consumption": "Survey turn23 consumes actual frames/passages/equipment; root turn24 passes actual surveyResult to reconcileMaps.",
+    "qualification": "This establishes those handoffs only; no complete application-success claim."
+  },
+  "defects": [
+    {
+      "id": "cave-conditional-anchor-compatibility",
+      "source": "applications/cave-mission/planMission/reconcileMaps/alignFrames/assessAnchorPair.nl",
+      "observed": "Children return compatible:null for transformed coordinates matching a possible A/global identity, because the actual lost convention remains unresolved. alignFrames then constructs candidate hypotheses with only J binding.",
+      "cause": "The contract describes transform-specific possible binding but does not define compatible as conditional consistency versus proof of the actual convention.",
+      "repair_proposal": "Under the supplied candidate transform, return true for source-consistent coordinate/identity bindings even when which transform is actual remains unknown; false for source-backed contradiction; null only when a missing coordinate or identity/scope premise prevents assessing conditional consistency. Preserve both supported transform alternatives.",
+      "state": "repaired_in_separate_source_variant_pending_live_diagnostic"
+    },
+    {
+      "id": "cave-exact-quote-drift",
+      "source": "applications/cave-mission/planMission/reconcileMaps/bindLandmarks.nl",
+      "observed": "Returned landmark witness changes original WW is wording to WW are; later hypotheses carry the altered quotation.",
+      "repair_proposal": "Parent binds source identity and validates literal-returned exact quotes before consuming landmark decisions; semantic meaning remains NL. Reuse exact witness service seam rather than a second policy engine.",
+      "state": "repaired_in_separate_source_variant_pending_live_diagnostic"
+    }
+  ],
+  "trace_anchors": [
+    {
+      "turn_zero_based": 5,
+      "invocation_id": "task-1-ae52aa4b-e295-4fcf-987d-873231ae5be6/1",
+      "request_sha256": "a42cf776cb601e47b73582783aeac168f55929302ca77f349cd9da914260feed"
+    },
+    {
+      "turn_zero_based": 9,
+      "invocation_id": "task-1-ae52aa4b-e295-4fcf-987d-873231ae5be6/2",
+      "request_sha256": "3d170d852c6e14c18e649795d358506b56fcf7e2d0f688e8b8cc132513456365"
+    },
+    {
+      "turn_zero_based": 14,
+      "invocation_id": "task-1-ae52aa4b-e295-4fcf-987d-873231ae5be6/4",
+      "request_sha256": "d0beb627efee79020401abbd273b698ede192ce0cdf4475e52152bc8cf1c8b72"
+    },
+    {
+      "turn_zero_based": 23,
+      "invocation_id": "task-1-ae52aa4b-e295-4fcf-987d-873231ae5be6/1",
+      "request_sha256": "2a409d80896307ea7a7b0efb1288f2b2d0acad4ec15cea7196f2ccafb03f38ab"
+    },
+    {
+      "turn_zero_based": 24,
+      "invocation_id": "e4175a733de18013911cb59732a00231/execution-4ae54e18-5c4d-466b-b52c-b7cc4b7e4878",
+      "request_sha256": "c26f18d3085f0ab8971c4bd0fdc6a73197fa427581a611ac24a95f0600098d1f"
+    },
+    {
+      "turn_zero_based": 60,
+      "invocation_id": "task-1-ae52aa4b-e295-4fcf-987d-873231ae5be6/25",
+      "request_sha256": "364b4e94a3df99510ec299f757b6225e1068fd854f23a36b83693cdf52801252"
+    },
+    {
+      "turn_zero_based": 62,
+      "invocation_id": "task-1-ae52aa4b-e295-4fcf-987d-873231ae5be6/27",
+      "request_sha256": "1c38cbc06e3760fedc3ff4eab95e433b68d92a76b4150fc7de1cc6461fe0da86"
+    },
+    {
+      "turn_zero_based": 64,
+      "invocation_id": "task-1-ae52aa4b-e295-4fcf-987d-873231ae5be6/29",
+      "request_sha256": "a9444c3c835e8276bd91df9c9bc0cffe923ea98cbe91e4eeda69a22fd63aab08"
+    },
+    {
+      "turn_zero_based": 68,
+      "invocation_id": "task-1-ae52aa4b-e295-4fcf-987d-873231ae5be6/21",
+      "request_sha256": "a48b8ca89117243dabfe8fdd092589394c6a744b9183328ad84f74fd3cdb5d1d"
+    },
+    {
+      "turn_zero_based": 69,
+      "invocation_id": "task-1-ae52aa4b-e295-4fcf-987d-873231ae5be6/6",
+      "request_sha256": "43cfa558dc252016cc8eb6414f80cd0c066a71c870b1e6d6275371a094c3bae8"
+    },
+    {
+      "turn_zero_based": 89,
+      "invocation_id": "task-1-ae52aa4b-e295-4fcf-987d-873231ae5be6/33",
+      "request_sha256": "c2b18dbadcbcbe6a157ef75ed15714c8b19880a4c995f6a9846537d6abf18f37"
+    }
+  ],
+  "training_admission": false,
+  "live_qualification": false,
+  "signature": {
+    "reviewer": "semantic_slate_astra",
+    "method": "Authored review attestation; committed content hashes, not cryptographic identity authentication"
+  },
+  "source_revision": "conditional-anchor-v2",
+  "peer_review": {
+    "reviewer": "semantic_slate_sol",
+    "verdict": "Three changed NL bodies accepted; local relation union precision applied.",
+    "live_credit": false
+  },
+  "changed_source_hashes": {
+    "applications/cave-mission/planMission/reconcileMaps/alignFrames.nl": "6382d072be8cd4280980fa8e70844229c72eee334102db780c9742ece964b33e",
+    "applications/cave-mission/planMission/reconcileMaps/alignFrames/assessAnchorPair.nl": "1ef6f9940d62b741d74752d4b6211acced0be6a4a255e06965b5ebee5d5b06b7",
+    "applications/cave-mission/planMission/reconcileMaps/bindLandmarks.nl": "ab9a0f27769154aebb9b2b65fd651cb33795cc2e0784349bd0af29a955957481"
+  }
+}

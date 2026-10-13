@@ -11,8 +11,11 @@ returns: FrameHypothesis[]
    These vector calculations are exact after the convention interpretation; they do not choose a convention.
 3. Match computed points to explicitly fixed global coordinates and same-place anchors. Call
    assessAnchorPair(localMention, globalMention, transformedPoint, landmarks) for each proposed binding.
-4. Consume compatible anchor assessments to build bindings. Reject a transform only for a supported
-   contradiction; an unresolved blue-circle match supplies no contradiction and no extra equality constraint.
+4. Validate assessment quotations against their original survey documents and bind source identities
+   from the matching original evidence before consumption. Propagate failed quotation validation as
+   a failed evidence contribution requiring repair. Consume compatible=true as a binding within this transform, not a choice
+   that it is the actual transform. Retain null for a missing conditional premise; reject only a supported
+   false contradiction. Keep every transform consistent with the fixed anchors.
 5. Preserve logical chamber identities for places with no independently named global counterpart.
    Their computed positions can vary across hypotheses while the local source label remains the same.
 6. Retain every hypothesis satisfying all established anchors. Attach transform and binding witnesses,
