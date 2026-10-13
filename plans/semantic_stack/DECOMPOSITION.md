@@ -109,6 +109,18 @@ before it replaces it. If screening selects all 24 records, the program may
 need relation-level grouping or a higher collection resource ceiling; the
 screen must not hide hard evidence to save requests.
 
+The first source-disjoint Sol plain pilot exposed a different handoff problem:
+the root and named stages carried the complete bundle, but an inline
+`RelationDecision` child saw only a narrow prior state and called a later stage
+with a fabricated empty bundle. The transport preserved the source exactly;
+that empty value was model-authored. The opt-in
+`--typed-literal-evidence` variant asks the owning stage to gather supporting
+source-linked evidence from its original bundle, invoke the relation literal
+on that evidence, append its returned typed decision to `StageState.relations`,
+and pass the original bundle to the next named stage. It is a source variant
+awaiting matched live measurement, not an accepted replacement for plain
+generation.
+
 ## Application-scale semantic projects
 
 The additive high-depth slate is a different source shape: a complete natlang project with roughly 10–30 authored `.nl` files, topic-specific callable folders, explicit typed interfaces, service declarations when outside-world work is needed, and real multi-step tasks. A project manifest selects an immutable source tree, task input snapshot, declared output/checker, provenance and split world. Its adapter snapshots the files into Program/2 without rewriting the author's call graph or forcing a generic chain. The root and modules remain natural-language functions; exact source hashing, path containment, type checking, replay and result checks are crisp. Full teacher trajectories, including child calls and tool outputs, are collected through the existing teacher pipeline. Existing 220 authored programs remain eligible when valid; their difficulty is a mix label, not an admission criterion. New project cases must show actual stage contributions, source visibility and correct outputs before training admission.

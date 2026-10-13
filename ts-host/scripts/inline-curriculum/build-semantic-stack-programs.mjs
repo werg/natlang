@@ -18,12 +18,13 @@ const pilotAstra = flags.includes('--pilot-astra');
 const stageSpecsMode = flags.includes('--stage-specs');
 const sourceDriven = flags.includes('--source-driven');
 const relevanceFirst = flags.includes('--relevance-first');
+const typedLiteralEvidence = flags.includes('--typed-literal-evidence');
 const groupedAstra = flags.includes('--grouped-astra') || stageSpecsMode;
 const reviewAt = flags.indexOf('--review-ids');
 const reviewPath = reviewAt >= 0 && flags[reviewAt + 1] ? resolve(flags[reviewAt + 1]) : null;
 const variantAt = flags.indexOf('--stage-variant');
 const variantPath = variantAt >= 0 && flags[variantAt + 1] ? resolve(flags[variantAt + 1]) : null;
-const knownFlags = new Set(['--pilot-astra', '--grouped-astra', '--stage-specs', '--source-driven', '--relevance-first', '--review-ids', '--stage-variant']);
+const knownFlags = new Set(['--pilot-astra', '--grouped-astra', '--stage-specs', '--source-driven', '--relevance-first', '--typed-literal-evidence', '--review-ids', '--stage-variant']);
 const selected = flags.filter(flag => knownFlags.has(flag));
 const expectedFlagCount = selected.length + (reviewPath ? 1 : 0) + (variantPath ? 1 : 0);
 if (args[0] !== '--out' || !args[1] || flags.length !== expectedFlagCount ||
@@ -31,9 +32,10 @@ if (args[0] !== '--out' || !args[1] || flags.length !== expectedFlagCount ||
     (stageSpecsMode && flags.includes('--grouped-astra')) ||
     (sourceDriven && (!groupedAstra || stageSpecsMode)) ||
     (relevanceFirst && !sourceDriven) ||
+    (typedLiteralEvidence && (groupedAstra || stageSpecsMode || sourceDriven || relevanceFirst)) ||
     (variantPath && !stageSpecsMode) ||
     selected.length !== new Set(selected).size)
-  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --grouped-astra [--source-driven [--relevance-first]] | --stage-specs] [--review-ids IDS_JSON] [--stage-variant VARIANT_JSON]');
+  throw Error('usage: node build-semantic-stack-programs.mjs --out FRESH_DIRECTORY [--pilot-astra | --grouped-astra [--source-driven [--relevance-first]] | --stage-specs | --typed-literal-evidence] [--review-ids IDS_JSON] [--stage-variant VARIANT_JSON]');
 const output = resolve(args[1]);
 const variantBytes = variantPath ? await readFile(variantPath) : null;
 const variant = variantBytes ? JSON.parse(variantBytes) : null;
@@ -460,10 +462,12 @@ function render(entry, provider) {
       continue;
     }
     const scoped = literal?.placement === step.name && literal.instructions
-      ? grouped ? `\nAt this stage, formulate ad hoc typed natural-language literals for the current batch. Use this short plan: ${lambdaInstructions} ${sourceDriven ? 'Invoke a focused literal on each relevant current item or relation, passing only its needed context. Append the actual returned decisions, retaining each source ID and path.' : "Pass the batch's records and relevant context as arguments; keep individual source IDs in each finding."}` :
+      ? typedLiteralEvidence && entry.typed_inputs ?
+        `\nFor each candidate relation this stage owns, gather the supporting EvidenceUnit values from the original bundle, retaining their source paths and exact passage text. Invoke a focused typed natural-language literal on that current relation, its supporting evidence, inquiry, domain context and prior relations. Its return value is a RelationDecision: append the actual returned decision to the carried StageState.relations before calling the next named stage with the original complete bundle. ${literal.instructions} Keep the literal's own result scoped to the relation and preserve unresolved findings when the source does not settle it.` :
+      grouped ? `\nAt this stage, formulate ad hoc typed natural-language literals for the current batch. Use this short plan: ${lambdaInstructions} ${sourceDriven ? 'Invoke a focused literal on each relevant current item or relation, passing only its needed context. Append the actual returned decisions, retaining each source ID and path.' : "Pass the batch's records and relevant context as arguments; keep individual source IDs in each finding."}` :
         `\nAt this stage, formulate an ad hoc typed natural-language literal ${literal.signature ?? ''} for the current item. Use this short plan: ${literal.instructions} Pass the current item and relevant context as arguments; keep source IDs in the finding.` : '';
     const delegate = next ? entry.typed_inputs ?
-      `\nAfter making this stage's finding, call the child ${next} within this active call with bundle, inquiry, and the carried StageState. Return its StageState with this stage's source-linked evidence preserved.` :
+      `\nAfter making this stage's finding, call the child ${next} within this active call with ${typedLiteralEvidence ? 'the original complete bundle' : 'bundle'}, inquiry, and the carried StageState. Return its StageState with this stage's source-linked evidence preserved.` :
       grouped ? sourceDriven ? `\nCall the child ${next} within this active call with the same EvidenceBatch and the accumulated EvidenceContext. Add this stage's actual source-grounded natural-language decisions to stageFindings when it makes one; otherwise pass the existing context. Return the child's complete EvidenceBatchFinding.` :
         `\nAfter making this stage's per-record findings, call the child ${next} within this active call. Pass the same EvidenceBatch and an EvidenceContext whose stageFindings includes this stage's findings. Return the child's EvidenceBatchFinding, with one finding for each batch record and all relevant source identities preserved.` :
       `\nAfter making this stage's finding, call the child ${next} within this active call. Pass the same item and an EvidenceContext whose stageFindings includes this stage's EvidenceFinding; return the child's EvidenceFinding with all relevant source identities preserved.` : '';
@@ -529,6 +533,7 @@ function render(entry, provider) {
     caseRow.source_groups = [sourceGroup];
     caseRow.source_revisions = ['semantic-stack-authored-v1'];
     if (relevance) caseRow.source_revisions.push('relevance-first-screen-and-selected-batches-v2');
+    if (typedLiteralEvidence && entry.typed_inputs) caseRow.source_revisions.push('typed-literal-evidence-handoff-v1');
     if (variant?.program_id === id) caseRow.source_revisions.push(`stage-variant:${sha(variantBytes)}`);
     caseRow.generation.collection = 'teacher';
     caseRow.generation.source_domain = domain;
@@ -596,7 +601,8 @@ const review = {
   partial_pilot: pilotAstra,
   presentation: stageSpecsMode ? 'owned-typed-stage-contributions' : relevanceFirst ?
     'relevance-first-folder-screen-and-selected-batches-v2' : sourceDriven ?
-    'source-driven-scoped-decisions' : groupedAstra ?
+    'source-driven-scoped-decisions' : typedLiteralEvidence ?
+    'typed-literal-evidence-handoff-v1' : groupedAstra ?
     'typed-coherent-folder-batches' : 'typed-individual-records',
   ...(variant ? { stage_variant: { id: variant.id, program_id: variant.program_id,
     file: variantPath, sha256: sha(variantBytes), base_catalog_sha256: variant.base_catalog_sha256 } } : {}),
