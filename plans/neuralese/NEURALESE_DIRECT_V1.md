@@ -484,7 +484,7 @@ lines in lockstep (plans/neuralese/TRAINING_RECIPE.md "Two lines in lockstep").
   arm does not fit beside v4 (Mellum E2E updates peaked at 72-94 GB on 2026-10-11); Mellum's first e2e run is its
   handoff, whose `direct_runtime` stage qualifies the exact weights first.
 
-### The mixed run: direct SFT and e2e edges in one run (owner decision 2026-10-13; design, implementation pending)
+### The mixed run: direct SFT and e2e edges in one run (owner decision 2026-10-13; implemented 2026-10-13)
 
 Owner: there is no reason to wait for direct-stage readiness before e2e. The only argument against starting e2e at
 once is efficiency (an e2e update costs more than a direct one), and mixing both kinds of update inside one run
@@ -506,19 +506,35 @@ evaluation:
 
 | Part | Becomes | Why |
 |---|---|---|
-| Host loop, optimizer, checkpoint, resume, drift monitor, QAT, task eval, layer staging, async eval, checkpoint offload | `train/direct_sft.py`, unchanged in role | It is each line's running trainer (Mellum v4 runs it), so v4 switches in by a handoff of the same lineage, keeping its optimizer state. A third trainer is not allowed. |
+| Host loop, optimizer, checkpoint, resume, drift monitor, QAT, task eval, async eval, checkpoint offload | `train/direct_sft.py`, unchanged in role | It is each line's running trainer (Mellum v4 runs it), so v4 switches in by a handoff of the same lineage, keeping its optimizer state. A third trainer is not allowed. |
 | Direct update | direct_sft's existing batch path (`tensors`, `forward`), unchanged | Already the cheap path at scale. |
-| E2E edge objective | a new module, `train/e2e_edges.py`, holding what trajectories.py's `--direct-artifact` path does for one chain: authenticate the chain (`authenticated_recurrence_context_view`), render (crisp text pieces, `soft_parts text`), the producers' writes through `serve/direct_write` (P(h) once `dgx-projection` lands), the consumer CE through the block (`GradSession.supervised_text_loss`), the producers' gold continuation CE (`writer_text_weight`) and the context CE | Moved out of trajectories.py's main() closure into one component with an explicit constructor (engine, session, texts, config) and two methods, `loss(chain)` and `evaluate(held)` (V, T, shuffled, zeroed, per family, chosen-token match). trajectories.py's direct path then calls the same component, so there is one implementation. Its legacy heads paths stay as they are. |
+| E2E edge objective | `train/trajectories.py` `build_e2e_objective(argv, engine=, neuralese_projection=, token_choice_projection=)` → `EmbeddedE2E` with `loss(cursor)` and `evaluate(label)` (paired held readers V, T, shuffled, zeroed, per family, plus the held crisp CE) | As built: trajectories.py's `main()` in embedded mode runs its own setup (authentication, rendering, the direct writer, the stream source, the paired held set) on the host's engine and projections, skips the trainer-only setup (backbone freezing/policy, its optimizer, checkpoint, loop) and returns the closures its own loop uses (`record_at`, `loss_of`, `evaluate_written`). A separate `e2e_edges.py` was too entangled (the closures share mutable setup state), so the one implementation stays in trajectories.py and both trainers call it. Embedded mode requires `soft_parts text` and refuses `latent_step_in_backward` (the host steps the latents). |
 | E2E data | `train/e2e_records.py` (streamed corpus v2/v3 by trajectory, CohortDocumentSampler by family^0.5), unchanged | Already shared. |
-| Update kind schedule | a crisp helper: update i is an e2e update iff floor((i+1)·p) > floor(i·p), where p = `e2e_mix.fraction` | Deterministic in the update index, so a resume repeats it exactly with no extra state, and both data cursors are saved in the checkpoint. |
-| Per-module rates | recipe settings: `token_choice_lr`, `token_choice_optimizer`, the writer's rate and optimizer, `latent_lr` | The dragnet's stable values go here (round 2: TCP at 3e-6; round 4: writer rate). One setting serves both update kinds. |
+| Update kind schedule | a crisp helper, `direct_sft.e2e_cursors(step, p)`: after direct update i (1-based) the e2e updates at cursors floor((i-1)·r) .. floor(i·r)−1 run, r = p/(1−p), exact rational arithmetic | Keeps direct_sft's update counter, data plan and QAT curriculum (they count direct updates); a fraction p of all updates are e2e. The e2e cursor is a function of the direct step, so a resume needs no second counter; the e2e source draws by (seed, cursor). After a handoff at update k the cursors continue from floor(k·r). |
+| Per-module rates | the recipe's `e2e_mix` component: `token_choice` and `writer` {lr, optimizer} (direct_sft `--token-choice-lr/-optimizer`, `--neuralese-projection-lr/-optimizer`), plus the stage's `latent_lr` | The dragnet's stable values go here (TCP and writer at 3e-6 on Muon). One setting serves both update kinds. |
 | Evaluation | the direct stage's held CE (as now) plus the e2e component's paired V/T at each evaluation; `e2e_acceptance` reads those rows | The gate (V at most T, V beats shuffled and zeroed) and the task success use the same cadence. |
 | Efficiency report | per update kind: seconds, supervised tokens, tokens/s; per evaluation: V−T, crisp CE, task success and wall time since the run started | The owner's framing: choose the ratio by improvement per wall-hour. |
 
-**One backward per update.** An update is one kind or the other, never both. Both kinds keep `latent_step_in_backward`
-(one backward per update, latents stepping inside it), and only one kind's graph is alive at a time, so peak memory is
-the larger of the two kinds, not their sum. Both losses are token means, so a direct and an e2e update are on the
-same scale.
+**One backward per update.** An update is one kind or the other, never both. Both kinds keep the latents stepping in
+backward (direct_sft's in-backward hooks, one backward per update), and only one kind's graph is alive at a time, so
+peak memory is the larger of the two kinds, not their sum. Both losses are token means, so a direct and an e2e update
+are on the same scale. An e2e update runs at the direct update's sampled precision point.
+
+**As built** (2026-10-13). The recipe component `e2e_mix` (train/recipe.py `validate_e2e_mix`: stages, fraction,
+content-pinned records and pieces, trajectories options, token_choice and writer rates) is an objective component like
+`family`: a running direct stage takes it by a declared objective continuation (`previous: {"e2e_mix": null}`), and
+the TokenChoiceProjection then starts at the identity with fresh optimizer state (by-name optimizer restore with the
+TCP declared added); everything else continues. train.jsonl rows carry `kind` (`direct`/`e2e`), `seconds`,
+`supervised_tokens` and `supervised_tokens_per_second`; e2e rows add the cursor, record, family and write lengths.
+e2e-eval.jsonl holds the e2e evaluation at the run's first update and at every evaluation (report.json `e2e`). Launch
+recipes: `neuralese-mixed-mellum-v4` and `neuralese-mixed-lfm-qad-broad-v1`, each extending its line's running direct
+recipe with the same `e2e_mix` (fraction 0.25 placeholder until the ratio runs below). Neuralese outputs in direct
+samples: the optional `e2e_mix.neuralese_spans` {path, sha256} pins the union rendering's span sidecar; spans with an
+e2e edge join the row's context-only spans in direct updates (Option A, `direct_sft.neuralese_spans`); spans without
+an edge are counted and keep the token CE (Option B is not implemented yet). The sidecar is part of the component, not
+a stage input, so it joins a running stage with the objective continuation. `parent_readiness` is removed
+from the recipes, `train/e2e_acceptance.py` and its tests. Not yet: `e2e_acceptance` reading the mixed run's
+e2e-eval.jsonl, and the layer-staged backward inside the mixed run.
 
 **Choosing the ratio.** Short LFM mixed runs at p ∈ {0.1, 0.25, 0.5} (from u10006 with the aligned P and the stable
 recipe), each the same wall time. For each, report seconds per update by kind, supervised tokens/s, and per wall-hour

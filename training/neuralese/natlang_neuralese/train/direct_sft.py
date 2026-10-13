@@ -64,7 +64,9 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
                   'gradient_digest_steps': 0, 'state_hash_steps': 0, 'sdpa_backend': 'default', 'family': None,
                   'train_target_tokens': None, 'merge_prefix_rows': False, 'cohort_repeats': None,
                   'recovery_selection': None,
-                  'train_min_context_tokens': 0, 'fresh_monitor_reference': False}
+                  'train_min_context_tokens': 0, 'fresh_monitor_reference': False,
+                  'token_choice_lr': None, 'token_choice_optimizer': 'muon', 'neuralese_projection_lr': None,
+                  'neuralese_projection_optimizer': 'muon', 'e2e_mix': None}
 # Train-window geometry (HEADER_EFFICIENCY_20261012.md): a running stage changes it only by a windowing continuation
 # (continuation_mode), which rebuilds the plan it trained on under the saved values.
 # cohort_repeats (the epoch's per-cohort repeat counts) changes which windows an epoch holds, so it moves exactly like
@@ -80,7 +82,10 @@ OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkp
                          'task_eval', 'task_eval_every'})
 # Objective components a declared objective continuation may change in an active stage (recipe.py
 # OBJECTIVE_COMPONENTS): each is a recipe component the stage receives as one JSON option.
-OBJECTIVE_KEYS = ('quantization', 'family')
+OBJECTIVE_KEYS = ('quantization', 'family', 'e2e_mix')
+# The mixed run's projection settings, which its e2e_mix component declares (parse): they change with it.
+MIXED_KEYS = ('token_choice_projection', 'token_choice_lr', 'token_choice_optimizer', 'neuralese_projection_lr',
+              'neuralese_projection_optimizer')
 # Options of components removed from the stage (owner 2026-10-13: the NeuraleseProjection objective, its weight and its
 # report margin). A state saved with them continues without them; they are never part of a resume identity.
 REMOVED_OPTIONS = frozenset({'neuralese_weight', 'value_margin'})
@@ -94,11 +99,17 @@ def without_legacy_projection(state):
     optimizer_state = state.get('optimizer')
     if not names or not any(n.startswith(LEGACY_PROJECTION_KEY + '.') for group in names for n in group):
         return optimizer_state, names
+    from ..model.neuralese_projection import is_legacy_projection_state
+    saved = state.get(LEGACY_PROJECTION_KEY)
+    if isinstance(saved, dict) and not is_legacy_projection_state(saved):
+        return optimizer_state, names  # the mixed run's token-anchored writer (e2e_mix): its slots are current
     from .optim_restore import drop_port_optimizer_slots
     optimizer_state, names, dropped = drop_port_optimizer_slots(
         optimizer_state, names, lambda name: name.startswith(LEGACY_PROJECTION_KEY + '.'))
     print(json.dumps({'event': 'removed_projection_optimizer_slots', 'dropped': len(dropped)}), flush=True)
     return optimizer_state, names
+
+
 OBJECTIVE_SCHEMA = 'natlang.neuralese-objective-continuation/1'
 
 
@@ -196,6 +207,21 @@ def parse(argv=None):
     p.add_argument('--projection-kernel', type=int, default=4)
     p.add_argument('--token-choice-projection', action=argparse.BooleanOptionalAction, default=False,
                    help='declare the TokenChoiceProjection (the end-to-end Neuralese stage); off in direct v1')
+    p.add_argument('--token-choice-lr', type=float, default=None,
+                   help='the TokenChoiceProjection\'s rate (it is the token readout, so its rate is its own; default '
+                        '--head-lr)')
+    p.add_argument('--token-choice-optimizer', choices=('muon', 'adamw'), default='muon')
+    p.add_argument('--neuralese-projection-lr', type=float, default=None,
+                   help='the NeuraleseProjection\'s (the writer\'s) rate; default --head-lr')
+    p.add_argument('--neuralese-projection-optimizer', choices=('muon', 'adamw'), default='muon')
+    p.add_argument('--e2e-mix', default=None,
+                   help='the mixed run (owner 2026-10-13; plans/neuralese/NEURALESE_DIRECT_V1.md "The mixed run"): JSON '
+                        '{"fraction": p, "records": [...], "pieces": [...], "options": {...}}. After direct update i (1-based), '
+                        'floor(ir) - floor((i-1)r) e2e updates run (e2e_cursors), r = p/(1-p), so a fraction p of all updates are e2e '
+                        'producer->consumer updates (train/trajectories.build_e2e_objective, on this run\'s engine, '
+                        'projections, optimizer, precision point and drift monitor). records/pieces are paths '
+                        '(relative to the repo); options are train/trajectories.py options (e.g. record_source, '
+                        'prompt_rendering, eval). Needs --token-choice-projection.')
     p.add_argument('--moe-kernel', choices=('invariant', 'loop', 'grouped'), default='invariant')
     p.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=None,
                    help='recompute each layer in backward (long windows)')
@@ -247,6 +273,23 @@ def parse(argv=None):
                         'only their logs and report')
     p.add_argument('--seed', type=int, default=0)
     a = p.parse_args(argv)
+    if a.e2e_mix is not None:
+        mix = a.e2e_mix = json.loads(a.e2e_mix) if isinstance(a.e2e_mix, str) else a.e2e_mix
+        if not isinstance(mix, dict) or not 0 < float(mix.get('fraction', 0)) < 1 or not mix.get('records') \
+                or not mix.get('pieces') or set(mix) - {'fraction', 'records', 'pieces', 'options', 'token_choice',
+                                                        'writer', 'stages', 'stage', 'description',
+                                                        'neuralese_spans', 'aligned_projection',
+                                                        'projection_on_manifold'}:
+            p.error('--e2e-mix needs {"fraction": 0 < p < 1, "records", "pieces", "options"?, "token_choice"?, '
+                    '"writer"?} (recipe e2e_mix, train/recipe.py validate_e2e_mix)')
+        # The e2e updates train the token readout apart from the writer: the TokenChoiceProjection, and the
+        # component's own rates and optimizers for it and the NeuraleseProjection.
+        a.token_choice_projection = True
+        if mix.get('token_choice'):
+            a.token_choice_lr, a.token_choice_optimizer = mix['token_choice']['lr'], mix['token_choice']['optimizer']
+        if mix.get('writer'):
+            a.neuralese_projection_lr = mix['writer']['lr']
+            a.neuralese_projection_optimizer = mix['writer']['optimizer']
     if a.epochs is not None and a.steps is not None:
         p.error('declare the budget as --epochs or --steps, not both')
     if a.epochs is None and a.steps is None:
@@ -266,6 +309,42 @@ def parse(argv=None):
     return a
 
 
+def e2e_cursors(step, fraction):
+    """The mixed run's schedule: the e2e record cursors whose updates follow direct update ``step`` (1-based).
+
+    With r = p/(1-p), direct update i is followed by e2e cursors floor((i-1)r) .. floor(ir)-1, so after any direct
+    update a fraction p of all updates were e2e (up to one), the e2e cursor is a function of the direct step (a resume
+    needs no second counter) and its draws are the e2e source's own deterministic (seed, cursor) records. Exact
+    rational arithmetic: a declared 0.25 is 1/3 e2e per direct update, never a float's floor one short."""
+    from fractions import Fraction
+    p = Fraction(str(fraction))
+    ratio = p / (1 - p)
+    return range(math.floor((step - 1) * ratio), math.floor(step * ratio))
+
+
+def e2e_argv(mix, a, repo):
+    """train/trajectories.py's argv for the embedded e2e objective of ``--e2e-mix``."""
+    def resolved(paths):
+        paths = [paths] if isinstance(paths, (str, dict)) else paths
+        paths = [path['path'] if isinstance(path, dict) else path for path in paths]  # a recipe's {path, sha256}
+        return [str(path if Path(path).is_absolute() else Path(repo) / path) for path in paths]
+    argv = ['--records', *resolved(mix['records']), '--pieces', *resolved(mix['pieces']), '--out', str(a.out / 'e2e'),
+            '--device', a.device, '--seed', str(a.seed), '--soft-parts', 'text', '--handover', 'written']
+    for key, value in (mix.get('options') or {}).items():
+        flag = '--' + key.replace('_', '-')
+        if value is True:
+            argv.append(flag)
+        elif value is False:
+            argv.append('--no-' + key.replace('_', '-'))
+        elif isinstance(value, (list, tuple)):
+            argv += [flag, *map(str, value)]
+        elif isinstance(value, dict):
+            argv += [flag, json.dumps(value)]
+        elif value is not None:
+            argv += [flag, str(value)]
+    return argv
+
+
 def context_only_spans(row):
     """A text row's producer-declared context-only spans: ``[[begin, end), ...]`` in its ``token_ids`` (so they need
     native token IDs), sorted and non-overlapping. They stay in the window as history and get zero loss weight."""
@@ -280,6 +359,77 @@ def context_only_spans(row):
             raise ValueError(f'context_only_spans must be sorted, non-overlapping [begin, end) token spans: {span}')
         previous = span[1]
     return [tuple(span) for span in spans]
+
+
+def mixed_writer(mix, width, embedding_width):
+    """(NeuraleseProjection, record) of the mixed run: ``e2e_mix.aligned_projection`` ({path, sha256,
+    artifact_manifest_sha256}) loaded on its export's manifest and gated by ``e2e_mix.projection_on_manifold``
+    (e2e_acceptance.projection_on_manifold: every criterion must pass), else a fresh token-anchored writer (C = 0)."""
+    from ..model.neuralese_projection import NeuraleseProjection, load_aligned_projection
+    binding = mix.get('aligned_projection')
+    if not binding:
+        return NeuraleseProjection(width, embedding_width=embedding_width), {
+            'source': 'fresh', 'correction': 'zero (value = E[chosen])'}
+    from ..common.hashing import sha256_file_hex
+    from ..common.paths import root as path_root
+    from .e2e_acceptance import projection_on_manifold
+    path = Path(binding['path'])
+    path = path if path.is_absolute() else path_root('repo') / path
+    if sha256_file_hex(path) != binding['sha256']:
+        raise ValueError('e2e_mix.aligned_projection hash mismatch: ' + str(path))
+    projection, alignment = load_aligned_projection(path, binding['artifact_manifest_sha256'])
+    declared = mix.get('projection_on_manifold')
+    if not declared:
+        raise ValueError('e2e_mix.aligned_projection needs its gate, e2e_mix.projection_on_manifold')
+    criteria = projection_on_manifold(declared, alignment.get('report'))
+    if any(c['status'] != 'pass' for c in criteria.values()):
+        raise ValueError('the aligned projection is not on the manifold: ' + json.dumps(criteria))
+    return projection, {**{k: v for k, v in alignment.items() if k != 'report'}, 'projection_on_manifold': criteria}
+
+
+def mixed_additions(state, mix, keys):
+    """The projections a handoff into the mixed run adds (``mix``: the e2e_mix component): of ``keys``, those the
+    saved state lacks or holds in the removed design. They start fresh (TokenChoiceProjection: identity; writer: its
+    alignment) with fresh optimizer state; everything else restores by name."""
+    if state is None or mix is None:
+        return []
+    from ..model.neuralese_projection import is_legacy_projection_state
+    return [key for key in keys if not isinstance(state.get(key), dict) or is_legacy_projection_state(state[key])]
+
+
+def neuralese_spans(mix, repo):
+    """The mixed run's Neuralese output spans (``e2e_mix.neuralese_spans``, a {path, sha256} sidecar beside a union
+    rendering: one row per direct document, {"id", "spans": [[begin, end, write_name, has_edge], ...]} in the row's
+    token_ids, end exclusive; plans/neuralese/NEURALESE_DIRECT_V1.md "Neuralese outputs in direct samples").
+    Returns ({row id: [[begin, end], ...] of the spans with an e2e edge}, count of spans without one), or None."""
+    binding = (mix or {}).get('neuralese_spans')
+    if not binding:
+        return None
+    path = Path(binding['path'] if isinstance(binding, dict) else binding)
+    path = path if path.is_absolute() else Path(repo) / path
+    edges, plain = {}, 0
+    with path.open() as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            for begin, end, _, has_edge in row['spans']:
+                if has_edge:
+                    edges.setdefault(row['id'], []).append([begin, end])
+                else:
+                    plain += 1
+    return edges, plain
+
+
+def merged_context_only_spans(declared, added):
+    """Sorted, non-overlapping [begin, end) spans covering both lists (context_only_spans' contract)."""
+    merged = []
+    for begin, end in sorted([list(span) for span in declared or ()] + [list(span) for span in added]):
+        if merged and begin <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([begin, end])
+    return merged
 
 
 def context_only_mask(source, labels, declared, decode):
@@ -730,7 +880,20 @@ def stage_data(engine, a, text_data):
         rows_meta = []
         receipt = None
         backing = WindowBackingSpool(getattr(a, 'out', None))
+        # The mixed run (Option A, owner 2026-10-13): a Neuralese output span whose value an e2e edge trains is
+        # context only in direct updates (the e2e update supervises it through the reader). Option B (spans without
+        # an edge read lm_head(norm(TCP(h.detach())))) is not implemented: they keep the plain token CE.
+        from ..common.paths import root as path_root
+        spans = neuralese_spans(getattr(a, 'e2e_mix', None), path_root('repo'))
+        if spans is not None:
+            print(json.dumps({'event': 'neuralese_spans', 'documents_with_edges': len(spans[0]),
+                              'edge_spans': sum(map(len, spans[0].values())), 'spans_without_edge': spans[1],
+                              'option_b': 'not implemented (TODO): spans without an edge keep the token CE'}),
+                  flush=True)
         for row in stage_rows(a, text_data, engine.tokenizer):
+            if spans is not None and row.get('id') in spans[0]:
+                row = {**row, 'context_only_spans': merged_context_only_spans(row.get('context_only_spans'),
+                                                                              spans[0][row['id']])}
             one, current = prepare_text_windows(engine, [row], tokens=a.tokens,
                 prefix_tokens=a.prefix_tokens, target_tokens=a.target_tokens,
                 mask_system_prompt=True,
@@ -1076,6 +1239,9 @@ def main(argv=None):
     resume_state = CheckpointPolicy.load(policy.slot) if policy.slot.exists() else None
     resume_optimizer_schema = (without_legacy_projection(resume_state)[0]['schema'] if resume_state is not None
                                else None)
+    # A handoff into the mixed run (objective continuation adding e2e_mix) adds the TokenChoiceProjection and the
+    # writer (mixed_additions).
+    mixed_addition = mixed_additions(resume_state, a.e2e_mix, ('token_choice_projection', 'neuralese_projection'))
     continuation_launch, continuation = continuation_mode(a, resume_state, inputs)
     resume_state = None
     if continuation_launch == 'continue':
@@ -1147,6 +1313,15 @@ def main(argv=None):
     sizes = dict(blocks=a.projection_blocks, hidden=a.projection_hidden or None, kernel=a.projection_kernel)
     token_choice = TokenChoiceProjection(width, **sizes).to(a.device) if a.token_choice_projection else None
     projections = {'token_choice_projection': token_choice} if token_choice is not None else {}
+    # The mixed run's writer (e2e_mix): the token-anchored NeuraleseProjection, value = E[chosen] + C(h), trained only by
+    # the e2e updates. The recipe's aligned projection (projection_align, bound to the parent export's manifest) after
+    # its manifold gate, else C = 0 (the value is E[chosen] exactly, on the manifold by construction).
+    neuralese = writer_alignment = None
+    if a.e2e_mix is not None:
+        neuralese, writer_alignment = mixed_writer(a.e2e_mix, width, int(backbone.embedding_weight.shape[1]))
+        neuralese = neuralese.to(a.device)
+        projections['neuralese_projection'] = neuralese
+        print(json.dumps({'event': 'mixed_writer', **writer_alignment}), flush=True)
     head_named = [(key + '.' + n, q) for key, module in projections.items() for n, q in module.named_parameters()]
     # The latent split, entries and options are shared with the end-to-end stage (train/optim.py).
     from .optim import beta_for_half_life, latent_entries, latent_options as latent_options_for, latent_split
@@ -1158,7 +1333,13 @@ def main(argv=None):
         a.latent_optimizer, weight_decay=a.latent_weight_decay, skip_idle=a.latent_skip_idle,
         cautious=a.latent_cautious, ns=a.latent_ns,
         betas=(0.9, beta_for_half_life(a.batch_tokens or a.tokens * a.batch, a.latent_beta2_half_life_tokens)))
+    # Per-module optimiser of the projections (the e2e collapse dragnet, plans/neuralese/E2E_COLLAPSE.md): adamw keeps a
+    # module off Muon's fixed-size orthogonalised steps; its rate is set below.
+    elementwise = {id(q) for key, module in projections.items() for q in module.parameters()
+                   if (key == 'token_choice_projection' and a.token_choice_optimizer == 'adamw') or
+                   (key == 'neuralese_projection' and a.neuralese_projection_optimizer == 'adamw')}
     optimizer = PortMuonAdamW(head_named + other_backbone, lr=a.head_lr, vocab_size=int(backbone.embedding_weight.shape[0]),
+                              embedding_ids=elementwise,
                               latent=latent, latent_optimizer=a.latent_optimizer, latent_options=latent_options)
     other_ids = {id(q) for _, q in other_backbone}
     for child in (optimizer.muon, optimizer.auxiliary):  # routers and norms at the backbone lr
@@ -1173,6 +1354,13 @@ def main(argv=None):
                 child.add_param_group({**{k: v for k, v in group.items() if k != 'params'}, 'params': backbone_params,
                                        'lr': a.backbone_lr})
     optimizer.param_groups = optimizer._groups()
+    module_rates = {**({f'token_choice_projection.{n}': a.token_choice_lr for n, _ in token_choice.named_parameters()}
+                       if token_choice is not None and a.token_choice_lr is not None else {}),
+                    **({f'neuralese_projection.{n}': a.neuralese_projection_lr for n, _ in neuralese.named_parameters()}
+                       if neuralese is not None and a.neuralese_projection_lr is not None else {})}
+    if module_rates:
+        from .optim_restore import set_learning_rates
+        set_learning_rates(optimizer, head_named + backbone_named, module_rates)
     in_backward = optimizer.latent
     from .optim import SpikeClip
     spike = SpikeClip(a.grad_spike_clip) if a.grad_spike_clip else None
@@ -1181,7 +1369,7 @@ def main(argv=None):
     parameter_names = {id(parameter): name for name, parameter in head_named + backbone_named}
     optimizer_parameter_names = [[parameter_names[id(parameter)] for parameter in group['params']]
                                  for group in optimizer.param_groups]
-    if resume_optimizer_schema is not None and resume_optimizer_schema != optimizer.schema:
+    if resume_optimizer_schema is not None and resume_optimizer_schema != optimizer.schema and not mixed_addition:
         first = next((i for i, (saved, current) in enumerate(zip(resume_optimizer_schema, optimizer.schema))
                       if saved != current), min(len(resume_optimizer_schema), len(optimizer.schema)))
         raise ValueError('direct optimizer schema differs before loading the corpus: '
@@ -1210,6 +1398,14 @@ def main(argv=None):
     train_windows, targets, held, held_selection, mask_receipt, rows = stage_data(engine, a, a.text_data)
     if not train_windows or not held:
         raise ValueError('neuralese_direct needs train and held windows')
+    # The mixed run: the e2e producer->consumer objective of train/trajectories.py on this run's engine, projections
+    # and optimizer (one implementation of the edge loss and its paired held evaluation).
+    e2e = None
+    if a.e2e_mix is not None:
+        from ..common.paths import root as path_root
+        from .trajectories import build_e2e_objective
+        e2e = build_e2e_objective(e2e_argv(a.e2e_mix, a, path_root('repo')), engine=engine,
+                                  neuralese_projection=neuralese, token_choice_projection=token_choice)
     # The budget (data audit 2026-10-11, DATA_INVENTORY_20261011.md E): epochs over the target-bearing train windows
     # (target_bearing), sampled by document without replacement through the shared CohortDocumentSampler, packed into
     # updates of up to --batch-tokens forward tokens (direct_schedule); after a data continuation, the rest of the
@@ -1434,11 +1630,22 @@ def main(argv=None):
         # The shared copy (its own scope): a loop variable left in main() is a view of the mmap'd state and kept the
         # whole mapping plus the dirtied pages alive for the run (v2 resume: 39 GB host anon, as text_warmup 085713c7).
         copy_restored_values({'backbone.' + n: t for n, t in tensors_by_name.items()}, state['student_parameters'])
+        added = []
         for key, module in projections.items():
+            if key in mixed_addition:
+                added += [key + '.' + n for n, _ in module.named_parameters()]
+                continue
             module.load_state_dict(state[key])
         from .optim_restore import own_host_tensors
-        optimizer.load_state_dict(without_legacy_projection(state)[0])
-        own_host_tensors(optimizer)  # no view of the mmap'd state outlives the restore
+        if added:  # the mixed run's handoff: by name, its projections declared added
+            from .optim_restore import record_restore_report, restore_optimizer_state
+            record_restore_report(restore_optimizer_state(
+                optimizer, without_legacy_projection(state)[0], dict(head_named + backbone_named), added,
+                saved_names=[name for group in without_legacy_projection(state)[1] for name in group]),
+                a.out, source=str(policy.slot))
+        else:
+            optimizer.load_state_dict(without_legacy_projection(state)[0])
+            own_host_tensors(optimizer)  # no view of the mmap'd state outlives the restore
         optimizer.param_groups = optimizer._groups()
         step, best, base_eval, history = state['step'], state.get('best'), state['base_eval'], state['history']
         monitor.restore(state)  # the update of the guard's last gate and its response KL
@@ -1472,7 +1679,7 @@ def main(argv=None):
                                        previous_record=objective)
         if added is not None:
             objective = dict(added, time=time.strftime('%Y-%m-%dT%H:%M:%S%z'))
-            for key in OBJECTIVE_KEYS:
+            for key in OBJECTIVE_KEYS + (MIXED_KEYS if 'e2e_mix' in added['changed'] else ()):
                 previous_options.pop(key, None)
                 current_options.pop(key, None)
             sidecar = a.out / 'objective-continuation.json'
@@ -1545,6 +1752,13 @@ def main(argv=None):
         # in-place resume. Everything else must match.
         phase_keys = {'text_data', 'records', 'pieces', 'epochs', 'quantization', 'family', 'batch', 'batch_tokens',
                       'target_tokens', 'fp8_training', 'fp8_recipe', 'fp8_amax_history_len'}
+        # The mixed run (NEURALESE_DIRECT_V1.md "The mixed run") continues a direct lineage: it adds the e2e updates,
+        # the TokenChoiceProjection (identity-initialised, its optimizer state fresh) and the projections' own rates.
+        mixed_keys = mixed_additions(state, a.e2e_mix, projections)
+        mixed_added = [key + '.' + n for key in mixed_keys for n, _ in projections[key].named_parameters()]
+        if a.e2e_mix is not None:
+            phase_keys |= {'e2e_mix', 'token_choice_projection', 'token_choice_lr', 'token_choice_optimizer',
+                           'neuralese_projection_lr', 'neuralese_projection_optimizer'}
         changed_objective = sorted(key for key in set(previous_options) & set(current_options)
                                    if key not in phase_keys and previous_options[key] != current_options[key])
         if changed_objective:
@@ -1572,6 +1786,8 @@ def main(argv=None):
             if tuple(saved_backbone[name].shape) != tuple(parameter.shape):
                 raise ValueError('--continue-from backbone shape differs: ' + name)
         for key, module in projections.items():
+            if key in mixed_keys:
+                continue
             saved_projection = state.get(key)
             current_projection = module.state_dict()
             if not isinstance(saved_projection, dict) or set(saved_projection) != set(current_projection):
@@ -1582,19 +1798,30 @@ def main(argv=None):
         saved_optimizer, saved_names = without_legacy_projection(state)
         saved_optimizer = saved_optimizer or {}
         current_optimizer = optimizer.state_dict()
-        if (saved_optimizer.get('format') != current_optimizer.get('format') or
+        mixed_restore = a.e2e_mix is not None and saved_names is not None and (
+            saved_optimizer.get('schema') != current_optimizer.get('schema') or saved_names != optimizer_parameter_names)
+        if mixed_restore:
+            pass  # by name below: the added projections start fresh, everything else must map exactly
+        elif (saved_optimizer.get('format') != current_optimizer.get('format') or
                 saved_optimizer.get('schema') != current_optimizer.get('schema')):
             raise ValueError('--continue-from optimizer names, shapes, dtypes, or partitions differ')
-        if saved_names is not None and saved_names != optimizer_parameter_names:
+        elif saved_names is not None and saved_names != optimizer_parameter_names:
             raise ValueError('--continue-from optimizer parameter names differ')
         from .text_warmup import copy_restored_values
         tensors_by_name = plain_named_tensors(backbone.hf)
         copy_restored_values({'backbone.' + n: t for n, t in tensors_by_name.items()}, state['student_parameters'])
         for key, module in projections.items():
-            module.load_state_dict(state[key])
+            if key not in mixed_keys:
+                module.load_state_dict(state[key])
         from .optim_restore import own_host_tensors
-        optimizer.load_state_dict(saved_optimizer)
-        own_host_tensors(optimizer)
+        if mixed_restore:
+            from .optim_restore import record_restore_report, restore_optimizer_state
+            record_restore_report(restore_optimizer_state(
+                optimizer, saved_optimizer, dict(head_named + backbone_named), mixed_added,
+                saved_names=[name for group in saved_names for name in group]), a.out, source=str(a.continue_from))
+        else:
+            optimizer.load_state_dict(saved_optimizer)
+            own_host_tensors(optimizer)
         optimizer.param_groups = optimizer._groups()
         memory_estimator = restored_memory_estimator(state)
         if spike is not None:
@@ -2024,6 +2251,63 @@ def main(argv=None):
                                                  'fp32_norm_saved_bytes_per_token',
                                                  'fp32_norm_transient_bytes_per_token')}}
 
+    def update_precision(scope, point, mix):
+        """The update's precision point, FP8 autocast and attention backend (both update kinds, through backward)."""
+        if quant is not None:
+            scope.enter_context(quant.context(point, mix))
+        if fp8_backend is not None:
+            scope.enter_context(fp8_backend.autocast())
+        if a.sdpa_backend == 'math':
+            # Keep this active through backward too: activation-checkpoint recomputation happens after the
+            # forward returns, and must use the same declared attention backend as the original forward.
+            from torch.nn.attention import SDPBackend, sdpa_kernel
+            scope.enter_context(sdpa_kernel(backends=[SDPBackend.MATH]))
+
+    def e2e_update(step, cursor, point, mix):
+        """One e2e update of the mixed run (the record at ``cursor``): its loss on the shared modules, one backward
+        with the latents stepped in it, the shared clip and optimizer step. Logged as kind e2e."""
+        tick = time.time()
+        with contextlib.ExitStack() as scope:
+            update_precision(scope, point, mix)
+            with shared_parametrized_weights(backbone.hf) as next_pass:
+                next_pass()
+                with in_backward.in_backward() as armed:
+                    with profile_region('update/e2e_forward'):
+                        loss, info = e2e.loss(cursor)
+                    if not torch.isfinite(loss):
+                        raise RuntimeError('nonfinite e2e loss in the mixed run')
+                    with profile_region('update/e2e_backward'), backward_phase():
+                        loss.backward()
+                latent_norm = armed.norm()
+        if spike is not None:
+            global_norm = clip_finite_gradients(other_trainables, consumed_norm=latent_norm, spike=spike)
+        else:
+            global_norm = torch.linalg.vector_norm(torch.stack([gradient_norm(other_trainables).to(latent_norm.device),
+                                                                latent_norm.double()]))
+        grad_clip = armed.clip_record(global_norm)
+        if spike is not None:
+            spike.observe(grad_clip['global_norm'])
+        with profile_region('update/optimizer'):
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+        seconds = time.time() - tick
+        log('train.jsonl', {'step': step, 'kind': 'e2e', 'e2e_cursor': cursor, 'loss': float(loss),
+                            'precision': point, 'mix': mix, **info, 'grad_clip': grad_clip, 'seconds': seconds,
+                            'supervised_tokens_per_second': info['supervised_tokens'] / seconds})
+
+    def e2e_evaluate():
+        """The e2e objective's paired held readers (written V against token T) and its held crisp CE, at BF16."""
+        with torch.no_grad(), contextlib.ExitStack() as scope:
+            if quant is not None:
+                scope.enter_context(quant.context('bf16', 0.0))
+            if fp8_backend is not None:
+                scope.enter_context(fp8_backend.native_modules())
+            report = {'step': step, **e2e.evaluate(f'step{step}')}
+        log('e2e-eval.jsonl', report)
+        return report
+
+    if e2e is not None and step == start_index and not (a.out / 'e2e-eval.jsonl').is_file():
+        e2e_evaluate()  # the mixed run's own e2e baseline, before its first update
     for step_index in loop:
         diagnostic_state_before = (state_hashes(direct_trainables)
                                    if step_index < a.state_hash_steps else None)
@@ -2060,15 +2344,7 @@ def main(argv=None):
                 scope.enter_context(saved_tensor_audit)
             if member is not None:  # through backward: checkpointed layers recompute as the member
                 scope.enter_context(family.selected(backbone, member))
-            if quant is not None:
-                scope.enter_context(quant.context(point, mix))
-            if fp8_backend is not None:
-                scope.enter_context(fp8_backend.autocast())
-            if a.sdpa_backend == 'math':
-                # Keep this active through backward too: activation-checkpoint recomputation happens after the
-                # forward returns, and must use the same declared attention backend as the original forward.
-                from torch.nn.attention import SDPBackend, sdpa_kernel
-                scope.enter_context(sdpa_kernel(backends=[SDPBackend.MATH]))
+            update_precision(scope, point, mix)
             if plan['mode'] == 'sequential' and len(batch) > 1:
                 _, _, _, valid_all, weights_all, _, _ = tensors(batch)
                 valid_positions = valid_all.sum().clamp_min(1)
@@ -2192,7 +2468,7 @@ def main(argv=None):
                 observed_activation)
         for key in totals:
             totals[key] += metrics[key]
-        log('train.jsonl', {'step': step, 'loss': float(loss), 'precision': point,
+        log('train.jsonl', {'step': step, 'kind': 'direct', 'loss': float(loss), 'precision': point,
                             'precision_policy': point, 'mix': mix, 'member': member,
                             'window_execution': plan['mode'], 'checkpoint_layers': plan['checkpoint_layers'],
                             'memory_plan': plan, 'observed_incremental_peak_bytes': observed_increment,
@@ -2213,10 +2489,15 @@ def main(argv=None):
             log('fp8-runtime-inventory.jsonl', {'step': step, **fp8_backend.inventory()})
         profiler.update_done(step, seconds, forward_tokens=metrics['forward_tokens'], windows=metrics['windows'],
                              checkpoint_layers=plan['checkpoint_layers'], mode=plan['mode'], precision=point)
+        if e2e is not None:  # the mixed run: this direct update's share of e2e updates, at its precision point
+            for cursor in e2e_cursors(step, a.e2e_mix['fraction']):
+                e2e_update(step, cursor, point, mix)
         if step % a.eval_every == 0 or step == end:
             try:
                 with profile_region('update/eval'):
                     report = evaluate()
+                    if e2e is not None:
+                        report['e2e'] = e2e_evaluate()
             except BaseException:
                 # Evaluation is outside the optimizer update. Preserve every
                 # completed update even when an evaluator or its dependency fails.
@@ -2327,6 +2608,8 @@ def main(argv=None):
         (a.out / 'weight-drift.json').write_text(json.dumps(
             latent_drift(a.weight_drift_base, latent_named, in_backward, step), indent=1) + '\n')
     print(json.dumps({'event': 'neuralese_direct_' + final['status'], 'step': step, 'qualified': qualified}), flush=True)
+    if reserve is not None:
+        reserve.cleanup()  # at return, not only at exit: a later run in this process (a resume) takes the lock again
 
 
 if __name__ == '__main__':

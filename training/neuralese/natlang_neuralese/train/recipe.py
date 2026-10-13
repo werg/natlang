@@ -537,7 +537,8 @@ DIRECT_IDENTITY_QUALIFICATION = 'neuralese_direct_step0_identity'
 # The end-to-end lineage (owner decision 2026-10-12, plans/neuralese/NEURALESE_DIRECT_V1.md "End-to-end stage"):
 # it starts from a direct export, which the lineage's first stage runtime-qualifies on those exact weights; the
 # trainer's step 0 adds the identity TokenChoiceProjection, so its logits equal the export's. Its acceptance is the
-# recipe's ``e2e_acceptance`` and its handoff moment the ``parent_readiness`` (train/e2e_acceptance.py).
+# recipe's ``e2e_acceptance`` (train/e2e_acceptance.py). The direct phases no longer hand off into it at a readiness
+# moment: e2e updates join the running direct stage (``e2e_mix``, the mixed run, owner 2026-10-13).
 DIRECT_E2E_QUALIFICATION = 'direct_e2e_runtime_qualified_export'
 DIRECT_E2E_KINDS = frozenset({'direct_runtime_qualification', 'raw_recurrence_training'})
 
@@ -686,11 +687,10 @@ def load_recipe(path):
     if 'e2e_acceptance' in recipe:
         if not e2e_lineage:
             raise ValueError('e2e_acceptance belongs to an end-to-end lineage')
-        from .e2e_acceptance import validate_declaration, validate_readiness
+        from .e2e_acceptance import validate_declaration
         validate_declaration(recipe['e2e_acceptance'])
-        validate_readiness(recipe.get('parent_readiness'))
     elif e2e_lineage:
-        raise ValueError('an end-to-end lineage declares its acceptance (e2e_acceptance) and parent_readiness')
+        raise ValueError('an end-to-end lineage declares its acceptance (e2e_acceptance)')
     validate_input_bindings(recipe)
     declared_runtime_environment(recipe)
     if 'family' in recipe:
@@ -701,6 +701,8 @@ def load_recipe(path):
         progress = (recipe.get('quantization') or {}).get('stage_progress', {})
         if any(stage_id not in progress for stage_id in recipe['family']['stages']):
             raise ValueError('a family stage needs a curriculum: name it in quantization.stage_progress')
+    if 'e2e_mix' in recipe:
+        validate_e2e_mix(recipe['e2e_mix'], {stage['id']: stage['kind'] for stage in recipe['stages']})
     if 'objective_continuation' in recipe:
         validate_objective_continuation(recipe)
     if 'quantization' in recipe:
@@ -845,7 +847,54 @@ def verify_direct_stage_lineage_gates(stage, inputs, lineage_evidence):
 
 # Objective components an active stage may change by a declared objective continuation (``objective_continuation``;
 # the trainer's direct_sft.OBJECTIVE_KEYS): the curriculum continues from the checkpoint's update without a jump.
-OBJECTIVE_COMPONENTS = ('quantization', 'family')
+OBJECTIVE_COMPONENTS = ('quantization', 'family', 'e2e_mix')
+
+E2E_MIX_KEYS = frozenset({'description', 'stages', 'fraction', 'records', 'pieces', 'options', 'token_choice', 'writer',
+                          'neuralese_spans'})
+
+
+def validate_e2e_mix(component, kinds):
+    """``e2e_mix`` (the mixed run, owner 2026-10-13; plans/neuralese/NEURALESE_DIRECT_V1.md "The mixed run"): the
+    e2e producer->consumer updates a neuralese_direct stage interleaves with its direct updates. {stages, fraction p
+    of all updates in (0, 1), records and pieces as content-pinned {path, sha256}, optional neuralese_spans (the union
+    rendering's Neuralese output spans sidecar, {path, sha256}: spans with an e2e edge are context only in direct
+    updates), options (train/trajectories.py
+    settings), token_choice and writer: {lr, optimizer muon|adamw} (the TokenChoiceProjection and the
+    NeuraleseProjection's own rates), description}."""
+    if not isinstance(component, dict) or set(component) - E2E_MIX_KEYS or \
+            not {'stages', 'fraction', 'records', 'pieces', 'token_choice', 'writer'} <= set(component):
+        raise ValueError('e2e_mix is {stages, fraction, records, pieces, neuralese_spans?, options?, token_choice, writer, '
+                         'description?}')
+    stages = component['stages']
+    if not isinstance(stages, list) or not stages or any(kinds.get(s) != 'neuralese_direct' for s in stages):
+        raise ValueError('e2e_mix.stages names neuralese_direct stages of the recipe')
+    fraction = component['fraction']
+    if not isinstance(fraction, (int, float)) or isinstance(fraction, bool) or not 0 < fraction < 1:
+        raise ValueError('e2e_mix.fraction is the e2e share of all updates, in (0, 1)')
+    for key in ('records', 'pieces') + (('neuralese_spans',) if 'neuralese_spans' in component else ()):
+        binding = component[key]
+        if not isinstance(binding, dict) or set(binding) != {'path', 'sha256'} or not binding['path'] or \
+                not re.fullmatch(r'[0-9a-f]{64}', str(binding['sha256'])):
+            raise ValueError('e2e_mix.' + key + ' is a content-pinned {path, sha256}')
+    if not isinstance(component.get('options', {}), dict):
+        raise ValueError('e2e_mix.options maps train/trajectories.py settings to values')
+    for key in ('token_choice', 'writer'):
+        rate = component[key]
+        if not isinstance(rate, dict) or set(rate) != {'lr', 'optimizer'} or \
+                not isinstance(rate['lr'], (int, float)) or not rate['lr'] > 0 or \
+                rate['optimizer'] not in ('muon', 'adamw'):
+            raise ValueError('e2e_mix.' + key + ' is {lr > 0, optimizer: muon|adamw}')
+
+
+def stage_e2e_mix(component, stage_id):
+    """The component as one stage receives it (``--e2e-mix``; as ``stage_family``), its records and pieces verified
+    against their pins; None when the stage does not mix."""
+    if not component or stage_id not in component.get('stages', []):
+        return None
+    for key in ('records', 'pieces', 'neuralese_spans'):
+        if key in component and sha(binding_path(component[key]['path'])) != component[key]['sha256']:
+            raise ValueError('e2e_mix.' + key + ' hash mismatch: ' + component[key]['path'])
+    return {**json.loads(json.dumps(component)), 'stage': stage_id}
 
 
 def validate_objective_continuation(recipe):
@@ -896,7 +945,8 @@ def objective_handoff(old_recipe, new_recipe, out):
         if not stage_finished(out, stage['id']):
             continue
         for key, member in (('quantization', lambda c, s: (c or {}).get('stage_progress', {}).get(s)),
-                            ('family', lambda c, s: s in (c or {}).get('stages', []))):
+                            ('family', lambda c, s: s in (c or {}).get('stages', [])),
+                            ('e2e_mix', lambda c, s: s in (c or {}).get('stages', []))):
             if member(old_recipe.get(key), stage['id']) != member(new_recipe.get(key), stage['id']):
                 raise ValueError('handoff refused: finished stage ' + stage['id'] + ' keeps its ' + key)
     old_value, new_value = json.loads(json.dumps(old_recipe)), json.loads(json.dumps(new_recipe))
@@ -910,12 +960,15 @@ def objective_handoff(old_recipe, new_recipe, out):
 
 
 def stage_objective_args(recipe, stage):
-    """The stage's family component and objective-continuation declaration as trainer arguments."""
+    """The stage's family and e2e_mix components and objective-continuation declaration as trainer arguments."""
     from ..maple.family import stage_family
     command = []
     component = stage_family(recipe.get('family'), stage['id'])
     if component is not None:
         command += ['--family', json.dumps(component, sort_keys=True, separators=(',', ':'))]
+    mix = stage_e2e_mix(recipe.get('e2e_mix'), stage['id'])
+    if mix is not None:
+        command += ['--e2e-mix', json.dumps(mix, sort_keys=True, separators=(',', ':'))]
     declared = recipe.get('objective_continuation')
     if isinstance(declared, dict) and declared.get('stage') == stage['id']:
         command += ['--objective-continuation', json.dumps({'stage': declared['stage'],
