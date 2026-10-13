@@ -484,7 +484,7 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "exact_checker_controls_passed": 22,
     "live_qualified": false,
@@ -505,5 +505,11 @@
   "source_replay": {
     "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/astra-cave-project-package-v1",
     "scope": "Shared-loader full typed canonical source-validity replay only"
+  },
+  "independent_review": {
+    "path": "training/semantic_applications/reviews/ASTRA_CAVE_REVIEW_SOL.json",
+    "commit": "439ba667",
+    "sha256": "544cba405406f1b3c5019d4dfb2b202c4a97e45595942dd878b00433ba7e1eb9",
+    "scope": "Independent source/oracle, exact lower-bound and policy-equivalence review. No actual application execution or training admission."
   }
 }

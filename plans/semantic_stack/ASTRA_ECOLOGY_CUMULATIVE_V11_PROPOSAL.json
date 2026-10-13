@@ -1,0 +1,114 @@
+{
+  "schema": "semantic-stage-variant/1",
+  "id": "astra-ecology01-cumulative-typed-state-v11-proposal",
+  "program_id": "astra-ecology-01",
+  "base_catalog_sha256": "d7619eadfd306223762b10d0866e9e121986389543b5ea230af6903046254907",
+  "base_stage": "interpretObservationScope",
+  "status": "proposal_not_adopted_unmeasured",
+  "fixture_and_oracle_changes": false,
+  "types": {
+    "ScopeInput": "{relation:{cause:string;effect:string;signedEffect:number;direct:boolean;witnesses:Witness[]}; scopeClause:string; premises:EvidenceRecord[]}",
+    "ScopeDecision": "{cause:string;effect:string;usable:boolean;sign:number|null;reason:string;witnesses:Witness[]}"
+  },
+  "literal_unit": "One directed candidate causal edge: judge source establishment and edge-specific conditions only. Downstream edges are eligible even when their cause is not the perturbed organism.",
+  "capture_policy": "Capture only the source edge-validity rule. Pass one relation plus its exact premises and edge-specific condition. Perturbation reachability and sign multiplication belong to verifyResult/root graph propagation, not this literal.",
+  "numbered_plan": [
+    "1. Select current-batch causalAssessments and their source-linked interactionEdges. Preserve the inherited earlier-stage contributions; create a new scopeDecisions list for this batch. Cross-batch final aggregation belongs to root.",
+    "2. For each selected causalAssessments element, bind it unchanged as ScopeInput.relation (cause/effect/signedEffect/direct/witnesses). Select exact premise records and any edge-specific condition into scopeClause/premises. When the edge is usable, preserve relation.signedEffect in the returned sign field.",
+    "3. In eval, declare local ScopeInput and ScopeDecision aliases with these exact shapes. Bind edgeValidityRule from input.context.rule and create nl.with<ScopeDecision>({edgeValidityRule}). Ask whether this directed edge is established by its premises and its own stated conditions hold; preserve its source sign and exact witnesses. A supported downstream edge is usable even if its cause is not the initially perturbed organism.",
+    "4. Directly await the literal on one ScopeInput and append its actual ScopeDecision. usable means this edge may participate in the causal graph. This stage does not decide whether the perturbation reaches it or the eventual net sign at its target.",
+    "5. Continue over the finite candidate list. A relation with insufficient or inapplicable premises still produces a decision (usable=false, sign=null when unresolved); it is not silently omitted.",
+    "6. Pass all inherited contributions and these actual decisions to verifyResult. If a literal fails to return, propagate a failed/unresolved stage result with the affected source paths; do not replace its unmade decision with an empty successful contribution."
+  ],
+  "direct_await_idiom": "const edgeValidityRule = input.context.rule; const judgeScope = nl.with<ScopeDecision>({edgeValidityRule})`Judge whether the supplied directed edge is source-established and its edge-specific conditions hold. Preserve entity identity, directed cause/effect orientation, source sign and exact witnesses; return lowercase case-folded entity keys. Supported downstream edges are usable even when their cause differs from the initially perturbed organism. Return cause, effect, usable, sign, reason and witnesses.`; const scopeDecision = await judgeScope(scopeInput); scopeDecisions.push(scopeDecision);",
+  "applicability": "Run once per candidate causal relation whose premises intersect this batch or whose explicit scope condition is introduced by this batch. Deduplicate only the same directed relation under the same scope premises.",
+  "no_op_criterion": "No candidate relation is introduced or modified by this batch. Then append StageAbsence with these source paths and the reason; no literal is required and no semantic-stage contribution is credited.",
+  "owned_contribution": "scopeDecisions: ScopeDecision[]",
+  "invariants": [
+    "Preserve the input relation's entity identity and direction while returning canonical lowercase case-folded cause/effect keys.",
+    "Every witness is an exact quote from a supplied premise.",
+    "A condition not established by the snapshot cannot become universal applicability.",
+    "Only actual returned decisions are consumed downstream; empty does not stand for failed judgment.",
+    "Eligibility is local to edge evidence/conditions; downstream reachability and sign multiplication are graph-stage work. A cause unequal to the initial perturbation is not an exclusion rule.",
+    "ScopeInput uses the actual causalAssessments element shape; output sign comes from relation.signedEffect when usable.",
+    "Use lowercase organism/resource keys for every cause/effect graph join and output, while preserving exact source quotation casing. Case normalization changes spelling only; substantive identity still needs evidence."
+  ],
+  "qualification_required": [
+    "Rendered type/scope fidelity",
+    "One relation per actual child call",
+    "Direct awaited structured result returns successfully",
+    "Returned usable/sign changes downstream propagation as appropriate",
+    "Matched v7/v8 live diagnostic, then approximately48samples per adopted variant"
+  ],
+  "training_admitted": false,
+  "idiom_preconditions": "Before executing this idiom, declare the local ScopeInput and ScopeDecision aliases; initialize scopeDecisions: ScopeDecision[]; bind one scopeInput from the selected edge and exact premises. Use the authored StageInput4 parameter input. The idiom explicitly binds its one captured rule from the declared context field.",
+  "diagnostic_revision_reason": "v8b consumed actual child decisions but wrongly excluded downstream edges by treating scope as direct applicability to the fox perturbation. v8c restricts the child to edge validity and keeps graph propagation downstream.",
+  "selected_collection": "input.prior.causalAssessments",
+  "source_projection": "Pass one actual causalAssessments element as ScopeInput.relation. The upstream signedEffect is the candidate source sign; when usable, map it to ScopeDecision.sign. direct describes the causal assessment and does not require the cause to be the initially perturbed organism.",
+  "entity_identity_contract": {
+    "domain": "Organism and ecological resource names in astra-ecology-01",
+    "join_key": "Use lowercase case-folded organism/resource names as entity keys in every edge, graph join and final output. Grass and grass share the key grass; Shelter and shelter share shelter.",
+    "source_quotes": "Preserve exact original casing in source quotations and evidence text.",
+    "scope": "Only normalize letter case. Keep distinct names distinct; synonym or referent equivalence still requires source-grounded semantic evidence."
+  },
+  "derived_from": "plans/semantic_stack/ASTRA_ECOLOGY_SCOPE_V8_PROPOSAL.json",
+  "cross_folder_accumulation": {
+    "schema": "semantic-cross-folder-state/1",
+    "context_field": "priorCompletedState",
+    "context_field_type": "FinalSemanticState",
+    "StageContext": "{objective:string;rule:string;relatedRecords:EvidenceRecord[];priorCompletedState:FinalSemanticState}",
+    "initial_state": {
+      "interactionAssertions": [],
+      "interactionEdges": [],
+      "causalAssessments": [],
+      "scopeDecisions": [],
+      "effectAudit": {
+        "positivePaths": [],
+        "negativePaths": [],
+        "unresolvedTargets": [],
+        "auditFindings": []
+      },
+      "stageAbsences": []
+    },
+    "append_fields": [
+      "interactionAssertions",
+      "interactionEdges",
+      "causalAssessments",
+      "scopeDecisions",
+      "stageAbsences"
+    ],
+    "replace_fields": [
+      "effectAudit"
+    ],
+    "batch_result_contract": "Stage1\u20134 arrays and stageAbsences in the returned FinalSemanticState contain this batch's new contributions only. effectAudit is the new global audit over completed prior folders plus this batch. This permits one exact append per batch without copying old arrays twice.",
+    "root_numbered_plan": [
+      "1. Initialize completedState with the declared empty FinalSemanticState before visiting the first folder.",
+      "2. For each actual source folder, pass the current completedState unchanged as context.priorCompletedState. Start the batch-local prior.stageAbsences empty; every named stage owns only its new batch contribution.",
+      "3. Await the full nested stage chain. Append the returned interactionAssertions, interactionEdges, causalAssessments, scopeDecisions and stageAbsences once to the corresponding completedState arrays; replace completedState.effectAudit with the returned global effectAudit.",
+      "4. Carry this exact completedState into the next folder. Preserve source-linked contribution objects and exact quotations; canonical lowercase organism/resource keys are used for joins.",
+      "5. After all folders, derive increase/decrease/unresolved from the final completedState.effectAudit and its typed perturbation assertion. Return the source-visible exact result schema. Root classification reads the accumulated typed state; it does not perform a separate raw-source graph extraction."
+    ],
+    "stage_ownership_plan": [
+      "1. Read context.priorCompletedState as immutable completed-folder evidence and input.prior as the current batch's already produced contributions.",
+      "2. Stages1\u20134 produce new source-linked rows owned by the current batch. Related source records may substantiate a join or quote; previously completed assertions/edges/decisions are reused from typed state.",
+      "3. Preserve both canonical entity keys and exact quotation casing. A source record's current-folder ownership is independent of which downstream graph paths eventually use it.",
+      "4. Return current-batch arrays unchanged through ancestors. The root is the single owner of cross-folder array append."
+    ],
+    "stage5_numbered_plan": [
+      "1. Form the graph input from context.priorCompletedState.interactionEdges plus input.prior.interactionEdges. Form matching assessment and scope-decision collections from the same prior-completed/current-batch union.",
+      "2. Join typed rows by canonical case-folded entity keys, direction and source witnesses. Include only source-established edges whose actual typed scope decision is usable and whose signed effect agrees with its assessment. Missing typed contribution becomes an audit finding requiring repair.",
+      "3. Read the perturbation from the union of typed interactionAssertions. Propagate signs over the supported directed graph, preserving path evidence; maintain a finite unvisited path/frontier appropriate to this source DAG.",
+      "4. Recompute the global effectAudit for the whole accumulated graph. Opposing supported path signs without strengths make that target unresolved, and propagate unresolved influence through its downstream reachable nodes. Earlier prefix audit classifications may change when a later folder adds a competing path.",
+      "5. Return this batch's stage1\u20134 arrays and stageAbsences plus the new global effectAudit. Do not append priorCompletedState arrays inside the batch result; root performs that exact merge once."
+    ],
+    "invariants": [
+      "Every completed-folder edge and scope decision consumed by global propagation comes from the prior typed state.",
+      "Only root performs cross-folder append; only stage5 replaces the global effect audit.",
+      "Related raw records support source quotation checks and genuinely new current-batch interpretation; they do not substitute a fresh global graph for earlier typed stage results.",
+      "A failed or absent required contribution remains explicit; source code does not repair a missing stage by reconstructing the final answer in root.",
+      "Fixture and oracle bytes, source-world identity and existing typed contribution element shapes remain unchanged."
+    ],
+    "qualification": "Separate diagnostic source variant; no adoption or training admission without matched live contribution and task-result evidence.",
+    "stage5_no_op_policy": "Even when the current batch adds no applicable assertion, recompute and return the global effectAudit from context.priorCompletedState plus current typed prior. Preserve supported earlier graph contributions. Record a stage5 StageAbsence only when no applicable source-backed graph exists across prior plus current; an empty current batch never erases the carried global audit."
+  }
+}
