@@ -868,7 +868,7 @@ def retain_best_checkpoint(out, report):
 
 
 def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, supervised_suffix_start=None,
-                     context_tokens=0, target_tokens=None, supervised_spans=None):
+                     context_tokens=0, target_tokens=None, supervised_spans=None, min_context_tokens=0):
     """Prime with real open; supervise each text token and the real close once.
 
     The first ``context_tokens`` document tokens (the system prompt) are context only: they stay in the
@@ -876,7 +876,13 @@ def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, sup
     ``target_tokens``, ``tokens`` is the maximum total window and each lazy window advances by at most
     that supervised span, using all available preceding document tokens as context. ``supervised_spans`` (a merged
     decision chain, ``merge_prefix_rows``) are ``[begin, end)`` observed suffixes in ``token_ids``; each window gets
-    the nonempty ones clipped to its span, in span coordinates, as ``supervised_spans``."""
+    the nonempty ones clipped to its span, in span coordinates, as ``supervised_spans``.
+
+    ``min_context_tokens`` (with ``target_tokens``): every window after the first keeps at least this many preceding
+    document tokens as context, by advancing ``min(target_tokens, tokens - min_context_tokens)``. Without it a
+    ``target_tokens`` near ``tokens`` leaves later windows of a long document only ``tokens - target_tokens`` of
+    context (REPETITION_DRAGNET_20261013.md: 1,024 tokens at 31,744 of 32,768, no task prompt). 0 keeps the old
+    geometry exactly."""
     ids=array('I',[open_id]);ids.extend(token_ids);ids.append(close_id)
     bounded_target = target_tokens is not None
     if bounded_target:
@@ -887,11 +893,17 @@ def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, sup
     else:
         stride=tokens-prefix_tokens
         context_capacity=prefix_tokens
+    if min_context_tokens:
+        if not bounded_target or type(min_context_tokens) is not int or not 0<min_context_tokens<tokens:
+            raise ValueError('min_context_tokens needs target_tokens and must be a positive integer below tokens')
+    later_stride=min(stride,tokens-min_context_tokens) if bounded_target and min_context_tokens else stride
+    offsets=[0]+list(range(stride,len(ids),later_stride)) if stride<len(ids) else [0]
     context_end=1+max(0,int(context_tokens))
     windows=[]
-    for offset in range(0,len(ids),stride):
-        start=max(0,offset-context_capacity)
-        end=min(len(ids),offset+stride)
+    for offset in offsets:
+        step=stride if offset==0 else later_stride
+        start=max(0,offset-(context_capacity if offset==0 else tokens-later_stride))
+        end=min(len(ids),offset+step)
         chunk=_TokenWindow(ids,start,end)
         width=max(1 if offset==0 else offset-start,context_end-start)
         if len(chunk)<=width:continue
@@ -1066,7 +1078,7 @@ def merge_prefix_rows(rows):
 
 
 def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
-                         mask_system_prompt=True, train_target_tokens=None):
+                         mask_system_prompt=True, train_target_tokens=None, train_min_context_tokens=0):
     """Build split-preserving text windows with the shared chat-role policy.
 
     System prompt tokens remain in the crisp context but can be excluded from
@@ -1074,7 +1086,8 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
     diagnostics and the shared context loss. Labels use one byte per token and
     are shared across overlapping windows, including training windows.
     ``train_target_tokens`` (default ``target_tokens``) is the supervised span of train windows only, so held
-    windows and their metrics keep their geometry. A merged row (``merge_prefix_rows``) passes its suffix spans and
+    windows and their metrics keep their geometry; ``train_min_context_tokens`` is the context floor of later train
+    windows (``document_windows`` ``min_context_tokens``). A merged row (``merge_prefix_rows``) passes its suffix spans and
     its constituents (``merged_rows``) to its windows; ``document_sha256`` stands for the text hash when the text was
     dropped (a streamed plan).
     """
@@ -1128,7 +1141,8 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
                 supervised_suffix_start=None if spans is not None else row.get('supervised_suffix_start'),
                 context_tokens=context,
                 target_tokens=train_target_tokens if split=='train' and train_target_tokens else target_tokens,
-                supervised_spans=spans):
+                supervised_spans=spans,
+                min_context_tokens=(train_min_context_tokens or 0) if split=='train' and train_target_tokens else 0):
             if labels is not None:
                 window['roles']=_TokenWindow(labels,window['start'],window['start']+len(window['ids']))
             if row.get('merged_rows'):

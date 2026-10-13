@@ -76,6 +76,26 @@ def test_windows_clip_the_suffix_spans_to_their_span():
     assert covered == [3, 4, 12, 13, 25, 26, 27, 28, 29]
 
 
+def test_later_windows_keep_the_declared_context_floor():
+    """REPETITION_DRAGNET_20261013.md: train_target_tokens near tokens left later windows of a long document only
+    tokens - train_target_tokens of context; min_context_tokens keeps at least that much, and 0 is the old geometry."""
+    ids = list(range(10, 110))
+    old = document_windows(ids, open_id=1, close_id=2, tokens=32, prefix_tokens=4, target_tokens=30)
+    assert [w['start'] for w in old] == [0, 28, 58, 88] and old[1]['prefix'] == 2  # 2 tokens of context
+    same = document_windows(ids, open_id=1, close_id=2, tokens=32, prefix_tokens=4, target_tokens=30,
+                            min_context_tokens=2)
+    assert [(w['start'], w['offset'], w['prefix'], len(w['ids'])) for w in same] == \
+        [(w['start'], w['offset'], w['prefix'], len(w['ids'])) for w in old]
+    floor = document_windows(ids, open_id=1, close_id=2, tokens=32, prefix_tokens=4, target_tokens=30,
+                             min_context_tokens=16)
+    assert all(len(w['ids']) <= 32 for w in floor)
+    assert all(w['offset'] - w['start'] >= 16 for w in floor[1:])
+    covered = [w['start'] + w['prefix'] + i for w in floor for i in range(len(w['ids']) - w['prefix'])]
+    assert covered == list(range(1, len(ids) + 2))  # every token (and the close) is a target exactly once
+    with pytest.raises(ValueError):
+        document_windows(ids, open_id=1, close_id=2, tokens=32, prefix_tokens=4, min_context_tokens=16)
+
+
 def engine():
     tokenizer = SimpleNamespace(unk_token_id=-1, convert_tokens_to_ids=lambda value: -1)
     return SimpleNamespace(tokenizer=tokenizer, backbone=SimpleNamespace(
@@ -144,8 +164,9 @@ def test_a_windowing_continuation_rebuilds_the_trained_plan_and_trains_the_unsee
     stage = {'id': 'direct_sft', 'progress': [0.0, 0.35], 'start': 0, 'end': 'derived'}
     record, plan = trainer.data_continuation(old_targets, held, new_targets, held, consumed=consumed, previous=None,
                                              quantization_stage=stage, a=new_a, previous_a=old_a)
-    assert record['windowing'] == {'previous': {'train_target_tokens': None, 'merge_prefix_rows': False},
-                                   'current': {'train_target_tokens': 56, 'merge_prefix_rows': True}}
+    unchanged = {'cohort_repeats': None, 'train_min_context_tokens': 0}
+    assert record['windowing'] == {'previous': {'train_target_tokens': None, 'merge_prefix_rows': False, **unchanged},
+                                   'current': {'train_target_tokens': 56, 'merge_prefix_rows': True, **unchanged}}
     assert record['held']['rebased'] is False
     seen = {w['document'] for batch, _ in old_plan[:consumed] for w in batch}
     trained = [w for batch, _ in plan[consumed:] for w in batch]

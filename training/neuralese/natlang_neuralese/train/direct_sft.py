@@ -60,12 +60,13 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
                   'fp8_training': 'off', 'fp8_recipe': 'delayed', 'fp8_amax_history_len': 16,
                   'gradient_audit_steps': 0, 'saved_tensor_audit_steps': 0,
                   'gradient_digest_steps': 0, 'state_hash_steps': 0, 'sdpa_backend': 'default', 'family': None,
-                  'train_target_tokens': None, 'merge_prefix_rows': False, 'cohort_repeats': None}
+                  'train_target_tokens': None, 'merge_prefix_rows': False, 'cohort_repeats': None,
+                  'train_min_context_tokens': 0}
 # Train-window geometry (HEADER_EFFICIENCY_20261012.md): a running stage changes it only by a windowing continuation
 # (continuation_mode), which rebuilds the plan it trained on under the saved values.
 # cohort_repeats (the epoch's per-cohort repeat counts) changes which windows an epoch holds, so it moves exactly like
 # the window geometry: on the same data by a windowing continuation, or with a data continuation.
-WINDOWING_KEYS = ('train_target_tokens', 'merge_prefix_rows', 'cohort_repeats')
+WINDOWING_KEYS = ('train_target_tokens', 'merge_prefix_rows', 'cohort_repeats', 'train_min_context_tokens')
 OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
@@ -118,6 +119,9 @@ def parse(argv=None):
                         'At --tokens minus a context margin, a row up to that length is one window supervised whole '
                         '(prompt and inputs at --context-weight, tool output at --feedback-weight; owner whole-'
                         'trajectory rule) instead of only its last --target-tokens positions')
+    p.add_argument('--train-min-context-tokens', type=int, default=0,
+                   help='with --train-target-tokens: every later train window of a long document keeps at least this '
+                        'many preceding tokens as context (0: tokens minus train-target-tokens, the old geometry)')
     p.add_argument('--merge-prefix-rows', action=argparse.BooleanOptionalAction, default=False,
                    help='train a decision row that is a prefix of another train row inside that row\'s forward '
                         '(text_warmup.merge_prefix_rows): linear decision chains are forwarded once')
@@ -706,7 +710,8 @@ def stage_data(engine, a, text_data):
             one, current = prepare_text_windows(engine, [row], tokens=a.tokens,
                 prefix_tokens=a.prefix_tokens, target_tokens=a.target_tokens,
                 mask_system_prompt=True,
-                train_target_tokens=getattr(a, 'train_target_tokens', None))
+                train_target_tokens=getattr(a, 'train_target_tokens', None),
+                train_min_context_tokens=getattr(a, 'train_min_context_tokens', 0))
             for split in windows:
                 backing.add(one[split])
                 windows[split].extend(one[split])
@@ -735,7 +740,8 @@ def stage_data(engine, a, text_data):
         print(json.dumps({'event': 'merge_prefix_rows', **merge}), flush=True)
     windows, mask_receipt = prepare_text_windows(engine, rows, tokens=a.tokens, prefix_tokens=a.prefix_tokens,
                                                  target_tokens=a.target_tokens, mask_system_prompt=True,
-                                                 train_target_tokens=getattr(a, 'train_target_tokens', None))
+                                                 train_target_tokens=getattr(a, 'train_target_tokens', None),
+                train_min_context_tokens=getattr(a, 'train_min_context_tokens', 0))
     held, held_selection = select_held_document_windows(windows['test'], a.held_documents)
     targets = [w for w in windows['train'] if target_bearing(w)]
     return windows['train'], targets, held, held_selection, mask_receipt, rows
@@ -825,7 +831,8 @@ def stage_plan_data(engine, a, text_data):
     for row in rows:
         windows, _ = prepare_text_windows(engine, [row], tokens=a.tokens, prefix_tokens=a.prefix_tokens,
                                           target_tokens=a.target_tokens, mask_system_prompt=True,
-                                          train_target_tokens=getattr(a, 'train_target_tokens', None))
+                                          train_target_tokens=getattr(a, 'train_target_tokens', None),
+                train_min_context_tokens=getattr(a, 'train_min_context_tokens', 0))
         targets += [light(w) for w in windows['train'] if target_bearing(w)]
         tests += [light(w) for w in windows['test']]
     held, held_selection = select_held_document_windows(tests, a.held_documents)
