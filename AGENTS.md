@@ -59,16 +59,9 @@ differences from a known-good path. Record what was ruled out and how.
 
 # Storage hygiene and discarded work (standing owner order, 2026-10-11)
 
-Amendment (owner, 2026-10-13): make deletions less eager. Prefer moving to the
-external disk (`/mnt/external`, verified copy plus symlink via
-`scripts/archive_to_external.py`) over deleting. Delete only true scratch
-(pytest/tmp leftovers, partial copies, verified exact duplicates). Diagnostic
-outputs, finished-run artifacts and anything possibly useful for a later bug
-hunt move to external instead. Never delete infrastructure (containers,
-images, model weights) as "retired" without checking its callers. Keep NVMe
-for latency-critical data with ample headroom; when the external disk nears
-its floor, report it rather than deleting. The rules below still apply where
-they don't conflict with this amendment.
+Amendment (owner, 2026-10-13): make deletions less eager. With the external disk
+available for space, lean towards moving data to `/mnt/external` rather than
+deleting it when unsure.
 
 - Delete discarded approaches and runs: their checkpoints, optimizer states,
   exports, frozen runtime copies, diagnostic outputs, obsolete recipes and run
