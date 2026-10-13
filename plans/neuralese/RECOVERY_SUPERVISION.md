@@ -60,6 +60,25 @@ cost), then source 2 (needs the runtime replay harness).
 
 ## Status 2026-10-13: source 1 (mined natural recoveries)
 
+Pop continuation at 13:36 CEST: DGX published the immutable source-1 selection as
+`natlang-recovery-selection-r3-20261013-v1`. Pop restored and verified it, then
+bound it in both phases of the shared `neuralese-direct-v3` recipe (`257d8a48`):
+`program-header` for direct_sft and `whole-trajectory` for direct_trajectory,
+rules `failed`, `empty`, and `identical`, with recovery cohort repeat two. The
+selection changes sampling metadata only, retaining original text, masks,
+source groups and split. The running Pop QAD v9 process still has its launch
+recipe; the new selection takes effect only at a safe recipe handoff. The
+first teacher-generated pilot is separately registered as
+`luna-recovery-failure-seeded-20261013-v1` (`c1baf3ad`): ten exact accepted
+parents and nine approved repair actions, with ten bad seed actions and two
+hardcoded teacher actions excluded from targets. DGX has its exact files and
+owns twin rendering into the next union. This pilot is deliberately small;
+expand across failure mechanisms and task domains before giving teacher
+recovery a large sampling share. In particular, the mined `failed` rule
+dominates; measure the distinct empty/identical behaviors and successful
+task outcomes separately so a large error-fix volume does not hide missing
+recovery diversity.
+
 Built: the exact classifier `training/neuralese/natlang_neuralese/train/recovery_mining.py` (rules identical / empty /
 failed; the failed form reuses `text_supervision.failed_feedback`, which wraps `FAILED_TOOL_FEEDBACK`), the streaming
 scanner `scripts/neuralese_data/mine_recovery.py` (bounded memory, spool then held-group filter), and
