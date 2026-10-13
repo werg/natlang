@@ -1,5 +1,53 @@
 # Continuation guide — updated 2026-10-13
 
+## 18:05 CEST: recovery data, s52028 generation, QAD interruption and dragnet
+
+Pop published `pop-static-folder-edit-large-s52027-native-20261013-v1`
+(five exact large CoEdIT directory-edit cases, 1,732 approved native turns) and
+`pop-static-recovery-loop-recursion-s62000-native-20261013-v1` (384/384 exact
+loop/recursion recoveries, 768 approved supervised correction turns and 384
+failed seed actions retained only as context). Both immutable manifests are on
+`origin/main`, and both file sets were synced to `/home/werg/natlang` on DGX
+with remote SHA-256 verification. DGX should render both LFM/Mellum twins and
+include approved turns in the next declared broad union; do not supervise the
+failed recovery seeds. The static recovery audit records 192 train source
+groups and no held/r3 overlap. The four s52027 large folder-edit teacher
+attempts exhausted 3600 s or 768 requests after hundreds of saved turns,
+yielded zero result rows, and now have exact reviewed zero-output exclusions.
+The replenisher advanced to s52028 with all six Luna workers active. A source
+build failure on `workbench.mjs` was an actual local-variable shadowing bug;
+commit `e2b2f803` fixes it on main. The replenisher timer remains active.
+
+The Gemini four-family pilot closed 64/64 valid responses. Exact gold matches:
+AG News 14/16, BoolQ 13/16, BoardgameQA 6/16, PubMedQA 10/16. Wrong labels,
+including confidently wrong BoardgameQA answers, are excluded from training.
+`gemini-pilot64-quality.json` pins this review. Pop copied the 64 durable rows
+to `gemini-labels-full512.jsonl` and launched the balanced 512-case collection;
+the resumed CLINC-only batch14 is still paused at 167 labels. The transient
+systemd pilot unit disappeared when it completed, so its attempted `OnSuccess`
+hook did not relaunch CLINC; this is now tracked operationally rather than
+assumed automatic. All provider labels remain review-only until native
+conversion/source-quality admission.
+
+QAD LFM direct SFT v12 step8000: held CE 0.675470 (base 2.679), gold accuracy
+0.86277, response KL 1.12542; full-prompt task eval 0/16 with ten exact
+repeated-action stops. In 418 saved eval assistant turns there was no emitted
+reasoning, while many admitted training rows have nonempty `<think>` targets.
+Pop owns the wide repetition/format dragnet in
+`plans/neuralese/REPETITION_DRAGNET_20261013.md`; DGX was asked to check
+Mellum in its parallel eval. Do not assume that the model simply cannot learn.
+At step8552 the adaptive memory estimate exceeded the v12 GPU claim by about
+53 MiB before forward execution. The latest full optimizer/RNG checkpoint was
+kept. Resume the same v12 lineage at a 7.3 GiB discrete CUDA envelope. A
+first relaunch with the shared package refused its exact recipe pin because
+`common/hdd_guard.py` changed since freezing; use the active lineage's frozen
+runtime (`/srv/storage/natlang-artifacts/neuralese-direct-lfm-qad-broad-20261013-v1/runtime`)
+as `PYTHONPATH` for this resume. The high-priority relaunch restored the
+step-8360 full checkpoint and resumed GPU updates at step8361 (99% GPU in the
+first observed update after its data reload). The DGX coordinator decision
+for the future lineage remains a mixed direct SFT + E2E run after projection
+fit, with no direct-stage plateau wait.
+
 ## 16:55 CEST: Pop generation and corpus sync
 
 The QAD direct SFT v12 handoff is training past update 7,500 with the GPU

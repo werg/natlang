@@ -55,3 +55,34 @@ The common pattern is a policy that does not condition its next action on the ob
 4. Behaviour data: recovery supervision (an observation that shows no progress followed by a different action) is the
    remaining lever; the targets almost never contain a repeated action, so the model never sees "same call twice, then
    change" either.
+
+## Pop QAD step-8000 follow-up — 2026-10-13
+
+Owner: Pop. This is an active investigation, not a verdict that the model cannot learn recovery. Keep the checkpoint lineage and investigate unexplained gaps against exact references.
+
+## Observed state
+
+- Direct SFT v12 step 8000: held CE 0.675470 (base 2.679), gold accuracy 0.86277, response KL 1.12542. Full-system-prompt task eval: 0/16 success, ten exact repeated-action stops, two invalid actions, three semantic mismatches, one budget exhaustion, zero infrastructure errors. The task gate has not shown success at earlier steps either.
+- The ten repeated cases each have many identical adjacent `eval` actions (10–41), with fresh, unique request hashes on every turn. The unchanged observation appears in the saved partial. Example: workbench tickets repeated the same TypeScript syntax error despite explicit “change it before running it again” feedback; its prompt grew from 5,413 to 11,185 tokens. Across repeated cases the largest saved prompt was 18,801 tokens, within the eval's declared 32,768 context.
+- The supervisor's `identical_turn_limit=8` matches the same invocation, exact tool-call JSON and exact observation hash over eight saved turns. It does not classify a reused action on another item as repetition. The stop labels are grounded in actual no-progress loops; their underlying cause remains open.
+- Of 418 saved assistant turns in the step-8000 task packet, zero contain `reasoning_content` or `<think>` in the server's returned message. The DGX whole-corpus scan above found 69% of LFM program-header suffixes are bare calls, so this is **not by itself a template bug**. Check whether the other 31% and the live prompt would predict any thinking before assigning a cause.
+
+## Training and rendering checks so far
+
+- The declared v12 direct SFT objective uses the r3 `program-header` input, then r3 `whole-trajectory`; the stage sampler declares recovery cohort weight 0.5 with two repeats. The handoff entered at step 7014. The `windows` record says 11,580 recovery candidate documents among 357,632, with 50/50 cohort sampling policy. Actual recovery draws since step 7014 still need measurement.
+- In the first 150,000 r3 `program-header` rows, 8,775 contain the exact runtime feedback “Nothing else from this eval was kept”; the corresponding whole-trajectory slice has 774. Representative rows put the next assistant action after the observation. Program-header rows declare `supervised_suffix_start` at that assistant action, and `direct_sft.py` gives positive suffix weight while masking the failed preceding assistant action. The actual sampled token mass on these rows still needs counting.
+- In the first 40,000 r3 rows, 32,707 program-header rows contain nonempty `<think>` (46,060 nonempty blocks) and 12,024 whole-trajectory rows contain nonempty `<think>`. A first-50,000-row r2 slice contains 40,579 such rows. **These prefix slices are corpus-order-skewed and not estimates of the full mix**; use the DGX full-corpus 69% bare-call suffix count above. A sampled r3 program-header row's `token_ids` decoded byte-for-byte to `text`; its supervised suffix starts at `<think>`. This rules out a blanket absence of reasoning targets or a simple token/text mismatch in that sample.
+- The QAD LFM chat template's generation prefix is `<|im_start|>assistant\n`; it permits `<think>` as the first generated content. The template renders a supplied `reasoning_content` as `<think>…</think>`. LFM's declared `last_turn_only` policy drops older turns' thoughts in training and serving, while retaining the latest turn. The server's `build_message` extracts a generated `<think>` block to `reasoning_content`; current eval responses never expose one. More direct inspection of raw generated tokens and first-token logits is needed before ruling out a parser/generation bug.
+- The task evaluator uses the same training engine through a local HTTP server, full prompt rendering, temperature 0.6, 32,768 context, and no explicit reasoning disable. It only requires a tool call near its last/compaction turns. Need compare the *exact* prompt prefix and request settings for a repeated state with a known-good train example.
+
+## Next checks
+
+1. Reconstruct two exact repeated requests from durable evidence and compare model-visible messages/tool schemas with training rows; check tool/error observation placement, full versus program-header prompt, tokenization, and cache positions. Inspect raw generated token IDs before `build_message`, especially the probability of `<think>` versus direct tool-call opening.
+2. Count actual recovery source windows and weighted supervised tokens drawn between 7014 and 8551. In selected post-error windows, verify nonzero positive weights on the correction and zero weight on the failed action.
+3. At a checkpoint, run a bounded three-state decode sweep (greedy and a few temperatures/top-p settings) with the identical full prompt, then remove only the repeated observation from a diagnostic copy. Preserve the protected eval packet and do not train on those cases.
+4. Compare the same states with a full recomputation against the normal request cache path to rule out stale KV. Inspect stop counter and context compaction evidence per case.
+5. If a mechanism is confirmed, fix the shared trainer/serving path, remeasure on the live executor, and coordinate DGX Mellum checks. Do not patch an isolated eval path as a substitute for the shared fix.
+
+## Training interruption
+
+At step 8552 the adaptive memory estimator predicted 5,516,523,000 bytes incremental against a 5,463,919,820-byte reusable ledger claim and raised before forward execution. This was a preflight capacity stop, not a numerical/model regression. Pop restarted the same v12 checkpoint lineage with discrete CUDA envelope 7.3 GiB (previously 7.2); preserve exact optimizer/RNG resume and check that training advances again. A first relaunch refused the recipe code pin because the shared `common/hdd_guard.py` changed after v12 was frozen. The pinned frozen runtime matches every recipe package hash, so the next launch uses that active-lineage runtime for this resume; this is not an adoption of changed shared code.
