@@ -1654,6 +1654,24 @@ fixtures, with a pass bar of one success. It is replaced, for qualification and 
   (NATLANG_PILLAR item 0) and `scripts/coreweave/jobs/heldv3-base-mellum.json` carry them. Earlier evaluations
   under 600 s/48 are comparable only as lower bounds. Pop's own recipes (`neuralese-direct-lfm-muon-main-20261012-v3*`,
   older packet) still declare 600/48 and need the same change from Pop.
+- **Asynchronous in-run task evaluation (coordinator 2026-10-13; shared code, both lines).** The blocking eval idled
+  training (Mellum v4: 1,888 s and 1,069 s at steps 1600/2000 under 600 s/48, up to ~1.5 h per eval every ~4.4 h
+  under the measured budgets). With `task_eval.async` (now true in `neuralese-direct-v2`) a cadence evaluation is
+  submitted and training continues at once: the trainer hard-links the slot it just wrote at the eval step into
+  `<stage>/task-eval/async/step-N/` (the slot is only ever replaced atomically, as for the best link), a child at idle
+  priority prunes it to weights only (`checkpoint_offload.child_copy(prune=True)`, the offload's weights-only path) and
+  the link is dropped. `scripts/task_eval_dispatch.py` (host side; the trainer's container has no systemd) launches
+  each request as its own resumable medium-priority ledger unit (`taskeval-<stage>-<step>`, budget 1.3x the weights +
+  8 GB; Mellum ~38 GB, which waits beside v4 until memory allows). The job restores the BF16 serving engine (clean
+  heads engine + the snapshot's trainables by plain name), runs the held subset, appends its row to
+  `task-eval.jsonl` with its step, and deletes the snapshot. Placement is DGX only for now: CoreWeave cannot take an
+  eval snapshot yet (no snapshot transfer). The regression comparison reads rows whenever they land; a job without a
+  row (hard crash) is relaunched up to 3 times, then recorded as an ineligible row; pending results are no failure,
+  `max_consecutive_failures` counts landed rows. The final evaluation stays synchronous (qualification). E2E handoff
+  readiness (`e2e_acceptance.readiness`) takes task success from the candidate checkpoint's task evaluation (the
+  latest step evaluated or requested) and stays pending until it lands. Difference from the synchronous eval:
+  the job serves the BF16 latent weights without the trainer's FP8 expert backend. Until v4 runs this code (next
+  handoff), its interim `task_eval_every` is 1600 (`neuralese-direct-mellum-v4-from-v3-warmup`).
 - **Applications:** nldb, pi and the harness bench are not yet in `natlang.program` form with exact scorers. They join
   as further shapes once adapted (v3), not as separate packets.
 

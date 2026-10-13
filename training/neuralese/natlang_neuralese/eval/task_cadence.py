@@ -32,6 +32,13 @@ The pass bar is relative (coordinator 2026-10-12): the final evaluation is eligi
 previous eligible evaluation of the stage minus ``noise_successes``. Every evaluation records the same comparison
 (``regressed``) for monitoring; only the final one gates.
   runtime         TS runtime directory with dist/teacher (default: the live checkout's ts-host, the newest code)
+  async           (default false) cadence evaluations run off the training critical path (coordinator 2026-10-13):
+                  the trainer links its just-saved checkpoint as the step's eval snapshot, a child at idle priority
+                  prunes it to weights only (the checkpoint offload's weights-only copy), and training continues. A
+                  separate job (scripts/task_eval_dispatch.py: its own resumable ledger unit) restores the weights into
+                  a serving engine, runs the evaluation and appends its row to task-eval.jsonl with its step; the
+                  snapshot is deleted when the row lands. The final evaluation stays synchronous (it gates
+                  qualification), and a pending result is no failure until its job reports.
   max_consecutive_failures  ineligible evaluations in a row (infrastructure errors, unresolved tasks, a collector or
                   serving exception) before the training run stops (default 3). A single failed evaluation is recorded
                   in task-eval.jsonl and the next cadence evaluates again: a transient eval failure must not end a
@@ -75,6 +82,8 @@ def parse_task_eval(value):
     reference = spec.setdefault('reference_successes', None)
     if reference is not None and (isinstance(reference, bool) or not isinstance(reference, int) or reference < 0):
         raise ValueError('task_eval.reference_successes must be a nonnegative integer or null (unmeasured)')
+    if not isinstance(spec.setdefault('async', False), bool):
+        raise ValueError('task_eval.async must be true or false')
     if spec.get('prompt_rendering') not in (None, 'full', 'program-header'):
         raise ValueError('task_eval.prompt_rendering must be full or program-header')
     return spec
@@ -373,6 +382,151 @@ class TaskEval:
                                f'{summary.get("error") or summary.get("outcome_counts")}); see {summary.get("run")}')
         return summary
 
+    # Asynchronous cadence evaluations ---------------------------------------------------------------------------------
+    def submit(self, step: int, checkpoint: Path, *, heads: str | None, device: str = 'cuda') -> dict:
+        """Request the evaluation of ``step`` off the critical path. ``checkpoint`` is the stage's rolling slot, just
+        written at this step: it is hard-linked (the slot is only ever replaced atomically, so the linked inode is
+        immutable, as for the best checkpoint), pruned to weights only by a child process at idle priority, and the
+        link dropped. Returns at once with a pending summary. Repeated landed failures still stop the run."""
+        request_dir = self.root / 'async' / f'step-{step:07d}'
+        request_dir.mkdir(parents=True, exist_ok=True)
+        full, weights = request_dir / 'full.pt', request_dir / 'weights.pt'
+        if not weights.exists():
+            pending = full.with_name(full.name + '.pending-link')
+            pending.unlink(missing_ok=True)
+            os.link(Path(checkpoint).resolve(strict=True), pending)
+            pending.replace(full)
+        request = {'schema': ASYNC_SCHEMA, 'step': step, 'stage_out': str(self.out.resolve()), 'spec': self.spec,
+                   'prompt_rendering': self.prompt_rendering, 'heads': heads, 'device': device,
+                   'checkpoint': str(Path(checkpoint).resolve()), 'requested_at': time.time(),
+                   'trainer_code_commit': _git_head()}
+        _write_json(request_dir / 'request.json', request)
+        if not weights.exists():
+            threading.Thread(target=prune_snapshot, args=(request_dir,), name=f'task-eval-prune-{step}',
+                             daemon=True).start()
+        failures = self.consecutive_failures()
+        print(json.dumps({'event': 'task_eval_submitted', 'step': step, 'request': str(request_dir),
+                          'consecutive_failures': failures}), flush=True)
+        if failures >= self.spec['max_consecutive_failures']:
+            raise RuntimeError(f'task_eval failed {failures} times in a row (asynchronous results in '
+                               f'{self.out / "task-eval.jsonl"})')
+        return {'schema': SCHEMA, 'step': step, 'pending': True, 'eligible': None, 'task_successes': None,
+                'cases': len(self.rows), 'outcome_counts': None, 'seconds': 0.0, 'request': str(request_dir)}
+
+    def submit_or_run(self, step: int, checkpoint: Path, **kwargs) -> dict:
+        """``submit``; when the slot cannot be linked (e.g. offloaded to another filesystem), the synchronous
+        ``cadence`` instead, so an evaluation is never silently skipped."""
+        try:
+            return self.submit(step, checkpoint, **kwargs)
+        except OSError as error:
+            print(json.dumps({'event': 'task_eval_async_unavailable', 'step': step, 'error': repr(error)}), flush=True)
+            return self.cadence(step)
+
+    def landed(self, step: int) -> dict | None:
+        """The row recorded for ``step`` on this packet and subset (eligible or not), or None."""
+        log = self.out / 'task-eval.jsonl'
+        found = None
+        if log.is_file():
+            for line in log.read_text().splitlines():
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (row.get('step') == step and row.get('packet_sha256') == self.spec['packet']['sha256'] and
+                        row.get('case_indices') == self.spec['cases']):
+                    found = row
+        return found
+
+    def record_failure(self, step: int, error: str) -> dict:
+        """An ineligible row for an evaluation whose job could not produce one (counted by consecutive_failures)."""
+        summary = {'schema': SCHEMA, 'step': step, 'task_successes': 0, 'cases': len(self.rows),
+                   'outcome_counts': None, 'eligible': False, 'error': error, 'async': True,
+                   'packet_sha256': self.spec['packet']['sha256'], 'case_indices': self.spec['cases'],
+                   'code_commit': _git_head(), 'seconds': 0.0, 'run': str(self.root / f'step-{step:07d}')}
+        with (self.out / 'task-eval.jsonl').open('a') as handle:
+            handle.write(json.dumps(summary) + '\n')
+        return summary
+
+
+ASYNC_SCHEMA = 'natlang.in-run-task-eval-request/1'
+
+
+def _write_json(path: Path, value) -> None:
+    temp = path.with_name(path.name + '.pending')
+    temp.write_text(json.dumps(value, indent=1) + '\n')
+    temp.replace(path)
+
+
+def prune_snapshot(request_dir: Path) -> Path:
+    """``full.pt`` (a link to the step's full training state) -> ``weights.pt`` through the checkpoint offload's
+    weights-only copy in a child at idle priority; the full link is dropped. Idempotent (trainer thread or job)."""
+    from ..train.checkpoint_offload import child_copy, verified_copy
+    request_dir = Path(request_dir)
+    full, weights = request_dir / 'full.pt', request_dir / 'weights.pt'
+    if not weights.exists():
+        if not full.exists():
+            raise FileNotFoundError(f'eval snapshot missing: {full}')
+        record = child_copy(full, weights, prune=True)
+        if not weights.exists():  # a state without optimizer entries is copied byte for byte
+            record = verified_copy(full, weights)
+        _write_json(request_dir / 'snapshot.json', record)
+    full.unlink(missing_ok=True)
+    return weights
+
+
+def pending_requests(stage_out: Path) -> list[Path]:
+    """Asynchronous evaluation requests of a stage whose row has not landed (their snapshot dirs still exist)."""
+    root = Path(stage_out) / 'task-eval' / 'async'
+    return sorted(p.parent for p in root.glob('step-*/request.json')) if root.is_dir() else []
+
+
+def restore_engine(request: dict, *, dtype=None):
+    """The serving engine of a direct-stage eval snapshot: the stage's clean heads engine (as the trainer builds it)
+    with the snapshot's backbone trainables copied in by their plain names (a BF16 serving model: no quantization
+    parametrizations, experts as buffers; train/backbone_policy.plain_named_tensors)."""
+    import torch
+    from ..serve import load_engine
+    from ..train.backbone_policy import plain_named_tensors
+    from ..train.checkpoint_offload import load_state
+    from ..train.text_warmup import copy_restored_values
+
+    engine = load_engine(heads_checkpoint=request['heads'], device=request['device'],
+                         dtype=dtype or (torch.bfloat16 if request['device'] != 'cpu' else torch.float32),
+                         prompt_rendering=request['prompt_rendering'])
+    state = load_state(Path(request['dir']) / 'weights.pt')
+    saved = state['student_parameters']
+    targets = {'backbone.' + n: t for n, t in plain_named_tensors(engine.backbone.hf).items()}
+    missing = sorted(set(saved) - set(targets))
+    if missing:
+        raise ValueError(f'eval snapshot names absent from the serving model: {missing[:5]}')
+    copy_restored_values(targets, saved)
+    saved = state = None
+    return engine
+
+
+def run_request(request_dir: Path, *, engine_factory=restore_engine) -> dict:
+    """The asynchronous job: evaluate one snapshot and append its row (eligible or not) to the stage's log, then
+    delete the snapshot. A rerun after the row landed (a requeued unit) only cleans up."""
+    request_dir = Path(request_dir)
+    request = {**json.loads((request_dir / 'request.json').read_text()), 'dir': str(request_dir)}
+    step = request['step']
+    evaluator = TaskEval(request['spec'], Path(request['stage_out']), None,
+                         prompt_rendering=request['prompt_rendering'])
+    summary = evaluator.landed(step)
+    if summary is None:
+        started = time.time()
+        try:
+            prune_snapshot(request_dir)
+            evaluator.engine = engine_factory(request)
+            summary = evaluator.run(step)
+        except Exception as error:  # noqa: BLE001 - recorded as an ineligible evaluation, counted by the trainer
+            summary = evaluator.record_failure(step, f'{type(error).__name__}: {error}')
+            summary['seconds'] = time.time() - started
+        finally:
+            evaluator.engine = None
+    shutil.rmtree(request_dir, ignore_errors=True)  # storage rules: the snapshot goes once its row landed
+    return summary
+
 
 def accounted(score: dict) -> bool:
     """Every task has an exact terminal outcome from the collector: a result row or explicit budget exhaustion (a
@@ -420,8 +574,10 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=main.__doc__)
     parser.add_argument('--base', default=None)
     parser.add_argument('--heads', default=None)
-    parser.add_argument('--spec', required=True)
-    parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--async-request', type=Path, default=None,
+                        help='run one asynchronous in-run evaluation request (task-eval/async/step-N) and exit')
+    parser.add_argument('--spec')
+    parser.add_argument('--out', type=Path)
     parser.add_argument('--device', default='cpu')
     parser.add_argument('--dtype', choices=('float32', 'bfloat16'), default='bfloat16')
     parser.add_argument('--threads', type=int, default=8)
@@ -430,6 +586,15 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     import torch
     from ..serve import load_engine
+
+    if args.async_request is not None:
+        torch.set_num_threads(args.threads)
+        summary = run_request(args.async_request)
+        print(json.dumps({'event': 'task_eval_async_done', **{k: summary.get(k) for k in
+                          ('step', 'task_successes', 'cases', 'eligible', 'error', 'seconds')}}), flush=True)
+        return 0
+    if not args.spec or args.out is None:
+        parser.error('--spec and --out are required without --async-request')
 
     torch.set_num_threads(args.threads)
     dtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16}[args.dtype]

@@ -2183,10 +2183,18 @@ def main(argv=None):
                     saved_step = step
                 # A failed evaluation is recorded and evaluated again at the next cadence; the final one is retried
                 # at once (it gates qualification). Repeated failures raise (task_eval.max_consecutive_failures).
+                # With task_eval.async a cadence evaluation is submitted (a weights-only snapshot of the slot just
+                # written, evaluated by its own job) and training continues; the final one is synchronous.
                 with profile_region('update/task_eval'):
-                    task_summary = task_eval.final_at(step) if step == end else task_eval.cadence(step)
+                    if step == end:
+                        task_summary = task_eval.final_at(step)
+                    elif task_eval_spec['async']:
+                        task_summary = task_eval.submit_or_run(step, policy.slot, heads=str(a.heads), device=a.device)
+                    else:
+                        task_summary = task_eval.cadence(step)
                 report['task_eval'] = {k: task_summary.get(k) for k in
-                                       ('task_successes', 'cases', 'outcome_counts', 'eligible', 'seconds', 'error')}
+                                       ('task_successes', 'cases', 'outcome_counts', 'eligible', 'seconds', 'error',
+                                        'pending', 'request')}
                 if step == end:
                     final_task_summary = task_summary
             (a.out / 'report.json').write_text(json.dumps({**report, 'status': 'running'}, indent=2) + '\n')

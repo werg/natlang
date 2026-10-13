@@ -120,6 +120,32 @@ def _jsonl(path):
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()] if path.is_file() else []
 
 
+def _task_eval_candidate(direct_stage):
+    """The in-run task evaluation of the candidate checkpoint (eval/task_cadence.py): the latest step with a task
+    evaluation landed or requested. A requested asynchronous evaluation that has not landed, or an ineligible one,
+    leaves readiness pending (it waits for that checkpoint's result); None when the stage has no task evaluation."""
+    from ..eval.task_cadence import pending_requests
+    rows = [r for r in _jsonl(Path(direct_stage) / 'task-eval.jsonl') if isinstance(r.get('step'), int)]
+    pending = {int(p.name.removeprefix('step-')) for p in pending_requests(direct_stage)}
+    steps = {r['step'] for r in rows} | pending
+    if not steps:
+        return None
+    step = max(steps)
+    landed = [r for r in rows if r['step'] == step]
+    if not landed:
+        return {'status': 'pending', 'step': step,
+                'reason': 'the task evaluation of the candidate checkpoint has not landed (asynchronous job pending)'}
+    row = landed[-1]
+    if not row.get('eligible'):
+        return {'status': 'pending', 'step': step, 'reason': 'the candidate checkpoint\'s task evaluation was '
+                'ineligible (infrastructure); the next cadence evaluates again', 'error': row.get('error')}
+    cases, reference = row.get('cases') or 0, row.get('reference_successes')
+    if not cases or not isinstance(reference, int):
+        return {'status': 'pending', 'step': step, 'reason': 'base reference_successes unmeasured for this line'}
+    return {'step': step, 'rate': row['task_successes'] / cases, 'base_rate': reference / cases,
+            'task_successes': row['task_successes'], 'reference_successes': reference, 'cases': cases}
+
+
 def readiness(declaration, direct_stage):
     """Whether the direct phase in ``direct_stage`` (its eval.jsonl, drift.jsonl) is ready to hand off.
 
@@ -151,7 +177,12 @@ def readiness(declaration, direct_stage):
                                  'guard': guard, 'step': drift[-1].get('step') if drift else None}
     task = declaration['task_success']
     measured = (evals[-1].get('task_success') or {}) if evals else {}
-    if _number(measured.get('rate')) and _number(measured.get('base_rate')):
+    candidate = _task_eval_candidate(direct_stage)
+    if candidate is not None:
+        criteria['task_success'] = (candidate if candidate['status'] == 'pending' else
+                                    {**candidate, 'status': 'pass' if candidate['rate'] >= candidate['base_rate'] +
+                                     task['min_vs_base'] else 'fail', 'min_vs_base': task['min_vs_base']})
+    elif _number(measured.get('rate')) and _number(measured.get('base_rate')):
         criteria['task_success'] = {'status': 'pass' if measured['rate'] >= measured['base_rate'] + task['min_vs_base']
                                     else 'fail', **measured, 'min_vs_base': task['min_vs_base']}
     else:

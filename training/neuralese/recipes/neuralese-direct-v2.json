@@ -89,6 +89,7 @@
      "max_model_requests": 128,
      "max_turns": 160,
      "workers": 8,
+     "async": true,
      "min_successes": 0,
      "noise_successes": 1,
      "reference_successes": null

@@ -117,3 +117,101 @@ def test_a_failed_evaluation_is_recorded_and_retried_and_repeated_failures_stop_
     import json
     rows = [json.loads(line) for line in (tmp_path / 'task-eval.jsonl').read_text().splitlines()]
     assert [row['step'] for row in rows] == [10, 20, 30, 40, 50]
+
+
+def _light_evaluator(spec, out):
+    from natlang_neuralese.eval.task_cadence import TaskEval
+    evaluator = TaskEval.__new__(TaskEval)
+    evaluator.spec, evaluator.out, evaluator.root, evaluator.rows = spec, out, out / 'task-eval', [{}]
+    evaluator.prompt_rendering, evaluator.engine = 'full', None
+    evaluator.root.mkdir(parents=True, exist_ok=True)
+    return evaluator
+
+
+def test_an_async_evaluation_is_submitted_from_a_weights_only_snapshot_and_lands_later(tmp_path, monkeypatch):
+    """Coordinator 2026-10-13: the trainer links its just-written slot, a child prunes it to weights only, training
+    goes on; the job restores the weights, appends the row with its step and deletes the snapshot."""
+    import json
+    import torch
+    from natlang_neuralese.eval import task_cadence
+    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'noise_repeats': 1,
+                            'async': True})
+    evaluator = _light_evaluator(spec, tmp_path)
+    slot = tmp_path / 'checkpoint.pt'
+    torch.save({'schema': 'natlang.neuralese-direct/1', 'step': 40,
+                'student_parameters': {'backbone.w': torch.ones(2)},
+                'optimizer': {'state': {'m': torch.zeros(2)}}}, slot)
+    pending = evaluator.submit(40, slot, heads='heads.pt', device='cpu')
+    assert pending['pending'] is True and pending['eligible'] is None
+    request_dir = tmp_path / 'task-eval' / 'async' / 'step-0000040'
+    for thread in __import__('threading').enumerate():
+        if thread.name.startswith('task-eval-prune'):
+            thread.join(60)
+    weights = torch.load(request_dir / 'weights.pt', weights_only=False)
+    assert 'optimizer' not in weights and weights['optimizer_pruned'] is True
+    assert not (request_dir / 'full.pt').exists()
+    torch.save({'step': 41}, tmp_path / 'next.pt')
+    (tmp_path / 'next.pt').replace(slot)  # the next rolling write never touches the snapshot
+    assert task_cadence.pending_requests(tmp_path) == [request_dir]
+
+    monkeypatch.setattr(task_cadence.TaskEval, '__init__',
+                        lambda self, spec, out, engine, prompt_rendering:
+                        self.__dict__.update(_light_evaluator(spec, out).__dict__))
+    seen = {}
+
+    def execute(self, run):
+        run.mkdir(parents=True, exist_ok=True)
+        seen['engine'] = self.engine
+        return {'task_successes': 3, 'task_success_rate': 3 / 16, 'complete': True, 'cases': [],
+                'cases_expected': 1, 'outcome_counts': {'task_success': 1, 'infrastructure_error': 0,
+                                                        'unresolved': 0}}, [0]
+    monkeypatch.setattr(task_cadence.TaskEval, '_execute', execute)
+    summary = task_cadence.run_request(request_dir, engine_factory=lambda request: ('engine', request['heads']))
+    assert seen['engine'] == ('engine', 'heads.pt') and summary['step'] == 40 and summary['eligible'] is True
+    assert not request_dir.exists() and task_cadence.pending_requests(tmp_path) == []
+    rows = [json.loads(line) for line in (tmp_path / 'task-eval.jsonl').read_text().splitlines()]
+    assert [(r['step'], r['task_successes']) for r in rows] == [(40, 3)]
+    # A requeued job after the row landed only cleans up.
+    request_dir.mkdir(parents=True)
+    (request_dir / 'request.json').write_text(json.dumps({'step': 40, 'spec': spec, 'stage_out': str(tmp_path),
+                                                          'prompt_rendering': 'full'}))
+    assert task_cadence.run_request(request_dir)['task_successes'] == 3 and not request_dir.exists()
+
+
+def test_a_failed_async_job_is_an_ineligible_row_and_pending_ones_are_no_failure(tmp_path, monkeypatch):
+    import json
+    from natlang_neuralese.eval import task_cadence
+    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'async': True,
+                            'max_consecutive_failures': 2})
+    evaluator = _light_evaluator(spec, tmp_path)
+    request_dir = tmp_path / 'task-eval' / 'async' / 'step-0000010'
+    request_dir.mkdir(parents=True)
+    (request_dir / 'request.json').write_text(json.dumps({'step': 10, 'spec': spec, 'stage_out': str(tmp_path),
+                                                          'prompt_rendering': 'full'}))
+    monkeypatch.setattr(task_cadence.TaskEval, '__init__',
+                        lambda self, spec, out, engine, prompt_rendering:
+                        self.__dict__.update(_light_evaluator(spec, out).__dict__))
+    summary = task_cadence.run_request(request_dir)  # no snapshot: recorded, not raised
+    assert summary['eligible'] is False and 'FileNotFoundError' in summary['error'] and not request_dir.exists()
+    assert evaluator.consecutive_failures() == 1
+    slot = tmp_path / 'checkpoint.pt'
+    slot.write_bytes(b'x')
+    monkeypatch.setattr(task_cadence, 'prune_snapshot', lambda d: None)
+    monkeypatch.setattr(task_cadence.threading, 'Thread', lambda **k: type('T', (), {'start': lambda s: None})())
+    assert evaluator.submit(20, slot, heads=None)['pending'] is True  # one landed failure, one pending: continues
+    evaluator.record_failure(20, 'job ended without a result')
+    with pytest.raises(RuntimeError, match='2 times in a row'):
+        evaluator.submit(30, slot, heads=None)
+
+
+def test_handoff_readiness_waits_for_the_candidate_checkpoints_task_evaluation(tmp_path):
+    import json
+    from natlang_neuralese.train.e2e_acceptance import _task_eval_candidate
+    assert _task_eval_candidate(tmp_path) is None
+    row = {'step': 400, 'eligible': True, 'task_successes': 8, 'cases': 16, 'reference_successes': 4}
+    (tmp_path / 'task-eval.jsonl').write_text(json.dumps(row) + '\n')
+    assert _task_eval_candidate(tmp_path)['rate'] == 0.5
+    (tmp_path / 'task-eval' / 'async' / 'step-0000800').mkdir(parents=True)
+    (tmp_path / 'task-eval' / 'async' / 'step-0000800' / 'request.json').write_text('{}')
+    waiting = _task_eval_candidate(tmp_path)
+    assert waiting['status'] == 'pending' and waiting['step'] == 800
