@@ -91,8 +91,8 @@
     "gate_held_rows": 48,
     "task_eval": {
      "packet": {
-      "path": "runs/natlang-held-task-packet-v2-20261012/cases.jsonl",
-      "sha256": "177726732807b96a13739a83bb0a9745a4865196d660ff5de90a652b10955f12"
+      "path": "runs/natlang-held-task-packet-v3-20261012/cases.jsonl",
+      "sha256": "535269866aeecc107e3cc8b165790a5b200cdb104884d4994958eee17eb6be95"
      },
      "cases": [
       0,
@@ -112,11 +112,12 @@
       58,
       63
      ],
-     "case_seconds": 600,
-     "max_model_requests": 48,
-     "workers": 4,
+     "case_seconds": 7200,
+     "max_model_requests": 128,
+     "max_turns": 160,
+     "workers": 8,
      "min_successes": 0,
-     "noise_successes": 0,
+     "noise_successes": 1,
      "reference_successes": null
     },
     "record_source": "trajectories",

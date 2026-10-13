@@ -260,3 +260,12 @@ base recipe instead of an inline config, and both lines declare a recipe (no pen
   - The direct parent trained on text prompts and the runtime serves text.
   - v2 has 3139 pieces, each read by few records. As trained soft prompts they would be single-use parameters with optimizer state (several GB at Mellum width), initialised in context.
 - `--records`/`--pieces` accept several files. Each eager file is authenticated on its own; their writer names must not clash.
+
+## neuralese-e2e-v1: task evaluation on held packet v3 with the direct base's budgets (2026-10-13)
+
+- `task_eval` follows the direct base (neuralese-direct-v2): the registered held packet
+  `natlang-held-task-packet-v3-20261012` (v2 with content-preserving edit_stream oracles, fc9d75ce) and the measured
+  budgets of ecff01ef (case_seconds 7200, 128 model requests, 160 turns, 8 workers, noise_successes 1); same 16 cases.
+  `task_success_vs_parent` compares the parent and the final weights on these same cases, and readiness reads the
+  direct phase's v3 evaluations. It stays synchronous in the e2e trainer: the asynchronous path (d85c8c88) restores a
+  direct checkpoint, not the e2e engine.
