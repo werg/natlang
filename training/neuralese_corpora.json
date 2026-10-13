@@ -62776,6 +62776,28 @@
         "provider-luna-held-shapes-s52016-v1",
         "provider-luna-held-shapes-s52017-v1"
       ]
+    },
+    {
+      "id": "luna-held-shapes-s52012-s52017-lfm-render-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-s52012-s52017-lfm-render-20261013-v1",
+      "include": [
+        "receipt.json",
+        "full/lfm25/text-data.jsonl",
+        "program-header/lfm25/text-data.jsonl",
+        "whole-trajectory/lfm25/text-data.jsonl",
+        "selection-omissions.jsonl",
+        "render-omissions/lfm25/omissions.jsonl"
+      ],
+      "admission": "derived LFM rendering of exact admitted native-turn corpus; no independent source credit",
+      "training_admission": true,
+      "training_admission_reason": "source corpus luna-held-shapes-s52012-s52017-native-turns-20261013-v1 admitted; renderer selected all 4526 turns and produced 4514 program-header documents after safely excluding 12 unresolved neuralese-reference decisions from one parent; no held/reserved hits",
+      "review_status": "receipt and exact omission rows inspected: 12 missing same-source crisp references in one neuralese.read child, 2 whole-trajectory render failures from that child; those rows excluded from text SFT",
+      "derived_from": "luna-held-shapes-s52012-s52017-native-turns-20261013-v1",
+      "source_class": "derived-lfm25-training-render",
+      "split": "train only; inherited from source decision rows",
+      "required_conversion": "include in next broad LFM union; Mellum twin DGX-owned",
+      "license": "inherited from source corpus; factual provenance"
     }
   ],
   "coverage_backlog": [
