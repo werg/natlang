@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import random
 import signal
+import subprocess
+import time
 
 import torch
 
@@ -40,14 +42,21 @@ class StopSignal:
 
     def __init__(self):
         self.requested = False
+        self.received = []
         self._previous = {}
 
     def request(self):
         self.requested = True
 
+    def _receive(self, sig, _frame):
+        # Which signal stopped the run and when, for the trainer's stop record: a stop nobody asked for is then
+        # traceable to its sender (journal, ledger events) instead of looking like a run that ended early.
+        self.received.append({'signal': signal.Signals(sig).name, 'unix': time.time()})
+        self.request()
+
     def install(self, signals=(signal.SIGTERM, signal.SIGINT)):
         for sig in signals:
-            self._previous.setdefault(sig, signal.signal(sig, lambda *_: self.request()))
+            self._previous.setdefault(sig, signal.signal(sig, self._receive))
         return self
 
     def restore(self):
@@ -55,6 +64,22 @@ class StopSignal:
         for sig, handler in self._previous.items():
             signal.signal(sig, handler)
         self._previous = {}
+
+
+def wait_forwarding_signals(child, poll_seconds: float = 0.2) -> int:
+    """Wait for ``child`` while this process's signal handlers keep running.
+
+    A blocking ``child.wait()`` sits in waitpid. CPython runs a Python signal handler only on the main thread between
+    bytecodes, and the kernel may deliver a process-directed SIGTERM to any thread (torch and loggers start many): the
+    handler, and so the forward to the child, then waits until the child exits by itself. Mellum v4 lost 200 updates
+    that way (2026-10-13: docker stop's SIGTERM never reached the trainer, SIGKILL after 600 s). Short timed waits
+    return to bytecode at least every ``poll_seconds``.
+    """
+    while True:
+        try:
+            return child.wait(timeout=poll_seconds)
+        except subprocess.TimeoutExpired:
+            pass
 
 
 class Cadence:

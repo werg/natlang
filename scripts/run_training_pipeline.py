@@ -18,6 +18,18 @@ import subprocess
 import sys
 import time
 
+def wait_forwarding_signals(child, poll_seconds: float = 0.2) -> int:
+    """Wait for ``child`` with short timed waits, so this process's SIGTERM/SIGINT handler runs (and forwards) within
+    ``poll_seconds``: a blocking wait() sits in waitpid, and a signal the kernel delivers to another thread is handled
+    only when the main thread next runs bytecode, i.e. after the child exits (Mellum v4, 2026-10-13). Same as
+    natlang_neuralese.train.loop.wait_forwarding_signals; scripts here do not import the package."""
+    while True:
+        try:
+            return child.wait(timeout=poll_seconds)
+        except subprocess.TimeoutExpired:
+            pass
+
+
 
 def digest_file(path):
     h = hashlib.sha256()
@@ -287,7 +299,7 @@ def run_pipeline(config_path, root, *, until=None):
                         atomic_json(state_path, state)
                         if stopped:
                             stop(signal.SIGTERM, None)
-                        code = child.wait()
+                        code = wait_forwarding_signals(child)
                         child = None
                     entry.pop("pid", None)
                     entry.pop("process_start", None)

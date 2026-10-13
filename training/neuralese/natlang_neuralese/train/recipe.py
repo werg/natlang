@@ -1421,7 +1421,8 @@ class _ChildSignalForwarder:
     def run(self, command, *, env=None):
         child = self.attach(subprocess.Popen(command, env=env))
         try:
-            return subprocess.CompletedProcess(command, child.wait())
+            from .loop import wait_forwarding_signals
+            return subprocess.CompletedProcess(command, wait_forwarding_signals(child))
         finally:
             self.detach(child)
 

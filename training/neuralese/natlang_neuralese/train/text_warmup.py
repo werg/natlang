@@ -3203,7 +3203,7 @@ def main(argv=None):
         except Exception as error:
             recover_postcommit_persistence_failure(error)
             return
-        print(json.dumps({'event':'checkpointed_on_signal','step':step}),flush=True)
+        print(json.dumps({'event':'checkpointed_on_signal','step':step,'signals':stop.received}),flush=True)
         return
     # The stage end: its full-state write, and the gate's evaluation. Recipes declare --steps a multiple of
     # --eval-every (train/recipe.py), so the last declared point is this one and nothing is evaluated twice.

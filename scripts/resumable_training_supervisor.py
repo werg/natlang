@@ -23,6 +23,18 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 
+def wait_forwarding_signals(child, poll_seconds: float = 0.2) -> int:
+    """Wait for ``child`` with short timed waits, so this process's SIGTERM/SIGINT handler runs (and forwards) within
+    ``poll_seconds``: a blocking wait() sits in waitpid, and a signal the kernel delivers to another thread is handled
+    only when the main thread next runs bytecode, i.e. after the child exits (Mellum v4, 2026-10-13). Same as
+    natlang_neuralese.train.loop.wait_forwarding_signals; scripts here do not import the package."""
+    while True:
+        try:
+            return child.wait(timeout=poll_seconds)
+        except subprocess.TimeoutExpired:
+            pass
+
+
 
 def atomic_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -240,7 +252,7 @@ class Supervisor:
                         self.child = subprocess.Popen(self.plan["argv"], cwd=self.plan.get("cwd"), env=env,
                                                       stdout=log, stderr=subprocess.STDOUT,
                                                       start_new_session=True)
-                    rc = self.child.wait()
+                    rc = wait_forwarding_signals(self.child)
                     self.child = None
                     state = checkpoint_state(self.plan)
                     if is_complete(self.plan, state):

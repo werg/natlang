@@ -21,6 +21,18 @@ import subprocess
 import sys
 import time
 
+def wait_forwarding_signals(child, poll_seconds: float = 0.2) -> int:
+    """Wait for ``child`` with short timed waits, so this process's SIGTERM/SIGINT handler runs (and forwards) within
+    ``poll_seconds``: a blocking wait() sits in waitpid, and a signal the kernel delivers to another thread is handled
+    only when the main thread next runs bytecode, i.e. after the child exits (Mellum v4, 2026-10-13). Same as
+    natlang_neuralese.train.loop.wait_forwarding_signals; scripts here do not import the package."""
+    while True:
+        try:
+            return child.wait(timeout=poll_seconds)
+        except subprocess.TimeoutExpired:
+            pass
+
+
 
 REPO = Path(__file__).resolve().parents[1]
 NEURALESE = REPO / "training" / "neuralese"
@@ -100,7 +112,7 @@ class AttachedProcess:
             self.child = subprocess.Popen(argv, stdout=stdout, stderr=stderr, start_new_session=True)
             if self.signal_received is not None:
                 self._forward(self.signal_received, None)
-            return self.child.wait()
+            return wait_forwarding_signals(self.child)
         finally:
             for sig, handler in self.previous.items():
                 signal.signal(sig, handler)

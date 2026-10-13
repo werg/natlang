@@ -2267,7 +2267,7 @@ def main(argv=None):
     identity_file = a.out / 'identity-check.json'
     final.update(identity_check=json.loads(identity_file.read_text()) if identity_file.is_file() else None)
     status = ('complete' if step >= a.steps else 'stopped_at') if finished else ('checkpointed_on_drift_guard' if drift_stopped else 'checkpointed_on_signal')
-    final.update(status=status, completed=step >= a.steps, steps=step, stopped_at=a.stop_at or None, best=best,
+    final.update(status=status, stop_signals=stop.received, completed=step >= a.steps, steps=step, stopped_at=a.stop_at or None, best=best,
                  behaviour_gate=gate, behaviour_gate_report_only=True, task_gate=task_gate,
                  qualification='held CE below base, no drift stop, final task successes at least the base and '
                                'not below the previous evaluation minus noise (owner/coordinator 2026-10-12)', drift_stopped=drift_stopped, value_qualified=value_qualified, qualified=qualified,

@@ -145,6 +145,7 @@ def test_stop_signal_sets_a_flag_and_restores_the_previous_handler():
     assert not stop.requested
     os.kill(os.getpid(), signal.SIGUSR2)
     assert stop.requested
+    assert [entry['signal'] for entry in stop.received] == ['SIGUSR2']  # the stop record names its signal
     stop.restore()
     assert signal.getsignal(signal.SIGUSR2) == previous
 

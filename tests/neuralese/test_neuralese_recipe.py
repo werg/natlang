@@ -346,7 +346,7 @@ def test_direct_shared_stage_recipe_pins_contract_and_builds_frozen_launch(tmp_p
             (stage_out / 'report.json').write_text(json.dumps({'qualified': True}))
             (stage_out / 'heads.pt').write_bytes(b'head artifact')
 
-        def wait(self):
+        def wait(self, timeout=None):
             return 0
 
     monkeypatch.setattr(runner.subprocess, 'Popen', FakeChild)
@@ -405,7 +405,7 @@ def test_recipe_runner_routes_each_stage_its_declared_input_files(tmp_path, monk
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(json.dumps({'token_aligned_reference_passed': True}))
 
-        def wait(self):
+        def wait(self, timeout=None):
             return 0
 
     monkeypatch.setattr(recipe_runner.subprocess, 'Popen', CompletedStage)
@@ -597,7 +597,10 @@ def test_child_signal_forwarder_delivers_sigterm_and_restores_parent_handler(tmp
         deadline = time.monotonic() + 3
         while not ready.exists() and time.monotonic() < deadline:
             time.sleep(0.01)
-        os.kill(os.getpid(), signal.SIGTERM)
+        # To the main thread: a process-directed kill may land on any thread, and Python runs the handler only when
+        # the main thread next executes bytecode, which it does not while blocked in the child's waitpid (strace,
+        # 2026-10-13: delivered to a worker thread, forwarded only after the child slept its 30 s and exited 0).
+        signal.pthread_kill(threading.main_thread().ident, signal.SIGTERM)
 
     sender = threading.Thread(target=send_after_child_ready)
     try:
@@ -611,6 +614,49 @@ def test_child_signal_forwarder_delivers_sigterm_and_restores_parent_handler(tmp
     finally:
         forwarder.close()
     assert signal.getsignal(signal.SIGTERM) == previous
+
+
+def test_runner_forwards_an_outside_sigterm_to_its_child_within_two_seconds(tmp_path):
+    """docker stop's SIGTERM reaches the recipe runner (container PID 1) while its main thread waits on the stage
+    child. When the kernel hands the signal to another thread, a blocking wait() ran the handler only after the child
+    exited, so the trainer never checkpointed (Mellum v4, 2026-10-13). The runner here sends every SIGTERM to a worker
+    thread (the main thread blocks it, as it may when busy in native code) and must still forward within 2 s."""
+    ready, received = tmp_path / 'ready', tmp_path / 'received'
+    child_code = (
+        'import pathlib,signal,sys,time; '
+        'ready=pathlib.Path(sys.argv[1]); received=pathlib.Path(sys.argv[2]); '
+        'signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGTERM}); '  # a child inherits the runner's mask
+        'signal.signal(signal.SIGTERM, lambda *_: (received.write_text(repr(time.time())), sys.exit(0))); '
+        'ready.write_text("ready"); time.sleep(60)'
+    )
+    runner_code = (
+        'import signal,sys,threading,time\n'
+        'from natlang_neuralese.train.recipe import _ChildSignalForwarder\n'
+        'threading.Thread(target=time.sleep,args=(120,),daemon=True).start()\n'
+        'signal.pthread_sigmask(signal.SIG_BLOCK,{signal.SIGTERM,signal.SIGINT})\n'
+        'with _ChildSignalForwarder() as forwarder:\n'
+        '    result=forwarder.run([sys.executable,"-c",sys.argv[1],sys.argv[2],sys.argv[3]])\n'
+        'sys.exit(0 if forwarder.stopped==[True] and result.returncode==0 else 3)\n'
+    )
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [
+        str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'), os.environ.get('PYTHONPATH')])))
+    runner = subprocess.Popen([sys.executable, '-c', runner_code, child_code, str(ready), str(received)], env=env)
+    try:
+        deadline = time.monotonic() + 60
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert ready.exists()
+        sent = time.time()
+        os.kill(runner.pid, signal.SIGTERM)
+        while not received.exists() and time.time() < sent + 2:
+            time.sleep(0.02)
+        assert received.exists(), 'SIGTERM was not forwarded to the child within 2 s'
+        assert float(received.read_text()) - sent < 2
+        assert runner.wait(timeout=10) == 0
+    finally:
+        if runner.poll() is None:
+            runner.kill()
+            runner.wait()
 
 
 def test_child_signal_forwarder_handles_signal_before_child_attachment(tmp_path):
