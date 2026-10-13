@@ -61959,6 +61959,44 @@
         "luna-held-shapes-s52005-source-20261013-v1",
         "luna-held-shapes-s52006-source-20261013-v1"
       ]
+    },
+    {
+      "id": "luna-held-shapes-lfm-render-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-lfm-render-20261013-v1",
+      "include": [
+        "receipt.json",
+        "full/lfm25/text-data.jsonl",
+        "program-header/lfm25/text-data.jsonl",
+        "whole-trajectory/lfm25/text-data.jsonl"
+      ],
+      "admission": "derived LFM rendering of exact admitted native-turn corpus; no independent source credit",
+      "training_admission": true,
+      "training_admission_reason": "source corpus luna-held-shapes-native-turns-20261013-v1 is admitted; renderer receipt verifies zero omissions, zero held reservation hits, exact token/template rendering",
+      "derived_from": "luna-held-shapes-native-turns-20261013-v1",
+      "source_class": "derived-lfm25-training-render",
+      "split": "train only; inherited from source decision rows",
+      "required_conversion": "include in next declared LFM training union; Mellum twin rendering on DGX",
+      "license": "inherited from source corpus; factual provenance"
+    },
+    {
+      "id": "luna-folder-recovery-lfm-render-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-folder-recovery-lfm-render-20261013-v1",
+      "include": [
+        "receipt.json",
+        "full/lfm25/text-data.jsonl",
+        "program-header/lfm25/text-data.jsonl",
+        "whole-trajectory/lfm25/text-data.jsonl"
+      ],
+      "admission": "derived LFM rendering of exact admitted native-turn corpus; no independent source credit",
+      "training_admission": true,
+      "training_admission_reason": "source corpus luna-folder-recovery-native-turns-20261013-v1 is admitted; renderer receipt verifies zero omissions, zero held reservation hits, exact token/template rendering",
+      "derived_from": "luna-folder-recovery-native-turns-20261013-v1",
+      "source_class": "derived-lfm25-training-render",
+      "split": "train only; inherited from source decision rows",
+      "required_conversion": "include in next declared LFM training union; Mellum twin rendering on DGX",
+      "license": "inherited from source corpus; factual provenance"
     }
   ],
   "coverage_backlog": [

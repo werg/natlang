@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-folder-recovery-lfm-render-20261013-v1",
+  "owner": "pop",
+  "path": "runs/luna-folder-recovery-lfm-render-20261013-v1",
+  "files": [
+    {
+      "path": "full/lfm25/text-data.jsonl",
+      "bytes": 968244,
+      "sha256": "13ab5abbf9ec309cc37882fb41e81c39a4cd02de2a08f74865b146f707914299",
+      "lines": 11
+    },
+    {
+      "path": "program-header/lfm25/text-data.jsonl",
+      "bytes": 5066399,
+      "sha256": "cf243751a6658522b21008c606fe9616c9d502e78800fec9cf70cbff7e4a513e",
+      "lines": 237
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 7336,
+      "sha256": "8c0a54984a7ed7172ca6c02250a206e7f7d5906b4e0b04387810d1fff815301d"
+    },
+    {
+      "path": "whole-trajectory/lfm25/text-data.jsonl",
+      "bytes": 2926462,
+      "sha256": "cc78390e903bc4469f4263036886ab6d7d919bfe430f9913e3fb2540faa45c29",
+      "lines": 144
+    }
+  ],
+  "bytes": 8968441
+}
