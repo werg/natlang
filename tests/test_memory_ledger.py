@@ -847,3 +847,13 @@ def test_small_jobs_start_beside_a_big_trainer_with_proportional_reserves(monkey
     with ledger.ledger() as state:  # a requeued spec takes the default for its budget
         requeued = {'claims': {'p.service': dict(state['claims']['plan-only.service'])}, 'events': []}
     assert ledger.requeue_spec(requeued, 'p.service') and requeued['waiting']['p.service']['reserve'] == GIB
+
+
+def test_detached_waiter_runs_as_its_own_unit_without_the_detach_flag():
+    argv = ['scripts/memory_ledger.py', 'run', '--unit', 'job-1', '--budget-gb', '8', '--detach', '--wait', '3600',
+            '--', 'sh', '-c', 'echo --detach']
+    command = ledger.detached_waiter_command(argv, 'job-1.service')
+    assert command[:5] == ['systemd-run', '--user', '--quiet', '--collect', '--unit']
+    assert command[5] == 'job-1-waiter'
+    inner = command[command.index('--working-directory') + 2:]
+    assert inner[2:] == ['run', '--unit', 'job-1', '--budget-gb', '8', '--wait', '3600', '--', 'sh', '-c', 'echo --detach']

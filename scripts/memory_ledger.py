@@ -628,7 +628,26 @@ def launch(spec):
     return subprocess.run(command + spec['command']).returncode
 
 
+def detached_waiter_command(argv, unit):
+    """The systemd-run command that re-runs this `run` call as its own user unit, without --detach. A waiting `run` is
+    a plain client process that refreshes its queue entry every 30 s; when the agent shell that started it ends (a
+    stopped agent session), the entry expires after WAITER_TTL and the job silently never starts. A waiter unit
+    survives its agent."""
+    rest = list(argv)
+    split = rest.index('--') if '--' in rest else len(rest)
+    head = [a for a in rest[:split] if a != '--detach']
+    name = unit.removesuffix('.service') + '-waiter'
+    return ['systemd-run', '--user', '--quiet', '--collect', '--unit', name, '--working-directory', os.getcwd(),
+            sys.executable, os.path.abspath(rest[0])] + head[1:] + rest[split:]
+
+
 def run(args):
+    if getattr(args, 'detach', False):
+        unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
+        if not args.wait:
+            raise SystemExit('--detach needs --wait (a detached waiter that is not admitted at once must keep waiting)')
+        command = detached_waiter_command(sys.argv, unit)
+        raise SystemExit(subprocess.call(command))
     budget = int(args.budget_gb * GIB)
     cuda_budget = int(args.cuda_budget_gb * GIB) if args.cuda_budget_gb is not None else None
     if cuda_budget is not None and cuda_budget <= 0:
@@ -1079,6 +1098,10 @@ def main():
     r.add_argument('--reserve-gb', type=float, default=None,
                    help='free memory that must remain after admission (default: a quarter of the budget, 1-8 GiB)')
     r.add_argument('--wait', type=float, default=0, help='seconds to wait for admission')
+    r.add_argument('--detach', action='store_true',
+                   help='wait for admission in its own user unit (<unit>-waiter) instead of this process, so the queue '
+                        'entry survives the end of the calling shell or agent session; needs --wait. Output goes to the '
+                        'journal of that unit')
     r.add_argument('--hold-budget', '--fixed-claim', action='store_true',
                    help='always count the whole unspent budget, even after the job settles (working set grows later)')
     r.add_argument('--stop-seconds', type=float, default=None,

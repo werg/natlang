@@ -107,3 +107,12 @@ priority GPU job, which then got a reduced cap and OOMed). The sum of claims may
 
 - Follow-up 2026-10-12: (1) detached containers: on preempt/pressure stops the guard finds the unit's containers (command, `run --container`, `docker run --name` client in the cgroup, unit name), signals them, `docker stop`s survivors when the unit exits, and does not relaunch a requeued unit while one runs (a wrapper shell runs its TERM trap only after its foreground `docker run` ends, so the unit's end never stopped the container). (2) Undeclared units are resumable (tests, checks, data jobs; only services and adopted units are protected; `--no-resumable` for long non-checkpointed jobs); `status` waiting entries list `blocked_by` (non-preemptible units with reason) and refusals name them.
 - Follow-up 2026-10-12 (b): backfill. The queue head starts when it fits (the guard preempts for it); other waiters, and requeued units the guard relaunches, start when they fit by real headroom and are resumable, so a big waiting head cannot starve the queue (a 1 GB watcher waited behind a 75 GB job with 17 GB free). Preemption for the head is tried first; backfill uses what is left. Cache release is non-blocking: it runs only as a detached process (`run` and the guard never walk in-process), never walks /mnt/external by default (a walk sat in uncommitted D state for 80 min), stops itself after 240 s, uses a pid file instead of a flock so a stuck walk blocks later releases for at most 480 s, and the guard abandons a release older than that.
+
+## Waiting jobs outlive their agent: `run --detach` (2026-10-13)
+
+A waiting `memory_ledger.py run --wait N` is a plain client process that refreshes its queue entry every 30 s; the entry
+expires after `WAITER_TTL` (90 s) once the client dies. Jobs queued from an agent's shell therefore vanished without a
+trace when that agent session ended (the 2026-10-13 handover units: ckpt-write-bench2, e2edata-assemble-v3,
+repeat-dragnet-open-ab, mellum-deploy-gguf-ternary, legacy-llamacpp-conformance, e2e tests14, ...). Queue anything that
+may wait longer than the calling session with `--detach --wait N`: the waiter then runs as the user unit
+`<unit>-waiter` (output in its journal) and the job starts when admitted.
