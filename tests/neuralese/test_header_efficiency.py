@@ -10,7 +10,9 @@ import torch
 from natlang_neuralese.train import direct_sft as trainer
 from natlang_neuralese.train.text_supervision import (ROLE_CODES, balanced_position_weights,
                                                       segmented_position_weights)
-from natlang_neuralese.train.text_warmup import document_windows, merge_prefix_rows, prepare_text_windows
+from natlang_neuralese.train import text_warmup
+from natlang_neuralese.train.text_warmup import (document_windows, merge_prefix_rows, prepare_text_windows,
+                                                stream_merge_prefix_rows)
 
 
 def test_one_suffix_segment_is_exactly_the_balanced_weights():
@@ -231,3 +233,68 @@ def test_a_merged_chain_gives_every_contained_decision_its_own_token_losses(tmp_
     with torch.no_grad():
         alone, merged = losses(contained), losses(container)
     assert torch.allclose(alone, merged[:alone.shape[0]], atol=1e-5, rtol=1e-5)
+
+
+def fuzz_rows(seed, programs=40):
+    """Decision chains with branches, exact duplicates, overlapping suffixes, other cohorts and sampling groups, short
+    rows, rows without tokens or suffix, declared context-only spans and held rows, in shuffled order."""
+    import random
+    rng = random.Random(seed)
+    header = [7] * 64
+    rows = []
+    for p in range(programs):
+        ids = header + [p % 5, p % 3]
+        for d in range(rng.randint(1, 6)):
+            start = len(ids) - rng.choice((0, 1, 3))  # sometimes the suffix reaches into the previous decision
+            ids = ids + [rng.randint(3, 9) for _ in range(rng.randint(1, 4))]
+            row = {'text': f'p{p}d{d}', 'id': f'p{p}:{d}', 'token_ids': list(ids), 'split': 'train',
+                   'source_groups': [f'g{p}'], 'supervised_suffix_start': max(start, 0)}
+            kind = rng.random()
+            if kind < .08:
+                row['text_cohort'] = 'agentic'
+            elif kind < .14:
+                row['sampling_group'] = f'sg{p % 2}'
+            elif kind < .18:
+                row['context_only_spans'] = [[0, 2]]
+            elif kind < .22:
+                row['split'] = 'test'
+            elif kind < .25:
+                row['document_sha256'] = f'{p:064x}'
+            rows.append(row)
+            if rng.random() < .1:
+                rows.append({**row, 'text': row['text'] + '-dup', 'id': row['id'] + '-dup'})
+            ids = ids + [1, 1]
+    rows += [{'text': 'short', 'id': 'short', 'token_ids': [7] * 10, 'split': 'train', 'source_groups': ['s'],
+              'supervised_suffix_start': 5},
+             {'text': 'untokenized', 'id': 'untokenized', 'split': 'train', 'source_groups': ['u']},
+             {'text': 'no-suffix', 'id': 'no-suffix', 'token_ids': header + [1], 'split': 'train',
+              'source_groups': ['n']}]
+    rng.shuffle(rows)
+    return rows
+
+
+@pytest.mark.parametrize('rows', [rows_with_chains(), list(reversed(rows_with_chains())), corpus()] +
+                         [fuzz_rows(seed) for seed in range(12)])
+def test_the_streaming_merge_equals_the_in_memory_merge(rows, tmp_path, monkeypatch):
+    """Coordinator 2026-10-13: merging stays shared on both lines; the bounded-memory merge (Pop's host RAM) gives the
+    same rows, order, spans, constituents and receipt as merge_prefix_rows, and so the same windows and weights."""
+    monkeypatch.setattr(text_warmup._SpooledTokens, 'CHUNK', 8)  # exercise chunked comparisons on short rows
+    expected, expected_receipt = merge_prefix_rows([dict(r) for r in rows])
+    passes = []
+
+    def source():
+        passes.append(1)
+        return (dict(r) for r in rows)
+    streamed, receipt = stream_merge_prefix_rows(source, spool_directory=tmp_path)
+    streamed = list(streamed)
+    assert streamed == expected and receipt == expected_receipt and len(passes) == 2
+    window = lambda rows: prepare_text_windows(engine(), rows, tokens=64, prefix_tokens=4, target_tokens=8,
+                                               train_target_tokens=60)[0]
+    per_row = {'train': [], 'test': []}
+    for row in streamed:  # the stage's streaming path prepares one row at a time
+        one = window([row])
+        for split in per_row:
+            per_row[split] += one[split]
+    whole = window(expected)
+    strip = lambda ws: [{k: (list(v) if k in ('ids', 'roles') else v) for k, v in w.items()} for w in ws]
+    assert strip(per_row['train']) == strip(whole['train']) and strip(per_row['test']) == strip(whole['test'])

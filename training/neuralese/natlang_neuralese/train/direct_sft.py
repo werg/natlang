@@ -698,15 +698,17 @@ def stage_data(engine, a, text_data):
     """(train windows, target-bearing windows, held windows, held selection, mask receipt, rows) of one data file."""
     from .text_warmup import (WindowBackingSpool, load_text_rows, prepare_text_windows,
                               select_held_document_windows)
-    if text_data is not None and not getattr(a, 'merge_prefix_rows', False):
+    if text_data is not None:
         # Keep only the token windows needed by training. Holding the raw JSON
         # rows beside their token windows duplicates a multi-gigabyte corpus
-        # during every checkpoint resume on a small host.
+        # during every checkpoint resume on a small host. Merged decision chains
+        # stream too (text_warmup.stream_merge_prefix_rows: the same rows as the
+        # in-memory merge, in bounded memory).
         windows = {'train': [], 'test': []}
         rows_meta = []
         receipt = None
         backing = WindowBackingSpool(getattr(a, 'out', None))
-        for row in stream_text_rows(text_data, engine.tokenizer):
+        for row in stage_rows(a, text_data, engine.tokenizer):
             one, current = prepare_text_windows(engine, [row], tokens=a.tokens,
                 prefix_tokens=a.prefix_tokens, target_tokens=a.target_tokens,
                 mask_system_prompt=True,
@@ -745,6 +747,18 @@ def stage_data(engine, a, text_data):
     held, held_selection = select_held_document_windows(windows['test'], a.held_documents)
     targets = [w for w in windows['train'] if target_bearing(w)]
     return windows['train'], targets, held, held_selection, mask_receipt, rows
+
+
+def stage_rows(a, text_data, tokenizer):
+    """The stage's rows of one data file as a stream: ``stream_text_rows``, with linear decision chains merged when the
+    stage merges them (``merge_prefix_rows``; bounded memory, text_warmup.stream_merge_prefix_rows)."""
+    if not getattr(a, 'merge_prefix_rows', False):
+        return stream_text_rows(text_data, tokenizer)
+    from .text_warmup import stream_merge_prefix_rows
+    rows, merge = stream_merge_prefix_rows(lambda: stream_text_rows(text_data, tokenizer),
+                                           spool_directory=a.out if getattr(a, 'out', None) and Path(a.out).is_dir() else None)
+    print(json.dumps({'event': 'merge_prefix_rows', **merge}), flush=True)
+    return rows
 
 
 def stream_text_rows(text_data, tokenizer):
@@ -818,17 +832,7 @@ def stage_plan_data(engine, a, text_data):
             value['merged_rows'] = window['merged_rows']
         return value
     targets, tests = [], []
-    rows = stream_text_rows(text_data, engine.tokenizer)
-    if getattr(a, 'merge_prefix_rows', False):
-        # Merging needs every train row's tokens at once; the texts are dropped for their hashes.
-        from .text_warmup import merge_prefix_rows
-        light_rows = []
-        for row in rows:
-            row['document_sha256'] = hashlib.sha256(row['text'].encode()).hexdigest()
-            row['text'] = ''
-            light_rows.append(row)
-        rows, _ = merge_prefix_rows(light_rows)
-    for row in rows:
+    for row in stage_rows(a, text_data, engine.tokenizer):
         windows, _ = prepare_text_windows(engine, [row], tokens=a.tokens, prefix_tokens=a.prefix_tokens,
                                           target_tokens=a.target_tokens, mask_system_prompt=True,
                                           train_target_tokens=getattr(a, 'train_target_tokens', None),

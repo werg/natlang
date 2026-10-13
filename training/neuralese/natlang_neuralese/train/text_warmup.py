@@ -1077,6 +1077,107 @@ def merge_prefix_rows(rows):
                     'contained_tokens_not_forwarded': tokens_removed}
 
 
+class _SpooledTokens:
+    """One row's token bytes in a merge spool, ordered like ``(bytes, index)`` without holding the bytes."""
+    __slots__ = ('view', 'offset', 'size', 'index')
+    CHUNK = 1 << 16
+
+    def __init__(self, view, offset, size, index):
+        self.view, self.offset, self.size, self.index = view, offset, size, index
+
+    def startswith(self, other):
+        if other.size > self.size:
+            return False
+        for begin in range(0, other.size, self.CHUNK):
+            end = min(begin + self.CHUNK, other.size)
+            if self.view[self.offset + begin:self.offset + end] != other.view[other.offset + begin:other.offset + end]:
+                return False
+        return True
+
+    def __lt__(self, other):
+        for begin in range(0, min(self.size, other.size), self.CHUNK):
+            mine = self.view[self.offset + begin:self.offset + min(begin + self.CHUNK, self.size)]
+            theirs = other.view[other.offset + begin:other.offset + min(begin + self.CHUNK, other.size)]
+            if mine != theirs:
+                return mine < theirs
+        return (self.size, self.index) < (other.size, other.index)
+
+
+def stream_merge_prefix_rows(rows_source, *, spool_directory=None):
+    """``merge_prefix_rows`` in bounded memory, for a corpus that does not fit beside its windows (Pop's 365,784-row
+    r3 program-header stage, coordinator 2026-10-13). ``rows_source()`` returns a fresh iterator over the same rows
+    (the stage streams its file again). Returns (merged row iterator, receipt): the same rows, in the same order, with
+    the same ``supervised_spans``, ``merged_rows`` and receipt as ``merge_prefix_rows(list(rows_source()))``
+    (tests/neuralese/test_header_efficiency.py checks equality).
+
+    Pass 1 keeps, per mergeable train row, its bucket, length, suffix start and identity, and appends its token bytes
+    to a scratch spool. Pass 2 resolves containers bucket by bucket with the same byte-order rule, comparing rows in
+    the memory-mapped spool (resident memory: a few objects per row, not their tokens). Pass 3 iterates the rows
+    again and yields each one merged or skips it as contained."""
+    import collections
+    import mmap
+    import tempfile
+    buckets, meta, rows = collections.defaultdict(list), {}, 0
+    with tempfile.TemporaryFile(dir=spool_directory) as spool:
+        offset = 0
+        for index, row in enumerate(rows_source()):
+            rows += 1
+            ids = row.get('token_ids')
+            if (row.get('split') != 'train' or ids is None or row.get('supervised_suffix_start') is None
+                    or row.get('context_only_spans') or len(ids) < MERGE_KEY_TOKENS):
+                continue
+            data = array('I', ids).tobytes()
+            buckets[(row.get('text_cohort', 'native'), row.get('sampling_group'),
+                     data[:4 * MERGE_KEY_TOKENS])].append(index)
+            meta[index] = (offset, len(ids), row['supervised_suffix_start'],
+                           row.get('document_sha256') or hashlib.sha256(row['text'].encode()).hexdigest(),
+                           row.get('id'))
+            spool.write(data)
+            offset += len(data)
+        spool.flush()
+        container = {}
+        view = mmap.mmap(spool.fileno(), 0, access=mmap.ACCESS_READ) if offset else None
+        try:
+            for members in buckets.values():
+                if len(members) < 2:
+                    continue
+                keyed = sorted(_SpooledTokens(view, meta[i][0], 4 * meta[i][1], i) for i in members)
+                top = None  # the maximal row that extends the row after this position (merge_prefix_rows)
+                for position in range(len(keyed) - 1, -1, -1):
+                    item = keyed[position]
+                    if position + 1 < len(keyed) and keyed[position + 1].startswith(item):
+                        container[item.index] = top
+                    else:
+                        top = item.index
+        finally:
+            if view is not None:
+                view.close()
+    del buckets
+    members = collections.defaultdict(list)
+    for index, owner in container.items():
+        members[owner].append(index)
+    receipt = {'policy': 'merge_prefix_rows/1', 'rows': rows, 'merged_rows': rows - len(container),
+               'contained_rows': len(container), 'containers': len(members),
+               'contained_tokens_not_forwarded': sum(meta[i][1] for i in container)}
+
+    def merged():
+        for index, row in enumerate(rows_source()):
+            if index in container:
+                continue
+            if index in members:
+                parts = [index] + sorted(members[index], key=lambda i: meta[i][1])
+                spans = sorted({(meta[i][2], meta[i][1]) for i in parts})
+                disjoint = []
+                for begin, end in spans:
+                    if disjoint and begin < disjoint[-1][1]:
+                        disjoint[-1] = (disjoint[-1][0], max(disjoint[-1][1], end))
+                    else:
+                        disjoint.append((begin, end))
+                row = {**row, 'supervised_spans': disjoint, 'merged_rows': [[meta[i][3], meta[i][4]] for i in parts]}
+            yield row
+    return merged(), receipt
+
+
 def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
                          mask_system_prompt=True, train_target_tokens=None, train_min_context_tokens=0):
     """Build split-preserving text windows with the shared chat-role policy.
