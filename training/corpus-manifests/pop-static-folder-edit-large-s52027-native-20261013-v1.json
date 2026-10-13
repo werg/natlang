@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-static-folder-edit-large-s52027-native-20261013-v1",
+  "owner": "pop",
+  "path": "runs/static-folder-edit-large-s52027-v1",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 592,
+      "sha256": "019ad4a11f6f5f6a85e1f77f2915b2460f1263f18fed5c4e9da5492e152d0ada"
+    },
+    {
+      "path": "cases.ir.jsonl",
+      "bytes": 856311,
+      "sha256": "95f51e4b108ac9c8a133be4198b87d1e9bffbca550f8fd8b258588291bbd7b36",
+      "lines": 5
+    },
+    {
+      "path": "results.jsonl.zst",
+      "bytes": 418856,
+      "sha256": "bd85fb3f601cbaed674d8669aee67b8820a042be61e6fa9e79340008b10fdf62"
+    },
+    {
+      "path": "source.json",
+      "bytes": 535,
+      "sha256": "4f267f65248516b384300f6546300f424a13ec9c24b4876c47db7d87c8d842b8"
+    },
+    {
+      "path": "turns.jsonl.zst",
+      "bytes": 500340,
+      "sha256": "3a33b9ef50c0c7a02e3b5028214f22c461960c018552996399f5f036f068f148"
+    }
+  ],
+  "bytes": 1776634
+}

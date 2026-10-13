@@ -63674,7 +63674,9 @@
       "admission": "static source generation gate passed; provider labels and source-quality review still required",
       "training_admission": false,
       "required_conversion": "typed provider labeling and semantic/source review before native training conversion",
-      "derived_from": ["natlang-decision-sources-catalog-20261004"]
+      "derived_from": [
+        "natlang-decision-sources-catalog-20261004"
+      ]
     },
     {
       "id": "pop-decision-four-family-provider-prep-20261013-v2",
@@ -63691,7 +63693,32 @@
       "admission": "prepared only; 64 live Gemini pilot queued, no model output admitted",
       "training_admission": false,
       "required_conversion": "provider labels, response validity and semantic review, then explicit native corpus admission",
-      "derived_from": ["pop-decision-four-family-source-20261013-v4"]
+      "derived_from": [
+        "pop-decision-four-family-source-20261013-v4"
+      ]
+    },
+    {
+      "id": "pop-static-folder-edit-large-s52027-native-20261013-v1",
+      "owner": "pop",
+      "path": "runs/static-folder-edit-large-s52027-v1",
+      "include": [
+        "cases.ir.jsonl",
+        "results.jsonl.zst",
+        "turns.jsonl.zst",
+        "source.json",
+        "audit.json"
+      ],
+      "source_class": "static reference-replayed natlang-native CoEdIT folder-edit turns",
+      "split": "train only; 851 source groups disjoint from protected held packet and r3 target source groups",
+      "admission": "five exact-oracle accepted reference demonstrations, 1732 native decisions; synthetic action notes are context only and teacher_reasoning_trained=false",
+      "training_admission": true,
+      "training_admission_reason": "exact reference replay of five large directory reducers (149-193 drafts each), all 1732 turns admitted by native materializer; no held/prior-r3 source-group overlap",
+      "required_conversion": "render LFM2.5 and Mellum2.1 twins and include in next declared broad union",
+      "review_status": "static reference replay accepted 5/5; audit.json pins source and runtime, all train and approved",
+      "license": "Apache-2.0 (Grammarly CoEdIT source); project-generated curriculum wrapper",
+      "source_campaigns": [
+        "provider-luna-held-shapes-s52027-v1"
+      ]
     }
   ],
   "coverage_backlog": [
