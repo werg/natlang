@@ -16,8 +16,8 @@ returns: GeneratedProgram
    is a writing defect requiring repair, not a successful way to increase declared depth.
 5. Construct sourceToModule from each selected clause's actual rule/module responsibility. Historical
    versions and exceptions can map to the same reusable guard with distinct captured source context.
-6. Return entryPath, modules, typeFiles, sourceToModule and unresolved. Scenario execution must inspect
+6. Keep generated source as immutable proposal data. Exact compiler/type checking belongs at the
+   outside-world seam and cannot certify its semantic equivalence to a procedure clause.
+7. Return entryPath, modules, typeFiles, sourceToModule and unresolved. Scenario execution must inspect
    these actual generated bodies/plans; replaying only the compiler's preferred source model would
    fail to detect a module that emitted a different guard or dropped a carried state field.
-7. Keep generated source as immutable proposal data. Exact compiler/type checking belongs at the
-   outside-world seam and cannot certify its semantic equivalence to a procedure clause.

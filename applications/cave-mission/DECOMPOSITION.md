@@ -6,7 +6,7 @@ Status: source-only application; no live execution or training admission. Progra
 
 The application reconciles two uncertain coordinate frames, derives physical worlds, explores a belief-state graph and constructs a policy whose every observation outcome returns a sealed sample. All decisions live in numbered NL functions. The visible TypeScript file contains declarations only. The external checker replays a supplied policy and checks exact arithmetic/topology; it never selects an action or interprets evidence for the application.
 
-Actual size: 25 NL files, 539 total lines, 355 body lines and 172 numbered steps; 43 named typed contracts. Four branches own survey interpretation, world construction, all-outcome planning and independent replay. The initial architecture was reduced from 29 proposed modules by folding small phrase interpretations into their owning functions; there are no placeholder stages.
+Actual size: 25 NL files, 585 total lines, 401 body lines and 182 numbered steps; 44 named typed contracts. Four branches own survey interpretation, world construction, all-outcome planning and independent replay. The initial architecture was reduced from 29 proposed modules by folding small phrase interpretations into their owning functions; there are no placeholder stages.
 
 ## Callable graph and stage deltas
 
@@ -73,3 +73,9 @@ Source loader, typed reference and twenty-two external checker controls pass. Or
 ## Conditional-anchor-v2 source delta
 
 The NL anchor assessment now decides consistency conditional on one candidate transform: matching source-backed coordinates admit a possible binding, contradictions reject, and missing conditional premises remain unknown. Selection of the actual reflection stays unresolved across worlds. The landmark literal returns semantic judgments and clause-keyed exact quote strings; its parent owns original source ID/path binding and substring checks before consuming the result. Alignment validates returned quotation provenance before inserting conditional bindings. These exact checks do not decide place identity or select a map. No crisp decision engine was added.
+
+## Conditional-binding-table-v3 source delta
+
+The second live diagnostic established conditional true assessments but lost their named pair identities before constructing FrameHypothesis. Alignment now owns a typed ConditionalAnchorBinding table, immediately inserting each actual child return with the candidate pair and transform. Numbered NL steps interpret the rows, handle conflicting or missing identity evidence, and project accepted named bindings before considering source-local chamber names. The local-name rule has a semantic naming obligation, not a blanket missing-result fallback. Passage reconciliation conditions its judgment on the supplied world instead of asking which reflection is actual.
+
+The new table is internal; external report, fixture, oracle and canonical policy remain unchanged. Coordinate arithmetic and source quotation checks are exact mechanics. Candidate identity, naming scope and conditional consistency remain NL policy. No JavaScript semantic engine or new wrapper stage was added. Source-only pending independent review and a fresh pinned live diagnostic.

@@ -16,9 +16,8 @@ returns: ScenarioVerdict
    a false premise; an absent fact cannot be upgraded to false merely to make the branch simpler.
 5. Inventory satisfiedObservables and violatedObservables with exact event/source witnesses. Link a
    violation to the earliest actual guard/state effect that diverges rather than only its final summary.
-6. Return scenarioId, valid, original traces, observable lists, unresolved and witnesses. The revision
-   reducer consumes these concrete failures and does not rewrite the input's requested observables.
-
-7. Inspect every actual GuardDecision.matchesSource and both state channels. A wrong emitted value
+6. Inspect every actual GuardDecision.matchesSource and both state channels. A wrong emitted value
    or effect is a violated observable even if sourceRequiredValue is correct or a later effect restores
    the final state. Never replace the emitted trace with the source-required trace to obtain success.
+7. After those checks return scenarioId, valid, original traces, observable lists, unresolved and
+   witnesses. The revision reducer consumes the concrete failures and never rewrites observables.

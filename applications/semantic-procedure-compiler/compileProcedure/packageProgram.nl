@@ -17,7 +17,7 @@ returns: CompilePacket
    Package source witnesses for why a generated branch changed across edition time or exception scope.
 4. Collect unresolved findings without replacing them with empty success reports. A generated program
    with a demonstrated repair target remains a proposal even if its other scenarios are useful.
-5. Return requestId, program, model, suite, audit, revisions and unresolved. Generated files are output
-   data; the original source snapshot and external hidden canonical witness are never overwritten.
-6. Name the packet's role as source/candidate preparation. Exact parser/type checks, independent
+5. Name the packet's role as source/candidate preparation. Exact parser/type checks, independent
    semantic comparisons and actual live module/literal consumption are separate qualification evidence.
+6. Return requestId, program, model, suite, audit, revisions and unresolved. Generated files are output
+   data; the original source snapshot and external hidden canonical witness are never overwritten.

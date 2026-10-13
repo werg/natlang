@@ -1,0 +1,48 @@
+{
+  "schema": "natlang.semantic-source-review/1",
+  "reviewer": "semantic_slate_astra",
+  "variant": "ecology-typed-handoff-v12",
+  "rendered_program": "/tmp/semantic-v12-builder-preflight-c-20261014/programs/astra/astra-ecology-01",
+  "source_packet_sha256": "cf332b148d7ac017b3980b2fbfee440a49f8af2aff65fd4d5cd4ae9dadaf37dd",
+  "verdict": "source_handoff_coherent_pending_live_consumption",
+  "files": {
+    "types.ts": "ec81219bbf68ba01b97465666657fecad00ba15e31c94e9ff4261eb9faea7ec3",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope/verifyResult.nl": "ace879601d7ed0f1bd58058cfa45e644d9bcec0a430b4d7f3b55b2416fc54d98",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope.nl": "1bd4471b5d017f9a02f9508db8e3ed5c7240d45e1cd9951d0d0dac42be5ebeca",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink.nl": "4ee0971e3c85d9b2ac42559ac117072732a6857775c03059257e899dc8db967b",
+    "solve/readStudyPlots/buildInteractionGraph.nl": "3212888bc53815a26a8539540709ae6631303e53b3d9c71b89cbf20426f2c9c4",
+    "solve/readStudyPlots.nl": "5b0c2210481b2ed73291cd65ca1cd7c65fd95c67f3c0344f963fa18d6c3cafe4",
+    "solve.nl": "04f217ac9d4fef0d6929003adb00813dbdf9fcffc3dfe6659c65d993fd488f1b"
+  },
+  "checked": [
+    "StageInput1 alone exposes raw EvidenceRecord text; StageInput2\u20135 have BatchIdentity, typed prior and witness snippets.",
+    "Stage1 direct await supplies actual semantic content, then parent binds original ID/path and checks nonempty exact quote.",
+    "Stage2 directly consumes each assertion, preserves no_relation/unresolved decisions and validates returned edge witnesses against supplied typed premises.",
+    "Stage3 stale raw-related-record plan removed; causal assessment reads actual typed contributions.",
+    "Stage4 condition judgment preserves downstream-edge eligibility; actual decisions feed global audit.",
+    "Stage5 uses prior/current typed union, propagates opposed signs and unresolved influence, and returns current-owned arrays plus global audit.",
+    "Root appends batch arrays once, checks exact coverage/quotes and projects final typed audit without new raw extraction."
+  ],
+  "remaining_live_questions": [
+    "One assertion content/quote per record must preserve every relevant claim in that record.",
+    "Stage3 causal rejudgment should contribute supported correction/confirmation rather than unexamined forwarding.",
+    "Check actual child-result insertion and unresolved propagation in trace; declarations alone do not prove use."
+  ],
+  "fixture_oracle_changed": false,
+  "live_qualified": false,
+  "training_admitted": false,
+  "followup": {
+    "rendered_program": "/tmp/semantic-v12-builder-preflight-d-20261014/programs/astra/astra-ecology-01",
+    "source_packet_sha256": "0ba78f47db52418daf49e4da4b32aef08a5ad73df8f8d26cac4935f1add67339",
+    "review": "Read full c\u2192d source diff: only duplicate objective and repeated entity/cross-folder boilerplate shortened. Typed interfaces, numbered plans and direct-await idioms unchanged; source handoff verdict preserved.",
+    "files": {
+      "types.ts": "ec81219bbf68ba01b97465666657fecad00ba15e31c94e9ff4261eb9faea7ec3",
+      "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope/verifyResult.nl": "69ab601c3fe989da51ef308dd42e255cc74fa12de7e589440fbe8d179c6eaaa9",
+      "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope.nl": "d37cbdf567e99994f8347d2a587f84005e1e973e9c33b2959c2a5e80e6fce2a6",
+      "solve/readStudyPlots/buildInteractionGraph/assessCausalLink.nl": "a32df1441829e02f4225928bd0c8029242438d7942aecd70f2795dc116680f22",
+      "solve/readStudyPlots/buildInteractionGraph.nl": "951f6747be0294eb4befde6c6ff28675d7f6a379f392ec6d5b03351bb8209820",
+      "solve/readStudyPlots.nl": "5db638fa97216778dec8eaeb518c114fd41216245e58c1cea2dfb72e9543c869",
+      "solve.nl": "2b82ebb1f9abc9138ef876d36bae476d24af0fc9388987f52d41f951d98470f9"
+    }
+  }
+}

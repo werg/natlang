@@ -278,6 +278,12 @@ function checkedStageSpecs(entry, steps) {
       if (handoff.schema !== 'semantic-typed-evidence-handoff/1' ||
           !['readStudyPlots', 'buildInteractionGraph'].every((name, index) =>
             spec.stages[index]?.name === name && handoff[`stage${index + 1}`]?.name === name) ||
+          (handoff.stage3 &&
+            (handoff.stage3.name !== spec.stages[2]?.name ||
+             !/\bCausalInput\b/.test(handoff.stage3.idiom_preconditions ?? '') ||
+             !/\bCausalDecision\b/.test(handoff.stage3.direct_await_idiom ?? '') ||
+             typeof variant.types.CausalInput !== 'string' ||
+             typeof variant.types.CausalDecision !== 'string')) ||
           !['StageInput1', 'StageInput2', 'StageInput3', 'StageInput4', 'StageInput5']
             .every(name => typeof variant.types[name] === 'string') ||
           !['StageInput2', 'StageInput3', 'StageInput4', 'StageInput5']
@@ -286,7 +292,9 @@ function checkedStageSpecs(entry, steps) {
           /\b(?:EvidenceBatch|EvidenceRecord|relatedRecords|\btext\s*:)/.test(variant.types.TypedStageContext ?? '') ||
           !/\binteractionAssertions\s*:\s*InteractionAssertion\[\]/.test(variant.types.StageInput2) ||
           !/\bedgeDecisions\s*:\s*EdgeDecision\[\]/.test(variant.types.StageInput3) ||
+          !/\bcausalAssessments\s*:/.test(variant.types.StageInput4) ||
           !/\bedgeDecisions\s*:\s*EdgeDecision\[\]/.test(variant.types.StageInput5) ||
+          !/\bscopeDecisions\s*:/.test(variant.types.StageInput5) ||
           !/\bedgeDecisions\s*:\s*EdgeDecision\[\]/.test(spec.types.FinalSemanticState))
         throw Error(`${entry.id}: invalid typed evidence handoff contract`);
       for (const [index, stage] of spec.stages.entries()) {
@@ -298,18 +306,21 @@ function checkedStageSpecs(entry, steps) {
         '3. Append source-grounded causalAssessments for this batch, preserving edge direction, canonical entity keys and exact witnesses.',
         '4. Call interpretObservationScope with BatchIdentity, TypedStageContext and the actual typed prior fields; return its complete FinalSemanticState.',
       ];
-      for (const index of [0, 1]) {
+      for (const index of handoff.stage3 ? [0, 1, 2] : [0, 1]) {
         const stage = spec.stages[index], replacement = handoff[`stage${index + 1}`];
         stage.numbered_plan = replacement.numbered_plan;
         stage.new_semantic_transformation = replacement.new_contribution;
         stage.scoped_literal_required = true;
         stage.scoped_literal_plan = [replacement.idiom_preconditions,
           replacement.direct_await_idiom, handoff.exact_vs_semantic];
-        stage.owned_contribution.type = index === 0 ? 'InteractionAssertion[]' :
-          'InteractionEdge[] with one source-bound EdgeDecision per assertion';
+        stage.owned_contribution.type = index === 0 ? 'InteractionAssertion[]' : index === 1 ?
+          'InteractionEdge[] with one source-bound EdgeDecision per assertion' :
+          '{cause:string;effect:string;signedEffect:number;direct:boolean;witnesses:Witness[]}[]';
         stage.no_op_policy = index === 0 ?
           'Only an empty source folder has no assertion decision; every actual record has one source-bound assertion, including background or unresolved.' :
-          'Only an empty typed assertion list has no edge decision; every actual assertion has one source-bound decision, including no_relation or unresolved.';
+          index === 1 ?
+            'Only an empty typed assertion list has no edge decision; every actual assertion has one source-bound decision, including no_relation or unresolved.' :
+            'Only an empty typed edge list has no causal decision; every actual established edge receives one source-bound assessment or a witnessed absence requiring repair.';
       }
       for (const stage of spec.stages.slice(2)) {
         stage.source_evidence_obligation =
@@ -437,6 +448,7 @@ function render(entry, provider) {
   const visibleIdentityContract = identityContract && !contract.some(part => part.includes(identityContract)) ?
     `Output identity convention: ${identityContract}\n` : '';
   const prefix = entry.operation ? `Operation: ${entry.operation}.\n` : '';
+  const stageHeading = objective.startsWith(title) ? objective : `${title}. ${objective}`;
   const legacyInstructions = `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
     `Carry out these stages over the supplied data, preserving exact source references. ` +
     `Call ${steps[0].name} from solve; each later named stage is a child of the preceding stage and is called from within that active stage. ` +
@@ -457,7 +469,7 @@ function render(entry, provider) {
     visibleIdentityContract +
     `Use exact code only for reading, ordering, serialization, and checks; the domain judgments belong in natural-language calls. ` +
     `Return the result specified by the output contract, grounded in the supplied sources.`;
-  const stageInstructions = stageSpec ? `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
+  const stageInstructions = stageSpec ? `${prefix}${stageHeading}\n\nSemantic rule: ${rule}\n\n` +
     identityInstruction +
     (identities ? `Source ID binding (attach id and path to every EvidenceRecord, and use these exact IDs in the result):\n${identities.map(({ id, path }) => `${id}: ${path}`).join('\n')}\n\n` : '') +
     (crossFolder && typedHandoff ?
@@ -499,14 +511,18 @@ function render(entry, provider) {
       const literalPlan = owned.scoped_literal_required ?
         `\nFormulate and invoke a scoped typed natural-language literal; use its actual returned decision in this stage's typed contribution.\n${paragraphs(owned.scoped_literal_plan).join('\n')}` : '';
       const carriedPlan = crossFolder ?
-        `\nCross-folder state: ${crossFolder.stage_ownership_plan.join(' ')}\n` : '';
+        typedHandoff ?
+          '\nCross-folder state: Read typed context.priorCompletedState and add only this batch’s owned contribution; pass the current typed prior to the child. Root merges returned batch fields once.\n' :
+          `\nCross-folder state: ${crossFolder.stage_ownership_plan.join(' ')}\n` : '';
       const handoffPlan = typedHandoff ?
         `\nTyped evidence boundary: ${index === 0 ? 'Only this stage reads EvidenceRecord.text. Bind source ID/path in parent scope and pass actual returned InteractionAssertion objects to the child.' :
           'Use BatchIdentity and prior typed contributions with exact witness snippets.'} ${typedHandoff.exact_vs_semantic}\n` : '';
       files[`${stageFolder}.nl`] = nlFile({ args: { input: `StageInput${index + 1}` },
         returns: 'FinalSemanticState', description: `${title}: ${name}`,
         instructions: `${plan}\nOwned new semantic contribution: ${owned.owned_contribution.field}: ${owned.owned_contribution.type}.\n` +
-          identityInstruction +
+          (typedHandoff ?
+            'Entity keys: lowercase case-fold cause/effect for joins and output; keep witness quote casing. Resolve substantive aliases from evidence.\n' :
+            identityInstruction) +
           `Transformation: ${owned.new_semantic_transformation}\n` +
           `Evidence: ${owned.source_evidence_obligation}\nInvariant: ${owned.invariant}\n` +
           `No applicable evidence: ${owned.no_op_policy}${literalPlan}${carriedPlan}${handoffPlan}\n` +

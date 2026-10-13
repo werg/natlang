@@ -19,9 +19,9 @@ returns: ContributionAudit
    of consumption is not actual live proof; this audit identifies missing authored data flow only.
 5. Name precise repairs in findings: absent typed state handoff, missing unknown branch, ignored
    returned guard or a policy decision moved into crisp code. Do not reward decorative step counts.
-6. Record LocalDecision only after the actual literal result. Return path, substantive, consumed
-   fields, findings, witnesses and the decision so writing can revise or diagnose the candidate.
-
-7. Original Witness citations establish the policy obligation from source records. Generated code
+6. Original Witness citations establish the policy obligation from source records. Generated code
    citations use generatedEvidence only: bind path from plan.path and require quote bytes in text.
    Keep these evidence domains separate; emitted code is not an original policy source record.
+7. After validating both evidence domains record LocalDecision from the actual literal result.
+   Return path, substantive, consumed fields, findings, witnesses, generatedEvidence and the decision
+   so writing can revise or diagnose the candidate.

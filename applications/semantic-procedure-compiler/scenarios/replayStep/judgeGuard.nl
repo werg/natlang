@@ -21,8 +21,10 @@ returns: GuardDecision
    this event and actual state; preserve unconditional permissions or lost prerequisites exactly as
    emitted; return resulting effects and exact generated text quotes, without repairing the body.
 4. Bind its generatedQuotes to module.path as GeneratedSpan evidence and validate each quote against
-   module.text. Keep original event/state quotations in the original Witness domain. An absent exact
-   code quote is unresolved evidence, not permission to cite emitted code as an original source record.
+   module.text. Require at least one nonempty exact generated quote for every decided emitted
+   permission or nonempty effect collection. Missing or invalid support leaves that emitted decision
+   unresolved and cannot certify a match. Keep original event/state quotations in the original Witness
+   domain; emitted code is not an original source record.
 5. Separately prepare requiredContext with the governing branch, selected source clauses/exceptions,
    sourceAtoms and original event evidence. Declare RequiredJudgment with value:boolean|null,
    effects:StateEffect[], satisfiedPremiseIds:string[], missingPremiseIds:string[], waivedPremiseIds:
