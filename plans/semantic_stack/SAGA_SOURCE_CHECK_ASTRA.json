@@ -183,15 +183,23 @@
       "commit": "2326b9b8",
       "python_ratchets": 22,
       "typescript": "passed"
-    }
+    },
+    "full_reference_runtime_coerce": "ForensicReport accepted",
+    "full_reference_exact_checker": "ok with no issues; semantic_review_required true"
   },
   "limitations": [
     "No live NL application execution yet.",
-    "No independent source/oracle review yet.",
     "No full ForensicReport reference replay yet.",
     "Exact quotation presence does not establish semantic support.",
-    "Checker control projections are not complete typed app results and may not be training data."
+    "Checker control projections are not complete typed app results and may not be training data.",
+    "Independent source/oracle review passes; external checker is partial on attempt fields, answer partitions, causal edges and atom coverage."
   ],
   "training_admitted": false,
-  "generation_ready": false
+  "generation_ready": false,
+  "reference_report_sha256": "26d03d3c1defb92af9469578b6cf1c6eacad69fb6d470d2391ebe0cb2a89fd40",
+  "independent_review": {
+    "path": "training/semantic_applications/reviews/ASTRA_SAGA_REVIEW_SOL.json",
+    "sha256": "7f6046c955ddd44210e60f3247fdc8c54eecf75576c765fe72b65d6ba8355b91",
+    "source_oracle_status": "pass"
+  }
 }

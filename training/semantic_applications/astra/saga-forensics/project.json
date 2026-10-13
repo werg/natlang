@@ -466,7 +466,7 @@
   "readiness": {
     "source_loader_checked": true,
     "typed_declarations_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": false,
     "live_qualified": false,
     "training_admitted": false,
@@ -479,5 +479,12 @@
   "metadata_files": [
     "DECOMPOSITION.md",
     "README.md"
-  ]
+  ],
+  "reference_path": "training/semantic_applications/astra/saga-forensics/pooled-rental/reference-report.json",
+  "reference_scope": "Canonical fully typed source-validity witness only. Replay separately from held source package; not a byte-equality oracle for equivalent policies and not named-stage execution evidence.",
+  "independent_review": {
+    "path": "training/semantic_applications/reviews/ASTRA_SAGA_REVIEW_SOL.json",
+    "sha256": "7f6046c955ddd44210e60f3247fdc8c54eecf75576c765fe72b65d6ba8355b91",
+    "scope": "Source/oracle/full canonical report and finite policy-minimum enumeration only; no live/admission credit."
+  }
 }

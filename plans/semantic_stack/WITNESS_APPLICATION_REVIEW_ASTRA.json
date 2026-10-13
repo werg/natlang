@@ -1,0 +1,75 @@
+{
+  "schema": "semantic-application-independent-review/1",
+  "reviewer": "semantic_slate_astra",
+  "subject_author": "semantic_slate_sol",
+  "source_commit": "d778644b",
+  "project": "sol-witness-rewrite-studio-harbor-retcon",
+  "files": {
+    "oracle_sha256": "75bc48eb63961809aee3c6de3cd6e88857300491c25bf396b6a2626880197e06",
+    "snapshot_sha256": "c0d629076db6a9666988e5fa9c2773eddf4156e675fb47961bc529ce00595c4b",
+    "request_sha256": "556075280965d85ea135d4ec46b543fe1aec4db8cdfc7807615bef6bb4dff64a"
+  },
+  "source_documents_reviewed": 26,
+  "source_snapshot_exact_match": true,
+  "semantic_result": "source_and_oracle_pass; identified dependency uncertainty contract repaired and delta-reviewed",
+  "independent_derivation": [
+    "Mara sees the seal but no letter contents at E01; only Ada acquires both interior facts at E02. Memory frames do not change selected-world acquisition.",
+    "P1 supplies accurate oral reception at E05 while Ada keeps original L01; E07 then truthfully names oral acquisition. E09 preserves the seal/message trust motif without claiming physical custody.",
+    "K01 moves Ada to Bo at E03 and Bo to Mara at E06; its real-gate capability supports E08. K02 is separate and cannot replace it.",
+    "The before-TB rescue remains intentional and informed. Trust at E09 leaves both protected motive interpretations open.",
+    "P2 introduces absent Orin; P3 substitutes unsupported guesses; P4 uses uninformed and absent Bo; P5 creates forbidden L02; P6 leaves false reading/custody callbacks; P7 supplies a definitive motive ruling.",
+    "Only P1 satisfies all nine visible obligations. It changes E05/E07/E09 and leaves E01/E02/E03/E04/E06/E08 unchanged; exact recipe text is required by sourceD02, so byte equality for edit spans is justified."
+  ],
+  "literal_source_review": [
+    {
+      "site": "world/parseFrames/interpretFrame.nl",
+      "owned_result": "asserted/observed/reported meanings under frame authority",
+      "consumer": "EventView and local decision ledger"
+    },
+    {
+      "site": "epistemics/checkDialogue/resolveLicensing.nl",
+      "owned_result": "licensed/unsupported/unresolved dialogue conjunction and acquisition path",
+      "consumer": "DialogueDecision and knowledge obligations"
+    },
+    {
+      "site": "studio/impact/closureStep.nl",
+      "owned_result": "necessary/affected dependency judgments",
+      "consumer": "judged links and affected closure"
+    },
+    {
+      "site": "proposals/simulate.nl",
+      "owned_result": "covered versus unsupported claimed meanings after actual snapshot replay",
+      "consumer": "Replay.claimJudgment and preservation audit"
+    },
+    {
+      "site": "studio/repairStep/compareCandidates.nl",
+      "owned_result": "ordering over fully audited alternatives",
+      "consumer": "selected candidate IDs in repair reducer"
+    }
+  ],
+  "defects": [
+    {
+      "id": "WITNESS-DEPENDENCY-UNKNOWN",
+      "severity": "typed-contract-precision",
+      "site": "studio/impact/closureStep.nl step6 and types.ts MeaningDependency",
+      "detail": "Instructions preserve unresolved dependency relevance, but necessary/affected are booleans and MeaningDependency has no typed unknown/status. Unknown cannot be carried without false certainty or prose-only encoding.",
+      "requested_fix": "Use nullable necessity/affected or explicit status, retain unknown through closure and expose unresolved required edges.",
+      "current_fixture_effect": "No source/oracle ambiguity found in the decisive harbor fixture; fix before ambiguous graph variants.",
+      "status": "resolved",
+      "resolution": "MeaningDependency now carries necessary:boolean|null and affected:boolean|null; closureStep assigns both actual literal results; impact carries possible exposure for either unknown field into unresolved review."
+    }
+  ],
+  "limits": [
+    "No actual NL execution reviewed.",
+    "Literal source plans do not prove literal invocation or downstream influence.",
+    "Exact verifier checks output invariants and patch bytes; semantic witness entailment and actual decision ledger still require live independent review.",
+    "No training admission granted."
+  ],
+  "training_admitted": false,
+  "delta_review_commit": "f02750ff",
+  "delta_review_files": {
+    "applications/witness-rewrite-studio/types.ts": "034ea943c8c73580df4fb997789ae40f40b379983333416d7ebd4f62c4658b50",
+    "applications/witness-rewrite-studio/studio/impact.nl": "678e0e52961764b14aafcfa4f3e57740c59ca8e93114b21918a9e24dbd743602",
+    "applications/witness-rewrite-studio/studio/impact/closureStep.nl": "3ab07ececb0ec68c8e7084f724b9067cdd628f976da6585b0ba1f3ad665eed7c"
+  }
+}

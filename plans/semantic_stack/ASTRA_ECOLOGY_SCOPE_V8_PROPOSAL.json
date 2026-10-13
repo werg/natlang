@@ -20,7 +20,7 @@
     "5. Continue over the finite candidate list. A relation with insufficient or inapplicable premises still produces a decision (usable=false, sign=null when unresolved); it is not silently omitted.",
     "6. Pass all inherited contributions and these actual decisions to verifyResult. If a literal fails to return, propagate a failed/unresolved stage result with the affected source paths; do not replace its unmade decision with an empty successful contribution."
   ],
-  "direct_await_idiom": "const judgeScope = nl.with<ScopeDecision>({perturbation, applicabilityRule})`Judge whether the supplied directed relation applies to perturbation under applicabilityRule. Return its cause, effect, usable, sign, reason and exact source witnesses.`; const scopeDecision = await judgeScope(scopeInput); scopeDecisions.push(scopeDecision);",
+  "direct_await_idiom": "const perturbation = input.context.objective; const applicabilityRule = input.context.rule; const judgeScope = nl.with<ScopeDecision>({perturbation, applicabilityRule})`Judge whether the supplied directed relation applies to perturbation under applicabilityRule. Return its cause, effect, usable, sign, reason and exact source witnesses.`; const scopeDecision = await judgeScope(scopeInput); scopeDecisions.push(scopeDecision);",
   "applicability": "Run once per candidate causal relation whose premises intersect this batch or whose explicit scope condition is introduced by this batch. Deduplicate only the same directed relation under the same scope premises.",
   "no_op_criterion": "No candidate relation is introduced or modified by this batch. Then append StageAbsence with these source paths and the reason; no literal is required and no semantic-stage contribution is credited.",
   "owned_contribution": "scopeDecisions: ScopeDecision[]",
@@ -37,5 +37,6 @@
     "Returned usable/sign changes downstream propagation as appropriate",
     "Matched v7/v8 live diagnostic, then approximately48samples per adopted variant"
   ],
-  "training_admitted": false
+  "training_admitted": false,
+  "idiom_preconditions": "Before executing this idiom, declare the local ScopeInput and ScopeDecision aliases; initialize scopeDecisions: ScopeDecision[]; and bind one scopeInput from the selected relation and exact premises as specified in numbered step2. Use the authored StageInput4 parameter input. The idiom explicitly binds both captured strings from its declared context fields."
 }

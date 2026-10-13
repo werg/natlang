@@ -1,0 +1,2128 @@
+{
+  "caseId": "pooled-rental-v1",
+  "identity": {
+    "attempts": [
+      {
+        "attemptId": "IA1",
+        "orderId": "OA",
+        "system": "warehouse",
+        "kind": "reservation",
+        "tenant": "ALPHA",
+        "warehouse": "WH",
+        "epoch": "E1",
+        "key": "slot-4",
+        "quantity": 2,
+        "unit": "kits",
+        "meaning": "reservation 2 for OA",
+        "referencedEffectId": null,
+        "causeId": null,
+        "witnesses": [
+          {
+            "sourceId": "J-SA",
+            "path": "journals/stock-a.md",
+            "quote": "[I01] Attempt IA1 from tenant ALPHA requested two kits for order OA from stock provider WH, epoch E1, key slot-4, at W time -8."
+          }
+        ]
+      },
+      {
+        "attemptId": "IA2",
+        "orderId": "OA",
+        "system": "warehouse",
+        "kind": "reservation",
+        "tenant": "ALPHA",
+        "warehouse": "WH",
+        "epoch": "E1",
+        "key": "slot-4",
+        "quantity": 2,
+        "unit": "kits",
+        "meaning": "reservation 2 for OA",
+        "referencedEffectId": null,
+        "causeId": null,
+        "witnesses": [
+          {
+            "sourceId": "J-SA",
+            "path": "journals/stock-a.md",
+            "quote": "[I02] Attempt IA2 retried IA1 at W time -7 using WH, E1 and slot-4. Its prose says two exhibition kits for OA; it requests the same quantity and business effect. Both client attempts received an acknowledged message."
+          },
+          {
+            "sourceId": "J-SA",
+            "path": "journals/stock-a.md",
+            "quote": "[I01] Attempt IA1 from tenant ALPHA requested two kits for order OA from stock provider WH, epoch E1, key slot-4, at W time -8."
+          }
+        ]
+      },
+      {
+        "attemptId": "IB1",
+        "orderId": "OB",
+        "system": "warehouse",
+        "kind": "reservation",
+        "tenant": null,
+        "warehouse": "WH",
+        "epoch": "E1",
+        "key": "slot-9",
+        "quantity": 1,
+        "unit": "kits",
+        "meaning": "reservation 1 for OB",
+        "referencedEffectId": null,
+        "causeId": null,
+        "witnesses": [
+          {
+            "sourceId": "J-SBM",
+            "path": "journals/stock-b-maintenance.md",
+            "quote": "[I03] Attempt IB1 requested one kit for OB from WH, epoch E1, key slot-9, at W time -6. The WH ledger committed effect SB, quantity 1, for that identity."
+          }
+        ]
+      },
+      {
+        "attemptId": "IM1",
+        "orderId": "OM",
+        "system": "warehouse",
+        "kind": "reservation",
+        "tenant": null,
+        "warehouse": "WH",
+        "epoch": "E2",
+        "key": "slot-4",
+        "quantity": 1,
+        "unit": "kits",
+        "meaning": "reservation 1 for OM",
+        "referencedEffectId": null,
+        "causeId": null,
+        "witnesses": [
+          {
+            "sourceId": "J-SBM",
+            "path": "journals/stock-b-maintenance.md",
+            "quote": "[I04] After the warehouse epoch became E2, attempt IM1 requested one maintenance kit for OM using WH, E2, key slot-4. The WH ledger committed effect SM, quantity 1. The epoch change does not cancel earlier E1 effects."
+          }
+        ]
+      },
+      {
+        "attemptId": "PA1",
+        "orderId": "OA",
+        "system": "bank",
+        "kind": "rental",
+        "tenant": "ALPHA",
+        "warehouse": null,
+        "epoch": null,
+        "key": "pay-7",
+        "quantity": 80,
+        "unit": "money",
+        "meaning": "rental 80 for OA",
+        "referencedEffectId": null,
+        "causeId": null,
+        "witnesses": [
+          {
+            "sourceId": "J-PA",
+            "path": "journals/bank-a.md",
+            "quote": "[I05] Attempt PA1 requested rental payment 80 for OA from bank B, tenant ALPHA, key pay-7. It names two kit rental shares; the client lost its reply."
+          }
+        ]
+      },
+      {
+        "attemptId": "PA2",
+        "orderId": "OA",
+        "system": "bank",
+        "kind": "rental",
+        "tenant": "ALPHA",
+        "warehouse": null,
+        "epoch": null,
+        "key": "pay-7",
+        "quantity": 80,
+        "unit": "money",
+        "meaning": "rental 80 for OA",
+        "referencedEffectId": null,
+        "causeId": null,
+        "witnesses": [
+          {
+            "sourceId": "J-PA",
+            "path": "journals/bank-a.md",
+            "quote": "[I06] PA2 retried the same ALPHA/pay-7 payment after a processor restart. Its description says rental of two kits for order OA, amount 80. No amount, order or effect kind changed."
+          }
+        ]
+      },
+      {
+        "attemptId": "DA1",
+        "orderId": "OA",
+        "system": "bank",
+        "kind": "deposit",
+        "tenant": "ALPHA",
+        "warehouse": null,
+        "epoch": null,
+        "key": "deposit-A",
+        "quantity": 12,
+        "unit": "money",
+        "meaning": "deposit 12 for OA",
+        "referencedEffectId": null,
+        "causeId": null,
+        "witnesses": [
+          {
+            "sourceId": "J-PA",
+            "path": "journals/bank-a.md",
+            "quote": "[I07] Attempt DA1 separately requested security deposit 12 for OA using tenant ALPHA, key deposit-A. The deposit is not one of the two rental shares."
+          }
+        ]
+      },
+      {
+        "attemptId": "PB1",
+        "orderId": "OB",
+        "system": "bank",
+        "kind": "rental",
+        "tenant": "BETA",
+        "warehouse": null,
+        "epoch": null,
+        "key": "pay-7",
+        "quantity": 40,
+        "unit": "money",
+        "meaning": "rental 40 for OB",
+        "referencedEffectId": null,
+        "causeId": null,
+        "witnesses": [
+          {
+            "sourceId": "J-PB",
+            "path": "journals/bank-b.md",
+            "quote": "[I08] Attempt PB1 requested rental payment 40 for OB using bank B, tenant BETA, key pay-7. Bank B committed effect PAYB, amount 40, at global time 18."
+          }
+        ]
+      },
+      {
+        "attemptId": "PBX",
+        "orderId": "OB",
+        "system": "bank",
+        "kind": "rental",
+        "tenant": "BETA",
+        "warehouse": null,
+        "epoch": null,
+        "key": "pay-7",
+        "quantity": 80,
+        "unit": "money",
+        "meaning": "rental 80 for OB",
+        "referencedEffectId": null,
+        "causeId": null,
+        "witnesses": [
+          {
+            "sourceId": "J-PB",
+            "path": "journals/bank-b.md",
+            "quote": "[I09] Later attempt PBX used BETA/pay-7 but requested amount 80 for OB. Bank B rejected PBX for incompatible payload; no effect was executed for PBX. The earlier PAYB receipt remains valid."
+          }
+        ]
+      },
+      {
+        "attemptId": "RA1",
+        "orderId": "OA",
+        "system": "bank",
+        "kind": "refund",
+        "tenant": "ALPHA",
+        "warehouse": null,
+        "epoch": null,
+        "key": "refund-A",
+        "quantity": 40,
+        "unit": "money",
+        "meaning": "refund 40 for OA",
+        "referencedEffectId": "PAYA",
+        "causeId": "CA",
+        "witnesses": [
+          {
+            "sourceId": "J-RA",
+            "path": "journals/refund-a.md",
+            "quote": "[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33."
+          }
+        ]
+      }
+    ],
+    "groups": [
+      [
+        "IA1",
+        "IA2"
+      ],
+      [
+        "IB1"
+      ],
+      [
+        "IM1"
+      ],
+      [
+        "PA1",
+        "PA2"
+      ],
+      [
+        "DA1"
+      ],
+      [
+        "PB1"
+      ],
+      [
+        "RA1"
+      ]
+    ],
+    "pairDecisions": [
+      {
+        "leftAttemptId": "IA1",
+        "rightAttemptId": "IA2",
+        "relation": "duplicate",
+        "scopeFields": [
+          "warehouse",
+          "epoch",
+          "key"
+        ],
+        "reason": "Same scoped key and unchanged business payload.",
+        "witnesses": [
+          {
+            "sourceId": "J-SA",
+            "path": "journals/stock-a.md",
+            "quote": "[I01] Attempt IA1 from tenant ALPHA requested two kits for order OA from stock provider WH, epoch E1, key slot-4, at W time -8."
+          },
+          {
+            "sourceId": "J-SA",
+            "path": "journals/stock-a.md",
+            "quote": "[I02] Attempt IA2 retried IA1 at W time -7 using WH, E1 and slot-4. Its prose says two exhibition kits for OA; it requests the same quantity and business effect. Both client attempts received an acknowledged message."
+          },
+          {
+            "sourceId": "J-SA",
+            "path": "journals/stock-a.md",
+            "quote": "[I01] Attempt IA1 from tenant ALPHA requested two kits for order OA from stock provider WH, epoch E1, key slot-4, at W time -8."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C01] Stock deduplication is scoped by warehouse, epoch and key. A repeat in that same scope with the same request meaning refers to one reservation effect. Reusing a key in a different epoch can create a different reservation."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C03] Payload equality means the same business order, effect kind and quantity or amount; cosmetic client prose is irrelevant. A mismatch cannot be repaired by assuming the latest payload replaced the original."
+          }
+        ]
+      },
+      {
+        "leftAttemptId": "IA1",
+        "rightAttemptId": "IM1",
+        "relation": "independent",
+        "scopeFields": [
+          "warehouse",
+          "epoch",
+          "key"
+        ],
+        "reason": "A required deduplication scope field differs.",
+        "witnesses": [
+          {
+            "sourceId": "J-SA",
+            "path": "journals/stock-a.md",
+            "quote": "[I01] Attempt IA1 from tenant ALPHA requested two kits for order OA from stock provider WH, epoch E1, key slot-4, at W time -8."
+          },
+          {
+            "sourceId": "J-SBM",
+            "path": "journals/stock-b-maintenance.md",
+            "quote": "[I04] After the warehouse epoch became E2, attempt IM1 requested one maintenance kit for OM using WH, E2, key slot-4. The WH ledger committed effect SM, quantity 1. The epoch change does not cancel earlier E1 effects."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C01] Stock deduplication is scoped by warehouse, epoch and key. A repeat in that same scope with the same request meaning refers to one reservation effect. Reusing a key in a different epoch can create a different reservation."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C03] Payload equality means the same business order, effect kind and quantity or amount; cosmetic client prose is irrelevant. A mismatch cannot be repaired by assuming the latest payload replaced the original."
+          }
+        ]
+      },
+      {
+        "leftAttemptId": "IA2",
+        "rightAttemptId": "IM1",
+        "relation": "independent",
+        "scopeFields": [
+          "warehouse",
+          "epoch",
+          "key"
+        ],
+        "reason": "A required deduplication scope field differs.",
+        "witnesses": [
+          {
+            "sourceId": "J-SA",
+            "path": "journals/stock-a.md",
+            "quote": "[I02] Attempt IA2 retried IA1 at W time -7 using WH, E1 and slot-4. Its prose says two exhibition kits for OA; it requests the same quantity and business effect. Both client attempts received an acknowledged message."
+          },
+          {
+            "sourceId": "J-SA",
+            "path": "journals/stock-a.md",
+            "quote": "[I01] Attempt IA1 from tenant ALPHA requested two kits for order OA from stock provider WH, epoch E1, key slot-4, at W time -8."
+          },
+          {
+            "sourceId": "J-SBM",
+            "path": "journals/stock-b-maintenance.md",
+            "quote": "[I04] After the warehouse epoch became E2, attempt IM1 requested one maintenance kit for OM using WH, E2, key slot-4. The WH ledger committed effect SM, quantity 1. The epoch change does not cancel earlier E1 effects."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C01] Stock deduplication is scoped by warehouse, epoch and key. A repeat in that same scope with the same request meaning refers to one reservation effect. Reusing a key in a different epoch can create a different reservation."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C03] Payload equality means the same business order, effect kind and quantity or amount; cosmetic client prose is irrelevant. A mismatch cannot be repaired by assuming the latest payload replaced the original."
+          }
+        ]
+      },
+      {
+        "leftAttemptId": "PA1",
+        "rightAttemptId": "PA2",
+        "relation": "duplicate",
+        "scopeFields": [
+          "tenant",
+          "key"
+        ],
+        "reason": "Same scoped key and unchanged business payload.",
+        "witnesses": [
+          {
+            "sourceId": "J-PA",
+            "path": "journals/bank-a.md",
+            "quote": "[I05] Attempt PA1 requested rental payment 80 for OA from bank B, tenant ALPHA, key pay-7. It names two kit rental shares; the client lost its reply."
+          },
+          {
+            "sourceId": "J-PA",
+            "path": "journals/bank-a.md",
+            "quote": "[I06] PA2 retried the same ALPHA/pay-7 payment after a processor restart. Its description says rental of two kits for order OA, amount 80. No amount, order or effect kind changed."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C02] Bank deduplication is scoped by tenant and key, and survives processor restarts. Equal key strings belonging to different tenants are independent. Equal tenant/key with incompatible payment meaning is rejected without a new effect."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C03] Payload equality means the same business order, effect kind and quantity or amount; cosmetic client prose is irrelevant. A mismatch cannot be repaired by assuming the latest payload replaced the original."
+          }
+        ]
+      },
+      {
+        "leftAttemptId": "PA1",
+        "rightAttemptId": "PB1",
+        "relation": "independent",
+        "scopeFields": [
+          "tenant",
+          "key"
+        ],
+        "reason": "A required deduplication scope field differs.",
+        "witnesses": [
+          {
+            "sourceId": "J-PA",
+            "path": "journals/bank-a.md",
+            "quote": "[I05] Attempt PA1 requested rental payment 80 for OA from bank B, tenant ALPHA, key pay-7. It names two kit rental shares; the client lost its reply."
+          },
+          {
+            "sourceId": "J-PB",
+            "path": "journals/bank-b.md",
+            "quote": "[I08] Attempt PB1 requested rental payment 40 for OB using bank B, tenant BETA, key pay-7. Bank B committed effect PAYB, amount 40, at global time 18."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C02] Bank deduplication is scoped by tenant and key, and survives processor restarts. Equal key strings belonging to different tenants are independent. Equal tenant/key with incompatible payment meaning is rejected without a new effect."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C03] Payload equality means the same business order, effect kind and quantity or amount; cosmetic client prose is irrelevant. A mismatch cannot be repaired by assuming the latest payload replaced the original."
+          }
+        ]
+      },
+      {
+        "leftAttemptId": "PA1",
+        "rightAttemptId": "PBX",
+        "relation": "independent",
+        "scopeFields": [
+          "tenant",
+          "key"
+        ],
+        "reason": "A required deduplication scope field differs.",
+        "witnesses": [
+          {
+            "sourceId": "J-PA",
+            "path": "journals/bank-a.md",
+            "quote": "[I05] Attempt PA1 requested rental payment 80 for OA from bank B, tenant ALPHA, key pay-7. It names two kit rental shares; the client lost its reply."
+          },
+          {
+            "sourceId": "J-PB",
+            "path": "journals/bank-b.md",
+            "quote": "[I09] Later attempt PBX used BETA/pay-7 but requested amount 80 for OB. Bank B rejected PBX for incompatible payload; no effect was executed for PBX. The earlier PAYB receipt remains valid."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C02] Bank deduplication is scoped by tenant and key, and survives processor restarts. Equal key strings belonging to different tenants are independent. Equal tenant/key with incompatible payment meaning is rejected without a new effect."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C03] Payload equality means the same business order, effect kind and quantity or amount; cosmetic client prose is irrelevant. A mismatch cannot be repaired by assuming the latest payload replaced the original."
+          }
+        ]
+      },
+      {
+        "leftAttemptId": "PA2",
+        "rightAttemptId": "PB1",
+        "relation": "independent",
+        "scopeFields": [
+          "tenant",
+          "key"
+        ],
+        "reason": "A required deduplication scope field differs.",
+        "witnesses": [
+          {
+            "sourceId": "J-PA",
+            "path": "journals/bank-a.md",
+            "quote": "[I06] PA2 retried the same ALPHA/pay-7 payment after a processor restart. Its description says rental of two kits for order OA, amount 80. No amount, order or effect kind changed."
+          },
+          {
+            "sourceId": "J-PB",
+            "path": "journals/bank-b.md",
+            "quote": "[I08] Attempt PB1 requested rental payment 40 for OB using bank B, tenant BETA, key pay-7. Bank B committed effect PAYB, amount 40, at global time 18."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C02] Bank deduplication is scoped by tenant and key, and survives processor restarts. Equal key strings belonging to different tenants are independent. Equal tenant/key with incompatible payment meaning is rejected without a new effect."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C03] Payload equality means the same business order, effect kind and quantity or amount; cosmetic client prose is irrelevant. A mismatch cannot be repaired by assuming the latest payload replaced the original."
+          }
+        ]
+      },
+      {
+        "leftAttemptId": "PA2",
+        "rightAttemptId": "PBX",
+        "relation": "independent",
+        "scopeFields": [
+          "tenant",
+          "key"
+        ],
+        "reason": "A required deduplication scope field differs.",
+        "witnesses": [
+          {
+            "sourceId": "J-PA",
+            "path": "journals/bank-a.md",
+            "quote": "[I06] PA2 retried the same ALPHA/pay-7 payment after a processor restart. Its description says rental of two kits for order OA, amount 80. No amount, order or effect kind changed."
+          },
+          {
+            "sourceId": "J-PB",
+            "path": "journals/bank-b.md",
+            "quote": "[I09] Later attempt PBX used BETA/pay-7 but requested amount 80 for OB. Bank B rejected PBX for incompatible payload; no effect was executed for PBX. The earlier PAYB receipt remains valid."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C02] Bank deduplication is scoped by tenant and key, and survives processor restarts. Equal key strings belonging to different tenants are independent. Equal tenant/key with incompatible payment meaning is rejected without a new effect."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C03] Payload equality means the same business order, effect kind and quantity or amount; cosmetic client prose is irrelevant. A mismatch cannot be repaired by assuming the latest payload replaced the original."
+          }
+        ]
+      },
+      {
+        "leftAttemptId": "PB1",
+        "rightAttemptId": "PBX",
+        "relation": "incompatible",
+        "scopeFields": [
+          "tenant",
+          "key"
+        ],
+        "reason": "Same scoped key with a changed business amount.",
+        "witnesses": [
+          {
+            "sourceId": "J-PB",
+            "path": "journals/bank-b.md",
+            "quote": "[I08] Attempt PB1 requested rental payment 40 for OB using bank B, tenant BETA, key pay-7. Bank B committed effect PAYB, amount 40, at global time 18."
+          },
+          {
+            "sourceId": "J-PB",
+            "path": "journals/bank-b.md",
+            "quote": "[I09] Later attempt PBX used BETA/pay-7 but requested amount 80 for OB. Bank B rejected PBX for incompatible payload; no effect was executed for PBX. The earlier PAYB receipt remains valid."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C02] Bank deduplication is scoped by tenant and key, and survives processor restarts. Equal key strings belonging to different tenants are independent. Equal tenant/key with incompatible payment meaning is rejected without a new effect."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C03] Payload equality means the same business order, effect kind and quantity or amount; cosmetic client prose is irrelevant. A mismatch cannot be repaired by assuming the latest payload replaced the original."
+          }
+        ]
+      }
+    ],
+    "rejectedAttemptIds": [
+      "PBX"
+    ],
+    "unresolved": []
+  },
+  "timeline": {
+    "clocks": [
+      {
+        "clock": "W",
+        "globalOffset": 20,
+        "applicableScope": "Every event in this snapshot",
+        "resetChangesOffset": false,
+        "witnesses": [
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T01] During every event in this snapshot, the worker W clock reads 0 when the global clock reads 20, and both advance at the same rate without resets. Thus a W reading is 20 less than its global time."
+          }
+        ]
+      },
+      {
+        "clock": "B",
+        "globalOffset": 0,
+        "applicableScope": "Every event in this snapshot",
+        "resetChangesOffset": false,
+        "witnesses": [
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T02] Carrier K and bank B timestamps already use the global clock. A processor restart changes neither B time nor the bank's tenant/key deduplication scope."
+          }
+        ]
+      },
+      {
+        "clock": "K",
+        "globalOffset": 0,
+        "applicableScope": "Every event in this snapshot",
+        "resetChangesOffset": false,
+        "witnesses": [
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T02] Carrier K and bank B timestamps already use the global clock. A processor restart changes neither B time nor the bank's tenant/key deduplication scope."
+          }
+        ]
+      },
+      {
+        "clock": "global",
+        "globalOffset": 0,
+        "applicableScope": "Every event in this snapshot",
+        "resetChangesOffset": false,
+        "witnesses": [
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T02] Carrier K and bank B timestamps already use the global clock. A processor restart changes neither B time nor the bank's tenant/key deduplication scope."
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "eventId": "IA1",
+        "localTime": -8,
+        "clock": "W",
+        "globalTime": 12,
+        "kind": "attempt",
+        "witnesses": [
+          {
+            "sourceId": "J-SA",
+            "path": "journals/stock-a.md",
+            "quote": "[I01] Attempt IA1 from tenant ALPHA requested two kits for order OA from stock provider WH, epoch E1, key slot-4, at W time -8."
+          },
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T01] During every event in this snapshot, the worker W clock reads 0 when the global clock reads 20, and both advance at the same rate without resets. Thus a W reading is 20 less than its global time."
+          }
+        ]
+      },
+      {
+        "eventId": "IA2",
+        "localTime": -7,
+        "clock": "W",
+        "globalTime": 13,
+        "kind": "retry",
+        "witnesses": [
+          {
+            "sourceId": "J-SA",
+            "path": "journals/stock-a.md",
+            "quote": "[I02] Attempt IA2 retried IA1 at W time -7 using WH, E1 and slot-4. Its prose says two exhibition kits for OA; it requests the same quantity and business effect. Both client attempts received an acknowledged message."
+          },
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T01] During every event in this snapshot, the worker W clock reads 0 when the global clock reads 20, and both advance at the same rate without resets. Thus a W reading is 20 less than its global time."
+          }
+        ]
+      },
+      {
+        "eventId": "IB1",
+        "localTime": -6,
+        "clock": "W",
+        "globalTime": 14,
+        "kind": "attempt",
+        "witnesses": [
+          {
+            "sourceId": "J-SBM",
+            "path": "journals/stock-b-maintenance.md",
+            "quote": "[I03] Attempt IB1 requested one kit for OB from WH, epoch E1, key slot-9, at W time -6. The WH ledger committed effect SB, quantity 1, for that identity."
+          },
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T01] During every event in this snapshot, the worker W clock reads 0 when the global clock reads 20, and both advance at the same rate without resets. Thus a W reading is 20 less than its global time."
+          }
+        ]
+      },
+      {
+        "eventId": "SA",
+        "localTime": -8,
+        "clock": "W",
+        "globalTime": 12,
+        "kind": "commit",
+        "witnesses": [
+          {
+            "sourceId": "R-SA",
+            "path": "receipts/stock-a.md",
+            "quote": "[R01] The WH stock ledger records one committed reservation effect SA for OA, quantity 2, warehouse WH, epoch E1, key slot-4. It references IA1 and covers retries of that identity; the effect committed at W time -8."
+          },
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T01] During every event in this snapshot, the worker W clock reads 0 when the global clock reads 20, and both advance at the same rate without resets. Thus a W reading is 20 less than its global time."
+          }
+        ]
+      },
+      {
+        "eventId": "PAYA",
+        "localTime": 15,
+        "clock": "B",
+        "globalTime": 15,
+        "kind": "commit",
+        "witnesses": [
+          {
+            "sourceId": "R-PA",
+            "path": "receipts/bank-a.md",
+            "quote": "[R03] Bank B reports committed rental effect PAYA for ALPHA/pay-7, order OA, amount 80, at global time 15. Its receipt references PA1."
+          },
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T02] Carrier K and bank B timestamps already use the global clock. A processor restart changes neither B time nor the bank's tenant/key deduplication scope."
+          }
+        ]
+      },
+      {
+        "eventId": "R04",
+        "localTime": 16,
+        "clock": "B",
+        "globalTime": 16,
+        "kind": "receipt-report",
+        "witnesses": [
+          {
+            "sourceId": "R-PA",
+            "path": "receipts/bank-a.md",
+            "quote": "[R04] The response to PA2 quotes the same bank effect ID PAYA and amount 80 at global time 16; it reports the earlier committed effect."
+          },
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T02] Carrier K and bank B timestamps already use the global clock. A processor restart changes neither B time nor the bank's tenant/key deduplication scope."
+          }
+        ]
+      },
+      {
+        "eventId": "DEPA",
+        "localTime": 17,
+        "clock": "B",
+        "globalTime": 17,
+        "kind": "commit",
+        "witnesses": [
+          {
+            "sourceId": "R-PA",
+            "path": "receipts/bank-a.md",
+            "quote": "[R05] Bank B reports committed deposit effect DEPA for ALPHA/deposit-A, order OA, amount 12, at global time 17."
+          },
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T02] Carrier K and bank B timestamps already use the global clock. A processor restart changes neither B time nor the bank's tenant/key deduplication scope."
+          }
+        ]
+      },
+      {
+        "eventId": "PAYB",
+        "localTime": 18,
+        "clock": "B",
+        "globalTime": 18,
+        "kind": "commit",
+        "witnesses": [
+          {
+            "sourceId": "J-PB",
+            "path": "journals/bank-b.md",
+            "quote": "[I08] Attempt PB1 requested rental payment 40 for OB using bank B, tenant BETA, key pay-7. Bank B committed effect PAYB, amount 40, at global time 18."
+          },
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T02] Carrier K and bank B timestamps already use the global clock. A processor restart changes neither B time nor the bank's tenant/key deduplication scope."
+          }
+        ]
+      },
+      {
+        "eventId": "H01",
+        "localTime": 24,
+        "clock": "global",
+        "globalTime": 24,
+        "kind": "manifest-print",
+        "witnesses": [
+          {
+            "sourceId": "O-HC",
+            "path": "operations/handover-cancel.md",
+            "quote": "[H01] At global time 24 a dispatch manifest printed two OA kit lines. Printing recorded a planned dispatch, not custody transfer."
+          }
+        ]
+      },
+      {
+        "eventId": "HA",
+        "localTime": 25,
+        "clock": "K",
+        "globalTime": 25,
+        "kind": "custody",
+        "witnesses": [
+          {
+            "sourceId": "O-HC",
+            "path": "operations/handover-cancel.md",
+            "quote": "[H02] Carrier K signed handover effect HA at global time 25 for exactly one OA kit drawn from reservation SA. The second OA kit stayed in WH; no OB kit was handed over."
+          },
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T02] Carrier K and bank B timestamps already use the global clock. A processor restart changes neither B time nor the bank's tenant/key deduplication scope."
+          }
+        ]
+      },
+      {
+        "eventId": "CA",
+        "localTime": 10,
+        "clock": "W",
+        "globalTime": 30,
+        "kind": "cancellation",
+        "witnesses": [
+          {
+            "sourceId": "O-HC",
+            "path": "operations/handover-cancel.md",
+            "quote": "[H03] The worker received cancellation CA for OA and CB for OB at W time 10. Both asked to stop the rentals and return whatever rental payments their contracts permit. Neither message asserts that any kit was returned."
+          },
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T01] During every event in this snapshot, the worker W clock reads 0 when the global clock reads 20, and both advance at the same rate without resets. Thus a W reading is 20 less than its global time."
+          }
+        ]
+      },
+      {
+        "eventId": "CB",
+        "localTime": 10,
+        "clock": "W",
+        "globalTime": 30,
+        "kind": "cancellation",
+        "witnesses": [
+          {
+            "sourceId": "O-HC",
+            "path": "operations/handover-cancel.md",
+            "quote": "[H03] The worker received cancellation CA for OA and CB for OB at W time 10. Both asked to stop the rentals and return whatever rental payments their contracts permit. Neither message asserts that any kit was returned."
+          },
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T01] During every event in this snapshot, the worker W clock reads 0 when the global clock reads 20, and both advance at the same rate without resets. Thus a W reading is 20 less than its global time."
+          }
+        ]
+      },
+      {
+        "eventId": "RA1",
+        "localTime": 12,
+        "clock": "W",
+        "globalTime": 32,
+        "kind": "refund-intent",
+        "witnesses": [
+          {
+            "sourceId": "J-RA",
+            "path": "journals/refund-a.md",
+            "quote": "[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33."
+          },
+          {
+            "sourceId": "O-CLOCK",
+            "path": "operations/clock.md",
+            "quote": "[T01] During every event in this snapshot, the worker W clock reads 0 when the global clock reads 20, and both advance at the same rate without resets. Thus a W reading is 20 less than its global time."
+          }
+        ]
+      },
+      {
+        "eventId": "I10",
+        "localTime": 33,
+        "clock": "global",
+        "globalTime": 33,
+        "kind": "processing-boundary",
+        "witnesses": [
+          {
+            "sourceId": "J-RA",
+            "path": "journals/refund-a.md",
+            "quote": "[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33."
+          }
+        ]
+      },
+      {
+        "eventId": "QUICK",
+        "localTime": 31,
+        "clock": "global",
+        "globalTime": 31,
+        "kind": "query-coverage",
+        "witnesses": [
+          {
+            "sourceId": "Q-BANK",
+            "path": "queries/bank-observations.md",
+            "quote": "[Q01] Query QUICK costs 1 and returns the bank's immutable history only through global time 31. It reports no refund-A entry. It returns the same answer whether REFA commits at time 33 or no effect occurs."
+          }
+        ]
+      },
+      {
+        "eventId": "FINAL",
+        "localTime": 34,
+        "clock": "global",
+        "globalTime": 34,
+        "kind": "query-coverage",
+        "witnesses": [
+          {
+            "sourceId": "Q-BANK",
+            "path": "queries/bank-observations.md",
+            "quote": "[Q02] Query FINAL costs 2 and covers refund-A through global time 34, after its processing boundary. It returns either committed(REFA,40) or definitive-absent(refund-A). These outcomes distinguish the two supported bank worlds."
+          }
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "causalEdges": [
+    {
+      "beforeId": "IA1",
+      "afterId": "SA",
+      "kind": "execution",
+      "witnesses": [
+        {
+          "sourceId": "R-SA",
+          "path": "receipts/stock-a.md",
+          "quote": "[R01] The WH stock ledger records one committed reservation effect SA for OA, quantity 2, warehouse WH, epoch E1, key slot-4. It references IA1 and covers retries of that identity; the effect committed at W time -8."
+        }
+      ]
+    },
+    {
+      "beforeId": "IA1",
+      "afterId": "IA2",
+      "kind": "retry",
+      "witnesses": [
+        {
+          "sourceId": "J-SA",
+          "path": "journals/stock-a.md",
+          "quote": "[I02] Attempt IA2 retried IA1 at W time -7 using WH, E1 and slot-4. Its prose says two exhibition kits for OA; it requests the same quantity and business effect. Both client attempts received an acknowledged message."
+        }
+      ]
+    },
+    {
+      "beforeId": "SA",
+      "afterId": "R02",
+      "kind": "retry",
+      "witnesses": [
+        {
+          "sourceId": "R-SA",
+          "path": "receipts/stock-a.md",
+          "quote": "[R02] A later worker response to IA2 repeats stock effect SA. It is another acknowledgment of SA, not a new ledger row."
+        }
+      ]
+    },
+    {
+      "beforeId": "IB1",
+      "afterId": "SB",
+      "kind": "execution",
+      "witnesses": [
+        {
+          "sourceId": "J-SBM",
+          "path": "journals/stock-b-maintenance.md",
+          "quote": "[I03] Attempt IB1 requested one kit for OB from WH, epoch E1, key slot-9, at W time -6. The WH ledger committed effect SB, quantity 1, for that identity."
+        }
+      ]
+    },
+    {
+      "beforeId": "IM1",
+      "afterId": "SM",
+      "kind": "execution",
+      "witnesses": [
+        {
+          "sourceId": "J-SBM",
+          "path": "journals/stock-b-maintenance.md",
+          "quote": "[I04] After the warehouse epoch became E2, attempt IM1 requested one maintenance kit for OM using WH, E2, key slot-4. The WH ledger committed effect SM, quantity 1. The epoch change does not cancel earlier E1 effects."
+        }
+      ]
+    },
+    {
+      "beforeId": "PA1",
+      "afterId": "PAYA",
+      "kind": "execution",
+      "witnesses": [
+        {
+          "sourceId": "R-PA",
+          "path": "receipts/bank-a.md",
+          "quote": "[R03] Bank B reports committed rental effect PAYA for ALPHA/pay-7, order OA, amount 80, at global time 15. Its receipt references PA1."
+        }
+      ]
+    },
+    {
+      "beforeId": "PA1",
+      "afterId": "PA2",
+      "kind": "retry",
+      "witnesses": [
+        {
+          "sourceId": "J-PA",
+          "path": "journals/bank-a.md",
+          "quote": "[I06] PA2 retried the same ALPHA/pay-7 payment after a processor restart. Its description says rental of two kits for order OA, amount 80. No amount, order or effect kind changed."
+        }
+      ]
+    },
+    {
+      "beforeId": "PAYA",
+      "afterId": "R04",
+      "kind": "retry",
+      "witnesses": [
+        {
+          "sourceId": "R-PA",
+          "path": "receipts/bank-a.md",
+          "quote": "[R04] The response to PA2 quotes the same bank effect ID PAYA and amount 80 at global time 16; it reports the earlier committed effect."
+        }
+      ]
+    },
+    {
+      "beforeId": "DA1",
+      "afterId": "DEPA",
+      "kind": "execution",
+      "witnesses": [
+        {
+          "sourceId": "J-PA",
+          "path": "journals/bank-a.md",
+          "quote": "[I07] Attempt DA1 separately requested security deposit 12 for OA using tenant ALPHA, key deposit-A. The deposit is not one of the two rental shares."
+        },
+        {
+          "sourceId": "R-PA",
+          "path": "receipts/bank-a.md",
+          "quote": "[R05] Bank B reports committed deposit effect DEPA for ALPHA/deposit-A, order OA, amount 12, at global time 17."
+        }
+      ]
+    },
+    {
+      "beforeId": "PB1",
+      "afterId": "PAYB",
+      "kind": "execution",
+      "witnesses": [
+        {
+          "sourceId": "J-PB",
+          "path": "journals/bank-b.md",
+          "quote": "[I08] Attempt PB1 requested rental payment 40 for OB using bank B, tenant BETA, key pay-7. Bank B committed effect PAYB, amount 40, at global time 18."
+        }
+      ]
+    },
+    {
+      "beforeId": "SA",
+      "afterId": "HA",
+      "kind": "custody",
+      "witnesses": [
+        {
+          "sourceId": "O-HC",
+          "path": "operations/handover-cancel.md",
+          "quote": "[H02] Carrier K signed handover effect HA at global time 25 for exactly one OA kit drawn from reservation SA. The second OA kit stayed in WH; no OB kit was handed over."
+        }
+      ]
+    },
+    {
+      "beforeId": "PAYA",
+      "afterId": "RA1",
+      "kind": "compensation",
+      "witnesses": [
+        {
+          "sourceId": "J-RA",
+          "path": "journals/refund-a.md",
+          "quote": "[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33."
+        }
+      ]
+    },
+    {
+      "beforeId": "CA",
+      "afterId": "RA1",
+      "kind": "compensation",
+      "witnesses": [
+        {
+          "sourceId": "J-RA",
+          "path": "journals/refund-a.md",
+          "quote": "[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33."
+        }
+      ]
+    }
+  ],
+  "ledger": {
+    "effects": [
+      {
+        "ledgerId": "SA",
+        "effectId": "SA",
+        "orderId": "OA",
+        "kind": "reservation",
+        "quantity": 2,
+        "unit": "kits",
+        "tenant": "ALPHA",
+        "key": "slot-4",
+        "referencedEffectId": null,
+        "causeId": null,
+        "attemptIds": [
+          "IA1",
+          "IA2"
+        ],
+        "possibleStatuses": [
+          "committed"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "R-SA",
+            "path": "receipts/stock-a.md",
+            "quote": "[R01] The WH stock ledger records one committed reservation effect SA for OA, quantity 2, warehouse WH, epoch E1, key slot-4. It references IA1 and covers retries of that identity; the effect committed at W time -8."
+          },
+          {
+            "sourceId": "R-SA",
+            "path": "receipts/stock-a.md",
+            "quote": "[R02] A later worker response to IA2 repeats stock effect SA. It is another acknowledgment of SA, not a new ledger row."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C01] Stock deduplication is scoped by warehouse, epoch and key. A repeat in that same scope with the same request meaning refers to one reservation effect. Reusing a key in a different epoch can create a different reservation."
+          }
+        ]
+      },
+      {
+        "ledgerId": "SB",
+        "effectId": "SB",
+        "orderId": "OB",
+        "kind": "reservation",
+        "quantity": 1,
+        "unit": "kits",
+        "tenant": null,
+        "key": "slot-9",
+        "referencedEffectId": null,
+        "causeId": null,
+        "attemptIds": [
+          "IB1"
+        ],
+        "possibleStatuses": [
+          "committed"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "J-SBM",
+            "path": "journals/stock-b-maintenance.md",
+            "quote": "[I03] Attempt IB1 requested one kit for OB from WH, epoch E1, key slot-9, at W time -6. The WH ledger committed effect SB, quantity 1, for that identity."
+          }
+        ]
+      },
+      {
+        "ledgerId": "SM",
+        "effectId": "SM",
+        "orderId": "OM",
+        "kind": "reservation",
+        "quantity": 1,
+        "unit": "kits",
+        "tenant": null,
+        "key": "slot-4",
+        "referencedEffectId": null,
+        "causeId": null,
+        "attemptIds": [
+          "IM1"
+        ],
+        "possibleStatuses": [
+          "committed"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "J-SBM",
+            "path": "journals/stock-b-maintenance.md",
+            "quote": "[I04] After the warehouse epoch became E2, attempt IM1 requested one maintenance kit for OM using WH, E2, key slot-4. The WH ledger committed effect SM, quantity 1. The epoch change does not cancel earlier E1 effects."
+          }
+        ]
+      },
+      {
+        "ledgerId": "PAYA",
+        "effectId": "PAYA",
+        "orderId": "OA",
+        "kind": "rental",
+        "quantity": 80,
+        "unit": "money",
+        "tenant": "ALPHA",
+        "key": "pay-7",
+        "referencedEffectId": null,
+        "causeId": null,
+        "attemptIds": [
+          "PA1",
+          "PA2"
+        ],
+        "possibleStatuses": [
+          "committed"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "R-PA",
+            "path": "receipts/bank-a.md",
+            "quote": "[R03] Bank B reports committed rental effect PAYA for ALPHA/pay-7, order OA, amount 80, at global time 15. Its receipt references PA1."
+          },
+          {
+            "sourceId": "R-PA",
+            "path": "receipts/bank-a.md",
+            "quote": "[R04] The response to PA2 quotes the same bank effect ID PAYA and amount 80 at global time 16; it reports the earlier committed effect."
+          },
+          {
+            "sourceId": "C-ID",
+            "path": "contracts/identity.md",
+            "quote": "[C02] Bank deduplication is scoped by tenant and key, and survives processor restarts. Equal key strings belonging to different tenants are independent. Equal tenant/key with incompatible payment meaning is rejected without a new effect."
+          }
+        ]
+      },
+      {
+        "ledgerId": "PAYB",
+        "effectId": "PAYB",
+        "orderId": "OB",
+        "kind": "rental",
+        "quantity": 40,
+        "unit": "money",
+        "tenant": "BETA",
+        "key": "pay-7",
+        "referencedEffectId": null,
+        "causeId": null,
+        "attemptIds": [
+          "PB1"
+        ],
+        "possibleStatuses": [
+          "committed"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "J-PB",
+            "path": "journals/bank-b.md",
+            "quote": "[I08] Attempt PB1 requested rental payment 40 for OB using bank B, tenant BETA, key pay-7. Bank B committed effect PAYB, amount 40, at global time 18."
+          },
+          {
+            "sourceId": "J-PB",
+            "path": "journals/bank-b.md",
+            "quote": "[I09] Later attempt PBX used BETA/pay-7 but requested amount 80 for OB. Bank B rejected PBX for incompatible payload; no effect was executed for PBX. The earlier PAYB receipt remains valid."
+          }
+        ]
+      },
+      {
+        "ledgerId": "DEPA",
+        "effectId": "DEPA",
+        "orderId": "OA",
+        "kind": "deposit",
+        "quantity": 12,
+        "unit": "money",
+        "tenant": "ALPHA",
+        "key": "deposit-A",
+        "referencedEffectId": null,
+        "causeId": null,
+        "attemptIds": [
+          "DA1"
+        ],
+        "possibleStatuses": [
+          "committed"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "J-PA",
+            "path": "journals/bank-a.md",
+            "quote": "[I07] Attempt DA1 separately requested security deposit 12 for OA using tenant ALPHA, key deposit-A. The deposit is not one of the two rental shares."
+          },
+          {
+            "sourceId": "R-PA",
+            "path": "receipts/bank-a.md",
+            "quote": "[R05] Bank B reports committed deposit effect DEPA for ALPHA/deposit-A, order OA, amount 12, at global time 17."
+          }
+        ]
+      },
+      {
+        "ledgerId": "RA1",
+        "effectId": null,
+        "orderId": "OA",
+        "kind": "refund",
+        "quantity": 40,
+        "unit": "money",
+        "tenant": "ALPHA",
+        "key": "refund-A",
+        "referencedEffectId": "PAYA",
+        "causeId": "CA",
+        "attemptIds": [
+          "RA1"
+        ],
+        "possibleStatuses": [
+          "committed",
+          "absent"
+        ],
+        "witnesses": [
+          {
+            "sourceId": "J-RA",
+            "path": "journals/refund-a.md",
+            "quote": "[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33."
+          },
+          {
+            "sourceId": "J-RA",
+            "path": "journals/refund-a.md",
+            "quote": "[I11] The client then lost contact and has no acknowledgment for RA1. There are exactly two still-supported bank outcomes for refund-A: a committed 40 refund REFA, or definitively no effect after the boundary. No partial refund or different amount is possible under this supplied contract."
+          }
+        ]
+      }
+    ],
+    "discardedAttemptIds": [
+      "PBX"
+    ],
+    "conflicts": []
+  },
+  "repair": {
+    "observations": {
+      "selected": [
+        {
+          "queryId": "FINAL",
+          "ledgerId": "RA1",
+          "cost": 2,
+          "coverageThrough": 34,
+          "processingBoundary": 33,
+          "answers": [
+            {
+              "answer": "committed",
+              "possibleStatuses": [
+                "committed"
+              ],
+              "establishesFinalAbsence": false,
+              "witnesses": [
+                {
+                  "sourceId": "Q-BANK",
+                  "path": "queries/bank-observations.md",
+                  "quote": "[Q02] Query FINAL costs 2 and covers refund-A through global time 34, after its processing boundary. It returns either committed(REFA,40) or definitive-absent(refund-A). These outcomes distinguish the two supported bank worlds."
+                },
+                {
+                  "sourceId": "J-RA",
+                  "path": "journals/refund-a.md",
+                  "quote": "[I11] The client then lost contact and has no acknowledgment for RA1. There are exactly two still-supported bank outcomes for refund-A: a committed 40 refund REFA, or definitively no effect after the boundary. No partial refund or different amount is possible under this supplied contract."
+                }
+              ]
+            },
+            {
+              "answer": "definitive-absent",
+              "possibleStatuses": [
+                "absent"
+              ],
+              "establishesFinalAbsence": true,
+              "witnesses": [
+                {
+                  "sourceId": "Q-BANK",
+                  "path": "queries/bank-observations.md",
+                  "quote": "[Q02] Query FINAL costs 2 and covers refund-A through global time 34, after its processing boundary. It returns either committed(REFA,40) or definitive-absent(refund-A). These outcomes distinguish the two supported bank worlds."
+                },
+                {
+                  "sourceId": "J-RA",
+                  "path": "journals/refund-a.md",
+                  "quote": "[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33."
+                },
+                {
+                  "sourceId": "C-REPAIR",
+                  "path": "contracts/repair.md",
+                  "quote": "[C11] Reissuing an uncertain refund is allowed only after a definitive absent result from a bank query whose coverage reaches the refund's processing boundary. Then reuse the original refund key. A committed result means no new refund write. A query before the boundary cannot license a retry."
+                }
+              ]
+            }
+          ],
+          "sufficient": true,
+          "reason": "Both source-supported outcomes are separated after processing boundary33.",
+          "witnesses": [
+            {
+              "sourceId": "Q-BANK",
+              "path": "queries/bank-observations.md",
+              "quote": "[Q02] Query FINAL costs 2 and covers refund-A through global time 34, after its processing boundary. It returns either committed(REFA,40) or definitive-absent(refund-A). These outcomes distinguish the two supported bank worlds."
+            },
+            {
+              "sourceId": "J-RA",
+              "path": "journals/refund-a.md",
+              "quote": "[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33."
+            },
+            {
+              "sourceId": "J-RA",
+              "path": "journals/refund-a.md",
+              "quote": "[I11] The client then lost contact and has no acknowledgment for RA1. There are exactly two still-supported bank outcomes for refund-A: a committed 40 refund REFA, or definitively no effect after the boundary. No partial refund or different amount is possible under this supplied contract."
+            },
+            {
+              "sourceId": "C-REPAIR",
+              "path": "contracts/repair.md",
+              "quote": "[C11] Reissuing an uncertain refund is allowed only after a definitive absent result from a bank query whose coverage reaches the refund's processing boundary. Then reuse the original refund key. A committed result means no new refund write. A query before the boundary cannot license a retry."
+            },
+            {
+              "sourceId": "C-REPAIR",
+              "path": "contracts/repair.md",
+              "quote": "[C12] Minimize worst-case external writes while meeting both cancellations. Observations are not writes. After minimizing worst-case writes, minimize total observation cost; an unnecessary query adds its stated cost even when it does not change the repair. Report all supported outcome branches; unknown outcomes may not be resolved by guessing."
+            }
+          ]
+        }
+      ],
+      "rejected": [
+        {
+          "queryId": "QUICK",
+          "ledgerId": "RA1",
+          "cost": 1,
+          "coverageThrough": 31,
+          "processingBoundary": 33,
+          "answers": [
+            {
+              "answer": "no-refund-A-through-31",
+              "possibleStatuses": [
+                "committed",
+                "absent"
+              ],
+              "establishesFinalAbsence": false,
+              "witnesses": [
+                {
+                  "sourceId": "Q-BANK",
+                  "path": "queries/bank-observations.md",
+                  "quote": "[Q01] Query QUICK costs 1 and returns the bank's immutable history only through global time 31. It reports no refund-A entry. It returns the same answer whether REFA commits at time 33 or no effect occurs."
+                },
+                {
+                  "sourceId": "J-RA",
+                  "path": "journals/refund-a.md",
+                  "quote": "[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33."
+                }
+              ]
+            }
+          ],
+          "sufficient": false,
+          "reason": "Coverage31 precedes refund intent32 and processing boundary33; either later outcome remains possible.",
+          "witnesses": [
+            {
+              "sourceId": "Q-BANK",
+              "path": "queries/bank-observations.md",
+              "quote": "[Q01] Query QUICK costs 1 and returns the bank's immutable history only through global time 31. It reports no refund-A entry. It returns the same answer whether REFA commits at time 33 or no effect occurs."
+            },
+            {
+              "sourceId": "J-RA",
+              "path": "journals/refund-a.md",
+              "quote": "[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33."
+            },
+            {
+              "sourceId": "O-CLOCK",
+              "path": "operations/clock.md",
+              "quote": "[T01] During every event in this snapshot, the worker W clock reads 0 when the global clock reads 20, and both advance at the same rate without resets. Thus a W reading is 20 less than its global time."
+            },
+            {
+              "sourceId": "C-REPAIR",
+              "path": "contracts/repair.md",
+              "quote": "[C11] Reissuing an uncertain refund is allowed only after a definitive absent result from a bank query whose coverage reaches the refund's processing boundary. Then reuse the original refund key. A committed result means no new refund write. A query before the boundary cannot license a retry."
+            }
+          ]
+        }
+      ],
+      "unresolved": []
+    },
+    "candidate": {
+      "coveredObligationIds": [
+        "CA",
+        "CB"
+      ],
+      "commonActions": [
+        {
+          "actionId": "release-unused-A",
+          "kind": "release",
+          "orderId": "OA",
+          "subjectEffectId": "SA",
+          "quantity": 1,
+          "unit": "kits",
+          "tenant": null,
+          "key": null,
+          "causeId": "CA",
+          "dependsOn": [],
+          "witnesses": [
+            {
+              "sourceId": "R-SA",
+              "path": "receipts/stock-a.md",
+              "quote": "[R01] The WH stock ledger records one committed reservation effect SA for OA, quantity 2, warehouse WH, epoch E1, key slot-4. It references IA1 and covers retries of that identity; the effect committed at W time -8."
+            },
+            {
+              "sourceId": "O-HC",
+              "path": "operations/handover-cancel.md",
+              "quote": "[H02] Carrier K signed handover effect HA at global time 25 for exactly one OA kit drawn from reservation SA. The second OA kit stayed in WH; no OB kit was handed over."
+            },
+            {
+              "sourceId": "O-HC",
+              "path": "operations/handover-cancel.md",
+              "quote": "[H03] The worker received cancellation CA for OA and CB for OB at W time 10. Both asked to stop the rentals and return whatever rental payments their contracts permit. Neither message asserts that any kit was returned."
+            },
+            {
+              "sourceId": "C-CANCEL",
+              "path": "contracts/cancellation.md",
+              "quote": "[C07] Each kit rents for 40 units of money. For a cancellation received after signed handover, the unhanded kits are refundable and releasable; handed-over rental shares remain payable. A cancellation received before handover would void every rental share, even if a later mistaken handover required a separate recovery. Compare actual global times."
+            },
+            {
+              "sourceId": "C-REPAIR",
+              "path": "contracts/repair.md",
+              "quote": "[C10] A repair policy may release unused reservations, refund entitled rental shares and request one of the listed bank observations. Release and refund for different effect kinds may occur independently. Protect reservations outside the target orders."
+            }
+          ]
+        },
+        {
+          "actionId": "release-unused-B",
+          "kind": "release",
+          "orderId": "OB",
+          "subjectEffectId": "SB",
+          "quantity": 1,
+          "unit": "kits",
+          "tenant": null,
+          "key": null,
+          "causeId": "CB",
+          "dependsOn": [],
+          "witnesses": [
+            {
+              "sourceId": "J-SBM",
+              "path": "journals/stock-b-maintenance.md",
+              "quote": "[I03] Attempt IB1 requested one kit for OB from WH, epoch E1, key slot-9, at W time -6. The WH ledger committed effect SB, quantity 1, for that identity."
+            },
+            {
+              "sourceId": "O-HC",
+              "path": "operations/handover-cancel.md",
+              "quote": "[H02] Carrier K signed handover effect HA at global time 25 for exactly one OA kit drawn from reservation SA. The second OA kit stayed in WH; no OB kit was handed over."
+            },
+            {
+              "sourceId": "O-HC",
+              "path": "operations/handover-cancel.md",
+              "quote": "[H03] The worker received cancellation CA for OA and CB for OB at W time 10. Both asked to stop the rentals and return whatever rental payments their contracts permit. Neither message asserts that any kit was returned."
+            },
+            {
+              "sourceId": "C-CANCEL",
+              "path": "contracts/cancellation.md",
+              "quote": "[C07] Each kit rents for 40 units of money. For a cancellation received after signed handover, the unhanded kits are refundable and releasable; handed-over rental shares remain payable. A cancellation received before handover would void every rental share, even if a later mistaken handover required a separate recovery. Compare actual global times."
+            },
+            {
+              "sourceId": "C-REPAIR",
+              "path": "contracts/repair.md",
+              "quote": "[C10] A repair policy may release unused reservations, refund entitled rental shares and request one of the listed bank observations. Release and refund for different effect kinds may occur independently. Protect reservations outside the target orders."
+            }
+          ]
+        },
+        {
+          "actionId": "refund-B",
+          "kind": "refund",
+          "orderId": "OB",
+          "subjectEffectId": "PAYB",
+          "quantity": 40,
+          "unit": "money",
+          "tenant": "BETA",
+          "key": "refund-B",
+          "causeId": "CB",
+          "dependsOn": [],
+          "witnesses": [
+            {
+              "sourceId": "J-PB",
+              "path": "journals/bank-b.md",
+              "quote": "[I08] Attempt PB1 requested rental payment 40 for OB using bank B, tenant BETA, key pay-7. Bank B committed effect PAYB, amount 40, at global time 18."
+            },
+            {
+              "sourceId": "O-HC",
+              "path": "operations/handover-cancel.md",
+              "quote": "[H03] The worker received cancellation CA for OA and CB for OB at W time 10. Both asked to stop the rentals and return whatever rental payments their contracts permit. Neither message asserts that any kit was returned."
+            },
+            {
+              "sourceId": "Q-BANK",
+              "path": "queries/bank-observations.md",
+              "quote": "[Q03] No refund intent or committed refund exists for OB. A fresh OB rental refund must use tenant BETA, key refund-B and reference PAYB; it is a new authorized write rather than a retry of refund-A."
+            },
+            {
+              "sourceId": "C-CANCEL",
+              "path": "contracts/cancellation.md",
+              "quote": "[C07] Each kit rents for 40 units of money. For a cancellation received after signed handover, the unhanded kits are refundable and releasable; handed-over rental shares remain payable. A cancellation received before handover would void every rental share, even if a later mistaken handover required a separate recovery. Compare actual global times."
+            },
+            {
+              "sourceId": "C-REPAIR",
+              "path": "contracts/repair.md",
+              "quote": "[C10] A repair policy may release unused reservations, refund entitled rental shares and request one of the listed bank observations. Release and refund for different effect kinds may occur independently. Protect reservations outside the target orders."
+            }
+          ]
+        }
+      ],
+      "branches": [
+        {
+          "conditions": [
+            {
+              "queryId": "FINAL",
+              "answer": "committed",
+              "ledgerId": "RA1",
+              "status": "committed"
+            }
+          ],
+          "actions": []
+        },
+        {
+          "conditions": [
+            {
+              "queryId": "FINAL",
+              "answer": "definitive-absent",
+              "ledgerId": "RA1",
+              "status": "absent"
+            }
+          ],
+          "actions": [
+            {
+              "actionId": "refund-A-after-absence",
+              "kind": "refund",
+              "orderId": "OA",
+              "subjectEffectId": "PAYA",
+              "quantity": 40,
+              "unit": "money",
+              "tenant": "ALPHA",
+              "key": "refund-A",
+              "causeId": "CA",
+              "dependsOn": [],
+              "witnesses": [
+                {
+                  "sourceId": "J-RA",
+                  "path": "journals/refund-a.md",
+                  "quote": "[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33."
+                },
+                {
+                  "sourceId": "J-RA",
+                  "path": "journals/refund-a.md",
+                  "quote": "[I11] The client then lost contact and has no acknowledgment for RA1. There are exactly two still-supported bank outcomes for refund-A: a committed 40 refund REFA, or definitively no effect after the boundary. No partial refund or different amount is possible under this supplied contract."
+                },
+                {
+                  "sourceId": "Q-BANK",
+                  "path": "queries/bank-observations.md",
+                  "quote": "[Q02] Query FINAL costs 2 and covers refund-A through global time 34, after its processing boundary. It returns either committed(REFA,40) or definitive-absent(refund-A). These outcomes distinguish the two supported bank worlds."
+                },
+                {
+                  "sourceId": "C-REPAIR",
+                  "path": "contracts/repair.md",
+                  "quote": "[C11] Reissuing an uncertain refund is allowed only after a definitive absent result from a bank query whose coverage reaches the refund's processing boundary. Then reuse the original refund key. A committed result means no new refund write. A query before the boundary cannot license a retry."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "worstCaseWrites": 4,
+      "observationCost": 2,
+      "rejectedReasons": [
+        "QUICK does not resolve the repair-relevant uncertainty.",
+        "A second refund write after a committed result would exceed the rental entitlement.",
+        "The handed-over unit, deposit and maintenance reservation are protected."
+      ]
+    },
+    "obligations": {
+      "obligations": [
+        {
+          "obligationId": "CA",
+          "orderId": "OA",
+          "cancellationId": "CA",
+          "reservationEffectId": "SA",
+          "paymentEffectId": "PAYA",
+          "releaseQuantity": 1,
+          "totalRefundEntitlement": 40,
+          "confirmedRefund": 0,
+          "uncertainRefundLedgerIds": [
+            "RA1"
+          ],
+          "protectedEffectIds": [
+            "DEPA"
+          ],
+          "witnesses": [
+            {
+              "sourceId": "C-CANCEL",
+              "path": "contracts/cancellation.md",
+              "quote": "[C07] Each kit rents for 40 units of money. For a cancellation received after signed handover, the unhanded kits are refundable and releasable; handed-over rental shares remain payable. A cancellation received before handover would void every rental share, even if a later mistaken handover required a separate recovery. Compare actual global times."
+            },
+            {
+              "sourceId": "C-CANCEL",
+              "path": "contracts/cancellation.md",
+              "quote": "[C08] An order's security deposit is a separate effect from rental payment. It remains held while that order has any kit in carrier or customer custody; cancellation is not return evidence."
+            },
+            {
+              "sourceId": "C-CANCEL",
+              "path": "contracts/cancellation.md",
+              "quote": "[C09] Refund only the remaining entitled amount after confirmed refunds for the same cause. Do not treat an unresolved refund as zero, and do not settle a deposit with a rental refund."
+            },
+            {
+              "sourceId": "O-HC",
+              "path": "operations/handover-cancel.md",
+              "quote": "[H02] Carrier K signed handover effect HA at global time 25 for exactly one OA kit drawn from reservation SA. The second OA kit stayed in WH; no OB kit was handed over."
+            },
+            {
+              "sourceId": "O-HC",
+              "path": "operations/handover-cancel.md",
+              "quote": "[H03] The worker received cancellation CA for OA and CB for OB at W time 10. Both asked to stop the rentals and return whatever rental payments their contracts permit. Neither message asserts that any kit was returned."
+            },
+            {
+              "sourceId": "R-SA",
+              "path": "receipts/stock-a.md",
+              "quote": "[R01] The WH stock ledger records one committed reservation effect SA for OA, quantity 2, warehouse WH, epoch E1, key slot-4. It references IA1 and covers retries of that identity; the effect committed at W time -8."
+            },
+            {
+              "sourceId": "R-PA",
+              "path": "receipts/bank-a.md",
+              "quote": "[R03] Bank B reports committed rental effect PAYA for ALPHA/pay-7, order OA, amount 80, at global time 15. Its receipt references PA1."
+            },
+            {
+              "sourceId": "R-PA",
+              "path": "receipts/bank-a.md",
+              "quote": "[R05] Bank B reports committed deposit effect DEPA for ALPHA/deposit-A, order OA, amount 12, at global time 17."
+            },
+            {
+              "sourceId": "J-RA",
+              "path": "journals/refund-a.md",
+              "quote": "[I10] At W time 12 the worker wrote intent RA1 to refund 40 of OA rental payment PAYA for cancellation CA. It used bank B, tenant ALPHA, key refund-A. The processing boundary for this refund is global time 33."
+            },
+            {
+              "sourceId": "J-RA",
+              "path": "journals/refund-a.md",
+              "quote": "[I11] The client then lost contact and has no acknowledgment for RA1. There are exactly two still-supported bank outcomes for refund-A: a committed 40 refund REFA, or definitively no effect after the boundary. No partial refund or different amount is possible under this supplied contract."
+            },
+            {
+              "sourceId": "O-CLOCK",
+              "path": "operations/clock.md",
+              "quote": "[T01] During every event in this snapshot, the worker W clock reads 0 when the global clock reads 20, and both advance at the same rate without resets. Thus a W reading is 20 less than its global time."
+            }
+          ]
+        },
+        {
+          "obligationId": "CB",
+          "orderId": "OB",
+          "cancellationId": "CB",
+          "reservationEffectId": "SB",
+          "paymentEffectId": "PAYB",
+          "releaseQuantity": 1,
+          "totalRefundEntitlement": 40,
+          "confirmedRefund": 0,
+          "uncertainRefundLedgerIds": [],
+          "protectedEffectIds": [],
+          "witnesses": [
+            {
+              "sourceId": "C-CANCEL",
+              "path": "contracts/cancellation.md",
+              "quote": "[C07] Each kit rents for 40 units of money. For a cancellation received after signed handover, the unhanded kits are refundable and releasable; handed-over rental shares remain payable. A cancellation received before handover would void every rental share, even if a later mistaken handover required a separate recovery. Compare actual global times."
+            },
+            {
+              "sourceId": "C-CANCEL",
+              "path": "contracts/cancellation.md",
+              "quote": "[C09] Refund only the remaining entitled amount after confirmed refunds for the same cause. Do not treat an unresolved refund as zero, and do not settle a deposit with a rental refund."
+            },
+            {
+              "sourceId": "O-HC",
+              "path": "operations/handover-cancel.md",
+              "quote": "[H02] Carrier K signed handover effect HA at global time 25 for exactly one OA kit drawn from reservation SA. The second OA kit stayed in WH; no OB kit was handed over."
+            },
+            {
+              "sourceId": "O-HC",
+              "path": "operations/handover-cancel.md",
+              "quote": "[H03] The worker received cancellation CA for OA and CB for OB at W time 10. Both asked to stop the rentals and return whatever rental payments their contracts permit. Neither message asserts that any kit was returned."
+            },
+            {
+              "sourceId": "J-SBM",
+              "path": "journals/stock-b-maintenance.md",
+              "quote": "[I03] Attempt IB1 requested one kit for OB from WH, epoch E1, key slot-9, at W time -6. The WH ledger committed effect SB, quantity 1, for that identity."
+            },
+            {
+              "sourceId": "J-PB",
+              "path": "journals/bank-b.md",
+              "quote": "[I08] Attempt PB1 requested rental payment 40 for OB using bank B, tenant BETA, key pay-7. Bank B committed effect PAYB, amount 40, at global time 18."
+            },
+            {
+              "sourceId": "Q-BANK",
+              "path": "queries/bank-observations.md",
+              "quote": "[Q03] No refund intent or committed refund exists for OB. A fresh OB rental refund must use tenant BETA, key refund-B and reference PAYB; it is a new authorized write rather than a retry of refund-A."
+            },
+            {
+              "sourceId": "O-CLOCK",
+              "path": "operations/clock.md",
+              "quote": "[T01] During every event in this snapshot, the worker W clock reads 0 when the global clock reads 20, and both advance at the same rate without resets. Thus a W reading is 20 less than its global time."
+            }
+          ]
+        }
+      ],
+      "protectedEffectIds": [
+        "DEPA",
+        "SM"
+      ],
+      "initialStock": 5,
+      "currentFree": 1,
+      "inUse": 1,
+      "currentReserved": 3,
+      "confirmedCash": 132,
+      "uncertainRefundLedgerIds": [
+        "RA1"
+      ],
+      "unresolved": [],
+      "witnesses": [
+        {
+          "sourceId": "O-POOL",
+          "path": "operations/pool.md",
+          "quote": "[S01] Warehouse WH has exactly five individually interchangeable kits at this snapshot's origin, none initially reserved or handed over. Committed reservations subtract free units; handover transfers reserved units to in-use custody without restoring free units; release restores only unused reserved units."
+        },
+        {
+          "sourceId": "O-POOL",
+          "path": "operations/pool.md",
+          "quote": "[S02] The target orders are OA and OB. Maintenance reservation OM is not a target order and must remain reserved. No kit has been returned in this snapshot; do not infer a return from a cancellation."
+        },
+        {
+          "sourceId": "R-SA",
+          "path": "receipts/stock-a.md",
+          "quote": "[R01] The WH stock ledger records one committed reservation effect SA for OA, quantity 2, warehouse WH, epoch E1, key slot-4. It references IA1 and covers retries of that identity; the effect committed at W time -8."
+        },
+        {
+          "sourceId": "J-SBM",
+          "path": "journals/stock-b-maintenance.md",
+          "quote": "[I03] Attempt IB1 requested one kit for OB from WH, epoch E1, key slot-9, at W time -6. The WH ledger committed effect SB, quantity 1, for that identity."
+        },
+        {
+          "sourceId": "J-SBM",
+          "path": "journals/stock-b-maintenance.md",
+          "quote": "[I04] After the warehouse epoch became E2, attempt IM1 requested one maintenance kit for OM using WH, E2, key slot-4. The WH ledger committed effect SM, quantity 1. The epoch change does not cancel earlier E1 effects."
+        },
+        {
+          "sourceId": "O-HC",
+          "path": "operations/handover-cancel.md",
+          "quote": "[H02] Carrier K signed handover effect HA at global time 25 for exactly one OA kit drawn from reservation SA. The second OA kit stayed in WH; no OB kit was handed over."
+        },
+        {
+          "sourceId": "R-PA",
+          "path": "receipts/bank-a.md",
+          "quote": "[R03] Bank B reports committed rental effect PAYA for ALPHA/pay-7, order OA, amount 80, at global time 15. Its receipt references PA1."
+        },
+        {
+          "sourceId": "R-PA",
+          "path": "receipts/bank-a.md",
+          "quote": "[R05] Bank B reports committed deposit effect DEPA for ALPHA/deposit-A, order OA, amount 12, at global time 17."
+        },
+        {
+          "sourceId": "J-PB",
+          "path": "journals/bank-b.md",
+          "quote": "[I08] Attempt PB1 requested rental payment 40 for OB using bank B, tenant BETA, key pay-7. Bank B committed effect PAYB, amount 40, at global time 18."
+        },
+        {
+          "sourceId": "J-RA",
+          "path": "journals/refund-a.md",
+          "quote": "[I11] The client then lost contact and has no acknowledgment for RA1. There are exactly two still-supported bank outcomes for refund-A: a committed 40 refund REFA, or definitively no effect after the boundary. No partial refund or different amount is possible under this supplied contract."
+        },
+        {
+          "sourceId": "O-BOUND",
+          "path": "operations/source-boundary.md",
+          "quote": "[B01] This investigation's as-of time is global 34. The snapshot contains all stock commits, handovers, target rental charges, deposits and confirmed refund receipts relevant to OA and OB. Its one deliberately incomplete fact is the outcome of ALPHA/refund-A described in I11."
+        }
+      ]
+    },
+    "blockedReasons": []
+  },
+  "currentCashPossibilities": [
+    92,
+    132
+  ],
+  "branchAccounting": [
+    {
+      "conditions": [
+        {
+          "queryId": "FINAL",
+          "answer": "committed"
+        }
+      ],
+      "startingCash": 92,
+      "finalCash": 52,
+      "free": 3,
+      "inUse": 1,
+      "reserved": 1,
+      "writeCount": 3,
+      "protectedEffectIds": [
+        "SM",
+        "DEPA"
+      ]
+    },
+    {
+      "conditions": [
+        {
+          "queryId": "FINAL",
+          "answer": "definitive-absent"
+        }
+      ],
+      "startingCash": 132,
+      "finalCash": 52,
+      "free": 3,
+      "inUse": 1,
+      "reserved": 1,
+      "writeCount": 4,
+      "protectedEffectIds": [
+        "SM",
+        "DEPA"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "severity": "defended",
+      "proposition": "Tenant and warehouse epoch are scoped independently; shared raw keys do not merge their effects.",
+      "witnesses": [
+        {
+          "sourceId": "C-ID",
+          "path": "contracts/identity.md",
+          "quote": "[C01] Stock deduplication is scoped by warehouse, epoch and key. A repeat in that same scope with the same request meaning refers to one reservation effect. Reusing a key in a different epoch can create a different reservation."
+        },
+        {
+          "sourceId": "C-ID",
+          "path": "contracts/identity.md",
+          "quote": "[C02] Bank deduplication is scoped by tenant and key, and survives processor restarts. Equal key strings belonging to different tenants are independent. Equal tenant/key with incompatible payment meaning is rejected without a new effect."
+        },
+        {
+          "sourceId": "J-SA",
+          "path": "journals/stock-a.md",
+          "quote": "[I01] Attempt IA1 from tenant ALPHA requested two kits for order OA from stock provider WH, epoch E1, key slot-4, at W time -8."
+        },
+        {
+          "sourceId": "J-SBM",
+          "path": "journals/stock-b-maintenance.md",
+          "quote": "[I04] After the warehouse epoch became E2, attempt IM1 requested one maintenance kit for OM using WH, E2, key slot-4. The WH ledger committed effect SM, quantity 1. The epoch change does not cancel earlier E1 effects."
+        },
+        {
+          "sourceId": "J-PA",
+          "path": "journals/bank-a.md",
+          "quote": "[I05] Attempt PA1 requested rental payment 80 for OA from bank B, tenant ALPHA, key pay-7. It names two kit rental shares; the client lost its reply."
+        },
+        {
+          "sourceId": "J-PB",
+          "path": "journals/bank-b.md",
+          "quote": "[I08] Attempt PB1 requested rental payment 40 for OB using bank B, tenant BETA, key pay-7. Bank B committed effect PAYB, amount 40, at global time 18."
+        }
+      ]
+    },
+    {
+      "severity": "defended",
+      "proposition": "Local cancellation10 is global30, after signed custody25; only the unused OA rental share is refunded.",
+      "witnesses": [
+        {
+          "sourceId": "O-CLOCK",
+          "path": "operations/clock.md",
+          "quote": "[T01] During every event in this snapshot, the worker W clock reads 0 when the global clock reads 20, and both advance at the same rate without resets. Thus a W reading is 20 less than its global time."
+        },
+        {
+          "sourceId": "O-HC",
+          "path": "operations/handover-cancel.md",
+          "quote": "[H02] Carrier K signed handover effect HA at global time 25 for exactly one OA kit drawn from reservation SA. The second OA kit stayed in WH; no OB kit was handed over."
+        },
+        {
+          "sourceId": "O-HC",
+          "path": "operations/handover-cancel.md",
+          "quote": "[H03] The worker received cancellation CA for OA and CB for OB at W time 10. Both asked to stop the rentals and return whatever rental payments their contracts permit. Neither message asserts that any kit was returned."
+        },
+        {
+          "sourceId": "C-CANCEL",
+          "path": "contracts/cancellation.md",
+          "quote": "[C07] Each kit rents for 40 units of money. For a cancellation received after signed handover, the unhanded kits are refundable and releasable; handed-over rental shares remain payable. A cancellation received before handover would void every rental share, even if a later mistaken handover required a separate recovery. Compare actual global times."
+        }
+      ]
+    },
+    {
+      "severity": "defended",
+      "proposition": "Printed dispatch does not transfer both units; one unused OA unit and one OB unit remain releasable.",
+      "witnesses": [
+        {
+          "sourceId": "O-HC",
+          "path": "operations/handover-cancel.md",
+          "quote": "[H01] At global time 24 a dispatch manifest printed two OA kit lines. Printing recorded a planned dispatch, not custody transfer."
+        },
+        {
+          "sourceId": "O-HC",
+          "path": "operations/handover-cancel.md",
+          "quote": "[H02] Carrier K signed handover effect HA at global time 25 for exactly one OA kit drawn from reservation SA. The second OA kit stayed in WH; no OB kit was handed over."
+        },
+        {
+          "sourceId": "C-EV",
+          "path": "contracts/evidence.md",
+          "quote": "[C06] A printed dispatch manifest is not a physical handover. Only a signed carrier handover establishes transferred custody. A stock reservation consumed by handover cannot be released as unused stock."
+        }
+      ]
+    },
+    {
+      "severity": "defended",
+      "proposition": "Custody protects the separate deposit and nontarget maintenance remains reserved.",
+      "witnesses": [
+        {
+          "sourceId": "C-CANCEL",
+          "path": "contracts/cancellation.md",
+          "quote": "[C08] An order's security deposit is a separate effect from rental payment. It remains held while that order has any kit in carrier or customer custody; cancellation is not return evidence."
+        },
+        {
+          "sourceId": "O-POOL",
+          "path": "operations/pool.md",
+          "quote": "[S02] The target orders are OA and OB. Maintenance reservation OM is not a target order and must remain reserved. No kit has been returned in this snapshot; do not infer a return from a cancellation."
+        },
+        {
+          "sourceId": "J-SBM",
+          "path": "journals/stock-b-maintenance.md",
+          "quote": "[I04] After the warehouse epoch became E2, attempt IM1 requested one maintenance kit for OM using WH, E2, key slot-4. The WH ledger committed effect SM, quantity 1. The epoch change does not cancel earlier E1 effects."
+        },
+        {
+          "sourceId": "R-PA",
+          "path": "receipts/bank-a.md",
+          "quote": "[R05] Bank B reports committed deposit effect DEPA for ALPHA/deposit-A, order OA, amount 12, at global time 17."
+        }
+      ]
+    },
+    {
+      "severity": "defended",
+      "proposition": "The two outcome branches leave identical final stock and cash, while the absent branch needs one extra write.",
+      "witnesses": [
+        {
+          "sourceId": "J-RA",
+          "path": "journals/refund-a.md",
+          "quote": "[I11] The client then lost contact and has no acknowledgment for RA1. There are exactly two still-supported bank outcomes for refund-A: a committed 40 refund REFA, or definitively no effect after the boundary. No partial refund or different amount is possible under this supplied contract."
+        },
+        {
+          "sourceId": "Q-BANK",
+          "path": "queries/bank-observations.md",
+          "quote": "[Q02] Query FINAL costs 2 and covers refund-A through global time 34, after its processing boundary. It returns either committed(REFA,40) or definitive-absent(refund-A). These outcomes distinguish the two supported bank worlds."
+        },
+        {
+          "sourceId": "C-REPAIR",
+          "path": "contracts/repair.md",
+          "quote": "[C11] Reissuing an uncertain refund is allowed only after a definitive absent result from a bank query whose coverage reaches the refund's processing boundary. Then reuse the original refund key. A committed result means no new refund write. A query before the boundary cannot license a retry."
+        },
+        {
+          "sourceId": "C-REPAIR",
+          "path": "contracts/repair.md",
+          "quote": "[C12] Minimize worst-case external writes while meeting both cancellations. Observations are not writes. After minimizing worst-case writes, minimize total observation cost; an unnecessary query adds its stated cost even when it does not change the repair. Report all supported outcome branches; unknown outcomes may not be resolved by guessing."
+        }
+      ]
+    }
+  ],
+  "sourceCoverage": [
+    {
+      "sourceId": "C-ID",
+      "atomIds": [
+        "C01",
+        "C02",
+        "C03"
+      ]
+    },
+    {
+      "sourceId": "C-EV",
+      "atomIds": [
+        "C04",
+        "C05",
+        "C06"
+      ]
+    },
+    {
+      "sourceId": "C-CANCEL",
+      "atomIds": [
+        "C07",
+        "C08",
+        "C09"
+      ]
+    },
+    {
+      "sourceId": "C-REPAIR",
+      "atomIds": [
+        "C10",
+        "C11",
+        "C12"
+      ]
+    },
+    {
+      "sourceId": "O-CLOCK",
+      "atomIds": [
+        "T01",
+        "T02"
+      ]
+    },
+    {
+      "sourceId": "O-POOL",
+      "atomIds": [
+        "S01",
+        "S02"
+      ]
+    },
+    {
+      "sourceId": "J-SA",
+      "atomIds": [
+        "I01",
+        "I02"
+      ]
+    },
+    {
+      "sourceId": "R-SA",
+      "atomIds": [
+        "R01",
+        "R02"
+      ]
+    },
+    {
+      "sourceId": "J-SBM",
+      "atomIds": [
+        "I03",
+        "I04"
+      ]
+    },
+    {
+      "sourceId": "J-PA",
+      "atomIds": [
+        "I05",
+        "I06",
+        "I07"
+      ]
+    },
+    {
+      "sourceId": "R-PA",
+      "atomIds": [
+        "R03",
+        "R04",
+        "R05"
+      ]
+    },
+    {
+      "sourceId": "J-PB",
+      "atomIds": [
+        "I08",
+        "I09"
+      ]
+    },
+    {
+      "sourceId": "O-HC",
+      "atomIds": [
+        "H01",
+        "H02",
+        "H03"
+      ]
+    },
+    {
+      "sourceId": "J-RA",
+      "atomIds": [
+        "I10",
+        "I11"
+      ]
+    },
+    {
+      "sourceId": "Q-BANK",
+      "atomIds": [
+        "Q01",
+        "Q02",
+        "Q03"
+      ]
+    },
+    {
+      "sourceId": "O-BOUND",
+      "atomIds": [
+        "B01",
+        "B02"
+      ]
+    }
+  ]
+}
