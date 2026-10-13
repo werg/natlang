@@ -17,6 +17,7 @@ import { NodeNativeRuntime } from '../node-runtime.js';
 import { Folder } from '../native/scoped-fs.js';
 import { dump, MISSING } from '../native/values.js';
 import { externalModule } from '../native/external.js';
+import { checkTrustedExactVerifier } from './trusted-exact-verifier.js';
 import { PROGRAM_VERSION, prepareProgramNode, type ProgramRecord } from './program.js';
 import { fileReturnValue, checkFilesWithJudge, checkFileReturn, DATA_QUALITY_VERSION, FILE_CONTENT_COMPARISON_VERSION, checkOracle } from './oracle.js';
 import { modelOracleJudge } from './model-judge.js';
@@ -1471,7 +1472,11 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const worldOk = (!worldScore || worldScore.score >= 100) && hostCertificateOk;
     const answerExpected = actualFiles && record.semantics.files_oracle?.return_count === 'changed' ?
       fileReturnValue(actualFiles, folderFiles!, record.semantics.files_oracle) : record.semantics.expected;
-    const oracle = await checkOracle(actual, answerExpected, record.semantics.oracle, options.judge);
+    const oracle = record.semantics.trusted_exact_verifier ?
+      await checkTrustedExactVerifier(record.semantics.trusted_exact_verifier,
+        { value: actual, oracle: record.semantics.trusted_exact_verifier.oracle,
+          inputs: record.semantics.inputs, fixture: folderFiles ?? {} }) :
+      await checkOracle(actual, answerExpected, record.semantics.oracle, options.judge);
     const checks = { seeded_failure_requirement: failureSeen, expected_status: result.outcome.kind === expectedKind,
       honest_stop: honestStop, effects: effectsOk, files: filesOk, world: worldOk,
       file_return_consistency: !actualFiles || !record.semantics.files_oracle ||

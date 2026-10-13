@@ -179,6 +179,18 @@ if (Array.isArray(manifest.services)) {
 }
 if (hasFullGold) row.semantics.oracle = { level: 'normalized', normalization: 'semantic-structured',
   comparison_spec: manifest.comparison_spec };
+let exactVerifierHash = null;
+if (manifest.external_verifier_path) {
+  const verifierPath = await sourcePath(manifest.external_verifier_path, 'external_verifier_path');
+  if (!manifest.external_verifier_path.startsWith('training/semantic_applications/') ||
+      !manifest.external_verifier_path.endsWith('.mjs') ||
+      verifierPath.startsWith(resolve(repo, manifest.source_root) + '/') ||
+      verifierPath.startsWith(resolve(repo, manifest.fixture_root) + '/'))
+    throw Error('external verifier must be a separate training/semantic_applications .mjs file');
+  exactVerifierHash = sha(await readFile(verifierPath));
+  row.semantics.trusted_exact_verifier = { path: manifest.external_verifier_path,
+    sha256: exactVerifierHash, oracle };
+}
 row.generation.collection = 'teacher';
 row.generation.source_quality = 'Exact authored natlang project snapshot; external verifier and independent semantic review required.';
 row.collection_guidance = { training_admission: false, review_scope: 'full-project-trajectory-and-external-oracle' };
@@ -195,6 +207,7 @@ if (manifest.reference_path) {
   const replayOnly = structuredClone(row);
   replayOnly.semantics.expected = reference;
   replayOnly.semantics.oracle = 'exact';
+  delete replayOnly.semantics.trusted_exact_verifier;
   // A canonical typed witness can prove source/result plumbing, not that the
   // actual NL application used its scoped literals or iterateOn. Those remain
   // live-trajectory obligations, so remove technique checks only on this
@@ -220,6 +233,7 @@ const report = { schema: 'natlang.semantic-application-package/1', id: manifest.
   service_bindings: Object.keys(row.semantics.services ?? {}),
   visible_sha256: fingerprint, source_sha256: sha(Buffer.from(JSON.stringify(row) + '\n')),
   external_verifier_path: manifest.external_verifier_path ?? null,
+  external_verifier_sha256: exactVerifierHash,
   canonical_reference_replay: canonicalReferenceReplay,
   quality_audit: qualityAudit,
   note: 'Program source preserves authored bytes and callable paths. Packaging does not admit or execute the case.' };

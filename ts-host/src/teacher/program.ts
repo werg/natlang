@@ -10,6 +10,7 @@ import { virtualSourceFiles } from '../runtime/virtual-project.js';
 import { formatType, parseType } from '../native/types.js';
 import type { LambdaNode } from '../native/values.js';
 import type { OracleSpec } from './oracle.js';
+import type { TrustedExactVerifier } from './trusted-exact-verifier.js';
 
 export const PROGRAM_VERSION = 'natlang.program/2';
 
@@ -21,6 +22,8 @@ export type ProgramSemantics = {
   expected: unknown;
   /** Evidence strength behind `expected`: exact comparison, normalized comparison, span evidence, or a judgment. */
   oracle?: OracleSpec;
+  /** Repository-pinned exact invariant checker, excluded from model-visible files. */
+  trusted_exact_verifier?: TrustedExactVerifier;
   operation?: string;
   effects?: Record<string, unknown>;
   failure_seed?: { code: string; kind?: 'compile' | 'runtime' | 'boundary' };
