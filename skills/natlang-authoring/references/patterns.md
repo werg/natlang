@@ -15,6 +15,8 @@ Move orchestration into a natural-language function only when the *order of oper
 
 Make the next meaningful action apparent from the instructions and typed state. A long run can be simple to execute if its steps, loop state, and helper contracts are clear. A tree walk recurses on each node's children, passing depth or path as separate arguments. For a graph traversal keep the frontier, visited IDs, results, and unresolved dependencies in typed state; let natlang choose priorities, and let an exact helper supply adjacency and readiness. Extract a helper when it gives a meaningful contract or reduces repeated context, not for every elementary operation.
 
+For a semantic directory reducer, make the item boundary a type: `{path, text}` for one current record, a separate context for the rule and related records, and a typed finding that carries the source path and evidence IDs. State the `iterateOn` step over the finite path frontier and its decreasing unprocessed count. The root combines returned findings after the frontier is empty. A generic `item: string` invites the executor to serialize the entire directory into one item, so the intended per-record natural-language calls never occur.
+
 ## Instructions a small interpreter can follow
 
 What a large model infers, a small interpreter needs said. These held across thousands of teacher runs:

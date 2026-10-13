@@ -98,7 +98,7 @@ function stageBody(step) {
   return step.instructions.replace(within, '');
 }
 function runtimeStageArgs(step, entry) {
-  if (!entry.typed_inputs || !step.signature) return { item: 'string', context: 'string' };
+  if (!entry.typed_inputs || !step.signature) return { item: 'EvidenceRecord', context: 'EvidenceContext' };
   const signature = /^[^(]+\(([^)]*)\)\s*->\s*([A-Za-z_][A-Za-z0-9_]*)$/.exec(step.signature);
   if (!signature) throw Error(`${entry.id}: invalid named stage signature ${step.signature}`);
   const args = Object.fromEntries(signature[1].split(',').map(part => {
@@ -109,7 +109,9 @@ function runtimeStageArgs(step, entry) {
   return args;
 }
 function runtimeTypeFile(entry) {
-  if (!entry.typed_inputs) return null;
+  if (!entry.typed_inputs) return `export type EvidenceRecord = { path: string; text: string };\n` +
+    `export type EvidenceFinding = { sourcePath: string; finding: string; evidenceIds: string[]; unresolved: string[] };\n` +
+    `export type EvidenceContext = { objective: string; rule: string; relatedRecords: EvidenceRecord[]; priorFindings: EvidenceFinding[]; stageFindings: EvidenceFinding[] };\n`;
   const bundle = /^([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(entry.typed_inputs.bundle ?? '')?.[1];
   if (!bundle) throw Error(`${entry.id}: missing typed bundle alias`);
   // The authored stage signatures retain their actual named types. The source
@@ -184,10 +186,10 @@ function render(entry, provider) {
     `Carry out these stages over the supplied data, preserving exact source references. ` +
     `Call ${steps[0].name} from solve; each later named stage is a child of the preceding stage and is called from within that active stage. ` +
     (entry.typed_inputs ? `Pass the typed bundle, inquiry, and carried StageState through the chain:\n` :
-      `Pass the current scoped item and context through the chain:\n`) +
+      `Use iterateOn over a finite, sorted list of source paths. State holds nextPathIndex and findings. Each step reads that one current file and calls ${steps[0].name} once with item={path,text} and an EvidenceContext carrying objective, rule, relevant related records, prior findings, and an initially empty stageFindings array. Append the returned EvidenceFinding and advance nextPathIndex. The unprocessed-path count decreases by one; finish when nextPathIndex equals the number of source paths. Each nested stage receives that same current EvidenceRecord and the updated context. Then synthesize the declared result from all findings and exact source records. The named stages are:\n`) +
     steps.map((step, index) => `${index + 1}. ${step.name}: ${step.instructions}`).join('\n') + '\n\n' +
     (fullPlan.length ? `Whole-program control flow:\n${fullPlan.map((step, index) => `${index + 1}. ${step}`).join('\n')}\n\n` : '') +
-    `For each current item, formulate a focused typed natural-language function literal with a short numbered instruction plan. ` +
+    `For each current source record, formulate a focused typed natural-language function literal with a short numbered instruction plan. ` +
     `Capture only the current task criterion and pass that item's content and the necessary carried state as arguments. ` +
     `Do not substitute a keyword test for the semantic relation.\n` +
     (lambda.length ? `Scoped child guidance: ${lambda.join(' ')}\n` : '') +
@@ -204,14 +206,16 @@ function render(entry, provider) {
     const next = steps[index + 1]?.name;
     const scoped = literal?.placement === step.name && literal.instructions
       ? `\nAt this stage, formulate an ad hoc typed natural-language literal ${literal.signature ?? ''} for the current item. Use this short plan: ${literal.instructions} Pass the current item and relevant context as arguments; keep source IDs in the finding.` : '';
-    const delegate = next ? `\nAfter making this stage's finding, call the child ${next} within this active call. Pass the finding and the current source-linked state to that child; return its result together with this stage's evidence.` : '';
+    const delegate = next ? entry.typed_inputs ?
+      `\nAfter making this stage's finding, call the child ${next} within this active call with bundle, inquiry, and the carried StageState. Return its StageState with this stage's source-linked evidence preserved.` :
+      `\nAfter making this stage's finding, call the child ${next} within this active call. Pass the same item and an EvidenceContext whose stageFindings includes this stage's EvidenceFinding; return the child's EvidenceFinding with all relevant source identities preserved.` : '';
     stageFolder += `/${name}`;
-    const instructionBody = `${stageBody(step)}${scoped}${delegate}\nApply the semantic rule to the supplied ${entry.typed_inputs ? 'bundle, inquiry, and prior state' : 'current item and context'}. Return a grounded ${entry.typed_inputs ? 'StageState with preserved source identities and carried work' : 'finding with source identity'}.`;
+    const instructionBody = `${stageBody(step)}${scoped}${delegate}\nApply the semantic rule to the supplied ${entry.typed_inputs ? 'bundle, inquiry, and prior state' : 'current item EvidenceRecord and EvidenceContext'}. Return a grounded ${entry.typed_inputs ? 'StageState with preserved source identities and carried work' : 'EvidenceFinding with sourcePath=item.path, a concise finding, cited evidenceIds, and unresolved claims'}.`;
     const selfName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (new RegExp(`\\b(?:call|invoke|delegate(?:\\s+to)?)\\s+${selfName}\\b`, 'i').test(instructionBody))
       throw Error(`${id}: ${name} instructions direct a self-call`);
     files[`${stageFolder}.nl`] = nlFile({ args: runtimeStageArgs(step, entry),
-      returns: entry.typed_inputs ? 'StageState' : 'string',
+      returns: entry.typed_inputs ? 'StageState' : 'EvidenceFinding',
       description: `${title}: ${step.name}`, instructions: instructionBody });
   }
   const filePaths = fixture ? Object.keys(fixture) : [];
