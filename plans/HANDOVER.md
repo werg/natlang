@@ -1,5 +1,35 @@
 # Continuation guide — updated 2026-10-13
 
+## 16:55 CEST: Pop generation and corpus sync
+
+The QAD direct SFT v12 handoff is training past update 7,500 with the GPU
+typically near full utilization (about 7.1/8.2 GiB VRAM). It has not yet
+reached the next step-8,000 held/task cadence. The s52027 Luna campaign has
+119 terminal result rows, 94 exact accepted; its three long directory-edit
+retries are still emitting provider deltas and the replenishment timer is
+active. A 25-row rejection review found answer (19), expected-status/world
+(5), files (2), and file-return-consistency (1) reasons, with overlaps. The
+KQA Pro misses returned an entity/predicate instead of the requested qualifier
+or relation; no new runtime bug is established. Old ambiguous workbench labels
+remain held pending live comparison of the revised source wording.
+
+The two Pop-owned immutable decision snapshots from `f3912a8f` were transferred
+to the DGX canonical repository and verified remotely against their SHA-256
+manifests: `pop-decision-four-family-source-20261013-v4` (6,779,977 bytes) and
+`pop-decision-four-family-provider-prep-20261013-v2` (1,268,695 bytes). DGX
+still needs to pull main to see the registry and manifests. Both remain
+review-only; syncing is not training admission.
+
+The CLINC-only Gemini batch14 was safely stopped with 167 durable labels so
+the mixed AG News, BoolQ, BoardgameQA, PubMedQA 64-case pilot could use the
+project quota. Its output appends under
+`runs/free-provider-generation-20261013-v1/fresh-decision-provider-v2/`;
+the CLINC command resumes from existing labels without redoing them. Resume
+that batch after scoring the pilot. The first six mixed labels are valid JSON,
+but one BoardgameQA answer disagreed with gold at confidence 1.0, so require
+per-case exact-gold and semantic quality review before any provider target is
+admitted. Gemini cooldowns remain the throughput constraint.
+
 ## 16:33 CEST: QAD recovery handoff and mixed free-provider intake
 
 Pop v12 (`natlang-pop-qad-broad-main-v12.service`) accepted the checkpoint-safe
