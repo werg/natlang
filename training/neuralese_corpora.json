@@ -61997,6 +61997,49 @@
       "split": "train only; inherited from source decision rows",
       "required_conversion": "include in next declared LFM training union; Mellum twin rendering on DGX",
       "license": "inherited from source corpus; factual provenance"
+    },
+    {
+      "id": "luna-held-shapes-followon-native-turns-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-followon-native-turns-20261013-v1",
+      "include": [
+        "approved-turns.jsonl",
+        "accepted-parents.native.jsonl",
+        "admission-review.json",
+        "parent-selection-review.json"
+      ],
+      "admission": "exact native oracle and materializer-approved decisions; train only",
+      "training_admission": true,
+      "training_admission_reason": "350 source-bound exact-oracle accepted parents across seeds52010/52011 and folder backfill; 1950 approved decisions; 156 unapproved context turns pruned; complete visible-world and source-group held exclusion, unique against prior admitted parent corpora",
+      "review_status": "all exact checks true; seven families sampled at first and last approved targets; candidate materialization not itself included",
+      "required_conversion": "render LFM and Mellum twins; include with preceding held-shape corpora in next broad union",
+      "split": "train only; held world and source groups excluded",
+      "source_class": "project-generated inline curriculum",
+      "license": "project-generated",
+      "source_campaigns": [
+        "provider-luna-held-shapes-s52010-v1",
+        "provider-luna-folder-backfill-s52007-s52010-v1",
+        "provider-luna-held-shapes-s52011-v1"
+      ]
+    },
+    {
+      "id": "luna-held-shapes-followon-lfm-render-20261013-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-followon-lfm-render-20261013-v1",
+      "include": [
+        "receipt.json",
+        "full/lfm25/text-data.jsonl",
+        "program-header/lfm25/text-data.jsonl",
+        "whole-trajectory/lfm25/text-data.jsonl"
+      ],
+      "admission": "derived LFM rendering of exact admitted native-turn corpus; no independent source credit",
+      "training_admission": true,
+      "training_admission_reason": "source corpus luna-held-shapes-followon-native-turns-20261013-v1 is admitted; renderer confirms 1950 eligible rows, zero decontamination omissions or reservation hits, exact program-header serving token boundaries",
+      "derived_from": "luna-held-shapes-followon-native-turns-20261013-v1",
+      "source_class": "derived-lfm25-training-render",
+      "split": "train only; inherited from source decision rows",
+      "required_conversion": "include with preceding held-shape renders in next broad LFM union; Mellum twin DGX-owned",
+      "license": "inherited from source corpus; factual provenance"
     }
   ],
   "coverage_backlog": [

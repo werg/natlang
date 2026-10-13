@@ -139,9 +139,18 @@ under `program-header`. The pi harness exposed the failure: the student could
 call `read_file` only from prior memory, and the server rejected it because its
 schema had been removed from the request. The implementation changes the
 prompt-rendering identity; existing frozen training snapshots are unchanged.
-**Measurement debt:** run about 48 live student calls with representative
-foreign tools under the old and new serving renderings, recording tool validity,
-task success and model requests before adopting a new export identity.
+**Measured 2026-10-13 (debt closed).** Pop's LFM Muon export step 10006 as pi's agent
+on the 20 harness-bench tasks (student alone, T=0.6, 1.5 min per task, crisp pi phases
+and tools, LFM2.5-2.6B executor), serving code at 95bc6eca^ (old) and b603734d (new):
+
+| rendering | tasks passed | requests | tool calls | rejected by pi (unknown tool or schema) | turns with unparsed call markup | valid first call |
+| --- | --- | --- | --- | --- | --- | --- |
+| old (schemas dropped) | 0/20 | 559 | 540 | 80 (15%) | 12 | 11/20 |
+| new (supplied schemas kept) | 0/20 | 1,232 | 1,219 | 0 | 1 | 17/20 |
+
+The new rendering removes every invalid call and most unparsed markup; task success is
+0 in both, because the student repeats an earlier identical call in 93-95% of its calls
+(HARNESS_BENCH.md §9). Adopted. Raw outputs: `/mnt/external/harness-bench/foreign-tools-20261012/`.
 
 ## Collector rendering for in-run student evaluation — 2026-10-13
 

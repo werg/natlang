@@ -228,9 +228,18 @@ def main() -> int:
                       if args.student_artifact else ["--base", str(args.student_base)])
             code = args.student_code.resolve()
             env = {**os.environ, "PYTHONPATH": str(code / "training/neuralese"), "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
-            procs.append(subprocess.Popen(serve, cwd=code, env=env, stdout=log.open("w"), stderr=subprocess.STDOUT))
             student = f"http://127.0.0.1:{port}"
-            wait_http(student + "/health", procs[-1], 900, log)
+            for attempt in range(3):
+                procs.append(subprocess.Popen(serve, cwd=code, env=env, stdout=log.open("w"), stderr=subprocess.STDOUT))
+                try:
+                    wait_http(student + "/health", procs[-1], 900, log)
+                    break
+                except RuntimeError:
+                    # On the GB10 a CUDA allocation can fail while page cache holds the free memory: drop it and retry.
+                    if attempt == 2 or "out of memory" not in log.read_text(errors="replace"):
+                        raise
+                    subprocess.run([sys.executable, str(ROOT / "scripts/memory_ledger.py"), "release-cache"], capture_output=True)
+                    time.sleep(10)
         student_model, executor_model = model_id(student), model_id(executor)
         commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
         meta = {"label": args.label or out.name, "commit": commit, "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

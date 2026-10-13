@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-held-shapes-followon-lfm-render-20261013-v1",
+  "owner": "pop",
+  "path": "runs/luna-held-shapes-followon-lfm-render-20261013-v1",
+  "files": [
+    {
+      "path": "full/lfm25/text-data.jsonl",
+      "bytes": 3955785,
+      "sha256": "61f6829e9ecfd13ef42a88d6e9d18d1e85b3b8ef205f947a18a00bb033490593",
+      "lines": 53
+    },
+    {
+      "path": "program-header/lfm25/text-data.jsonl",
+      "bytes": 44877024,
+      "sha256": "7eddd274dce5caff52745e4fd2e77346f9a72f2e86c7c1185c444e4365368a7d",
+      "lines": 1950
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 7385,
+      "sha256": "122e6696d11d9d62683196237d487389103c197cea70ef25f9ab888f8c5af8b3"
+    },
+    {
+      "path": "whole-trajectory/lfm25/text-data.jsonl",
+      "bytes": 21150854,
+      "sha256": "10cc8f9f465d559414414b77a7b99b87407777879de786cdfbb42bd9e9b6c8cc",
+      "lines": 966
+    }
+  ],
+  "bytes": 69991048
+}
