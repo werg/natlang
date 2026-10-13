@@ -141,14 +141,12 @@ Trigger it when the **mixed direct+e2e recipe** is on main (see §3). The projec
 
 ## 9. Unfinished workstreams, exact state
 
-1. **Mixed direct+e2e run (critical; it gates the v4 gap):** 4 commits rebased on main in the worktree
-   `/home/werg/data/wt-mixed` (detached): EmbeddedE2E objective, `direct_sft` e2e_mix interleave, mixed launch recipes
-   `neuralese-mixed-mellum-v4.json` / `neuralese-mixed-lfm-qad-broad-v1.json`, parent_readiness removed. Tests are
-   running (`mixed-land-tests`). If `exit=0`: `cd /home/werg/data/wt-mixed && git fetch && git rebase origin/main &&
-   scripts/check-main.sh --quick && git push origin HEAD:main`. If red: fix, don't park.
-2. **T_self acceptance (V against the writer's own tokens):** 1 WIP commit stacked on the mixed commits in
+1. **Mixed direct+e2e run: LANDED on main (bb19a820)**, 125 tests passed: EmbeddedE2E objective, `direct_sft` e2e_mix
+   interleave, launch recipes `neuralese-mixed-mellum-v4.json` / `neuralese-mixed-lfm-qad-broad-v1.json`, parent_readiness
+   removed. Brief Pop with one decision (not yet sent). Set C's rate from item 3 before launching.
+2. **T_self acceptance (V against the writer's own tokens):** 1 WIP commit on main's tip in
    `/home/werg/data/wt-tself` (`train/self_text.py`, `e2e_acceptance.py`, `trajectories.py`, tests). Its tests have
-   never passed; they're queued as `tself-land-tests` (log `/home/werg/data/wt-tself-tests.log`). Land after item 1.
+   never passed; they're queued as `tself-land-tests` (log `/home/werg/data/wt-tself-tests.log`). When `exit=0`: `git fetch && git rebase origin/main && scripts/check-main.sh --quick && git push origin HEAD:main`.
 3. **E2E learning dynamics:** V flat at writer 3e-6, worse above. Read `e2elead-gdiag-t` (gradient reaching C and the
    backbone) and the `v2stream-c3e-6` / `c3e-5` arms (V−T, crisp). Pick C's rate for the mixed recipe (TCP 3e-6 on
    Muon).
