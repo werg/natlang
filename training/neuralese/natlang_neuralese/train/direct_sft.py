@@ -2198,6 +2198,21 @@ def main(argv=None):
         final_task_summary = task_eval.final_at(step)
     gate = monitor.final_gate(step) if finished else None
     final = json.loads((a.out / 'report.json').read_text()) if (a.out / 'report.json').exists() else {}
+    if finished and 'ce_delta' not in final:
+        # A post-update collector may fail before the normal report write. An
+        # exact-step resume then has no loop iteration to restore its held CE.
+        # Recover only the evaluation of this very checkpoint step; never
+        # infer qualification from an earlier or unrelated evaluation.
+        eval_log = a.out / 'eval.jsonl'
+        if eval_log.is_file():
+            for line in reversed(eval_log.read_text().splitlines()):
+                try:
+                    prior_eval = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if prior_eval.get('step') == step and 'ce_delta' in prior_eval:
+                    final.update(prior_eval)
+                    break
     drift_stopped = any((json.loads(line).get('behaviour_drift') or {}).get('guard') == 'stop'
                         for name in ('eval.jsonl', 'drift.jsonl') if (a.out / name).is_file()
                         for line in (a.out / name).open())
