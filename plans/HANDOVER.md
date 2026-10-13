@@ -1,5 +1,26 @@
 # Continuation guide — updated 2026-10-13
 
+## 21:45 CEST: CUAD pilots closed, six Luna slots refilled
+
+The two representative s52029 CUAD `folder_extract` pilots have terminal
+outcomes. Worker 03's fresh-seed 768-request hinted attempt saved 380 fresh
+turns and exhausted the expanded ceiling with zero result rows; worker 04's
+fresh-seed attempt completed after 309 replies but failed the exact `files`
+and `answer` oracle (five positives versus three gold, none verified). Both
+original zero-result cases are now recorded in the campaign's
+`reviewed-exclusions.json`, bringing reviewed oversized cases to six. They
+are not SFT targets. With no assigned repair or DPO consumer for the rejected
+pilot, Pop listed the four exact original/retry `jobs/` directories, checked
+the four units had stopped, and removed them, reclaiming 369,225,771 bytes;
+review receipts, journals and result manifests remain. This supersedes the
+earlier note below to retain worker 04 for a repair cycle. Do not reopen these
+oversized cases through a generic budget retry. The replenisher then launched
+s52031 workers 04–06, filling all six Luna slots. At the review point s52030
+had 89/103 accepted exact outcomes and s52031 15/16; these are generation
+results pending separate admission. DGX's full check of a3150e8a5d has now
+passed every step; later Pop commits had quick checks and await a current-main
+full check.
+
 ## 20:15 CEST: live training and Luna source reader repair
 
 Pop QAD LFM direct SFT v13 is active past step 10050. The step-10000 held
