@@ -567,15 +567,16 @@ def main():
         for campaign in campaigns:
             manifest_path = campaign / 'campaign-manifest.json'
             if not manifest_path.exists():
-                source = campaign / 'source' / f'held-shapes-s{int(campaign.name.split("-s")[-1].split("-")[0])}-n8.ir.jsonl'
-                if source.exists():
-                    if active(f'natlang-pop-build-held-s{int(campaign.name.split("-s")[-1].split("-")[0])}.service'):
-                        print(json.dumps({'event': 'source_build_wait', 'campaign': str(campaign)}), flush=True)
-                        return
-                    prepare(campaign, int(campaign.name.split('-s')[-1].split('-')[0]),
-                    source, prior_worlds(campaign), prior_groups(campaign))
+                seed = int(campaign.name.split('-s')[-1].split('-')[0])
+                if active(f'natlang-pop-build-held-s{seed}.service'):
+                    print(json.dumps({'event': 'source_build_wait', 'campaign': str(campaign)}), flush=True)
                     return
-                raise ValueError(f'Incomplete campaign preparation: {campaign}')
+                # A failed source build leaves the campaign directory and its
+                # verification report, but no shard. Rebuild that exact seed
+                # and keep valid cases after reviewed source holds are removed.
+                source = build_source(campaign, seed)
+                prepare(campaign, seed, source, prior_worlds(campaign), prior_groups(campaign))
+                return
             if not complete(campaign):
                 pending_campaigns.append(campaign)
         if not BACKFILL.exists():
