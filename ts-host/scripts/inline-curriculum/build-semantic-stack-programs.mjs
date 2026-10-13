@@ -79,6 +79,18 @@ function stages(entry) {
     instructions: String(step).replace(/^\s*\d+\.\s*/, ''),
   }));
 }
+function stageBody(step) {
+  // Authored catalog steps describe a parent's action: "Call inspect to ...".
+  // Repeating that line inside inspect asks the child to invoke itself, which
+  // the language correctly rejects. Render the child's own job as an action.
+  const escaped = step.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const selfCall = new RegExp(`^Call ${escaped} to (.+)$`, 'i').exec(step.instructions);
+  if (selfCall) return selfCall[1][0].toUpperCase() + selfCall[1].slice(1);
+  const forEach = new RegExp(`^Call ${escaped} for (.+)$`, 'i').exec(step.instructions);
+  if (forEach) return 'For ' + forEach[1];
+  const within = new RegExp(`^Within ${escaped},\\s*`, 'i');
+  return step.instructions.replace(within, '');
+}
 function runtimeStageArgs(step, entry) {
   if (!entry.typed_inputs || !step.signature) return { item: 'string', context: 'string' };
   const signature = /^[^(]+\(([^)]*)\)\s*->\s*([A-Za-z_][A-Za-z0-9_]*)$/.exec(step.signature);
@@ -188,9 +200,13 @@ function render(entry, provider) {
       ? `\nAt this stage, formulate an ad hoc typed natural-language literal ${literal.signature ?? ''} for the current item. Use this short plan: ${literal.instructions} Pass the current item and relevant context as arguments; keep source IDs in the finding.` : '';
     const delegate = next ? `\nAfter making this stage's finding, call the child ${next} within this active call. Pass the finding and the current source-linked state to that child; return its result together with this stage's evidence.` : '';
     stageFolder += `/${name}`;
+    const instructionBody = `${stageBody(step)}${scoped}${delegate}\nApply the semantic rule to the supplied ${entry.typed_inputs ? 'bundle, inquiry, and prior state' : 'current item and context'}. Return a grounded ${entry.typed_inputs ? 'StageState with preserved source identities and carried work' : 'finding with source identity'}.`;
+    const selfName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\b(?:call|invoke|delegate(?:\\s+to)?)\\s+${selfName}\\b`, 'i').test(instructionBody))
+      throw Error(`${id}: ${name} instructions direct a self-call`);
     files[`${stageFolder}.nl`] = nlFile({ args: runtimeStageArgs(step, entry),
       returns: entry.typed_inputs ? 'StageState' : 'string',
-      description: `${title}: ${step.name}`, instructions: `${step.instructions}${scoped}${delegate}\nApply the semantic rule to the supplied ${entry.typed_inputs ? 'bundle, inquiry, and prior state' : 'current item and context'}. Return a grounded ${entry.typed_inputs ? 'StageState with preserved source identities and carried work' : 'finding with source identity'}.` });
+      description: `${title}: ${step.name}`, instructions: instructionBody });
   }
   const filePaths = fixture ? Object.keys(fixture) : [];
   const hasScopedCollection = filePaths.length >= 3 &&
