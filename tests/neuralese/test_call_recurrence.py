@@ -229,6 +229,58 @@ def test_direct_end_to_end_trains_the_child_context_under_the_in_backward_latent
     assert moved["in-backward"]["instructions@caller"] == pytest.approx(moved["separate"]["instructions@caller"], rel=0.05)
 
 
+def _stream_cohort(directory, monkeypatch):
+    """A two-trajectory cohort directory (records.jsonl, chains.jsonl) whose trajectories reuse the same writer names:
+    the streamed source authenticates each trajectory on its own, so the names need to be unique only per trajectory."""
+    monkeypatch.setenv("NATLANG_E2E_INDEX_CACHE", str(directory / "index-cache"))
+    rows, chains = [], []
+    for trajectory, family in (("ta", "family-a"), ("tb", "family-b")):
+        ids = []
+        for record in RECORDS:
+            rows.append({**record, "id": f"{trajectory}:{record['id']}", "split": "train", "task_family": family})
+            ids.append(rows[-1]["id"])
+        chains.append({"trajectory": trajectory, "source": "test", "family": family, "split": "train",
+                       "records": ids, "edges": 2})
+    (directory / "records.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    (directory / "chains.jsonl").write_text("".join(json.dumps(c) + "\n" for c in chains))
+    return directory
+
+
+@pytest.mark.parametrize("soft_parts", ["trained", "text"])
+def test_direct_end_to_end_streams_trajectories_with_writer_names_scoped_per_trajectory(loaded, tmp_path, monkeypatch,
+                                                                                       soft_parts):
+    """--record-source trajectories (train/e2e_records.py, dgx-a256): each drawn trajectory is loaded by offset and
+    authenticated on its own; with one resident chain, both trajectories train although they write the same names."""
+    _, pieces, _ = _direct_stand_in(loaded, tmp_path, monkeypatch)
+    cohort = _stream_cohort(tmp_path, monkeypatch)
+    out = tmp_path / "out"
+    arguments = _direct_arguments(cohort, pieces, out, tmp_path)
+    arguments[arguments.index("--steps") + 1] = "8"
+    assert main(arguments + ["--no-save-state", "--record-source", "trajectories", "--stream-held-chains", "0",
+                             "--stream-probe-chains", "0", "--stream-resident", "1", "--soft-parts", soft_parts]) == 0
+    stream = json.loads((out / "record-stream.json").read_text())
+    assert stream["trainable_train_records"] == 6 and stream["family_weights"] == {"family-a": 0.5, "family-b": 0.5}
+    rows = [json.loads(line) for line in (out / "train.jsonl").read_text().splitlines()]
+    drawn = {rid.split(":")[0] for row in rows for rid in row.get("reader_record_ids", [])}
+    assert drawn == {"ta", "tb"}
+    final = json.loads((out / "summary.json").read_text())
+    assert final["record_stream"]["chains_evicted"] >= 1 and not final["record_stream"]["chains_refused"]
+    soft = {name for name in final["relative_change"] if name.startswith("instructions@")}
+    assert soft == (set() if soft_parts == "text" else {"instructions@grand", "instructions@child", "instructions@caller"})
+
+
+def test_streamed_source_draws_by_family_and_is_seeded(tmp_path, monkeypatch):
+    from natlang_neuralese.train.e2e_records import TrajectoryRecordSource
+    cohort = _stream_cohort(tmp_path, monkeypatch)
+    source = TrajectoryRecordSource([cohort], seed=7)
+    again = TrajectoryRecordSource([cohort / "records.jsonl"], seed=7)  # by its records file; the cached index
+    assert [source.draw(c) for c in range(40)] == [again.draw(c) for c in range(40)]
+    assert {source.chains[p]["family"] for p, _ in (source.draw(c) for c in range(40))} == {"family-a", "family-b"}
+    assert source.load_chain(1)[2]["id"] == "tb:caller"
+    assert source.soft_names()["instructions@child"] == (0, "ta:child")
+    assert list((tmp_path / "index-cache").glob("*.json"))
+
+
 @pytest.mark.parametrize("feedback", ["token", "value"])
 def test_direct_writer_feeds_back_tokens_so_a_consumer_reaches_each_value_at_depth_one(loaded, feedback):
     """Neuralese direct v1: inside a write the backbone reads token embeddings, never the emitted values, so the

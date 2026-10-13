@@ -1,15 +1,15 @@
 {
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-e2e-v1",
- "description": "Shared base of the end-to-end Neuralese stage for both lines (owner decision 2026-10-12: start the E2E arm now, in parallel with SFT; plans/REVIEW_20261012.md item 2; design plans/neuralese/NEURALESE_DIRECT_V1.md \"End-to-end stage\"). It starts from a direct export (a neuralese_direct checkpoint exported by train/direct_export.py) bound as input_bindings.direct_artifact by the launch recipe that extends a line recipe; that binding is a lineage key, not a parity setting. Two stages: direct_runtime runs the exact runtime qualification of that export on the stage's machine (eval/direct_runtime.py: writer, cache readback, producer replay and input adjoints, typed wire); e2e trains train/trajectories.py --direct-artifact on neuralese-e2e-cohort-20261012-v2-slice1 (7,007 records, 6,003 train / 1,004 held, 7,521 authenticated producer->consumer edges over 80 families: the trainer-sized slice of e2e corpus v2, 95,106 edges / 24,141 chains mined from every native-turn source by scripts/neuralese_data/e2e_mine.py, plans/neuralese/E2E_DATA.md; edge endpoints of whole chains, writer names unique; supersedes the 1,389-record union cohort v1, which v2 contains): producers write their child results with the shared direct writer (token-driven, one Neuralese value per crisp token, generated-length stops), consumers read the written block, the identity TokenChoiceProjection comes on at step 0 (logits equal the export's), the backbone latents train on MuonSR (cubic5, wd 0.1, spike clip 5) and step inside the layer-staged backward, with the shared drift monitor (response KL warns 0.5, stops 1.5; the 48-probe behaviour gate is reported only, owner 2026-10-12) and the line's QAT component held at its parent's curriculum progress. Acceptance (e2e_acceptance, train/e2e_acceptance.py, written as e2e-certificate.json): consumers reading values against consumers reading the gold tokens on the same held producer calls (V CE at most T CE; V beats shuffled and zeroed blocks by 0.05 nats; at least 32 paired readers), exact-oracle task success (V at most 0.02 below T), and no drift stop. Lines: neuralese-e2e-mellum-v1 (DGX), neuralese-e2e-lfm-v1 (Pop); every difference is declared in training/neuralese/line-parity.json.",
+ "description": "Shared base of the end-to-end Neuralese stage for both lines (owner decision 2026-10-12: start the E2E arm now, in parallel with SFT; plans/REVIEW_20261012.md item 2; design plans/neuralese/NEURALESE_DIRECT_V1.md \"End-to-end stage\"). It starts from a direct export (a neuralese_direct checkpoint exported by train/direct_export.py) bound as input_bindings.direct_artifact by the launch recipe that extends a line recipe; that binding is a lineage key, not a parity setting. Two stages: direct_runtime runs the exact runtime qualification of that export on the stage's machine (eval/direct_runtime.py: writer, cache readback, producer replay and input adjoints, typed wire); e2e trains train/trajectories.py --direct-artifact on all of the e2e corpus neuralese-e2e-cohort-20261012-v2 (174,608 records in 24,141 whole trajectories, 158,936 trainable train-split records, 85,315 train edges; registered, scripts/neuralese_data/e2e_mine.py), streamed one trajectory at a time (--record-source trajectories, train/e2e_records.py, dgx-a256 2026-10-13): each drawn chain is read by offset and authenticated on its own, families are drawn by trainable-record count^0.5 through the shared CohortDocumentSampler (musique_hops, 42% of the records, gets 14%), 4 held chains and 1 probe chain per family load at start, steps = one epoch of the trainable train records at batch 1, and instructions pieces are their text (--soft-parts text, as the direct stage trained and the runtime serves; 3139 pieces would otherwise be single-use trained soft prompts): producers write their child results with the shared direct writer (token-driven, one Neuralese value per crisp token, generated-length stops), consumers read the written block, the identity TokenChoiceProjection comes on at step 0 (logits equal the export's), the backbone latents train on MuonSR (cubic5, wd 0.1, spike clip 5) and step inside the layer-staged backward, with the shared drift monitor (response KL warns 0.5, stops 1.5; the 48-probe behaviour gate is reported only, owner 2026-10-12) and the line's QAT component held at its parent's curriculum progress. Acceptance (e2e_acceptance, train/e2e_acceptance.py, written as e2e-certificate.json): consumers reading values against consumers reading the gold tokens on the same held producer calls (V CE at most T CE; V beats shuffled and zeroed blocks by 0.05 nats; at least 32 paired readers), exact-oracle task success (V at most 0.02 below T), and no drift stop. Lines: neuralese-e2e-mellum-v1 (DGX), neuralese-e2e-lfm-v1 (Pop); every difference is declared in training/neuralese/line-parity.json.",
  "identity_qualification": "direct_e2e_runtime_qualified_export",
  "input_bindings": {
   "e2e_records": {
-   "path": "runs/neuralese-e2e-cohort-20261012-v2-slice1/records.jsonl",
-   "sha256": "68b3e77951687aee85d0caf39df91561d1a7027b6aaa7487a16119c549a5e469"
+   "path": "runs/neuralese-e2e-cohort-20261012-v2/records.jsonl",
+   "sha256": "40d608d47714d31e54f027e2f7d38e07ac9b764d0df6185f42187b4f844c9c08"
   },
   "e2e_pieces": {
-   "path": "runs/neuralese-e2e-cohort-20261012-v2-slice1/pieces.jsonl",
+   "path": "runs/neuralese-e2e-cohort-20261012-v2/pieces.jsonl",
    "sha256": "8f420dcd79ee6044012d2323ef06557706989d02dbdc07aa6108d7c9949a7a9a"
   }
  },
@@ -35,9 +35,8 @@
     "direct_artifact_manifest": "direct_artifact"
    },
    "parameters": {
-    "steps": 6003,
+    "steps": 158936,
     "batch": 1,
-    "train": 6003,
     "eval": 32,
     "max_tokens": 32768,
     "max_write_vectors": 2048,
@@ -120,7 +119,11 @@
      "noise_successes": 0,
      "reference_successes": null
     },
-    "record_order": "family-interleave"
+    "record_source": "trajectories",
+    "family_temperature": 0.5,
+    "stream_held_chains": 4,
+    "stream_probe_chains": 1,
+    "soft_parts": "text"
    }
   }
  ],

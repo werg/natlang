@@ -245,3 +245,18 @@ base recipe instead of an inline config, and both lines declare a recipe (no pen
   union cohort) or reading a producer that is not, are skipped and counted (skipped.unadmitted); gold producer
   replay refused them at update 13 of every round-1 arm.
 
+
+## neuralese-e2e-v1: all of e2e corpus v2, streamed by trajectory (2026-10-13, dgx-a256)
+
+- Data: the e2e stage now binds neuralese-e2e-cohort-20261012-v2. That is 174,608 records in 24,141 whole trajectories; 158,936 are trainable train-split records with target and admission, and there are 85,315 train edges. It replaces the trainer-sized slice neuralese-e2e-cohort-20261012-v2-slice1 (6,003 train records; bound on main the same day, after the 1389-record union cohort v1) on both lines (same binding, lockstep).
+- `--record-source trajectories` (train/e2e_records.py) streams the cohort. One indexing pass records each record's byte offset and is cached under `~/.cache/natlang/e2e-record-index` (135 s for v2).
+  - A drawn trajectory is read by offset and authenticated on its own (authenticated_recurrence_context_view per chain). Writer names therefore need to be unique only per chain and among the resident chains (`--stream-resident`, default 16; the least recently drawn chain is evicted with its producers). A chain that clashes, is cyclic or has a clipped producer source is refused and counted.
+  - Sampling is the shared CohortDocumentSampler: task family, then the chain's first source group, then chain, then record. Each family is weighted by its trainable-record count to the power `family_temperature` (0.5). musique_hops is 42% of the records and 72% of the edges; it gets 14% of the draws.
+  - Draws are seeded by the run seed and cursor, so resume and rollback replay the same records. Ineligible draws are redrawn and counted by reason.
+  - Held and probe chains are 4 test and 1 train chain per family, chosen in seeded order and loaded at start.
+  - Receipts: `record-stream.json` at start, `record_stream` every 10 updates in train.jsonl, and in the summary.
+- `steps` = 158,936: one epoch of the trainable train records at batch 1. `train`/`record_order` do not apply to a streamed source and were dropped.
+- `--soft-parts text`: instructions pieces render as their text, not as trained soft prompts.
+  - The direct parent trained on text prompts and the runtime serves text.
+  - v2 has 3139 pieces, each read by few records. As trained soft prompts they would be single-use parameters with optimizer state (several GB at Mellum width), initialised in context.
+- `--records`/`--pieces` accept several files. Each eager file is authenticated on its own; their writer names must not clash.

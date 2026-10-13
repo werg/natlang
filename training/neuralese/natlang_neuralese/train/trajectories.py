@@ -54,6 +54,8 @@ from __future__ import annotations
 
 import argparse
 import base64
+import collections
+import itertools
 import hashlib
 import json
 import math
@@ -656,6 +658,18 @@ def _progress(records, label: str):
                           "seconds": round(time.time() - began, 2), "elapsed": round(time.time() - start, 1)}),
               file=sys.stderr, flush=True)
 
+def merge_context_reviews(reviews: list) -> dict:
+    """One recurrence-context review of several separately authenticated record groups (files or trajectories)."""
+    merged = {"schema": "natlang.recurrence-context-review/1", "groups": len(reviews)}
+    for key in ("source_records", "prepared_records", "excluded_context_records"):
+        merged[key] = sum(review[key] for review in reviews)
+    for key in ("prepared_by_split", "excluded_by_split"):
+        merged[key] = {split: sum(review[key].get(split, 0) for review in reviews) for split in ("train", "test")}
+    for key in ("decisions", "excluded"):
+        merged[key] = [entry for review in reviews for entry in review[key]]
+    return merged
+
+
 def record_family(record: dict) -> str:
     """The task family a record's sampling and per-family evaluation group it by."""
     curriculum = record.get('curriculum') if isinstance(record.get('curriculum'), dict) else {}
@@ -685,8 +699,9 @@ def family_interleaved_order(records: list, seed, epoch: int) -> list:
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--records", required=True)
-    parser.add_argument("--pieces", required=True)
+    parser.add_argument("--records", required=True, nargs='+',
+                        help='records file(s); with --record-source trajectories, cohort directories or their records.jsonl')
+    parser.add_argument("--pieces", required=True, nargs='+')
     parser.add_argument("--out", required=True)
     parser.add_argument("--member-weight", type=float, default=0.0,
                         help="nested-family students (MAPLE_NESTED §4a): each update also trains one member (in rotation) "
@@ -886,6 +901,24 @@ def main(argv=None):
                         help='training record order without --cohort-weights: the file order (historical) or a seeded '
                              'per-epoch permutation that spreads task families evenly (record_family); with '
                              'family-interleave, --train keeps a family-balanced subset instead of the file prefix')
+    parser.add_argument('--record-source', choices=('eager', 'trajectories'), default='eager',
+                        help='eager: load and authenticate each --records file whole (writer names unique across the '
+                             'files); trajectories: stream whole cohorts (a directory, or a records.jsonl with '
+                             'chains.jsonl beside it) one trajectory at a time (train/e2e_records.py): the held and '
+                             'probe chains load at start, each training draw loads and authenticates its chain')
+    parser.add_argument('--family-temperature', type=float, default=0.5,
+                        help='--record-source trajectories: task families are drawn by trainable-record count to '
+                             'this power (0: uniform over families, 1: by count)')
+    parser.add_argument('--stream-held-chains', type=int, default=4,
+                        help='--record-source trajectories: held (test-split) chains loaded per family for the evaluations')
+    parser.add_argument('--stream-probe-chains', type=int, default=1,
+                        help='--record-source trajectories: train-split chains per family loaded at start for the '
+                             'train-probe evaluation and in-context initialisation')
+    parser.add_argument('--stream-resident', type=int, default=16,
+                        help='--record-source trajectories: drawn chains kept loaded (least recently drawn evicted)')
+    parser.add_argument('--soft-parts', choices=('trained', 'text'), default='trained',
+                        help='trained: each instructions piece a trained soft prompt (text-initialised in context); '
+                             'text: rendered as its text, as the direct stage trained and the runtime serves')
     parser.add_argument('--token-choice-lr', type=float, default=None,
                         help='rate of the TokenChoiceProjection (--direct-artifact), which sits in every token '
                              'prediction; default --heads-lr; 0 keeps it the identity (frozen)')
@@ -907,6 +940,9 @@ def main(argv=None):
     apply_consumer_defaults(parser)
     parser.add_argument("--inspect-training-config", action="store_true", help="print effective defaults and overrides without loading models or starting training")
     args = parser.parse_args(argv)
+    # One file stays a plain path (the identity of every earlier run); several stay a list.
+    args.records = args.records[0] if len(args.records) == 1 else args.records
+    args.pieces = args.pieces[0] if len(args.pieces) == 1 else args.pieces
     from ..maple.model import set_dense_moe_kernel
     set_dense_moe_kernel(args.moe_kernel)
     option_defaults = {action.dest: action.default for action in parser._actions if action.dest != 'help'}
@@ -1022,14 +1058,32 @@ def main(argv=None):
         raise ValueError('existing recurrence output has no resumable checkpoint; use a fresh directory')
     out.mkdir(parents=True, exist_ok=True)
     from .trajectory_state import atomic_checkpoint, trajectory_optimizer, validate_resume, validate_continuation, gradient_norm, clip_finite_gradients
+    def as_list(value):
+        return list(value) if isinstance(value, list) else [value] if value else []
+
+    def input_files(values):
+        # A streamed cohort is pinned by its records and chains files.
+        files = []
+        for value in as_list(values):
+            if args.record_source == 'trajectories' and value in as_list(args.records):
+                from .e2e_records import cohort_files
+                files += [str(p) for p in cohort_files(value)]
+            else:
+                files.append(value)
+        return files
+
     def digest_file(path):
+        if Path(path).stat().st_size > (1 << 30):
+            # (an 11 GB streamed cohort is hashed once, not at every start and resume)
+            from ..common.hashing import sha256_file_hex_cached
+            return sha256_file_hex_cached(path)
         digest = hashlib.sha256()
         with Path(path).open('rb') as stream:
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
     identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'eval_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size', 'direct_parent_proof', 'direct_artifact', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_rows', 'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'gate_held_rows', 'gate_response_kl', 'save_state', 'task_eval', 'task_eval_every', 'record_order'} and not (k == 'writer_text_weight' and v is None)},
-                'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
+                'files': {str(Path(p).resolve()): digest_file(p) for p in [*input_files(args.records), *as_list(args.pieces), args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
         identity['continuation'] = {'checkpoint_sha256': digest_file(args.continue_from),
@@ -1037,7 +1091,10 @@ def main(argv=None):
                                     'curriculum_changes': args.curriculum_change}
     from ..common.artifact_paths import artifact_refs
     # Each input bound to its role once, at launch, for every loader of the checkpoints written below.
-    input_roles = artifact_refs(vars(args), identity['files'], ('base', 'heads', 'records', 'pieces', 'bank', 'soft_init'))
+    # (several records or pieces files have no single role; identity['files'] pins each of them)
+    input_roles = artifact_refs({**vars(args), **{role: None for role in ('records', 'pieces')
+                                                  if isinstance(getattr(args, role), list)}},
+                                identity['files'], ('base', 'heads', 'records', 'pieces', 'bank', 'soft_init'))
     direct_parent = None
     if args.direct_artifact:
         from .direct_export import direct_parent_binding
@@ -1159,33 +1216,90 @@ def main(argv=None):
     session = GradSession(engine)
 
     texts, piece_kinds = {}, {}
-    with open(args.pieces) as stream:
-        for line in stream:
-            piece = json.loads(line)
-            texts[piece["name"]] = piece["text"]
-            piece_kinds[piece["name"]] = piece.get("kind")
-    with open(args.records) as stream:
-        source_records = [json.loads(line) for line in stream]
-    # Records converted before the view rename are refused before any model work, naming their conversion.
-    for record in source_records:
-        for message in record.get("messages") or []:
-            for part in message.get("content") if isinstance(message.get("content"), list) else []:
-                reject_digest_part(part)
+    for pieces_path in as_list(args.pieces):
+        with open(pieces_path) as stream:
+            for line in stream:
+                piece = json.loads(line)
+                if texts.get(piece["name"], piece["text"]) != piece["text"]:
+                    raise ValueError('pieces files disagree on the text of ' + piece["name"])
+                texts[piece["name"]] = piece["text"]
+                piece_kinds[piece["name"]] = piece.get("kind")
+    # Record groups, each authenticated on its own (authenticated_recurrence_context_view): one per --records file,
+    # or with --record-source trajectories one per trajectory (train/e2e_records.py), so writer names need to be
+    # unique within a group and among the groups resident together, not across a whole cohort.
+    stream_source, stream_stats = None, None
+    if args.record_source == 'trajectories':
+        from .e2e_records import TrajectoryRecordSource
+        stream_source = TrajectoryRecordSource(as_list(args.records), seed=args.seed,
+                                               family_temperature=args.family_temperature)
+        initial_chains = sorted(set(stream_source.chosen_chains('test', args.stream_held_chains, 'held')) |
+                                set(stream_source.chosen_chains('train', args.stream_probe_chains, 'probe')))
+        record_groups = [stream_source.load_chain(position) for position in initial_chains]
+        stream_stats = {'chains_loaded': 0, 'chains_evicted': 0, 'excluded_context_records': 0,
+                        'chains_refused': {}, 'redraws': {}}
+    else:
+        initial_chains, record_groups = [], []
+        for records_path in as_list(args.records):
+            with open(records_path) as stream:
+                record_groups.append([json.loads(line) for line in stream])
+
+    def reject_digest_parts(group):
+        # Records converted before the view rename are refused before any model work, naming their conversion.
+        for record in group:
+            for message in record.get("messages") or []:
+                for part in message.get("content") if isinstance(message.get("content"), list) else []:
+                    reject_digest_part(part)
+    for group in record_groups:
+        reject_digest_parts(group)
     if "prompt:digest" in texts:
         reject_digest_part({"type": "digest"})
-    records, context_review = authenticated_recurrence_context_view(source_records, texts)
+    prepared_groups, reviews = [], []
+    for group in record_groups:
+        prepared, review = authenticated_recurrence_context_view(group, texts)
+        prepared_groups.append(prepared)
+        reviews.append(review)
+    context_review = reviews[0] if len(reviews) == 1 else merge_context_reviews(reviews)
     context_review_path = out / "recurrence-context-review.json"
     context_review_path.write_text(json.dumps(context_review, ensure_ascii=False, indent=2) + "\n")
     bank = load_bank(args.bank) if args.bank else None
     params, leaf_ids, from_bank = {}, {}, []
 
+    def soft_part(name):
+        # --soft-parts text: an instructions piece is its text, as in the direct stage and at serving.
+        return ({"type": "text", "text": texts[name]} if args.soft_parts == 'text'
+                else {"type": "neuralese", "id": leaf_ids[name]})
+
     producers = {}
-    if args.handover == "written":
-        # Every record whose target writes a note, by note name: the producer of that note's block.
-        for record in records:
-            for name in target_writes(record):
-                if name in producers:raise ValueError('duplicate producer for '+name)
-                producers[name]={**record,'_active_write_name':name}
+    records, resident = [], collections.OrderedDict()  # resident: streamed chain position -> its prepared records
+
+    def group_producers(group):
+        named = {}
+        if args.handover == "written":
+            # Every record whose target writes a note, by note name: the producer of that note's block.
+            for record in group:
+                for name in target_writes(record):
+                    if name in named:
+                        raise ValueError('duplicate producer for ' + name)
+                    named[name] = {**record, '_active_write_name': name}
+        return named
+    for position, group in itertools.zip_longest(initial_chains, prepared_groups):
+        try:
+            named = group_producers(group)
+            clash = sorted(set(named) & set(producers))
+            if clash:
+                raise ValueError('duplicate producer for ' + clash[0])
+        except ValueError as error:
+            if stream_source is None:
+                raise
+            # A streamed chain whose writer names clash is refused (counted), not trained or evaluated.
+            print(json.dumps({'event': 'stream_chain_refused', 'chain': stream_source.chains[position]['key'],
+                              'reason': str(error)[:200]}), flush=True)
+            stream_stats['chains_refused']['writer-name'] = stream_stats['chains_refused'].get('writer-name', 0) + 1
+            continue
+        producers.update(named)
+        records += group
+        if position is not None:
+            resident[position] = {'records': {r['id']: r for r in group}, 'names': list(named), 'pinned': True}
 
     backbone, heads = engine.backbone, engine.heads
     backbone.ffn_chunk_tokens = args.ffn_chunk_tokens
@@ -1400,7 +1514,7 @@ def main(argv=None):
             # Depth counts writes, once per edge. Previously incrementing here
             # AND in written_values silently made depth3 only two write layers.
             names, payloads = written_values(producer, leaves, depth, visiting + (name,), memo)
-        messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer),
+        messages = render(producer["messages"], soft_part, handover_notes(producer),
                           names, names)
         capture_context, _capture_context_sha256 = authenticated_capture_context_augmentation(producer, name)
         if capture_context is not None:
@@ -1643,7 +1757,7 @@ def main(argv=None):
         return names, payloads
 
     def soft_messages(record, names):
-        return render(record["messages"], lambda name: {"type": "neuralese", "id": leaf_ids[name]}, handover_notes(record),
+        return render(record["messages"], soft_part, handover_notes(record),
                       names, names)
 
     def target_of(record, names):
@@ -1721,6 +1835,79 @@ def main(argv=None):
                          ', '.join(sorted(train_per_cohort)))
     sampler = RecordCohortSampler(train, cohort_weights, seed=args.seed) if cohort_weights is not None else None
     coverage = trajectory_coverage(train) if args.context_coverage == 'records' else {}
+
+    def release_chain(position):
+        entry = resident.pop(position)
+        for name in entry['names']:
+            producers.pop(name, None)
+            dependencies.pop(name, None)
+        for rid in entry['records']:
+            coverage.pop(rid, None)
+        stream_stats['chains_evicted'] += 1
+
+    def stream_chain(position):
+        """The prepared records of streamed chain ``position``, loaded and authenticated on its own when not resident;
+        its producers join the shared index while it stays resident (the least recently drawn chain is evicted)."""
+        if position in resident:
+            resident.move_to_end(position)
+            return resident[position]['records']
+        group = stream_source.load_chain(position)
+        reject_digest_parts(group)
+        prepared, review = authenticated_recurrence_context_view(group, texts)
+        stream_stats['chains_loaded'] += 1
+        stream_stats['excluded_context_records'] += review['excluded_context_records']
+        entry = {'records': {r['id']: r for r in prepared}, 'names': [], 'pinned': False}
+        reason = 'writer-name'
+        try:
+            named = group_producers(prepared)
+            if set(named) & set(producers):
+                raise ValueError('duplicate producer for ' + sorted(set(named) & set(producers))[0])
+            producers.update(named)
+            entry['names'] = list(named)
+            for name, producer in named.items():
+                dependencies[name] = (reads(producer) | set(handover_notes(producer))) - target_writes(producer)
+            reason = 'cyclic'
+            if share_producers and not is_acyclic(dependencies):
+                raise ValueError('a streamed chain makes the producer graph cyclic')
+            reason = 'producer-source'
+            if args.tokens_per_vector:
+                for name, producer in named.items():
+                    source_length(producer_source(name, producer))
+        except ValueError as error:
+            for name in entry['names']:
+                producers.pop(name, None)
+                dependencies.pop(name, None)
+            print(json.dumps({'event': 'stream_chain_refused', 'chain': stream_source.chains[position]['key'],
+                              'reason': str(error)[:200]}), flush=True)
+            stream_stats['chains_refused'][reason] = stream_stats['chains_refused'].get(reason, 0) + 1
+            entry = {'records': {}, 'names': [], 'pinned': False}
+        if args.context_coverage == 'records':
+            coverage.update(trajectory_coverage(list(entry['records'].values())))
+        resident[position] = entry
+        while sum(not e['pinned'] for e in resident.values()) > max(1, args.stream_resident):
+            release_chain(next(p for p, e in resident.items() if not e['pinned']))
+        return entry['records']
+
+    def stream_record(cursor):
+        """The training record at ``cursor``: the source's seeded draw, redrawn (counted by reason) while the drawn
+        record is not trainable here, under the eager path's own rules."""
+        for attempt in range(256):
+            position, rid = stream_source.draw(cursor, attempt)
+            record = stream_chain(position).get(rid)
+            if record is None:
+                reason = 'unauthenticated-or-refused'
+            elif args.only_handover and not (reads(record) or handover_notes(record)):
+                reason = 'no-handover'
+            elif native_neuralese_prompt(record):
+                reason = 'native-neuralese-prompt'
+            elif not admitted_for_training(record):
+                reason = 'unadmitted'
+            elif prompt_tokens(record) > args.max_tokens:
+                reason = 'long'
+            else:
+                return record
+            stream_stats['redraws'][reason] = stream_stats['redraws'].get(reason, 0) + 1
+        raise ValueError(f'no trainable streamed record in 256 draws at cursor {cursor}: {stream_stats}')
     from .trajectory_probe import select_held, select_paired_held, source_groups
     probe_policy = 'typed-factual-reciprocal-readers-v1'
     held = select_held(held_pool, args.eval)
@@ -1751,6 +1938,12 @@ def main(argv=None):
     strata_records = [record for chosen in cohort_strata_held.values() for record in chosen]
     used_names = {part["name"] for record in train + held + strata_records + paired_held + paired_train + list(producers.values()) for message in record["messages"]
                   if isinstance(message.get("content"), list) for part in message["content"] if part["type"] == "soft"}
+    if args.soft_parts == 'text':
+        used_names = set()
+    elif stream_source is not None:
+        # Every soft part a streamed record reads, initialised in context from the first record that reads it.
+        stream_soft = stream_source.soft_names()
+        used_names |= set(stream_soft)
     if args.view == "written":
         used_names.add("prompt:view")
     from .trajectory_state import soft_initialization, resumed_initial_rows, iteration_rng_state, restore_iteration_rng
@@ -1773,7 +1966,12 @@ def main(argv=None):
         else:
             # In-context text initialisation (text_init.py): the soft prompt reproduces its text where a recorded
             # call shows it, not an encoding of the bare piece.
-            rows = _in_context_rows(engine, name, text, texts, train + list(producers.values()))
+            context_records = train + list(producers.values())
+            if stream_source is not None and name in stream_soft and not any(
+                    part.get("type") == "soft" and part.get("name") == name for r in context_records
+                    for m in r["messages"] if isinstance(m.get("content"), list) for part in m["content"]):
+                context_records = [stream_source.load_record(*stream_soft[name])]
+            rows = _in_context_rows(engine, name, text, texts, context_records)
         block = engine.store.put(make_block(rows, engine.dialect, type="Neuralese<SystemPrompt>",
                                             producer={"kind": "bank" if name in from_bank else "text-init-in-context", "text": text}))
         params[name] = torch.nn.Parameter(block.payload.clone().float().to(engine.device))
@@ -1784,6 +1982,16 @@ def main(argv=None):
         # Training records that read or show a note come first in the mix's accounting; their producers may lie
         # outside the read window, which is why every producer was indexed.
         handovers = sum(1 for r in train if reads(r) or handover_notes(r))
+    if stream_source is not None:
+        # The streamed source's census and sampling policy; `train` above is only the probe chains' records.
+        (out / 'record-stream.json').write_text(json.dumps({
+            **stream_source.receipt(), 'initial_chains': [stream_source.chains[p]['key'] for p in resident],
+            'stream_resident': args.stream_resident, 'soft_parts': args.soft_parts,
+            'epoch_updates': math.ceil(stream_source.train_records() / args.batch)}, indent=2) + '\n')
+        print(json.dumps({'event': 'record_stream', 'trainable_train_records': stream_source.train_records(),
+                          'families': len(stream_source.family_weights), 'initial_chains': len(resident),
+                          'steps': args.steps, 'epochs': round(args.steps * args.batch / stream_source.train_records(), 4),
+                          **stream_stats}), flush=True)
     print(json.dumps({"train": len(train), "heldout": len(held), "skipped": skipped, "soft_params": len(params),
                       "from_bank": len(from_bank), "from_previous_soft": len(from_previous), "records_with_handover": handovers,
                       "handover": args.handover, "note_producers": len(producers),
@@ -2051,7 +2259,7 @@ def main(argv=None):
                 child_names = visit(producer, depth + 1, visiting + (name,)) if depth + 1 < args.write_depth else {}
                 cache_key = name, tuple(sorted(child_names))
                 if cache_key not in geometry_cache:
-                    messages = render(producer['messages'], lambda n: {'type': 'neuralese', 'id': leaf_ids[n]},
+                    messages = render(producer['messages'], soft_part,
                                       handover_notes(producer), child_names, child_names)
                     rendered = render_messages(messages, producer.get('tools'), engine._template, engine.specials)
                     items = session._items(rendered.segments, rendered.blocks, rendered.escape_nonce)
@@ -2580,7 +2788,9 @@ def main(argv=None):
             for _ in range(args.batch):
                 if args.device.startswith("cuda"):
                     torch.cuda.reset_peak_memory_stats()
-                if sampler is not None:
+                if stream_source is not None:
+                    record = stream_record(cursor)
+                elif sampler is not None:
                     record = sampler.record(cursor)
                 elif record_order == 'family-interleave':
                     epoch_index = cursor // len(train)
@@ -2861,6 +3071,9 @@ def main(argv=None):
                 del projection_before
             stop_phase(optimizer_phase)
             entry = {"step": step, "iteration_index": step, "completed_updates": step + 1, "reader_record_ids": step_record_ids, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started), **direct_update,
+                     **({"record_stream": {**stream_stats, 'redraws': dict(stream_stats['redraws']),
+                                           'chains_refused': dict(stream_stats['chains_refused'])}}
+                        if stream_source is not None and step % 10 == 0 else {}),
                      "errors": errors, "backward_mode": mode, "staged_nodes": staged_nodes,
                      "host_gc_seconds": round(host_gc_seconds - step_gc_seconds, 6),
                      "host_gc_calls": host_gc_calls - step_gc_calls,
@@ -2980,6 +3193,8 @@ def main(argv=None):
     report["soft-trained"] = evaluate("soft-trained", leaves)
     if task_eval is not None:
         report["task_eval"] = task_eval_report(args.steps)
+    if stream_source is not None:
+        report["record_stream"] = {'trainable_train_records': stream_source.train_records(), **stream_stats}
     if drift_monitor is not None:
         # The shared acceptance's behaviour gate on the final weights (the hard criterion) and the guard's record.
         report["behaviour_gate"] = drift_monitor.final_gate(args.steps)
