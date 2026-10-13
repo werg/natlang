@@ -1,6 +1,6 @@
 {
   "schema": "natlang.neuralese-training-recipe/1",
-  "id": "neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix",
+  "id": "neuralese-direct-lfm-qad-broad-20261013-v1-exact-resume-v10",
   "description": "Code handoff after v8 showed an identity mismatch: the newly introduced fresh_monitor_reference=false option was absent from the step-2000 saved checkpoint. Its default is now treated like other post-checkpoint defaults; same weights, optimizer, data, windowing and eval policy.",
   "identity_qualification": "neuralese_direct_step0_identity",
   "stages": [
