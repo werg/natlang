@@ -1,5 +1,42 @@
 # Continuation guide — updated 2026-10-13
 
+## 23:05 CEST: independent 200-program target and live source gates
+
+The owner clarified that Astra and GPT-6.1 Sol each have the **same** brief,
+independently, for at least 100 substantive natlang programs each. The
+catalogs currently contain 120 Astra and 100 Sol programs across 40 disjoint
+domains; all have 24-plus-record fixture drafts over 54 and 28 source worlds,
+respectively. This meets authoring volume, **not** generation or training
+admission. Current builder v6b has 23 source-preparation-ready cases and 197
+held. Both authors are adding per-field oracle comparison rules and typed
+stage transformation contracts; exact source replay alone cannot prove that
+the model actually performs meaningful semantic stages. Sol's full replay was
+99/100; the `sol060` heterogenous union result exposed a shared runtime
+type-checker bug (it selected a partial union arm without trying a later
+complete arm). The curriculum integrator has a local fix/regression and is
+preparing its checked commit. Preserve these gates when prioritizing teacher
+generation; no new semantic-stack trajectory is admitted yet.
+
+Two Luna diagnostics ran. Typed per-record v5 reached about 177 turns
+and 356 provider requests while processing roughly ten records. Grouped typed
+v6b has completed two six-record folders by about 85 turns/172 requests;
+the second folder returned six distinct source paths. Grouping seems to save
+repeated named-chain setup but still performs per-record NL calls, with only
+modest/variable throughput improvement at provider concurrency one. The live
+trace also showed stages forwarding unchanged state and a generated literal
+that is unused, so depth may be cosmetic; require actual stage contribution
+before admission. Both exact units were stopped after sufficient evidence, with
+partials retained for review and no model-negative labels; their released RAM
+returns to ordinary Luna. The v7 plan is typed stage deltas with mandatory
+child-result consumption, authored per-field comparison semantics, positive
+and negative grader variants, then 2–4 small matched live cases before wider
+priority generation. Ordinary Luna replenisher timer and Gemini batch15
+are active; Pop QAD trainer v14 remains GPU active past step 13120. Its step
+13000 held CE is 0.53307, gold accuracy 0.89220, response KL 1.33926 (below
+the 1.5 stop); the step12000 full task packet was still 0/16. Next full task
+gate is step16000. DGX's matched LFM template A/B is still pending; do not
+change the Pop prompt/template on the partial first-token evidence.
+
 ## 22:48 CEST: all 220 fixture drafts, typed per-record pilot
 
 Astra committed all 120 substantive fixture views (`80404a4c`) across 54

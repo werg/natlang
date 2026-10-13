@@ -309,10 +309,21 @@ export function problems(value: Value, type: Type, env: TypeEnv, path: string): 
     const resolved = env.resolve(current);
     if (resolved.kind === 'refined' || resolved.kind === 'untrusted') return walk(item, resolved.base, at);
     if (resolved.kind === 'union') {
+      let closest: Diagnostic[] | undefined;
       for (const member of resolved.members) {
-        try { coerce(item, member, env, at); walk(item, member, at); return; }
-        catch (error) { if (!(error instanceof Reject)) throw error; }
+        const start = holes.length;
+        try {
+          coerce(item, member, env, at);
+          walk(item, member, at);
+          const branchHoles = holes.splice(start);
+          if (!branchHoles.length) return;
+          if (!closest || branchHoles.length < closest.length) closest = branchHoles;
+        } catch (error) {
+          holes.splice(start);
+          if (!(error instanceof Reject)) throw error;
+        }
       }
+      if (closest) holes.push(...closest);
     } else if (resolved.kind === 'host') {
       return;
     } else if (resolved.kind === 'record' && plain(item)) {

@@ -28,6 +28,19 @@ test('native values distinguish missing, null and empty records', () => {
   assert.notEqual(MISSING, null);
 });
 
+test('a record union is complete when a later structural arm is complete', () => {
+  const env = new TypeEnv();
+  const type = parseType('{ chains: ({ cause: string, invoiceId: string, creditId: string, refundIds: string[] } | { cause: string, creditId: string, refundIds: string[] })[] }');
+  const valid = { chains: [
+    { cause: 'invoice', invoiceId: 'I1', creditId: 'C1', refundIds: [] },
+    { cause: 'credit', creditId: 'C2', refundIds: ['R1'] },
+  ] };
+  assert.deepEqual(problems(coerce(valid, type, env), type, env, 'value').holes, []);
+  const missing = { chains: [{ cause: 'credit', creditId: 'C2' }] };
+  assert.deepEqual(problems(coerce(missing, type, env), type, env, 'value').holes.map(d => d.path),
+    ['value/chains/0/refundIds']);
+});
+
 test('lambda construction keeps typed parameters, instructions, and a record codebase', () => {
   const lam = buildPending({ $lambda: { type: '(item: number) => number', instructions: 'Double the item.' } });
   assert.equal(lam.nodeKind, 'lambda');

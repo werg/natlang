@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { createNatlangRuntime, loadVirtualNatlang } from '../dist/index.js';
 
 /** Run root.nl with scripted root tool calls; returns each tool result and the call's value. */
-async function script(calls) {
+async function script(calls, returns = 'string') {
   const results = [];
   let step = 0;
   const model = async request => {
@@ -12,11 +12,24 @@ async function script(calls) {
     return call ? { calls: [call] } : { calls: [['return_result', { status: 'failed', reason: 'The scripted test has no more calls.' }]] };
   };
   const runtime = createNatlangRuntime({ model, seed: { mode: 'backend' } });
-  const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: {}\nreturns: string\n---\nSay hello.\n' }, 'root.nl');
+  const fn = loadVirtualNatlang({ 'root.nl': `---\nargs: {}\nreturns: ${JSON.stringify(returns)}\n---\nSay hello.\n` }, 'root.nl');
   let value;
   try { value = await runtime.run(() => fn()); } catch {}
   return { results, value };
 }
+
+test('return_result accepts a complete later record-union arm and rejects a genuinely missing field', async () => {
+  const returns = '{ chains: ({ cause: string, invoiceId: string, creditId: string, refundIds: string[] } | { cause: string, creditId: string, refundIds: string[] })[] }';
+  const incomplete = { chains: [{ cause: 'credit', creditId: 'C2' }] };
+  const complete = { chains: [{ cause: 'invoice', invoiceId: 'I1', creditId: 'C1', refundIds: [] },
+    { cause: 'credit', creditId: 'C2', refundIds: ['R1'] }] };
+  const { results, value } = await script([
+    ['return_result', { status: 'success', value: incomplete }],
+    ['return_result', { status: 'success', value: complete }],
+  ], returns);
+  assert.match(results[0], /return_result needs a complete/);
+  assert.deepEqual(value, complete);
+});
 
 test('a value sent as blocked gets stop-shape repair without unconditional success advice', async () => {
   const { results, value } = await script([
