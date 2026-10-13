@@ -134,8 +134,11 @@ def launch_queue(queue_dir, unit):
                '--case-seconds', '1800', '--provider', 'openai-codex',
                '--model-id', 'gpt-6-luna', '--model-concurrency', '1',
                '--execution-plans', '--reasoning-effort', 'low', '--min-free-mib', '1024']
+    # A retry may process a much larger partially completed program than its
+    # original one-case queue. Give its collector enough cgroup RAM to resume.
+    budget = '1.5' if queue_dir.name.startswith('retry-') else '0.9'
     run = subprocess.run(['python3', 'scripts/memory_ledger.py', 'run', '--unit', unit,
-                          '--budget-gb', '0.9', '--reserve-gb', '0.2', '--class', 'collection',
+                          '--budget-gb', budget, '--reserve-gb', '0.2', '--class', 'collection',
                           '--priority', 'low', '--workdir', str(ROOT), '--', *command],
                          cwd=ROOT, capture_output=True, text=True)
     if run.returncode:
@@ -163,10 +166,21 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, 
     own_retries = [path for path in retry_dirs
                    if (path / 'review.json').exists() and
                    json.loads((path / 'review.json').read_text()).get('original_key') == job['key']]
-    if own_retries and not (own_retries[-1] / 'journal.jsonl').exists():
+    retry_journal = own_retries[-1] / 'journal.jsonl' if own_retries else None
+    if own_retries and (not retry_journal.exists() or
+                        not any(event.get('event') == 'finish' for event in rows(retry_journal))):
         last_retry = own_retries[-1]
         prefix = f'natlang-pop-luna-repair-s{seed}' if repair else f'natlang-pop-luna-s{seed}'
-        launch_queue(last_retry, f'{prefix}-w{number:02d}-r{last_retry.name.removeprefix("retry-")}')
+        unit = f'{prefix}-w{number:02d}-r{last_retry.name.removeprefix("retry-")}'
+        state_file = last_retry / 'relaunch-state.json'
+        state = json.loads(state_file.read_text()) if state_file.exists() else {'failures': 0}
+        if state['failures'] >= 4:
+            print(json.dumps({'event': 'needs_review', 'unit': unit,
+                              'reason': 'four_interrupted_retry_relaunches'}), flush=True)
+            return False
+        subprocess.run(['systemctl', '--user', 'reset-failed', unit], check=False)
+        if launch_queue(last_retry, unit):
+            state_file.write_text(json.dumps({'failures': state['failures'] + 1}) + '\n')
         return True
     last = own_retries[-1] if own_retries else worker / f'case-{queue_ordinal(worker, job["key"]):03d}'
     errors = sorted((last / 'jobs').glob('*.error.json'))

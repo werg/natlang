@@ -71,6 +71,11 @@ export-source reconstruction is explicitly labelled in that bundle. DGX owns
 the equal-checkpoint/equal-seed full versus program-header eval; Pop kept its
 GPU training active rather than run a CPU strict export that the memory ledger
 could not admit concurrently. Await DGX's think/repeat/success breakdown.
+At step9000 the full-prompt held eval again scored 0/16 with ten exact-repeat
+stops and consumed 886 seconds synchronously. At the next checkpoint-safe
+handoff, change only operational `task_eval_every` to 4000; retain normal
+CE/drift checks. Keep investigating the failure rather than interpreting the
+repeated score as an approach verdict.
 
 The Step 5 repair cohort yielded three exact accepted handoffs from eight
 attempts. Shared native materialization produced 12 approved turns and three
@@ -82,6 +87,19 @@ branch corrections, not observed post-error recovery; the five wrong-answer
 outcomes are excluded. The approved native SFT turns need their own quality
 review before training admission. Genuine observed-error recovery remains in
 the 384-case static loop/recursion corpus.
+
+The s52028 Luna workers all reached a large CoEdIT `folder_edit` final case.
+Four originals exhausted their request budgets; worker02's one-case retry
+completed a 269-turn trace, but its 155 semantic rewrites are all
+`unverified_rewrite`, so final `outcome.accepted=false` despite exact numeric
+return. Treat this as review-needed semantic data, not an admitted teacher
+trajectory. Worker04's first retry was cgroup OOM-killed at a 0.9 GiB claim.
+`replenish_luna_held_shapes.py` now grants 1.5 GiB to retry queues and
+relaunches interrupted, resultless retries with a four-attempt no-progress
+cap; the live worker04 retry resumed. Preserve independent correct rows only
+after actual file-level semantic review. Future campaigns should route
+rewrite-oracle folder edits to that reviewer or static reference path rather
+than spend Luna requests without an admission route.
 
 ## 16:55 CEST: Pop generation and corpus sync
 
