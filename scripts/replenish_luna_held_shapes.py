@@ -26,13 +26,20 @@ FAMILIES = ('contract_diagnosis', 'workbench_tickets', 'logic_proof_verifier',
             'actor_greenhouse', 'edit_stream', 'claims_desk',
             'dataset_workbench', 'inline_review_each',
             'counterexample_revision', 'policy_after_measure',
-            'recurrence_inline_graphs', 'composed_process')
+            'recurrence_inline_graphs', 'composed_process',
+            'kqapro_question', 'scienceworld_task', 'alfworld_task',
+            'musique_hops', 'knowledge_research', 'folder_edit')
 START_SEED = 52007
 WORKERS = 6
-PER_FAMILY = {family: 8 for family in FAMILIES}
+PER_FAMILY = {family: 6 for family in FAMILIES}
 # inline_review_each also emits its paired no-crisp family. Preserve both
 # behaviours without letting this one builder take two full family slots.
-PER_FAMILY.update(inline_review_each=4, inline_avoid_crisp=4)
+PER_FAMILY.update(inline_review_each=3, inline_avoid_crisp=3)
+TARGET_GROUP_INDEX = BASE / 'target-r3-source-groups.jsonl'
+TARGET_GROUP_INPUT_HASHES = {
+    'program-header': '0974200754e27da114f429de3142fb3be8500431bcb0837cbea35868ebf30ba9',
+    'whole-trajectory': 'c30b6bbeb2887bc9a533a5aaa18111216caf6dc4252511a7d0985e32f7044501',
+}
 BACKFILL = BASE / 'provider-luna-folder-backfill-s52007-s52010-v1'
 BACKFILL_UNIT_SEED = 52070
 
@@ -214,6 +221,31 @@ def prior_worlds(current):
     return worlds
 
 
+def prior_groups(current):
+    index_manifest = Path(str(TARGET_GROUP_INDEX) + '.manifest.json')
+    if not TARGET_GROUP_INDEX.exists() and not index_manifest.exists():
+        from neuralese_data.source_group_index import build
+        union = ROOT / 'runs/natlang-target-union-20261011-r3'
+        build([union / rendering / 'lfm25/text-data.jsonl'
+               for rendering in TARGET_GROUP_INPUT_HASHES], TARGET_GROUP_INDEX)
+    manifest = json.loads(index_manifest.read_text())
+    if (manifest.get('schema') != 'natlang.training-source-group-index/1' or
+            manifest.get('index_sha256') != sha256_file_hex(TARGET_GROUP_INDEX) or
+            {Path(item['path']).parts[-3]: item['sha256'] for item in manifest['inputs']}
+            != TARGET_GROUP_INPUT_HASHES):
+        raise ValueError('target r3 source-group exclusion index is stale')
+    groups = {json.loads(line) for line in TARGET_GROUP_INDEX.read_text().splitlines()}
+    old = Path('/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1')
+    sources = list(old.glob('provider-luna-held-shape-remediation*/source/*.ir.jsonl'))
+    sources += list(BASE.glob('provider-luna-held-shapes-s*-v1/source/*.ir.jsonl'))
+    for source in sources:
+        if current in source.parents:
+            continue
+        for row in rows(source):
+            groups.update(row.get('source_groups') or ())
+    return groups
+
+
 def write_queues(campaign, seed, selected):
     """Write six source-pinned one-program queues and launch their workers."""
     for number in range(1, WORKERS + 1):
@@ -235,7 +267,7 @@ def write_queues(campaign, seed, selected):
         launch_worker(campaign, seed, number)
 
 
-def prepare(campaign, seed, source, excluded):
+def prepare(campaign, seed, source, excluded, excluded_groups):
     source_rows = rows(source)
     report = json.loads(Path(str(source) + '.report.json').read_text())
     if report['cases'] != len(source_rows) or report['verified'] != len(source_rows):
@@ -246,7 +278,12 @@ def prepare(campaign, seed, source, excluded):
     counts = collections.Counter()
     # Choose distinct groups before sibling variants, avoiding exact held or
     # prior-generation input worlds. Do not force a quota if the source lacks it.
-    eligible = [row for row in source_rows if row['split'] == 'train' and world(row) not in excluded]
+    excluded_world_cases = sum(row['split'] == 'train' and world(row) in excluded for row in source_rows)
+    excluded_group_cases = sum(row['split'] == 'train' and
+                               bool(excluded_groups.intersection(row.get('source_groups') or ()))
+                               for row in source_rows)
+    eligible = [row for row in source_rows if row['split'] == 'train' and world(row) not in excluded
+                and not excluded_groups.intersection(row.get('source_groups') or ())]
     for distinct in (True, False):
         for row in eligible:
             family = row['curriculum']['family']
@@ -265,6 +302,11 @@ def prepare(campaign, seed, source, excluded):
                     source_verified_cases=len(source_rows), selected_count=len(selected),
                     selected_by_family=dict(counts), selected_ids=[row['id'] for row in selected],
                     held_path=str(HELD), held_sha256=sha256_file_hex(HELD),
+                    target_group_index=str(TARGET_GROUP_INDEX),
+                    target_group_index_sha256=sha256_file_hex(TARGET_GROUP_INDEX),
+                    excluded_existing_source_groups=len(excluded_groups),
+                    excluded_world_cases=excluded_world_cases,
+                    excluded_group_cases=excluded_group_cases,
                     world_exclusion='same family and all visible semantics (including folder_files and operation; excluding gold expected/oracle) against held and earlier sources',
                     training_admission=False, status='generation_only_pending_quality_review')
     (campaign / 'campaign-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
@@ -325,7 +367,7 @@ def main():
                         print(json.dumps({'event': 'source_build_wait', 'campaign': str(campaign)}), flush=True)
                         return
                     prepare(campaign, int(campaign.name.split('-s')[-1].split('-')[0]),
-                            source, prior_worlds(campaign))
+                    source, prior_worlds(campaign), prior_groups(campaign))
                     return
                 raise ValueError(f'Incomplete campaign preparation: {campaign}')
             if not complete(campaign):
@@ -340,7 +382,7 @@ def main():
         campaign.mkdir(exist_ok=True)
         source = build_source(campaign, seed)
         excluded = prior_worlds(campaign)
-        prepare(campaign, seed, source, excluded)
+        prepare(campaign, seed, source, excluded, prior_groups(campaign))
 
 
 if __name__ == '__main__':
