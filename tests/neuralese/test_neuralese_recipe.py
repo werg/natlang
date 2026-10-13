@@ -807,7 +807,7 @@ def test_lineage_handoff_takes_newest_code_and_operational_recipe_changes_only(t
         runner.lineage_handoff(updated, dict(plan, inputs={'x': '2'}), frozen, package, plan_path)
 
 
-def test_lineage_handoff_allows_pinned_code_and_memory_envelope_change(tmp_path):
+def test_lineage_handoff_allows_pinned_code_memory_and_retired_readiness_change(tmp_path):
     import json as _json
 
     from natlang_neuralese.train import recipe as runner
@@ -824,6 +824,7 @@ def test_lineage_handoff_allows_pinned_code_and_memory_envelope_change(tmp_path)
     new_code = {str(path.relative_to(package)): runner.sha(path) for path in package.rglob('*.py')}
     old_recipe = {'id': 'r-v10', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': old_code},
                   'stages': [{'id': 's', 'parameters': {'lr': 1, 'memory_gb': 9}}]}
+    old_recipe['parent_readiness'] = {'held_ce_plateau': {'evaluations': 3}}
     new_recipe = {'id': 'r-v10', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': new_code},
                   'stages': [{'id': 's', 'parameters': {'lr': 1, 'memory_gb': 16}}]}
     existing = {'recipe': old_recipe, 'recipe_sha256': 'lineage', 'inputs': {'x': '1'}, 'device': 'cuda',

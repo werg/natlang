@@ -1140,6 +1140,10 @@ def recipe_handoff_epoch_changes(old_recipe, new_recipe):
         raise ValueError('handoff refused: recipe changes outside the direct-stage epoch budget')
     old = _without_direct_epochs(_without_package_code(_without_operational(old_recipe)))
     new = _without_direct_epochs(_without_package_code(_without_operational(new_recipe)))
+    # Owner 2026-10-13 retired the direct-stage plateau prerequisite. Existing
+    # E2E runs may drop its metadata at a handoff; adding/changing it still fails.
+    if 'parent_readiness' not in new:
+        old.pop('parent_readiness', None)
     if old != new:
         raise ValueError('handoff refused: the recipe changes more than operational stage parameters, '
                          'runtime.package_code, and neuralese_direct epoch budgets')
