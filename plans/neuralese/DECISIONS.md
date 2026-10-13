@@ -1720,6 +1720,16 @@ are for Q4_0 inference, so use the full-precision QAD source for training and
 measure our own quantized serving result. Pop owns the new LFM initialization;
 DGX was briefed via `coord.py` decision `2026-10-12T16:54:18.472948Z-pop-7fe7`.
 
+Owner clarification 2026-10-13: do not spend compute on a separate matched QAD
+base held-task execution. The earlier non-QAD 350M base scored 0/16 on packet v3
+under full rendering and the smaller 600-second/48-request budget; that is useful
+context, not a same-weights/same-rendering comparison with the QAD training run.
+The QAD base's 18/48 one-turn behavior probe and the warm-up's 26/48 measure a
+different capability. Continue judging the QAD lineage by absolute held-task
+success, exact failure classes, and changes across its own checkpoints; keep the
+declared zero-success reference as a permissive historical floor rather than
+claiming a measured QAD task baseline.
+
 Deleted on DGX under the standing owner order on discarded work (AGENTS.md); exact paths in `runs/DELETED-DISCARDED-20261011.txt` on DGX. References above are historical.
 
 - `maple-native-qat-preflight-20261007.sh`: deleted 2026-10-11.
