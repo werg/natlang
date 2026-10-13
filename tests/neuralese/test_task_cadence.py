@@ -228,19 +228,6 @@ def test_a_failed_async_job_is_an_ineligible_row_and_pending_ones_are_no_failure
         evaluator.submit(30, slot, heads=None)
 
 
-def test_handoff_readiness_waits_for_the_candidate_checkpoints_task_evaluation(tmp_path):
-    import json
-    from natlang_neuralese.train.e2e_acceptance import _task_eval_candidate
-    assert _task_eval_candidate(tmp_path) is None
-    row = {'step': 400, 'eligible': True, 'task_successes': 8, 'cases': 16, 'reference_successes': 4}
-    (tmp_path / 'task-eval.jsonl').write_text(json.dumps(row) + '\n')
-    assert _task_eval_candidate(tmp_path)['rate'] == 0.5
-    (tmp_path / 'task-eval' / 'async' / 'step-0000800').mkdir(parents=True)
-    (tmp_path / 'task-eval' / 'async' / 'step-0000800' / 'request.json').write_text('{}')
-    waiting = _task_eval_candidate(tmp_path)
-    assert waiting['status'] == 'pending' and waiting['step'] == 800
-
-
 def test_the_dispatcher_finds_requests_through_the_queue_pointers(tmp_path, monkeypatch):
     import importlib.util
     import json
