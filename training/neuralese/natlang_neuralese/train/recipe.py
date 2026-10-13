@@ -1300,17 +1300,19 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
         actual_new = {str(path.relative_to(package)): sha(path) for path in sorted(package.rglob('*.py'))}
         if actual_new != new_pin:
             raise ValueError('handoff refused: new recipe code pin differs from the current shared package')
-        if old_code == actual_new:
-            raise ValueError('handoff refused: runtime.package_code has not changed')
-    previous = frozen.parent.parent / ('runtime-superseded-' + time.strftime('%Y%m%dT%H%M%S'))
+    code_changed = old_code != actual_new if old_pin is not None or new_pin is not None else True
+    previous = (frozen.parent.parent / ('runtime-superseded-' + time.strftime('%Y%m%dT%H%M%S'))
+                if code_changed else None)
     if dry_run:
         new_code = {str(path.relative_to(package)): sha(path) for path in package.rglob('*.py')}
-    else:
+    elif code_changed:
         frozen.parent.rename(previous)
         shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         new_code = {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')}
+    else:
+        new_code = old_code
     record = {'time': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'recipe_id': plan['recipe'].get('id'),
-              'recipe_sha256': plan['recipe_sha256'], 'superseded_runtime': previous.name,
+              'recipe_sha256': plan['recipe_sha256'], 'superseded_runtime': previous.name if previous else None,
               'code_changed': sorted(k for k in old_code.keys() & new_code.keys() if old_code[k] != new_code[k]),
               'code_added': sorted(new_code.keys() - old_code.keys()),
               'code_removed': sorted(old_code.keys() - new_code.keys())}
