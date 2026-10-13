@@ -63768,6 +63768,194 @@
       "derived_from": [
         "provider-luna-held-shapes-s52027-v1"
       ]
+    },
+    {
+      "id": "natlang-native-turns-pop-static-folder-edit-large-s52027-render-20261013-v1",
+      "owner": "dgx",
+      "path": "runs/natlang-native-turns-pop-static-folder-edit-large-s52027-render-20261013-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: pop-static-folder-edit-large-s52027-native-20261013-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "pop-static-folder-edit-large-s52027-native-20261013-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "7a396c74240f73212b2ce559f9ac93aa7d088d4f30ed181ccec46be823a5e4cc",
+            "documents": 388,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 388,
+                "supervised_tokens": 10357,
+                "tokens": 2147883,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 9189,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "d3b4d8939c203a448e1c820a799a0bc1fca1238bacd09b5107212f0d11b9b68e",
+            "documents": 388,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 388,
+                "supervised_tokens": 15914,
+                "tokens": 2172876,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 10273,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "6eb35f78eed05ebca84d07991bd1b42460a0c9de7ca82c122e2cc16b50e3ee43",
+            "documents": 1712,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1712,
+                "supervised_tokens": 52264,
+                "tokens": 1755045,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 4664,
+            "merge_omissions": {
+              "exact_duplicate_document": 20
+            }
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "f7f326bcdf65d2db30a2fc0c96e1076c801392d9ae5ed475f2a2ec800d482c60",
+            "documents": 1712,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1712,
+                "supervised_tokens": 76914,
+                "tokens": 1873120,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 5752,
+            "merge_omissions": {
+              "exact_duplicate_document": 20
+            }
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "2d83e2b66292905ba305f0262987660ced83fada2ff384c8c9ed855af4a962d4",
+            "documents": 856,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 545150,
+                "documents": 856,
+                "opening_tokens": 478334,
+                "supervised_tokens": 66816,
+                "tokens": 906973,
+                "tool_tokens": 138132
+              }
+            },
+            "max_document_tokens": 4649,
+            "merge_omissions": {
+              "exact_duplicate_document": 10
+            }
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "f829ebaf652dbdeb5e8d5626592bc849fe9d94071de4a4bf4ed56c1e7d223eb4",
+            "documents": 856,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 590389,
+                "documents": 856,
+                "opening_tokens": 462075,
+                "supervised_tokens": 128314,
+                "tokens": 993665,
+                "tool_tokens": 176176
+              }
+            },
+            "max_document_tokens": 5758,
+            "merge_omissions": {
+              "exact_duplicate_document": 10
+            }
+          }
+        }
+      },
+      "selection": {
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 1732,
+        "selected:train": 1732,
+        "source_rows": 1732
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 1344,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 1344
+      },
+      "program_header_parity": {
+        "equal": 3464,
+        "retokenization_checked": 3464
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "aa4bf1e0438b5aae110ce42d48916c06898dc0ce99d73e90bddc4210667c0982",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/natlang-native-turns-pop-static-folder-edit-large-s52027-render-20261013-v1/receipt.json",
+        "sources": {
+          "/home/werg/data/natlang-corpora/pop-static-folder-edit-large-s52027-src/turns.jsonl": {
+            "bytes": 431309679,
+            "sha256": "17259205079efb9628d709f94e03dee6ba8b6c2f3115e74405993177ed13f14c"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/natlang-target-union-20261011-r3/program-header/lfm25/text-data.jsonl": "0974200754e27da114f429de3142fb3be8500431bcb0837cbea35868ebf30ba9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": ""
     }
   ],
   "coverage_backlog": [
