@@ -87,14 +87,29 @@ failure classes and states its choice. Shadow mode compares them before the NL o
   thresholds as the direct stages, LINE_PARITY.md). The in-loss β term is per-rollout and secondary.
 - **Replay:** the stage mixes its train rows' SFT data (direct objective) at a declared weight; no general anchors.
 
-## 6. Recipe stage
+## 6. Recipe stage (built 2026-10-13, commits c8bc0c7f, f18828c4)
 
-A `neuralese_rl` handler in `train/recipe.py` `HANDLERS`, module `natlang_neuralese.rl.stage` (to build), recipes
-`extends` the lineage's direct recipe and override only RL parameters: `rows` (task-row binding), `group`,
-`temperature`, `rounds`, `rft_min_successes`, `beta`, `clip`, `lr`, drift-monitor parameters. Inputs: the direct
-checkpoint (`continue_from`), task rows, monitor reference. Each round: export → serve (ledger GPU unit) → queue →
-score → RFT or GRPO step → drift check → held-task eval subset on cadence. Result: `report.json` plus the best
-checkpoint retained by `task_packet.retain_best_checkpoint` on held-task successes.
+`neuralese_rl` in `train/recipe.py` `HANDLERS`, module `natlang_neuralese.rl.stage`. One implementation per concept:
+the stage owns only the RL data decision; the update is the shared direct trainer (`train/direct_sft.py`: loss,
+optimizer, checkpoints, held CE, in-run task-success evaluation, drift monitor).
+
+- **Inputs:** `rollouts` (scored `natlang.rollout/1`, from `task_rollouts score --emit-rollouts`; teacher rollouts
+  as further files), and the continuation roles of the direct trainer. In a lineage the stage `requires` a direct
+  phase and continues from its output implicitly (`DIRECT_TRAINING_KINDS`, the same rule as direct phase to phase);
+  a standalone RL recipe pins `continue_from`/`continue_identity`/`continue_monitor_reference`.
+- **Parameters:** every `neuralese_direct` parameter (defaults inherit the recipe's `neuralese_direct` defaults,
+  `RL_DEFAULTS_FROM`) plus `rl_mode` (`rft`), `rl_tokenizer` (base snapshot), `rl_prompt_rendering`,
+  `rft_max_success_rate` (0.75), `rft_held_fraction` (0.125).
+- **Mode `rft`:** successful turns of tasks with 0 < success rate <= `rft_max_success_rate` (`rl.stage.rft_tasks`)
+  become whole-trajectory documents rendered by the shared serving renderer (`native_gold_packet`, the checkpoint's
+  rendering), reply as supervised suffix, task-level held split; receipt `rl-data-receipt.json`.
+- **KL to pre-RL:** the stage runs the trainer with `--fresh-monitor-reference`, so the drift reference is captured
+  from the continued (pre-RL) weights at update 0 instead of copying the predecessor's base reference.
+- **Gate and report:** the direct gate (`qualified`: held CE, no drift stop, task-success cadence on the held packet);
+  epochs budget, objective arguments and `--plan-only` as for direct phases.
+- **Not yet:** signed advantage weights (GRPO on the full checkpoint) need per-document weights in the direct
+  trainer; until then GRPO runs on adapters (`grpo.py round`, which also has `--objective rft` with the same task
+  rule). Tests: `tests/neuralese/test_rl_stage.py`.
 
 ## 7. End-to-end / Neuralese path
 

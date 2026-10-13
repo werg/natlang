@@ -451,6 +451,77 @@ def cmd_slice(a):
     print(json.dumps({k: receipt[k] for k in ('id', 'chains', 'records', 'edges', 'by_split')}, indent=1))
 
 
+def cmd_partition(a):
+    """Partition a whole assembled corpus into trainer-sized slices that together hold every chain.
+
+    Each part holds the edge endpoints of whole chains, at most --records records, writer names unique within the part
+    (so each part re-authenticates as one file); chains are dealt round-robin over families so every part is
+    family-mixed. Parts: <ID>/part-NNN/{records,edges,chains}.jsonl, one shared pieces.jsonl, receipt.json.
+    """
+    from natlang_neuralese.train.trajectories import target_writes
+    src = Path(a.source) if '/' in a.source else Path(resolve_str('data_nvme', 'natlang-corpora', a.source))
+    chains = [json.loads(l) for l in read_lines(src / 'chains.jsonl')]
+    index = {(c['source'], c['trajectory']): i for i, c in enumerate(chains)}
+    ends = collections.defaultdict(set)
+    for line in read_lines(src / 'edges.jsonl'):
+        e = json.loads(line); ends[index[(e['source'], e['trajectory'])]] |= {e['writer_record_id'], e['reader_record_id']}
+    for i, c in enumerate(chains): c['records'] = [r for r in c['records'] if r in ends[i]]
+    member = {rid: i for i, c in enumerate(chains) for rid in c['records']}
+    names = collections.defaultdict(set)
+    for line in read_lines(src / 'records.jsonl'):
+        r = json.loads(line); i = member.get(r['id'])
+        if i is not None: names[i].update(target_writes(r))
+    by_family = collections.defaultdict(list)
+    for i, c in enumerate(chains):
+        if c['records']: by_family[c['family']].append(i)
+    order = []
+    queues = [collections.deque(v) for _, v in sorted(by_family.items())]
+    while any(queues):
+        for q in queues:
+            if q: order.append(q.popleft())
+    parts = []  # [records, used names, chain ids]
+    part_of = {}
+    for i in order:
+        n = len(chains[i]['records'])
+        for k, (count, used, ids) in enumerate(parts):
+            if count + n <= a.records and not (names[i] & used):
+                parts[k][0] += n; used |= names[i]; ids.append(i); part_of[i] = k; break
+        else:
+            parts.append([n, set(names[i]), [i]]); part_of[i] = len(parts) - 1
+    out = Path(a.out_dir) / a.id if a.out_dir else Path(resolve_str('data_nvme', 'natlang-corpora', a.id))
+    staged = out.with_name(out.name + '.building'); staged.mkdir(parents=True, exist_ok=True)
+    rid_part = {rid: part_of[i] for rid, i in member.items()}
+    dirs = [staged / f'part-{k:03d}' for k in range(len(parts))]
+    for d in dirs: d.mkdir(exist_ok=True)
+    rec = [open(d / 'records.jsonl', 'w') for d in dirs]
+    for line in read_lines(src / 'records.jsonl'):
+        k = rid_part.get(json.loads(line)['id'])
+        if k is not None: rec[k].write(line)
+    edg = [open(d / 'edges.jsonl', 'w') for d in dirs]
+    for line in read_lines(src / 'edges.jsonl'):
+        e = json.loads(line); edg[part_of[index[(e['source'], e['trajectory'])]]].write(line)
+    for k, d in enumerate(dirs):
+        with open(d / 'chains.jsonl', 'w') as f:
+            for i in parts[k][2]: f.write(json.dumps(chains[i]) + '\n')
+    for h in rec + edg: h.close()
+    import shutil; shutil.copyfile(src / 'pieces.jsonl', staged / 'pieces.jsonl')
+    info = []
+    for k, d in enumerate(dirs):
+        sel = [chains[i] for i in parts[k][2]]
+        info.append({'part': d.name, 'chains': len(sel), 'records': parts[k][0], 'edges': sum(c['edges'] for c in sel),
+                     'train_records': sum(len(c['records']) for c in sel if c['split'] == 'train'),
+                     'records_sha256': sha256_file_hex(d / 'records.jsonl'), 'records_bytes': os.path.getsize(d / 'records.jsonl')})
+    receipt = {'schema': 'natlang.neuralese-e2e-cohort-partition/1', 'id': a.id, 'source': str(src),
+               'source_receipt_sha256': sha256_file_hex(src / 'receipt.json'), 'selection': cmd_partition.__doc__.strip(),
+               'records_per_part_max': a.records, 'parts': info,
+               'totals': {k: sum(p[k] for p in info) for k in ('chains', 'records', 'edges', 'train_records')},
+               'by_family': {f: len(v) for f, v in sorted(by_family.items())},
+               'pieces_sha256': sha256_file_hex(staged / 'pieces.jsonl')}
+    json.dump(receipt, open(staged / 'receipt.json', 'w'), indent=1, sort_keys=True)
+    staged.rename(out)
+    print(json.dumps({'id': a.id, 'parts': len(info), **receipt['totals']}, indent=1))
+
+
 def _soft_names(row):
     out = set()
 
@@ -476,12 +547,14 @@ def main():
     sl = sub.add_parser('slice'); sl.add_argument('--source', required=True, help='corpus id under data_nvme natlang-corpora, or a path'); sl.add_argument('--id', required=True)
     sl.add_argument('--train-records', type=int, default=12000); sl.add_argument('--test-records', type=int, default=1500)
     sl.add_argument('--seed', type=int, default=20261012)
+    pa = sub.add_parser('partition'); pa.add_argument('--source', required=True); pa.add_argument('--id', required=True)
+    pa.add_argument('--records', type=int, default=8000); pa.add_argument('--out-dir')
     r = sub.add_parser('redo-failed'); r.add_argument('name'); r.add_argument('--work', required=True)
     m = sub.add_parser('assemble'); m.add_argument('--work', required=True); m.add_argument('--id', required=True)
     m.add_argument('--out-dir', help='parent directory of the corpus (default: data_nvme natlang-corpora); bulk corpora go to the HDD')
     m.add_argument('--held-union', default=resolve_str('repo', 'runs/natlang-target-union-20261011-r3'))
     a = ap.parse_args()
-    {'shard': cmd_shard, 'convert': cmd_convert, 'assemble': cmd_assemble, 'redo-failed': cmd_redo_failed, 'slice': cmd_slice}[a.cmd](a)
+    {'shard': cmd_shard, 'convert': cmd_convert, 'assemble': cmd_assemble, 'redo-failed': cmd_redo_failed, 'slice': cmd_slice, 'partition': cmd_partition}[a.cmd](a)
 
 
 if __name__ == '__main__':
