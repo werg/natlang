@@ -271,6 +271,30 @@ function checkedStageSpecs(entry, steps) {
       ...paragraphs(variant.idiom_preconditions),
       variant.direct_await_idiom, variant.no_op_criterion, ...variant.invariants];
     stage.no_op_policy = variant.no_op_criterion;
+    const carried = variant.cross_folder_accumulation;
+    if (carried) {
+      const fields = Object.keys(carried.initial_state ?? {});
+      if (carried.schema !== 'semantic-cross-folder-state/1' ||
+          carried.context_field !== 'priorCompletedState' ||
+          carried.context_field_type !== 'FinalSemanticState' ||
+          typeof carried.StageContext !== 'string' ||
+          !carried.StageContext.includes('priorCompletedState:FinalSemanticState') ||
+          !['interactionAssertions', 'interactionEdges', 'causalAssessments',
+            'scopeDecisions', 'effectAudit', noOpField].every(field => fields.includes(field)) ||
+          !Array.isArray(carried.root_numbered_plan) ||
+          !Array.isArray(carried.stage_ownership_plan) ||
+          !Array.isArray(carried.stage5_numbered_plan) ||
+          typeof carried.stage5_no_op_policy !== 'string' ||
+          !carried.stage5_no_op_policy.trim() ||
+          carried.root_numbered_plan.length < 3 || carried.stage5_numbered_plan.length < 3)
+        throw Error(`${entry.id}: invalid cross-folder typed accumulation contract`);
+      spec.types.StageContext = carried.StageContext;
+      const last = spec.stages.at(-1);
+      last.numbered_plan = carried.stage5_numbered_plan;
+      last.no_op_policy = carried.stage5_no_op_policy;
+      last.new_semantic_transformation =
+        'Recompute the global effect audit from priorCompletedState and current-batch typed edges, assessments and scope decisions.';
+    }
   }
   return spec;
 }
@@ -322,6 +346,7 @@ function render(entry, provider) {
   const steps = stages(entry);
   if (steps.length < 3) throw Error(`${id}: need at least three distinct stages`);
   const stageSpec = stageSpecsMode ? checkedStageSpecs(entry, steps) : null;
+  const crossFolder = stageSpec && variant?.program_id === id ? variant.cross_folder_accumulation : null;
   const entityIdentity = stageSpec && variant?.program_id === id ? variant.entity_identity_contract : null;
   if (entityIdentity && ['join_key', 'source_quotes', 'scope'].some(key =>
     typeof entityIdentity[key] !== 'string' || !entityIdentity[key].trim()))
@@ -376,7 +401,9 @@ function render(entry, provider) {
   const stageInstructions = stageSpec ? `${prefix}${title}. ${objective}\n\nSemantic rule: ${rule}\n\n` +
     identityInstruction +
     (identities ? `Source ID binding (attach id and path to every EvidenceRecord, and use these exact IDs in the result):\n${identities.map(({ id, path }) => `${id}: ${path}`).join('\n')}\n\n` : '') +
-    (entry.typed_inputs ? `Read the supplied directory snapshot and inquiry into the authored typed bundle. Call ${steps[0].name} with StageInput1 {bundle,inquiry,prior:{${stageSpec.no_op_field ?? 'stageAbsences'}:[]}}. The named stages must each add their own source-backed typed contribution before calling the next stage within the active call. Synthesize the declared answer from the returned FinalSemanticState, not by re-solving from the raw folder.\n` :
+    (crossFolder ?
+      `Use iterateOn over sorted source folders with a shrinking unprocessed-folder frontier. Initialize completedState:FinalSemanticState = ${JSON.stringify(crossFolder.initial_state)}. For each folder, build a typed EvidenceBatch of {id,path,text} records and call ${steps[0].name} with StageInput1 {batch,context:{objective,rule,relatedRecords,priorCompletedState:completedState},prior:{stageAbsences:[]}}. Follow this exact typed state plan:\n${crossFolder.root_numbered_plan.join('\n')}\n` :
+      entry.typed_inputs ? `Read the supplied directory snapshot and inquiry into the authored typed bundle. Call ${steps[0].name} with StageInput1 {bundle,inquiry,prior:{${stageSpec.no_op_field ?? 'stageAbsences'}:[]}}. The named stages must each add their own source-backed typed contribution before calling the next stage within the active call. Synthesize the declared answer from the returned FinalSemanticState, not by re-solving from the raw folder.\n` :
       `Use iterateOn over the sorted source folders. Each step builds a typed EvidenceBatch of {id,path,text} records for one current folder and calls ${steps[0].name} with StageInput1 {batch,context,prior:{stageAbsences:[]}}. Append the returned FinalSemanticState to the loop's collected states, then advance the folder frontier; the unprocessed-folder count decreases by one until all folders are consumed. Each named stage adds its owned, source-linked contribution and passes that accumulated state to its child. Synthesize the declared result from all collected states, preserving cross-folder evidence and unresolved claims.\n`) +
     `The named stages are ${steps.map(step => step.name).join(' → ')}. Their typed inputs, owned contribution fields, source witnesses and plans are in the callable .nl files; read those files when called. A stage with no applicable evidence records a source-grounded absence instead of silently forwarding. An ad hoc natural-language literal counts only when invoked and its decision changes the accumulated state.\n` +
     `Output contract: ${contract.join(' ')}\nUse exact code for file reading, binding, finite iteration, coverage checks and serialization. Semantic judgments belong in the named functions and invoked literals. Return the declared typed answer grounded in their FinalSemanticState.` : null;
@@ -394,13 +421,15 @@ function render(entry, provider) {
       const plan = owned.numbered_plan.join('\n');
       const literalPlan = owned.scoped_literal_required ?
         `\nFormulate and invoke a scoped typed natural-language literal; pass its returned decision into ${owned.owned_contribution.field}.\n${paragraphs(owned.scoped_literal_plan).join('\n')}` : '';
+      const carriedPlan = crossFolder ?
+        `\nCross-folder state: ${crossFolder.stage_ownership_plan.join(' ')}\n` : '';
       files[`${stageFolder}.nl`] = nlFile({ args: { input: `StageInput${index + 1}` },
         returns: 'FinalSemanticState', description: `${title}: ${name}`,
         instructions: `${plan}\nOwned new semantic contribution: ${owned.owned_contribution.field}: ${owned.owned_contribution.type}.\n` +
           identityInstruction +
           `Transformation: ${owned.new_semantic_transformation}\n` +
           `Evidence: ${owned.source_evidence_obligation}\nInvariant: ${owned.invariant}\n` +
-          `No applicable evidence: ${owned.no_op_policy}${literalPlan}\n` +
+          `No applicable evidence: ${owned.no_op_policy}${literalPlan}${carriedPlan}\n` +
           (next ? `Pass the accumulated typed contributions to child ${next} within this active call and return its complete FinalSemanticState.\n` :
             `Return the complete FinalSemanticState with every earlier contribution preserved.\n`) });
       continue;

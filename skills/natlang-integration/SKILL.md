@@ -32,6 +32,7 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 - Eval exposes `inputs` and `read_inputs()` only for calls with formal input fields, unless those names are shadowed. A zero-argument call has no implicit caller-input object; ordinary local declarations may use those names.
 - Verify live-model quality separately from fixture wiring and rendering, and name the remaining empirical gates.
 - For source-grounded graph outputs, make any exact entity-key normalization visible to the natlang stages and keep the original evidence text intact. A source/type replay does not prove that live stages joined cross-file identities correctly.
+- When a directory reducer processes related folders, pass its previous typed result into the next call and merge only new stage-owned contributions. Check live traces for a final stage that re-derives past semantic findings from raw files; that indicates a missing carried input contract.
 - In native collection, an absent result after two consecutive provider-confirmed immediate empty EOS replies is reported as `model_incomplete: terminated_without_result` after one normal recovery prompt. Keep this distinct from transport failures and resource timeouts; if a provider adapter does not expose exact EOS metadata, it must not claim this classification from an empty string alone.
 
 Pair with `natlang-authoring` for substantial natural-language algorithms when that skill is available; this skill is independently usable.
