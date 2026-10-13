@@ -37,6 +37,16 @@ def held_task(task_id: str, fraction: float) -> bool:
     return digest / 0xFFFFFFFF < fraction
 
 
+def rft_tasks(rollouts: Iterable[dict[str, Any]], *, max_success_rate: float) -> set[str]:
+    """Tasks the policy solves only sometimes: 0 < success rate <= max_success_rate over scored rollouts."""
+    scored: dict[str, list[float]] = {}
+    for rollout in rollouts:
+        if rollout.get("reward") is not None:
+            scored.setdefault(rollout["task_id"], []).append(rollout["reward"].get("quality"))
+    return {task for task, values in scored.items()
+            if 0 < sum(v == 1.0 for v in values) / len(values) <= max_success_rate}
+
+
 def select_rft_documents(rollouts: Iterable[dict[str, Any]], *, max_success_rate: float,
                          held_fraction: float) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """The successful turns to supervise, as {task_id, split, messages, tools, target}, and a selection receipt.
@@ -49,6 +59,7 @@ def select_rft_documents(rollouts: Iterable[dict[str, Any]], *, max_success_rate
             continue
         tasks.setdefault(rollout["task_id"], []).append(rollout)
     documents, selected, skipped = [], [], {"never_solved": 0, "always_solved_above_rate": 0}
+    qualifying = rft_tasks((r for members in tasks.values() for r in members), max_success_rate=max_success_rate)
     for task_id in sorted(tasks):
         members = tasks[task_id]
         successes = [r for r in members if r["reward"].get("quality") == 1.0]
@@ -56,7 +67,7 @@ def select_rft_documents(rollouts: Iterable[dict[str, Any]], *, max_success_rate
         if not successes:
             skipped["never_solved"] += 1
             continue
-        if rate > max_success_rate:
+        if task_id not in qualifying:
             skipped["always_solved_above_rate"] += 1
             continue
         split = "test" if held_task(task_id, held_fraction) else "train"

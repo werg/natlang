@@ -73,3 +73,27 @@ def test_stage_refuses_without_train_and_held_documents(tmp_path):
     rollouts.write_text(json.dumps(_rollout("never", 0.0)) + "\n")
     with pytest.raises(SystemExit):
         rl_stage.main(["--rollouts", str(rollouts), "--rl-tokenizer", str(tmp_path), "--out", str(tmp_path / "o")])
+
+
+def test_rft_objective_weights_successes_of_selected_tasks(monkeypatch):
+    from natlang_neuralese.rl import grpo
+
+    class FakeServer:
+        def __init__(self):
+            self.terms = None
+
+        def sequence_logps(self, rollouts, adapters):
+            return [0.0] * len(rollouts)
+
+        def post(self, path, body):
+            if path.endswith("/grad"):
+                self.terms = body["terms"]
+                return {"loss": 0.0, "gradients": {"a0": "g"}}
+            return {"params": ["a1"], "state": {}}
+
+    rollouts = [dict(_rollout("mixed", 1.0), group=0), dict(_rollout("mixed", 0.0), group=0),
+                dict(_rollout("always", 1.0), group=1), dict(_rollout("always", 1.0), group=1)]
+    server = FakeServer()
+    result = grpo.run_round(server, rollouts, "a0", {}, lr=1e-3, beta=0.0, clip=0.2, steps=1, objective="rft")
+    assert result["report"]["rft_tasks"] == 1 and result["adapter"] == "a1"
+    assert len(server.terms) == 1 and server.terms[0]["weight"] == 1.0  # only the mixed task's success

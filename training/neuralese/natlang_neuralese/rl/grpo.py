@@ -127,8 +127,12 @@ def load_rollouts(path: str | Path, round_: int | None = None) -> list[dict]:
 
 
 def run_round(server: Server, rollouts: list[dict], adapter: str, state: dict, *, lr: float, beta: float, clip: float,
-              steps: int, scale: float = 1.0) -> dict:
-    """One GRPO round on `rollouts` (sampled with `adapter`). Returns the new adapter, optimiser state and a report."""
+              steps: int, scale: float = 1.0, objective: str = "grpo", rft_max_success_rate: float = 0.75) -> dict:
+    """One update round on `rollouts` (sampled with `adapter`). Returns the new adapter, optimiser state and a report.
+
+    `grpo`: KL-shaped, group-relative advantages. `rft` (S7 step 0, rejection-sampling fine-tuning): advantage 1 for
+    each successful rollout of a task the policy solves only sometimes (rl.stage.rft_tasks, the same rule as the
+    full-checkpoint RL stage), 0 otherwise; the same clipped replay update."""
     started = time.time()
     policy = [{"id": adapter, "scale": scale}]
     kept = [r for r in rollouts if usable(r)]
@@ -149,6 +153,13 @@ def run_round(server: Server, rollouts: list[dict], adapter: str, state: dict, *
         spread += stats["spread"]
         for i, value in zip(members, values):
             advantages[i] = value or 0.0
+    if objective == "rft":
+        from .stage import rft_tasks
+        selected = rft_tasks(kept, max_success_rate=rft_max_success_rate)
+        advantages = [1.0 if r["task_id"] in selected and r["reward"]["quality"] == 1.0 else 0.0 for r in kept]
+        report.update(objective="rft", rft_tasks=len(selected))
+    elif objective != "grpo":
+        raise ValueError("objective is grpo or rft")
     report.update({"groups": len(groups), "groups_with_spread": spread,
                    "reward_mean": sum(r["reward"]["quality"] for r in kept) / len(kept),
                    "kl_estimate_mean": sum(b - r for b, r in zip(behaviour, reference)) / len(kept),
@@ -203,6 +214,8 @@ def main(argv=None):
     r.add_argument("--beta", type=float, default=0.02)
     r.add_argument("--clip", type=float, default=0.2)
     r.add_argument("--steps", type=int, default=1)
+    r.add_argument("--objective", choices=("grpo", "rft"), default="grpo")
+    r.add_argument("--rft-max-success-rate", type=float, default=0.75)
     a = p.parse_args(argv)
     server = Server(a.server)
     out = Path(a.out)
@@ -219,7 +232,7 @@ def main(argv=None):
             raise SystemExit(f"{a.restore} holds {restored}, not --adapter {a.adapter}")
     state = json.loads(Path(a.state).read_text())["state"] if a.state else {}
     result = run_round(server, load_rollouts(a.rollouts, a.round), a.adapter, state, lr=a.lr, beta=a.beta, clip=a.clip,
-                       steps=a.steps)
+                       steps=a.steps, objective=a.objective, rft_max_success_rate=a.rft_max_success_rate)
     (out / "adapter.json").write_text(json.dumps({"adapter": result["adapter"], "state": result["state"]}, indent=1) + "\n")
     server.save_block(result["adapter"], out / "adapter.nzb")
     with (out / "rounds.jsonl").open("a") as log:
