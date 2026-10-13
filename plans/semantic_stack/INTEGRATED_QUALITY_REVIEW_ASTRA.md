@@ -6,9 +6,9 @@ The signed, content-bound receipt is [INTEGRATED_QUALITY_REVIEW_ASTRA.json](INTE
 
 ## Confirmed defects and limits
 
-1. **Exact grading rejects valid answers.** The sealed grouped v6b source emits no `semantics.oracle`. Runtime comparator calls rejected a reversed `sol-001.correctedClaims` set and a reversed `astra-archives-02.clusters` outer set. Both preserve the task's semantic answer. Field-specific set handling must preserve genuinely ordered chronology and path fields. Prose paraphrases and alternative valid witnesses need grounded semantic or constraint review.
-2. **Replay does not prove semantic execution.** The scripted reference reads evidence and returns authored gold through a synthesizer; it bypasses the named stages. Grouped replay passed 23/23; the independent Astra review build passed 130/130 including ten existing Sol cases. These are source-validity results, with zero teacher observations.
-3. **Some typed contracts are weakened.** The adapter drops Sol's typed quotation witnesses and candidate-frontier fields in favor of generic strings. Astra's individual-record literal expects `id`, whereas its emitted record supplies `path`, without an explicit alias mapping.
+1. **Exact grading rejects valid answers.** The sealed grouped v6b source emits no `semantics.oracle`. Runtime comparator calls rejected a reversed `astra-ecology-01.increase` set and a reversed `astra-archives-02.clusters` outer set. Both preserve the task's semantic answer. Field-specific set handling must preserve genuinely ordered chronology and path fields. Prose paraphrases and alternative valid witnesses need grounded semantic or constraint review.
+2. **Replay does not prove semantic execution.** The scripted reference reads evidence and returns authored gold through a synthesizer; it bypasses the named stages. Grouped replay passed 23/23; the independent all-program review build passed **220/220**, with 82 source groups and zero failures. This build used the pre-comparison adapter and includes the separately reviewed sol060 invoice-link schema correction. These are source-validity results, with zero teacher observations.
+3. **Some typed contracts are weakened.** The initial adapter dropped Sol's typed quotation witnesses and candidate-frontier fields. Commit `115fc18c` fixes this, and all 100 rendered Sol type bundles and fixtures now match the authored contracts. Astra's emitted record still omits `id`; archives01 gold uses `r21` without any visible ID-to-path mapping. That source identity bug is assigned to the integrator.
 4. **Named depth needs meaningful contributions.** In the partial grouped trace, record-local chronology judgments preserve their source paths and are grounded. Two named stages only forward unchanged state; one constructs an unused literal. Neither action demonstrates a new semantic decision.
 
 ## Batch-of-six observation
@@ -20,3 +20,11 @@ The complete trajectory is not sealed yet. Its review must check source-path bij
 ## Disposition
 
 Source designs and split grouping pass the stated review. Grading, typed-interface and live-stage defects have been sent to the integrator and Sol. Authored fixture and gold bytes remain unchanged. **No training admission or live presentation qualification is granted.** This receipt will be updated when the full replay and grouped trajectory are sealed.
+
+## Review correction
+
+The first receipt incorrectly classified a reversed `sol-001.correctedClaims` array as a false negative. Its visible query explicitly requires ascending IDs, so that rejection is contractual. The receipt now uses the ecology01 classification set instead. Semantic set equality never overrides an explicit source ordering requirement.
+
+## Further source-quality findings
+
+Gold-inferred nested map keys disclose the archives04 inferred series categories and ecology06 contradicted-hypothesis IDs in root types. Four dynamic maps now use source-authored generic types and await a new rendered-source check. Separately, 24 files can contain only a few task-relevant premises: valid simpler cases remain in the generation mix. Application-scale depth is being added in a separate new slate; difficulty alone is not a hold. Neither source size nor repeated named calls establishes a substantial semantic program.

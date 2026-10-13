@@ -1,0 +1,59 @@
+{
+  "schema": "natlang.independent-stage-contract-review/1",
+  "reviewer": "/root/semantic_slate_astra",
+  "reviewed_at": "2026-10-13T21:23:51.625679+00:00",
+  "snapshot_sha256": "daa361f8b85cb9c2305eb4718a8df1070445cb92dcc0f44883e6ff76c5dc236d",
+  "scope": {
+    "stage_contracts": [
+      "sol-001",
+      "sol-002",
+      "sol-003",
+      "sol-004",
+      "sol-005",
+      "sol-006",
+      "sol-007",
+      "sol-008",
+      "sol-009",
+      "sol-010"
+    ],
+    "comparison_contracts": [
+      "sol-001",
+      "sol-002",
+      "sol-003",
+      "sol-004",
+      "sol-005",
+      "sol-006",
+      "sol-007",
+      "sol-008",
+      "sol-009",
+      "sol-010"
+    ],
+    "schema_delta": [
+      "sol-060"
+    ],
+    "all100_comparison_annotations_reviewed": false
+  },
+  "result": "pass_authored_contract_review_pending_render_and_live_use",
+  "accepted_repairs": [
+    "sol001 correctedClaims/edges, sol002 eventOrder, sol003 reasons and sol004 lineages preserve their visible canonical ordering requirements.",
+    "sol010 lexicalStatus remains exact unobserved, as its visible query requires.",
+    "All10 FinalSemanticState types carry absences:StageAbsence[]; child prior types and no-op policy preserve absence evidence.",
+    "sol006 missing scene/speaker/referent and sol008 unlicensed rule/form are nullable, preserving uncertainty without fabricated sentinels.",
+    "sol060 documentedInvoiceIds is uniformly a string array; source A18 supports Z for C1; A21-A22 supply no invoice link for C2, so empty means undocumented, not nonexistent."
+  ],
+  "stage_assessment": "The first three owned contributions in each application view are distinct: evidence interpretation, candidate semantic relations and scoped decisions. Final assembly consumes those contributions and audits result completeness. Actual consumption and depth need live trace review; schema does not establish execution.",
+  "fixture_gold_preservation": "First10 fixture/gold unchanged; sol060 source/query schema change preserves independently checked economic meaning.",
+  "source_replay": "Independent pre-comparison builder replay220/220 included sol060 uniform schema, but does not qualify comparison normalization or new stage rendering.",
+  "limitations": [
+    "Only initial10 stage/comparison annotations and sol060 schema delta are accepted here.",
+    "Canonical sorted arrays must not be normalized as unordered merely because their underlying facts are sets.",
+    "No live model measurement or training admission credited."
+  ],
+  "training_admission": false,
+  "live_variant_qualified": false,
+  "signature": {
+    "signed_by": "/root/semantic_slate_astra",
+    "kind": "reviewer-attributed-content-digest",
+    "payload_sha256": "17c07517a9be4c246f3c9a09f21c23fd418bb0f65d1a10f51e7bef61c9c33721"
+  }
+}
