@@ -2,6 +2,34 @@
 
 ## 00:42 CEST: deep NL application review and live qualification
 
+**00:59 addendum.** v10b ecology's final named `verifyResult` stage at turns
+81–82 reconstructed a global case-specific edge array in JS from raw
+`relatedRecords`. The source passed only the current folder's typed result as
+`prior`, so it did not give final graph work the typed edges from other
+folders. This is a source-graph topology bug, not a model failure. Exact
+`natlang-pop-semantic-ecology-v10b-diag.service` was stopped after its 138-turn
+diagnostic partial; no SFT admission. Shared v11 commit `15433d91` carries
+`FinalSemanticState` and witnesses between folder iterations, with an owned
+stage-5 global audit. Source replay is 20/20, and matched one-case v11b queue
+is sealed. It is queued low-priority as
+`natlang-pop-semantic-ecology-v11b-diag` behind the Cave pilot.
+
+The baseline plain cohort was OOM-interrupted at 439 turns/~104k completion
+tokens on its first case; it remains a diagnostic partial, not a model-negative
+row, and is not being restarted. The source-driven cohort continues; first
+folklore case still has no final result, but live code has far fewer large
+hard-coded snippets and consumes typed child decisions. Cave Mission now has
+independent source/oracle review and 22 external checker controls. Its
+one-case low-ledger diagnostic `natlang-pop-cave-app-diag-v1b.service` is
+active. Both runs are held pending live completion and semantic review.
+
+Witness host-service wrong-shape calls now return one-sentence typed recovery
+errors in shared commit `439ba667`, with authoring/integration skill advice
+and model-facing sample debt. Running frozen Witness diagnostic remains on
+older code; no retroactive live qualification. The previous full-check waiter
+was stopped and cancelled to allow lower-memory Cave/v11 diagnostics to admit;
+fresh `natlang-pop-check-main-20261014-0055` low-priority waiter is queued.
+
 Owner reaffirmed that the additive slate should resemble a sizeable natlang
 codebase, with substantive **deep numbered natural-language pseudocode** rather
 than crisp interpretation code. Existing valid shallow catalog sources remain
@@ -12,9 +40,9 @@ crisp. Astra/Sol authors and curriculum monitor were briefed. Inspect actual
 live code as well as source: large hard-coded JS decision tables do not meet the
 new cohort's idiomatic goal.
 
-Current main is `328d2bdb` after merging DGX's E2E accounting fix; quick gate
-passed and pushed. Pop full `check-main` is still a low-priority ledger waiter,
-`natlang-pop-check-main-20261014-0035-waiter.service`, blocked by trainer RAM;
+The source-contract change was pushed in `328d2bdb` after merging DGX's E2E
+accounting fix; quick gate passed. Pop full `check-main` is still a low-priority
+ledger waiter (current unit named in the addendum), blocked by trainer RAM;
 do not call this full-verified. QAD trainer is active at ~step14635, GPU ~98%,
 and a complete step14080 checkpoint has replaced the earlier truncated pending
 checkpoint. Ordinary Luna, v10b ecology, paired plain/source-driven six-case
