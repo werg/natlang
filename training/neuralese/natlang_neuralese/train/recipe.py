@@ -31,7 +31,7 @@ HANDLERS = {
                                             'continue_identity','continue_monitor_reference',
                                             'continued_text_data'},
                          'parameters':{'steps','epochs','batch_tokens','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
-                           'train_target_tokens','train_min_context_tokens','merge_prefix_rows','checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
+                           'train_target_tokens','train_min_context_tokens','merge_prefix_rows','cohort_repeats','recovery_selection','checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
                            'latent_optimizer','latent_lr','head_lr','neuralese_weight','projection_blocks',
                            'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows','drift_every','drift_gate_every','drift_gate_rise','drift_ce_windows','gate_response_kl',
                            'drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop','drift_gate','gate_held_rows','monitor',

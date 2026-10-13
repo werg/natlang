@@ -61,12 +61,14 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
                   'gradient_audit_steps': 0, 'saved_tensor_audit_steps': 0,
                   'gradient_digest_steps': 0, 'state_hash_steps': 0, 'sdpa_backend': 'default', 'family': None,
                   'train_target_tokens': None, 'merge_prefix_rows': False, 'cohort_repeats': None,
+                  'recovery_selection': None,
                   'train_min_context_tokens': 0, 'fresh_monitor_reference': False}
 # Train-window geometry (HEADER_EFFICIENCY_20261012.md): a running stage changes it only by a windowing continuation
 # (continuation_mode), which rebuilds the plan it trained on under the saved values.
 # cohort_repeats (the epoch's per-cohort repeat counts) changes which windows an epoch holds, so it moves exactly like
 # the window geometry: on the same data by a windowing continuation, or with a data continuation.
-WINDOWING_KEYS = ('train_target_tokens', 'merge_prefix_rows', 'cohort_repeats', 'train_min_context_tokens')
+WINDOWING_KEYS = ('train_target_tokens', 'merge_prefix_rows', 'cohort_repeats',
+                  'recovery_selection', 'train_min_context_tokens')
 OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'value_margin', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
@@ -129,6 +131,9 @@ def parse(argv=None):
                    help='JSON {text_cohort: repeats}: in each epoch every document of that cohort (the row field '
                         'text_cohort; default cohort "native") appears that many times (text_supervision.'
                         'CohortDocumentSampler); a declared upweighting, e.g. of agentic tool-loop sessions')
+    p.add_argument('--recovery-selection', type=json.loads, default=None,
+                   help='JSON {path,sha256,rendering,rules}: pin an exact recovery-selection manifest and mark selected '
+                        'rendered rows as the recovery cohort without changing their training text')
     p.add_argument('--batch', type=int, default=1)
     p.add_argument('--eval-batch', type=int, default=1)
     p.add_argument('--eval-every', type=int, default=100)
@@ -752,10 +757,15 @@ def stage_data(engine, a, text_data):
 def stage_rows(a, text_data, tokenizer):
     """The stage's rows of one data file as a stream: ``stream_text_rows``, with linear decision chains merged when the
     stage merges them (``merge_prefix_rows``; bounded memory, text_warmup.stream_merge_prefix_rows)."""
+    from .recovery_selection import load_selection, mark_row
+    selected = load_selection(getattr(a, 'recovery_selection', None))
+    def source():
+        for row in stream_text_rows(text_data, tokenizer):
+            yield mark_row(row, selected)
     if not getattr(a, 'merge_prefix_rows', False):
-        return stream_text_rows(text_data, tokenizer)
+        return source()
     from .text_warmup import stream_merge_prefix_rows
-    rows, merge = stream_merge_prefix_rows(lambda: stream_text_rows(text_data, tokenizer),
+    rows, merge = stream_merge_prefix_rows(source,
                                            spool_directory=a.out if getattr(a, 'out', None) and Path(a.out).is_dir() else None)
     print(json.dumps({'event': 'merge_prefix_rows', **merge}), flush=True)
     return rows
