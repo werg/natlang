@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-decision-four-family-provider-prep-20261013-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261013-v1/fresh-decision-provider-v2",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 1085144,
+      "sha256": "42f6e0b352623be78035b35954094e9044571eb91bc8a8abacdab91ab680064e",
+      "lines": 512
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 57105,
+      "sha256": "76a91aa8cef69dd01aed1c4e8f35a1bdbd0b638f69994178090937c213c16dc8",
+      "lines": 35
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 126446,
+      "sha256": "180baeb4f8dba4186e7529324d89e9daf00edbbe1eb2910bb0567e5bfe8be129"
+    }
+  ],
+  "bytes": 1268695
+}

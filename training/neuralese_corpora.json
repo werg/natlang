@@ -63657,6 +63657,41 @@
       "admission": "27 pinned Hugging Face dataset snapshots (parquet) with data/decision-sources/MANIFEST.json (repo id, config, files, HF commit sha, license), downloaded 2026-10-04; consumed by scripts/build_decision_cases.py. Requested by Pop (free-API decision source builder) so both machines resolve data_hdd/natlang-development-data/data/decision-sources identically.",
       "storage": "HDD (/mnt/external/natlang-development-data/data/decision-sources on DGX; data_hdd on Pop)",
       "derived_from": []
+    },
+    {
+      "id": "pop-decision-four-family-source-20261013-v4",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261013-v1/fresh-decision-source-v4",
+      "include": [
+        "decision-cases.jsonl",
+        "decision-data.manifest.json",
+        "decision-episodes.jsonl",
+        "decision-episodes.audit.json"
+      ],
+      "source_class": "project-generated typed decision cases from pinned HF datasets",
+      "license": "per upstream dataset; pinned in source manifest",
+      "split": "train only, 800 each: AG News, BoolQ, BoardgameQA, PubMedQA",
+      "admission": "static source generation gate passed; provider labels and source-quality review still required",
+      "training_admission": false,
+      "required_conversion": "typed provider labeling and semantic/source review before native training conversion",
+      "derived_from": ["natlang-decision-sources-catalog-20261004"]
+    },
+    {
+      "id": "pop-decision-four-family-provider-prep-20261013-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261013-v1/fresh-decision-provider-v2",
+      "include": [
+        "cases.jsonl",
+        "omissions.jsonl",
+        "source-manifest.json"
+      ],
+      "source_class": "source-disjoint typed provider-decision candidate selection",
+      "license": "per upstream dataset; inherited from source cases",
+      "split": "train only, 128 each from four families; 23 explicit source holds and 12 overlong states omitted",
+      "admission": "prepared only; 64 live Gemini pilot queued, no model output admitted",
+      "training_admission": false,
+      "required_conversion": "provider labels, response validity and semantic review, then explicit native corpus admission",
+      "derived_from": ["pop-decision-four-family-source-20261013-v4"]
     }
   ],
   "coverage_backlog": [
