@@ -251,6 +251,7 @@ for (const [index, family] of families.entries()) {
         child = individual({ guidance: parent.guidance, skill: parent.skill, origin: parent.origin, adapter: parent.adapter });
         child.fit = await evaluateOn(validation, { ...parent, skill: refined });
         child.baldwin = refined.$neuralese.id;
+        child.refined = refined;
       } else if (operator === 'refine-adapter') {
         child = individual({ guidance: parent.guidance, skill: parent.skill, origin: parent.origin, adapter: await refineAdapter(parent, support) });
       } else {
@@ -290,14 +291,17 @@ for (const [index, family] of families.entries()) {
   }
   const searchCompute = { seconds: log.reduce((s, e) => s + (e.seconds ?? 0), 0), readout_calls: readouts() - familyReadouts };
   const best = [...population].sort((a, b) => a.fit.loss - b.fit.loss)[0];
+  // What an individual's fitness measured: a Baldwinian child is scored with its refined block but carries the unrefined
+  // one (its offspring inherit refinability), so it is deployed, and scored on query and transfer, with the refined one.
+  const deployed = ind => ind.refined ? { ...ind, skill: ind.refined } : ind;
   // Reference on the same split: the soft-gold method arm (refinement of the generic seed alone).
   const referenceStarted = Date.now(), referenceReadouts = readouts();
   const reference = { guidance: '', skill: await refine(plain, support, options['reference-steps']) };
   const referenceCompute = { seconds: (Date.now() - referenceStarted) / 1000, readout_calls: readouts() - referenceReadouts };
-  const [bestQuery, bestTransfer, baseQuery, baseTransfer, refQuery, refValidation] = [await evaluateOn(query, best), await evaluateOn(transfer, best),
+  const [bestQuery, bestTransfer, baseQuery, baseTransfer, refQuery, refValidation] = [await evaluateOn(query, deployed(best)), await evaluateOn(transfer, deployed(best)),
     await evaluateOn(query, plain), await evaluateOn(transfer, plain), await evaluateOn(query, reference), await evaluateOn(validation, reference)];
   await record({ family, transfer_family: other, fitness: options.fitness, best: { id: best.id, operator: best.operator, guidance: best.guidance,
-    skill: best.skill.$neuralese.id, ...(best.adapter ? { adapter: best.adapter.$neuralese.id } : {}), validation_loss: best.fit.loss, validation_quality: best.fit.quality }, seed_validation_loss: baseline.loss,
+    skill: deployed(best).skill.$neuralese.id, ...(best.refined ? { carried_skill: best.skill.$neuralese.id } : {}), ...(best.adapter ? { adapter: best.adapter.$neuralese.id } : {}), validation_loss: best.fit.loss, validation_quality: best.fit.quality }, seed_validation_loss: baseline.loss,
     // `uniform`: the quality of answering every case with equal probabilities. A score at or below it is hedging, not
     // discrimination (on two-way cases with hard labels it is .75; 2026-10-12 smoke: every arm sat there).
     query: { best: bestQuery.quality, seed: baseQuery.quality, 'soft-gold': refQuery.quality, uniform: uniformQuality(query) },
@@ -309,7 +313,8 @@ for (const [index, family] of families.entries()) {
   // The final population's soft skills and the reference, so the steps stay resolvable after the server is gone.
   await learning.save(join(out, 'artifacts', `${family.replace(/[^a-z0-9-]+/gi, '_')}.nz`), Object.fromEntries([...population.map(ind =>
     [`${ind.id.replace('-', '_')}_skill`, { type: 'Neuralese<string>', value: ind.skill }]).concat(population.filter(ind => ind.adapter).map(ind =>
-    [`${ind.id.replace('-', '_')}_adapter`, { type: 'Adapter', value: ind.adapter }])),
+    [`${ind.id.replace('-', '_')}_adapter`, { type: 'Adapter', value: ind.adapter }])).concat(population.filter(ind => ind.refined).map(ind =>
+    [`${ind.id.replace('-', '_')}_refined_skill`, { type: 'Neuralese<string>', value: ind.refined }])),
     ['soft_gold_skill', { type: 'Neuralese<string>', value: reference.skill }]]));
   console.log(JSON.stringify({ family, query_best: bestQuery.quality, query_seed: baseQuery.quality, query_soft_gold: refQuery.quality,
     transfer_best: bestTransfer.quality, compute: { search: searchCompute, 'soft-gold': referenceCompute } }));

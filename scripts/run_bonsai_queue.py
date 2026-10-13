@@ -468,6 +468,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             retries = entry['request_retries']
             if type(retries) is not int or retries < 0:
                 raise ValueError(f'entry request_retries must be a nonnegative integer: {entry.get("key")}')
+        if 'system_file' in entry and (not isinstance(entry['system_file'], str) or not Path(entry['system_file']).is_file()):
+            raise ValueError(f'entry system_file must name an existing file: {entry.get("key")}')
         if 'temperature' in entry:
             temperature = entry['temperature']
             if type(temperature) not in (int, float) or not 0 <= temperature <= 2:
@@ -553,6 +555,9 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             command += ['--request-retries', str(entry['request_retries'])]
         if 'action_max_tokens' in entry:
             command += ['--action-max-tokens', str(entry['action_max_tokens'])]
+        if 'system_file' in entry:
+            # The run's system prompt (the collector's --system-file), e.g. a memetic individual's guidance.
+            command += ['--system-file', entry['system_file']]
         if 'temperature' in entry:
             # Sampled rollouts (S7 GRPO groups); absent means the collector's greedy default.
             command += ['--temperature', str(entry['temperature'])]
