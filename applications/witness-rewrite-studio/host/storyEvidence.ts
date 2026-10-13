@@ -54,7 +54,32 @@ const storyEvidence: StoryEvidence = {
   },
 };
 
-/** Flat exports match the trusted collector service module binding. */
-export const checkWitnesses: StoryEvidence['checkWitnesses'] = (snapshot, witnesses) => storyEvidence.checkWitnesses(snapshot, witnesses);
-export const checkEdits: StoryEvidence['checkEdits'] = (snapshot, edits, allowedPaths) => storyEvidence.checkEdits(snapshot, edits, allowedPaths);
-export const applySnapshot: StoryEvidence['applySnapshot'] = (snapshot, edits, allowedPaths) => storyEvidence.applySnapshot(snapshot, edits, allowedPaths);
+/** Runtime shape checks teach the declared positional call without exposing a raw JS TypeError. */
+const recordShape = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
+const stringList = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === 'string');
+function snapshotShape(value: unknown): value is SourceSnapshot {
+  return recordShape(value) && typeof value.revision === 'string' && Array.isArray(value.records) && value.records.every(record =>
+    recordShape(record) && ['id', 'path', 'text', 'sha256'].every(key => typeof record[key] === 'string'));
+}
+function witnessShape(value: unknown): value is Witness {
+  return recordShape(value) && ['sourceId', 'path', 'quote'].every(key => typeof value[key] === 'string');
+}
+function editShape(value: unknown): value is ProposedEdit {
+  return recordShape(value) && ['id', 'sourceId', 'sourcePath', 'oldQuote', 'replacement', 'sceneId'].every(key => typeof value[key] === 'string') &&
+    stringList(value.removedFactIds) && stringList(value.addedMeanings) && Array.isArray(value.witnesses) && value.witnesses.every(witnessShape);
+}
+export function checkWitnesses(snapshot: SourceSnapshot, witnesses: Witness[]): ExactCheck[] {
+  if (!snapshotShape(snapshot) || !Array.isArray(witnesses) || !witnesses.every(witnessShape))
+    throw new Error('Call storyEvidence.checkWitnesses(snapshot, witnesses) with a SourceSnapshot and a Witness[] array.');
+  return storyEvidence.checkWitnesses(snapshot, witnesses);
+}
+export function checkEdits(snapshot: SourceSnapshot, edits: ProposedEdit[], allowedPaths: string[]): ExactCheck[] {
+  if (!snapshotShape(snapshot) || !Array.isArray(edits) || !edits.every(editShape) || !stringList(allowedPaths))
+    throw new Error('Call storyEvidence.checkEdits(snapshot, edits, allowedPaths) with a SourceSnapshot, a ProposedEdit[] array and a string[] path array.');
+  return storyEvidence.checkEdits(snapshot, edits, allowedPaths);
+}
+export function applySnapshot(snapshot: SourceSnapshot, edits: ProposedEdit[], allowedPaths: string[]): SourceSnapshot {
+  if (!snapshotShape(snapshot) || !Array.isArray(edits) || !edits.every(editShape) || !stringList(allowedPaths))
+    throw new Error('Call storyEvidence.applySnapshot(snapshot, edits, allowedPaths) with a SourceSnapshot, a ProposedEdit[] array and a string[] path array.');
+  return storyEvidence.applySnapshot(snapshot, edits, allowedPaths);
+}

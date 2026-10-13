@@ -50,3 +50,7 @@ client calls the student directly with its own tool schemas, serving retains tho
 schemas so the student can discover and call them. Custom application instructions
 remain. Training and serving use the scope table exported by
 `node ts-host/scripts/neuralese-prompt-pieces.mjs` after building ts-host.
+
+## Validate exact service arguments at the boundary
+
+Export trusted service methods with explicit named parameter and return types so their declarations show the callable shape. Validate required argument structure before dereferencing fields, and reject invalid input with one sentence stating the correct positional call and its declared types. For example, the story witness boundary teaches `storyEvidence.checkWitnesses(snapshot, witnesses)` with `SourceSnapshot` and `Witness[]`; it then performs exact quote checks. Preserve semantic judgment in NL stages. Record changed declarations or error text as model-facing debt and sample the corrected boundary live before adoption; a recovered call or a source/type replay alone does not qualify its presentation.

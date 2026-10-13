@@ -73,8 +73,10 @@ A selected harbor drama contains a lost letter, an original key and a rehearsal 
 
 The fixture's 26 source records contain more than twenty connected story, authority, access, timing, custody and dramatic premises; seven records are adversarial proposal recipes. Its input IDs and output field meanings are model-visible. The oracle lives outside callable source and input files. It states required changed facts, allowed alternative repairs, preserved ambiguities, exact witness references and forbidden unsupported transfers. Grading accepts a different valid repair only if it satisfies all declared constraints. Call depth alone gives no stage credit: the live trace must show new contributions, consumed literal results and repair decisions.
 
-Status: decomposition authored before implementation; all 27 modules and the connected fixture are authored. Loader, oracle, runtime and live quality checks remain pending. Model-facing adoption requires about 48 live samples per variant or explicitly recorded debt.
+Status: decomposition authored before implementation; all 27 modules and the connected fixture are authored. The authored project loads; typed canonical source replay and independent source/oracle review pass. The first live full-project diagnostic is underway, with semantic output and literal-consumption qualification still pending. Model-facing adoption requires about 48 live samples per variant or explicitly recorded debt.
 
 ## Reused department visibility
 
 World, epistemics, physical continuity, motifs, candidate replay and audit are package-root callable departments. `studio` and candidate replay declare their shared `uses` explicitly. Their child folders retain specialist ownership and type inheritance. This avoids treating a reused specialist as an unrelated descendant of a still-loading entrypoint. The manifest is host-only under `training/semantic_applications/sol/witness-rewrite-studio`; it is excluded from model-visible source.
+
+The first live diagnostic exposed a positional service-argument error. The exact service now validates shapes and returns a one-sentence typed recovery instruction; the current running snapshot stays unchanged. The corrected declaration/error presentation is unmeasured and recorded in `plans/MODEL_FACING_CHANGES.md`.

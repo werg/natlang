@@ -1,0 +1,101 @@
+{
+  "schema": "natlang.application-independent-semantic-review/1",
+  "reviewer": "semantic_slate_sol",
+  "project": "astra-app-cave-mission-v1",
+  "source_commit": "c4df5263",
+  "fixture_content_sha256": "e7c6a3740bfa8165a0024e7dc0cdf532cbcfd8a2b58022dc51c9f7ff5ed5ea94",
+  "oracle_sha256": "652c18267e79c61c0b2b12d4626e979578a880b81f2c03c955e0248f2036c786",
+  "reference_report_sha256": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90",
+  "verifier_sha256": "5be4d8fa2c646d9c73d96adbf8fd2c9991c7b8f40ae04a36ce4f3ed779ea9737",
+  "source_oracle_status": "pass",
+  "open_source_oracle_findings": [],
+  "independent_frame_derivation": {
+    "origin": [
+      0,
+      1
+    ],
+    "vVector": [
+      0,
+      1
+    ],
+    "uVectors": [
+      [
+        1,
+        0
+      ],
+      [
+        -1,
+        0
+      ]
+    ],
+    "localToGlobal": {
+      "direct": {
+        "A": "EW",
+        "B": "WW",
+        "V": [
+          2,
+          1
+        ],
+        "X": [
+          -2,
+          1
+        ]
+      },
+      "reflected": {
+        "A": "WW",
+        "B": "EW",
+        "V": [
+          -2,
+          1
+        ],
+        "X": [
+          2,
+          1
+        ]
+      }
+    },
+    "anchor_identity": "Unique three-hole disk establishes J; repeated blue circles do not establish A/EW."
+  },
+  "reviewed_constraints": [
+    "Reflection changes onlyu, notv, scale or stated translation.",
+    "Global east remains fixed when robot changes facing.",
+    "V and imitation X are distinct and only V has sealed sample/chimney.",
+    "Both water gates are outward only; no rope reversal.",
+    "Full sample carrier blocks every narrow tunnel.",
+    "Sealed sample cannot be cached, opened or discarded.",
+    "Single spool rig is irreversible and does not reveal correctness.",
+    "Correct anchor lies on V side; upward chimney uses it without another spool.",
+    "ECHO partitions both worlds; GLOW leaves both possible.",
+    "All source-supported worlds and observation answers must be covered."
+  ],
+  "independent_exact_lower_bound": {
+    "feasibility_by_initial_energy": {
+      "1": null,
+      "2": null,
+      "3": null,
+      "4": null,
+      "5": null,
+      "6": null,
+      "7": null,
+      "8": null,
+      "9": [
+        9,
+        1
+      ]
+    },
+    "minimumWorstCaseEnergy": 9,
+    "minimumObservationsAtOptimum": 1,
+    "noDiscriminatingObservationAtEnergy9": null,
+    "recursion_measure": "Remaining source-given energy strictly decreases because every action cost is positive.",
+    "proof_scope": "Finite exact arithmetic/state constraint verification of independently interpreted source; no production planner or application execution."
+  },
+  "checker_review": {
+    "canonical_full_typed_witness": "pass",
+    "benign_unreachable_terminal_initially_rejected": "reproduced",
+    "precision_fix": "Unreachable nodes now non-gating quality observations; rooted all-world replay remains exact.",
+    "semantic_equivalence": "Alpha-renamed IDs, object-key permutations and benign unused nodes accepted.",
+    "remaining_gate": "Exact quotation existence is distinct from entailment; live typed contributions and literal use are unmeasured."
+  },
+  "actual_application_execution": false,
+  "training_admission": false
+}
