@@ -3,7 +3,7 @@
 For any agent (any provider) taking over DGX coordination. Read `AGENTS.md` first. It holds the standing owner rules
 (memory ledger for everything, both lines in lockstep, assume a bug, small commits to main, brief Pop via
 `scripts/coord.py`). The previous handover is `plans/neuralese/SESSION_HANDOVER_20261013.md`. This file supersedes it
-where they differ. No agents are running now; ledger units, systemd units and containers keep running.
+where they differ. No agents are running now (§8 lists the running machinery, §9 the unfinished work); ledger units, systemd units and containers keep running.
 
 ## Start of session
 
@@ -82,8 +82,7 @@ Trigger it when the **mixed direct+e2e recipe** is on main (see §3). The projec
   repeat counter; context length. The synchronous eval uses the same engine object as training, so stale weights are
   unlikely. Remaining suspects: the QAT/quantised eval forward or train-vs-eval mode divergence, and the
   full-prompt-vs-training gap (LFM rows mostly have no system prompt; the full eval adds a 16k-character system message).
-- DGX A/B running on CPU: `ab-lfm-step8000-full` and `ab-lfm-step8000-program-header`, which restore the student
-  tensors independently. Results → `runs/ab-lfm-step8000-{full,program-header}/task-eval.jsonl`, logs
+- DGX A/B (`ab-lfm-step8000-full` / `-program-header`, CPU, independent restore of the student tensors) was INVALID; rerun it per §9 item 4. Results → `runs/ab-lfm-step8000-{full,program-header}/task-eval.jsonl`, logs
   `/home/werg/data/dgxops/ab-lfm/`. Report successes, repeat stops and think share; Pop also asked for first-token
   P(<think>). Reply on coord thread pop-fed0. If the CPU restore emits <think> and the in-run eval doesn't, inspect the
   QAT/serving forward.
@@ -101,6 +100,72 @@ Trigger it when the **mixed direct+e2e recipe** is on main (see §3). The projec
 - CoreWeave sandboxes: blocked on CoreWeave support (the owner is in contact). Don't create test sandboxes. Plans:
   plans/COREWEAVE_SANDBOXES.md, plans/COREWEAVE_HARDWARE_OPTIMIZATION.md.
 - s7rl-72x8 RL run: off until a GPU gap.
+
+## 8. Running machinery at handover (~18:30 UTC) and how to supervise it
+
+**Long-running units** (`systemctl --user`). Stop them only by unit name or explicit PID, never by pattern:
+| Unit | What | Supervision |
+|---|---|---|
+| `natlang-neuralese-direct-mellum-v4-113152` (+ container of same name) | Mellum v4 direct SFT, 98 GB ledger claim, priority high | `run-v4/direct_sft/train.jsonl` (updates), `eval.jsonl`, `task-eval.jsonl`, `run-v4.log`. Healthy = ~19 s/update alone. Stop grace 1500 s. |
+| `natlang-e2e-dragnet-v2stream-c3e-5-193025` (+ container) | e2e arm on LFM u10006 + corpus v2, value E[chosen]+C, C rate 3e-5 (c3e-6 done; c3e-4 next if wanted) | logs `runs/e2e-collapse-dragnet-20261012/v2stream-c3e-*.log`; summarise with `runs/e2e-collapse-dragnet-20261012/summarize.py`. One arm at a time beside v4, ≤ ~2x v4 slowdown (owner-approved). |
+| `natlang-task-eval-dispatch` | async task-eval dispatcher (`scripts/task_eval_dispatch.py --every 120`) | Leave running. |
+| `natlang-memory-guard` | memory guard (kills unledgered memory hogs) | Leave running; everything that loads a model goes through the ledger. |
+| `render-r4-e2e-musique4` (+ render container) | union r4 render | Auto-registers via `pending-renders.json` and the registration timer. |
+| `swe-bulk-d13-followup` | SWE bulk data follow-up (low priority) | Check its log on finish; register outputs if it produced a corpus. |
+| `mixed-land-tests` | tests for the mixed-run landing (§9) | Log `/home/werg/data/wt-mixed-tests.log` (`exit=` line at end). |
+| `*-waiter` units (`render-r4-folder-edit-large-waiter`, `render-r4-recovery-loop-waiter`) | detached ledger waiters (043575ca); they launch the unit when memory frees | Nothing to do. |
+
+**Ledger queue** (`python3 scripts/memory_ledger.py status`): `tself-land-tests`, `natlang-full-check-635a9adf46`,
+`e2elead-gdiag-t` (the e2e gradient-flow diagnostic: does consumer gradient reach C and the backbone?), `tself-recur3`
+(a leftover from the stopped helper; redundant with tself-land-tests, so cancel it), `render-r4-folder-edit-large`,
+`render-r4-recovery-loop`, `swe-norm-twins-*`, `e2edata-mine-v3`, `dgxops-export-dry4` (v4 parent export rehearsal).
+`dgx-parity-verifyplan-121620` may also still be queued. The queue drains as memory frees; v4 holds most of it.
+
+**Timers (recurrent tasks; keep enabled):**
+- `natlang-full-check-main.timer`: full `check-main` on new main commits; it posts failures to coord (dgx-full-check).
+  Fix or route every red file.
+- `natlang-render-registration.timer`: registers finished renders listed in `pending-renders.json`.
+- `natlang-storage-retention.timer`, `natlang-archive-to-external.timer`: storage hygiene (AGENTS.md amendment: move to
+  `/mnt/external` rather than delete). Keep NVMe free above ~60 GB; it was ~118 GB.
+- `natlang-clef-pools-daily.timer`: daily Clef pool refresh (shared quota with Pop).
+- root cron every 3 h: `/home/werg/bgkit/scripts/drop_host_caches.sh`.
+
+**Recurring duties of the supervising agent:**
+- At least every 50 min: `coord.py inbox --ack`, answer Pop, keep `coord.py status --set` current.
+- Failure watch (§Start, step 3), re-armed every ~30 min if your tooling needs it.
+- Watch v4's update time; if more than one GPU job is beside it, stop the extra one.
+- Full-check results: main must stay green.
+- When Pop pushes corpora: twin-render for both tokenizers, register, include in the next union.
+- Brief Pop with one `decision` per shared change. Any setting added to one line goes to the shared recipe; the parity
+  verifier enforces this.
+
+## 9. Unfinished workstreams, exact state
+
+1. **Mixed direct+e2e run (critical; it gates the v4 gap):** 4 commits rebased on main in the worktree
+   `/home/werg/data/wt-mixed` (detached): EmbeddedE2E objective, `direct_sft` e2e_mix interleave, mixed launch recipes
+   `neuralese-mixed-mellum-v4.json` / `neuralese-mixed-lfm-qad-broad-v1.json`, parent_readiness removed. Tests are
+   running (`mixed-land-tests`). If `exit=0`: `cd /home/werg/data/wt-mixed && git fetch && git rebase origin/main &&
+   scripts/check-main.sh --quick && git push origin HEAD:main`. If red: fix, don't park.
+2. **T_self acceptance (V against the writer's own tokens):** 1 WIP commit stacked on the mixed commits in
+   `/home/werg/data/wt-tself` (`train/self_text.py`, `e2e_acceptance.py`, `trajectories.py`, tests). Its tests have
+   never passed; they're queued as `tself-land-tests` (log `/home/werg/data/wt-tself-tests.log`). Land after item 1.
+3. **E2E learning dynamics:** V flat at writer 3e-6, worse above. Read `e2elead-gdiag-t` (gradient reaching C and the
+   backbone) and the `v2stream-c3e-6` / `c3e-5` arms (V−T, crisp). Pick C's rate for the mixed recipe (TCP 3e-6 on
+   Muon).
+4. **LFM prompt A/B (invalid; rerun):** `ab-lfm-step8000-full` OOMed at 8 GB, and the program-header arm ran stale
+   code (greedy, no temperature) and was stopped. Rerun on current main, sequentially, `--workers 2`, a larger ledger
+   budget (~16 GB), T=0.6; script `/home/werg/data/dgxops/ab_lfm.py`, inputs
+   `/mnt/external/natlang-development-data/pop-step8000-prompt-ab/`. Report successes, repeats, think share and
+   first-token P(<think>); Pop also asks for a variant without the `<|neuralese|>` position-0 open marker that training
+   windows prepend (dragnet §3b). Reply on coord thread pop-fed0.
+5. **Combined v4 gap (§2):** after items 1 and 3.
+6. **Miner coverage (§3), recovery sources 2/3, CoreWeave spec:** not started.
+7. **The llama.cpp direct projector GGUF export** (8b6f9837) predates the mixture removal; update it to E[chosen]+C
+   before the `mellum-deploy-gguf-ternary` job uses it.
+8. **Old WIP branches on origin, not from this session:** `gpu-tests`, `infrastructure-implementation`,
+   `storage/qat-convert-checkpoint-policy`, `wip/batched-execution`, `wip/build-migration`, `wip/eval-field-check`
+   (superseded by main's eval field check), `wip/games`, `wip/refinement-types`, `wip/scheduling-workflow`,
+   `wip/wiki-logs`. The owner wants nothing parked in branches: review each, then merge or delete.
 
 ## 7. Owner working rules from today
 
