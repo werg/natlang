@@ -63719,6 +63719,29 @@
       "source_campaigns": [
         "provider-luna-held-shapes-s52027-v1"
       ]
+    },
+    {
+      "id": "pop-static-recovery-loop-recursion-s62000-native-20261013-v1",
+      "owner": "pop",
+      "path": "runs/static-recovery-compile-runtime-s62000-v1",
+      "include": [
+        "cases.ir.jsonl",
+        "cases.ir.jsonl.report.json",
+        "results.jsonl.zst",
+        "turns.jsonl.zst",
+        "audit.json"
+      ],
+      "source_class": "static reference-replayed natlang-native compile/runtime recovery turns",
+      "split": "train only; 192 source groups disjoint from protected held packet and r3 target source groups",
+      "admission": "384/384 exact reference-replayed recoveries; 768 approved correction turns supervised, 384 failed seed actions context only; synthetic action notes untrained",
+      "training_admission": true,
+      "training_admission_reason": "all 384 exact; all 768 approved recovery turns contain observed error context; no held/prior-r3 source-group overlap",
+      "required_conversion": "render LFM2.5 and Mellum2.1 twins and include approved corrections in next declared broad union; failed seed turns remain context only",
+      "review_status": "audit.json pins source and report hashes; exact/approved/source-group review passed",
+      "license": "project-generated curriculum wrapper and reference trajectories",
+      "source_campaigns": [
+        "static-recovery-compile-runtime-s62000-v1"
+      ]
     }
   ],
   "coverage_backlog": [

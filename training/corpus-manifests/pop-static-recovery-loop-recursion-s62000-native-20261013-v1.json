@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-static-recovery-loop-recursion-s62000-native-20261013-v1",
+  "owner": "pop",
+  "path": "runs/static-recovery-compile-runtime-s62000-v1",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 725,
+      "sha256": "0e596f7558a9e8950054eadb7cdff3e869872cb7c05e791ccd831001e0dbd106"
+    },
+    {
+      "path": "cases.ir.jsonl",
+      "bytes": 1411831,
+      "sha256": "d2fd44e24ef36d7620b34448133d611fd6aea63dbfbcdb0dcf362590a4050860",
+      "lines": 384
+    },
+    {
+      "path": "cases.ir.jsonl.report.json",
+      "bytes": 271,
+      "sha256": "f2dca36b2a5f564459d3a8164c0d6c8e9de79ee29144205910ba3a21c56f11b4"
+    },
+    {
+      "path": "results.jsonl.zst",
+      "bytes": 347189,
+      "sha256": "c36195abf2412a4be8f15cc0d306a01710e4e64f8bbfbf6c5bbde7295dc3f39f"
+    },
+    {
+      "path": "turns.jsonl.zst",
+      "bytes": 308504,
+      "sha256": "8b4b4d21a35c17ddb7375e53ac43ec545080e40f9afe70ed06f5c610b191889c"
+    }
+  ],
+  "bytes": 2068520
+}
