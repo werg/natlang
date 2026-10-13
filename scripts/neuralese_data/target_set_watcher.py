@@ -16,8 +16,7 @@ One pass (``--loop`` repeats it every ``--interval`` seconds; the state lives in
    - ``r<N>.json`` (members, files, skipped with reasons, pending) is written to ``runs/natlang-target-set-20261011``;
    - ``natlang-target-set-20261011-r<N>`` and ``natlang-target-union-20261011-r<N>`` are registered together;
    - the trainer is told the new ids and union files via coord (it resumes onto newer revisions);
-   - union files older than the previous revision are deleted (derived, reproducible from their receipt); their
-     registry entries stay and say so.
+   - union retention is handled separately: revision age cannot establish that a trainer no longer needs an input.
 """
 from __future__ import annotations
 
@@ -128,14 +127,18 @@ def build_union(members: list[dict], rev: int, launches: int = 0) -> Path | str 
               '-v', f'{root("data_nvme")}:{root("data_nvme")}',
               '-v', f'{out}:{out}']
     cmd = [sys.executable, str(ROOT / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '10',
-           '--priority', 'low', '--resumable', '--wait', '86400', '--workdir', str(ROOT), '--',
+           '--priority', 'low', '--resumable', '--container', unit, '--wait', '86400', '--detach',
+           '--workdir', str(ROOT), '--',
            'docker', 'run', '--rm', '--name', unit, '--network', 'none', '--user', f'{os.getuid()}:{os.getgid()}',
            '--memory', '12g', '-e', 'HOME=/tmp', '-e', 'PYTHONDONTWRITEBYTECODE=1', '-e', 'HF_HUB_OFFLINE=1',
            *mounts, '-w', str(ROOT), '--entrypoint', 'python3', 'natlang-neuralese:26.09',
            'scripts/neuralese_data/build_native_turn_union.py', '--out-dir', str(out),
            '--tokenizer', f'lfm25={LFM}', '--tokenizer', f'mellum21={MELLUM}', *args]
     log_path = SET_DIR / f'union-r{rev}.launch.log'
-    subprocess.Popen(cmd, cwd=ROOT, stdout=open(log_path, 'a'), stderr=subprocess.STDOUT, start_new_session=True)
+    # Confirm the independent ledger waiter before this pass exits. A detached
+    # process session alone still belongs to the supervising systemd cgroup.
+    with open(log_path, 'a') as launch_log:
+        subprocess.run(cmd, cwd=ROOT, stdout=launch_log, stderr=subprocess.STDOUT, check=True)
     log(union_launched=rev, unit=unit, members=len(members))
     return 'launched'
 
@@ -191,9 +194,8 @@ def finish_revision(state: dict, build: dict, union: Path) -> None:
                                       'totals': totals, 'members': [m['id'] for m in members]}, indent=1)],
                    cwd=ROOT, check=False)
     kept = state.get('union_revisions', [])
-    for old in kept[:-1]:  # keep the previous union for a trainer still resuming on it; older ones are reproducible
-        shutil.rmtree(ROOT / 'runs' / f'{UNION_BASE}-r{old}', ignore_errors=True)
-        log(deleted_union=old)
+    # Retention must inspect exact recipe inputs and live consumers. In particular,
+    # Mellum v4 still names r2 when r4 is published; it is a required lineage input.
     state.update(revision=rev, signature=sig, union_revisions=kept[-1:] + [rev])
     state.pop('building', None)
     save(STATE, state)
