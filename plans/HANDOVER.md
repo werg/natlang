@@ -1,5 +1,36 @@
 # Continuation guide — updated 2026-10-13
 
+## 15:20 CEST: Pop QAD direct SFT recovery and repair lane
+
+Pop v9 stopped at planned update 6524 **before its forward pass**: the adaptive
+memory estimator required 4,961,679,950 bytes for that update against
+4,695,523,328 bytes reusable under its 6.5 GiB discrete CUDA ledger claim.
+This was a safe resource preflight, not a numerical/model failure. The latest
+full optimizer/RNG checkpoint at update 6000 and its mirror remain intact.
+V10 with a 7.2 GiB CUDA claim reached the recipe handoff check but refused:
+the shared base recipe had since acquired `recovery_selection` and
+`cohort_repeats` for an already-started stage. Pop did not silently change the
+active run's sample schedule. The declared exact-resume recipe
+`training/neuralese/recipes/neuralese-direct-lfm-qad-broad-20261013-v1-exact-resume-v10.json`
+pins the **original resolved recipe** and current shared package hashes, so
+the normal code handoff is allowed without changing data. V11 is active under
+the high-priority ledger with a 7.2 GiB discrete CUDA claim, 4.5 GiB host
+budget; verify checkpoint/optimizer resume and first post-resume update.
+Recovery-selection sampling remains for a later explicitly declared data
+continuation. Pop's ledger guard was not running as a persistent service;
+two low-priority Luna workers were stopped by `guard --once` for the high-priority
+training admission and should be replenished. Add persistent guard supervision
+after v11 is stable so queued high-priority work does not leave the GPU idle.
+
+Repair intake: s52018–s52025 produced 9 replay-checked same-state handoffs;
+Luna exact-accepted 3, answer-rejected 5, quiesced 1. The three accepted parents
+yielded 104 native-turn candidates and 2 causal preference pairs, review-only.
+`select_repair_fallback.py` now pins exact-answer rejects for another provider.
+Step 5 Preview through the official OpenCode CLI bridge has accepted the proof
+pilot and 3 of the six exploratory follow-ups so far; a 180-second bridge
+request cap caused a schedule-case transport failure. Pop raised it to 600
+seconds and resumed the queue. Broad s52027 and Gemini generation continue.
+
 ## 13:36 CEST: diversity and recovery intake
 
 The owner clarified that diversity means the **whole** admitted training mix, not merely the Luna queue. In union r3's LFM program-header rendering, 357,632 train documents come from 27 member corpora and have 38.05M supervised tokens; v13-r2 and s72 supply 58.0% of those tokens. In whole-trajectory, they supply 47.0% of 33.33M supervised tokens. This is concentration by corpus volume, not proof that their task worlds are duplicates. Measure source families, worlds, failure modes, trajectory shapes, and model/provider origins separately when constructing r4; do not infer novelty from a new seed alone. Gemini's active CLINC pool remains one classification source, so do not count each batch as a new domain. Broaden that lane when an independently reviewed mixed typed-decision source is ready.
