@@ -57,3 +57,43 @@ No progress, decided crisply and exactly on the observation (no model judgement 
 
 Source 1 first (a selection over existing data, adds a sampling group to r4), then source 3 (new breadth, no teacher
 cost), then source 2 (needs the runtime replay harness).
+
+## Status 2026-10-13: source 1 (mined natural recoveries)
+
+Built: the exact classifier `training/neuralese/natlang_neuralese/train/recovery_mining.py` (rules identical / empty /
+failed; the failed form reuses `text_supervision.failed_feedback`, which wraps `FAILED_TOOL_FEEDBACK`), the streaming
+scanner `scripts/neuralese_data/mine_recovery.py` (bounded memory, spool then held-group filter), and
+`tests/neuralese/test_recovery_mining.py` (the five dragnet loop cases as synthetic observations, scanner and guard).
+Exact choices: an action is the assistant message without `<think>`, whitespace-collapsed; an observation drops the
+`Stored local` line before comparison; "empty" is only `[]`, `{}`, `null`, `""` (console output or a declaration
+status is information, so `console:\npages: 3\nnull` is not empty, it is caught by "identical" on the rerun).
+Program-header and full rows supervise their last assistant turn; whole-trajectory rows every assistant turn.
+
+Scan of `natlang-target-union-20261011-r3` (mellum21 twin; the LFM twin has the same documents by construction, ids are
+tokenizer-agnostic): program-header 365,784 rows, whole-trajectory 167,371, full 79,391; ledger unit
+`mine-recovery-r3`, about 5 minutes on CPU. Manifest and summary:
+`/mnt/external/natlang-development-data/recovery/r3-mellum21/{recovery-selection.jsonl,summary.json}` (sha256
+`dae1c4567e34c25ac72ff103cc1ab09713e681ba75424b7156f113a0d80bf6c9`; one JSON line per (rendering, document id, turn)).
+
+| | train | held (test, never train data) |
+|---|---|---|
+| selections (all renderings) | 18,578 | 945 |
+| rule failed | 15,989 | 838 |
+| rule empty | 2,019 | 87 |
+| rule identical | 895 | 26 |
+| program-header / whole-trajectory / full | 11,580 / 5,981 / 1,017 | 451 / 253 / 241 |
+
+Distinct train decisions: 13,743 (about 3.8% of the 357,632 train program-header rows); the three renderings overlap on
+the same decisions. Rules can co-occur on one selection. Train selections dropped by the held-source-group guard: 0
+(r3 already has no mixed groups). The failed rule dominates (error then fix); the progress-after-no-progress signal
+the loops lack is the 2,019 empty and 895 identical train selections (about 1,970 distinct, mostly
+workflow_invoice-processing 972, s72 645, recovered_clevr 341, commaqa, agent-trace-observability, musique). 103 families.
+The natural share is small, as the design expected, so sources 3 and 2 remain needed for breadth of the empty/identical cases.
+
+Registering for union r4 (coordinator decides; not registered here): a `recovery` sampling group over the r4 union
+rows, keyed by document id. For program-header and full the row is the document (its supervised last turn is the
+selected turn, so the group is the set of those row ids); for whole-trajectory the selected turn is one of several
+supervised turns, so the group selects the row and any weight applies to the document. Regenerate the manifest against
+the r4 union files (`mine_recovery.py --input RENDERING=PATH`), register it as a corpus entry with the summary sha, and
+give the group the same split as its source rows. Optionally restrict the group to the empty/identical selections
+(about 2.9k train) and treat the failed ones as already covered by the context-only mechanism.
