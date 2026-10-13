@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.application-source-delta-independent-review/1",
+  "reviewer": "semantic_slate_sol",
+  "date": "2026-10-14",
+  "application": "astra-cave-mission",
+  "variant": "conditional-binding-v3",
+  "result": "passed_authored_source_handoff_review",
+  "files": {
+    "applications/cave-mission/types.ts": "3acffa4258e7965c9a0573ba199696c7760f6c2ef940e925b3263b174c19bf5f",
+    "applications/cave-mission/planMission/reconcileMaps/alignFrames.nl": "2cb131a192076eee92073dfd652ced41901f3575170e41c227aa9277809dbc3c",
+    "applications/cave-mission/planMission/reconcileMaps/buildWorlds/extendHypothesis/resolveContradiction.nl": "97f98a027792d3011fe6a69ab84827dc6ac6c745e7159e41600985e59d2e06c8"
+  },
+  "findings": [
+    "Each actual returned AnchorAssessment is immediately copied into a ConditionalAnchorBinding row with original pair IDs/frames, alternative identity and computed transformedPoint.",
+    "Named true rows project to physical bindings before local-only naming fallback; accepted A/EW cannot become a local A/A fallback.",
+    "False rejects a proposed pair, rejecting the whole transform only when required anchor or independently named positioned landing cannot be bound consistently.",
+    "Null is missing conditional evidence, not rejection or permission for local fallback; complete-world claim requires actual evidence resolution.",
+    "Final returned bindings cover positioned local mentions and preserve accepted row global identity/position; original exact nonempty evidence checked before child contribution consumed.",
+    "resolveContradiction conditions directions/existence/carrying-state claims on the supplied hypothesis, keeping actual reflection uncertainty separate.",
+    "Typed table/row projection is exact provenance plumbing; source identity/conditional compatibility judgments remain numbered NL."
+  ],
+  "fixture_oracle_reference_delta": "none",
+  "initial_source_oracle_review": "training/semantic_applications/reviews/ASTRA_CAVE_REVIEW_SOL.json",
+  "live_qualified": false,
+  "training_admission": false,
+  "limitations": [
+    "Authored row/state handoff is not proof of model consumption; inspect fresh pinned live parent/child trace.",
+    "Source/type/canonical controls do not qualify generated world semantics or live mission policy."
+  ]
+}
