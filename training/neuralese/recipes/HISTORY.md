@@ -7,13 +7,17 @@ Experiment history moved out of `description` for recipes that use `extends`/`ov
 ## neuralese-mixed-mellum-v4, neuralese-mixed-lfm-qad-broad-v1: the mixed run (owner decision 2026-10-13)
 
 - Each extends its line's running direct recipe (neuralese-direct-mellum-v4-from-v3-warmup;
-  neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix) with the same `e2e_mix` component and an
+  neuralese-direct-lfm-qad-broad-20261013-v1-recovery-handoff-v12, whose runtime.package_code pin is refreshed at the
+  handoff) with the same `e2e_mix` component and an
   objective continuation of `direct_sft` (`previous: {"e2e_mix": null}`): a `--handoff` of the running lineage keeps
   weights, optimizer state, update counter, data plan and QAT curriculum, adds the identity TokenChoiceProjection with
   fresh optimizer state and interleaves e2e updates (plans/neuralese/NEURALESE_DIRECT_V1.md "The mixed run").
 - `e2e_mix`: fraction 0.25 (placeholder until the ratio runs), records/pieces = neuralese-e2e-v1's e2e corpus v2
   bindings, options = neuralese-e2e-v1's e2e data and objective settings, TokenChoiceProjection and writer at 3e-6 on
-  Muon (the e2e collapse dragnet's stable rates). Stages direct_sft and direct_trajectory.
+  Muon (the e2e collapse dragnet's stable rates). Stages direct_sft and direct_trajectory. The writer is the
+  token-anchored NeuraleseProjection (E[chosen] + C(h), fc32044e): `aligned_projection` (projection_align on the
+  parent export, gated by `projection_on_manifold`, the e2e base's thresholds) is bound at the handoff; without it
+  C starts at 0.
 - `parent_readiness` removed from neuralese-e2e-v1 (and its validator, `e2e_acceptance readiness` and their tests): e2e
   no longer waits for a direct phase's readiness.
 

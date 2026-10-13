@@ -850,21 +850,23 @@ def verify_direct_stage_lineage_gates(stage, inputs, lineage_evidence):
 OBJECTIVE_COMPONENTS = ('quantization', 'family', 'e2e_mix')
 
 E2E_MIX_KEYS = frozenset({'description', 'stages', 'fraction', 'records', 'pieces', 'options', 'token_choice', 'writer',
-                          'neuralese_spans'})
+                          'neuralese_spans', 'aligned_projection', 'projection_on_manifold'})
 
 
 def validate_e2e_mix(component, kinds):
     """``e2e_mix`` (the mixed run, owner 2026-10-13; plans/neuralese/NEURALESE_DIRECT_V1.md "The mixed run"): the
     e2e producer->consumer updates a neuralese_direct stage interleaves with its direct updates. {stages, fraction p
-    of all updates in (0, 1), records and pieces as content-pinned {path, sha256}, optional neuralese_spans (the union
+    of all updates in (0, 1), records and pieces as content-pinned {path, sha256}, optional aligned_projection (the
+    writer fitted on the parent export, {path, sha256, artifact_manifest_sha256}, gated by projection_on_manifold;
+    without it the writer starts at C = 0, value = E[chosen]), optional neuralese_spans (the union
     rendering's Neuralese output spans sidecar, {path, sha256}: spans with an e2e edge are context only in direct
     updates), options (train/trajectories.py
     settings), token_choice and writer: {lr, optimizer muon|adamw} (the TokenChoiceProjection and the
     NeuraleseProjection's own rates), description}."""
     if not isinstance(component, dict) or set(component) - E2E_MIX_KEYS or \
             not {'stages', 'fraction', 'records', 'pieces', 'token_choice', 'writer'} <= set(component):
-        raise ValueError('e2e_mix is {stages, fraction, records, pieces, neuralese_spans?, options?, token_choice, writer, '
-                         'description?}')
+        raise ValueError('e2e_mix is {stages, fraction, records, pieces, neuralese_spans?, aligned_projection?, '
+                         'projection_on_manifold?, options?, token_choice, writer, description?}')
     stages = component['stages']
     if not isinstance(stages, list) or not stages or any(kinds.get(s) != 'neuralese_direct' for s in stages):
         raise ValueError('e2e_mix.stages names neuralese_direct stages of the recipe')
@@ -876,6 +878,16 @@ def validate_e2e_mix(component, kinds):
         if not isinstance(binding, dict) or set(binding) != {'path', 'sha256'} or not binding['path'] or \
                 not re.fullmatch(r'[0-9a-f]{64}', str(binding['sha256'])):
             raise ValueError('e2e_mix.' + key + ' is a content-pinned {path, sha256}')
+    aligned = component.get('aligned_projection')
+    if aligned is not None and (not isinstance(aligned, dict) or
+                                set(aligned) != {'path', 'sha256', 'artifact_manifest_sha256'} or
+                                not all(re.fullmatch(r'[0-9a-f]{64}', str(aligned[k]))
+                                        for k in ('sha256', 'artifact_manifest_sha256'))):
+        raise ValueError('e2e_mix.aligned_projection is {path, sha256, artifact_manifest_sha256} (projection_align on '
+                         'the parent export)')
+    if aligned is not None or 'projection_on_manifold' in component:
+        from .e2e_acceptance import validate_manifold
+        validate_manifold(component.get('projection_on_manifold'))
     if not isinstance(component.get('options', {}), dict):
         raise ValueError('e2e_mix.options maps train/trajectories.py settings to values')
     for key in ('token_choice', 'writer'):
@@ -891,7 +903,7 @@ def stage_e2e_mix(component, stage_id):
     against their pins; None when the stage does not mix."""
     if not component or stage_id not in component.get('stages', []):
         return None
-    for key in ('records', 'pieces', 'neuralese_spans'):
+    for key in ('records', 'pieces', 'neuralese_spans', 'aligned_projection'):
         if key in component and sha(binding_path(component[key]['path'])) != component[key]['sha256']:
             raise ValueError('e2e_mix.' + key + ' hash mismatch: ' + component[key]['path'])
     return {**json.loads(json.dumps(component)), 'stage': stage_id}

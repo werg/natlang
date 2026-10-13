@@ -524,7 +524,10 @@ are on the same scale. An e2e update runs at the direct update's sampled precisi
 content-pinned records and pieces, trajectories options, token_choice and writer rates) is an objective component like
 `family`: a running direct stage takes it by a declared objective continuation (`previous: {"e2e_mix": null}`), and
 the TokenChoiceProjection then starts at the identity with fresh optimizer state (by-name optimizer restore with the
-TCP declared added); everything else continues. train.jsonl rows carry `kind` (`direct`/`e2e`), `seconds`,
+TCP declared added); everything else continues. The writer is the token-anchored NeuraleseProjection (value =
+E[chosen] + C(h), fc32044e), which only the e2e updates train: `e2e_mix.aligned_projection` (projection_align on the
+parent export, {path, sha256, artifact_manifest_sha256}) after `e2e_mix.projection_on_manifold`, else C = 0; a handoff
+adds it with fresh optimizer state too, and drops the removed mixture projection's slots. train.jsonl rows carry `kind` (`direct`/`e2e`), `seconds`,
 `supervised_tokens` and `supervised_tokens_per_second`; e2e rows add the cursor, record, family and write lengths.
 e2e-eval.jsonl holds the e2e evaluation at the run's first update and at every evaluation (report.json `e2e`). Launch
 recipes: `neuralese-mixed-mellum-v4` and `neuralese-mixed-lfm-qad-broad-v1`, each extending its line's running direct

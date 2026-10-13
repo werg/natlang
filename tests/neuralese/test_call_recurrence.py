@@ -429,7 +429,7 @@ def test_the_e2e_objective_embeds_in_a_host_trainer_with_the_hosts_modules(loade
     loss, info = objective.loss(0)
     assert info["record_id"] == "caller" and info["write_lengths"] and info["supervised_tokens"] > 0 and torch.isfinite(loss)
     loss.backward()
-    assert host.neuralese_projection.stack.blocks[-1].down.weight.grad.abs().sum() > 0
+    assert host.neuralese_projection.linear.weight.grad.abs().sum() > 0
     assert trainable.grad is not None and trainable.grad.abs().sum() > 0
     with pytest.raises(ValueError, match="soft-parts text"):
         build_e2e_objective(_direct_arguments(records, pieces, tmp_path / "e2e2", tmp_path),
