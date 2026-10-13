@@ -15,8 +15,8 @@ import {renderValue} from '../dist/native/agent.js';
  */
 import {createHash} from 'node:crypto';
 import {buildInlineInstructionIndex} from '../dist/compiler/inline-instruction-index.js';
-import { createReadStream, createWriteStream, writeFileSync } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { createWriteStream, writeFileSync } from 'node:fs';
+import { jsonlLines } from './jsonl-stream.mjs';
 import { parseArgs } from 'node:util';
 import { callOf, ChildResultIndexBuilder, convertTrajectory, instructionsDigest, NEURALESE_CONVERSION_VERSION, openingInstructions } from '../dist/compiler/neuralese-conversion.js';
 import { materializedActionProjection, validateSoftStateConversionEvidence } from './inline-curriculum/soft-state-conversion-evidence.mjs';
@@ -45,7 +45,7 @@ const childIndex = new ChildResultIndexBuilder({ admitHostResults: values['admit
 const inlineSiteRows=[];
 let counted = 0;
 outer0: for (const input of positionals) {
-  for await (const line of createInterface({ input: createReadStream(input), crlfDelay: Infinity })) {
+  for await (const line of jsonlLines(input)) {
     if (!line.trim()) continue;
     if (counted++ >= limit) break outer0;
     let row;
@@ -81,7 +81,7 @@ totals.inline_instruction_index = { writers: inlineInstructions.writers.length, 
     [...new Set(inlineInstructions.held.map(hold => hold.reason))].map(reason =>
       [reason, inlineInstructions.held.filter(hold => hold.reason === reason).length])) };
 outer: for (const input of positionals) {
-  for await (const line of createInterface({ input: createReadStream(input), crlfDelay: Infinity })) {
+  for await (const line of jsonlLines(input)) {
     if (!line.trim()) continue;
     if (totals.records >= limit) break outer;
     totals.records++;

@@ -3,7 +3,7 @@ import { createGunzip } from 'node:zlib';
 import { StringDecoder } from 'node:string_decoder';
 import { createHash } from 'node:crypto';
 
-export async function* jsonlRows(path) {
+export async function* jsonlLines(path) {
   const source = createReadStream(path);
   const compressed = String(path).endsWith('.gz');
   const input = compressed ? createGunzip() : source;
@@ -14,10 +14,6 @@ export async function* jsonlRows(path) {
   }
   const decoder = new StringDecoder('utf8');
   let pending = '';
-  const emitLine = line => {
-    if (line.endsWith('\r')) line = line.slice(0, -1);
-    return line.trim() ? JSON.parse(line) : undefined;
-  };
   try {
     for await (const chunk of input) {
       pending += decoder.write(chunk);
@@ -25,20 +21,22 @@ export async function* jsonlRows(path) {
       while ((at = pending.indexOf('\n')) >= 0) {
         const line = pending.slice(0, at);
         pending = pending.slice(at + 1);
-        const row = emitLine(line);
-        if (row !== undefined) yield row;
+        yield line.endsWith('\r') ? line.slice(0, -1) : line;
       }
     }
     pending += decoder.end();
     if (pending.length) {
-      const row = emitLine(pending);
-      if (row !== undefined) yield row;
+      yield pending.endsWith('\r') ? pending.slice(0, -1) : pending;
     }
   } finally {
     if (compressed) source.off('error', forwardSourceError);
     if (!source.destroyed) source.destroy();
     if (input !== source && !input.destroyed) input.destroy();
   }
+}
+
+export async function* jsonlRows(path) {
+  for await (const line of jsonlLines(path)) if (line.trim()) yield JSON.parse(line);
 }
 
 export async function fileDigest(path) {
