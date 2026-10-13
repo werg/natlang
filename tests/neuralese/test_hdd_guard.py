@@ -88,3 +88,15 @@ def test_the_staged_cache_is_bounded_least_recently_used_first(hdd, tmp_path, mo
     source.write_bytes(b'd' * 1024)
     hdd_guard.stage_input(source)
     assert os.path.exists(paths[0]) and not os.path.exists(paths[1])
+
+
+def test_a_streamed_cohort_stages_its_chains_beside_its_records(hdd, tmp_path):
+    """train/e2e_records.py reads chains.jsonl beside records.jsonl: staging the records brings the chains along."""
+    cohort = hdd / 'cohort'
+    cohort.mkdir()
+    (cohort / 'records.jsonl').write_text('records')
+    (cohort / 'chains.jsonl').write_text('chains')
+    staged = hdd_guard.stage_input(cohort / 'records.jsonl', hashlib.sha256(b'records').hexdigest())
+    assert open(staged).read() == 'records'
+    assert (tmp_path / 'staged' / hashlib.sha256(b'records').hexdigest() / 'chains.jsonl').read_text() == 'chains'
+    assert hdd_guard.RECORDS[-1]['sidecar_of'] == str(cohort / 'records.jsonl')

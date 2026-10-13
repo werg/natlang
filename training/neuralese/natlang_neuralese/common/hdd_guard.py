@@ -23,6 +23,9 @@ from .paths import resolve
 RECORDS: list[dict] = []
 # Roles a stage reads as data (staged when on the HDD); every other role is load-once state, read in place.
 STAGED_ROLES = frozenset({'text_data', 'records', 'pieces', 'harness_records', 'harness_pieces'})
+# Files that travel with a staged input: a streamed e2e cohort's records.jsonl is read with the chains.jsonl beside
+# it (train/e2e_records.py), so staging the records stages its chains into the same directory.
+SIDECARS = {'records.jsonl': ('chains.jsonl',)}
 
 
 def hdd_prefix() -> Path | None:
@@ -103,4 +106,14 @@ def stage_input(path, sha256: str | None = None) -> str:
         os.replace(part, target)
     RECORDS.append({'source': str(source), 'staged': str(target), 'sha256': digest,
                     'declared_hash': sha256 is not None})
+    for name in SIDECARS.get(source.name, ()):
+        sidecar, staged = source.parent / name, target.parent / name
+        if not sidecar.is_file():
+            continue
+        if not (staged.is_file() and staged.stat().st_size == sidecar.stat().st_size):
+            part = staged.with_name(staged.name + f'.part{os.getpid()}')
+            shutil.copyfile(sidecar, part)
+            os.replace(part, staged)
+        RECORDS.append({'source': str(sidecar), 'staged': str(staged), 'sha256': _sha(staged),
+                        'declared_hash': False, 'sidecar_of': str(source)})
     return str(target)
