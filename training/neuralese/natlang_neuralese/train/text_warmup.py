@@ -1103,17 +1103,8 @@ class _SpooledTokens:
         return (self.size, self.index) < (other.size, other.index)
 
 
-def stream_merge_prefix_rows(rows_source, *, spool_directory=None):
-    """``merge_prefix_rows`` in bounded memory, for a corpus that does not fit beside its windows (Pop's 365,784-row
-    r3 program-header stage, coordinator 2026-10-13). ``rows_source()`` returns a fresh iterator over the same rows
-    (the stage streams its file again). Returns (merged row iterator, receipt): the same rows, in the same order, with
-    the same ``supervised_spans``, ``merged_rows`` and receipt as ``merge_prefix_rows(list(rows_source()))``
-    (tests/neuralese/test_header_efficiency.py checks equality).
-
-    Pass 1 keeps, per mergeable train row, its bucket, length, suffix start and identity, and appends its token bytes
-    to a scratch spool. Pass 2 resolves containers bucket by bucket with the same byte-order rule, comparing rows in
-    the memory-mapped spool (resident memory: a few objects per row, not their tokens). Pass 3 iterates the rows
-    again and yields each one merged or skips it as contained."""
+def _merge_decisions(rows_source, spool_directory):
+    """Passes 1 and 2 of ``stream_merge_prefix_rows``: (container, meta, rows)."""
     import collections
     import mmap
     import tempfile
@@ -1152,7 +1143,33 @@ def stream_merge_prefix_rows(rows_source, *, spool_directory=None):
         finally:
             if view is not None:
                 view.close()
-    del buckets
+    return container, meta, rows
+
+
+def stream_merge_prefix_rows(rows_source, *, spool_directory=None, cache_key=None):
+    """``merge_prefix_rows`` in bounded memory, for a corpus that does not fit beside its windows (Pop's 365,784-row
+    r3 program-header stage, coordinator 2026-10-13). ``rows_source()`` returns a fresh iterator over the same rows
+    (the stage streams its file again). Returns (merged row iterator, receipt): the same rows, in the same order, with
+    the same ``supervised_spans``, ``merged_rows`` and receipt as ``merge_prefix_rows(list(rows_source()))``
+    (tests/neuralese/test_header_efficiency.py checks equality).
+
+    Pass 1 keeps, per mergeable train row, its bucket, length, suffix start and identity, and appends its token bytes
+    to a scratch spool. Pass 2 resolves containers bucket by bucket with the same byte-order rule, comparing rows in
+    the memory-mapped spool (resident memory: a few objects per row, not their tokens). Pass 3 iterates the rows
+    again and yields each one merged or skips it as contained.
+
+    Passes 1 and 2 depend only on the rows (file bytes, tokenizer and any pinned sampling-group marking), so with a
+    ``cache_key`` (common.row_index; the caller derives it from exactly those) their result (container map, per-row
+    meta, row count) is stored, and a later call goes straight to pass 3."""
+    import collections
+    from ..common import row_index
+    cached = row_index.load(cache_key) if cache_key is not None else None
+    if cached is not None:
+        container, meta, rows = cached['container'], cached['meta'], cached['rows']
+    else:
+        container, meta, rows = _merge_decisions(rows_source, spool_directory)
+        if cache_key is not None:
+            row_index.save(cache_key, {'container': container, 'meta': meta, 'rows': rows})
     members = collections.defaultdict(list)
     for index, owner in container.items():
         members[owner].append(index)

@@ -765,17 +765,52 @@ def stage_rows(a, text_data, tokenizer):
     if not getattr(a, 'merge_prefix_rows', False):
         return source()
     from .text_warmup import stream_merge_prefix_rows
-    rows, merge = stream_merge_prefix_rows(source,
+    import json as _json
+    cache_key = row_index_key('merge-prefix-rows/1', text_data, tokenizer,
+                              _json.dumps(getattr(a, 'recovery_selection', None), sort_keys=True))
+    rows, merge = stream_merge_prefix_rows(source, cache_key=cache_key,
                                            spool_directory=a.out if getattr(a, 'out', None) and Path(a.out).is_dir() else None)
     print(json.dumps({'event': 'merge_prefix_rows', **merge}), flush=True)
     return rows
 
 
+def row_index_key(kind, text_data, tokenizer, *extra):
+    """The ``common.row_index`` cache entry of what a pass over ``text_data`` computes: the file's sha256, the tokenizer
+    fingerprint and vocabulary size, and ``extra`` (the windowing/merge policy). None when the tokenizer cannot be
+    fingerprinted (the pass then runs uncached)."""
+    from ..common import row_index
+    from ..common.hashing import sha256_file_hex_cached
+    from ..data.text_corpus import tokenizer_fingerprint
+    try:
+        return row_index.entry_path(kind, sha256_file_hex_cached(text_data), tokenizer_fingerprint(tokenizer),
+                                    len(tokenizer), *extra)
+    except (AttributeError, TypeError):
+        return None
+
+
 def stream_text_rows(text_data, tokenizer):
     """``text_warmup.load_text_rows(text_data=...)`` as a stream, for a data-only plan: the same validation, train/held
     source-group check, exclusion of train rows that duplicate a held text and exact-duplicate dedup (first row
-    kept), with content hashes in place of texts; two passes over the file, one row in memory at a time."""
+    kept), with content hashes in place of texts; two passes over the file, one row in memory at a time.
+
+    The outcome of those two passes (which lines are dropped; the validation raised nothing) is a function of the file
+    bytes and the tokenizer only, so it is cached under ``common.row_index``: a later call (the next plan rebuild, the
+    real load, a handoff after a plan-only) makes one pass that skips the dropped lines without parsing them."""
+    from ..common import row_index
     from ..data.text_corpus import tokenizer_fingerprint
+    key = row_index_key('text-rows/1', text_data, tokenizer)
+    cached = row_index.load(key) if key is not None else None
+    if cached is not None:
+        skip = cached['skip']
+        with Path(text_data).open() as source:
+            for number, line in enumerate(source):
+                if number in skip:
+                    continue
+                row = json.loads(line)
+                if 'token_ids' in row:
+                    row['token_ids'] = array('I', row['token_ids'])
+                yield row
+        return
     fingerprint, vocab_size = None, len(tokenizer)
     groups, held_texts = {'train': set(), 'test': set()}, set()
     with Path(text_data).open() as source:
@@ -805,24 +840,29 @@ def stream_text_rows(text_data, tokenizer):
     if groups['train'] & groups['test']:
         raise ValueError('text warm-up factual source groups cross train/test')
     seen = {}
+    skip = set()
     with Path(text_data).open() as source:
-        for line in source:
+        for number, line in enumerate(source):
             row = json.loads(line)
             text = hashlib.sha256(row['text'].encode()).digest()
             if row['split'] == 'train' and text in held_texts:
+                skip.add(number)
                 continue
             if 'token_ids' in row:
                 row['token_ids'] = array('I', row['token_ids'])
-            key = (row['split'], text, hashlib.sha256(array('I', row.get('token_ids', [])).tobytes()).digest(),
-                   row.get('supervised_suffix_start'), row.get('sampling_group'))
+            key_ = (row['split'], text, hashlib.sha256(array('I', row.get('token_ids', [])).tobytes()).digest(),
+                    row.get('supervised_suffix_start'), row.get('sampling_group'))
             cohort = row.get('text_cohort', 'native')
-            if key in seen:
-                if seen[key] != cohort:
+            if key_ in seen:
+                if seen[key_] != cohort:
                     raise ValueError('an identical document belongs to multiple cohorts; resolve ownership before '
                                      'training')
+                skip.add(number)
                 continue
-            seen[key] = cohort
+            seen[key_] = cohort
             yield row
+    if key is not None:
+        row_index.save(key, {'skip': frozenset(skip)})
 
 
 def stage_plan_data(engine, a, text_data):

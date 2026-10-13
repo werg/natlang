@@ -257,3 +257,61 @@ def test_cohort_repeats_upweight_a_cohort_in_every_epoch_and_continue_with_new_d
     later = [w['document'] for batch, _ in cont[3:] for w in batch]
     assert all(later.count(d) == 9 for d in unseen_agentic)
     assert 'cohort_repeats' in trainer.WINDOWING_KEYS
+
+
+class _FingerprintTokenizer(_Tokenizer):
+    chat_template = None
+    all_special_tokens = ['<s>']
+    backend_tokenizer = SimpleNamespace(to_str=lambda: '{}')
+
+    def get_vocab(self):
+        return {'<s>': 0}
+
+
+def test_a_second_pass_over_the_same_text_file_skips_what_the_first_decided(tmp_path, monkeypatch):
+    """Row-index cache (common.row_index): the stream's validation and duplicate filtering is a function of the file bytes
+    and the tokenizer, so a later call makes one pass over the file instead of two and yields exactly the same rows."""
+    import pathlib
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
+    rows = []
+    for i in range(12):
+        rows.append({'id': f'd{i}', 'text': ' '.join(f'w{(i * 7 + j) % 30}' for j in range(5 + i)),
+                     'split': 'test' if i % 5 == 0 else 'train', 'source_groups': [f'g{i}']})
+    rows.append(dict(rows[3]))  # an exact duplicate
+    rows.append({**rows[5], 'split': 'train', 'source_groups': ['g-dup']})  # a train copy of a held text
+    data = tmp_path / 'text.jsonl'
+    data.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    opened = []
+    real_open = pathlib.Path.open
+    monkeypatch.setattr(pathlib.Path, 'open', lambda self, *a, **k: (opened.append(str(self)), real_open(self, *a, **k))[1])
+    tokenizer = _FingerprintTokenizer()
+    cold = list(trainer.stream_text_rows(data, tokenizer))
+    cold_opens = opened.count(str(data))
+    warm = list(trainer.stream_text_rows(data, tokenizer))
+    warm_opens = opened.count(str(data)) - cold_opens
+    assert cold == warm and len(cold) == len(rows) - 2
+    assert (cold_opens, warm_opens) == (2, 1)
+    data.write_text(data.read_text() + json.dumps({**rows[1], 'id': 'extra', 'text': 'brand new words here',
+                                                    'source_groups': ['g-extra']}) + '\n')
+    assert len(list(trainer.stream_text_rows(data, tokenizer))) == len(cold) + 1  # another file hash: no stale entry
+
+
+def test_the_prefix_merge_decisions_are_cached_under_their_key(tmp_path, monkeypatch):
+    from natlang_neuralese.train.text_warmup import stream_merge_prefix_rows
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
+    base = list(range(10, 10 + 120))
+    rows = [{'id': f'r{i}', 'text': f't{i}', 'split': 'train', 'source_groups': [f'g{i}'], 'token_ids': base[:n],
+             'supervised_suffix_start': n - 2} for i, n in enumerate((70, 90, 110, 80))]
+    passes = []
+
+    def source():
+        passes.append(1)
+        return (dict(r) for r in rows)
+    key = tmp_path / 'cache' / 'merge-test.pkl'
+    cold, cold_receipt = stream_merge_prefix_rows(source, cache_key=key)
+    cold = list(cold)
+    assert len(passes) == 2
+    warm, warm_receipt = stream_merge_prefix_rows(source, cache_key=key)
+    warm = list(warm)
+    assert len(passes) == 3  # the warm call made only the yielding pass
+    assert warm == cold and warm_receipt == cold_receipt and cold_receipt['contained_rows'] > 0
