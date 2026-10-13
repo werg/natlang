@@ -6,13 +6,16 @@ quality/decontamination review and explicit corpus admission.
 """
 import collections
 import fcntl
-import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'training/neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex
+
 BASE = Path('/srv/storage/natlang-artifacts/free-provider-generation-20261013-v1')
 HELD = ROOT / 'runs/natlang-held-task-packet-v3-20261012/cases.jsonl'
 RUNTIME = Path('/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/runtime-held-task-empty-eos-v1')
@@ -26,14 +29,6 @@ PER_FAMILY = 20
 
 def rows(path):
     return [json.loads(s) for s in path.read_text().splitlines() if s.strip()]
-
-
-def sha(path):
-    h = hashlib.sha256()
-    with path.open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1 << 20), b''):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def world(row):
@@ -166,10 +161,10 @@ def prepare(campaign, seed, source, excluded):
                            text_neuralese_emulation=True)
                 stream.write(json.dumps(job, sort_keys=True) + '\n')
     manifest = dict(schema='natlang.generation-campaign/1', seed=seed,
-                    source_path=str(source), source_sha256=sha(source),
+                    source_path=str(source), source_sha256=sha256_file_hex(source),
                     source_verified_cases=len(source_rows), selected_count=len(selected),
                     selected_by_family=dict(counts), selected_ids=[row['id'] for row in selected],
-                    held_path=str(HELD), held_sha256=sha(HELD),
+                    held_path=str(HELD), held_sha256=sha256_file_hex(HELD),
                     world_exclusion='same family and exact semantics.inputs/files/services against held and earlier sources',
                     training_admission=False, status='generation_only_pending_quality_review')
     (campaign / 'campaign-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
