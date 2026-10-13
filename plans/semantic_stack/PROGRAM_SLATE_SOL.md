@@ -1649,3 +1649,11 @@ Crisp helpers provide immutable directory snapshots, finite frontier mechanics, 
 ## Priority fixture cohort
 
 `sol-001` through `sol-010` now each carry 24 concrete interacting evidence records plus a query (250 visible files total). Structured exact oracles are manually derived from those passages and remain outside model-visible files. These ten are prepared for independent source replay and semantic teacher review; the other 90 remain design seeds. Actual nested execution and about 48 live samples are still required. The JSON records the exact oracle derivation and admission state per case.
+
+## Full substantial fixture expansion
+
+All100 Sol programs now carry24 concrete evidence records plus their own query and an independently manually derived structured oracle outside the model-visible files. The first10 worlds are individual; remaining90 programs interpret18 shared domain worlds with five distinct algorithms each. This is28 independent authored worlds, not100. Shared-world split identities must be preserved. Source/reference replay, contextual teacher review, actual runtime nesting, and about48 live samples per adopted variant remain unqualified until measured.
+
+## Exact readiness boundary
+
+All100 are fixture-ready. `sol-001` through `sol-010` retain generation preparation readiness from initial exact source screening. `sol-011` through `sol-100` are held expanded sources: their oracles were derived manually from the passages independently of the compiler, but a second independent oracle review and source replay have not run. No live semantic execution, deep-stack observation, 48-sample qualification or training admission is credited by this authoring expansion.
