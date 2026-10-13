@@ -16,6 +16,8 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'training/neuralese'))
 from natlang_neuralese.common.hashing import sha256_file_hex
+from neuralese_data.prepare_recovery_teacher_queue import prepare as prepare_recovery_queue
+from neuralese_data.select_repair_handoffs import select as select_repair_handoffs
 
 BASE = Path('/srv/storage/natlang-artifacts/free-provider-generation-20261013-v1')
 HELD = ROOT / 'runs/natlang-held-task-packet-v3-20261012/cases.jsonl'
@@ -42,6 +44,9 @@ TARGET_GROUP_INPUT_HASHES = {
 }
 BACKFILL = BASE / 'provider-luna-folder-backfill-s52007-s52010-v1'
 BACKFILL_UNIT_SEED = 52070
+REPAIR = BASE / 'repair-handoffs'
+FIRST_REPAIR_SEED = 52026
+REPAIR_EVERY_SEEDS = 8
 
 
 def rows(path):
@@ -66,18 +71,20 @@ def active(unit):
 
 def complete(campaign):
     manifest = json.loads((campaign / 'campaign-manifest.json').read_text())
+    repair = manifest.get('repair_cycle', False)
     exclusions_path = campaign / 'reviewed-exclusions.json'
     exclusions = json.loads(exclusions_path.read_text()) if exclusions_path.exists() else {}
     if exclusions and exclusions.get('schema') != 'natlang.generation-reviewed-exclusions/1':
         raise ValueError(f'Unrecognized reviewed exclusions: {exclusions_path}')
     excluded = exclusions.get('cases', {})
     pending = False
-    for number in range(1, WORKERS + 1):
+    for number in range(1, manifest.get('workers', WORKERS) + 1):
         worker = campaign / f'worker-{number:02d}'
         queue = rows(worker / 'queue.jsonl')
-        unit = f'natlang-pop-luna-s{manifest["seed"]}-w{number:02d}.service'
+        prefix = f'natlang-pop-luna-repair-s{manifest["seed"]}' if repair else f'natlang-pop-luna-s{manifest["seed"]}'
+        unit = f'{prefix}-w{number:02d}.service'
         retry_dirs = sorted(worker.glob('retry-*'))
-        if active(unit) or any(active(f'natlang-pop-luna-s{manifest["seed"]}-w{number:02d}-r{path.name.removeprefix("retry-")}.service')
+        if active(unit) or any(active(f'{prefix}-w{number:02d}-r{path.name.removeprefix("retry-")}.service')
                                for path in retry_dirs):
             pending = True
             continue
@@ -94,7 +101,7 @@ def complete(campaign):
                                   'reason': 'four_no_progress_relaunches', 'missing': len(missing)}), flush=True)
                 return False
             subprocess.run(['systemctl', '--user', 'reset-failed', unit], check=False)
-            if not launch_worker(campaign, manifest['seed'], number):
+            if not launch_worker(campaign, manifest['seed'], number, repair=repair):
                 return False  # memory pressure is a deferred launch, not a no-progress attempt
             retry_file.write_text(json.dumps({'failures': failures, 'finished': len(finished)}) + '\n')
             pending = True
@@ -111,7 +118,8 @@ def complete(campaign):
                             not review.get('reason')):
                         raise ValueError(f'Reviewed exclusion no longer matches terminal output: {job["key"]}')
                     continue
-                if retry_transient(campaign, worker, manifest['seed'], number, job, result, retry_dirs):
+                if retry_transient(campaign, worker, manifest['seed'], number, job, result, retry_dirs,
+                                   repair=repair):
                     pending = True
                     continue
                 print(json.dumps({'event': 'needs_review', 'campaign': str(campaign),
@@ -141,11 +149,12 @@ def launch_queue(queue_dir, unit):
     return True
 
 
-def launch_worker(campaign, seed, number):
-    return launch_queue(campaign / f'worker-{number:02d}', f'natlang-pop-luna-s{seed}-w{number:02d}')
+def launch_worker(campaign, seed, number, *, repair=False):
+    prefix = f'natlang-pop-luna-repair-s{seed}' if repair else f'natlang-pop-luna-s{seed}'
+    return launch_queue(campaign / f'worker-{number:02d}', f'{prefix}-w{number:02d}')
 
 
-def retry_transient(campaign, worker, seed, number, job, result, retry_dirs):
+def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, repair=False):
     """Retry a resultless provider error without reclassifying it as a model rejection."""
     if result.get('status') != 'incomplete' or result.get('exit_code') != 2:
         return False
@@ -156,7 +165,8 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs):
                    json.loads((path / 'review.json').read_text()).get('original_key') == job['key']]
     if own_retries and not (own_retries[-1] / 'journal.jsonl').exists():
         last_retry = own_retries[-1]
-        launch_queue(last_retry, f'natlang-pop-luna-s{seed}-w{number:02d}-r{last_retry.name.removeprefix("retry-")}')
+        prefix = f'natlang-pop-luna-repair-s{seed}' if repair else f'natlang-pop-luna-s{seed}'
+        launch_queue(last_retry, f'{prefix}-w{number:02d}-r{last_retry.name.removeprefix("retry-")}')
         return True
     last = own_retries[-1] if own_retries else worker / f'case-{queue_ordinal(worker, job["key"]):03d}'
     errors = sorted((last / 'jobs').glob('*.error.json'))
@@ -187,8 +197,61 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs):
     (retry / 'review.json').write_text(json.dumps({
         'schema': 'natlang.teacher-transient-retry/1', 'original_key': job['key'],
         'attempt': attempt, 'error': message, 'training_admission': False}, indent=2) + '\n')
-    launch_queue(retry, f'natlang-pop-luna-s{seed}-w{number:02d}-r{ordinal:03d}-{attempt:02d}')
+    prefix = f'natlang-pop-luna-repair-s{seed}' if repair else f'natlang-pop-luna-s{seed}'
+    launch_queue(retry, f'{prefix}-w{number:02d}-r{ordinal:03d}-{attempt:02d}')
     return True
+
+
+def prepare_repair_cycle(campaigns, seed):
+    """Replay failed train runs and pin a balanced correction queue once per eight broad batches."""
+    cycle = REPAIR / f'luna-s{seed - REPAIR_EVERY_SEEDS}-s{seed - 1}-v1'
+    if cycle.exists():
+        if not ((cycle / 'teacher/campaign-manifest.json').exists() or
+                (cycle / 'empty-selection.json').exists()):
+            raise ValueError(f'incomplete repair cycle preparation: {cycle}')
+        return cycle
+    cycle.mkdir(parents=True)
+    recent = [campaign for campaign in campaigns if
+              seed - REPAIR_EVERY_SEEDS <= int(campaign.name.split('-s')[-1].split('-')[0]) < seed]
+    if len(recent) != REPAIR_EVERY_SEEDS:
+        raise ValueError(f'repair cycle needs eight closed source campaigns, found {len(recent)}')
+    results = sorted(path for source in recent for path in source.glob('worker-*/case-*/results.jsonl'))
+    raw = cycle / 'handoffs.raw.ir.jsonl'
+    subprocess.run(['node', str(RUNTIME / 'scripts/build-handoffs.mjs'), str(raw),
+                    *map(str, results), '--workers', '6'], cwd=ROOT, check=True)
+    selected = cycle / 'handoffs.selected.ir.jsonl'
+    selection = select_repair_handoffs(raw, HELD, selected)
+    if not selection['selected']:
+        (cycle / 'empty-selection.json').write_text(json.dumps(selection, indent=2) + '\n')
+        return cycle
+    prepare_recovery_queue(selected, cycle / 'teacher', line='lfm25', workers=WORKERS,
+                           case_seconds=1800)
+    manifest_path = cycle / 'teacher/campaign-manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    manifest.update(seed=seed, repair_cycle=True, runtime=str(RUNTIME),
+                    runtime_sha256=sha256_file_hex(RUNTIME / 'frozen-runtime.json'),
+                    source_campaigns={str(source): sha256_file_hex(source / 'campaign-manifest.json')
+                                      for source in recent})
+    manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+    return cycle
+
+
+def run_repair_cycle(campaigns):
+    latest = max(int(campaign.name.split('-s')[-1].split('-')[0]) for campaign in campaigns)
+    if latest < FIRST_REPAIR_SEED or (latest - FIRST_REPAIR_SEED) % REPAIR_EVERY_SEEDS:
+        return False
+    # First cycle uses s52018..s52025 after the live s52026 work closes;
+    # subsequent cycles use the previous eight complete campaigns.
+    cycle = prepare_repair_cycle(campaigns, latest)
+    if (cycle / 'empty-selection.json').exists():
+        return False
+    teacher = cycle / 'teacher'
+    manifest = json.loads((teacher / 'campaign-manifest.json').read_text())
+    for number in range(1, manifest['workers'] + 1):
+        worker = teacher / f'worker-{number:02d}'
+        if not (worker / 'journal.jsonl').exists() and not active(f'natlang-pop-luna-repair-s{latest}-w{number:02d}.service'):
+            launch_worker(teacher, latest, number, repair=True)
+    return not complete(teacher)
 
 
 def queue_ordinal(worker, key):
@@ -376,6 +439,8 @@ def main():
             prepare_backfill()
             return
         if not complete(BACKFILL):
+            return
+        if campaigns and run_repair_cycle(campaigns):
             return
         seed = START_SEED if not campaigns else max(int(p.name.split('-s')[-1].split('-')[0]) for p in campaigns) + 1
         campaign = BASE / f'provider-luna-held-shapes-s{seed}-v1'

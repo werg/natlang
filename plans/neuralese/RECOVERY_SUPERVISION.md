@@ -1,5 +1,36 @@
 # Recovery supervision: a changed action after a no-progress observation (design, 2026-10-13)
 
+## Regular repair-candidate lane (Pop, 2026-10-13)
+
+Repair candidates are based on **failed train-split executions at the exact state the
+model reached**. The preferred source is a rollout of the current student checkpoint
+over source-group-disjoint train tasks; while that serving path is being integrated,
+the running Luna teacher campaigns also supply genuine failed trajectories. Held
+eval tasks identify failure-mode families only and never become train handoffs.
+Seeded, exact-oracle no-progress tasks remain a complementary source for failure
+mechanisms that natural rollouts rarely expose.
+
+The regular Pop replenisher schedules one repair batch after eight broad Luna
+campaigns. It uses the **same frozen runtime** to replay rejected trajectories with
+`build-handoffs.mjs`, then `select_repair_handoffs.py` chooses one site per failed
+trajectory and source group, round-robin across families with a three-per-family
+cap and held-group exclusion. The selected `natlang.program/2` handoffs enter
+`prepare_recovery_teacher_queue.py` and the ordinary native collector. The bad
+action and earlier prefix are context; the teacher's changed action and ensuing
+continuation are only candidate targets. Exact oracle success is necessary but
+does not confer training admission: use the existing native turn/decision review,
+source-group check, and corpus registry. `build-preference-pairs.mjs` may derive
+same-state failure/success pairs after causal replay, for a separately approved
+preference-training lane. Provider/timeout/runtime errors are not model negatives.
+
+The first source window (s52018–s52025) produced 82 replay-checked sites, but 71
+are proof-verifier sites. The balanced selection retains 9 distinct states from
+four families: actor route replanning 3, proof verifier 3, workbench tickets 2,
+schedule repair 1. This exercises the lane but is still a narrow repair corpus.
+Next, collect student-checkpoint train rollouts and widen task families before
+increasing the repair sampling share. Track recovery success by failure
+mechanism and family as well as total accepted count.
+
 Source: plans/neuralese/REPETITION_DRAGNET_20261013.md, recommendation 4. Both students loop: the same action and the
 same observation for 8 to 127 turns. The training targets almost never contain a repeated action (0.08–0.10% of
 supervised turns repeat a call on an identical observation), so the model never sees "this did not move, so do

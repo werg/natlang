@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pin train-only seeded recovery cases for teacher collection.
+"""Pin train-only seeded failures or replay-checked handoffs for teacher collection.
 
 The source supplies the task and an actual first action to execute. The native
 collector runs that action, shows its real feedback to the teacher, and grades
@@ -24,23 +24,35 @@ def prepare(source, output, *, line, workers, case_seconds):
     if not rows:
         raise ValueError('empty recovery source')
     ids = set()
+    source_modes = set()
     for row in rows:
         semantics = row.get('semantics', {})
+        if not isinstance(semantics, dict):
+            raise ValueError(f'invalid semantics: {row.get("id")}')
+        seeded = 'failure_seed' in semantics
+        handoff = row.get('handoff', {})
+        replayed = (isinstance(handoff, dict) and handoff.get('version') == 'natlang.handoff/2'
+                    and handoff.get('kind') in ('failed_action', 'wrong_result')
+                    and isinstance(handoff.get('source'), dict)
+                    and isinstance(handoff['source'].get('program_id'), str)
+                    and isinstance(handoff.get('rejected'), dict))
         if (row.get('version') != 'natlang.program/2' or
                 row.get('kind') not in ('lambda_graph', 'lambda_source') or
                 not isinstance(semantics.get('root'), str) or
                 semantics['root'] not in semantics.get('files', {}) or
                 row.get('split') != 'train' or not row.get('source_groups') or
-                'failure_seed' not in row.get('semantics', {})):
-            raise ValueError('recovery source needs focused program IR v2, train split, source groups, and a failure seed')
+                seeded == bool(replayed)):
+            raise ValueError('recovery source needs focused train IR v2, source groups, and exactly one seeded failure or replay-checked handoff')
         if row['id'] in ids:
             raise ValueError(f'duplicate recovery source id: {row["id"]}')
         ids.add(row['id'])
+        source_modes.add('seeded_failure' if seeded else 'replay_checked_handoff')
     output.mkdir(parents=True)
     manifest = {'schema': 'natlang.recovery-teacher-campaign/1',
                 'line': line, 'source': str(source), 'source_sha256': sha256_file_hex(source),
                 'cases': len(rows), 'workers': workers,
-                'selection': 'all train-only seeded failure cases, one per source id',
+                'source_modes': sorted(source_modes),
+                'selection': 'all train-only exact failure seeds or replay-checked handoffs, one per source id',
                 'training_admission': False,
                 'required_review': 'exact oracle, continuation action quality, held-group exclusion, native render'}
     (output / 'campaign-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
