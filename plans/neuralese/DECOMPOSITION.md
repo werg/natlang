@@ -223,3 +223,13 @@ ContinueMixedTraining uses the existing mixed objective and data continuation:
    before replacing the frozen runtime.
 The recipe is a declarative natural-language training plan. Existing crisp
 recipe, input-hash and optimizer restoration verifiers enforce it; no new trainer.
+
+## Preserve JSONL record framing — 2026-10-14
+
+ReadTrajectoryRecords separates records only at the JSONL byte newline (LF),
+retaining Unicode line/paragraph separators inside JSON strings. Reuse the
+shared jsonl-stream reader for both converter passes, exposing raw lines so
+invalid JSON still receives the existing unreadable accounting. The framing
+and UTF-8 decoding are exact crisp mechanisms, with no policy or model change.
+Node 24 readline treats U+2028/U+2029 as line endings; those are valid JSON
+string contents and must not fragment a trajectory row.
