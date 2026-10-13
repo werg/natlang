@@ -18,9 +18,12 @@ cap and held-group exclusion. The selected `natlang.program/2` handoffs enter
 `prepare_recovery_teacher_queue.py` and the ordinary native collector. The bad
 action and earlier prefix are context; the teacher's changed action and ensuing
 continuation are only candidate targets. Exact oracle success is necessary but
-does not confer training admission: use the existing native turn/decision review,
-source-group check, and corpus registry. `build-preference-pairs.mjs` may derive
-same-state failure/success pairs after causal replay, for a separately approved
+does not confer training admission. On completion the replenisher automatically
+collects exact-success parents, materializes native-turn review candidates, and
+builds replay-checked same-state preference candidates. These outputs are pinned
+in `review-candidates.json` with `training_admission: false`; use native turn/decision review,
+source-group check, and corpus registry. The same-state failure/success pairs
+from `build-preference-pairs.mjs` require separately approved
 preference-training lane. Provider/timeout/runtime errors are not model negatives.
 
 The first source window (s52018–s52025) produced 82 replay-checked sites, but 71

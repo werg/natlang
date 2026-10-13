@@ -245,6 +245,42 @@ def prepare_repair_cycle(campaigns, seed):
     return cycle
 
 
+def finalize_repair_cycle(cycle):
+    """Prepare exact-success turns and causal pairs for review, never training admission."""
+    package = cycle / 'review-candidates.json'
+    if package.exists():
+        return
+    teacher = cycle / 'teacher'
+    parents = cycle / 'accepted-parents.jsonl'
+    parent_review = parents.with_suffix('.review.json')
+    if not parents.exists() and not parent_review.exists():
+        subprocess.run(['python3', 'scripts/collect_luna_accepted_parents.py',
+                        '--campaign', str(teacher), '--held', str(HELD),
+                        '--out', str(parents)], cwd=ROOT, check=True)
+    if not parents.is_file() or not parent_review.is_file():
+        raise ValueError(f'incomplete repair parent collection: {cycle}')
+    native = cycle / 'native-turns.review-candidates.jsonl'
+    if not native.exists() and parents.stat().st_size:
+        subprocess.run(['node', str(RUNTIME / 'scripts/materialize-native-teacher.mjs'),
+                        str(parents), str(native)], cwd=ROOT, check=True)
+    pairs = cycle / 'preference-pairs.review-candidates.jsonl'
+    if not pairs.exists() and parents.stat().st_size:
+        subprocess.run(['node', str(RUNTIME / 'scripts/build-preference-pairs.mjs'),
+                        str(pairs), '--handoffs', str(parents), '--workers', '6'], cwd=ROOT, check=True)
+    outputs = {name: {'path': str(path), 'sha256': sha256_file_hex(path),
+                      **({'rows': sum(1 for line in path.open() if line.strip())}
+                         if path.suffix == '.jsonl' else {})}
+               for name, path in (('accepted_parents', parents), ('parent_review', parent_review),
+                                  ('native_turns', native), ('preference_pairs', pairs)) if path.exists()}
+    package.write_text(json.dumps({
+        'schema': 'natlang.repair-review-candidates/1',
+        'source_manifest_sha256': sha256_file_hex(teacher / 'campaign-manifest.json'),
+        'runtime_sha256': sha256_file_hex(RUNTIME / 'frozen-runtime.json'),
+        'outputs': outputs, 'training_admission': False,
+        'required_review': 'native decision quality, split/source decontamination, causal pair audit, explicit corpus registration',
+    }, indent=2) + '\n')
+
+
 def run_repair_cycle(campaigns):
     latest = max(int(campaign.name.split('-s')[-1].split('-')[0]) for campaign in campaigns)
     if latest < FIRST_REPAIR_SEED or (latest - FIRST_REPAIR_SEED) % REPAIR_EVERY_SEEDS:
@@ -260,7 +296,10 @@ def run_repair_cycle(campaigns):
         worker = teacher / f'worker-{number:02d}'
         if not (worker / 'journal.jsonl').exists() and not active(f'natlang-pop-luna-repair-s{latest}-w{number:02d}.service'):
             launch_worker(teacher, latest, number, repair=True)
-    return not complete(teacher)
+    if not complete(teacher):
+        return True
+    finalize_repair_cycle(cycle)
+    return False
 
 
 def queue_ordinal(worker, key):
