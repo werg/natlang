@@ -2,7 +2,7 @@
  "schema": "natlang.neuralese-training-recipe/1",
  "id": "neuralese-direct-mellum-v4",
  "extends": "neuralese-direct-v3",
- "description": "neuralese-direct-v3 (union r2, three phases: full-prompt warm-up 0.5 epoch, program-header direct_sft 1 epoch, whole-trajectory direct_trajectory 1 epoch) on BF16 Mellum2.1 with raw-token-v1 heads. Every difference from the base is declared in training/neuralese/line-parity.json. Backbone-inherent: the data binds the union's Mellum2.1 twin renders (full/, program-header/, whole-trajectory/mellum21; same document ids, splits and source groups as the base's lfm25 renders); grouped MoE kernel; maple output convention and Mellum's measured base gate_pass; MuonSR latent_lr 1e-5; Mellum's quantization points (ternary-experts, ternary) on the shared curriculum (direct_sft [0, 0.75], direct_trajectory [0.75, 1.0]; owner 2026-10-12); the shared nested-family objective with Mellum's members (backbone-inherent): expert width over the N0 order (runs/mellum-nested-20261009/n0-v1: 32 experts carry 91% of routing mass, 16 carry 71%) and depth: 28x32, 28x16, 21x32 (28x24 evaluated). Fit-only: window_execution packed. Supersedes neuralese-direct-mellum-v3 (4962-document data, two phases). History: recipes/HISTORY.md.",
+ "description": "neuralese-direct-v3 (union r2, three phases: full-prompt warm-up 0.5 epoch, program-header direct_sft 1 epoch, whole-trajectory direct_trajectory 1 epoch) on BF16 Mellum2.1 with raw-token-v1 heads. Every difference from the base is declared in training/neuralese/line-parity.json. Backbone-inherent: the data binds the union's Mellum2.1 twin renders (full/, program-header/, whole-trajectory/mellum21; same document ids, splits and source groups as the base's lfm25 renders); grouped MoE kernel; maple output convention and Mellum's measured base gate_pass; MuonSR latent_lr 1e-5; Mellum's quantization points (ternary-experts, ternary) on the shared curriculum (direct_sft [0, 0.75], direct_trajectory [0.75, 1.0]; owner 2026-10-12); the shared nested-family objective with Mellum's members (backbone-inherent): expert width over the N0 order (runs/mellum-nested-20261009/n0-v1: 32 experts carry 91% of routing mass, 16 carry 71%) and depth: 28x32, 28x16, 21x32 (28x24 evaluated). Fit-only: window_execution packed. Supersedes neuralese-direct-mellum-v3 (4962-document data, two phases). History: recipes/HISTORY.md. Data revision (coordinator 2026-10-13): direct_sft and direct_trajectory bind the Mellum twins of union r3's program-header and whole-trajectory renders, as the shared base does.",
  "overrides": {
   "input_bindings": {
    "direct_text": {
@@ -10,12 +10,12 @@
     "sha256": "aaa838741ad07e075b89d3b6b39ed22c1659628bb25252d8bc79a0800a57b55d"
    },
    "direct_text_program_header": {
-    "path": "runs/natlang-target-union-20261011-r2/program-header/mellum21/text-data.jsonl",
-    "sha256": "2699844e3a76e329ca8a454b38c32bf2695eb9c3b7e4d071730a6e24fefb095f"
+    "path": "runs/natlang-target-union-20261011-r3/program-header/mellum21/text-data.jsonl",
+    "sha256": "3a3b52c47a3f184a719df90d05de28a3abf69b60719200a8185c9d3441826836"
    },
    "direct_text_trajectory": {
-    "path": "runs/natlang-target-union-20261011-r2/whole-trajectory/mellum21/text-data.jsonl",
-    "sha256": "f92e2f330fc3d8a394b148c5c625e158bb7f7f4ff2c85dd0f9eea514aea81ca4"
+    "path": "runs/natlang-target-union-20261011-r3/whole-trajectory/mellum21/text-data.jsonl",
+    "sha256": "1e3759cd1a9bffc9148a79d2960fd5dbbbae97563d5a4226ca7cf73019120d88"
    }
   },
   "stage_parameter_defaults": {

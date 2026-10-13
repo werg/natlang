@@ -8,6 +8,10 @@
    "direct_text": {
     "$delete": true
    },
+   "direct_text_program_header": {
+    "path": "runs/natlang-target-union-20261011-r2/program-header/mellum21/text-data.jsonl",
+    "sha256": "2699844e3a76e329ca8a454b38c32bf2695eb9c3b7e4d071730a6e24fefb095f"
+   },
    "direct_text_trajectory": {
     "path": "runs/natlang-target-union-20261011-r3/whole-trajectory/mellum21/text-data.jsonl",
     "sha256": "1e3759cd1a9bffc9148a79d2960fd5dbbbae97563d5a4226ca7cf73019120d88"
