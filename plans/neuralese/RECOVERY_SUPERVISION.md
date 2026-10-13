@@ -34,6 +34,27 @@ Next, collect student-checkpoint train rollouts and widen task families before
 increasing the repair sampling share. Track recovery success by failure
 mechanism and family as well as total accepted count.
 
+First cycle outcome (2026-10-13): Luna completed all nine handoffs, including
+one resultless request-budget retry. Three continuations passed the exact task
+oracle; six failed the answer check. Review packaging yielded 104 native turn
+candidates and two causally verified same-state preference pairs, all explicitly
+**not admitted**. The accepted actor-route continuation alone took 89 turns;
+its exact final answer is not evidence that every intermediate decision is a
+good training target. Inspect repetition, unnecessary calls, and semantic
+claims before admitting any turns or pair. A first alternate-teacher pilot
+using Step 5 Preview through the official OpenCode CLI bridge solved one proof
+handoff in two turns that Luna had missed; a six-case follow-up is running.
+The OpenCode free model rejects direct API use (HTTP 403, FreeTierError), so
+provider use must stay on the normal CLI bridge and its audited action route.
+
+The current `natlang.handoff/2` replay presents the state **before** the bad
+decision, with the bad action retained only as provenance. These examples teach
+same-state correction and can produce causal preference pairs. They are not
+post-feedback recoveries, where the student has already seen the failed action's
+observation. The seeded-failure pilot above covers the latter form. Keep those
+two training mechanisms labeled separately; use current-student train rollouts
+to expand the post-feedback branch after their serving path is available.
+
 Collection budget finding: s52026's customer shared-inbox deduplication case
 used 192 saved turns and reached 384 nested model requests without a result.
 Five sibling cases already yielded accepted exact results, so this was not a
