@@ -20,7 +20,7 @@ export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknow
   /** Explicit answer-map keys whose lowercase strings are unsigned numerals in a declared base. */
   radix_fields?: Array<{ key: string; base: number }>;
   rubric?: string; context?: unknown; [key: string]: unknown };
-const BUILTIN_NORMALIZATIONS = ['qa', 'qa-string-map', 'named-tree', 'json-string-record'] as const;
+const BUILTIN_NORMALIZATIONS = ['qa', 'qa-string-map', 'named-tree', 'json-string-record', 'semantic-structured'] as const;
 /** Apply only explicitly declared unordered array paths; object keys are already order-free. */
 export function declaredStructuralCanonical(value: unknown, unorderedPaths: string[], prosePaths: string[] = [],
   ignoreProse = false): string | null {
