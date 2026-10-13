@@ -35,6 +35,12 @@ classified as the NVMe file they replaced) gets one tier. When in doubt, PRUNE-A
 | PRUNE-AUTO | Clearly regenerable: intermediate step checkpoints of a finished run (the latest step, `*best*`, `*final*`, `*export*` stay); checkpoints of aborted/stopped runs (`aborted`, `guard-stopped`, `floor-stopped`, `failed`) after 7 days unless a plan or script names the run directory; leftover partial writes (`*.pending`, `*.tmp`, `*.partial`) after 2 days; dangling docker images and build cache. | By `storage_retention.py --apply`, with a deletion manifest |
 | PRUNE-ASK | Every other large file: latest checkpoints of finished runs no one references, optimizer state of finished runs, unregistered teacher dumps and datasets, exports. | Only when the owner lists the path in `~/.config/natlang/storage-approved.txt` |
 
+Protected docker objects (`keep.docker` in `training/storage-policy.json`) are active infrastructure even when
+exited, and are never removed by a cleanup, by hand or by script: the teacher container `natlang-qwen36-nvfp4-server`
+and its image `vllm-node` (ID `666307b2…`) are started on demand by `scripts/ensure_teacher.sh`. A 2026-10-12 cleanup
+took "exited five days ago, no ledger reference" for "retired" and deleted both; `storage_retention.py` now reports
+protected objects that are missing, and `scripts/teacher/run-qwen36.sh` recreates the teacher from its run spec.
+
 Deletion re-checks each file right before unlinking (size and mtime unchanged since the scan, not open) and removes
 the NVMe symlink that pointed to a deleted archived copy. The manifest (`~/.local/state/natlang/storage/deletions.jsonl`)
 keeps path, bytes, category, tier, reason, run and time.

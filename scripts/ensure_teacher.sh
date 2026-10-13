@@ -1,5 +1,5 @@
 #!/bin/sh
-# Bring the vLLM teacher (container natlang-qwen36-nvfp4-server) up under the ledger if it is not serving, and wait
+# Bring the vLLM teacher (container natlang-qwen36-nvfp4-server, run spec scripts/teacher/run-qwen36.sh) up under the ledger if it is not serving, and wait
 # until it answers. Several queued campaigns call this; a unit that is already starting is waited for, not duplicated.
 # vLLM sizes its KV cache from the memory free while it loads (~10 min): a start that overlaps another big job fails
 # with negative KV memory (2026-10-07), so a failed start is retried after a pause, up to ATTEMPTS times. Startup
@@ -19,8 +19,9 @@ until serving; do
     [ $attempt -gt 0 ] && sleep 300
     attempt=$((attempt + 1))
     systemctl --user reset-failed $UNIT 2>/dev/null
+    # The run spec pulls the pinned image and recreates the container when a cleanup removed them, then attaches.
     python3 $ROOT/scripts/memory_ledger.py run --unit $UNIT --budget-gb 68 --class service --wait 28800 --workdir $ROOT \
-      -- docker start -a natlang-qwen36-nvfp4-server || exit 1
+      --container natlang-qwen36-nvfp4-server -- $ROOT/scripts/teacher/run-qwen36.sh start || exit 1
     sleep 30
   fi
   sleep 15

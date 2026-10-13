@@ -507,6 +507,23 @@ def delete(entry: dict, manifest: Path, held: set[str]) -> dict | None:
     return record
 
 
+def docker_protected(policy: dict) -> dict:
+    """The policy's protected containers and images (``keep.docker``) and which of them are missing. They are active
+    infrastructure even when exited (the teacher container is started on demand): never remove them by hand either.
+    A missing one is reported so the pass surfaces it; scripts/teacher/run-qwen36.sh recreates the teacher."""
+    keep = policy.get('keep', {}).get('docker', {})
+    missing = []
+    for kind, names in (('container', keep.get('containers', ())), ('image', keep.get('images', ()))):
+        for name in names:
+            try:
+                found = subprocess.run(['docker', kind, 'inspect', name], capture_output=True, timeout=60).returncode == 0
+            except (OSError, subprocess.SubprocessError):
+                continue
+            if not found:
+                missing.append(f'{kind} {name}')
+    return {'containers': list(keep.get('containers', ())), 'images': list(keep.get('images', ())), 'missing': missing}
+
+
 def docker_prune(apply: bool) -> dict:
     """Dangling images and build cache: regenerable. Containers and tagged images are never touched."""
     result = {'dangling_images': [], 'applied': apply}
@@ -567,6 +584,8 @@ def run(args) -> dict:
                     handle.write(json.dumps(record) + '\n')
                 deleted.append(record)
     docker = docker_prune(args.apply and not args.no_docker)
+    if not args.no_docker:
+        docker['protected'] = docker_protected(policy)
     tiers: dict = defaultdict(lambda: {'files': 0, 'bytes': 0})
     for e in classified:
         tiers[e['tier']]['files'] += 1

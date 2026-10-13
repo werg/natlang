@@ -326,7 +326,8 @@ def ensure_teacher_queued() -> None:
     # --wait blocks until admitted; run it detached so this loop keeps preparing prompts meanwhile.
     subprocess.Popen(['python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', 'natlang-qwen36-teacher',
                       '--budget-gb', '68', '--priority', 'low', '--resumable', '--wait', '604800', '--workdir', str(REPO),
-                      '--', 'docker', 'start', '-a', 'natlang-qwen36-nvfp4-server'], start_new_session=True,
+                      '--container', 'natlang-qwen36-nvfp4-server',
+                      '--', str(REPO / 'scripts/teacher/run-qwen36.sh'), 'start'], start_new_session=True,
                      stdout=open(root_log(), 'ab'), stderr=subprocess.STDOUT)
 
 

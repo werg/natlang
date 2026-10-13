@@ -52,8 +52,15 @@
     "path_patterns": [
       "/home/werg/data/models/*",
       "/home/werg/data/bird-sqlite/*",
-      "/home/werg/natlang-data-nvme/*"
-    ]
+      "/home/werg/natlang-data-nvme/*",
+      "/mnt/external/bgkit-data/models/hf/Qwen3.6-35B-A3B-NVFP4/*",
+      "/mnt/external/natlang-vllm-qwen36/*"
+    ],
+    "docker": {
+      "why": "Active infrastructure, never retired: the vLLM teacher (scripts/teacher/run-qwen36.sh, scripts/ensure_teacher.sh, unit natlang-qwen36-teacher) serves :8082 for teacher data, live measurements, the specializer and the weekly teacher window. An exited container is not a retired one: it is started on demand.",
+      "containers": ["natlang-qwen36-nvfp4-server"],
+      "images": ["vllm-node", "sha256:666307b207f9f583f6048111e90c5d177355a2f94d9101494c8c85c5b277471d"]
+    }
   },
   "checkpoint": {
     "suffixes": [
