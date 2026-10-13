@@ -148,7 +148,8 @@ export async function answer(evidence: EvidenceCollection, question: string): Pr
   if (problem) { ids = [...await select(question, found, problem)]; problem = hitProblem(ids, found); }
   if (problem) return unresolved(found.collection_revision, `Invalid selection: ${problem}`);
   const passages = evidence.read(ids, found.collection_revision);
-  let claims = evidence.cite(await claimsFor(question, passages), passages);
+  // With no passage selected there is nothing to cite: the claims stage is skipped and the gap stage reports the shortfall.
+  let claims = passages.length ? evidence.cite(await claimsFor(question, passages), passages) : [];
   const wrong = evidence.citationProblems(passages, claims);
   if (wrong.length) claims = evidence.cite(await claimsFor(question, passages, wrong.map(row => row.problem).join('\n')), passages);
   const gaps = [...await findGaps(question, claims, passages), ...(found.truncated ? [truncationGap(found)] : [])];

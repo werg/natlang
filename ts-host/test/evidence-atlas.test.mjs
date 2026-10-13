@@ -83,6 +83,16 @@ test('two invalid selections end as an unresolved value, not a throw', async () 
   assert.equal(model.calls.claims, 0);
 });
 
+test('no selected passage skips the claims stage and ends unresolved with the gap', async () => {
+  const evidence = new EvidenceCollection(documents);
+  const model = stagesModel({ select: () => 'return []', gaps: () => 'return ["No passage says where checkpoints are stored."]' });
+  const result = await ask(model, evidence, 'Where are checkpoints stored?');
+  assert.equal(result.status, 'unresolved');
+  assert.deepEqual(result.gaps, ['No passage says where checkpoints are stored.']);
+  assert.equal(model.calls.claims, 0);
+  assert.equal(model.calls.gaps, 1);
+});
+
 test('an invalid quote gets one repair attempt, then reports invalid-citation', async () => {
   const evidence = new EvidenceCollection(documents);
   const repaired = stagesModel({
