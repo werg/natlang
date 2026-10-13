@@ -1,5 +1,9 @@
 # Memory admission on the DGX
 
+## Pop discrete GPU
+
+On Pop, the RTX 4060's VRAM is separate from host RAM. Launch GPU jobs with `memory_ledger.py run --budget-gb HOST --cuda-budget-gb VRAM`: the host budget governs admission and cgroup use, while the CUDA budget is sent to the trainer and returned by `claimed_budget` for its activation planner. Omit `--cuda-budget-gb` on the DGX Spark, where CUDA allocations consume unified host memory and must remain part of the single claim. This keeps Pop's CPU generation lanes supplied while its GPU trains.
+
 The GB10 has one 121 GB pool. CUDA allocations come from it, systemd's `MemoryMax` does not see them, and the
 kernel's OOM killer ranks processes by resident pages, which leave CUDA memory out. On 2026-10-04 an extra CUDA
 server pushed the machine over and the global OOM killed the v10 teacher campaign along with it.

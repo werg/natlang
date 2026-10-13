@@ -2183,9 +2183,7 @@ def main(argv=None):
                 # A failed evaluation is recorded and evaluated again at the next cadence; the final one is retried
                 # at once (it gates qualification). Repeated failures raise (task_eval.max_consecutive_failures).
                 with profile_region('update/task_eval'):
-                    task_summary = task_eval.cadence(step)
-                    while step == end and not task_summary['eligible']:
-                        task_summary = task_eval.cadence(step)
+                    task_summary = task_eval.final_at(step) if step == end else task_eval.cadence(step)
                 report['task_eval'] = {k: task_summary.get(k) for k in
                                        ('task_successes', 'cases', 'outcome_counts', 'eligible', 'seconds', 'error')}
                 if step == end:
@@ -2210,8 +2208,28 @@ def main(argv=None):
     if archive is not None:
         archive.wait()
     finished = step >= end
+    if finished and task_eval is not None and final_task_summary is None:
+        # An exact resume at the final optimizer step has no train-loop body.
+        # The checkpoint is sound even if the collector failed afterwards;
+        # recover its task gate without repeating the 414 optimizer updates.
+        final_task_summary = task_eval.final_at(step)
     gate = monitor.final_gate(step) if finished else None
     final = json.loads((a.out / 'report.json').read_text()) if (a.out / 'report.json').exists() else {}
+    if finished and 'ce_delta' not in final:
+        # A post-update collector may fail before the normal report write. An
+        # exact-step resume then has no loop iteration to restore its held CE.
+        # Recover only the evaluation of this very checkpoint step; never
+        # infer qualification from an earlier or unrelated evaluation.
+        eval_log = a.out / 'eval.jsonl'
+        if eval_log.is_file():
+            for line in reversed(eval_log.read_text().splitlines()):
+                try:
+                    prior_eval = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if prior_eval.get('step') == step and 'ce_delta' in prior_eval:
+                    final.update(prior_eval)
+                    break
     drift_stopped = any((json.loads(line).get('behaviour_drift') or {}).get('guard') == 'stop'
                         for name in ('eval.jsonl', 'drift.jsonl') if (a.out / name).is_file()
                         for line in (a.out / name).open())
