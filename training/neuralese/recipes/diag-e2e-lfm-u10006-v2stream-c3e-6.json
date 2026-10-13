@@ -1,0 +1,15 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "diag-e2e-lfm-u10006-v2stream-c3e-6",
+ "extends": "diag-e2e-lfm-u10006-v2stream-b",
+ "description": "E2E dragnet C-rate sweep on streamed corpus v2 (coordinator 2026-10-13): writer correction C of value = E[chosen] + C(h) at heads_lr 3e-06, TCP Muon 3e-6, 400 updates, held paired V/T every 50, per-group gradient norms.",
+ "overrides": {
+  "stages": {
+   "e2e": {
+    "parameters": {
+     "heads_lr": 3e-06
+    }
+   }
+  }
+ }
+}

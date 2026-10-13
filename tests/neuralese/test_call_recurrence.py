@@ -193,6 +193,10 @@ def test_direct_writer_end_to_end_stage_trains_the_child_write_through_the_neura
     assert moved["instructions@caller"] > 0 and moved["instructions@child"] > 0
     linear = projections["neuralese"].linear.weight
     assert not torch.equal(linear, start), "the caller's loss trains the NeuraleseProjection"
+    rows = [json.loads(line) for line in (out / "train.jsonl").read_text().splitlines()]
+    update = next(row for row in rows if "projection_parameter_gradient_norms" in row)
+    assert update["projection_parameter_gradient_norms"]["linear.weight"] > 0
+    assert update["writer_hidden_gradient_norm"] > 0, "the consumer's gradient reaches the producer through the writer"
     saved = torch.load(out / "heads.pt", weights_only=False)
     assert torch.equal(saved["neuralese_projection"]["linear.weight"], linear.detach().cpu())
     # Full state at the end only: never before the first update (a fresh start has nothing to protect).

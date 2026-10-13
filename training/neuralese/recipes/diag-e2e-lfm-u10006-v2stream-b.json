@@ -1,0 +1,50 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "diag-e2e-lfm-u10006-v2stream-b",
+ "extends": "neuralese-e2e-lfm-v1",
+ "description": "E2E dragnet (dgx-e2e lead, plans/neuralese/E2E_COLLAPSE.md): arm B's stable rates (TCP Muon 3e-6, writer 3e-6) on all of e2e corpus v2 streamed by trajectory (80 families, family^0.5 draws, instructions as text), 400 updates, held paired readers every 50: does V improve on held readers when training is broad? Rebased on the shared value = E[chosen] + C(h) projection (fc32044e) from the aligned u10006 P.",
+ "overrides": {
+  "input_bindings": {
+   "direct_artifact": {
+    "path": "runs/pop-lfm-muon-main-v2-export-step10006/manifest.json",
+    "sha256": "3c0a4695f406b074efebb3544e954894b1a1201607b1e3d2926f4bc382ca2525"
+   },
+   "aligned_projection": {
+    "path": "runs/pop-lfm-muon-main-v2-export-step10006-aligned-projection/aligned-projection.pt",
+    "sha256": "a633b3892e812645b1df30250140a176e1cc8f509885a4b733bccff054791c58"
+   }
+  },
+  "quantization": {
+   "stage_progress": {
+    "e2e": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "stages": {
+   "direct_runtime": {
+    "parameters": {
+     "direct_base_snapshot": "/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f"
+    }
+   },
+   "e2e": {
+    "parameters": {
+     "steps": 400,
+     "eval_every": 50,
+     "checkpoint_every": 200,
+     "task_eval": {
+      "$delete": true
+     },
+     "direct_base_snapshot": "/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+     "memory_gb": 9,
+     "latent_step_in_backward": false,
+     "token_choice_optimizer": "muon",
+     "token_choice_lr": 3e-06,
+     "heads_lr": 3e-06,
+     "soft_parts": "text"
+    }
+   }
+  }
+ }
+}

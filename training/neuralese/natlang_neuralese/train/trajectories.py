@@ -2586,6 +2586,15 @@ def main(argv=None):
             torch.cuda.set_rng_state_all(resumed['cuda_rng'])
     graph_routes = dict(resumed.get('graph_routes', {})) if resumed and memory_estimator.joint_routes_compatible else {}
     trainables = list(params.values()) + lora + head_params
+    writer_hidden_gradient = [0.0]
+    if direct is not None:
+        def _observe_writer_hidden(module, inputs, output):
+            hidden = inputs[0] if inputs else None
+            if isinstance(hidden, torch.Tensor) and hidden.requires_grad:
+                def _accumulate(grad):
+                    writer_hidden_gradient[0] += float(grad.detach().float().pow(2).sum())
+                hidden.register_hook(_accumulate)
+        direct.neuralese_projection.register_forward_hook(_observe_writer_hidden)
     stepped_in_backward = {id(q) for _, q, *_ in lion} if in_backward is not None else set()
 
     def pending_gradient_bytes():
@@ -3059,6 +3068,15 @@ def main(argv=None):
                                      for key, group in projection_groups.items()}
                 direct_update['projection_gradient_norms'] = {
                     key: float(gradient_norm(group)) for key, group in projection_groups.items()}
+                # Gradient-path diagnostics (E2E_COLLAPSE.md): which parts of the writer receive gradient, how much
+                # reaches the backbone, and how much of the consumers' gradient reaches the producer's hidden states
+                # through the writer (zero while the correction C is zero: the anchor E[chosen] is detached).
+                direct_update['projection_parameter_gradient_norms'] = {
+                    name: float(p.grad.norm()) if p.grad is not None else None
+                    for name, p in direct.neuralese_projection.named_parameters()}
+                direct_update['backbone_gradient_norm'] = float(gradient_norm(lora)) if lora else None
+                direct_update['writer_hidden_gradient_norm'] = writer_hidden_gradient[0] ** 0.5
+            writer_hidden_gradient[0] = 0.0
             try:
                 spike_threshold = spike.threshold() if spike is not None else None  # earlier updates' norms only
                 global_grad_norm = clip_finite_gradients(
