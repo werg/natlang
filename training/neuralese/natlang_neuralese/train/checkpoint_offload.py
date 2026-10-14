@@ -338,15 +338,15 @@ def require_optimizer(state, path) -> None:
                          'its optimizer')
 
 
-_LOCKS: dict[str, threading.Lock] = {}
+_LOCKS: dict[str, threading.RLock] = {}
 _LOCKS_GUARD = threading.Lock()
 
 
-def path_lock(path) -> threading.Lock:
+def path_lock(path) -> threading.RLock:
     """One in-process lock per NVMe path: a best publication and the offload's link swap never interleave."""
     key = str(_absolute(path))
     with _LOCKS_GUARD:
-        return _LOCKS.setdefault(key, threading.Lock())
+        return _LOCKS.setdefault(key, threading.RLock())
 
 
 def replace_with_link(path, dest, *, expect: list | None = None) -> None:
@@ -548,9 +548,14 @@ def offload_one(path, role: str, settings: OffloadSettings, *, copier=None, prun
              'bytes': record['bytes'], 'sha256': record['sha256'], 'copied': copied,
              'optimizer_pruned': bool(record.get('optimizer_pruned')), 'source_bytes': record.get('source_bytes')}
     if role == 'archive' and settings.link_archived:
-        if record.get('optimizer_pruned'):
-            event['receipts'] = rebind_receipts(path, record)  # pins name the weights-only file from here on
-        replace_with_link(path, mirror, expect=record['source_identity'])
+        # Publication uses this same lock. Check the identity before changing
+        # any receipt, and hold it through both receipt updates and the swap.
+        with path_lock(path):
+            if _identity(path.lstat()) != list(record['source_identity']):
+                raise RuntimeError(f'{path} changed before its link swap')
+            if record.get('optimizer_pruned'):
+                event['receipts'] = rebind_receipts(path, record)
+            replace_with_link(path, mirror, expect=record['source_identity'])
         event['linked'] = True
     return event
 

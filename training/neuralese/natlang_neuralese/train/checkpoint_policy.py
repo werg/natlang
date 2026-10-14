@@ -54,11 +54,11 @@ def publish_best(slot: Path, best: Path, receipt: dict | None = None, *, prune=F
         pending.unlink(missing_ok=True)
         os.link(slot, pending)
         pending.replace(best)
-    if receipt is not None:
-        manifest = best.with_suffix('.json')
-        temp = manifest.with_name(manifest.name + '.pending')
-        temp.write_text(json.dumps(receipt, indent=2) + '\n')
-        temp.replace(manifest)
+        if receipt is not None:
+            manifest = best.with_suffix('.json')
+            temp = manifest.with_name(manifest.name + '.pending')
+            temp.write_text(json.dumps(receipt, indent=2) + '\n')
+            temp.replace(manifest)
     after_write(best, 'archive', prune)  # verified copy to the external disk, then a link in its place (checkpoint_offload)
 
 
