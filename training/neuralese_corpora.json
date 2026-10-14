@@ -69036,6 +69036,28 @@
         "receipt": "runs/natlang-target-union-20261014-r6/receipt.json"
       },
       "notes": "R5 admitted source renders plus D13 PH/trajectory twins and low-share service recovery. Exact tokenizer twins, inherited held splits, pending source-review joins excluded. Compressed text has independent decoded SHA/byte proofs; original build receipt retained. No new source example admission; omissions remain explicit."
+    },
+    {
+      "id": "luna-held-shapes-s52052-curated-native-turns-20261014-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-s52052-accepted-parents-20261014-v1",
+      "include": [
+        "accepted-parents.native.jsonl",
+        "accepted-parents.native.review.json",
+        "native-materialized-preview.jsonl",
+        "semantic-holds.json",
+        "approved-turns.jsonl",
+        "admission-review.json"
+      ],
+      "source_class": "project-generated inline natlang curriculum teacher trajectories",
+      "license": "project-generated",
+      "split": "train only; exact accepted parents source-disjoint from protected held48 by program ID, source ID and source group",
+      "admission": "81 of 90 exact-success parents; 540 successful native teacher decisions; seven folder reducers with snapshot-hardcoded file selection and two arbitrary-loop-cap process parents held; 15 failed or unexecuted decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Explicit semantic parent holds plus source-bound exact oracle, native successful decision admission, protected held48 group/source checks; admission-review.json binds all inputs and output hashes. No preference pairs admitted.",
+      "review_status": "parent source and group, exact outcomes, root action shape, native decision status and representative family actions reviewed; holds are explicit",
+      "required_conversion": "render LFM and Mellum twins; include in next broad train union at natural source share",
+      "notes": "Only approved-turns.jsonl is a training input. Other files are selection, native-materialization and semantic-review evidence; s52052 raw campaign remains Pop-owned."
     }
   ],
   "coverage_backlog": [
