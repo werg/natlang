@@ -137,8 +137,10 @@ def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, c
         # shards): keep waiting, and keep its decompressed input, until it finishes; relaunch one that failed.
         for attempt in range(5):
             unit = f'{prefix}{int(time.time()) % 100000}'
+            container = f'render-{part.name}-{hashlib.sha1(str(part.resolve()).encode()).hexdigest()[:10]}'
             cmd = ['python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb',
-                   str(budget_gb), '--priority', 'low', '--resumable', '--wait', '86400', '--workdir', str(REPO), '--',
+                   str(budget_gb), '--priority', 'low', '--resumable', '--wait', '86400', '--workdir', str(REPO),
+                   '--container', container, '--stop-seconds', '90', '--',
                    'env', f'MEM={docker_gb}g', f'CPUS={cpus}', 'nice', '-n', '10',
                    'scripts/neuralese_data/render_native_turn_corpus.sh', str(part), '--corpus-id', corpus_id,
                    '--source', str(plain), '--workers', str(cpus), '--shards', '32', '--full-sample', '0.05',

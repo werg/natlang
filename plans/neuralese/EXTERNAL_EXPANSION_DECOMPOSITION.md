@@ -118,5 +118,7 @@ decoded hashes and byte counts. This extends the existing parts renderer's crisp
 serialization and durability mechanism; selection, split protection, tokenizer
 alignment and model-visible rows stay identical. Use this storage option for
 new outputs when raw merged views would exceed local disk headroom.
+Part launch plumbing declares the wrapper's exact named Docker container to the
+memory ledger, so accounting and shutdown cover the actual renderer.
 
 A held/source-quality corpus can be removed from training while its original source identities remain protected. The next union must retain test-group/text exclusions from removed references and quarantine derivatives sharing their source groups in either split. This is the owner's explicit MuSiQue quality hold, not new inferred source approval. Extend the shared union planner with hash-bound reference files; exact set joins and omission receipts are crisp verifiers. Read the already compressed R7 aggregate as a source snapshot, apply these restrictions, and add the finished external static render. Preserve all original evidence and publish a new immutable union.
