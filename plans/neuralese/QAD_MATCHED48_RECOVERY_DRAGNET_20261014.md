@@ -207,6 +207,12 @@ the collection budget ended it. It stays out of training and automatic retries.
 The failed attempt's redundant partial/evidence files have no repair or DPO
 consumer; keep the compact review and queue status, prune those large files,
 and review this task shape before producing another variant.
+The exact zero-result original finish is now pinned in the s52048 campaign's
+`reviewed-exclusions.json`, so the replenisher can close this campaign while
+preserving its 100 other cases. No failed action from this case is a training
+negative. The retry-memory check was also corrected to inspect partials in
+`retry-NNN-NN/jobs`; previously it only inspected ordinary `case-*/jobs` and
+could admit a large resumed retry with a 1.5 GiB budget after its partial grew.
 
 ## Train-only recovery admission and broader student rollout
 
