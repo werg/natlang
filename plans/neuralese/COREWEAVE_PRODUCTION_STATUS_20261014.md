@@ -280,3 +280,40 @@ inherited agreementwarn0.97 drives report-only48-probe gates every220updates
 when response agreement drops below0.97 even belowKLwarn. This is an exact
 utilization finding for a future operational handoff, not a hot package/control
 change or explanation of the independently reproduced trained-weight failures.
+
+## Supervision update, 23:35UTC
+
+LFM performed the approved cadence handoff on the same held allocation/root.
+After the6000task ended0/16 (1invalid,11repetition,4budget, zero infrastructure
+or unresolved), a scoped trainer TERM atomically saved full state6257.
+Private independent object readback verified1,149,837,531bytes, SHA
+`b3a6f56a6f4f2d78cce82b126fa6a156302030d2a72c7097299efb0a09d9f1b7`.
+V4 changes task cadence1000→4000 and one declared jsonio package hash (the
+streaming compressed writer addition); CE/drift cadence1000, input/controls,
+optimizer/RNG and final evaluation remain exact. The actual trainer emitted
+`resumed step6257 code_changed=[common/jsonio.py]` and502backing shards for
+483,983merged documents. First resumed updates6258/6259/6260 completed with
+losses0.39349/0.79020/0.58115 and15.06/0.42/0.84seconds (first kernel startup
+included); by23:33 it reached6408. No OOM/error; the CPU window reconstruction
+before restore cost about21minutes despite retained row/prefix indexes.
+
+Mellum task1200 completed4/16:5invalid actions,7semantic mismatches, no
+infrastructure/unresolved outcomes,2842.69seconds. It remains below inherited
+base13 and unqualified, despite lower CE0.7114 and responseKL0.22565. Actual
+training resumed and reached1320. Full state1200 privately verified
+46,821,480,919bytes, SHA
+`ff8123a320a0e55d44d97eda939db3bb8fee2bd0c8b3e38606fb57a3191810eb`.
+Terminal evaluator outputs plus recipe/identity/eval/drift/report/source
+metadata survived to DGX in17,038,519compressed bytes, SHA
+`cb3228350caab5fc2b5bcb083631a049cb91746fd247e694165049d4ecdc1c12`;
+collect bundle75c73cf8b1e91b034568800276b56a05833ec69c63d9f8c3479edf8fc92c8ae6.
+The refreshed1200 checkpoint/metadata fetch bundle is
+f4c974c73109b718efc1a9200fa6e1276a3a43ce7e67a52447a7ee2a37bc3772.
+
+Raw survival is still in progress:13/16sources,122,799,910,486raw bytes have
+private full-object readback and every raw-file SHA validated; D38/D22/D36
+remain. No Mellum SDK stop/replacement or thirdGPU allocation occurred.
+Search/OWL public source verification and conversion completed; protected
+streaming finalization is still running on one spare CPU at~95MBRSS, followed
+by its already declared native pipeline. All acquired/converted outputs remain
+separate from training admission.

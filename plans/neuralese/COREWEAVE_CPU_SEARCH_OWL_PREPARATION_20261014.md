@@ -66,3 +66,29 @@ The generic submit helper refuses duplicate live workers and clears an obsolete
 exit marker only after verifying the prior worker is gone. Poll reads are
 bounded to64KiB; old setup traces in cumulative logs are historical, not newly
 failed conversion results. Closure, native replay and admission remain pending.
+
+## Prepared reuse for Dolci and Cognitive Kernel, 23:35UTC
+
+After Search/OWL completes its current protected-finalization and existing native
+pipeline, reuse the same isolated spare-CPU procedure for D30 and D34. Do not
+run a second converter concurrently with it or change either training recipe.
+The prepared owner-side spec is
+`/home/werg/data/dgxops/coreweave-dolci-cognitive-cpu-spec-prepared-20261014.json`;
+its existing staging-helper derivative writes an exact Git-revision runtime and
+executable spec before submission. It includes both root and ts-host dependency
+links, the required relative data alias, independent phase sessions and durable
+phase PID receipts from the resolved Search/OWL setup. No new conversion,
+closure, native builder or replay implementation is introduced.
+
+Fetch `allenai/Dolci-Instruct-SFT-Tool-Use` at
+`dc042846f0f2de0f15eedae3d6ced04223ed47eb` and
+`CognitiveKernel/CognitiveKernel-Pro-SFT` at
+`6443666c406f863898b0924cf1a3e1a2512180e8`, exactly1,663,608,164catalog bytes.
+Verify every file's size/full SHA and available LFS SHA. Run shared
+`convert-agents --corpora dolci-tool-use cognitive-kernel`, then streaming
+`finalize` with the same protected benchmark binding, followed by the existing
+one-worker native pipeline under the renewed host-headroom check. The local
+644,471candidate count is a comparison reference, not a predeclared cloud
+result or training admission. Preserve source license cards, split groups,
+closure omissions and exact native receipts. The supervisor registers successful
+source/native outputs and admits rendering/union inputs separately.
