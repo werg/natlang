@@ -68,6 +68,9 @@ BACKFILL_UNIT_SEED = 52070
 REPAIR = BASE / 'repair-handoffs'
 FIRST_REPAIR_SEED = 52026
 REPAIR_EVERY_SEEDS = 8
+# Student-root handoffs are already selected from exact replay. Give their
+# bounded correction queues first claim on the existing six Luna slots.
+STUDENT_REPAIR_CAMPAIGNS = (REPAIR / 'qad-r8-student-root-v4/luna',)
 
 
 def rows(path):
@@ -618,6 +621,9 @@ def main():
         raise FileNotFoundError(RUNTIME)
     with (BASE / '.luna-replenisher.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        for campaign in STUDENT_REPAIR_CAMPAIGNS:
+            if campaign.exists() and not complete(campaign):
+                print(json.dumps({'event': 'student_repair_pending', 'campaign': str(campaign)}), flush=True)
         campaigns = sorted(BASE.glob('provider-luna-held-shapes-s*-v1'))
         pending_campaigns = []
         for campaign in campaigns:
