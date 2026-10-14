@@ -51,5 +51,29 @@ only a triage label, not necessarily the first mistake in a trajectory.
 The present evidence does not distinguish insufficient recovery training from
 a prompting, serving, state or template bug. Preserve that uncertainty while
 running the checks above. The new Luna closed backlog contributes 23,651
-approved train targets, including many nested semantic actions, but its render
-and broad-union inclusion are still in progress; it was not part of step-15000.
+approved train targets, including many nested semantic actions, and its LFM
+render is registered and synced to DGX. Its next broad-union inclusion is
+pending; it was not part of step-15000.
+
+## Train-only closed-backlog action audit (2026-10-14)
+
+Pop scored six source-disjoint, admitted closed-backlog decisions from six task
+families using the step-15000 QAD checkpoint, both `program-header` and `full`
+LFM renderings, and the exact serving prompt renderer. The report is
+`runs/qad-action-target-mask-audit-20261014-v1/closed-backlog-report.json`, SHA-256
+`d432c8fa5df59c674197d6c111cb9f7284e68de3d9435114d38b5d991c726c70`;
+selection and source row hashes are in the adjacent
+`closed-backlog-selection.json`. All
+twelve training prefixes equal their live serving token IDs exactly (lengths
+1,699–2,223 header; 5,949–6,632 full). Each target occupies a train window
+with positive assistant loss weight, zero excluded target positions, and no
+truncation in this selection. Gold tool names have perfect argmax agreement
+across all twelve observations (two to three tokens per case); action delimiter
+tokens also agree. Most disagreement is in reasoning/reply tokens (per-case
+agreement 0.415–0.625), with some argument differences. This rules out a gross
+mask or render mismatch for these twelve teacher-forced *new* decisions; it
+does not explain held task repetition or establish executable success. The
+first argmax disagreement is at target token zero for each case, which is
+sensitive to free-form reasoning choice. Next inspect actual repeated held
+continuations and train-only recoveries at their first failed tool action; do
+not use held traces as training targets.

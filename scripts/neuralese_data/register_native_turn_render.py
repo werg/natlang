@@ -20,12 +20,26 @@ ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = ROOT / 'training' / 'neuralese_corpora.json'
 
 
+def text_binding(rendering, tokenizer, stats):
+    name = stats.get('text_data_file', 'text-data.jsonl')
+    if name not in ('text-data.jsonl', 'text-data.jsonl.zst'):
+        raise ValueError('unsupported rendered text filename: ' + str(name))
+    binding = {'file': f'{rendering}/{tokenizer}/{name}', 'sha256': stats['text_data_sha256']}
+    if name.endswith('.zst'):
+        import re
+        digest, size = stats.get('decoded_text_data_sha256'), stats.get('decoded_text_data_bytes')
+        if not isinstance(digest, str) or not re.fullmatch('[0-9a-f]{64}', digest) or type(size) is not int or size < 0:
+            raise ValueError('compressed text requires verified decoded hash and byte count')
+        binding.update(compression='zstd', decoded_sha256=digest, decoded_bytes=size)
+    return binding
+
+
 def member_entry(a, receipt):
     renders = {}
     for key, stats in receipt['renders'].items():
         rendering, tok = key.split('/')
         renders.setdefault(rendering, {})[tok] = {
-            'file': f'{rendering}/{tok}/text-data.jsonl', 'sha256': stats['text_data_sha256'],
+            **text_binding(rendering, tok, stats),
             'documents': stats['documents'], 'by_split': stats['by_split'],
             'max_document_tokens': stats['max_document_tokens'], 'merge_omissions': stats['merge_omissions']}
     return {
@@ -43,7 +57,7 @@ def member_entry(a, receipt):
 
 
 def union_entry(a, receipt):
-    return {'renders': {r: {tok: {'file': f'{r}/{tok}/text-data.jsonl', 'sha256': s['text_data_sha256'],
+    return {'renders': {r: {tok: {**text_binding(r, tok, s),
                                   'documents': s['documents'], 'by_split': s['by_split'], 'by_member': s['by_member']}
                             for tok, s in v['by_tokenizer'].items()}
                         for r, v in receipt['renderings'].items()},
@@ -84,7 +98,7 @@ def make_entry(a) -> dict:
                          for tokenizer in tokenizers)
     entry = {
         'id': a.id, 'owner': a.machine, 'path': a.path,
-        'include': ['receipt.json', '*/*/text-data.jsonl', '*/*/omissions.jsonl', '*.jsonl', '*.json',
+        'include': ['receipt.json', '*/*/text-data.jsonl', '*/*/text-data.jsonl.zst', '*/*/omissions.jsonl', '*.jsonl', '*.json',
                     'render-omissions/*/omissions.jsonl', '*/omissions.jsonl'],
         'source_class': ('rendered-natlang-native-teacher-turn-text' if a.kind == 'member'
                          else 'shared-natlang-target-training-set'),
