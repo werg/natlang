@@ -68,17 +68,20 @@ function answerFormat(record) {
   if (kind === 'choice') return 'Return only the correct option letter exactly as shown in the choices.';
   if (kind === 'sql') return 'Return only one SQLite query that answers the request, with no explanation.';
   if (kind === 'calls') return 'Return only the JSON list of calls the request asks for, with no explanation.';
-  if (kind === 'message') return 'Return only the next assistant message of the session, written exactly as the assistant would write it.';
+  if (kind === 'message') return richMessage(record.target.value)
+    ? 'Return the next assistant message as a JSON object, preserving its content, reasoning and tool calls.'
+    : 'Return only the next assistant message of the session, written exactly as the assistant would write it.';
   if (SHORT_QA.test(record.family)) return 'Answer concisely using only the evidence; return only the answer phrase, with no explanation.';
   return 'Return the complete answer in the form the request asks for.';
 }
 function targetText(record) {
   const { kind, value } = record.target;
-  if (kind === 'message') return text(value?.content);
+  if (kind === 'message') return richMessage(value) ? JSON.stringify(value) : text(value?.content);
   if (kind === 'calls') return JSON.stringify(value);
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
-const transcript = messages => messages.map(message => `${message.role}: ${text(message.content)}`).join('\n\n');
+const richMessage = message => Boolean(message?.reasoning || message?.tool_calls?.length);
+const transcript = messages => messages.map(message => `${message.role}: ${richMessage(message) ? JSON.stringify(message) : text(message.content)}`).join('\n\n');
 function sourceText(source) {
   const head = source.title ? `${source.role} (${source.title})` : source.role;
   const body = typeof source.text === 'string' ? source.text : Array.isArray(source.messages) ? transcript(source.messages) : '';
