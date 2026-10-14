@@ -1,0 +1,33 @@
+{
+  "schema": "natlang.generated-closure-control-oracle/1",
+  "id": "station-handover-transitive-permission-bug",
+  "expected_visited_paths": [
+    "decision.nl",
+    "decision/readGate.nl",
+    "decision/readGate/permit.nl",
+    "types.ts"
+  ],
+  "required_call_edges": [
+    [
+      "decision.nl",
+      "decision/readGate.nl"
+    ],
+    [
+      "decision/readGate.nl",
+      "decision/readGate/permit.nl"
+    ]
+  ],
+  "expected_runtime_clause_ids": [
+    "V2"
+  ],
+  "excluded_paths": [
+    "decoys/explainIdeal.nl",
+    "decoys/unused-types.ts"
+  ],
+  "actual_emitted_permission": true,
+  "source_required_permission": false,
+  "matches_source": false,
+  "grounding": "SN2 explicitly has no personal acknowledgment at N_BO; actual grandchild permits unconditionally. V2 citation read does not evaluate the required clause.",
+  "acceptance": "Path sets and clause IDs exact; equivalent type dependency/self-reference edges and justified span selections accepted. Emitted/source interpretation requires separate semantic review.",
+  "training_admission": false
+}

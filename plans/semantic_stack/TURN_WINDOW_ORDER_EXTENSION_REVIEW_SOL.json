@@ -1,0 +1,42 @@
+{
+  "schema": "natlang.application-source-extension-independent-review/1",
+  "reviewer": "semantic_slate_sol",
+  "date": "2026-10-14",
+  "application": "turn-window-adjudicator",
+  "source_commit": "fab8d1da",
+  "variant": "replacement-order-isolated-previews",
+  "result": "passed_authored_source_branch_review",
+  "files": {
+    "applications/turn-window-adjudicator/types.ts": "48cea63d3615beb1eefcc7a230ee23ca5240c2799fe04e587bbd0cd9ba46cf26",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl": "5d8906834e11f7ff6876911b5fa16f6122e5c50eb390bbd4712af23570bda84d",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl": "91be0b39ffbf5c68eb4585a799fc7b8c5ea8060b6342abf33b39ecb5630c4980",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl": "67d39a4b4272caf5d1ba3b9714896488d4f550a18c7474193d987781da98c112",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl": "cd1f7ce95eb41083f6b8a7e8ee2d73ae41d6bd8891135f2dadec89bc52954c7b",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/bindSubmittedChoice.nl": "604cf25d335b16521d9b3054291aff71d0599b6e55ae526c15d66c90756befcf",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl": "180921114edbcb4fb3a1b37817a09ff8af6eee28943e2383c4ac6e54ccb7beed",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow.nl": "f0bfe9622a5d07c0c4d047e79d9d70bf8581d60d200f9e8ef365a0004cb648c6",
+    "applications/turn-window-adjudicator/adjudicateTurn/auditTurn.nl": "0e1f04cfcaf0f589157e5fd664e4ebd17b2ff6b6cd0d36682acc4f8d34898357"
+  },
+  "initial_world_review": "plans/semantic_stack/TURN_WINDOW_APPLICATION_REVIEW_SOL.json",
+  "findings": [
+    "Pair-specific scoped NL relation determines genuine source chronology,unconstrained alternatives and source-backed independence; exact enumeration only consumes those chosen directed edges.",
+    "Structural recursive candidate enumeration uses smaller remaining application universe; no source priority fabricated by path/storage order.",
+    "Each actual candidate invokes the existing applyReplacement reducer from a pristine original bundle/beforeBoard and independent reservation state.",
+    "Comparison judges source consumers including converted quantity,departure,recipient andsharedcapacity,not justfinalcounters.",
+    "Chooser authority and submission differ; permission to choose or illustrative examples cannot select a consequential order.",
+    "Parent consumes the actual selected completed preview rather than replaying or synthesizing predicted results; unresolved choice cannot mutate board or activate triggers.",
+    "OrderResolution retains alternatives,comparisons andsourcechoice,while live token spending occurs only afterselectedbatchsuccess.",
+    "No crisp semantic policy helper or forwarding-only newsemanticstage identified."
+  ],
+  "exact_controls": {
+    "count": 35,
+    "passed": true,
+    "scope": "Current Glass Garden authored expanded certificate, not new consequential-order world or live reducer execution"
+  },
+  "remaining_review": [
+    "Consequential Mirror Garden fixture/oracle separate review once authored.",
+    "Live candidate isolation,NL pair judgments,sourcechoice andactualparent consumption need trace inspection."
+  ],
+  "live_qualified": false,
+  "training_admission": false
+}

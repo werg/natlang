@@ -12,6 +12,8 @@ offline expected_exact_text). Legacy numeric answer presence is only structural.
 """
 from __future__ import annotations
 
+from ..common.jsonio import read_jsonl
+
 import argparse
 from collections.abc import Mapping
 import gc
@@ -177,7 +179,7 @@ def evaluate(args):
         raise ValueError("output directory must be new; preserve every paired run")
     if sha256_file_hex(args.probes) != args.probes_sha256:
         raise ValueError("probe file changed from its declared SHA-256")
-    probes = [json.loads(line) for line in args.probes.read_text().splitlines() if line.strip()]
+    probes = read_jsonl(args.probes)
     if not probes or any(not isinstance(p, dict) or not isinstance(p.get("id"), str) or
                          not isinstance(p.get("messages"), list) for p in probes):
         raise ValueError("probe JSONL requires at least one row with string id and messages array")

@@ -5,20 +5,19 @@ args:
   beforeBoard: BoardSnapshot
   source: TurnSource
   protocol: WindowProtocol
-returns: ReplacementOrder
+returns: OrderPlan
 ---
-1. Build candidate rule/lineage applications from the bundle and actual standing/replacement meanings.
-   Preserve explicit source precedence between rules within each lineage. Every condition reads the
-   same beforeBoard unless its own rule explicitly reads the current rewritten quantity or spent use.
-2. Distinguish separate capacities: a once-per-lineage standing rule may apply independently to sibling
-   parts; one artifact's turn-use token is shared across those parts. The application frontier tracks
-   those declared scopes rather than resetting every capacity at each part.
-3. For unordered applications, judge whether swapping them could change effect kind, quantity, target
-   or shared-token availability. Independent reductions on distinct lineages can commute; competition
-   for one shared token needs a source priority or a submitted legal choice when it changes the result.
-4. Use only supplied before/after rules and actual submitted choices to resolve consequential order.
-   Retain a missing choice as unresolved. A deterministic storage order is allowed only after the
-   source judgments establish semantic independence, not as a way to decide who receives protection.
-5. Return one finite ordered application list respecting those findings, plus exact ordering witnesses
-   and unresolved choices. Planning this replacement order does not commit any damage, destruction,
-   token use or after-batch consequence; applyReplacement still judges each actual current part.
+1. Inventory standing and replacement readings relevant to the actual effect kinds and original
+   lineages. Allocate one application identity per source-permitted rule/lineage use. Keep potentially
+   false applications: their returned negative decisions explain why an effect survived unchanged.
+2. Interpret each capacity owner. Once-per-lineage history and an artifact's shared turn token are
+   different scopes. Planning neither spends the token nor decides who will obtain it.
+3. Gather clauses establishing precedence, chooser authority and actual submitted relative-order
+   choices separately. Permission to choose does not supply a choice; an example is not a submission.
+4. Call enumerateLegalOrders(applications, bundle, beforeBoard, source, protocol). Consume its actual
+   constraints, complete alternatives and unresolved legality findings. Source-required chronology
+   remains distinct from proven independent display order.
+5. Check candidate identities against the inventoried finite set: each application appears once and
+   every returned directed constraint holds. These exact checks cannot invent a missing priority.
+6. Return the actual OrderPlan with source choice clauses. Later actual previews establish whether
+   legal alternatives differ; do not predict a selected order from an expected final board.

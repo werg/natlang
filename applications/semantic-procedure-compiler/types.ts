@@ -40,3 +40,11 @@ export type RevisionState = { program: GeneratedProgram; suite: ScenarioSuiteRes
 export type InterfaceFinding = { caller: string; callee: string; field: string; preserved: boolean | null; reason: string; witnesses: Witness[]; generatedEvidence: GeneratedSpan[] };
 export type CompilationAudit = { interfaces: InterfaceFinding[]; sourceComplete: boolean | null; scenarioComplete: boolean | null; contributionComplete: boolean | null; findings: string[]; unresolved: string[] };
 export type CompilePacket = { requestId: string; program: GeneratedProgram; model: ProcedureModel; suite: ScenarioSuiteResult; audit: CompilationAudit; revisions: RevisionTarget[]; unresolved: string[] };
+
+/** Internal actual-generated-code traversal; ideal source policy stays in the separate guard channel. */
+export type ExecutionFile = { path: string; text: string; kind: 'module' | 'types' };
+export type GeneratedCodeReference = { callerPath: string; targetPath: string | null; kind: 'call' | 'type'; status: 'resolved' | 'unresolved'; reason: string; generatedEvidence: GeneratedSpan[]; targetEvidence: GeneratedSpan[] };
+export type RuntimeSourceRead = { callerPath: string; clauseIds: string[]; wholeCollection: boolean; reason: string; generatedEvidence: GeneratedSpan[] };
+export type CodeDependencyJudgment = { filePath: string; references: GeneratedCodeReference[]; runtimeReads: RuntimeSourceRead[]; ignoredMentions: GeneratedSpan[]; unresolved: string[] };
+export type CodeClosureState = { pendingPaths: string[]; unvisitedPaths: string[]; visitedFiles: ExecutionFile[]; availableFiles: ExecutionFile[]; selectedClauses: SourceClause[]; references: GeneratedCodeReference[]; runtimeReads: RuntimeSourceRead[]; unresolved: string[] };
+export type EmittedClosure = { entryPath: string; files: ExecutionFile[]; references: GeneratedCodeReference[]; runtimeReads: RuntimeSourceRead[]; runtimeClauses: SourceClause[]; unresolved: string[] };

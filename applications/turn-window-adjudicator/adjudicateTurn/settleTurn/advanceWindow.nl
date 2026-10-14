@@ -13,7 +13,9 @@ returns: WindowState
    preserve captured announcement fields unchanged. Record a response WindowTrace with no event batch.
 3. For an announcement or queued trigger, call prepareBundle with this slot, the current state and
    beforeBoard. The result owns actual effect parts and bound recipients. Pass it to rewriteBundle
-   with beforeBoard, source and protocol; consume its returned bundle and replacement history.
+   with beforeBoard, source and protocol; append its actual OrderResolution to orderResolutions.
+   Consume its selected bundle/history only when the returned choice is decided. If it is unresolved,
+   retain this dispute, beforeBoard and finished=true without invoking resolveBatch or collectTriggers.
 4. Call resolveBatch on that actual rewritten result and the same immutable beforeBoard. Its proposed
    object/resource/departure changes must resolve together; an effect part cannot observe a sibling's
    later death or return. Keep the returned BatchDelta as the committed semantic decision.

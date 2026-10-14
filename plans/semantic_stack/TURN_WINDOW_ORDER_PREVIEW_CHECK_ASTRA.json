@@ -1,0 +1,406 @@
+{
+  "schema": "natlang.semantic-application-source-variant-check/1",
+  "author": "semantic_slate_astra",
+  "application": "astra-app-turn-window-v1",
+  "variant": "ordering-preview-v2",
+  "prior_source_sha256": "d7b79ccfd35a32deae7edead61602fe97b2fb74204cc4d808b808669a0ee76f0",
+  "source_sha256": "7cae6949150f4de306ad2c71b9d39eeeb95f09ec2d5f7871a6399eca5e050461",
+  "composition": {
+    "nl_files": 30,
+    "nl_total_lines": 761,
+    "nl_body_lines": 546,
+    "numbered_steps": 192,
+    "type_aliases": 49,
+    "visible_crisp_policy_lines": 0
+  },
+  "hashes": {
+    "applications/turn-window-adjudicator/adjudicateTurn.nl": "91c8af7b7f9677764eb6bb1465a6c9c121ad155dabfca48e44d8ca341f67706a",
+    "applications/turn-window-adjudicator/adjudicateTurn/auditTurn.nl": "0e1f04cfcaf0f589157e5fd664e4ebd17b2ff6b6cd0d36682acc4f8d34898357",
+    "applications/turn-window-adjudicator/adjudicateTurn/auditTurn/challengeTiming.nl": "895fdf583a4c90a66405b527882f82fa21d8c7d0d8200cdc95315373ceb2e575",
+    "applications/turn-window-adjudicator/adjudicateTurn/auditTurn/replayIdentity.nl": "d46685b6c36f10777711100d63c9c3e22cc04cc79ca76cfd0b5005018803bf78",
+    "applications/turn-window-adjudicator/adjudicateTurn/captureAnnouncements.nl": "47ae89a03c2fc363578424fe9146f3f342936df8d7af112d9f726af7636df01f",
+    "applications/turn-window-adjudicator/adjudicateTurn/captureAnnouncements/bindReference.nl": "3e4f4d5bb39210e58a3bfd7a08f99476cd0b981430c064d78bb4866636b294bf",
+    "applications/turn-window-adjudicator/adjudicateTurn/compileWindows.nl": "8246630df6a55b057bbcb135ed5447017a3ce00bb2b8b0be210919c121f35309",
+    "applications/turn-window-adjudicator/adjudicateTurn/compileWindows/checkWindowDependencies.nl": "1c8d598641a633c3431987e2548921131ee2d0bc32c47697f0d99664202af97d",
+    "applications/turn-window-adjudicator/adjudicateTurn/compileWindows/classifyTiming.nl": "74f8a85d2e81e20b6e88983c6803864f8c93f0dbdd71c5cb6f40ddd031e5d7e6",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn.nl": "90554cf0ed3f5c66c932174e5626f5b0f561336b243250901c4535e44cf2b320",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn/readBoard.nl": "46056746a76c9352030b2c68d99c50cbb40400229120fec73983cb1ef30e4d43",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn/readIntents.nl": "23e51cb430763a88296327fb024c2de8a38ddd9d1288de03316ff655166d0fe7",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn/readRules.nl": "446f7887c5a7e43c713d3b22fe3ed5c23f7dfebd5973b9e71b036dd57017bcdc",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn/readRules/interpretAbility.nl": "4bc15d4fd1f2b6e56f0981364c4851633cba15953084ad3bf09cd3cc36f466c5",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn.nl": "6b109726b536a9f703e07205e09a6062e278543f21d57fa830be87ca509edf20",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow.nl": "f0bfe9622a5d07c0c4d047e79d9d70bf8581d60d200f9e8ef365a0004cb648c6",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/collectTriggers.nl": "aa9de21c74e70260a4343c2b773ddf2bbe6f0c0cb6f189c87bfc9263ca674126",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/collectTriggers/interpretTrigger.nl": "0cdd3e2a86c30978f1dd11940cfab834f342f1cf429b5e941781c62f7874b6d4",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/prepareBundle.nl": "df30b3c5acf65c699599c73fc8930b1d91c89e2127d5ecd703277de263dabfc1",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/resolveBatch.nl": "18416d66444ce600724f01a25f89a1a2e18cbc8ebf046eb5814b8736323217f1",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/resolveBatch/judgeOutcome.nl": "b6ee4c63882bff8f2787e5da93a8d4fc27b673611893d048a22887b08faacee8",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/resolveBatch/reconcileDeltas.nl": "f4dd40d494aaf9ed61b8440057d05df7c94a0de99640d79e48814c970cbb34a3",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/resolveInterrupts.nl": "756aafe0b33aa0cdafc167dedf4b53959e41ca8bfd44116fcfd139ec07131c2a",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl": "5d8906834e11f7ff6876911b5fa16f6122e5c50eb390bbd4712af23570bda84d",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/applyReplacement.nl": "6fa31f23a381acd4b5dcc5268fe0f44102ccfe87eab4497fa4bdb023939787bb",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl": "cd1f7ce95eb41083f6b8a7e8ee2d73ae41d6bd8891135f2dadec89bc52954c7b",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/bindSubmittedChoice.nl": "604cf25d335b16521d9b3054291aff71d0599b6e55ae526c15d66c90756befcf",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl": "180921114edbcb4fb3a1b37817a09ff8af6eee28943e2383c4ac6e54ccb7beed",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl": "91be0b39ffbf5c68eb4585a799fc7b8c5ea8060b6342abf33b39ecb5630c4980",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl": "67d39a4b4272caf5d1ba3b9714896488d4f550a18c7474193d987781da98c112",
+    "applications/turn-window-adjudicator/types.ts": "48cea63d3615beb1eefcc7a230ee23ca5240c2799fe04e587bbd0cd9ba46cf26",
+    "applications/turn-window-adjudicator/natlang.json": "70225ae785a23ff3db37e76bb45474961719026fbfeb00f9f0c6a682b65097a4",
+    "applications/turn-window-adjudicator/tsconfig.json": "56df78c376d04fdd1dec2a9d1b87b7b55c096ff24b84c9db209f97f47a7dadf4",
+    "training/semantic_applications/astra/turn-window-adjudicator/verify-result.mjs": "9e409ab1434d400173258dce005720a3516fd92dc53d148141f410a21d86f6b8",
+    "training/semantic_applications/astra/turn-window-adjudicator/check-verifier.mjs": "a1a0c56e6b010761a155c71c712e2c7d7d7f4d1cf0270820b9bbc2518734a398",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/reference-report.json": "079db52e06611176e740eff3d6b74b65e910d143a284dbc93da20ea2f8f2337d",
+    "training/semantic_applications/astra/turn-window-adjudicator/project.json": "47036de11589ce4f5f0c9038bcc8def71e3248c7c2f1cc05809f42e7a47013b9"
+  },
+  "canonical_replay": {
+    "path": "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/reference-report.json",
+    "sha256": "079db52e06611176e740eff3d6b74b65e910d143a284dbc93da20ea2f8f2337d",
+    "reference_ok": true,
+    "reference_problems": [],
+    "opening_sha256": "9e1c8b09ba5a58777e960b3da7d06f3cb2ee4f6ad9d497207cb13a6aead2109a",
+    "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+  },
+  "exact_controls": {
+    "scope": "External exact certificate controls; no application or NL literal execution",
+    "passed": true,
+    "checks": [
+      {
+        "name": "full canonical certificate",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "unordered boards witnesses and sibling parts",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "consistent generated trace and revision IDs",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "consistent internal rule IDs",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "independent reason wording",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "consistent generated candidate IDs",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "selected candidate absent",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "selected preview window identity"
+        ]
+      },
+      {
+        "name": "preview input revision detached",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "preview common input revision",
+          "selected preview immutable input"
+        ]
+      },
+      {
+        "name": "preview order not actually consumed",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual preview application order",
+          "actual selected preview consumed"
+        ]
+      },
+      {
+        "name": "preview reservation leaks unselected capacity",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "only selected reservations committed"
+        ]
+      },
+      {
+        "name": "choice claimed without source submission",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "consequential order source choice"
+        ]
+      },
+      {
+        "name": "candidate precedence violated",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "source order constraint",
+          "source order constraint",
+          "actual preview application order"
+        ]
+      },
+      {
+        "name": "wrong case identity",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "case identity"
+        ]
+      },
+      {
+        "name": "captured controller replaced by live controller",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "captured controller PA"
+        ]
+      },
+      {
+        "name": "announced damage altered",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "announced parts",
+          "rewrite actual before lineage"
+        ]
+      },
+      {
+        "name": "source window order changed",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "source-governed window chronology",
+          "initial source board",
+          "window state continuity",
+          "window state continuity"
+        ]
+      },
+      {
+        "name": "source identity mislabeled",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "source-governed window chronology",
+          "source-governed window delta MOVE"
+        ]
+      },
+      {
+        "name": "initial controller corrupted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "initial source board"
+        ]
+      },
+      {
+        "name": "common before revision corrupted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "common before-batch revision"
+        ]
+      },
+      {
+        "name": "Cover reduction omitted on second part",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual selected preview consumed",
+          "Cover exact reduction",
+          "rewrite actual before lineage"
+        ]
+      },
+      {
+        "name": "Mantle converts original rather than reduced quantity",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual selected preview consumed",
+          "Mantle exact conversion",
+          "rewrite final lineage coverage"
+        ]
+      },
+      {
+        "name": "wrong actual damage",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "resolved actual quantity"
+        ]
+      },
+      {
+        "name": "replacement capacity omitted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "only selected reservations committed",
+          "actual declared deltas applied",
+          "replacement capacity spent once"
+        ]
+      },
+      {
+        "name": "last known departing controller corrupted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "simultaneous departure provenance"
+        ]
+      },
+      {
+        "name": "declared object delta unapplied",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual declared deltas applied"
+        ]
+      },
+      {
+        "name": "Scribe recipient is source controller",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "scribe binding",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "name": "Mirror falsely emits",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "trigger eligibility MIRROR",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "name": "negative trigger loses capacity owner",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "trigger capacity ownership",
+          "trigger capacity domain",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "name": "missing printed trigger judgment",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "four printed trigger judgments",
+          "trigger capacity domain",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "name": "returned instance reuses departed identity",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "delta object identity",
+          "actual declared deltas applied"
+        ]
+      },
+      {
+        "name": "return refreshes spent token",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual declared deltas applied",
+          "source-governed window delta RETURN",
+          "window state continuity"
+        ]
+      },
+      {
+        "name": "return inherits departed damage",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual declared deltas applied",
+          "source-governed window delta RETURN",
+          "window state continuity"
+        ]
+      },
+      {
+        "name": "final ink paid to wrong player",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual final board"
+        ]
+      },
+      {
+        "name": "invented source quotation",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "exact source witness"
+        ]
+      },
+      {
+        "name": "missing relevant source clause",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "complete original clause coverage"
+        ]
+      }
+    ]
+  },
+  "independent_review": "Requested from semantic_slate_sol; pending for added branch. Existing signed receipt covers prior baseline only.",
+  "remaining_work": [
+    "Mirror Garden consequential ordering fixture and missing-choice partner",
+    "Independent candidate-isolation and source-choice semantic review",
+    "Actual live child execution and result-consumption inspection"
+  ],
+  "live_qualified": false,
+  "training_admitted": false
+}

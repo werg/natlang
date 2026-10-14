@@ -17,8 +17,12 @@ returns: TurnCertificate
 4. Inspect that each final resolving part has a source-linked replacement history, each departure has
    contributing resolved damage, and each queued consequence has an actual eligible TriggerDecision.
    A valid negative trigger judgment is evidence, not a missing event to fabricate for completeness.
-5. Verify source coverage against the original manifest and exact clause IDs. These mechanical domain
+5. Inspect actual orderResolutions. Join a selected preview to its committed window by bundle and
+   cause-slot identity; its actual selected parts, replacement history and capacities must be consumed.
+   Unselected preview reservations never spend live tokens. A null source choice remains uncommitted
+   with its typed alternatives and unresolved premise, not a fabricated completed window.
+6. Verify source coverage against the original manifest and exact clause IDs. These mechanical domain
    checks do not establish entailment; preserve semantic objections returned by either child review.
-6. Return caseId, actual captured announcements, settled finalBoard/windows, all actual trigger decisions,
-   findings, unresolved and sourceCoverage. Keep original IDs exact and generated trace references
+7. Return caseId, actual captured announcements, settled finalBoard/windows, all actual trigger decisions,
+   settled.orderResolutions, findings, unresolved and sourceCoverage. Keep original IDs exact and generated trace references
    internally consistent. The certificate reports this execution proposal, including its defects.

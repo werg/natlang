@@ -126,3 +126,33 @@ work. Original fixture/oracle source facts are unchanged by this correction.
 Revised source after peer findings:28NL /669 physical lines; independent emitted/required judgments share one guardsite but return separate consumed contributions. Source parser/type and quickgate pass.
 
 Fulltyped canonical CompilePacket nowauthoredoutsidevisible roots:11generatedNLmodules/14symboliceventtraces. Canonicalsource/type replaypasses; externalexactchecker7positive/25negative controls pass. Independentcanonical/checker reviewpasses;live qualificationremainspending; no generated-runtime execution credit.
+
+## Connected emitted-code closure frontier extension
+
+The reviewed baseline at43adf1c6 is frozen separately. This extension replaces an implicit instruction
+inside judgeGuard with a real nested typed transformation: judgeGuard → readEmittedClosure →
+followCodeReference. The latter is a finite frontier reducer, not a set of disconnected utilities.
+
+| Unit | NL semantic responsibility | Typed contribution consumed by parent | Exact seam |
+| --- | --- | --- | --- |
+| readEmittedClosure | Inventory actual generated paths; initialize entry reachability; distinguish used runtime definitions from normative guidance | EmittedClosure.files, references, runtimeClauses, unresolved form the emitted literal context | Project actual path/text only; preserve original clause bytes |
+| followCodeReference | Read one actual body, judge genuine called modules/type dependencies/runtime reads, resolve source-local references, preserve missing or ambiguous targets | Smaller CodeClosureState; newly activated original paths, reference judgments and runtime clause IDs | Path membership, exact nonempty spans, original ID membership |
+| judgeGuard consumer | Interpret returned actual closure, preserving emitted defects; independently compare source-required behavior | Existing two-channel GuardDecision, generated evidence and counterexample | Exact closure quote membership |
+
+Each step owns one original file. Its scoped literal sees that file, available path identities and
+actual runtime-definition identities, never ModulePlan, ideal BranchPlan, source-required answer or
+oracle. It distinguishes a real invoked dependency from an illustrative mention or a name appearing
+only in explanatory prose. Runtime clause definitions enter emittedContext only when actual code reads
+them. Missing code or a genuinely unresolved call remains unresolved; it cannot be filled from the
+compiler's ideal model. The immutable supplied program is the finite file universe. Pending paths may
+grow only by activating already inventoried unvisited paths; every step removes one path from the
+unvisited universe. No active path or unresolved closure terminates the reduction.
+
+The new source introduces no crisp policy helper. Existing exact path, substring and domain checks
+verify the NL result. The extension needs its own source/type replay, connected transitive-call control
+fixture, independent peer review and live parent/child consumption inspection. A static source closure
+witness is not actual generated callable invocation or compiler execution.
+
+Connected extension implemented: 30 NL modules / 726 physical lines / 208 numbered steps, 47 aliases, 32 call edges. Native parser/type checks pass; full baseline witness replays and the internal closure witness coerces to EmittedClosure. Ten connected exact controls (3 equivalent positives, 7 corruptions) and32 baseline checker controls pass. Independent extension review and live consumption remain pending; no generated callable execution or admission credit.
+
+Peer precision repair: actual defining type-file declarations enter the dependency scope; resolved type references carry exact targetEvidence separately from caller spans. Eleven connected exact controls (3 positives/8 corruptions) pass; no original policy facts changed.

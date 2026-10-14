@@ -20,6 +20,8 @@ usage: python -m natlang_neuralese.rl.stage --rollouts R.jsonl [--rollouts T.jso
 """
 from __future__ import annotations
 
+from ..common.jsonio import read_jsonl
+
 import argparse
 import hashlib
 import json
@@ -112,7 +114,7 @@ def parse(argv=None) -> tuple[argparse.Namespace, list[str]]:
 def main(argv=None) -> None:
     a, rest = parse(argv)
     a.out.mkdir(parents=True, exist_ok=True)
-    rollouts = [json.loads(line) for path in a.rollouts for line in path.read_text().splitlines() if line.strip()]
+    rollouts = [row for path in a.rollouts for row in read_jsonl(path)]
     documents, receipt = select_rft_documents(rollouts, max_success_rate=a.rft_max_success_rate,
                                               held_fraction=a.rft_held_fraction)
     if not any(d["split"] == "train" for d in documents) or not any(d["split"] == "test" for d in documents):
