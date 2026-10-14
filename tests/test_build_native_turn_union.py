@@ -31,6 +31,27 @@ def test_union_compression_preserves_exact_utf8_and_decoded_receipt(tmp_path):
     assert compressed.decoded_bytes == len(restored)
 
 
+def test_removed_quality_reference_blocks_derivatives_in_both_splits():
+    candidates = {
+        'base': {tok: {'train-copy': identity('train', groups=('question-held',)),
+                       'test-copy': identity('test', split='test', groups=('question-held',)),
+                       'good': identity('good', groups=('independent',))}
+                 for tok in TOKENS}}
+    selected, omitted = plan_member_rows(['base'], candidates, {}, TOKENS, set(), set(),
+                                        quarantined_source_groups={'question-held'})
+    assert selected == {('base', 'good')}
+    assert {o['reason'] for o in omitted.values()} == {'source_quality_quarantine'}
+
+
+def test_removed_member_held_group_still_blocks_a_train_derivative():
+    candidates = {'remaining': {tok: {'r': identity('new text', groups=('removed-held-group',))}
+                                for tok in TOKENS}}
+    selected, omitted = plan_member_rows(['remaining'], candidates, {}, TOKENS,
+                                        {'removed-held-group'}, set())
+    assert not selected
+    assert omitted[('remaining', 'r')]['reason'] == 'train_document_shares_held_source_group'
+
+
 def identity(text, split='train', groups=('g1',)):
     return {
         'split': split,

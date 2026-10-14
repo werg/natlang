@@ -60,3 +60,7 @@ completed expansion.
 ## Direct compressed union output
 
 The MuSiQue family hold requires a corrected broad union before the next main-line launch. Keep the existing admission, protected split, deduplication and tokenizer-twin decisions; explicitly remove the held member. Serialize selected rows directly into zstd, recording compressed identity plus independently decoded SHA-256 and byte count. Compression and durability extend the existing crisp union builder and compressed registry contract. This avoids another roughly140GB raw working copy without changing model-visible data or granting source admission.
+
+## Protection survives member removal
+
+A held/source-quality corpus can be removed from training while its original source identities remain protected. The next union must retain test-group/text exclusions from removed references and quarantine derivatives sharing their source groups in either split. This is the owner's explicit MuSiQue quality hold, not new inferred source approval. Extend the shared union planner with hash-bound reference files; exact set joins and omission receipts are crisp verifiers. Read the already compressed R7 aggregate as a source snapshot, apply these restrictions, and add the finished external static render. Preserve all original evidence and publish a new immutable union.

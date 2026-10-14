@@ -135,7 +135,8 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
                      tokenizer_names: list[str], held_groups: set, held_texts: set,
                      member_duplicates: dict | None = None,
                      member_duplicate_observations: dict | None = None,
-                     source_review_groups: set[str] | None = None) -> tuple[set, dict]:
+                     source_review_groups: set[str] | None = None,
+                     quarantined_source_groups: set[str] | None = None) -> tuple[set, dict]:
     """Return (selected (member,id) pairs, omissions) after twin and source-safety checks.
 
     ``member_rows`` holds only row identities, not rendered text/token payloads. A candidate becomes eligible only
@@ -148,6 +149,7 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
     member_duplicates = member_duplicates or {}
     member_duplicate_observations = member_duplicate_observations or {}
     source_review_groups = source_review_groups or set()
+    quarantined_source_groups = quarantined_source_groups or set()
     member_rank = {name: index for index, name in enumerate(order)}
     for name in order:
         per_tok = member_rows[name]
@@ -177,6 +179,11 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
                 continue
             identity = {**signatures[0], 'twin_text_sha256': tuple(
                 (tok, per_tok[tok][rid]['text_sha256']) for tok in tokenizer_names)}
+            quarantined = sorted(set(identity['source_groups']) & quarantined_source_groups)
+            if quarantined:
+                _drop(drop, key, 'source_quality_quarantine', source_groups=quarantined,
+                      text_sha256=identity['text_sha256'])
+                continue
             pending_source_groups = sorted(set(identity['source_groups']) & source_review_groups)
             if identity['split'] == 'train' and pending_source_groups:
                 _drop(drop, key, 'source_review_pending', source_groups=pending_source_groups,
@@ -304,6 +311,10 @@ def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--out-dir', type=Path, required=True)
     p.add_argument('--compress-text', action='store_true', help='write verified zstd text directly, without raw intermediates')
+    p.add_argument('--held-reference', type=Path, action='append', default=[],
+                   help='excluded source snapshot whose test groups/texts remain protected')
+    p.add_argument('--quarantine-reference', type=Path, action='append', default=[],
+                   help='excluded source snapshot whose source-group derivatives are omitted in both splits')
     p.add_argument('--tokenizer', action='append', required=True, help='NAME=DIR')
     p.add_argument('--member', action='append', required=True, help='NAME:RENDERING:TOKENIZER=PATH')
     p.add_argument('--supersedes', action='append', default=[],
@@ -355,6 +366,18 @@ def main(argv=None):
                     if row['split'] == 'test':
                         held_groups.update(row['source_groups'])
                         held_texts.add(sha(row['text'].encode()))
+    reference_bindings = []
+    quarantined_groups = set()
+    for kind, paths in [('held', a.held_reference), ('quarantine', a.quarantine_reference)]:
+        for path in paths:
+            reference_bindings.append({'kind': kind, 'path': str(path), 'sha256': file_sha(path),
+                                       'bytes': path.stat().st_size})
+            for _, row in rows(path):
+                if row['split'] == 'test':
+                    held_groups.update(row['source_groups'])
+                    held_texts.add(sha(row['text'].encode()))
+                if kind == 'quarantine':
+                    quarantined_groups.update(row['source_groups'])
     print(json.dumps({'held_groups': len(held_groups), 'held_texts': len(held_texts),
                       'seconds': round(time.time() - t0)}), flush=True)
     from build_neuralese_gold_text_delta import load_pinned_tokenizer
@@ -367,6 +390,8 @@ def main(argv=None):
                                 for name, paths in by_name.items()}
                     for rendering, by_name in members.items()}
     receipt = {'schema': SCHEMA, 'renderings': {}, 'held_groups': len(held_groups), 'held_texts': len(held_texts),
+               'excluded_source_references': reference_bindings,
+               'quarantined_source_groups': len(quarantined_groups),
                'source_review': {'holds_sha256': source_review_sha256,
                                  'pending_unpinned_source_groups': len(source_review_groups),
                                  'match': 'exact original dataset:id source_group; train rows only'},
@@ -404,7 +429,8 @@ def main(argv=None):
                                           list(tokenizer_dirs), held_groups, held_texts,
                                           member_duplicates=member_duplicates,
                                           member_duplicate_observations=member_duplicate_observations,
-                                          source_review_groups=source_review_groups)
+                                          source_review_groups=source_review_groups,
+                                          quarantined_source_groups=quarantined_groups)
         if not selected:
             raise ValueError(f'{rendering}: no eligible tokenizer twins; cannot publish an empty training union')
         out = a.out_dir / rendering
