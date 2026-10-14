@@ -3,7 +3,7 @@
   "author": "semantic_slate_sol",
   "date": "2026-10-14",
   "application": "semantic-procedure-compiler",
-  "scope": "Author source audit and exact qualification, pending independent canonical/checker and live review.",
+  "scope": "Author source audit and exact qualification, independently reviewed source and canonical/checker; live qualification pending.",
   "source_files": {
     "applications/semantic-procedure-compiler/audit/checkInterfaces.nl": "be61f3ea5a888c73be09ed9429227bf3b64590130de2ef4d90b90bfec60619f9",
     "applications/semantic-procedure-compiler/audit.nl": "7335c22946482b83f3b21c17dcfe51f442e05d53afac434591a0148dd509017a",
@@ -106,7 +106,6 @@
   "generation_ready": false,
   "live_execution": false,
   "remaining_gates": [
-    "Independent fulltypedcanonical/checker review.",
     "One separately pinned fullcompiler live diagnostic; inspect actual meaningful stages/literal effects and generated output semantics.",
     "Actual generatedcallable runtime invocation remains separatefromsymbolicreplay.",
     "About48 reviewedlive samples per adopted model-facingvariant."
@@ -114,5 +113,6 @@
   "checker_peer_findings_resolved": [
     "Per-rule guard decisions are not aggregate event permission: aggregate permission compared once in each final event state, individual rule decisions retain channel consistency/effects. Equivalent custody=true plus acknowledgment-dependent permission=false is accepted."
   ],
-  "public_format_repair": "O06 explicitly declares traced state keys/subjects/unknown conventions; internal rule IDs may vary consistently, source clause IDs exact. Normative outcomes unchanged."
+  "public_format_repair": "O06 explicitly declares traced state keys/subjects/unknown conventions; internal rule IDs may vary consistently, source clause IDs exact. Normative outcomes unchanged.",
+  "independent_reference_receipt": "plans/semantic_stack/PROCEDURE_COMPILER_REFERENCE_REVIEW_ASTRA.json"
 }

@@ -103,7 +103,7 @@ loader/type/reference replay, comparator positives/negatives and live literal/st
 separate gates. Source/replay preparation never grants training admission; model-facing changes require
 roughly48 live samples per variant or recorded measurement debt.
 
-Current source:28 authored NL modules /669 physical lines,34connected visible clauses,6scenario histories,5consumed scoped judgment sites (6semantic literal roles) and30declared call edges. Parser/type checks and full typed witness replay pass. Independent source review passes; final canonical/checker delta review and liveexecution remain separate gates.
+Current source:28 authored NL modules /669 physical lines,34connected visible clauses,6scenario histories,5consumed scoped judgment sites (6semantic literal roles) and30declared call edges. Parser/type checks and full typed witness replay pass. Independent source and canonical/checker review pass; liveexecution remains a separate gate.
 
 
 ## Independent-review correction: symbolic replay must expose generated divergence
@@ -125,4 +125,4 @@ work. Original fixture/oracle source facts are unchanged by this correction.
 
 Revised source after peer findings:28NL /669 physical lines; independent emitted/required judgments share one guardsite but return separate consumed contributions. Source parser/type and quickgate pass.
 
-Fulltyped canonical CompilePacket nowauthoredoutsidevisible roots:11generatedNLmodules/14symboliceventtraces. Canonicalsource/type replaypasses; externalexactchecker7positive/25negative controls pass. Independentcanonical/checker andlive qualificationremainpending; no generated-runtime execution credit.
+Fulltyped canonical CompilePacket nowauthoredoutsidevisible roots:11generatedNLmodules/14symboliceventtraces. Canonicalsource/type replaypasses; externalexactchecker7positive/25negative controls pass. Independentcanonical/checker reviewpasses;live qualificationremainspending; no generated-runtime execution credit.
