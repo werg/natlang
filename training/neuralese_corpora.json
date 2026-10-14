@@ -75033,6 +75033,221 @@
           }
         }
       }
+    },
+    {
+      "id": "greenhouse-iterated-measured-20261015-v1",
+      "owner": "pop",
+      "path": "runs/greenhouse-iterated-measured-20261015-v1",
+      "include": [
+        "selected.ir.jsonl",
+        "accepted-parents.jsonl",
+        "selection-review.json",
+        "approved-turns.jsonl"
+      ],
+      "source_class": "measured-Luna-greenhouse-iterateOn-teacher-decisions",
+      "license": "project-generated",
+      "split": "train only; fresh s52086 and s52087 source groups disjoint from protected held packet and target-r3 groups; global union held filter still required",
+      "admission": "48 matched family-version-3 trials, 38 exact outcomes with recorded iteration_step events; 168 approved native decisions after 21 failed/unexecuted proposals removed",
+      "training_admission": true,
+      "training_admission_reason": "Constructed-world exact/status oracle and recorded iterateOn execution; source and held IDs/groups checked, per-decision native materializer approval and immutable review hashes; materializer intermediate pruned",
+      "review_status": "Exact/status and executed-process parent review plus native decision review complete; later global held/source-quality filter required at union build",
+      "required_conversion": "Render LFM and Mellum full, program-header and whole-trajectory twins; include in later protected union after global held/source-quality checks",
+      "notes": "Only approved-turns.jsonl is training input. Normal/sun/long 36/36 exact and iterative; broken heater 2/12 exact/blocked, remaining failures excluded. plans/neuralese/GREENHOUSE_ITERATION_CORPUS_20261015.md."
+    },
+    {
+      "id": "greenhouse-iterated-measured-render-20261015-v1",
+      "owner": "pop",
+      "path": "runs/greenhouse-iterated-measured-20261015-v1/render-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: greenhouse-iterated-measured-20261015-v1; variants: full/lfm25, full/mellum21, program-header/lfm25, program-header/mellum21, whole-trajectory/lfm25, whole-trajectory/mellum21; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "greenhouse-iterated-measured-20261015-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl.zst",
+            "sha256": "41cab00c4518b7a36df695fdc99ee0c7e97c8d723a44b7ea389b8fc9799cc1f0",
+            "compression": "zstd",
+            "decoded_sha256": "fa8f4e51ec157f10a16d639309091088de7e98be9146521ab66dd7c503af9df3",
+            "decoded_bytes": 10567549,
+            "documents": 168,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 168,
+                "supervised_tokens": 21914,
+                "tokens": 1110408,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 8762,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl.zst",
+            "sha256": "da1d84d1985c65b9ab342793052625fcacece6960188063eb2060349490f5be2",
+            "compression": "zstd",
+            "decoded_sha256": "f7e549e05606b8203eb56532a75a77e2c31e22ee87803f5562f31d1c8999029a",
+            "decoded_bytes": 10366221,
+            "documents": 168,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 168,
+                "supervised_tokens": 24507,
+                "tokens": 1127720,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 9582,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl.zst",
+            "sha256": "5e783e8db9e2fff1961796d9fe3421363b9bd2794affe7cab15bf53b36a7e7fb",
+            "compression": "zstd",
+            "decoded_sha256": "96810dc6de23f745a3309f336188e31e60092ca2fa0be3f7376267790643c4ba",
+            "decoded_bytes": 3730986,
+            "documents": 168,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 168,
+                "supervised_tokens": 21914,
+                "tokens": 393635,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 4459,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl.zst",
+            "sha256": "61c9f94c6233a36989493c61a563b5cfc22d669de66e1c2b0b9fb4b69f03db9f",
+            "compression": "zstd",
+            "decoded_sha256": "5d4981acec46d9838c0325195d5b123dcfa64db8a8a38161602cc52913f7c354",
+            "decoded_bytes": 3728779,
+            "documents": 168,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 168,
+                "supervised_tokens": 24507,
+                "tokens": 407351,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 5261,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl.zst",
+            "sha256": "4373b53d85617b1ea18804b1a00b302b34117d8555908691218245228bfe1c00",
+            "compression": "zstd",
+            "decoded_sha256": "54643940e71b95fe345cdf61142b7544add6422c88efb7ecebaa3dd57bd6d2a4",
+            "decoded_bytes": 1312809,
+            "documents": 56,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 38606,
+                "documents": 56,
+                "opening_tokens": 21543,
+                "supervised_tokens": 17063,
+                "tokens": 137015,
+                "tool_tokens": 25174
+              }
+            },
+            "max_document_tokens": 4384,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl.zst",
+            "sha256": "b238dc899946f3fefcbdc42eb04b38c929fa378d82260df01902d7c9c352a05b",
+            "compression": "zstd",
+            "decoded_sha256": "8cba9f33fcc6c0cc746a5bb80bd871f1d24cd5a06ed9951c2590d87363577709",
+            "decoded_bytes": 1372338,
+            "documents": 56,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 50673,
+                "documents": 56,
+                "opening_tokens": 21918,
+                "supervised_tokens": 28755,
+                "tokens": 148870,
+                "tool_tokens": 26280
+              }
+            },
+            "max_document_tokens": 5261,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 168,
+        "selected:train": 168,
+        "source_rows": 168
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 0,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 0
+      },
+      "program_header_parity": {
+        "equal_text_serving_token_boundaries": 336,
+        "retokenization_checked": 0
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "cd22423d7181576175120a299ae1de2511cf3be9048353621840506f98da592f",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/greenhouse-iterated-measured-20261015-v1/render-v1/receipt.json",
+        "sources": {
+          "runs/greenhouse-iterated-measured-20261015-v1/approved-turns.jsonl": {
+            "bytes": 12461751,
+            "sha256": "0360ba40a2b30e0a74ffc60bb88244031fe249452146a89087842c2122bbaf38"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {}
+      },
+      "notes": "Measured greenhouse Luna iteration decisions, 38 exact+recorded iteration parents; 168 approved native decisions; train-only render"
     }
   ],
   "coverage_backlog": [

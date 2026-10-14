@@ -110,8 +110,12 @@ export function page_count(): number { return ${Math.ceil(rows.length / 8)}; }
  * unreachable (the review stops it, and the honest outcome is blocked).
  */
 export const GREENHOUSE_INSTRUCTIONS = 'Bring the greenhouse to between 20 and 22 °C and keep it there until ' +
-  'greenhouse.certificate() issues a certificate (three readings in a row in that band). Repeat one control step as ' +
-  'often as it takes: heater on below 20.5 °C, vent on above 21.5 °C, then take a reading. Return the certificate.';
+  'greenhouse.certificate() issues a certificate after three readings in that band. ' +
+  'Read the starting temperature once. Define a control step over {temp, certified}: set heater on below 20.5 °C ' +
+  'and vent on above 21.5 °C, call greenhouse.read(), and return the new temperature with greenhouse.certificate(). ' +
+  'Let one awaited iterateOn(control, initial).until(state => state.certified !== null) own the repeated control steps; ' +
+  'use its final state to return the certificate. If readings show controls cannot make progress toward the band, ' +
+  'stop the operation as blocked and state the evidence from the readings.';
 export function greenhouseControl(seed, index) {
   const rng = new Random(seed, `greenhouse:${index}`);
   const certificate = `stable-${createHash('sha256').update(`${seed}:${index}:greenhouse`).digest('hex').slice(0, 8)}`;
@@ -183,7 +187,7 @@ return final.certified;`), returnCall(certificate)];
     const judge = spec.broken ?
       { verdict: 'divergent', reason: 'The temperature falls every step although the heater is on; the run is moving away from the band.' } :
       { verdict: 'continue', reason: 'The temperature rises steadily toward the band.' };
-    return curriculumCase({ family: 'actor_greenhouse', shape, variant, pairGroup: `greenhouse:${shape}`,
+    return curriculumCase({ family: 'actor_greenhouse', familyVersion: 3, shape, variant, pairGroup: `greenhouse:${shape}`,
       slice: 'iterate', domain: 'actor', mode: 'single_call', inline: 'avoid', iterate: 'required',
       sketch: 'the state is { temp: number, certified: string | null }; the step sets heater and vent from state.temp, ' +
         'calls greenhouse.read(), and returns the new temperature with greenhouse.certificate(); stop when certified is not null. ' +

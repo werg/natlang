@@ -440,7 +440,7 @@ export function referenceDriver(record: CurriculumRecord, reasoningFor?: Reasoni
         const exactInputs = children.filter(child => child.expected_soft_input && names.has(child.expected_soft_input));
         if (exactInputs.length === 1) answer = exactInputs[0];
         else if (exactInputs.length === 0) answer = children.find(child =>
-          (Array.isArray(child.match) ? child.match : [child.match]).every(fragment => opening.includes(fragment)));
+          (Array.isArray(child.match) ? child.match : [child.match]).every(fragment => shows(opening, fragment)));
       }
       const turn = childTurns.get(opening) ?? 0;
       childTurns.set(opening, turn + 1);

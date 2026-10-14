@@ -1,0 +1,7 @@
+# Measured greenhouse iteration corpus (2026-10-15)
+
+The family-version-3 greenhouse instruction was measured on 48 fresh train-only Luna cases from seeds 52086 and 52087, balanced across normal, arriving-sun, long-start and broken-heater variants and hinted/plain openings. It produced 38 exact outcomes; all 38 have actual `iteration_step` events. Normal, sun and long passed 36/36; broken heater passed 2/12 with the required blocked status. The source groups have zero overlap with the held task packet and target-r3 source-group index.
+
+`scripts/neuralese_data/curate_greenhouse_iteration.py` binds the source snapshot, all 48 terminal results, the held packet and the exact oracle. It selects only exact results with recorded iteration steps. The 38 selected parent trajectories have 189 native decisions; 168 are approved for training and 21 failed or unexecuted proposals were removed. The approved-turn SHA-256 is `0360ba40a2b30e0a74ffc60bb88244031fe249452146a89087842c2122bbaf38`. The superseded materializer candidate file was pruned after counts and hashes were recorded in `runs/greenhouse-iterated-measured-20261015-v1/selection-review.json`.
+
+Only `approved-turns.jsonl` is a training input. Register the source, render both tokenizer twins, and apply the global held/source-quality filters in the next union. Broken-heater failures remain outside SFT; one may be retained only for an assigned stopping-behavior repair or actual DPO input.
