@@ -38,6 +38,8 @@ import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT,
   TEXT_NEURALESE_WIDTH } from '../model/text-neuralese-emulation.js';
 import { registerTrace, releaseTrace } from '../native/graph.js';
 import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';
+import { hostCaptures, type CaptureSource } from '../calls/host-capture.js';
+import { checkItemResultBinding, type ItemResultBindingSpec } from './item-result-binding.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
@@ -1489,6 +1491,44 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const invocationTraces = [trace, ...childInvocationTraces.map(child => child.events)];
     const childTraceByRunId = new Map(childInvocationTraces.map(child => [child.callId, child]));
     const executionGraph = invocationTraces.flat().filter(event => typeof event.node === 'string' && Array.isArray(event.inputs));
+    const bindingSpec = (record.curriculum as { item_result_binding?: ItemResultBindingSpec } | undefined)?.item_result_binding;
+    const bindingSources = new Set(bindingSpec?.sites.map(site => site.owner_source_path) ?? []);
+    const possibleBindingStore = bindingSpec ? runtime.frame?.task.runtime.callStore() as Partial<CaptureSource> | undefined : undefined;
+    const bindingStore: CaptureSource | undefined = possibleBindingStore &&
+      typeof possibleBindingStore.call === 'function' && typeof possibleBindingStore.value === 'function' ?
+      possibleBindingStore as CaptureSource : undefined;
+    const invocationLedger = invocationTraces.flatMap(events => {
+      const manifest = events.find(event => event.kind === 'manifest');
+      if (!manifest || typeof manifest.run_id !== 'string') return [];
+      const invocation = events.find(event => event.kind === 'invocation' && event.phase === 'start');
+      const output = events.find(event => event.kind === 'host_capture' && event.capture_kind === 'invocation_output');
+      const childTrace = childTraceByRunId.get(manifest.run_id);
+      const finalState = events.filter(event => event.kind === 'state' && event.phase === 'final').at(-1);
+      const source = output?.definition_source;
+      const inline = manifest.inline_instruction_site;
+      const inlineReturns = inline && typeof inline === 'object' ?
+        (inline as { returns?: { natlang?: unknown; text?: unknown } }).returns : undefined;
+      const scopedChild = bindingSpec?.sites.some(site =>
+        String(inlineReturns?.natlang ?? inlineReturns?.text ?? output?.result_type ?? '')
+          .includes(site.inline_child_site.return_type));
+      const inputNames = bindingSources.has(String(source)) ? ['state'] :
+        scopedChild ? ['input'] : [];
+      let hostInputs: ReturnType<typeof hostCaptures>;
+      if (inputNames.length && bindingStore) {
+        try { hostInputs = hostCaptures(bindingStore, manifest.run_id,
+          { inputArguments: inputNames, maxBytes: 1_048_576 })?.filter(capture => capture.capture_kind === 'invocation_input'); }
+        catch { /* Missing durability evidence is an unverified hold, never an execution failure. */ }
+      }
+      return [{ invocation_id: manifest.run_id, parent_invocation_id: manifest.parent_call_id ?? null,
+        ...(inline ? { inline_instruction_site: inline } : {}),
+        ...(invocation?.captures && typeof invocation.captures === 'object' ? { captures: structuredClone(invocation.captures) } : {}),
+        completion_status: finalState?.outcome ?? childTrace?.outcome ?? null,
+        completion_source: finalState ? 'execution_graph' : childTrace ? 'runtime_invocation_trace' : 'unavailable',
+        ...(childTrace ? { completion_detail: childTrace.detail } : {}),
+        ...(output ? { host_result: output } : {}),
+        ...(hostInputs ? { host_inputs: hostInputs } : {}) }];
+    });
+    const itemResultBinding = bindingSpec ? checkItemResultBinding(bindingSpec, invocationLedger) : undefined;
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
       effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}),
       ...(worldScore ? { world: worldScore } : {}),
@@ -1498,25 +1538,8 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
       // Every call's actions, children included: a child nl call runs in its own runtime and reports its trace to
       // the task (call_id tells them apart), so its decisions can be linked to what they did.
       // Preserve observed invocation parentage, rather than reconstructing it from equal returned text.
-      invocation_ledger: invocationTraces
-        .flatMap(events => {
-          const manifest = events.find(event => event.kind === 'manifest');
-          if (!manifest || typeof manifest.run_id !== 'string') return [];
-          const invocation = events.find(event => event.kind === 'invocation' && event.phase === 'start');
-          const output = events.find(event => event.kind === 'host_capture' && event.capture_kind === 'invocation_output');
-          const childTrace = childTraceByRunId.get(manifest.run_id);
-          const finalState = events.filter(event => event.kind === 'state' && event.phase === 'final').at(-1);
-          return [{ invocation_id: manifest.run_id, parent_invocation_id: manifest.parent_call_id ?? null,
-            ...(manifest.inline_instruction_site ? { inline_instruction_site: manifest.inline_instruction_site } : {}),
-            ...(invocation?.captures && typeof invocation.captures === 'object' ? { captures: structuredClone(invocation.captures) } : {}),
-            // Child invocation traces are the runtime's authoritative terminal record. A provider throw can
-            // happen after invocation.start but before a final graph state exists; preserve that actual outcome
-            // and detail instead of reporting null or fabricating a graph completion event.
-            completion_status: finalState?.outcome ?? childTrace?.outcome ?? null,
-            completion_source: finalState ? 'execution_graph' : childTrace ? 'runtime_invocation_trace' : 'unavailable',
-            ...(childTrace ? { completion_detail: childTrace.detail } : {}),
-            ...(output ? { host_result: output } : {}) }];
-        }),
+      invocation_ledger: invocationLedger,
+      ...(itemResultBinding ? { item_result_binding: itemResultBinding } : {}),
       // Preserve the exact native graph nodes for source-reference audits. This is the runtime's observed graph,
       // not an edge reconstructed from equal payloads or from the reference script.
       execution_graph: executionGraph,

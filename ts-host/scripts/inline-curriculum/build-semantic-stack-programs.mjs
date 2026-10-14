@@ -731,6 +731,8 @@ function render(entry, provider) {
     expectedFiles: { ...fixture, ...(entry.oracle?.expected_files ?? {}) },
   }) : null;
   if (caseRow) {
+    if (variant?.program_id === id && variant.item_result_binding)
+      caseRow.curriculum.item_result_binding = variant.item_result_binding;
     caseRow.semantics.oracle = { level: 'normalized', normalization: 'semantic-structured',
       comparison_spec: comparison,
       context: { objective, semantic_rule: rule, source_files: fixture } };
