@@ -1039,9 +1039,6 @@ def main(argv=None, embed=None):
     set_dense_moe_kernel(args.moe_kernel)
     option_defaults = {action.dest: action.default for action in parser._actions if action.dest != 'help'}
     anchor_now = [args.projection_anchor_weight]  # the scheduled projection-anchor weight of the current update
-    if args.inspect_training_config:
-        print(json.dumps(vars(args), sort_keys=True, indent=2))
-        return
     if args.token_cache_mib < 0:
         raise ValueError('negative token cache budget')
     cohort_weights = None
@@ -1121,6 +1118,9 @@ def main(argv=None, embed=None):
     if args.purpose_contrast and (args.view != 'written' or args.purpose_contrast < 0 or
                                   not math.isfinite(args.purpose_contrast) or not math.isfinite(args.purpose_margin)):
         raise ValueError('the purpose contrast needs --view written and a finite nonnegative weight and margin')
+    if args.inspect_training_config:
+        print(json.dumps(vars(args), sort_keys=True, indent=2))
+        return
     if args.device.startswith('cuda'):
         free, total = torch.cuda.mem_get_info()
         args.memory_gb = args.memory_gb or float(os.environ.get('NATLANG_CUDA_MEMORY_GB') or free / 2**30 * .9)

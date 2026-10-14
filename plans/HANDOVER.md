@@ -15,13 +15,23 @@ training-admitted.
 Dialogue's two-layer quotation and timed promise refinement is on main; its
 canonical/checker and independent review remain active.
 
-The v15d ecology diagnostic is active under
-`natlang-pop-semstack-v15d-ecology.service` with current-batch return and
-source-ID guards. Cave v5 was stopped after about 34 turns when one teacher
-request streamed over 86 KB of partial tool-call deltas without completing;
-its `action_max_tokens:4096` transport path is under investigation. The Cave
-trace is diagnostic for the earlier frozen source only. The refined source
-requires a separately sealed run. Pop's QAD held48 GPU evaluation continues.
+Turn Window Mirror Garden v3 used the Codex-capped frozen runtime and reached
+the `readRules` child. It stopped at about 73 turns after the source directed
+identity-only and timing-only clause groups into `interpretAbility`, whose
+required ability fields those groups cannot supply; a batched child failure
+then caused successful groups to be recomputed. Exact hashes and trace are in
+`plans/semantic_stack/LIVE_DIAGNOSTICS.md` (`3e9d962a`). The source should
+separate ability units from typed identity/timing context and preserve
+completed child results in a finite iteration. No teacher row is admitted or
+model-negative label assigned. The bounded Codex output transport worked.
+
+The v15d ecology diagnostic stopped after Stage 5 made case-specific graph
+status decisions in generated JS; v16 must move each node finding into a
+scoped typed NL decision while exact graph traversal remains mechanical.
+Cave v5 stopped after a Codex teacher request ignored its configured output
+ceiling. The shared Pi Codex payload fix and authenticated ceiling proof are
+published (`edfb67e6`, `f2f15d2a`); the revised Cave source still needs a
+separately sealed live run. Pop's QAD held48 evaluation has completed.
 
 DGX's new bulk SWE cohort was merged to main. All four text training manifests
 (two whole-trajectory and two program-header views, about 3.56 GiB total) are
@@ -47,6 +57,11 @@ repetition/budget cases lack result exports but have exact terminal queue
 receipts; the original report remains unchanged. The close marker did not
 appear visibly in any completed response; this does not prove it was never
 sampled as an invisible stop. No matched 48-case base comparison exists.
+The older step-15000 full-rendering 16-case run shares the same packet hash
+but only 12 IDs with the new 48-case set. Both runs pass one of those 12,
+on different cases. A corrected-classifier rescore of the original 16 receipts
+is adjacent to the immutable original report; its outcome counts did not
+change. The owner's earlier decision waives a separate 48-case QAD-base run.
 
 ## 03:50 CEST: deep NL source bar, ecology state repair, live QAD evaluation
 
@@ -1475,3 +1490,8 @@ Read `python3 scripts/coord.py inbox --ack` and `python3 scripts/coord.py status
 - Root-reviewed V24 packet `luna-v24-clinc-intent-reviewed-child-actions-20261012-v1` admits371 exact selected native SFT actions (one employer-label source error excluded). Published in `a8d7387f`, synced and manifest-verified on DGX; superseded export pruned in `7d3fd51c`. Shared renderer verifies signed source-clearance sidecars, selected input/target bindings and the root admission receipt. Selection or portable bytes alone do not admit training. These additions join the next declared union, not the active immutable r2 input. Whole-parent, writer/recurrence and runtime admission remain false; the helper is reviewing missing typed child captures and independently valid parent lambda formulations.
 
 - Removed four five-day-old W&B watchers for discarded October5 approaches and their tracking directories (~239MB disk / ~200MB resident). Actual reusable data and current lineage weights were preserved. No old watcher should be restarted for the Muon lineage.
+# 2026-10-14 source-depth and QAD control update
+
+- Owner clarified the target for the new semantic cohort: connected applications comparable to the larger natlang source trees, with deep, numbered natural-language pseudocode owning substantive policy. A large file or call count is insufficient. Keep useful smaller examples in the general mix, but review each new application for typed child-result consumption and crisp code that substitutes domain decisions. `plans/semantic_stack/PROJECT_SOURCE_CONTRACT.md` records the source and live review bar. Ecology v15d is held because its Stage 5 live trace assigned per-entity graph findings in case-specific JS; v16 must make that a scoped typed NL judgment, with only exact traversal/sign arithmetic in crisp code. Cave v5 is held because the Codex provider ignored `maxTokens`; shared payload ceiling fix `edfb67e6` and authenticated 16-token proof `f2f15d2a` are published. Reseal and rerun the Cave source before admission.
+- Pop sampled the QAD step-15000 checkpoint on four captured serving requests, four seeds each, temperature 0.6, up to 256 tokens (`scripts/neuralese_data/qad_sampled_control_probe.py`; report `/srv/storage/natlang-artifacts/qad15000-hf-serving-cache-parity/sampled-control-run-01/report.json`). All 16 paths avoided neuralese open/close; 13 reached ordinary EOS and 3 reached the length cap. Maximum observed open+close probability was 1.54e-11. This rules out frequent marker sampling on these four prompts only; it does not explain the 4/48 task success rate or prove the checkpoint never emits markers elsewhere.
+

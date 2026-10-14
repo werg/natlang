@@ -10,7 +10,7 @@ returns: QueryAnswers
 ---
 1. For each original query call resolveQueryFocus(query, source, scoped, evolution). Consume its actual
    participant/time/dimension focus and the last source-established view at or before the requested time.
-2. Call joinProof(focus, source, scoped, episodePlan, evolution). Consume the actual support/defeat graph
+2. Call joinProof(focus, source, scoped, episodePlan, evolution). Name its returned actual support/defeat graph actualGraph
    and its actual returned challenge; a convenient globally true proposition cannot substitute for this proof.
 3. Derive QueryObservable from the actual focus and joined evidence: statement speaker/due from its
    attributed act, belief from current endorsed or defeated atoms, knowledge from endorsement plus available

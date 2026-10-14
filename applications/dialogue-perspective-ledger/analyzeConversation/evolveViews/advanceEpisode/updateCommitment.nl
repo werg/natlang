@@ -31,7 +31,11 @@ returns: CommitmentDelta
    passed. This differs from an activated/unconditional promise whose timely consequent demonstrably failed.
 8. Preserve the established commitment when its issuer privately wants to cancel it. Only the actual
    communicated/adopted retraction stage may replace its status as retracted for the relevant audience.
-9. Recompute an existing commitment's condition readings using newly available actual event evidence,
+9. Locate any existing commitment by its actual original sourceActId before recomputation. If it is
+   retracted, preserve that terminal status: later facts and due boundaries cannot reactivate it. Recomputed
+   condition/fulfillment evidence may be retained without changing that status. A source-established new
+   performed promise has its own original act lineage and does not overwrite the old retracted promise.
+   Recompute an existing commitment's condition readings using newly available actual event evidence,
    retaining its original source act ID and establishedAt. Replacement changes condition/status fields,
    not its original promise date, issuer, version predicate or audience.
 10. Return additions/replacements for this participant's actual ledger with original exact support. The

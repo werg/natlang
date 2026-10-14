@@ -12,7 +12,13 @@ returns: ScopedConversation
    proposition, endorsement and condition meaning; neither this parent nor a type table re-derives them.
 4. Join returned act IDs and reference span IDs to actual nodes of that turn. Nonempty semantic
    contributions require exact original support. Unknown attribution stays a nullable typed contribution.
-5. Retain ambiguity alternatives and unresolved child reasons separately from known report/quote status.
+5. For each actual joined turn directly invoke a scoped NL LedgerFinding literal capturing returned
+   quote attribution, reference meanings, performed/depicted act readings and original context. Judge
+   whether these contributions express one coherent scope. An actor's explicitly mistaken private belief
+   can be a valid perspective difference; a child assigning the reporter the quoted original's promise
+   is an inconsistent output. Retain the actual witnessed finding in scopeFindings without overwriting
+   the child results. A missing premise leaves pass null and its original IDs unresolved.
+6. Retain ambiguity alternatives and unresolved child reasons separately from known report/quote status.
    A source-established forwarding-only act is a resolved non-endorsement, not an unresolved assertion.
-6. Return all actual quote trees, reference bindings and act readings. Equal quoted strings in different
+7. Return all actual quote trees, reference bindings, act readings and scopeFindings. Equal quoted strings in different
    turns keep separate frames and availability paths; only their original target identity may be shared.
