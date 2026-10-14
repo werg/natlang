@@ -33,6 +33,16 @@ if [ -n "${TRAINING_CHECKPOINT:-}" ]; then
       --checkpoint "$TRAINING_CHECKPOINT" --checkpoint-sha256 "$TRAINING_CHECKPOINT_SHA256" \
       --heads "$TRAINING_HEADS" --heads-sha256 "$TRAINING_HEADS_SHA256" \
       --prompt-rendering "${RENDER:-full}" --device cuda --port "${PORT:-8097}" > "$R/server.log" 2>&1 &
+elif [ -n "${SERVE_IMAGE:-}" ] && [ -z "${DIRECT:-}" ]; then
+  # Keep the matched base and trained-checkpoint arms on the same image,
+  # tokenizer snapshot, dtype, prompt rendering, and HTTP collector surface.
+  : "${CONTAINER:?CONTAINER is required with SERVE_IMAGE}"
+  docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  docker run --rm --name "$CONTAINER" --gpus all --network host --user "$(id -u):$(id -g)" \
+    -e HOME=/tmp -e PYTHONPATH=$ROOT/training/neuralese -e HF_HUB_OFFLINE=1 \
+    -v /home/werg:/home/werg:ro -v /srv/storage:/srv/storage:ro -w "$ROOT" "$SERVE_IMAGE" \
+    python -m natlang_neuralese.serve --base "$SNAP" --prompt-rendering "${RENDER:-full}" \
+      --device cuda --dtype bfloat16 --port "${PORT:-8097}" > "$R/server.log" 2>&1 &
 elif [ -n "${SERVE_IMAGE:-}" ]; then
   # A direct export pins its source proof to the exporting machine's paths (hf_hub_cache, launch receipt). Serve it in
   # a container that mounts the local HF cache and the exact receipt (RECEIPT, hash-checked by the loader) at those
