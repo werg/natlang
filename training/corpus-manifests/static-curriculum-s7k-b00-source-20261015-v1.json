@@ -1,0 +1,39 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "static-curriculum-s7k-b00-source-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/static-curriculum-s7k-b00-source-20261015-v1",
+  "files": [
+    {
+      "path": "batches/b00/batch.json",
+      "bytes": 5752,
+      "sha256": "1908e6639ac817e13713448f08b61f4433ee128ee3bbe6fedf90e6fd22411317"
+    },
+    {
+      "path": "batches/b00/case-ids.txt",
+      "bytes": 609135,
+      "sha256": "d2298c77d7c54ebc1b03ba28ccccc15ee103a04c2c99cc10ab56c60d81ab768c"
+    },
+    {
+      "path": "batches/b00/cases.ir.jsonl.zst",
+      "bytes": 17483323,
+      "sha256": "ee5d62f7f5cdd7f2e021547db305c882af79ff44d8773fe128df2e3531c10703"
+    },
+    {
+      "path": "batches/b00/rows.jsonl.zst",
+      "bytes": 43027193,
+      "sha256": "84bd482aed11d96d530ceea447b7dc8aad05f1bb2bebadfb21c3488a925b891e"
+    },
+    {
+      "path": "batches/b00/turns.jsonl.zst",
+      "bytes": 118808633,
+      "sha256": "5dfb34a0f64a475a8166e5c48316b4989bc88a869f11fe7ecb8788493f19972b"
+    },
+    {
+      "path": "config.json",
+      "bytes": 2801,
+      "sha256": "910c960a2c82d13805d2e01a50b39d48fc4833c2a0e38ffc86c73ef834b8bd7c"
+    }
+  ],
+  "bytes": 179936837
+}

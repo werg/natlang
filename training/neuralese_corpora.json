@@ -79683,6 +79683,48 @@
         "held_text": {}
       },
       "notes": "Seed52070 curated exact decisions, 547 selected, zero omissions, LFM/Mellum twin full, program-header, whole-trajectory; protected union still required"
+    },
+    {
+      "id": "static-curriculum-s7k-b00-source-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/static-curriculum-s7k-b00-source-20261015-v1",
+      "include": [
+        "config.json",
+        "batches/b00/cases.ir.jsonl.zst",
+        "batches/b00/rows.jsonl.zst",
+        "batches/b00/turns.jsonl.zst",
+        "batches/b00/batch.json",
+        "batches/b00/case-ids.txt"
+      ],
+      "source_class": "static-native-reference-source-snapshot",
+      "training_admission": false,
+      "admission": "Immutable original b00 provenance only; rejected and process/semantic holds retained for assigned repair, not admitted as a whole. The old campaign is stopped; missing collector dist caused later seed replay failure.",
+      "license": "Per-source facts in original case IR; owner accepts all licenses."
+    },
+    {
+      "id": "static-s7k-curated-native-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/static-s7k-curated-native-20261015-v1",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "admission-review.json",
+        "omissions.jsonl",
+        "identity-audit.json",
+        "quality-review.json",
+        "quality-witness.jsonl",
+        "source-config.json",
+        "source-batch.json",
+        "source-case-ids.txt"
+      ],
+      "source_class": "static-inline-curriculum-reference-demonstrations",
+      "training_admission": true,
+      "trace_admission": false,
+      "training_admission_reason": "Owner-authorized exact static natlang reference data. Preserve kept original decoded rows, IDs, groups, splits and source provenance; collapse only independently audited identical model payloads, retaining alternate replay provenance in omissions and identity audit; require native decision approval; exclude structural-quality groups and dataset_workbench train rows pending independent semantic item review. Original test rows retained as protected evaluation; stock reference reasoning remains producer-marked untrained. This is not real-model teacher reasoning or channel qualification.",
+      "admission": "88560 approved train decisions/8474 parents;346 protected test decisions/120 parents. Exact static native reference replay; stock action-note reasoning remains producer-marked untrained.600 rejected,1440 structural group decisions,2891 dataset semantic-review decisions excluded;3 identical model payload duplicates collapsed with alternate replay provenance retained. Current shared renderer256-decision pilot completed; full protected twin render and global union checks remain separate.",
+      "derived_from": [
+        "static-curriculum-s7k-b00-source-20261015-v1"
+      ],
+      "license": "Per-source facts retained in original case IR, all licenses accepted."
     }
   ],
   "coverage_backlog": [
