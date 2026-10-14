@@ -567,3 +567,31 @@ def test_fused_readout_matches_the_chunked_readout():
     assert torch.allclose(loss, reference) and torch.allclose(grad, reference_grad, atol=1e-6)
     assert torch.equal(prediction, reference_pred) and torch.allclose(losses, reference_losses)
 
+
+def test_fused_bf16_readout_normalizes_before_rounding_for_accumulation():
+    import torch
+    from natlang_neuralese.train.text_warmup import fused_readout
+
+    torch.manual_seed(17)
+    head = torch.nn.Linear(16, 40, bias=False).to(torch.bfloat16).requires_grad_(False)
+
+    class Readout:
+        def logits(self, states):
+            return head(states)
+
+    targets = torch.randint(0, 40, (1, 63))
+    weights = torch.linspace(.25, 2., 63).reshape_as(targets)
+    original = torch.randn(1, 63, 16, dtype=torch.bfloat16)
+    for denominator in (63, 97):  # default mean and padded/microbatch group normalization
+        reference = original.clone().requires_grad_()
+        positions = torch.nn.functional.cross_entropy(head(reference).float().flatten(0, 1),
+                                                      targets.flatten(), reduction='none').reshape_as(targets)
+        expected_loss = (positions * weights).sum() / denominator
+        expected_grad, = torch.autograd.grad(expected_loss, reference)
+        states = original.clone().requires_grad_()
+        loss, _, _ = fused_readout(Readout(), states, targets, 0, chunk_size=128,
+                                  position_weights=weights, loss_denominator=denominator)
+        actual_grad, = torch.autograd.grad(loss, states)
+        assert torch.equal(loss, expected_loss)
+        assert torch.equal(actual_grad, expected_grad)
+

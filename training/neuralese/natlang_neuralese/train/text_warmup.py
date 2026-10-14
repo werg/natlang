@@ -497,26 +497,31 @@ class _ForwardGradReadout(torch.autograd.Function):
     """The weighted readout CE whose input gradient was computed in the forward (``fused_readout``)."""
 
     @staticmethod
-    def forward(ctx, states, value, gradient, count):
+    def forward(ctx, states, value, gradient):
         ctx.save_for_backward(gradient)
-        ctx.count = count
-        return value / count
+        return value
 
     @staticmethod
     def backward(ctx, grad):
         (gradient,) = ctx.saved_tensors
-        return (gradient * (grad / ctx.count).to(gradient.dtype)), None, None, None
+        return gradient * grad.to(gradient.dtype), None, None
 
 
-def fused_readout(backbone, states, targets, close_id, *, chunk_size=128, gradients=True, position_weights):
+def fused_readout(backbone, states, targets, close_id, *, chunk_size=128, gradients=True, position_weights,
+                  loss_denominator=None):
     """``chunked_readout``'s weighted CE (the training loss) for a frozen readout, each chunk's vocabulary logits
     computed once: the forward also takes the chunk's input gradient (autograd of the chunk alone), which the backward
     only scales, instead of a checkpoint that recomputes the logits in backward.
 
-    Returns (training_ce, prediction, token_losses): ``training_ce`` = sum(weights x token CE) / numel, with
+    Returns (training_ce, prediction, token_losses): ``training_ce`` = sum(weights x token CE) / loss_denominator
+    (default: target numel). Normalize inside autograd before the input gradient rounds to BF16; callers
+    accumulating padded batches supply the final group denominator here, rather than scaling afterwards. With
     a gradient to ``states``; the others detached. The readout's own parameters (final norm, head, control rows) get
     no gradient: callers whose optimizer does not train them (neuralese_direct)."""
     weights = position_weights
+    denominator = targets.numel() if loss_denominator is None else loss_denominator
+    if not bool(torch.isfinite(torch.as_tensor(denominator)).all()) or float(denominator) <= 0:
+        raise ValueError('readout loss denominator must be finite and positive')
     needs_grad = gradients and torch.is_grad_enabled() and states.requires_grad
     total = states.new_zeros((), dtype=torch.float32)
     gradient = torch.empty_like(states) if needs_grad else None
@@ -532,14 +537,14 @@ def fused_readout(backbone, states, targets, close_id, *, chunk_size=128, gradie
                                         reduction='none').reshape_as(gold)
             weighted = (per_token * weight).sum()
             if needs_grad:
-                (gradient[:, start:stop],) = torch.autograd.grad(weighted, chunk)
+                (gradient[:, start:stop],) = torch.autograd.grad(weighted / denominator, chunk)
         with torch.no_grad():
             total += weighted.detach()
             predictions.append(logits.argmax(-1))
             token_losses.append(per_token.detach())
         del logits, per_token
-    count = targets.numel()
-    training_ce = (_ForwardGradReadout.apply(states, total, gradient, count) if needs_grad else total / count)
+    value = total / denominator
+    training_ce = (_ForwardGradReadout.apply(states, value, gradient) if needs_grad else value)
     return training_ce, torch.cat(predictions, 1), torch.cat(token_losses, 1)
 
 
