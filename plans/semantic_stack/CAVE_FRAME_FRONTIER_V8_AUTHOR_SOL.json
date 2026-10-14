@@ -11,15 +11,15 @@
   "changed_paths": {
     "applications/cave-mission/DECOMPOSITION.md": "afd0afa5a37cbb35fd9d32a6f1bfc8fae0a55e40cf283117071be55d1732de9b",
     "applications/cave-mission/types.ts": "81650ac5f94b9a7f7433cd3544d07db87da52f56a0fe40f180795cd7c86c7149",
-    "applications/cave-mission/planMission/survey/readFrames.nl": "1a3678c6c4af52826506be23368b552e8d03f4650f556652e40b8614e6b2d983",
-    "applications/cave-mission/planMission/survey/readFrames/advanceFrameUnit.nl": "167826d498e2736340434a52cd5ada432e3d0007167c2e33fc9f22435e8ca214",
+    "applications/cave-mission/planMission/survey/readFrames.nl": "1b9f0cf90630dcfa90ec80858e83c97b131bfd161c0a1629f065dae59b8b8da6",
+    "applications/cave-mission/planMission/survey/readFrames/advanceFrameUnit.nl": "6a95e425cee3e911877b0063a3016044455e5b9b550d635b8e7023ff67ca682b",
     "applications/cave-mission/planMission/survey/readFrames/interpretLandmark.nl": "953c7374406c1f622df1b7159dd635fcf3bb3483c8824dba5c831c9fc6adc061",
     "applications/cave-mission/planMission/survey/readPassages.nl": "dad6356afd5fa26eaa7a4932d8567d253718c4bcc030f7a75e3c128ebbdb108f",
     "applications/cave-mission/planMission/survey/readEquipment.nl": "03b4974c22aa0f45265667332f2707cc4408a9f5a318de610b7c7af1af9ae265",
-    "training/semantic_applications/astra/cave-mission/project.json": "90bc5dd69cdf0829538422eabc78fc7f3631cd09f17d6f9b1336af63312cac8c",
+    "training/semantic_applications/astra/cave-mission/project.json": "9a430a28fda00afb519b2dbd16fb57832ff27995bc111fb370e72d7981c62bfd",
     "training/semantic_applications/astra/cave-mission/survey-v5-controls/item-witnesses.json": "ddeac9fd3d94d2a4cc17a4c1665fa8d171e21876549e4a8aab94f7bb0dd9439d",
-    "training/semantic_applications/astra/cave-mission/frame-v8-controls/progress-witness.json": "07af977a6fb4c52a4a67ca4795bdefe2fccac2de6387449996e828e548538961",
-    "training/semantic_applications/astra/cave-mission/frame-v8-controls/check-controls.mjs": "6844663ddb0bcf60849f520fea8abf2de83ac28ec33b56d574834ce51dddf49b"
+    "training/semantic_applications/astra/cave-mission/frame-v8-controls/progress-witness.json": "67b050c13936ce4be64f70c9ab8e455590820466ae8af3085228868998721167",
+    "training/semantic_applications/astra/cave-mission/frame-v8-controls/check-controls.mjs": "f08ea9be6dda9398038bb911883c14c1630f5d84590602e5e394a4e56ca05d18"
   },
   "source_mechanism_audit": {
     "semantic_policy": "Numbered NL inventory, support selection, convention/landmark interpretation and actual nullable-result handling. Existing physical/directional/conditional alignment policy unchanged.",
@@ -35,8 +35,8 @@
   },
   "composition": {
     "nl_files": 30,
-    "nl_total_lines": 797,
-    "nl_body_lines": 601,
+    "nl_total_lines": 798,
+    "nl_body_lines": 602,
     "numbered_steps": 219,
     "type_aliases": 59,
     "visible_crisp_policy_lines": 0
@@ -44,8 +44,9 @@
   "controls": {
     "frame_progress": {
       "passed": true,
-      "positive": 5,
-      "negative": 15
+      "positive": 7,
+      "negative": 20,
+      "scope": "Both actual frame support-refinement and landmark one-unit transitions; raw child preservation and exact projection"
     },
     "survey_item": {
       "passed": true,
@@ -69,8 +70,8 @@
       "opening_sha256": "b72b63ef1b49b92d6dca56cb0d1a906659c9f3ed0a681b5715979e2a33516569",
       "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
     },
-    "package_path": "/tmp/sol-cave-v8-source-held-preflight",
-    "source_sha256": "5a779db50c56020371ffca198ebc436d9a8beaa26147430b15653dfcc7b16b5c",
+    "package_path": "/tmp/sol-cave-v8-frame-branch-preflight",
+    "source_sha256": "5feb77fce81170aa08a9970d847aa6de5c690ff8479c5deecffd5f24d4c6c620",
     "package_source_status": "held_exact_verifier_bound_semantic_review_pending",
     "reviewed": false
   },
@@ -86,5 +87,10 @@
     "actual_literal_consumption_review": false
   },
   "generation_ready": false,
-  "training_admission": false
+  "training_admission": false,
+  "independent_review_response": [
+    "Frame branch control permits only actual selected supportingClauseIds refinement, retaining other unit fields",
+    "Nonempty sourceFrame required at inventory and named-step boundary",
+    "Actual convention return retained independently of projected alternatives"
+  ]
 }

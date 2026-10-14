@@ -7,7 +7,7 @@ returns: FrameReadFrontier
 ---
 1. If state.pendingUnits is empty, return state. Select state.pendingUnits' first actual unit; keep original clauses and all
    prior completed results unchanged. This invocation owns only this unit's actual new contribution.
-2. Bind original primary/supporting clauses by the unit IDs. Require exact membership. For a landmark
+2. Bind original primary/supporting clauses by the unit IDs. Require exact membership and a nonempty original sourceFrame. For a landmark
    verify originalLocalName is a complete case-preserved source token in its actual primary text; for
    a frame preserve originalLocalName:null. A failed boundary records this unit, not a semantic default.
 3. For a frame directly await a scoped NL SurveyReadingUnit support-selection literal on
@@ -25,7 +25,7 @@ returns: FrameReadFrontier
    retain its actual ConventionInterpretation. For a landmark call interpretLandmark with that actual
    unit and originals, directly await and retain its actual LandmarkItemMeaning. Only this selected
    child is invoked. A rejected call records status=failed and its actual error; all prior results survive.
-6. Check each complete convention's sourceFrame equals the unit's actual frame when supplied, and
+6. Check each complete convention's sourceFrame equals the unit's actual nonempty frame, and
    every returned landmark frame agrees likewise. A nonnull landmark meaning.localId must equal
    unit.originalLocalName. Name, frame and provenance are exact boundaries; physical counterpart,
    location description and meaning still come from the actual NL child.

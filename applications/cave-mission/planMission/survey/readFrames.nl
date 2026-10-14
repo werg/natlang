@@ -12,7 +12,8 @@ returns: FrameSurvey
    For frame units originalLocalName is null. Names and source scope are inventory data; position,
    basis alternative, descriptive meaning and physical identity remain the later children's judgments.
 3. Consume the actual inventory. Require unique original unit IDs, frame/landmark kinds, nonempty
-   existing primary IDs and existing support IDs. A landmark name must be a nonempty complete lexical
+   existing primary IDs and existing support IDs. Each unit must carry a nonempty sourceFrame grounded
+   in its original frame context; missing frame scope remains an explicit unresolved inventory premise. A landmark name must be a nonempty complete lexical
    token in its primary clause text, preserving case: adjacent letters, digits or underscore belong to
    the same token. A frame name slot is null. Retain exact failed inventory identities for repair.
 4. Initialize FrameReadFrontier with original clauses, actual validated pending units, completed:[]

@@ -6,14 +6,23 @@ const ast=ts.createSourceFile('types.ts',fs.readFileSync(path.join(repo,'applica
 const authored=JSON.parse(fs.readFileSync(new URL('progress-witness.json',import.meta.url),'utf8'));
 const canonical=v=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v,eq=(a,b)=>JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
 const word=c=>c!==undefined&&/[\p{L}\p{N}_]/u.test(c);function token(text,name){if(!name)return false;for(let i=text.indexOf(name);i>=0;i=text.indexOf(name,i+1))if(!word(text[i-1])&&!word(text[i+name.length]))return true;return false;}
-function verify(before,after){const issues=[];try{coerce(before,parseType('FrameReadFrontier'),env);coerce(after,parseType('FrameReadFrontier'),env);
+function verify(before,after,trace=null){const issues=[];try{coerce(before,parseType('FrameReadFrontier'),env);coerce(after,parseType('FrameReadFrontier'),env);
  if(!eq(before.clauses,after.clauses))issues.push('immutable original clauses');
  if(!eq(before.completed,after.completed.slice(0,before.completed.length)))issues.push('prior actual returns preserved');
  if(after.completed.length!==before.completed.length+1||!eq(after.pendingUnits,before.pendingUnits.slice(1)))issues.push('one original unit consumed');
  const unit=before.pendingUnits[0],row=after.completed.at(-1),by=new Map(before.clauses.map(c=>[c.id,c]));
- if(!eq(unit,row.unit))issues.push('original landmark unit retained');
+ if(!unit.sourceFrame)issues.push('original frame scope required');
+ if(unit.kind==='landmark'&&!eq(unit,row.unit))issues.push('original landmark unit retained');
+ if(unit.kind==='frame'){
+  if(!trace||!eq(row.unit,trace.actual_support_selection)||!eq({...row.unit,supportingClauseIds:unit.supportingClauseIds},unit)||!unit.supportingClauseIds.every(id=>row.unit.supportingClauseIds.includes(id))||!row.unit.supportingClauseIds.every(id=>by.has(id)))issues.push('actual frame support selection retained');
+  if(!eq(row.convention,trace?.actual_child_return))issues.push('actual convention child return retained');
+ }
  if(unit.kind==='landmark'&&!unit.primaryClauseIds.some(id=>token(by.get(id)?.text??'',unit.originalLocalName)))issues.push('complete case-preserved original name token');
- if(row.status==='accepted'){
+ if(row.status==='accepted'&&unit.kind==='frame'){
+  if(row.failure!==null||row.landmark!==null||!row.convention?.alternatives.length||row.landmarks.length)issues.push('accepted actual convention');
+  const projected=(row.convention?.alternatives??[]).map((a,i)=>{const ws=[];for(const e of a.evidence){const c=by.get(e.clauseId);if(!c||!e.exactQuote||!c.text.includes(e.exactQuote)||![...row.unit.primaryClauseIds,...row.unit.supportingClauseIds].includes(e.clauseId))issues.push('actual frame supplied quote');else ws.push({...c.witnesses[0],quote:e.exactQuote});}if(!a.evidence.length||a.sourceFrame!==unit.sourceFrame)issues.push('frame source scope/support');return{...Object.fromEntries(['sourceFrame','origin','uVector','vVector'].map(k=>[k,a[k]])),witnesses:ws};});
+  if(!eq(row.alternatives.map(({alternativeId,...v})=>v),projected)||new Set(row.alternatives.map(v=>v.alternativeId)).size!==projected.length)issues.push('projection of actual returned frame alternatives');
+ }else if(row.status==='accepted'){
   if(row.failure!==null||!row.landmark?.meaning||row.convention!==null)issues.push('accepted actual typed landmark return');
   const actual=row.landmark?.meaning,ev=row.landmark?.evidence??[];
   if(actual?.localId!==unit.originalLocalName||actual?.frame!==unit.sourceFrame)issues.push('original name/frame binding');
@@ -45,4 +54,12 @@ check('empty supporting evidence',false,(_,a)=>a.completed.at(-1).landmark.evide
 check('absent original quotation',false,(_,a)=>a.completed.at(-1).landmark.evidence[0].exactQuote='An invented source quotation');
 check('fabricated witness path',false,(_,a)=>a.completed.at(-1).landmarks[0].witnesses[0].path='input');
 check('failed item projects accepted rows',false,(_,a)=>{a.completed.at(-1).status='failed';a.completed.at(-1).failure='Actual type error';});
+function frameCheck(name,expected,mutation){const t=structuredClone(authored.frame_transition);mutation?.(t.before,t.after);const r=verify(t.before,t.after,t);checks.push({name,expected,actual:r.ok,passed:r.ok===expected,issues:r.issues});}
+frameCheck('actual frame support refinement and two returned alternatives',true);
+frameCheck('frame generated IDs alpha rename',true,(_,a)=>a.completed[0].alternatives.forEach((v,i)=>v.alternativeId='renamed-'+i));
+frameCheck('frame actual convention dropped',false,(_,a)=>a.completed[0].convention=null);
+frameCheck('frame actual convention altered',false,(_,a)=>a.completed[0].convention.alternatives[0].origin.y=0);
+frameCheck('frame supporting anchor lost',false,(_,a)=>a.completed[0].unit.supportingClauseIds=a.completed[0].unit.supportingClauseIds.filter(id=>id!=='F01'));
+frameCheck('frame projection re-solved',false,(_,a)=>a.completed[0].alternatives[0].uVector.x=-1);
+frameCheck('frame scope missing',false,(b,a)=>{b.pendingUnits[0].sourceFrame=null;a.completed[0].unit.sourceFrame=null;});
 console.log(JSON.stringify({scope:authored.role,passed:checks.every(c=>c.passed),positive:checks.filter(c=>c.expected).length,negative:checks.filter(c=>!c.expected).length,checks},null,2));if(checks.some(c=>!c.passed))process.exitCode=1;
