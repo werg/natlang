@@ -133,24 +133,37 @@ def main():
     parser.add_argument('--root', type=Path, required=True)
     parser.add_argument('--review', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument('--batches', type=int, default=44)
+    parser.add_argument('--start-batch', type=int, default=1)
+    parser.add_argument('--batches', type=int, default=44, help='inclusive last batch number')
     args = parser.parse_args()
     review = json.loads(args.review.read_text())
+    seeds = review.get('sample_seeds')
+    sizes = review.get('sample_sizes')
+    scopes = review.get('sample_scopes')
     if (review.get('schema') != 'natlang.gemini-clinc-static-semantic-review/1' or
             review.get('root_approved') is not True or not review.get('rationale') or
-            review.get('sample_seeds') != [44, 529, 771] or
-            review.get('sample_sizes') != [25, 70, 100] or
-            review.get('sample_scopes') != ['batch44', 'all', 'all']):
+            args.start_batch < 1 or args.batches < args.start_batch or
+            not isinstance(seeds, list) or not seeds or
+            not isinstance(sizes, list) or not isinstance(scopes, list) or
+            len(seeds) != len(sizes) or len(seeds) != len(scopes) or
+            any(type(seed) is not int or seed < 0 for seed in seeds) or
+            any(type(size) is not int or size <= 0 for size in sizes) or
+            any(scope != 'all' and (not isinstance(scope, str) or
+                not scope.startswith('batch') or not scope[5:].isdigit() or
+                not args.start_batch <= int(scope[5:]) <= args.batches) for scope in scopes)):
         raise ValueError('semantic review decision missing or incomplete')
     root, out = args.root.resolve(), args.out.resolve()
     if out.exists() and any(out.iterdir()):
         raise ValueError(f'refusing to overwrite review: {out}')
     all_matching, all_groups = {}, set()
-    batches = [batch_review(root, n, all_matching, all_groups) for n in range(1, args.batches + 1)]
+    batches = [batch_review(root, n, all_matching, all_groups)
+               for n in range(args.start_batch, args.batches + 1)]
     items = [(key, value) for key, value in all_matching.items()]
     sampled = []
     for seed, size, scope in zip(review['sample_seeds'], review['sample_sizes'], review['sample_scopes']):
-        chosen = [item for item in items if scope == 'all' or item[1]['batch'] == 44]
+        chosen = [item for item in items if scope == 'all' or item[1]['batch'] == int(scope[5:])]
+        if size > len(chosen):
+            raise ValueError(f'semantic sample asks for {size} items from {scope}, only {len(chosen)} available')
         random.Random(seed).shuffle(chosen)
         sampled.extend(key for key, _ in chosen[:size])
     held = set(review['held_source_ids'])
@@ -172,7 +185,7 @@ def main():
     receipt = {'schema': 'natlang.gemini-clinc-static-freeze/1',
                'review_path': str(args.review.resolve()), 'review_sha256': digest(args.review),
                'training_admission': True, 'trace_admission': False,
-               'training_scope': 'authored static reference decisions from source-matching typed labels; two ambiguous programs excluded at render',
+               'training_scope': 'authored static reference decisions from source-matching typed labels; reviewed ambiguous programs excluded at render',
                'batches': batches, 'compressed': compressed,
                'totals': {'source_cases': sum(x['source_rows'] for x in batches),
                           'source_matching_labels': len(all_matching),
