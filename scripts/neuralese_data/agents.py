@@ -466,3 +466,100 @@ CORPORA = {
     "webshaper": (webshaper, 2),
     "search-r1": (search_r1, 1),
 }
+
+
+# Pinned expansion snapshots. Raw files and acquisition.json retain the complete
+# original graphs; these views use the existing causal SessionHistory handoff.
+EXPANSION_ROOT = Path("data/neuralese/external-expansion-20261014")
+_JSON_CALL = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.S)
+
+
+def expansion_messages(raw):
+    """Lift JSON call tags into structured calls; preserve unrecognized dialects as text."""
+    prepared = []
+    for original in raw:
+        item = dict(original)
+        content = item.get("content")
+        if isinstance(content, list):
+            # Keep non-text blocks too: silently dropping them destroys observations.
+            content = json.dumps(content, ensure_ascii=False)
+            item["content"] = content
+        if item.get("role") == "assistant" and isinstance(content, str) and not item.get("tool_calls"):
+            calls, consumed = [], []
+            for match in _JSON_CALL.finditer(content):
+                try:
+                    value = json.loads(match.group(1))
+                except ValueError:
+                    continue
+                if isinstance(value.get("name"), str) and "arguments" in value:
+                    calls.append(tool_call(value["name"], value["arguments"], value.get("id")))
+                    consumed.append(match.span())
+            if calls:
+                for start, end in reversed(consumed):
+                    content = content[:start] + content[end:]
+                item["content"], item["tool_calls"] = content, calls
+        prepared.append(item)
+    return _openai_messages(prepared)
+
+
+def expansion_trajectory(ref, receipt, rid, row):
+    """A task-grouped external teacher view; reported outcomes are not execution certificates."""
+    metadata = row.get("metadata") or {}
+    if isinstance(metadata, str):
+        metadata = json.loads(metadata)
+    msgs = expansion_messages(row.get("messages") or [])
+    if not msgs:
+        raise Reject("empty-trajectory")
+    request = next((m.get("content") or "" for m in msgs if m["role"] == "user"), "")
+    trajectory_id = metadata.get("trajectory_id") or metadata.get("source_trajectory_id")
+    source = str(metadata.get("source") or "")
+    if not trajectory_id and source:
+        trajectory_id = source.rsplit("/", 1)[0]
+    trajectory_id = str(trajectory_id or task_hash(request))
+    session_id = str(metadata.get("session_id") or metadata.get("agent_id") or rid)
+    repo = receipt["repo"]
+    card = receipt.get("card") or {}
+    license_name = card.get("license") or "LicenseRef-upstream-unspecified"
+    if not isinstance(license_name, str):
+        license_name = "LicenseRef-upstream-custom"
+    return Trajectory(
+        id=f"upstream:expansion:{ref}:{trajectory_id}:{session_id}",
+        family="trajectory_continuation_research" if ref == "D01" else "trajectory_continuation_coding",
+        messages=msgs, head=_head(msgs), noun="research session" if ref == "D01" else "coding session",
+        lineage=_lineage(repo, rid, repo, upstream_id=session_id, revision=receipt["revision"],
+                         teacher="unknown", notes={"metadata": metadata, "communication": "derived-history",
+                            "observed_graph_snapshot": str(EXPANSION_ROOT / ref),
+                            "native_execution_verified": False}),
+        license=licence(license_name, "nc" in license_name.lower(), "Pinned upstream card; owner accepts all licenses."),
+        split="train", split_groups=[group_key(f"expansion-{ref.lower()}-task", trajectory_id),
+                                     group_key("task", task_hash(request))],
+        outcome={"label": "teacher", "checked": None},
+        tools=json.loads(row["tools"]) if isinstance(row.get("tools"), str) else row.get("tools"),
+    )
+
+
+def _expansion(ref, limit=None):
+    root = EXPANSION_ROOT / ref
+    receipt = json.loads((root / "acquisition.json").read_text())
+    def rows():
+        for path in sorted(root.rglob("*.jsonl")):
+            with path.open() as stream:
+                for i, line in enumerate(stream):
+                    if line.strip():
+                        yield f"{path.relative_to(root)}:{i}", json.loads(line)
+        for path in sorted(root.rglob("*.parquet")):
+            for i, row in _parquet_groups(path):
+                yield f"{path.relative_to(root)}:{i}", row
+    for rid, row in _limited(rows(), limit):
+        yield rid, expansion_trajectory(ref, receipt, rid, row)
+
+
+def wideseek(limit=None):
+    yield from _expansion("D01", limit)
+
+
+def cooperator_dual_policy(limit=None):
+    yield from _expansion("D08", limit)
+
+
+CORPORA.update({"wideseek": (wideseek, 4), "cooperator-dual-policy": (cooperator_dual_policy, 4)})
