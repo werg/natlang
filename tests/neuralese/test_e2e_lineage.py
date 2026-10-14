@@ -33,6 +33,12 @@ def launch_recipe(tmp_path, line='mellum', **extra):
     return path
 
 
+def task_counts(cases, successes=0):
+    from natlang_neuralese.eval.task_packet import TASK_OUTCOMES
+    return {key: successes if key == 'task_success' else cases - successes
+            if key == 'semantic_mismatch' else 0 for key in TASK_OUTCOMES}
+
+
 @pytest.mark.parametrize('line', ['mellum', 'lfm'])
 def test_a_launch_recipe_binding_an_export_validates(tmp_path, line):
     recipe = load_recipe(launch_recipe(tmp_path, line))
@@ -62,7 +68,7 @@ def test_acceptance_compares_values_with_tokens_and_keeps_missing_evidence_pendi
             'shuffled': 1.2, 'zeroed': 1.3, 'n': 40, 'crisp_token_matched': 1.1,
             'v_minus_t_token_matched': -0.1, 'n_token_matched': 40, 'token_trace_errors': [],
             'token_reference': 'emitted-token-embeddings-on-identical-producer-states-and-lengths'}
-    arm = {'eligible': True, 'complete': True, 'packet_sha256': 'a' * 64, 'case_indices': [0, 3], 'cases': 2}
+    arm = {'eligible': True, 'complete': True, 'packet_sha256': 'a' * 64, 'case_indices': [0, 3], 'cases': 2, 'outcome_counts': task_counts(2, 1)}
     summary = {'written-trained': held, 'drift_guard': {'stopped': False},
                'task_eval-init': {**arm, 'task_successes': 1, 'task_success_rate': 0.5},
                'task_eval': {**arm, 'task_successes': 1, 'task_success_rate': 0.5,
@@ -72,7 +78,7 @@ def test_acceptance_compares_values_with_tokens_and_keeps_missing_evidence_pendi
         'paired_readers': 'pass', 'v_minus_t_ce': 'pass', 'v_margin_over_shuffled': 'pass',
         'v_margin_over_zeroed': 'pass', 'task_success': 'pending', 'task_success_vs_parent': 'pass',
         'no_drift_stop': 'pass'}
-    summary['task_eval'] = {**summary['task_eval'], 'task_successes': 0, 'task_success_rate': 0.0,
+    summary['task_eval'] = {**summary['task_eval'], 'task_successes': 0, 'task_success_rate': 0.0, 'outcome_counts': task_counts(2),
                             'case_successes': {'0': False, '3': False}}
     summary['task_eval_neuralese'] = {**arm, 'fused_cases': [0], 'fused_case_successes': {'0': True}}
     assert criteria['v_minus_t_ce']['t_gold'] == 0.9  # gold T is reported, not the bar (owner 2026-10-13)
@@ -89,11 +95,11 @@ def test_acceptance_compares_values_with_tokens_and_keeps_missing_evidence_pendi
     assert criteria['v_minus_t_ce']['status'] == 'pending'  # independent generation cannot certify a matched trace
 
 
-@pytest.mark.parametrize('missing', ['eligible', 'complete', 'packet_sha256', 'case_indices', 'cases',
+@pytest.mark.parametrize('missing', ['eligible', 'complete', 'packet_sha256', 'case_indices', 'cases', 'outcome_counts',
                                     'fused_case_successes'])
 def test_fused_task_success_never_treats_incomplete_evidence_as_zero(missing):
     declaration = json.loads((RECIPES / 'neuralese-e2e-v1.json').read_text())['e2e_acceptance']
-    common = {'eligible': True, 'complete': True, 'packet_sha256': 'a' * 64, 'case_indices': [0], 'cases': 1}
+    common = {'eligible': True, 'complete': True, 'packet_sha256': 'a' * 64, 'case_indices': [0], 'cases': 1, 'outcome_counts': task_counts(1)}
     text = {**common, 'case_successes': {'0': False}}
     value = {**common, 'fused_cases': [0], 'fused_case_successes': {'0': False}}
     value.pop(missing)
@@ -104,7 +110,7 @@ def test_fused_task_success_never_treats_incomplete_evidence_as_zero(missing):
 @pytest.mark.parametrize('outcomes', [{}, {'0': None}, {'0': 'false'}])
 def test_fused_task_success_requires_boolean_outcomes_in_both_arms(outcomes):
     declaration = json.loads((RECIPES / 'neuralese-e2e-v1.json').read_text())['e2e_acceptance']
-    common = {'eligible': True, 'complete': True, 'packet_sha256': 'a' * 64, 'case_indices': [0], 'cases': 1}
+    common = {'eligible': True, 'complete': True, 'packet_sha256': 'a' * 64, 'case_indices': [0], 'cases': 1, 'outcome_counts': task_counts(1)}
     for broken in ('text', 'value'):
         text = {**common, 'case_successes': outcomes if broken == 'text' else {'0': False}}
         value = {**common, 'fused_cases': [0],
@@ -113,11 +119,11 @@ def test_fused_task_success_requires_boolean_outcomes_in_both_arms(outcomes):
         assert criteria['task_success']['status'] == 'pending'
 
 
-@pytest.mark.parametrize('change', [{'packet_sha256': 'b' * 64}, {'eligible': False}, {'complete': False},
+@pytest.mark.parametrize('change', [{'packet_sha256': 'b' * 64}, {'eligible': False}, {'outcome_counts': {}},
                                    {'fused_cases': [0, 0]}, {'fused_cases': [9]}])
 def test_fused_task_success_requires_the_same_completed_packet(change):
     declaration = json.loads((RECIPES / 'neuralese-e2e-v1.json').read_text())['e2e_acceptance']
-    common = {'eligible': True, 'complete': True, 'packet_sha256': 'a' * 64, 'case_indices': [0], 'cases': 1}
+    common = {'eligible': True, 'complete': True, 'packet_sha256': 'a' * 64, 'case_indices': [0], 'cases': 1, 'outcome_counts': task_counts(1)}
     text = {**common, 'case_successes': {'0': False}}
     value = {**common, 'fused_cases': [0], 'fused_case_successes': {'0': False}, **change}
     criteria, _ = e2e_acceptance.evaluate(declaration, {'task_eval': text, 'task_eval_neuralese': value})
@@ -125,11 +131,11 @@ def test_fused_task_success_requires_the_same_completed_packet(change):
 
 
 @pytest.mark.parametrize('change', [{'packet_sha256': 'b' * 64}, {'task_success_rate': None},
-                                   {'task_success_rate': float('nan')}, {'complete': False}])
+                                   {'task_success_rate': float('nan')}, {'outcome_counts': {}}])
 def test_parent_task_comparison_keeps_unknown_or_mismatched_results_pending(change):
     declaration = json.loads((RECIPES / 'neuralese-e2e-v1.json').read_text())['e2e_acceptance']
     arm = {'eligible': True, 'complete': True, 'packet_sha256': 'a' * 64,
-           'case_indices': [0], 'cases': 1, 'task_success_rate': 0.0}
+           'case_indices': [0], 'cases': 1, 'task_success_rate': 0.0, 'outcome_counts': task_counts(1)}
     criteria, _ = e2e_acceptance.evaluate(declaration, {'task_eval': arm, 'task_eval-init': {**arm, **change}})
     assert criteria['task_success_vs_parent']['status'] == 'pending'
 
@@ -173,3 +179,26 @@ def test_the_manifold_gate_checks_the_aligned_projection_of_the_exact_export(tmp
     (tmp_path / 'c').mkdir()
     with pytest.raises(ValueError, match='aligned_projection'):
         load_recipe(launch_recipe(tmp_path / 'c', stages={'e2e': {'inputs': {'aligned_projection': {'$delete': True}}}}))
+
+
+def test_scored_repetition_failures_are_comparable_without_all_exported_results():
+    declaration = json.loads((RECIPES / 'neuralese-e2e-v1.json').read_text())['e2e_acceptance']
+    counts = task_counts(16)
+    counts.update(semantic_mismatch=5, repetition=9, invalid_action=2)
+    # Exact shape of the real terminal full-prompt arm: all cases classified,
+    # no infrastructure/unresolved outcome, but repetitions export no result row.
+    arm = {'eligible': True, 'complete': False, 'packet_sha256': 'a' * 64,
+           'case_indices': list(range(16)), 'cases': 16, 'outcome_counts': counts,
+           'task_successes': 0, 'task_success_rate': 0.0}
+    text = {**arm, 'case_successes': {'0': False}}
+    value = {**arm, 'fused_cases': [0], 'fused_case_successes': {'0': False}}
+    criteria, _ = e2e_acceptance.evaluate(declaration, {
+        'task_eval': text, 'task_eval_neuralese': value, 'task_eval-init': arm})
+    assert criteria['task_success']['status'] == 'pass'
+    assert criteria['task_success_vs_parent']['status'] == 'pass'
+    for invalid in [{**counts, 'unresolved': 1}, {**counts, 'repetition': 8},
+                    {**counts, 'repetition': True}, {**counts, 'semantic_mismatch': -1},
+                    {**counts, 'infrastructure_error': 1}, {**counts, 'extra': 0}]:
+        criteria, _ = e2e_acceptance.evaluate(declaration, {
+            'task_eval': text, 'task_eval_neuralese': {**value, 'outcome_counts': invalid}})
+        assert criteria['task_success']['status'] == 'pending'

@@ -175,6 +175,22 @@ def score_rows(source_rows: list[dict[str, Any]], result_rows: list[dict[str, An
     }
 
 
+def accounted(score: dict) -> bool:
+    """Every selected case has a known outcome; only infrastructure/unresolved
+    outcomes make scoring ineligible. Result-export completeness is separate.
+    """
+    if not isinstance(score, dict):
+        return False
+    counts = score.get('outcome_counts')
+    expected = score.get('cases_expected', score.get('cases'))
+    return (type(expected) is int and expected > 0
+            and isinstance(counts, dict)
+            and {'task_success', 'infrastructure_error', 'unresolved'} <= set(counts) <= set(TASK_OUTCOMES)
+            and all(type(value) is int and value >= 0 for value in counts.values())
+            and counts['infrastructure_error'] == 0 and counts['unresolved'] == 0
+            and sum(counts.values()) == expected)
+
+
 def retain_best_checkpoint(checkpoint: str | Path, evaluation: dict[str, Any],
                            evaluation_sha256: str, destination: str | Path) -> dict[str, Any]:
     """Publish the highest task-success count among complete, comparable evaluations."""

@@ -64,6 +64,8 @@ import threading
 import time
 from pathlib import Path
 
+from .task_packet import accounted
+
 DEFAULT_CASES = tuple(range(0, 48, 3))
 SCHEMA = 'natlang.in-run-task-eval/1'
 
@@ -628,15 +630,6 @@ def run_request(request_dir: Path, *, engine_factory=restore_engine) -> dict:
             evaluator.engine = None
     drop_request(request_dir)  # storage rules: the snapshot goes once its row landed
     return summary
-
-
-def accounted(score: dict) -> bool:
-    """Every task has an exact terminal outcome from the collector: a result row or explicit budget exhaustion (a
-    task that ran out of its wall or request budget is a model outcome, and the queue runner exits non-zero for it).
-    Infrastructure errors and unresolved tasks make the evaluation ineligible."""
-    counts = score['outcome_counts']
-    return (counts['infrastructure_error'] == 0 and counts['unresolved'] == 0 and
-            sum(counts.values()) == score['cases_expected'])
 
 
 def task_gate(summary: dict | None, spec: dict | None) -> dict | None:
