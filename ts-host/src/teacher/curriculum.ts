@@ -349,7 +349,7 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
 
 // ---- Build-time verification -----------------------------------------------------------------
 
-const REFERENCE_OPTIONS = { contextTokens: 16384, maxTurns: 60, rootSeed: 0 };
+const REFERENCE_OPTIONS = { contextTokens: 16384, maxTurns: 60, rootSeed: 0, sourceReferenceOnly: true };
 const REFERENCE_LABEL = 'curriculum-reference';
 
 /**
