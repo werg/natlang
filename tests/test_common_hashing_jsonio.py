@@ -97,6 +97,27 @@ def test_zstd_complete_read_rejects_truncation_after_a_valid_row(tmp_path):
             stream.read()
 
 
+def test_zstd_registry_file_symlink_reads_target_and_rejects_corruption(tmp_path):
+    from natlang_neuralese.common.jsonio import open_jsonl_text, read_jsonl
+    target = tmp_path / 'physical-data'
+    data = subprocess.run(['zstd', '-q', '-c', '--check'], input=b'{"a":1}\r\n',
+                          capture_output=True, check=True).stdout
+    target.write_bytes(data)
+    registered = tmp_path / 'registered.jsonl.zst'
+    registered.symlink_to(target.name)
+    with open_jsonl_text(registered) as stream:
+        assert stream.read().encode() == b'{"a":1}\r\n'
+    assert read_jsonl(registered) == [{'a': 1}]
+    target.write_bytes(data[:-2])
+    with pytest.raises(RuntimeError, match='zstd failed'):
+        read_jsonl(registered)
+    target.unlink()
+    with pytest.raises(FileNotFoundError, match='registered.jsonl.zst'):
+        read_jsonl(registered)
+    with pytest.raises(FileNotFoundError, match='missing.jsonl.zst'):
+        read_jsonl(tmp_path / 'missing.jsonl.zst')
+
+
 def test_zstd_partial_reader_closes_without_masking_consumer_errors(tmp_path):
     from natlang_neuralese.common.jsonio import open_jsonl_text
     path = tmp_path / 'large.jsonl.zst'
