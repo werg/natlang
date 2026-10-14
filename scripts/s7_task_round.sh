@@ -11,6 +11,10 @@ set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 R=$1; N=${2:-1}
 SNAP=${SNAP:-$HOME/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f}
+if [ -z "${TRAINING_CHECKPOINT:-}" ] && [ -z "${DIRECT:-}" ] && [ ! -f "$SNAP/model.safetensors" ]; then
+  echo "Base snapshot is incomplete at $SNAP; set SNAP to a complete pinned snapshot." >&2
+  exit 1
+fi
 PY=${NEURALESE_PYTHON:-$ROOT/.venv-neuralese/bin/python}
 if [ ! -x "$PY" ]; then PY=python3; fi
 export PYTHONPATH=$ROOT/training/neuralese HF_HUB_OFFLINE=1
