@@ -212,3 +212,32 @@ def test_real_cohort_write_join_retains_the_shared_extractor_value_path(tmp_path
     (tmp_path / 'edges.jsonl').write_text(json.dumps({'writer_record_id': 'r', 'write_name': 'fact'}) + '\n')
     assert spans_module.cohort_writes(tmp_path) == {'r': [('fact', 'same', True, {
         'tool': 'return_result', 'value_path': ['value', 'facts'], 'source_kind': 'json-write-marker'})]}
+
+
+def test_inline_code_span_uses_attested_location_through_native_and_json_escaping():
+    import json
+    code = '// repeated: package\'s café\nconst judgment = nl<boolean>`Check package\'s café`(input);'
+    body = "Check package's café"
+    start = code.index(body)
+    site = {'tool': 'eval', 'value_path': ['code'], 'source_kind': 'inline-code-sidecar',
+            'code': code, 'source_span': [start, start + len(body)]}
+    single = code.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '\\n')
+    targets = ["eval(code='" + single + "', finish=True)",
+               '<tool_call>' + json.dumps({'name': 'eval', 'arguments': {'code': code}}, ensure_ascii=False) + '</tool_call>']
+    for target in targets:
+        spans, missing = spans_module.spans_for_row(row('', target), [('instruction', body, True, site)], CharTokenizer())
+        assert missing == 0 and len(spans) == 1
+        begin, end = spans[0][:2]
+        assert target[begin:end].startswith('Check package') and target[begin:end].endswith('café')
+    invalid = {**site, 'code': code + ' changed'}
+    assert spans_module.spans_for_row(row('', targets[0]), [('instruction', body, True, invalid)], CharTokenizer()) == ([], 1)
+
+
+def test_json_escaped_surrogate_pair_has_one_decoded_character_offset():
+    import json
+    value = 'x😀\ny'
+    rendered = json.dumps(value, ensure_ascii=True)
+    bounds = spans_module.quoted_content_offsets(rendered, value)
+    assert len(bounds) == len(value)
+    assert rendered[bounds[1][0]:bounds[1][1]] == '\\ud83d\\ude00'
+    assert rendered[bounds[2][0]:bounds[2][1]] == '\\n'
