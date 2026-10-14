@@ -112,7 +112,10 @@ def validate(job: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(scratch, dict) or not str(scratch.get('path', '')).startswith('/'):
         raise JobError('scratch: {"path": absolute mount path, "size": e.g. "600Gi"}')
     memory_gib(scratch.get('size', '200Gi'))
-    job['scratch'] = {'path': scratch['path'], 'size': scratch.get('size', '200Gi')}
+    storage = scratch.get('storage', 'volume')
+    if storage not in ('volume', 'root'):
+        raise JobError('scratch.storage is "volume" or "root" (ephemeral root filesystem, no reserved size)')
+    job['scratch'] = {'path': scratch['path'], 'size': scratch.get('size', '200Gi'), 'storage': storage}
     job['env'] = env
     job.setdefault('transport', 'bucket' if bucket else 'api')
     if job['transport'] not in ('bucket', 'api') or (job['transport'] == 'bucket' and not bucket):
@@ -176,12 +179,13 @@ def sandbox_request(job: dict[str, Any], bootstrap: str) -> dict[str, Any]:
         # Mapping form {path: content}: the docs show [{"path", "content"}] but cwsandbox 1.19.0 reads list entries as
         # {"mount_path", "file_content"}; the mapping form is the one both accept unambiguously.
         'mounted_files': {BOOTSTRAP_PATH: bootstrap},
-        'volumes': [{'name': 'work', 'mount_path': job['scratch']['path'], 'size': job['scratch']['size']}],
         'environment_variables': bootstrap_env(job),
         # Measured 2026-10-12 under W&B auth: the default (auto, which prefers a direct mTLS data plane) fails every
         # exec/log/file call with "Connect to sandbox data plane failed: project not found"; the gateway works.
         'data_plane_mode': job.get('data_plane_mode', 'gateway'),
     }
+    if job['scratch']['storage'] == 'volume':
+        request['volumes'] = [{'name': 'work', 'mount_path': job['scratch']['path'], 'size': job['scratch']['size']}]
     if job.get('bucket'):
         request['object_storage_access'] = {'buckets': [job['bucket']], 'permission': 'read_write'}
     if job.get('runner_ids'):

@@ -73,6 +73,19 @@ def test_cost_estimate_is_request_based_and_gpu_rate_unknown_by_default():
     assert priced['max_total'] == round((8 * 0.128 + 32 * 0.0212 + 2.5) * 2, 2)
 
 
+def test_root_work_path_omits_vendor_volume_without_changing_bootstrap_or_outputs():
+    declaration = base_job(scratch={'path': '/work', 'size': '50Gi', 'storage': 'root'}, outputs=['runs/x'])
+    request = job.sandbox_request(declaration, 'echo boot')
+    assert 'volumes' not in request
+    assert request['mounted_files'] == {job.BOOTSTRAP_PATH: 'echo boot'}
+    assert request['environment_variables']['NATLANG_CW_WORK'] == '/work'
+    assert request['environment_variables']['NATLANG_CW_OUTPUTS'] == 'runs/x'
+    legacy = job.sandbox_request(base_job(), 'echo boot')
+    assert legacy['volumes'] == [{'name': 'work', 'mount_path': '/work', 'size': '200Gi'}]
+    with pytest.raises(job.JobError, match='scratch.storage'):
+        job.validate(base_job(scratch={'path': '/work', 'size': '50Gi', 'storage': 'persistent'}))
+
+
 class FakeS3:
     def __init__(self):
         self.objects = {}
