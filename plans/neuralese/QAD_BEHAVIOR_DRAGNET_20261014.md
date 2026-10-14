@@ -63,11 +63,16 @@ different mechanisms. Inspect action traces before interpreting outcome counts.
   slots with no model result, and no DPO or training admission. The corrected
   run's journal SHA and source-hold receipt are under
   `round2-trained-program-header20-matched-seeds/diagnostic-closeout.json`.
-- **Open:** run the current-main full gate with the pinned training-image
-  interpreter; the first Pop attempt lacked a host Python 3.11+ torch stack.
-  The image-backed run is queued under the ledger.
-- **Open:** qualify a fresh clean-QAD-base lineage on the corrected shared
-  code and filtered R7 union. Compare held response CE/KL, repetition, exact
+- **Done:** the image-backed full gate passed end to end at `be4d58c9`:
+  Python general 962 pass, Neuralese 1290 pass, GPU 14 pass, TS and
+  conformance green. Host/image isolation fixes are on main.
+- **In progress:** a fresh clean-QAD-base direct lineage on corrected shared
+  code and admitted, SHA-verified filtered R7 union started under Pop ledger
+  unit `natlang-pop-qad-r7-clean-main-v2` on 2026-10-14. Its first container
+  attempt lacked `zstd`, stopped before any optimizer update, and its
+  incomplete output was deleted. The corrected launch mounts verified host
+  `zstd` and pins the actual installed image in recipe commit `b4b5e06e`.
+  Compare held response CE/KL, repetition, exact
   task behavior, and the mask/gradient receipts stage by stage. Do not restore
   optimizer or weights from the old step-15000 checkpoint.
 
