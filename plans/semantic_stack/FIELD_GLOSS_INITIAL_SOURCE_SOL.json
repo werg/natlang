@@ -4,19 +4,19 @@
   "author": "semantic_slate_sol",
   "quality": {
     "nl_files": 34,
-    "nl_lines": 520,
+    "nl_lines": 524,
     "numbered_steps": 239,
     "type_aliases": 55,
     "visible_executable_crisp_policy": 0
   },
   "hashes": {
-    "applications/field-gloss-workbench/DECOMPOSITION.md": "ac49b7092910011131ac8be4748b7af99897bbd40159aea20afc60d05889da20",
+    "applications/field-gloss-workbench/DECOMPOSITION.md": "a3951f3efbf62554afebf57d9fa466233a3db7ec260029919f8f030de4665144",
     "applications/field-gloss-workbench/analyzeCorpus/auditReport/challengePatch.nl": "de5280a2c0f0153867e10159d57cd0650af2078d380b565127a461365b313de0",
     "applications/field-gloss-workbench/analyzeCorpus/auditReport/challengeReading.nl": "a76f6c9ef198fdf55c6ce92393ffd9491a08c6b6966cff7926791f608b15efc2",
     "applications/field-gloss-workbench/analyzeCorpus/auditReport.nl": "b308de76c603439d0af7722f0652261867b7f031639ccdfde534390646b8d746",
     "applications/field-gloss-workbench/analyzeCorpus/buildEvidence/alignElicitation/judgeResponseScope.nl": "e838cdbc1335b7356a03c5ada7876092f2233840f1bcacefa5ca835f6f51ac7d",
     "applications/field-gloss-workbench/analyzeCorpus/buildEvidence/alignElicitation.nl": "bfc303fbff6e20abb2ba910cf87b583b10053b00a640a5386c697ec84b9d5a01",
-    "applications/field-gloss-workbench/analyzeCorpus/buildEvidence/resolveNoteVersion.nl": "6afb03884e5faf74c0e60fa90ba21a637ddbc88e73592a760c336d693e6d44a3",
+    "applications/field-gloss-workbench/analyzeCorpus/buildEvidence/resolveNoteVersion.nl": "09302b9bb7fe0ecb8c423204572c3ae21cd3ce64d5a1ac38e26d0a5a3c98a3f4",
     "applications/field-gloss-workbench/analyzeCorpus/buildEvidence.nl": "b65d7ca09001e509b09203ac69f3429c14045db8cdba98a4055e9971112a5f7c",
     "applications/field-gloss-workbench/analyzeCorpus/inferGrammar/advanceHypothesis/compareJudgment/judgeCompatibility.nl": "1173224ca2ebae4f5f24c0c65eca8f31bcbdc52f075dbe5d6573c3983e92cfb5",
     "applications/field-gloss-workbench/analyzeCorpus/inferGrammar/advanceHypothesis/compareJudgment.nl": "5a43564379aca37419dc77e4e3593bb7243b5c3c31457f9dffd8e0873852c839",
@@ -26,26 +26,26 @@
     "applications/field-gloss-workbench/analyzeCorpus/inferGrammar.nl": "847b88c795485961ff5bffa6636295e4074b17f3a4cd777f85cd11163c831e38",
     "applications/field-gloss-workbench/analyzeCorpus/intake/inventoryCorpus/advanceClause.nl": "04db156d15ddb6d94cd09fc2fd1262b4b10074e9494d81a0288ad93b8c46fcee",
     "applications/field-gloss-workbench/analyzeCorpus/intake/inventoryCorpus.nl": "1821b319b4b8928f6602eb8677bd5f2358f41493a25799f5d951c45659426567",
-    "applications/field-gloss-workbench/analyzeCorpus/intake/readCorrections/judgeCorrectionScope.nl": "cc36cb5952c65755f66e8586a81e1df9b0543d57fadff54845265a961366fd5b",
-    "applications/field-gloss-workbench/analyzeCorpus/intake/readCorrections.nl": "9832207a987a1d7f8f79a89bf5f926dc751dd04aab28a50e2cf486e088aeeea0",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readCorrections/judgeCorrectionScope.nl": "201e3c006b542c24be87ec68698a7fdc099d46ae4b37b5ba4043b5b4dff7acbd",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readCorrections.nl": "08a5775a3aa6cf9a89d48aa22b846228772f57c6d14a15b85dd76e40d6e42e7f",
     "applications/field-gloss-workbench/analyzeCorpus/intake/readSessions/readSituation.nl": "2ff8e76a13639bd3f299ba7f9f925f5b14c4ba1fcc2379d51a179f3fa728fc26",
     "applications/field-gloss-workbench/analyzeCorpus/intake/readSessions.nl": "dda13fa93e90b5305bcd8be84c98526dcfee134a666cf12756100961ea0a06be",
-    "applications/field-gloss-workbench/analyzeCorpus/intake/readUtterances/interpretNote.nl": "bdcb1bd02ef4747e6ed6318dd4b4dc1e15202bcac18737795557f57a3c442734",
-    "applications/field-gloss-workbench/analyzeCorpus/intake/readUtterances.nl": "9ab8938efae0e63c190f275a04f520fe5fa5c538e9654f7cc1a232ee3f31b417",
-    "applications/field-gloss-workbench/analyzeCorpus/intake.nl": "d2340e4f270d3ddd30c99d0c48332fb4d51ad85fa05d36ef878b5b7df2097fe2",
-    "applications/field-gloss-workbench/analyzeCorpus/interpretRoles/judgeDiscourseRole.nl": "16558d8bce5731a17224c22357b0a8a6e698631f1606cfdaebcdd0a96b0afcaa",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readUtterances/interpretNote.nl": "a34231dff24d3cc2c785c4ed2dced0040a6cc5c03bba0f2837837b53da22f460",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readUtterances.nl": "78cff5724d86e1253773a92926fdbf39ce66f5c396ccc1fc216ab484136fc008",
+    "applications/field-gloss-workbench/analyzeCorpus/intake.nl": "f51b68339e7ad399eb92441449eb3d852c0ee9260f8d36110555264fd8cfd262",
+    "applications/field-gloss-workbench/analyzeCorpus/interpretRoles/judgeDiscourseRole.nl": "25d754553f26c47e1ec25e8e680e4a4dad1cd97ef9201e8afe3901b919959741",
     "applications/field-gloss-workbench/analyzeCorpus/interpretRoles.nl": "e3f0bc011bd0866c6acab6bec960b2201a6cf310f1e04567d782f3bc9fcb2fec",
     "applications/field-gloss-workbench/analyzeCorpus/interpretSegmentation/judgeBoundary.nl": "5df4e2c2ef5dae81adbf0cc53d817c74fb38f632e409f450e3843f3512926129",
     "applications/field-gloss-workbench/analyzeCorpus/interpretSegmentation.nl": "90d34184d1c1186a068c441b76542c992dc28faab7a43aacf5b40f3700312cfd",
     "applications/field-gloss-workbench/analyzeCorpus/repairGlossNotes/judgePatch.nl": "9c568bef583f8ad1df82c8d3dcf1aca91ce1b61882f8449ca8f5fa0b95ac7c59",
     "applications/field-gloss-workbench/analyzeCorpus/repairGlossNotes.nl": "71016f2f93c66d8f937d6d5de15c9b74ef335c1a5b52ac1cdf3491eeb1aaa5f5",
     "applications/field-gloss-workbench/analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase/judgeContext.nl": "42890d955c90d1adc2afb920f3fe2be11beed35748b55f10baa0531ce7ac423c",
-    "applications/field-gloss-workbench/analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase.nl": "b09b952da1ce4129d12d85330b25085da01c8962e1aa0f6cc8dbb788ea0084f0",
+    "applications/field-gloss-workbench/analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase.nl": "8875314c769e5113c22eefbd51329c607a4a53ed6967118ed1c2978280e19d65",
     "applications/field-gloss-workbench/analyzeCorpus/translateHeldOut/advanceTranslation.nl": "f96219ee1bd1012584e6d71479639756c9711ec5fab3ca22585b39ed79d8b0f0",
     "applications/field-gloss-workbench/analyzeCorpus/translateHeldOut/compareReadings.nl": "7adfc71aef68a608c7a2ceb25a869609a5ab4b4d29c78b73b87982e460e9b801",
     "applications/field-gloss-workbench/analyzeCorpus/translateHeldOut.nl": "f6d59332c151d959768b01893481f39cd69c4e2b7653af341b846d605cb94201",
-    "applications/field-gloss-workbench/analyzeCorpus.d.nl.ts": "ab52b8aea68ffc953715d9d5f350e4497cc4ce18dcea510a32daa5443ff683ab",
-    "applications/field-gloss-workbench/analyzeCorpus.nl": "51f4d00a80bf8ccef10d23e0f7fb93c74fead913dabcd1a56c1314e4c222a47e",
+    "applications/field-gloss-workbench/analyzeCorpus.d.nl.ts": "45fcdf54375c8c7284e0001ab5d93ce87cfc4a922f284cc6d3e020ded9301969",
+    "applications/field-gloss-workbench/analyzeCorpus.nl": "d3f3152431935dbff0e1c6dc247cec4281836e777682e4600817f880e83070d2",
     "applications/field-gloss-workbench/natlang.json": "e3d17a7b17d61bc0d34b1d14015084e68181cf33237a86a8ec6e7d39c7411599",
     "applications/field-gloss-workbench/tsconfig.json": "0fb1f74481675487fd0b816035b1b4560497dbf0de5a60de1b509b2b09c58cf7",
     "applications/field-gloss-workbench/types.ts": "b80679d99ad36094f7156962081e63dc2e93f3701e585adb891c066b9e546818"
@@ -61,7 +61,6 @@
     "TranslationFrontier: one original target, all actual survivor readings retained and immediate finished next"
   ],
   "remaining_gates": [
-    "Concrete connected visible corpus world",
     "Independent finite landscape reconstruction and full typed witness",
     "Exact checker/equivalent and adversarial controls",
     "Independent source/oracle/checker peer review",
@@ -73,5 +72,15 @@
   "closed_author_precision_findings": [
     "Scope-only original role inventory cannot replace later linguistic judgments",
     "Candidate-defined conflicting role assignments are licensed=false with actual contribution rows; missing decisive meaning stays null"
-  ]
+  ],
+  "source_world_draft": {
+    "key": "sol-app-world:field-reed-court-v1",
+    "documents": 14,
+    "clauses": 67,
+    "tested_utterances": 6,
+    "heldout": 3,
+    "hypotheses": 16,
+    "source_fixture_exact": true,
+    "invariant_oracle_role": "Draft outside visible roots; no full canonical/checker/live claim"
+  }
 }

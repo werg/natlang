@@ -6,9 +6,7 @@ args:
   source: CorpusSource
   graph: EvidenceGraph
 returns: MeaningReading
-uses:
-  - analyzeCorpus/interpretSegmentation
-  - analyzeCorpus/interpretRoles
+uses: [analyzeCorpus/interpretSegmentation, analyzeCorpus/interpretRoles]
 ---
 1. Resolve this actual target utterance and original context clauses. Preserve the supplied completed survivor choices; do not use source repair text as a lexical answer.
 2. Call the existing interpretSegmentation(hypothesis, utterance, source, graph) through its declared uses edge, passing the actual returned evidence graph and retaining the actual result. Source correction/reuse context remains real; target interpretation invents no consultant verdict.

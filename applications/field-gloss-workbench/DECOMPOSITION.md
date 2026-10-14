@@ -114,3 +114,11 @@ The initial tree is author-only: visible corpus world, full typed witness, exact
 Original clause-role discovery now has its own typed one-item frontier: the actual `ClauseRoleReading` is retained in `ClauseInventoryEntry` and the actual `CorpusInventory` is retained by `CorpusSource`. Role discovery exposes original evidence scope only; candidate/stem meanings are separately returned by typed NL judgments over actual definitions. This prevents a broad inventory operation from standing in for later segmentation, role or translation policy.
 
 `DiscourseRoleJudgment` now retains actual `RoleContribution` rows and a nullable `licensed` verdict. An established conflicting two-agent assignment is false licensing, while missing role evidence is unknown. The actual role child owns that distinction under the supplied candidate/source rules, and compatibility consumes it without repairing the prediction. No crisp role classifier or fixed fixture table was added.
+
+## First source world: Reed Court
+
+The original fictional corpus now contains14documents/67clauses, three authenticated sessions, six constrained responses and three held-out targets. Its16closed candidate combinations vary productive versus frozen NA-bearing forms, discourse-versus-event role, RA case meaning and prospective negation. Patient-topic and agent-topic contrasts, stacked marking, a new stem and reordered reuse exercise different actual interpretation paths. Negative evidence deliberately excludes future expectation, so target interpretation must preserve consequential prospective alternatives rather than using a scene's silence as a denial.
+
+Correction interpretation receives a selected original primary and its actual original authority/adoption context. Actual note and correction children receive the governing rules, and effective-version resolution groups repeated support of one replacement without inventing competing versions. The source-authorized patch scope protects accepted transcription and independent uncertain gloss slots.
+
+Visible task snapshot and an external draft invariant landscape are authored. Native/type and project-tree packaging pass; full typed reference, exact comparator/control qualification, independent semantic review and actual NL execution remain pending. The project stays generation-held/live-false/training-false.
