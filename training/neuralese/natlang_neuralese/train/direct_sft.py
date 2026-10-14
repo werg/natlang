@@ -41,6 +41,7 @@ import torch
 
 from .loop import StopSignal, TrainingLoop, capture_training_rng_state, restore_training_rng_state
 from ..common.hashing import canonical_json_sha256_hex
+from ..common.jsonio import open_jsonl_text
 from ..common.profiling import UpdateProfiler, backward_phase, region as profile_region, scope as profile_scope
 from .checkpoint_policy import CheckpointPolicy
 
@@ -982,7 +983,7 @@ def stream_text_rows(text_data, tokenizer):
     cached = row_index.load(key) if key is not None else None
     if cached is not None:
         skip = cached['skip']
-        with Path(text_data).open() as source:
+        with open_jsonl_text(text_data) as source:
             for number, line in enumerate(source):
                 if number in skip:
                     continue
@@ -993,7 +994,7 @@ def stream_text_rows(text_data, tokenizer):
         return
     fingerprint, vocab_size = None, len(tokenizer)
     groups, held_texts = {'train': set(), 'test': set()}, set()
-    with Path(text_data).open() as source:
+    with open_jsonl_text(text_data) as source:
         for line in source:
             row = json.loads(line)
             if (row.get('split') not in ('train', 'test') or not isinstance(row.get('text'), str)
@@ -1021,7 +1022,7 @@ def stream_text_rows(text_data, tokenizer):
         raise ValueError('text warm-up factual source groups cross train/test')
     seen = {}
     skip = set()
-    with Path(text_data).open() as source:
+    with open_jsonl_text(text_data) as source:
         for number, line in enumerate(source):
             row = json.loads(line)
             text = hashlib.sha256(row['text'].encode()).digest()

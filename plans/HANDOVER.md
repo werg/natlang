@@ -1,5 +1,67 @@
 # Continuation guide — updated 2026-10-14
 
+## 10:05 CEST: Pop GPU evaluation, source handoff and storage
+
+The 09:12 section below is historical: its clean full TS gate finished green
+(builds, layering, TS tests and 22/22 conformance). The deterministic Flash
+trainer fix, FP8 audit and gate results were published to `origin/main` at
+`9b59911d`; Pop subsequently pulled the DGX mixed-corpus and ledger changes,
+then published semantic source/review commits through `cd221494`. Current Pop
+checkout has fast-forwarded to DGX `a892860a`. Ecology v18b source-only full
+replay rendered 220 cases, with 23 candidates and zero reference failures;
+its one-case Luna live diagnostic is still running and held. Field Gloss has
+independently reviewed source, but no typed certificate, checker or live
+qualification. Neither source has training admission.
+
+The Pop GPU is now running the QAD step-15000 **full-prompt, temperature-0.6,
+48-case matched evaluation** as ledger unit
+`natlang-pop-qad-matched48-w1-trained15000-20261014.service`. At 10:04 CEST,
+9/48 cases had finished: three complete trajectories all missed the exact
+answer, four repeated, and two exhausted the request budget. The GPU used
+7.6/8.2 GiB with no CUDA OOM in this single-worker arm. Earlier four- and
+two-worker trained attempts OOMed, so their partial scores must not be used;
+the two-worker clean-base arm returned 1/48 but is not yet an exact operational
+match. Run the base arm at one worker and the same per-case seeds after the
+trained arm finishes. Its script is `/tmp/natlang-pop-qad-matched48-w1-20261014.py`;
+output root is
+`/srv/storage/natlang-artifacts/qad-base-vs-15000-matched48-w1-20261014-v1`.
+Trace review so far shows heterogeneous loops: repeated `read_code(nl)`,
+attempts to add a sixth ad hoc NL layer despite the depth-five error, and
+repeated JS binding mistakes. Keep held eval cases out of training; use these
+failure families to select disjoint train tasks for teacher recovery. DGX's
+repetition request has an interim reply and remains open until the full census.
+
+Luna held-shape queues, retry and Gemini batch30 are active; their replenish
+timers are enabled. Pop listed and removed only two discarded cold FP8
+diagnostic run directories using
+`/tmp/prune_pop_discarded_fp8_20261014.py`; four unique checkpoint payloads
+accounted for about 4.4 GiB reclaimed (root free 20→24 GiB). Committed
+FP8 recipes/receipts remain. `/srv/storage` still has only 7.3 GiB free, so
+continue retention review without deleting unadmitted source data or protected
+held evaluations. DGX was briefed through coordination message
+`2026-10-14T08:04:50.847526Z-pop-c5c2`.
+
+The later v11 source dependency audit is complete: all six major v11 data
+outputs were rehashed against the
+identical SHA-256 inputs recorded by the completed v13 recipe from v12; no
+active registry, symlink or process pointed to v11. The exact 52-file deletion
+list and hash checks are in `/tmp/prune_pop_data_lineage_v11_20261014.py` and
+its `.list`/`.applied` receipts. The superseded `run-v11` directory was
+deleted, reclaiming 20,771,869,649 logical bytes (root free 24→43 GiB).
+The current v13 prepared corpus and its `native-sft-v13-r2` symlink remain
+present and readable. This supersedes the older v11 warning below.
+
+At 10:17 CEST the Pop Luna timer exposed a masked s52046 backlog:
+`worker-04` case016 had advanced to 245 durable turns, but its 0.9-GiB
+collector cgroup was OOM-killed repeatedly. The replenisher counted only
+terminal cases, mislabeled the four relaunches as no progress, and held later
+campaigns. `scripts/replenish_luna_held_shapes.py` now counts saved turns as
+durable progress and grants a 2.0-GiB ledger budget when resuming a partial
+of at least 8 MB. Focused tests and quick gate passed; the full main gate
+remains to run after the ongoing Pop GPU evaluation and semantic source edits.
+Run the replenisher once after this change to relaunch case016 and confirm
+the ledger admits it; continue monitoring its real progress and memory.
+
 ## 09:12 CEST: Pop GPU handoff, deterministic Flash and FP8 repeat
 
 The Pop GPU had an avoidable idle handoff after QAD v14's hard drift stop at
@@ -392,9 +454,9 @@ snapshot is about 50.65 GiB and remains explicitly `missing` on Pop while the
 main disk has about 24 GiB free; it is registered and retained by owner DGX.
 Do not delete the historical `run-v13-group-resplit-r2/prepared` directory
 while cleaning storage: `data/neuralese/corpora/native-sft-v13-r2` is a symlink
-to it, and its 8.45 GB `teacher.jsonl` is current corpus input. Older run-v11
-looks superseded but still needs a source/provenance dependency audit before
-deletion; a failed old recipe alone does not prove its rows are disposable.
+to it, and its 8.45 GB `teacher.jsonl` is current corpus input. The separate
+v11 intermediate was subsequently audited and deleted; see the current note
+at the top of this handover.
 
 Pop's sampled QAD step15000 held48 run completed with four task successes.
 The original scorer marked the run ineligible because an explicit

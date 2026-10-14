@@ -90,6 +90,27 @@ def active_luna_workers():
     return sum(unit.startswith('natlang-pop-luna-') and '-w' in unit for unit in units)
 
 
+def durable_progress(journals, missing, finished):
+    """Count completed jobs and the largest saved turn of an unfinished job.
+
+    A resumed collector may advance hundreds of durable turns before it can
+    emit one terminal result. Treat those turns as progress across relaunches.
+    """
+    saved_turns = max((event.get('saved_turns', 0)
+                       for journal in journals if journal.exists()
+                       for event in rows(journal)
+                       if event.get('key') in missing and event.get('event') == 'activity'), default=0)
+    return len(finished), saved_turns
+
+
+def launch_budget_gb(queue_dir):
+    """Allow a growing resumable partial enough RAM for its retained context."""
+    partials = queue_dir.glob('case-*/jobs/*.partial.json')
+    if any(path.stat().st_size >= 8_000_000 for path in partials):
+        return '2.0'
+    return '1.5' if queue_dir.name.startswith('retry-') else '0.9'
+
+
 def complete(campaign):
     manifest = json.loads((campaign / 'campaign-manifest.json').read_text())
     repair = manifest.get('repair_cycle', False)
@@ -116,15 +137,19 @@ def complete(campaign):
         if missing:
             retry_file = worker / 'relaunch-state.json'
             previous = json.loads(retry_file.read_text()) if retry_file.exists() else {}
-            failures = previous.get('failures', 0) + (len(finished) <= previous.get('finished', -1))
+            progress = durable_progress(journals, set(missing), finished)
+            old_progress = (previous.get('finished', -1), previous.get('saved_turns', -1))
+            failures = 0 if progress > old_progress else previous.get('failures', 0) + 1
             if failures >= 4:
                 print(json.dumps({'event': 'needs_review', 'unit': unit,
-                                  'reason': 'four_no_progress_relaunches', 'missing': len(missing)}), flush=True)
+                                  'reason': 'four_no_progress_relaunches', 'missing': len(missing),
+                                  'durable_progress': progress}), flush=True)
                 return False
             subprocess.run(['systemctl', '--user', 'reset-failed', unit], check=False)
             if not launch_worker(campaign, manifest['seed'], number, repair=repair):
                 return False  # memory pressure is a deferred launch, not a no-progress attempt
-            retry_file.write_text(json.dumps({'failures': failures, 'finished': len(finished)}) + '\n')
+            retry_file.write_text(json.dumps({'failures': failures, 'finished': progress[0],
+                                               'saved_turns': progress[1]}) + '\n')
             pending = True
             continue
         for job in queue:
@@ -163,7 +188,7 @@ def launch_queue(queue_dir, unit):
                '--execution-plans', '--reasoning-effort', 'low', '--min-free-mib', '1024']
     # A retry may process a much larger partially completed program than its
     # original one-case queue. Give its collector enough cgroup RAM to resume.
-    budget = '1.5' if queue_dir.name.startswith('retry-') else '0.9'
+    budget = launch_budget_gb(queue_dir)
     run = subprocess.run(['python3', 'scripts/memory_ledger.py', 'run', '--unit', unit,
                           '--budget-gb', budget, '--reserve-gb', '0.2', '--class', 'collection',
                           '--priority', 'low', '--workdir', str(ROOT), '--', *command],

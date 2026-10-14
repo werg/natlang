@@ -46,21 +46,10 @@ SCHEMA = 'natlang.native-text-union/2'
 
 
 def rows(path: Path):
-    """Rows of a text file; ``.zst`` files (compressed full renders of the static campaign) stream through zstd."""
-    if str(path).endswith('.zst'):
-        import subprocess
-        proc = subprocess.Popen(['zstd', '-dcq', '--long=27', str(path)], stdout=subprocess.PIPE, text=True)
-        try:
-            for line in proc.stdout:
-                if line.strip():
-                    yield line, json.loads(line)
-        finally:
-            proc.stdout.close()
-            if proc.wait() not in (0, None):
-                raise RuntimeError(f'zstd failed on {path}')
-        return
-    with open(path) as f:
-        for line in f:
+    """Exact literal-LF rows, plain or compressed through the shared text opener."""
+    from natlang_neuralese.common.jsonio import open_jsonl_text
+    with open_jsonl_text(path) as stream:
+        for line in stream:
             if line.strip():
                 yield line, json.loads(line)
 
