@@ -12,3 +12,5 @@ permission/state invariants; it is not a full typed reference or execution traje
 Source parser/type/loader packaging passes. Full typed canonical generated-program witness and exact7positive/25negative checker controls pass.
 Independent source and canonical/checker reviews pass; real live execution remains pending.
 Generation readiness and training admission are false. See DECOMPOSITION.md for stage ownership.
+
+Connected closure variant:30NL modules and47aliases. A nested NL file frontier returns actual generated callee/type/runtime-read closure consumed by emitted interpretation. Independent source/control review passes,13connected exact controls pass; fresh live diagnostic remains unqualified. The28-module reviewed-v1 baseline is separately frozen.

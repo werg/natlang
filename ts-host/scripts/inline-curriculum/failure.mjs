@@ -211,11 +211,74 @@ for (const p of chart) {
   for (let step = 0; step < chart.length && manager !== null; step++) { length++; manager = managerOf[manager]; }
   deepest = Math.max(deepest, length);
 }
+
 return deepest;`), returnCall(expected)] },
       root: { name: 'chart_depth', args: {}, returns: 'number',
         instructions: 'How many levels does the organisation chart in org.people() have? The top person has no manager and is level 1; each report is one level below their manager.' },
       files: { 'chart_depth/org.ts': `const PEOPLE = ${literal(nodes)};\n/** Everyone in the organisation and their manager (null for the top). */\nexport function people(): { name: string, manager: string | null }[] { return PEOPLE; }\n` },
       inputs: {}, expected, failureSeed: { kind: 'runtime', code: seedCode } });
+  });
+}
+
+/**
+ * Train-only recovery from a real compiler rejection: a result declaration uses
+ * the name of its injected service. The teacher receives the compiler's actual
+ * feedback, then must keep the service name available and finish the task.
+ * These worlds are generated independently of held evaluation packets.
+ */
+export function serviceResultRecovery(seed, index, split = 'train') {
+  if (split !== 'train') throw new Error('service_result_recovery is train-only');
+  const rng = new Random(seed, `service-result-recovery:${index}`);
+  const [place, item, person] = nonceWords(rng, 3);
+  const variants = [
+    {
+      domain: 'dispatch', service: 'dispatch', method: 'assignment',
+      request: { ticket: `T-${rng.int(100, 999)}` },
+      result: { ticket: null, destination: `${place} depot`, handler: person },
+      returns: '{ destination: string, handler: string }',
+      answer: record => ({ destination: record.destination, handler: record.handler }),
+      steps: '1. Ask dispatch.assignment for the ticket\'s current assignment.\n2. Preserve the returned destination and handler together; they describe one assignment.\n3. Return those two fields as a record.',
+    },
+    {
+      domain: 'catalog', service: 'catalog', method: 'edition',
+      request: { title: `${item} atlas` },
+      result: { title: `${item} atlas`, edition: rng.int(2, 9), shelf: `${place}-${rng.int(10, 90)}` },
+      returns: '{ edition: number, shelf: string }',
+      answer: record => ({ edition: record.edition, shelf: record.shelf }),
+      steps: '1. Ask catalog.edition for the requested title.\n2. Read the edition number and shelf from the same returned entry.\n3. Return them together so a reader can locate that edition.',
+    },
+    {
+      domain: 'permit', service: 'permits', method: 'current',
+      request: { site: `${place} quay` },
+      result: { site: `${place} quay`, status: rng.pick(['active', 'pending', 'expired']), inspector: person },
+      returns: '{ status: string, inspector: string }',
+      answer: record => ({ status: record.status, inspector: record.inspector }),
+      steps: '1. Ask permits.current for the site named in the request.\n2. Treat the returned status and inspector as one current record; do not infer a status from the site name.\n3. Return the status and inspector.',
+    },
+  ];
+  return variants.map(spec => {
+    const request = spec.request;
+    const result = { ...spec.result, ...(spec.domain === 'dispatch' ? { ticket: request.ticket } : {}) };
+    const expected = spec.answer(result);
+    const call = `${spec.service}.${spec.method}(${literal(request)})`;
+    const requestField = Object.keys(request)[0];
+    const resultType = `{ ${Object.keys(result).map(key => `${key}: ${typeof result[key] === 'number' ? 'number' : 'string'}`).join(', ')} }`;
+    const serviceFile = `const RECORD = ${literal(result)};\n/** Current ${spec.domain} record for the exact request. */\nexport function ${spec.method}(request: { ${requestField}: string }): ${resultType} {\n  if (request.${requestField} !== ${JSON.stringify(request[requestField])}) throw new Error('unknown ${spec.domain} request');\n  return { ...RECORD };\n}\n`;
+    const answerCode = `{ ${Object.keys(expected).map(key => `${key}: ${spec.service}Result.${key}`).join(', ')} }`;
+    return curriculumCase({ family: 'service_result_recovery', familyVersion: 1,
+      shape: `${spec.domain}${index}`, variant: `s${seed}`, split: 'train',
+      splitGroup: `service-result-recovery:s${seed}:${spec.domain}${index}`,
+      slice: 'folder_failure', domain: 'other', mode: 'followup', inline: 'optional',
+      evidence: { world: [`${spec.domain} record for ${Object.values(request)[0]}`], retrieved: ['the compiler feedback'], background: [] },
+      decisive: [{ marker: `${spec.service} names this scope's ${spec.service} service`, source: 'error', note: 'the service name belongs to the injected service' }],
+      plausibleActions: ['declare a differently named result and finish the task', 'read the service result', 'return the requested fields'],
+      minimumSequence: ['read the binding error', 'keep the service callable', 'use a distinct result name', 'return fields from one record'],
+      root: { name: `${spec.domain}_lookup`, args: {}, returns: spec.returns,
+        instructions: `Find the current ${spec.domain} information for ${Object.values(request)[0]}.\n${spec.steps}` },
+      files: { [`${spec.domain}_lookup/${spec.service}.ts`]: serviceFile },
+      inputs: {}, expected, failureSeed: { kind: 'compile', code: `const ${spec.service} = ${call};\nreturn ${spec.service};` },
+      reference: { root: [evalCall(`const ${spec.service}Result = ${call};\nreturn ${answerCode};`), returnCall(expected)] },
+    });
   });
 }
 

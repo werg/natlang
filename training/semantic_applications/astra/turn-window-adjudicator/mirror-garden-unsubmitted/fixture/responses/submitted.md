@@ -1,0 +1,3 @@
+[R01] Response order1 is intent TAKE: Rowan gains control of the same garden instance A1. It changes no integrity, damage, growth, card identity or attachment. TAKE is legal and has already paid its cost.
+[R02] Response order2 is intent MOVE: Ilex moves W1 from A1 to M1. This attachment move is legal, consumes no WARD use, and changes neither W1's controller nor either creature's controller. MOVE has already paid its cost.
+[R03] These two response records are actual submitted intents. No response changes Fork's captured controller fields or printed damage amounts; replacement rules will interpret the resumed board separately.

@@ -1,0 +1,5 @@
+[E01] Experiment S uses U as mother and T as father, then reads the replica-complete offspring tray with COOL_UNIFORM. It costs 1 assay-credit and consumes one U_FLOWER and one T_POLLEN. Its original one-use slot is SLOT_S.
+[E02] Experiment C uses T as mother and U as father, then reads the replica-complete offspring tray with COOL_COLOR. It costs 3 assay-credits and consumes one T_FLOWER and one U_POLLEN. Its original one-use slot is SLOT_C.
+[E03] Experiment G probes original U with GENOTYPE. It costs 2 assay-credits and consumes one U_LEAF. Its original one-use slot is SLOT_G.
+[E04] Experiment F images original U's maternal seed coat with COAT_IMAGE. It costs 1 assay-credit and consumes one COAT_IMAGE_SLOT. Its original one-use slot is SLOT_F.
+[E05] Experiment W would cross U as mother with T as father and read the tray under WARM_COLOR. It costs 1 assay-credit, consumes one U_FLOWER and one T_POLLEN, and has original slot SLOT_W. Its listing is a proposal, not a claim that the invalid protocol is usable.

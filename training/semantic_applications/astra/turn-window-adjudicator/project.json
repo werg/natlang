@@ -557,7 +557,7 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
@@ -572,5 +572,23 @@
     "source_sha256": "d7b79ccfd35a32deae7edead61602fe97b2fb74204cc4d808b808669a0ee76f0",
     "review_receipt": "plans/semantic_stack/TURN_WINDOW_APPLICATION_REVIEW_SOL.json",
     "status": "Independent source/exact review applies to this prior source only."
-  }
+  },
+  "independent_reviews": [
+    {
+      "path": "plans/semantic_stack/TURN_WINDOW_APPLICATION_REVIEW_SOL.json",
+      "sha256": "e28d38071d223475e5ab08be158026c1add052a36a7eed52c192f494f917cce1",
+      "reviewer": "semantic_slate_sol"
+    },
+    {
+      "path": "plans/semantic_stack/TURN_WINDOW_ORDER_EXTENSION_REVIEW_SOL.json",
+      "sha256": "e9dc12df2793422d15642be85d9bb2086452c044cad479cffb7deba5b40b0d94",
+      "reviewer": "semantic_slate_sol"
+    },
+    {
+      "path": "plans/semantic_stack/TURN_WINDOW_MIRROR_CASES_REVIEW_SOL.json",
+      "sha256": "258064cc2618ed44749c1d0b8589919019912cdb87c745c286b56de23ddfdec6",
+      "reviewer": "semantic_slate_sol"
+    }
+  ],
+  "readiness_scope": "Source semantics, typed canonical witness and exact certificate controls are reviewed. Actual application/literal execution and training admission remain unqualified."
 }

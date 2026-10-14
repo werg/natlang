@@ -41,7 +41,11 @@
     "planMission.nl",
     "natlang.json",
     "tsconfig.json",
-    "types.ts"
+    "types.ts",
+    "planMission/survey/readFrames/interpretLandmark.nl",
+    "planMission/survey/readPassages/interpretPassage.nl",
+    "planMission/survey/readEquipment/interpretGear.nl",
+    "planMission/survey/readEquipment/interpretSensor.nl"
   ],
   "fixture_files": [
     "contracts/mission.md",
@@ -256,10 +260,11 @@
       {
         "path": "planMission/survey/readFrames/interpretConvention.nl",
         "args": {
+          "unit": "SurveyReadingUnit",
           "frameClauses": "SourceClause[]",
           "supportingClauses": "SourceClause[]"
         },
-        "returns": "FrameAlternative[]",
+        "returns": "ConventionInterpretation",
         "owned_delta": "Translate one frame convention into explicit origin and basis alternatives."
       },
       {
@@ -273,7 +278,8 @@
       {
         "path": "planMission/survey/readPassages.nl",
         "args": {
-          "clauses": "SourceClause[]"
+          "clauses": "SourceClause[]",
+          "frames": "FrameSurvey"
         },
         "returns": "PassageAssertion[]",
         "owned_delta": "Distinguish directed movement, geometric adjacency and known absence in passage descriptions."
@@ -293,6 +299,47 @@
         },
         "returns": "AuditedMission",
         "owned_delta": "Reconcile uncertain cave maps and produce an all-world mission policy."
+      },
+      {
+        "path": "planMission/survey/readFrames/interpretLandmark.nl",
+        "args": {
+          "unit": "SurveyReadingUnit",
+          "primaryClauses": "SourceClause[]",
+          "supportingClauses": "SourceClause[]"
+        },
+        "returns": "LandmarkItemMeaning",
+        "owned_delta": "Actual per-unit scoped NL meaning and original clause-keyed evidence"
+      },
+      {
+        "path": "planMission/survey/readPassages/interpretPassage.nl",
+        "args": {
+          "unit": "SurveyReadingUnit",
+          "primaryClauses": "SourceClause[]",
+          "supportingClauses": "SourceClause[]",
+          "frames": "FrameSurvey"
+        },
+        "returns": "PassageItemMeaning",
+        "owned_delta": "Actual per-unit scoped NL meaning and original clause-keyed evidence"
+      },
+      {
+        "path": "planMission/survey/readEquipment/interpretGear.nl",
+        "args": {
+          "unit": "SurveyReadingUnit",
+          "primaryClauses": "SourceClause[]",
+          "supportingClauses": "SourceClause[]"
+        },
+        "returns": "GearItemMeaning",
+        "owned_delta": "Actual per-unit scoped NL meaning and original clause-keyed evidence"
+      },
+      {
+        "path": "planMission/survey/readEquipment/interpretSensor.nl",
+        "args": {
+          "unit": "SurveyReadingUnit",
+          "primaryClauses": "SourceClause[]",
+          "supportingClauses": "SourceClause[]"
+        },
+        "returns": "SensorItemMeaning",
+        "owned_delta": "Actual per-unit scoped NL meaning and original clause-keyed evidence"
       }
     ],
     "edges": [
@@ -391,6 +438,22 @@
       {
         "caller": "planMission.nl",
         "callee": "planMission/survey.nl"
+      },
+      {
+        "caller": "planMission/survey/readFrames.nl",
+        "callee": "planMission/survey/readFrames/interpretLandmark.nl"
+      },
+      {
+        "caller": "planMission/survey/readPassages.nl",
+        "callee": "planMission/survey/readPassages/interpretPassage.nl"
+      },
+      {
+        "caller": "planMission/survey/readEquipment.nl",
+        "callee": "planMission/survey/readEquipment/interpretGear.nl"
+      },
+      {
+        "caller": "planMission/survey/readEquipment.nl",
+        "callee": "planMission/survey/readEquipment/interpretSensor.nl"
       }
     ]
   },
@@ -422,6 +485,46 @@
       "capture": "Source mission and gear rules",
       "result_type": "CrossingDecision",
       "consumed_by": "Independent replay nextRobot or first defect"
+    },
+    {
+      "site": "planMission/survey/readFrames.nl",
+      "result_type": "SurveyUnitInventory",
+      "consumed_by": "Actual inventory selects original reading units; actual child meanings supply typed survey fields and original source evidence."
+    },
+    {
+      "site": "planMission/survey/readPassages.nl",
+      "result_type": "SurveyUnitInventory",
+      "consumed_by": "Actual inventory selects original reading units; actual child meanings supply typed survey fields and original source evidence."
+    },
+    {
+      "site": "planMission/survey/readEquipment.nl",
+      "result_type": "SurveyUnitInventory",
+      "consumed_by": "Actual inventory selects original reading units; actual child meanings supply typed survey fields and original source evidence."
+    },
+    {
+      "site": "planMission/survey/readFrames/interpretConvention.nl",
+      "result_type": "Per-item semantic interpretation",
+      "consumed_by": "Actual inventory selects original reading units; actual child meanings supply typed survey fields and original source evidence."
+    },
+    {
+      "site": "planMission/survey/readFrames/interpretLandmark.nl",
+      "result_type": "Per-item semantic interpretation",
+      "consumed_by": "Actual inventory selects original reading units; actual child meanings supply typed survey fields and original source evidence."
+    },
+    {
+      "site": "planMission/survey/readPassages/interpretPassage.nl",
+      "result_type": "Per-item semantic interpretation",
+      "consumed_by": "Actual inventory selects original reading units; actual child meanings supply typed survey fields and original source evidence."
+    },
+    {
+      "site": "planMission/survey/readEquipment/interpretGear.nl",
+      "result_type": "Per-item semantic interpretation",
+      "consumed_by": "Actual inventory selects original reading units; actual child meanings supply typed survey fields and original source evidence."
+    },
+    {
+      "site": "planMission/survey/readEquipment/interpretSensor.nl",
+      "result_type": "Per-item semantic interpretation",
+      "consumed_by": "Actual inventory selects original reading units; actual child meanings supply typed survey fields and original source evidence."
     }
   ],
   "iteration_reducers": [
@@ -484,24 +587,25 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": true,
+    "independent_oracle_review": false,
     "exact_result_replay": true,
     "exact_checker_controls_passed": 22,
     "live_qualified": false,
-    "training_admitted": false
+    "training_admitted": false,
+    "source_variant_review": "pending v5 peer review; unchanged fixture/oracle previously independently reviewed"
   },
   "fixture_document_count": 10,
   "fixture_clause_count": 31,
   "composition": {
-    "nl_files": 25,
-    "nl_total_lines": 599,
-    "nl_body_lines": 415,
-    "numbered_steps": 182,
-    "type_aliases": 44,
+    "nl_files": 29,
+    "nl_total_lines": 728,
+    "nl_body_lines": 509,
+    "numbered_steps": 207,
+    "type_aliases": 57,
     "visible_crisp_policy_lines": 0
   },
   "reference_scope": "Full typed canonical source-validity witness, separate from actual callable execution. Equivalent policies are replayed rather than compared bytewise.",
-  "model_facing_debt": "All 25 NL functions/types are unmeasured; source-only until live qualification and approximately 48 samples per adopted presentation.",
+  "model_facing_debt": "Survey-v5 instructions/types/literals:0/48 live samples; stoppedv4diagnostic remains frozen, no model-negative or admission.",
   "source_replay": {
     "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/astra-cave-project-package-v1",
     "scope": "Shared-loader full typed canonical source-validity replay only"
@@ -513,21 +617,15 @@
     "scope": "Independent source/oracle, exact lower-bound and policy-equivalence review. No actual application execution or training admission."
   },
   "source_variant": {
-    "id": "physical-existence-v4",
-    "parent_source_commit": "521a4891",
+    "id": "survey-item-nl-v5",
+    "parent_source_commit": "f88070f9",
     "changes": [
-      "PassageAssertion.physicalExistence denotes connection existence, separate from allowed direction and carried-state permission.",
-      "Reader orients one present one-way gate and attaches reverse-forbidden source evidence to that assertion.",
-      "World construction creates travel edges only for physically present connections and preserves negative evidence through conditional reconciliation."
+      "Scoped NL inventory and per-unit semantic literals replace extraction tables.",
+      "Actual FrameSurvey feeds passage endpoints; local origin and global anchor stay separate.",
+      "Nullable internal passage cost preserves absent/unknown route evidence; present projection requires source-permitted known cost."
     ],
     "fixture_oracle_reference_changed": false,
-    "independent_source_review": true,
-    "live_qualified": false,
-    "reviewer": "semantic_slate_sol",
-    "review_scope": "Physical existence, ordered traversal, negative evidence retention and conditional comparison reviewed; no source-world blocker or live credit.",
-    "canonical_reference_replay": {
-      "path": "/tmp/astra-cave-physical-v4-package",
-      "passed": true
-    }
+    "independent_source_review": false,
+    "live_qualified": false
   }
 }

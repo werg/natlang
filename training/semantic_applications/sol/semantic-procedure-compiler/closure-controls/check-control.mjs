@@ -7,6 +7,7 @@ function verify(value){const issues=[];const require=(v,s)=>{if(!v)issues.push(s
  const c=value.closure,files=new Map(input.actual_files.map(x=>[x.path,x]));
  require(c.entryPath===input.entry_path,'original entry identity');require(eq(set(c.files.map(x=>x.path)),set(oracle.expected_visited_paths)),'actual visited file set');
  for(const f of c.files)require(eq(f,files.get(f.path)),'original generated file bytes');
+ for(const r of [...c.references,...c.runtimeReads])require(r.generatedEvidence.length>0,'nonempty actual caller support');
  for(const r of [...c.references,...c.runtimeReads])for(const s of r.generatedEvidence){const f=files.get(s.path);require(s.path===r.callerPath&&f&&s.quote.length>0&&f.text.includes(s.quote),'exact caller span');}
  require(c.references.every(r=>r.status==='resolved'&&files.has(r.callerPath)&&files.has(r.targetPath)),'resolved original path domains');
  for(const r of c.references)if(r.kind==='type'){require(r.targetEvidence.length>0,'type defining evidence');for(const s of r.targetEvidence){const f=files.get(s.path);require(s.path===r.targetPath&&f?.kind==='types'&&s.quote.length>0&&f.text.includes(s.quote),'exact defining type span');}}
@@ -26,6 +27,8 @@ check('grandchild quote rebound to parent',false,v=>v.closure.runtimeReads[0].ge
 check('ideal source silently corrects emitted permission',false,v=>v.actualEmittedPermission=false);
 check('actual emitted value contaminates required permission',false,v=>v.sourceRequiredPermission=true);
 check('unread source clause introduced',false,v=>v.closure.runtimeClauses.push(input.selected_clauses.find(x=>x.id==='WAIVER')));
+check('decided call without exact supporting quote',false,v=>v.closure.references.find(r=>r.kind==='call').generatedEvidence=[]);
+check('runtime read without exact supporting quote',false,v=>v.closure.runtimeReads[0].generatedEvidence=[]);
 check('fabricated defining type quotation',false,v=>v.closure.references.find(r=>r.kind==='type').targetEvidence[0].quote='No actual definition here');
 check('actual call edge erased',false,v=>v.closure.references=v.closure.references.filter(r=>r.targetPath!=='decision/readGate/permit.nl'));
 console.log(JSON.stringify({scope:'Authored connected control witness exact checks, not NL closure/guard execution',passed:checks.every(x=>x.passed),checks},null,2));if(checks.some(x=>!x.passed))process.exitCode=1;

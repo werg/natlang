@@ -20,6 +20,8 @@ import json
 import math
 from pathlib import Path
 
+from ..eval.task_packet import accounted
+
 SCHEMA = 'natlang.neuralese-e2e-certificate/1'
 KEYS = {'description', 'paired_reader', 'task_success', 'drift', 'reported'}
 PAIRED = {'max_v_minus_t_ce_nats', 'min_v_margin_over_shuffled_nats', 'min_v_margin_over_zeroed_nats',
@@ -31,15 +33,17 @@ def _number(value):
 
 
 def _same_task_cases(left, right):
-    """Exact completed task reports of one packet and case sequence."""
+    """Fully scored task reports of one packet and case sequence."""
     indices = left.get('case_indices')
     packet = left.get('packet_sha256')
     return (left.get('eligible') is True and right.get('eligible') is True
-            and left.get('complete') is True and right.get('complete') is True
+            and type(left.get('complete')) is bool and type(right.get('complete')) is bool
+            and accounted(left) and accounted(right)
             and isinstance(packet, str) and len(packet) == 64 and packet == right.get('packet_sha256')
             and isinstance(indices, list) and bool(indices)
             and all(type(index) is int for index in indices) and len(set(indices)) == len(indices)
             and indices == right.get('case_indices')
+            and type(left.get('cases')) is int and type(right.get('cases')) is int
             and left.get('cases') == right.get('cases') == len(indices))
 
 

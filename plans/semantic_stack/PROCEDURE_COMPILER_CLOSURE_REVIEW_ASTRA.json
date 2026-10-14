@@ -1,0 +1,180 @@
+{
+  "schema": "natlang.semantic-application-independent-source-variant-review/1",
+  "reviewer": "semantic_slate_astra",
+  "application": "semantic-procedure-compiler",
+  "source_commit": "e00a57b7",
+  "control_commit": "fccf8d34",
+  "result": "source_and_connected_exact_control_pass",
+  "hashes": {
+    "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard.nl": "bf5cb8e90a3661892c75de475f147e7aebbb62219e4a22d083cac4f2ff7e0630",
+    "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard/readEmittedClosure.nl": "be7362f4e66b6fc48cd8b784aed71940263f7f14ab1af1fc403720ada75a8a5c",
+    "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard/readEmittedClosure/followCodeReference.nl": "b60884b259f89c67df8af310ce7291e673e4f9b96b2c4cb33eeb64ed097f4b8c",
+    "applications/semantic-procedure-compiler/types.ts": "ebf2a907ca001f97ed428dc9ae92726509639d107858afa56449ecf60b1630ba",
+    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/check-control.mjs": "7da8578ee6f5cc85aac512403cf664f29ff7732010971439f50e78931ab1610c",
+    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.input.json": "e8655a8dcdc323f88899a7255edbd0722d21d3ec23ec93494765474d9561e6d3",
+    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.oracle.json": "57f5c22662a082223ef8ab39bec87ca3e9be0dcd0c23723a951ed3f369328de9",
+    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.reference.json": "066f94d28ebe93e41e829fa7c62c24e86bad28fe00cf9125a4a871a2573d0cf1"
+  },
+  "source_findings": [
+    {
+      "id": "defining-type-information-absent",
+      "status": "closed_source_verified",
+      "resolution": "Dependency literal now sees actual declaration texts; resolved type edges carry separately validated targetEvidence at the defining file. Caller use span alone cannot establish a definition."
+    },
+    {
+      "id": "vacuous-empty-caller-evidence",
+      "status": "closed_exact_controls_reproduced",
+      "resolution": "Source already required nonempty caller evidence; external control checker now rejects empty decided-call and runtime-read support."
+    }
+  ],
+  "connected_reconstruction": {
+    "visited_paths": [
+      "decision.nl",
+      "decision/readGate.nl",
+      "decision/readGate/permit.nl",
+      "types.ts"
+    ],
+    "excluded_paths": [
+      "decoys/explainIdeal.nl",
+      "decoys/unused-types.ts"
+    ],
+    "runtime_clause_ids": [
+      "V2"
+    ],
+    "actual_permission": true,
+    "source_required_permission": false,
+    "reason": "Actual transitive permit body sets guardValue true without testing acknowledgment. V2 is read for citation only; original N_BO evidence explicitly denies personal acknowledgment."
+  },
+  "stage_audit": [
+    "Finite pending/unvisited original-file universe and structural iterateOn measure.",
+    "Actual NL dependency result determines edges, file activation and runtime source reads.",
+    "Parent binds caller path and exact source spans; target type evidence is checked separately.",
+    "Only actual returned closure reaches emitted interpretation; ideal source judgment remains separate."
+  ],
+  "controls_reproduced": {
+    "scope": "Authored connected control witness exact checks, not NL closure/guard execution",
+    "passed": true,
+    "checks": [
+      {
+        "name": "canonical connected closure witness",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "unordered actual file and dependency sets",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "full exact caller quotations",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "transitive grandchild missing",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual visited file set"
+        ]
+      },
+      {
+        "name": "uncalled ideal decoy included",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual visited file set",
+          "closure reachability"
+        ]
+      },
+      {
+        "name": "grandchild quote rebound to parent",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "exact caller span"
+        ]
+      },
+      {
+        "name": "ideal source silently corrects emitted permission",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "independent emitted/source invariant"
+        ]
+      },
+      {
+        "name": "actual emitted value contaminates required permission",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "independent emitted/source invariant"
+        ]
+      },
+      {
+        "name": "unread source clause introduced",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "original runtime clause values"
+        ]
+      },
+      {
+        "name": "decided call without exact supporting quote",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "nonempty actual caller support"
+        ]
+      },
+      {
+        "name": "runtime read without exact supporting quote",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "nonempty actual caller support"
+        ]
+      },
+      {
+        "name": "fabricated defining type quotation",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "exact defining type span"
+        ]
+      },
+      {
+        "name": "actual call edge erased",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual transitive call edges",
+          "closure reachability"
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "Exact controls exercise authored closure witness, not the NL program.",
+    "Dependency completeness, code entailment and actual literal consumption still require live trace.",
+    "Original baseline qualification does not transfer live credit to the new branch."
+  ],
+  "live_qualified": false,
+  "training_admitted": false
+}

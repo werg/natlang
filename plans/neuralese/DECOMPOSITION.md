@@ -255,3 +255,19 @@ than str.splitlines, which also splits valid Unicode separators within JSON
 strings. Keep object validation and physical-line error locations. These are
 exact input verifiers; task scoring, drift policy, rendering and prompts do
 not change. Leave actual source-code/text line splitting alone.
+
+## Compare fully scored task runs, including observed failures — 2026-10-14
+
+CompareTaskSuccess keeps the declared same-packet V/T and parent comparisons:
+1. Require the same packet hash, ordered unique case indices and exact case count.
+2. Require every selected case to be counted in a known terminal outcome; reject
+   missing/negative/noninteger counts, infrastructure errors and unresolved cases.
+3. Treat observed repetition, budget exhaustion and model failure as scored
+   unsuccessful cases, just as the shared in-run task evaluator already does.
+   The collector's complete flag means result rows were exported for every case;
+   it does not mean all selected cases have been scored. Keep the flag explicit
+   but do not require it true when the outcome accounting is exact.
+4. Compare explicit Boolean fused-case outcomes; missing V/T outcomes stay pending.
+Move the existing accounted verifier into task_packet and reuse it, rather than
+introduce a second accounting policy. The acceptance code remains an exact
+verifier of this natural-language qualification rule. No prompt or model change.

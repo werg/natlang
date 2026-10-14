@@ -1,20 +1,28 @@
 ---
-description: Recover resource transitions and the distinct scopes of available observations.
+description: Consume scoped per-item NL resource transitions and sensor capabilities.
 args:
   clauses: SourceClause[]
 returns: EquipmentSurvey
 ---
-1. Inventory the initial carried objects and source-authorized changes: rigging, sample pickup,
-   consumption, irreversibility, and any explicitly allowed recovery or transfer.
-2. Return GearRule entries for conditions and consequences. Keep the empty/full carrier distinction
-   separate from rope availability; carrying a sample and rigging a rope change different state fields.
-3. Preserve prohibitions on discarding, opening or transferring the sealed sample. A route that
-   returns the robot but loses the task object cannot satisfy the mission goal.
-4. For each sensor, record its ID, available location, cost, source-listed answer categories and scope.
-   State whether it sees a surface feature, deep structure or another property of the physical world.
-5. Distinguish an answer's meaning from the observation action's physical effect. Observing can
-   refine belief without moving the robot, changing the map or restoring a resource.
-6. Record repeated-query cost and consistency if stated. An identical answer under every supported
-   map is still an observation, but it cannot settle a route-relevant frame ambiguity.
-7. Preserve any unresolved cost or scope clause explicitly. Do not invent a more capable sensor or
-   a free observation to make a policy feasible. Return gear, sensors and unresolved.
+1. Capture immutable original clauses. Create a scoped NL inventory literal returning SurveyUnitInventory
+   and directly await it. It identifies individual gear condition/transition and sensor reading units,
+   primary/supporting original clause IDs and focus questions; it supplies no prepared semantic rows.
+2. Include initial resources, sample restrictions, rope rigging/reuse, permitted recovery and distinct
+   sensor capabilities. Split several semantic items in one clause when their ownership differs; join
+   one sensor's complementary answer/scope/cost clauses by actual source identity, not file adjacency.
+3. Require nonempty primaryClauseIds, only gear/sensor kinds, existing original IDs and unique unit IDs.
+   An invalid inventory reports its unit and expected source/kind for repair. Visit every actual unit.
+   For gear call interpretGear(unit, primaryClauses, supportingClauses); for a sensor call
+   interpretSensor(unit, primaryClauses, supportingClauses). Await and retain each actual child result.
+4. Construct GearRule or SensorRule only from its returned nullable meaning. Conditions, consequences,
+   scope, costs and answer descriptions come from that literal, not a parent-created case-specific table.
+   A child's unresolved premise stays unresolved; missing meaning is never replaced with a predicted row.
+5. Every established meaning requires nonempty clause-keyed exact evidence. Validate quotations within
+   actual supplied original clause witnesses and copy original sourceId/path in the parent. A failed
+   evidence check fails this contribution for repair before later planning can consume it.
+6. Preserve conflicting source meanings; merge exact duplicate rows only. Join returned sensor categories
+   only when original identity and scope agree. Observation effects and resource transitions retain
+   different meanings even when both happen to cost one unit in this particular source world.
+7. Return actual gear, sensors and inventory/child unresolved findings. Planning consumes these typed
+   resource and observation rules; this stage neither selects an action nor predicts a sensor answer
+   for a chosen physical world. No resource is changed while reading the snapshot.

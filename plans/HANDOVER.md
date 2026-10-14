@@ -1,5 +1,82 @@
 # Continuation guide — updated 2026-10-14
 
+## 02:46 CEST: deep pseudocode priority, base task result, and train-only recovery
+
+Owner again clarified that new connected application examples should put the
+decisive algorithm in deep, numbered natural-language pseudocode, rather than
+long case-specific crisp tables. Keep the valid simpler 220 examples; the
+application-scale cohort is additive. Astra, Sol and curriculum were briefed to
+inspect actual teacher evals for hidden JS policy and require downstream use of
+typed NL decisions. Cave v4 already exposes crisp assertion tables in early
+children and remains diagnostic-only; Cave v5 is being redesigned around
+per-record scoped NL judgments. Turn Window and Procedure Compiler retain
+source-only status until live execution and admission review.
+
+The matched QAD base full-prompt eval completed 0/16 accepted on the protected
+packet (14 semantic mismatch, 1 invalid action, 1 budget exhaustion, no infra
+or unresolved). Step15000 was 1/16 then 0/16 on the same full prompt, so there
+is not yet evidence of a large task-success regression from QAD base; neither
+result qualifies the stage. GPU is free after the eval; choose a useful next
+training or diagnostic job rather than resuming the unqualified KL-stopped
+step15600 stage by default.
+
+Fresh train-only `service_result_recovery` seeded cases landed in `a2402633`:
+dispatch/catalog/permit worlds, actual compiler rejection for a result
+declaration that collides with an injected service, then a correctly named
+service result and exact oracle. Six seed52054 cases passed independent source
+replay with the real rejection observed and exact answers, with new source
+groups disjoint from the protected packet. This is source readiness, not live
+teacher quality or training admission. The recovery queue preparer now uses
+the shared physical-LF JSONL reader, preserving U+2028/U+2029. DGX request
+`2026-10-14T00:36:20.275854Z-dgx-fba3` was answered with the commit.
+
+## 02:40 CEST: deeper application variants, live crisp-code concern, green TS gate
+
+The connected Procedure Compiler closure variant is on main (`c17258f8`,
+`e00a57b7`, `fccf8d34`, independent review `d4e8e456`, readiness
+`b1b25b76`): 30 `.nl` functions and about 730 lines, with actual generated
+code/type closure traversed through NL children and 13 connected exact controls.
+Turn Window's isolated alternative-order branch and consequential Mirror Garden
+submitted/unsubmitted pair are on main (`fab8d1da`, `d4f95a8e`, exact verifier
+fix `3e2a32a7`, independent reviews `6d514c15`, `cb1d1884`): 30 `.nl`
+functions/about 761 lines, 35 baseline plus 24 ordering controls. These
+source/review achievements do not admit training rows. Keep the frozen
+baseline one-case queues distinct from new variants until repackaged.
+
+Ecology v14 live (`d93fefa7`) verified Stage1–3 typed NL handoff and exact
+plural source-key preservation; Stage4's depth-five ad hoc lambda guard fired
+as designed. The root still delegated repeatedly, then used a crisp graph
+propagation loop in the audit child and hit an unbound `stagedValue` error.
+Stopped around 80 turns; no final/admission/model-negative result. Astra is
+preparing v15 with narrower scoped decisions and structural NL graph
+iteration. Cave v4 matched diagnostic is active. Its early `readPassages`,
+`readFrames` and equipment children have written multi-kilobyte case-specific
+JS assertion tables despite source-grounded facts; later NL landmark decisions
+are still running. Treat this as source ergonomics debt even if the answer is
+correct. Revise to per-record scoped NL typed extraction and inspect actual
+downstream consumption. Non-gating trace signals live in
+`scripts/audit_semantic_trace_idiomaticity.py` (`a9b0c21c`).
+
+Pop's ledgered full TypeScript side of `check-main` passed at `a9b0c21c`:
+node build, browser/app builds, types, layering, all TS tests (463 seconds)
+and 22 conformance programs; log
+`/tmp/natlang-pop-check-main-ts-20261014-0225.log` ends `exit=0`.
+The first attempt exposed two independent test-environment defects. Restored
+12 missing `dist/browser` files in a sealed skill-authoring parent snapshot
+from byte-identical sources; its full 20,748-file seal matches again and the
+targeted positive e2e passes. The trusted verifier test assumed repo cwd when
+run from `ts-host`; `ecb420a4` fixes its paths and targeted 5/5 passes. DGX
+was asked for the full Python/GPU check, which needs more memory than Pop's
+safe envelope; no full-cross-machine green claim yet.
+
+The Pop GPU now runs a same-packet QAD **base** model full-prompt task eval
+under `natlang-pop-qad-base-full-20261014.service` (clean untrained-head
+checkpoint, no SFT weights). It will localize whether the step15000 0–1/16
+task success was already present at base or arose during SFT. It is an eval,
+not training. Do not train on the protected held packet or its failed traces;
+create fresh train-only recovery analogues for the observed proof-service
+shadowing loop instead.
+
 ## 02:22 CEST: source corrections, exact JSONL framing, and QAD prompt evidence
 
 The owner's current source target is connected, application-sized programs

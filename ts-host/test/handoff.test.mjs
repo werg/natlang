@@ -121,6 +121,28 @@ test('replacing the planted failing action is a valid handoff without reinjectin
     new Promise(resolve => teacher.server.close(resolve))]); }
 });
 
+test('a wrong result completed by eval finish is a repair site after a planted failure', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'finished-eval-handoff-'));
+  const seeded = { ...record, semantics: { ...record.semantics,
+    failure_seed: { kind: 'compile', code: 'while (true) {}' } } };
+  const student = modelServer([[['eval', { code: 'return 2;', finish: true }]]]);
+  await new Promise(resolve => student.server.listen(0, '127.0.0.1', resolve));
+  try {
+    const surface = await defaultToolSurfaceHash();
+    const configForStudent = config(dir, `http://127.0.0.1:${student.server.address().port}`, 'student', surface);
+    await collectBatch([{ index: 0, record: seeded }], configForStudent, nativeJobRunner(configForStudent));
+    const failed = JSON.parse((await readFile(configForStudent.output, 'utf8')).trim());
+    assert.equal(failed.outcome.status, 'done');
+    assert.equal(failed.outcome.accepted, false);
+    assert.deepEqual(handoffSites(failed), [
+      { index: 0, kind: 'failed_action' }, { index: 1, kind: 'wrong_result' },
+    ]);
+    const handoff = handoffAt(failed, { index: 1, kind: 'wrong_result' });
+    assert.equal(handoff.prefix[0].length, 1, 'the planted rejection remains in the replayed prefix');
+    assert.equal(await failsInPlace(failed, 1, handoff.rejected, 'wrong_result', options, 'wrong-result-check'), null);
+  } finally { await new Promise(resolve => student.server.close(resolve)); }
+});
+
 test('recorded turns retain usage that calibrates replay compaction and token budgets', async () => {
   const { recorded } = await import('../dist/teacher/replay.js');
   const response = recorded({ context: [], model_response: { prompt_tokens: 12000, completion_tokens: 900 },

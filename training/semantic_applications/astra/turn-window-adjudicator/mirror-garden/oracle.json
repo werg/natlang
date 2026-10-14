@@ -1,0 +1,235 @@
+{
+  "schema": "natlang.semantic-application-invariant-oracle/1",
+  "caseId": "mirror-garden-v1",
+  "status": "authored_pending_independent_review",
+  "capturedControllers": {
+    "PA": "Ilex",
+    "PM": "Rowan"
+  },
+  "resumedControllers": {
+    "A1": "Rowan",
+    "M1": "Rowan",
+    "W1": "Ilex"
+  },
+  "resumedAttachment": {
+    "W1": "M1"
+  },
+  "parts": {
+    "PA": {
+      "announcedDamage": 3,
+      "afterCover": 2,
+      "actualDamage": 2,
+      "growthAdded": 0,
+      "discardedTarget": "A1"
+    },
+    "PM": {
+      "announcedDamage": 2,
+      "afterCover": 2,
+      "actualDamage": 0,
+      "growthAdded": 2,
+      "discardedTarget": null,
+      "afterCoverMeaning": "Cover follows conversion and is inapplicable; amount remains two growth."
+    }
+  },
+  "finalCreatures": {
+    "M1": {
+      "cardId": "CM",
+      "controller": "Rowan",
+      "integrity": 2,
+      "damage": 0,
+      "growth": 2
+    },
+    "A2": {
+      "cardId": "CA",
+      "controller": "Rowan",
+      "integrity": 2,
+      "damage": 0,
+      "growth": 0
+    }
+  },
+  "discardedInstances": [
+    "A1"
+  ],
+  "finalAttachment": {
+    "W1": "M1"
+  },
+  "ink": {
+    "Ilex": 3,
+    "Rowan": 0
+  },
+  "emittedTriggers": [
+    "RETURN",
+    "SCRIBE",
+    "MIRROR"
+  ],
+  "notEmittedTriggers": {
+    "REPRISAL": "source token already spent"
+  },
+  "spentTokens": [
+    "WARD",
+    "RETURN",
+    "SCRIBE",
+    "REPRISAL",
+    "MIRROR"
+  ],
+  "remainingTokens": [],
+  "windowOrder": [
+    "TAKE",
+    "MOVE",
+    "FORK",
+    "RETURN",
+    "SCRIBE",
+    "MIRROR"
+  ],
+  "sourceWorldSplitKey": "astra-turn-window-glass-garden-v1",
+  "trainingAdmission": false,
+  "initialBoardFacts": {
+    "objects": [
+      {
+        "attachedTo": "A1",
+        "cardId": "CW",
+        "controller": "Ilex",
+        "damage": 0,
+        "growth": 0,
+        "instanceId": "W1",
+        "integrity": null,
+        "kind": "artifact",
+        "zone": "garden"
+      },
+      {
+        "attachedTo": null,
+        "cardId": "CA",
+        "controller": "Ilex",
+        "damage": 0,
+        "growth": 0,
+        "instanceId": "A1",
+        "integrity": 2,
+        "kind": "creature",
+        "zone": "garden"
+      },
+      {
+        "attachedTo": null,
+        "cardId": "CE",
+        "controller": "Ilex",
+        "damage": 0,
+        "growth": 0,
+        "instanceId": "E1",
+        "integrity": null,
+        "kind": "artifact",
+        "zone": "garden"
+      },
+      {
+        "attachedTo": null,
+        "cardId": "CM",
+        "controller": "Rowan",
+        "damage": 0,
+        "growth": 0,
+        "instanceId": "M1",
+        "integrity": 2,
+        "kind": "creature",
+        "zone": "garden"
+      },
+      {
+        "attachedTo": null,
+        "cardId": "CP",
+        "controller": "Rowan",
+        "damage": 0,
+        "growth": 0,
+        "instanceId": "P1",
+        "integrity": null,
+        "kind": "artifact",
+        "zone": "garden"
+      },
+      {
+        "attachedTo": null,
+        "cardId": "CS",
+        "controller": "Rowan",
+        "damage": 0,
+        "growth": 0,
+        "instanceId": "S1",
+        "integrity": null,
+        "kind": "artifact",
+        "zone": "garden"
+      }
+    ],
+    "resources": [
+      {
+        "ink": 0,
+        "player": "Ilex"
+      },
+      {
+        "ink": 0,
+        "player": "Rowan"
+      }
+    ],
+    "tokens": [
+      {
+        "holderCardId": "CA",
+        "id": "RETURN",
+        "status": "available"
+      },
+      {
+        "holderCardId": "CE",
+        "id": "MIRROR",
+        "status": "available"
+      },
+      {
+        "holderCardId": "CP",
+        "id": "REPRISAL",
+        "status": "spent"
+      },
+      {
+        "holderCardId": "CS",
+        "id": "SCRIBE",
+        "status": "available"
+      },
+      {
+        "holderCardId": "CW",
+        "id": "WARD",
+        "status": "available"
+      }
+    ],
+    "unresolved": []
+  },
+  "returnObjectFacts": {
+    "instanceId": "A2",
+    "cardId": "CA",
+    "kind": "creature",
+    "zone": "garden",
+    "controller": "Rowan",
+    "integrity": 2,
+    "damage": 0,
+    "growth": 0,
+    "attachedTo": null
+  },
+  "orderPreviewInvariants": {
+    "originalLineage": "PM",
+    "selectedRelativeOrder": [
+      "Mantle",
+      "Cover"
+    ],
+    "choiceClauseId": "CHO01",
+    "alternatives": [
+      {
+        "relativeOrder": [
+          "Cover",
+          "Mantle"
+        ],
+        "growth": 1,
+        "convertedQuantity": 1,
+        "mirrorEligible": false
+      },
+      {
+        "relativeOrder": [
+          "Mantle",
+          "Cover"
+        ],
+        "growth": 2,
+        "convertedQuantity": 2,
+        "mirrorEligible": true
+      }
+    ],
+    "allStartWithWardAvailable": true,
+    "previewChangesLiveBoard": false
+  }
+}

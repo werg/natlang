@@ -66148,6 +66148,27 @@
       },
       "note": "Clef-flash-distilled inline-lambda programs over new source pools, day 20261014: 453 cases, 2898 decisions ({'clef_wellbeing_triage': 100, 'clef_edit_review': 139, 'clef_clause_risk': 65, 'clef_skill_routing': 149}). Files: *.skeletons (Clef requests), *.answers (Clef outputs with usage), *.ir (cases), *.rows (trajectories), *.turns (native training turns).",
       "consumable_by_direct_stage": false
+    },
+    {
+      "id": "luna-service-result-recovery-s52054-v1",
+      "owner": "pop",
+      "path": "runs/luna-service-result-recovery-s52054-v1",
+      "include": [
+        "source.ir.jsonl",
+        "source-review.json",
+        "accepted-parents.native.jsonl",
+        "approved-turns.jsonl",
+        "admission-review.json"
+      ],
+      "source_class": "project-generated typed service-result recovery teacher continuations",
+      "license": "project-generated",
+      "split": "train only; protected held packet v3 source IDs and groups disjoint",
+      "admission": "exact native oracle, actual service invocation, replay-checked wrong-result handoffs, decision-level rejection exclusion",
+      "training_admission": true,
+      "training_admission_reason": "47 unique exact accepted parent runs yield 58 eligible teacher decisions; all 45 planted bad actions and both replayed student-prefix actions denied. One unresolved wrong-return case omitted.",
+      "review_status": "source/held-group, native oracle, action ledger, parent and decision materialization reviewed; see admission-review.json",
+      "required_conversion": "render approved-turns.jsonl as model-template text with low recovery mixture weight; include in next broad target union",
+      "notes": "Narrow service recovery family (dispatch, catalog, permits); retain alongside broad application-scale semantic programs rather than expanding its relative share."
     }
   ],
   "coverage_backlog": [

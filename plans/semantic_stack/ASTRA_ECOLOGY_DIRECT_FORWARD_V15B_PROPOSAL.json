@@ -1,0 +1,285 @@
+{
+  "schema": "semantic-stage-variant/1",
+  "id": "astra-ecology01-direct-scope-and-final-forwarding-v15b-proposal",
+  "program_id": "astra-ecology-01",
+  "base_catalog_sha256": "2d36ef0a58a402668344d0b64fec2fea93bcdceae367b2291452922a8d81b4ca",
+  "base_stage": "interpretObservationScope",
+  "status": "authored_unmeasured_variant",
+  "fixture_and_oracle_changes": false,
+  "types": {
+    "ScopeInput": "{relation:{cause:string;effect:string;signedEffect:number;direct:boolean;witnesses:Witness[]};scopeClause:string;premises:Witness[]}",
+    "ScopeDecision": "{cause:string;effect:string;usable:boolean;sign:number|null;reason:string;witnesses:Witness[]}",
+    "AssertionContent": "{kind:'assertion'|'background'|'unresolved';entitySurfaces:EntitySurface[];observation:string;exactQuote:string;reason:string}",
+    "InteractionAssertion": "{sourceId:string;sourcePath:string;kind:'assertion'|'background'|'unresolved';organisms:string[];entitySurfaces:EntitySurface[];observation:string;reason:string;witnesses:Witness[]}",
+    "InteractionEdge": "{cause:string;effect:string;sign:number;mechanism:string;witnesses:Witness[]}",
+    "EdgeContent": "{status:'established'|'no_relation'|'unresolved';edges:InteractionEdge[];reason:string}",
+    "EdgeDecision": "{sourceId:string;sourcePath:string;status:'established'|'no_relation'|'unresolved';edges:InteractionEdge[];reason:string;witnesses:Witness[]}",
+    "AssertionInput": "{text:string}",
+    "EdgeInput": "{assertion:InteractionAssertion;relatedAssertions:InteractionAssertion[]}",
+    "BatchIdentity": "{folderPath:string;sourceIds:string[];sourcePaths:string[]}",
+    "TypedStageContext": "{objective:string;rule:string;priorCompletedState:FinalSemanticState}",
+    "FinalSemanticState": "{interactionAssertions:InteractionAssertion[]; edgeDecisions:EdgeDecision[]; interactionEdges: {cause:string; effect:string; sign:number; mechanism:string; witnesses:Witness[]}[]; causalAssessments: {cause:string; effect:string; signedEffect:number; direct:boolean; witnesses:Witness[]}[]; scopeDecisions: {cause:string; effect:string; usable:boolean; sign:number|null; reason:string; witnesses:Witness[]}[]; effectAudit: {positivePaths:{target:string; path:string[]}[]; negativePaths:{target:string; path:string[]}[]; unresolvedTargets:string[]; auditFindings:AuditedFinding[]}; stageAbsences:StageAbsence[]}",
+    "StageInput1": "{batch:EvidenceBatch;context:TypedStageContext;prior:{stageAbsences:StageAbsence[]}}",
+    "StageInput2": "{batch:BatchIdentity;context:TypedStageContext;prior:{stageAbsences:StageAbsence[];interactionAssertions:InteractionAssertion[]}}",
+    "StageInput3": "{batch:BatchIdentity;context:TypedStageContext;prior:{stageAbsences:StageAbsence[];interactionAssertions:InteractionAssertion[];edgeDecisions:EdgeDecision[];interactionEdges:InteractionEdge[]}}",
+    "StageInput4": "{batch:BatchIdentity;context:TypedStageContext;prior:{stageAbsences:StageAbsence[];interactionAssertions:InteractionAssertion[];edgeDecisions:EdgeDecision[];interactionEdges:InteractionEdge[];causalAssessments:{cause:string;effect:string;signedEffect:number;direct:boolean;witnesses:Witness[]}[]}}",
+    "StageInput5": "{batch:BatchIdentity;context:TypedStageContext;prior:{stageAbsences:StageAbsence[];interactionAssertions:InteractionAssertion[];edgeDecisions:EdgeDecision[];interactionEdges:InteractionEdge[];causalAssessments:{cause:string;effect:string;signedEffect:number;direct:boolean;witnesses:Witness[]}[];scopeDecisions:{cause:string;effect:string;usable:boolean;sign:number|null;reason:string;witnesses:Witness[]}[]}}",
+    "CausalInput": "{edge:InteractionEdge;assertions:InteractionAssertion[]}",
+    "CausalDecision": "{established:boolean|null;direct:boolean|null;reason:string;witnesses:Witness[]}",
+    "EntitySurface": "{sourceForm:string;key:string}",
+    "SupportedEffectEdge": "{cause:string;effect:string;sign:number;witnesses:Witness[]}",
+    "EffectSeed": "{entity:string;change:number;witnesses:Witness[]}",
+    "SignedEffectPath": "{target:string;path:string[];sign:number;witnesses:Witness[]}",
+    "EffectNodeFinding": "{entity:string;status:'increase'|'decrease'|'unresolved'|'unaffected';reason:string;witnesses:Witness[]}",
+    "EffectFrontier": "{remainingEntityKeys:string[];completedEntityKeys:string[];edges:SupportedEffectEdge[];seeds:EffectSeed[];paths:SignedEffectPath[];nodeFindings:EffectNodeFinding[];auditFindings:AuditedFinding[];finished:boolean}"
+  },
+  "literal_unit": "One established directed edge and its own condition: return its current ScopeDecision.",
+  "capture_policy": "The scoped literal directly contains the three numbered condition-judgment steps and receives one actual ScopeInput as its argument.",
+  "numbered_plan": [
+    "1. Select actual current-batch causalAssessments and their matching typed edge-condition witnesses. Preserve earlier contributions; initialize this batch scopeDecisions empty.",
+    "2. Bind one ScopeInput from the actual assessment, exact relevant witness snippets and its source-grounded condition. An explicitly unconditional edge carries that meaning in scopeClause. Preserve the supplied complete-source-form endpoint keys.",
+    "3. Declare ScopeInput and ScopeDecision locally. Create the three-step NL literal below and directly await it on this actual scopeInput. Its requested work is the edge-specific condition judgment.",
+    "4. Check returned endpoints equal the actual input endpoints and every returned witness is an exact supplied snippet. Append the actual ScopeDecision to the owned list. Missing or failed output remains a failed contribution requiring repair.",
+    "5. Continue over the fixed assessment collection, retaining a decision for a condition that is unsupported or inapplicable. Each child returns a ScopeDecision to this parent.",
+    "6. Bind the actual accumulated prior and scopeDecisions into the next typed input. Forward once to auditEffectGraph in eval with finish:true and code that directly returns its awaited result."
+  ],
+  "direct_await_idiom": "const judgeScope = nl<ScopeDecision>`1. Read the supplied ScopeInput relation, scopeClause and premises. 2. If this edge is unconditional or its own condition is established by these premises, return usable=true with sign=relation.signedEffect; otherwise return usable=false with sign=null and name the missing or inapplicable condition. 3. Return one ScopeDecision directly with the supplied cause/effect keys, a brief reason and exact supporting supplied witnesses.`; const scopeDecision = await judgeScope(scopeInput); if (scopeDecision.cause !== scopeInput.relation.cause || scopeDecision.effect !== scopeInput.relation.effect) throw new Error(\"Preserve the supplied relation endpoint keys exactly.\"); scopeDecisions.push(scopeDecision);",
+  "applicability": "Run once per candidate causal relation whose premises intersect this batch or whose explicit scope condition is introduced by this batch. Deduplicate only the same directed relation under the same scope premises.",
+  "no_op_criterion": "No candidate relation is introduced or modified by this batch. Then append StageAbsence with these source paths and the reason; no literal is required and no semantic-stage contribution is credited.",
+  "owned_contribution": "scopeDecisions: ScopeDecision[]",
+  "invariants": [
+    "Preserve the input relation's entity identity and direction while returning the exact supplied cause/effect keys derived by lowercasing complete source forms.",
+    "Every witness is an exact quote from a supplied premise.",
+    "A condition not established by the snapshot cannot become universal applicability.",
+    "Only actual returned decisions are consumed downstream; empty does not stand for failed judgment.",
+    "Eligibility is local to edge evidence/conditions; downstream reachability and sign multiplication are graph-stage work. A cause unequal to the initial perturbation is not an exclusion rule.",
+    "ScopeInput uses the actual causalAssessments element shape; output sign comes from relation.signedEffect when usable.",
+    "Use lowercase organism/resource keys for every cause/effect graph join and output, while preserving exact source quotation casing. Case normalization changes spelling only; substantive identity still needs evidence.",
+    "The one-edge child returns a ScopeDecision directly; the named parent owns subsequent graph-stage invocation."
+  ],
+  "qualification_required": [
+    "Rendered type/scope fidelity",
+    "One relation per actual child call",
+    "Direct awaited structured result returns successfully",
+    "Returned usable/sign changes downstream propagation as appropriate",
+    "Matched v7/v8 live diagnostic, then approximately48samples per adopted variant",
+    "Trace explicit reported reduction retained as Stage1 assertion; perturbation-only Stage2 decision owns no borrowed edge; Stage3 directly awaited single-edge result appears in next StageInput4.",
+    "Verify a plural source noun remains plural in Stage1 entitySurfaces and every downstream edge key.",
+    "Exact controls: full source-form/casefold pairs pass; singular prefix inside a plural source word fails lexical boundary; unsupported keys fail membership.",
+    "Trace actual validated surfaces through primary-owned Stage2 edges and Stage3/4 identity-preserving projections.",
+    "Rendered named graph child is callable and receives actual initialized typed frontier",
+    "Every iteration consumes one original entity or returns witnessed blocked terminal state",
+    "Actual returned paths/findings determine effectAudit",
+    "Seed polarity is applied once and unresolved influence reaches descendants",
+    "No admission from canonical source/type replay alone",
+    "Direct scope child returns ScopeDecision using only actual ScopeInput and template instructions.",
+    "Each named forwarding stage finishes its first awaited child result exactly once; inspect actual invocation IDs."
+  ],
+  "training_admitted": false,
+  "idiom_preconditions": "Before this idiom declare ScopeInput/ScopeDecision, initialize scopeDecisions and bind one scopeInput from the selected actual assessment. The literal contains its complete local judgment instructions.",
+  "diagnostic_revision_reason": "Matched v15 trace: ScopeInput judgment child treated the captured instruction string as a callable; direct template steps remove that extra capture. Stage3 staged a correctly returned named-child result without finishing and later re-invoked the chain. The positive final-forwarding contract binds return+finish in its first final action. Stage5 frontier policy and all fixture/gold bytes remain unchanged.",
+  "selected_collection": "input.prior.causalAssessments",
+  "source_projection": "Pass one actual causalAssessments element and its source-linked typed witness snippets. ScopeInput.premises is Witness[]; no raw record collection is passed. signedEffect becomes sign when usable.",
+  "entity_identity_contract": {
+    "domain": "Organism and ecological resource names in astra-ecology-01",
+    "join_key": "Use lowercase case-folded organism/resource names as entity keys in every edge, graph join and final output. Grass and grass share the key grass; Shelter and shelter share shelter.",
+    "source_quotes": "Preserve exact original casing in source quotations and evidence text.",
+    "scope": "Only normalize letter case. Keep distinct names distinct; synonym or referent equivalence still requires source-grounded semantic evidence. Select source species/resource noun phrases as semantic spans, preserving their grammatical number and spelling. Derive keys only by lowercasing those complete source forms. EntitySurface validation checks exact declared spans and key equality; it never performs lexical normalization."
+  },
+  "derived_from": {
+    "path": "plans/semantic_stack/ASTRA_ECOLOGY_SCOPE_GRAPH_V15_PROPOSAL.json",
+    "sha256": "51a1e18e7a00f4b8c75b13e72a988b51617ce33ef1ef918a9682c2ae37642020"
+  },
+  "cross_folder_accumulation": {
+    "schema": "semantic-cross-folder-state/1",
+    "context_field": "priorCompletedState",
+    "context_field_type": "FinalSemanticState",
+    "StageContext": "{objective:string;rule:string;priorCompletedState:FinalSemanticState}",
+    "initial_state": {
+      "interactionAssertions": [],
+      "interactionEdges": [],
+      "causalAssessments": [],
+      "scopeDecisions": [],
+      "effectAudit": {
+        "positivePaths": [],
+        "negativePaths": [],
+        "unresolvedTargets": [],
+        "auditFindings": []
+      },
+      "stageAbsences": [],
+      "edgeDecisions": []
+    },
+    "append_fields": [
+      "interactionAssertions",
+      "edgeDecisions",
+      "interactionEdges",
+      "causalAssessments",
+      "scopeDecisions",
+      "stageAbsences"
+    ],
+    "replace_fields": [
+      "effectAudit"
+    ],
+    "batch_result_contract": "Stage1\u20134 arrays and stageAbsences in the returned FinalSemanticState contain this batch's new contributions only. effectAudit is the new global audit over completed prior folders plus this batch. This permits one exact append per batch without copying old arrays twice.",
+    "root_numbered_plan": [
+      "1. Initialize completedState with the declared empty FinalSemanticState before visiting the first folder.",
+      "2. For each actual source folder, pass the current completedState unchanged as context.priorCompletedState. Start the batch-local prior.stageAbsences empty; every named stage owns only its new batch contribution.",
+      "3. Await the full nested stage chain. Append the returned interactionAssertions, edgeDecisions, interactionEdges, causalAssessments, scopeDecisions and stageAbsences once to the corresponding completedState arrays; replace completedState.effectAudit with the returned global effectAudit.",
+      "4. Carry this exact completedState into the next folder. Preserve source-linked contribution objects and exact quotations; exact keys from lowercased complete source forms are used for joins.",
+      "5. After all folders, return increase/decrease from the final effectAudit positive/negative supported targets, assigning any target in unresolvedTargets only to unresolved. These path signs already include the typed perturbation seed; preserve that classification directly. Root reads actual returned audit state."
+    ],
+    "stage_ownership_plan": [
+      "1. Read context.priorCompletedState as immutable completed-folder evidence and input.prior as the current batch's already produced contributions.",
+      "2. Stage1 owns one source-bound assertion decision per current record. Stage2 owns edgeDecisions and established interactionEdges; stages3\u20134 add their assessments and scope judgments. Previous folders are available only as typed completed state. Preserve current-batch ownership.",
+      "3. Preserve exact keys from lowercased complete source forms and exact quotation casing. Stages2\u20135 receive BatchIdentity and TypedStageContext; their evidence consists of prior typed assertions, edges, decisions and witness snippets.",
+      "4. Return current-batch arrays unchanged through ancestors. The root is the single owner of cross-folder array append."
+    ],
+    "stage5_numbered_plan": [
+      "1. Read input.context.priorCompletedState and input.prior. Join their typed edges, causal assessments and scope decisions. Keep established supported rows with matching signed effect and usable scope; missing required typed contributions become witnessed audit findings. Preserve exact supplied endpoint keys.",
+      "2. Read the union of input.context.priorCompletedState.interactionAssertions and input.prior.interactionAssertions for an explicitly described perturbation. Interpret its entity from supplied entitySurfaces and its increase/decrease sign as EffectSeed, with actual source witnesses. A missing decisive perturbation stays an audit finding. Source sign is applied once at the seed.",
+      "3. Initialize EffectFrontier from the supported typed edge union and seeds. remainingEntityKeys is the fixed finite union of their entity keys; completedEntityKeys, paths and nodeFindings start empty. Carry actual audit findings and set finished if the universe is empty.",
+      "4. Invoke the named child advanceEffectFrontier.iterateOn with this actual state, measure remainingEntityKeys.length and the state.finished predicate. Each semantic step contributes one ready entity; consume its returned state rather than constructing a separate graph result in the parent.",
+      "5. Build effectAudit from the actual completed frontier. positivePaths and negativePaths project returned paths by their signed influence, already including the seed sign. unresolvedTargets are actual unresolved node findings. Preserve auditFindings and explicit blocked-graph findings; unaffected nodes have no inferred increase or decrease.",
+      "6. Return this batch stage1\u20134 arrays and stageAbsences with the new global effectAudit. The root alone appends batch contributions once. The graph audit always consumes previous completed folders plus the current typed state."
+    ],
+    "invariants": [
+      "Every completed-folder edge and scope decision consumed by global propagation comes from the prior typed state.",
+      "Only root performs cross-folder append; only stage5 replaces the global effect audit.",
+      "Stages2\u20135 consume typed evidence and witness snippets only. Root retains raw source records for exact provenance validation; stage1 is the sole raw-record semantic reader.",
+      "A failed or absent required contribution remains explicit; source code does not repair a missing stage by reconstructing the final answer in root.",
+      "Fixture and oracle bytes and source-world identity remain unchanged. The separate variant extends typed assertion provenance and explicit edge-decision state."
+    ],
+    "qualification": "Separate diagnostic source variant; no adoption or training admission without matched live contribution and task-result evidence.",
+    "stage5_no_op_policy": "When this batch adds no graph records, recompute the global audit from carried supported typed state through the same finite frontier. Preserve prior evidence. A wholly empty graph/seed universe yields a witnessed absence; it does not erase an existing supported audit merely because the current folder is empty."
+  },
+  "typed_evidence_handoff": {
+    "schema": "semantic-typed-evidence-handoff/1",
+    "overrides": "Render these type overrides and numbered plans instead of inherited raw-batch/context stages. StageInput2..5 contain BatchIdentity, never EvidenceBatch. TypedStageContext has no raw source collection.",
+    "root_exact_ownership": [
+      "Bind source IDs and paths from fixture manifest, retaining raw records outside downstream semantic call inputs.",
+      "Validate each returned witness quote is a nonempty substring of its identified original record. This is a mechanical provenance check, not semantic entailment.",
+      "Require one stage1 assertion decision for each current record ID. Reject missing, duplicated or foreign identities as an explicit failed contribution.",
+      "The root appends current-batch edgeDecisions exactly once alongside other owned arrays, then replaces the global audit."
+    ],
+    "stage1": {
+      "name": "readStudyPlots",
+      "owned": "interactionAssertions:InteractionAssertion[]",
+      "numbered_plan": [
+        "1. Initialize an empty typed interactionAssertions list for this folder. Visit each actual batch record once, preserving its exact manifest ID and path in parent scope.",
+        "2. Bind the source-independent claimExtractionRule stated below. Create a scoped NL literal returning AssertionContent on this record text. Extract reported claims, observations, conditions and perturbations before any causal-sign judgment; preserve modality and unresolved wording. The NL result reports each complete species/resource source noun phrase in entitySurfaces as sourceForm and its letters-only lowercase key, preserving grammatical number and source spelling.",
+        "3. Directly await the literal. Validate nonempty exactQuote, and validate every sourceForm as an exact complete lexical span in this record with key equal to sourceForm.toLowerCase(). Boundary checks validate the reported span; noun/phrase selection remains the literal semantic judgment. A failed contribution requires repair.",
+        "4. Create one InteractionAssertion from the actual semantic result; bind source ID/path and witness in parent scope. Copy validated entitySurfaces and derive organisms exactly from their keys. Append once, including background/unresolved decisions.",
+        "5. Build BatchIdentity from the current record IDs/paths. Call buildInteractionGraph with this identity, TypedStageContext and the actual interactionAssertions. Preserve its returned FinalSemanticState."
+      ],
+      "idiom_preconditions": "Declare local EntitySurface, AssertionContent and InteractionAssertion aliases; initialize interactionAssertions; bind record. The exact lexical-span check validates a returned source span and never infers a noun, lemma or synonym.",
+      "direct_await_idiom": "const claimExtractionRule = \"Extract source-reported interactions, observations, conditions and perturbations before causal validation. Select complete species/resource noun phrases from this record. Copy each exact sourceForm including grammatical number, and derive key by lowercasing its letters only. Preserve source spelling; equivalence beyond case requires explicit source evidence. Return ambiguous claim meaning as unresolved with exact wording retained.\"; const interpretRecord = nl.with<AssertionContent>({claimExtractionRule})`Return kind, entitySurfaces, observation, exactQuote and reason for this source record. Each entity surface is its complete source noun phrase and lowercase key. Preserve modality and uncertainty; later stages assess signed causality.`; const content = await interpretRecord({text:record.text}); if (!content.exactQuote || !record.text.includes(content.exactQuote)) throw new Error(\"Return a nonempty exact quote from the supplied record.\"); const lexicalCharacter = /[\\p{L}\\p{M}\\p{N}]/u; for (const surface of content.entitySurfaces) { const occurrences = surface.sourceForm ? record.text.split(surface.sourceForm) : []; let offset = 0; let complete = false; for (let i = 0; i < occurrences.length - 1; i++) { offset += occurrences[i].length; const before = offset ? record.text[offset - 1] : \"\"; const after = record.text[offset + surface.sourceForm.length] ?? \"\"; if (!lexicalCharacter.test(before) && !lexicalCharacter.test(after)) complete = true; offset += surface.sourceForm.length; } if (!complete || surface.key !== surface.sourceForm.toLowerCase()) throw new Error(\"Copy a complete source noun phrase and lowercase only its letters for the key.\"); } const assertion:InteractionAssertion = {sourceId:record.id,sourcePath:record.path,kind:content.kind,organisms:content.entitySurfaces.map(s => s.key),entitySurfaces:content.entitySurfaces,observation:content.observation,reason:content.reason,witnesses:[{sourcePath:record.path,quote:content.exactQuote}]}; interactionAssertions.push(assertion);",
+      "new_contribution": "The literal chooses reported meaning and complete source entity phrases. Exact parent validation binds source surfaces to casefold-only keys; later stages consume those actual keys."
+    },
+    "stage2": {
+      "name": "buildInteractionGraph",
+      "owned": "edgeDecisions:EdgeDecision[] and interactionEdges:InteractionEdge[]",
+      "numbered_plan": [
+        "1. Iterate over actual current-batch interactionAssertions. Preserve one EdgeDecision for each assertion, including perturbation-only, background and unresolved records.",
+        "2. Select related typed assertions only to resolve a referent or condition of this assertion. Each EdgeDecision owns only relations actually asserted by its own source assertion; include its own witness on every returned edge. A perturbation-only claim remains no_relation even when nearby records describe interactions.",
+        "3. Create the scoped EdgeContent literal from interpretationRule. Judge whether this assertion establishes a directed signed effect, preserves a perturbation/background without a relation, or leaves the relation unresolved. Association alone does not establish a causal sign. Copy endpoint keys from primary or explicitly linked related entitySurfaces; related evidence can resolve a referent but cannot license an unreported independent edge.",
+        "4. Directly await its result; validate every returned witness against supplied typed witness snippets. Bind decision source identity to the input assertion. Append the decision and only its established edges to owned arrays. Unresolved decisions remain typed and reach the audit.",
+        "5. Pass the actual prior assertion objects, edgeDecisions and established interactionEdges to assessCausalLink with BatchIdentity/TypedStageContext. No downstream field exposes original record text."
+      ],
+      "idiom_preconditions": "Declare EdgeInput, EdgeContent, EdgeDecision and InteractionEdge aliases; initialize edgeDecisions and interactionEdges; bind assertion and relatedAssertions from typed current/prior state; validate edge witness provenance before append.",
+      "direct_await_idiom": "const interpretationRule = input.context.rule; const interpretEdge = nl.with<EdgeContent>({interpretationRule})`Interpret relations reported in the primary assertion. Related assertions may resolve its referents or conditions; retain their separate ownership for independent relations. Every returned edge includes a witness from the primary assertion. A perturbation-only assertion returns no_relation. Return established with directed signed edges only when source evidence establishes them; no_relation for an interpreted perturbation or background that adds no edge; unresolved for missing, contradictory or ambiguous direction or sign. Copy cause/effect keys exactly from supplied entitySurfaces, preserving source grammatical number and spelling apart from letter case. Resolve references only from explicit linked evidence; preserve exact witness snippets. Return status, edges and reason.`; const content = await interpretEdge({assertion,relatedAssertions}); const allowedKeys = new Set([assertion,...relatedAssertions].flatMap(a => a.entitySurfaces.map(s => s.key))); const suppliedWitnesses = [assertion,...relatedAssertions].flatMap(item => item.witnesses); for (const edge of content.edges) { if (!allowedKeys.has(edge.cause) || !allowedKeys.has(edge.effect)) throw new Error(\"Use endpoint keys from the supplied source entity surfaces.\"); if (!edge.witnesses.some(w => assertion.witnesses.some(p => p.sourcePath === w.sourcePath && p.quote === w.quote)) || !edge.witnesses.every(w => suppliedWitnesses.some(p => p.sourcePath === w.sourcePath && p.quote === w.quote))) throw new Error(\"Return witnesses from the supplied typed evidence.\"); } if (content.status !== \"established\" && content.edges.length) throw new Error(\"Keep unresolved or absent relations in the decision reason; established edges require established status.\"); const decision:EdgeDecision = {sourceId:assertion.sourceId,sourcePath:assertion.sourcePath,status:content.status,edges:content.edges,reason:content.reason,witnesses:assertion.witnesses}; edgeDecisions.push(decision); if (decision.status === \"established\") interactionEdges.push(...decision.edges);",
+      "new_contribution": "Actual returned edge direction, sign and status control graph inclusion; unresolved interpretation remains auditable."
+    },
+    "later_stage_contract": [
+      "Stage3 directly consumes one focused CausalDecision per actual edge into an assessment or source-linked missing/contradicted contribution. It preserves all earlier typed evidence; Stage5 treats unsupported or missing assessments as audit findings requiring repair.",
+      "Stage4 applies the existing narrow scope literal with ScopeInput.premises:Witness[]. Exact quoted evidence remains available through typed assertions.",
+      "Stage5 audits the union of prior/current typed graph and unresolved decisions. A missing required interpretation is an explicit audit failure; root cannot report a complete exact answer by rereading raw source."
+    ],
+    "exact_vs_semantic": "ID/path binding, quote substring validation, finite iteration and field transfer are exact mechanism. Relevance, identity, causal direction/sign, scope and uncertainty are NL decisions.",
+    "qualification": [
+      "Render and parse all five overridden StageInput aliases.",
+      "Verify no text/relatedRecords raw field exists in StageInput2..5 or their context.",
+      "Trace one actual returned AssertionContent into stage2 input and its actual EdgeContent into stage3 input.",
+      "Check an unresolved interpretation reaches global audit.",
+      "Matched diagnostic first; approximately48 live samples before adoption."
+    ],
+    "stage3": {
+      "name": "assessCausalLink",
+      "owned": "causalAssessments:{cause:string;effect:string;signedEffect:number;direct:boolean;witnesses:Witness[]}[]",
+      "numbered_plan": [
+        "1. Initialize this batch causalAssessments empty. Visit each actual current-batch interactionEdge once; find the typed assertion owners and condition/referent premises through its source witnesses.",
+        "2. Bind CausalInput to this one edge plus only those typed assertions. Capture causalAuditRule: distinguish a source-declared directed causal effect from co-occurrence, and distinguish a direct link from a composed path. Preserve explicit fictional causal declarations without demanding an external experiment.",
+        "3. Create a scoped CausalDecision literal over that narrow input and directly await it. The result owns established, direct, reason and exact supplied witnesses; it is one semantic assessment, not an aggregate stage result.",
+        "4. Validate nonempty returned witnesses against supplied typed evidence. When established is true and direct is known, append the actual assessment with cause/effect/sign copied from this input edge and direct/witnesses from this return.",
+        "5. For false or unknown establishment, or missing directness, append a witnessed StageAbsence describing this specific failed/missing causal assessment. Preserve the edge and source decisions as evidence for audit; a missing required assessment remains a repair obligation.",
+        "6. Pass all actual inherited typed contributions, causalAssessments and stageAbsences to interpretObservationScope. The named parent owns this next-stage call after consuming all per-edge returns."
+      ],
+      "idiom_preconditions": "Declare CausalInput and CausalDecision aliases and initialize causalAssessments plus copied stageAbsences. Bind causalInput to one actual edge and its typed supporting assertions; edge identity/sign remain parent-held.",
+      "direct_await_idiom": "const causalAuditRule = \"Judge whether supplied wording establishes this directed causal effect and whether it is a direct link or a composed path. A fictional source may declare causation directly. Separate causal claims from co-occurrence and preserve missing premises.\"; const assessEdge = nl.with<CausalDecision>({causalAuditRule})`Return one CausalDecision with established, direct, reason and exact supplied witnesses for this edge. Preserve source uncertainty.`; const assessment = await assessEdge(causalInput); const suppliedWitnesses = [ ...causalInput.edge.witnesses, ...causalInput.assertions.flatMap(a => a.witnesses) ]; if (!assessment.witnesses.length || !assessment.witnesses.every(w => suppliedWitnesses.some(p => p.sourcePath === w.sourcePath && p.quote === w.quote))) throw new Error(\"Return nonempty witnesses from the supplied typed evidence.\"); if (assessment.established === true && assessment.direct !== null) { causalAssessments.push({cause:causalInput.edge.cause,effect:causalInput.edge.effect,signedEffect:causalInput.edge.sign,direct:assessment.direct,witnesses:assessment.witnesses}); } else { stageAbsences.push({stage:\"assessCausalLink\",sourcePaths:assessment.witnesses.map(w => w.sourcePath),reason:assessment.reason}); }",
+      "new_contribution": "The returned causal-support/directness judgment controls inclusion in typed causalAssessments. Original edge identity/sign cannot be replaced by an independently invented relation."
+    }
+  },
+  "entity_surface_contract": {
+    "semantic_owner": "Stage1 NL literal selects complete source noun phrases; Stage2 NL interprets referents/relations using supplied forms.",
+    "exact_mechanism": "Complete lexical span occurrence, lowercase key equality, parent-derived organisms and allowed endpoint membership.",
+    "limitations": "Boundary checks establish complete lexical tokens, not correct semantic noun-phrase selection. Phrase scope and referent entailment still need NL/source review.",
+    "later_stage_identity": "Stage3 copies input edge cause/effect/sign. Stage4 preserves exact supplied cause/effect keys; Stage5/root use these graph keys without inflection or synonym rewrite.",
+    "later_stage_wording": "Use exact keys derived by lowercasing complete supplied source forms; preserve grammatical number and spelling in every later stage."
+  },
+  "stage_rename": {
+    "from": "verifyResult",
+    "to": "auditEffectGraph"
+  },
+  "graph_audit_frontier": {
+    "schema": "semantic-named-graph-frontier/1",
+    "owner_stage": "auditEffectGraph",
+    "step_name": "advanceEffectFrontier",
+    "relative_child_path": "auditEffectGraph/advanceEffectFrontier.nl",
+    "input_type": "EffectFrontier",
+    "output_type": "EffectFrontier",
+    "args": {
+      "state": "EffectFrontier"
+    },
+    "description": "Propagate supported source effects to one ready entity and preserve conflicting downstream predictions.",
+    "numbered_plan": [
+      "1. Read remainingEntityKeys and the actual supported incoming edges. Select one remaining entity whose incoming causes are all completed. The choice among independent ready entities is presentation only; every source dependency must be ready before its consumer is classified.",
+      "2. If no remaining entity is ready, retain the blocked entities as unresolved findings with their actual edge witnesses and finish this frontier. An empty frontier is already finished. Source cycle or missing dependency is explicit evidence, not a reason to erase an edge.",
+      "3. Gather this entity's actual incoming edges, completed parent findings and signed paths ending at those parents. Include any explicit source perturbation seed for this same supplied entity key. Preserve exact source-form keys and source witnesses throughout the join.",
+      "4. For each actual parent path and supported incoming edge, form the extended path by appending this entity; its influence sign is the parent sign multiplied by the source edge sign. Include the seed path [entity] with its source perturbation sign. Use exact arithmetic only after the NL join selects actual supported premises.",
+      "5. Judge the resulting predictions together. Only positive predictions imply increase; only negative predictions imply decrease. Opposing signs without source strengths imply unresolved, and an unresolved influencing parent preserves downstream uncertainty. A node with no perturbation-connected path is unaffected. Keep every supported path and the source-grounded reason for this node finding.",
+      "6. Append these actual paths and the one EffectNodeFinding to copied state. Remove only this entity from remainingEntityKeys and append it once to completedEntityKeys. Preserve every earlier path, finding, seed and edge; this step owns one new entity contribution.",
+      "7. Set finished when no entity remains. Return the copied EffectFrontier with strictly fewer remainingEntityKeys, or the explicit blocked terminal finding from step2. Parent audit consumes these actual returned paths and findings."
+    ],
+    "iteration": {
+      "mechanism": "existing named callable iterateOn",
+      "measure": "remainingEntityKeys.length",
+      "finished_predicate": "state.finished",
+      "universe": "Unique endpoint keys of the supported typed graph plus explicit typed perturbation seed keys; fixed before the first step.",
+      "progress": "Each progressing call consumes one existing entity identity. A blocked source graph returns an explicit unresolved terminal result.",
+      "ownership": "auditEffectGraph owns the iterateOn call; advanceEffectFrontier performs one step and returns actual EffectFrontier."
+    },
+    "callable_visibility": "Renderer places the authored step beneath the final auditEffectGraph callable folder and retains this direct edge in source/call-graph checks.",
+    "exact_seams": [
+      "Source ID/path/quote and endpoint membership checks",
+      "Finite copied-array bookkeeping and exact sign multiplication after source-supported joins",
+      "Projection of actual returned paths and node findings into the public effectAudit fields"
+    ],
+    "nl_owned_decisions": [
+      "Supported graph joins from actual prior/current stage contributions",
+      "External perturbation interpretation from source-linked typed assertions",
+      "Ready dependency selection and source-cycle/missing-premise finding",
+      "Causal-path extension and conflict/uncertainty classification"
+    ]
+  },
+  "implementation_request": "Render direct literal wording and stage_forwarding_contract for the four named continuation stages. Preserve v15 Stage5 graph frontier, source surfaces, typed handoff, fixtures and gold. Keep frozen v15 unchanged.",
+  "stage_forwarding_contract": {
+    "applies_to": [
+      "readStudyPlots",
+      "buildInteractionGraph",
+      "assessCausalLink",
+      "interpretObservationScope"
+    ],
+    "instruction": "After binding the complete next-stage input, perform the final forwarding in one eval action with finish:true whose code directly returns the awaited named-child result.",
+    "example": "eval({code:\"return await interpretObservationScope(nextStageInput);\",finish:true})",
+    "renderer_rule": "Render the actual next child name and the already bound typed input variable at each forwarding stage. This is the final action after all owned contributions and checks have been completed."
+  }
+}

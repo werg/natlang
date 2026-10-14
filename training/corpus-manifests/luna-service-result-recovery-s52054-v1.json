@@ -1,0 +1,37 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-service-result-recovery-s52054-v1",
+  "owner": "pop",
+  "path": "runs/luna-service-result-recovery-s52054-v1",
+  "files": [
+    {
+      "path": "accepted-parents.native.jsonl",
+      "bytes": 5201896,
+      "sha256": "c12210c6d7383ab8cea29a0d8b39eacf757d2ba46d782b8fe739f35b93dba9cf",
+      "lines": 47
+    },
+    {
+      "path": "admission-review.json",
+      "bytes": 1489,
+      "sha256": "690cd16bd0dd375c189ef176f7f1c5d2e426e19cf230c114843c231e76a189ca"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 3960804,
+      "sha256": "ad606a8b67317a8f758d7486295d156859aa774ec215fc373588e5d6eb802d9c",
+      "lines": 58
+    },
+    {
+      "path": "source-review.json",
+      "bytes": 558,
+      "sha256": "b7df27cb6db15d26f91d7fed37c4156282a737b4c7ffacac79a7000dd6b53d43"
+    },
+    {
+      "path": "source.ir.jsonl",
+      "bytes": 129012,
+      "sha256": "e73139c7815df5ceb9dd1e15b8ce32fc10509a63c0117aa8e6958b2dee8cf274",
+      "lines": 48
+    }
+  ],
+  "bytes": 9293759
+}

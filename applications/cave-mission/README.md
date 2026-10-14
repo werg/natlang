@@ -5,3 +5,5 @@ A typed natural-language application that turns uncertain survey evidence into a
 The source snapshot is read-only. Actions are proposed data for a fictional closed mission. The first fixture is `training/semantic_applications/astra/cave-mission/mirrored-vault/fixture`; its request, oracle, full typed reference and verifier live outside the model-visible source tree as declared in `project.json`.
 
 See DECOMPOSITION.md for stage ownership and exact seams. Source-only: live execution and model-facing qualification remain pending.
+
+Survey v5 source: 29NL functions / 728 lines. NL inventory and per-item judgments replace extraction tables; actual frame output feeds passage reading. Twenty item controls and22existing policy controls pass; typed canonical replay passes. Fixture/oracle/reference unchanged. Peer/live qualification pending, no training admission.

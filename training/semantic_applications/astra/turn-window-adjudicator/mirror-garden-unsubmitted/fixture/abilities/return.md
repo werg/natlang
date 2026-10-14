@@ -1,0 +1,3 @@
+[RET01] Aster's Return ability has one available token RETURN for card CA across this whole turn. If an instance of CA is discarded by Fork's resolved batch, Return is eligible, consumes RETURN when queued, and remembers that departing instance's last-known controller.
+[RET02] Resolving Return creates garden instance A2 of card CA under the remembered last-known controller, integrity2, damage0 and growth0, with no attachment. A1 remains the discarded old instance in the history; A2 does not refresh RETURN or any other turn-use token.
+[RET03] Return does not choose the card's controller at Fork announcement, the owner of Mantle, or Fork's caster. Its controller basis is exactly the departing instance's last-known controller.

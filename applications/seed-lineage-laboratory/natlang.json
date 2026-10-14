@@ -1,0 +1,1 @@
+{"schema":"natlang.package/v2","name":"@natlang/seed-lineage-laboratory","version":"0.1.0","description":"Joint inheritance beliefs and adaptive source-grounded experiment policies in a closed fictional seed bank.","include":["types.ts","designExperiments.nl","designExperiments","tsconfig.json"],"engines":{"natlang":">=0.1.0","node":">=22.13.0"}}

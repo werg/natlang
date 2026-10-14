@@ -1,0 +1,596 @@
+{
+  "schema": "natlang.semantic-application-source/1",
+  "id": "astra-app-turn-window-mirror-garden-v1",
+  "source_root": "applications/turn-window-adjudicator",
+  "entry": "adjudicateTurn.nl",
+  "entry_kind": "directory-reducer",
+  "request_type": "TurnRequest",
+  "result_type": "TurnCertificate",
+  "fixture_root": "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture",
+  "request_path": "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/request.json",
+  "oracle_path": "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/oracle.json",
+  "source_world_split_key": "astra-turn-window-glass-garden-v1",
+  "program_files": [
+    "adjudicateTurn.nl",
+    "adjudicateTurn/auditTurn.nl",
+    "adjudicateTurn/auditTurn/challengeTiming.nl",
+    "adjudicateTurn/auditTurn/replayIdentity.nl",
+    "adjudicateTurn/captureAnnouncements.nl",
+    "adjudicateTurn/captureAnnouncements/bindReference.nl",
+    "adjudicateTurn/compileWindows.nl",
+    "adjudicateTurn/compileWindows/checkWindowDependencies.nl",
+    "adjudicateTurn/compileWindows/classifyTiming.nl",
+    "adjudicateTurn/readTurn.nl",
+    "adjudicateTurn/readTurn/readBoard.nl",
+    "adjudicateTurn/readTurn/readIntents.nl",
+    "adjudicateTurn/readTurn/readRules.nl",
+    "adjudicateTurn/readTurn/readRules/interpretAbility.nl",
+    "adjudicateTurn/settleTurn.nl",
+    "adjudicateTurn/settleTurn/advanceWindow.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/collectTriggers.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/collectTriggers/interpretTrigger.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/prepareBundle.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/resolveBatch.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/resolveBatch/judgeOutcome.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/resolveBatch/reconcileDeltas.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/resolveInterrupts.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/applyReplacement.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/bindSubmittedChoice.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl",
+    "types.ts",
+    "natlang.json",
+    "tsconfig.json"
+  ],
+  "fixture_files": [
+    "abilities/other.md",
+    "abilities/return.md",
+    "abilities/scribe.md",
+    "announcements/fork.md",
+    "board/before.md",
+    "choices/order.md",
+    "contracts/result.md",
+    "manifest.json",
+    "responses/submitted.md",
+    "rules/identity.md",
+    "rules/replacements.md",
+    "rules/windows.md"
+  ],
+  "metadata_files": [
+    "DECOMPOSITION.md"
+  ],
+  "typed_call_graph": {
+    "nodes": [
+      {
+        "path": "adjudicateTurn/auditTurn/challengeTiming.nl",
+        "args": {
+          "window": "WindowTrace",
+          "windows": "WindowTrace[]",
+          "captured": "CapturedTurn",
+          "source": "TurnSource"
+        },
+        "returns": "TurnFinding[]",
+        "owned_delta": "Independently challenge one window snapshot choice and semantic consequence timing."
+      },
+      {
+        "path": "adjudicateTurn/auditTurn/replayIdentity.nl",
+        "args": {
+          "captured": "CapturedTurn",
+          "settled": "WindowState",
+          "source": "TurnSource"
+        },
+        "returns": "TurnFinding[]",
+        "owned_delta": "Independently follow instance and controller identity through actual window changes."
+      },
+      {
+        "path": "adjudicateTurn/auditTurn.nl",
+        "args": {
+          "request": "TurnRequest",
+          "source": "TurnSource",
+          "captured": "CapturedTurn",
+          "settled": "WindowState"
+        },
+        "returns": "TurnCertificate",
+        "owned_delta": "Audit returned timing, identity and effect histories without replacing them with a reconstructed answer."
+      },
+      {
+        "path": "adjudicateTurn/captureAnnouncements/bindReference.nl",
+        "args": {
+          "part": "IntentPart",
+          "consumerRule": "RuleReading",
+          "initialBoard": "BoardSnapshot",
+          "clauses": "SourceClause[]"
+        },
+        "returns": "ReferenceBinding",
+        "owned_delta": "Interpret one consumer's captured, live or last-known reference to an announced target."
+      },
+      {
+        "path": "adjudicateTurn/captureAnnouncements.nl",
+        "args": {
+          "request": "TurnRequest",
+          "source": "TurnSource",
+          "protocol": "WindowProtocol"
+        },
+        "returns": "CapturedTurn",
+        "owned_delta": "Capture announcement-owned references and allocate the source-bounded work-slot universe."
+      },
+      {
+        "path": "adjudicateTurn/compileWindows/checkWindowDependencies.nl",
+        "args": {
+          "timing": "TimingBinding[]",
+          "precedence": "TimingEdge[]"
+        },
+        "returns": "DependencyCheck",
+        "owned_delta": "Reconcile timing constraints without introducing a priority between independent effects."
+      },
+      {
+        "path": "adjudicateTurn/compileWindows/classifyTiming.nl",
+        "args": {
+          "rule": "RuleReading",
+          "rules": "RuleIndex",
+          "clauses": "SourceClause[]"
+        },
+        "returns": "TimingBinding",
+        "owned_delta": "Bind a rule to its governing event version and source-defined precedence."
+      },
+      {
+        "path": "adjudicateTurn/compileWindows.nl",
+        "args": {
+          "source": "TurnSource"
+        },
+        "returns": "WindowProtocol",
+        "owned_delta": "Compile source timing, snapshot ownership and finite consequence capacity into a window protocol."
+      },
+      {
+        "path": "adjudicateTurn/readTurn/readBoard.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "rules": "RuleIndex"
+        },
+        "returns": "BoardSnapshot",
+        "owned_delta": "Reconstruct only the before-announcement board and original turn-use state."
+      },
+      {
+        "path": "adjudicateTurn/readTurn/readIntents.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "request": "TurnRequest",
+          "initialBoard": "BoardSnapshot"
+        },
+        "returns": "IntentIndex",
+        "owned_delta": "Separate submitted intent structure from rule examples and future triggered consequences."
+      },
+      {
+        "path": "adjudicateTurn/readTurn/readRules/interpretAbility.nl",
+        "args": {
+          "unitClauses": "SourceClause[]",
+          "governingClauses": "SourceClause[]"
+        },
+        "returns": "RuleMeaning",
+        "owned_delta": "Interpret a source ability's timing, effect and reference semantics in one scoped NL judgment."
+      },
+      {
+        "path": "adjudicateTurn/readTurn/readRules.nl",
+        "args": {
+          "clauses": "SourceClause[]"
+        },
+        "returns": "RuleIndex",
+        "owned_delta": "Assemble coherent ability units and preserve source-defined timing and capacity roles."
+      },
+      {
+        "path": "adjudicateTurn/readTurn.nl",
+        "args": {
+          "request": "TurnRequest"
+        },
+        "returns": "TurnSource",
+        "owned_delta": "Read the closed turn and separate normative rules, initial state and submitted actions."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/collectTriggers/interpretTrigger.nl",
+        "args": {
+          "rule": "RuleReading",
+          "bundle": "EventBundle",
+          "replacements": "ReplacementDecision[]",
+          "batch": "BatchDelta",
+          "beforeBoard": "BoardSnapshot",
+          "afterBoard": "BoardSnapshot",
+          "announcements": "Announcement[]"
+        },
+        "returns": "TriggerDecision",
+        "owned_delta": "Join one trigger condition with resolved quantities and its captured or last-known controller basis."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/collectTriggers.nl",
+        "args": {
+          "bundle": "EventBundle",
+          "replacements": "ReplacementDecision[]",
+          "batch": "BatchDelta",
+          "beforeBoard": "BoardSnapshot",
+          "afterBoard": "BoardSnapshot",
+          "state": "WindowState"
+        },
+        "returns": "TriggerCollection",
+        "owned_delta": "Judge consequences from the actual resolved batch and activate only their source-inventoried slots."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/prepareBundle.nl",
+        "args": {
+          "slot": "WorkSlot",
+          "state": "WindowState",
+          "beforeBoard": "BoardSnapshot"
+        },
+        "returns": "EventBundle",
+        "owned_delta": "Materialize one announced or queued consequence using its correct captured and live references."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/resolveBatch/judgeOutcome.nl",
+        "args": {
+          "part": "EventPart",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource"
+        },
+        "returns": "PartOutcome",
+        "owned_delta": "Interpret one final effect part without observing any sibling unapplied outcome."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/resolveBatch/reconcileDeltas.nl",
+        "args": {
+          "bundle": "EventBundle",
+          "outcomes": "PartOutcome[]",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource"
+        },
+        "returns": "BatchDelta",
+        "owned_delta": "Join same-object simultaneous proposals and derive departures from their combined damage."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/resolveBatch.nl",
+        "args": {
+          "rewritten": "RewrittenBundle",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource"
+        },
+        "returns": "BatchDelta",
+        "owned_delta": "Derive simultaneous effect outcomes from one shared before-state and reconcile their actual proposals."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/resolveInterrupts.nl",
+        "args": {
+          "response": "IntentReading",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource"
+        },
+        "returns": "InterruptResolution",
+        "owned_delta": "Interpret one submitted response without rebinding the suspended announcement."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/applyReplacement.nl",
+        "args": {
+          "state": "ReplacementState"
+        },
+        "returns": "ReplacementState",
+        "owned_delta": "Judge and consume one replacement application against current parts and the fixed before-batch board."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl",
+        "args": {
+          "bundle": "EventBundle",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource",
+          "protocol": "WindowProtocol"
+        },
+        "returns": "OrderPlan",
+        "owned_delta": "Resolve replacement precedence and shared capacity without treating simultaneous outcomes as sequential."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl",
+        "args": {
+          "bundle": "EventBundle",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource",
+          "protocol": "WindowProtocol"
+        },
+        "returns": "RewrittenBundle",
+        "owned_delta": "Set a finite source-governed replacement frontier and consume its rewritten parts."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow.nl",
+        "args": {
+          "state": "WindowState"
+        },
+        "returns": "WindowState",
+        "owned_delta": "Own one ready window and commit only the semantic deltas returned by its children."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn.nl",
+        "args": {
+          "request": "TurnRequest",
+          "source": "TurnSource",
+          "captured": "CapturedTurn"
+        },
+        "returns": "WindowState",
+        "owned_delta": "Resolve the finite source-authorized work frontier while retaining each actual window delta."
+      },
+      {
+        "path": "adjudicateTurn.nl",
+        "args": {
+          "request": "TurnRequest"
+        },
+        "returns": "TurnCertificate",
+        "owned_delta": "Adjudicate the supplied closed turn through captured references, rewritten bundles and witnessed windows."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl",
+        "args": {
+          "applications": "ReplacementApplication[]",
+          "bundle": "EventBundle",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource",
+          "protocol": "WindowProtocol"
+        },
+        "returns": "OrderPlan",
+        "owned_delta": "Interpret actual ordering obligations and enumerate source-legal finite alternatives."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
+        "args": {
+          "plan": "OrderPlan",
+          "previews": "OrderPreview[]",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource"
+        },
+        "returns": "OrderResolution",
+        "owned_delta": "Consume actual preview comparisons and source-backed candidate selection."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl",
+        "args": {
+          "first": "OrderPreview",
+          "second": "OrderPreview",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource"
+        },
+        "returns": "OrderDifference",
+        "owned_delta": "Judge downstream semantic distinguishability from actual typed rewrite previews."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/bindSubmittedChoice.nl",
+        "args": {
+          "plan": "OrderPlan",
+          "previews": "OrderPreview[]",
+          "differences": "OrderDifference[]",
+          "source": "TurnSource"
+        },
+        "returns": "OrderChoiceBinding",
+        "owned_delta": "Join actual submitted order scope and chooser authority to candidate identities."
+      }
+    ],
+    "edges": [
+      {
+        "caller": "adjudicateTurn/auditTurn.nl",
+        "callee": "adjudicateTurn/auditTurn/challengeTiming.nl"
+      },
+      {
+        "caller": "adjudicateTurn/auditTurn.nl",
+        "callee": "adjudicateTurn/auditTurn/replayIdentity.nl"
+      },
+      {
+        "caller": "adjudicateTurn.nl",
+        "callee": "adjudicateTurn/auditTurn.nl"
+      },
+      {
+        "caller": "adjudicateTurn/captureAnnouncements.nl",
+        "callee": "adjudicateTurn/captureAnnouncements/bindReference.nl"
+      },
+      {
+        "caller": "adjudicateTurn.nl",
+        "callee": "adjudicateTurn/captureAnnouncements.nl"
+      },
+      {
+        "caller": "adjudicateTurn/compileWindows.nl",
+        "callee": "adjudicateTurn/compileWindows/checkWindowDependencies.nl"
+      },
+      {
+        "caller": "adjudicateTurn/compileWindows.nl",
+        "callee": "adjudicateTurn/compileWindows/classifyTiming.nl"
+      },
+      {
+        "caller": "adjudicateTurn.nl",
+        "callee": "adjudicateTurn/compileWindows.nl"
+      },
+      {
+        "caller": "adjudicateTurn/readTurn.nl",
+        "callee": "adjudicateTurn/readTurn/readBoard.nl"
+      },
+      {
+        "caller": "adjudicateTurn/readTurn.nl",
+        "callee": "adjudicateTurn/readTurn/readIntents.nl"
+      },
+      {
+        "caller": "adjudicateTurn/readTurn/readRules.nl",
+        "callee": "adjudicateTurn/readTurn/readRules/interpretAbility.nl"
+      },
+      {
+        "caller": "adjudicateTurn/readTurn.nl",
+        "callee": "adjudicateTurn/readTurn/readRules.nl"
+      },
+      {
+        "caller": "adjudicateTurn.nl",
+        "callee": "adjudicateTurn/readTurn.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/collectTriggers.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/collectTriggers/interpretTrigger.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/collectTriggers.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/prepareBundle.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/resolveBatch.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/resolveBatch/judgeOutcome.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/resolveBatch.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/resolveBatch/reconcileDeltas.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/resolveBatch.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/resolveInterrupts.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/applyReplacement.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow.nl"
+      },
+      {
+        "caller": "adjudicateTurn.nl",
+        "callee": "adjudicateTurn/settleTurn.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/bindSubmittedChoice.nl"
+      }
+    ]
+  },
+  "scoped_literals": [
+    {
+      "site": "adjudicateTurn/readTurn/readRules/interpretAbility.nl",
+      "result_type": "RuleMeaning",
+      "consumed_by": "RuleReading kind, timing, controller basis and capacity"
+    },
+    {
+      "site": "adjudicateTurn/captureAnnouncements/bindReference.nl",
+      "result_type": "ReferenceBinding",
+      "consumed_by": "Announcement captured vs deferred controller fields"
+    },
+    {
+      "site": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/applyReplacement.nl",
+      "result_type": "ReplacementDecision",
+      "consumed_by": "Actual next rewritten lineage and reserved tokens"
+    },
+    {
+      "site": "adjudicateTurn/settleTurn/advanceWindow/collectTriggers/interpretTrigger.nl",
+      "result_type": "TriggerDecision",
+      "consumed_by": "Actual queue recipient, consequence and one-use capacity"
+    },
+    {
+      "site": "adjudicateTurn/auditTurn/challengeTiming.nl",
+      "result_type": "TimingJudgment",
+      "consumed_by": "Defended/defect/unresolved certificate findings"
+    },
+    {
+      "site": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl",
+      "result_type": "PairOrder",
+      "consumed_by": "Actual source precedence and independence constraints for finite candidate enumeration"
+    },
+    {
+      "site": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl",
+      "result_type": "ConsequenceComparison",
+      "consumed_by": "Typed difference constraining source-choice selection"
+    }
+  ],
+  "services": [],
+  "composition": {
+    "nl_files": 30,
+    "nl_total_lines": 761,
+    "nl_body_lines": 546,
+    "numbered_steps": 192,
+    "type_aliases": 49,
+    "visible_crisp_policy_lines": 0
+  },
+  "comparison_spec": {
+    "mode": "source-grounded-invariant-and-event-replay",
+    "ordered_fields": [
+      "Window chronology",
+      "Per-lineage replacement before/after sequence",
+      "Causal parent direction"
+    ],
+    "unordered_collections": [
+      "Board rows",
+      "Witnesses",
+      "Sibling batch parts",
+      "Independent source coverage rows"
+    ],
+    "generated_identifiers": "Trace/bundle/revision IDs may differ with consistent references. Original instance/card/intent/part/token/source IDs exact.",
+    "semantic_fields": "Rule grouping, applicability, controller basis, consequence eligibility and audit entailment require independent source review."
+  },
+  "provenance": {
+    "author": "semantic_slate_astra",
+    "kind": "Original fictional evidence and NL application",
+    "license": "Repository license"
+  },
+  "readiness": {
+    "source_loader_checked": true,
+    "typed_declarations_checked": true,
+    "typed_reference_checked": true,
+    "independent_oracle_review": true,
+    "exact_result_replay": true,
+    "live_qualified": false,
+    "training_admitted": false
+  },
+  "model_facing_debt": "All source is unmeasured; full reference/verifier and independent source review precede pinned diagnostic, then approximately48 reviewed samples for an adopted presentation.",
+  "reference_path": "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/reference-report.json",
+  "external_verifier_path": "training/semantic_applications/astra/turn-window-adjudicator/verify-result.mjs",
+  "external_verifier_export": "verifyCandidate",
+  "source_variant": "ordering-preview-v2-mirror-garden",
+  "prior_frozen_source": {
+    "commit": "c3fd2000",
+    "source_sha256": "d7b79ccfd35a32deae7edead61602fe97b2fb74204cc4d808b808669a0ee76f0",
+    "review_receipt": "plans/semantic_stack/TURN_WINDOW_APPLICATION_REVIEW_SOL.json",
+    "status": "Independent source/exact review applies to this prior source only.",
+    "note": "Shared world family; original baseline and these variants must remain in one split."
+  },
+  "independent_reviews": [
+    {
+      "path": "plans/semantic_stack/TURN_WINDOW_APPLICATION_REVIEW_SOL.json",
+      "sha256": "e28d38071d223475e5ab08be158026c1add052a36a7eed52c192f494f917cce1",
+      "reviewer": "semantic_slate_sol"
+    },
+    {
+      "path": "plans/semantic_stack/TURN_WINDOW_ORDER_EXTENSION_REVIEW_SOL.json",
+      "sha256": "e9dc12df2793422d15642be85d9bb2086452c044cad479cffb7deba5b40b0d94",
+      "reviewer": "semantic_slate_sol"
+    },
+    {
+      "path": "plans/semantic_stack/TURN_WINDOW_MIRROR_CASES_REVIEW_SOL.json",
+      "sha256": "258064cc2618ed44749c1d0b8589919019912cdb87c745c286b56de23ddfdec6",
+      "reviewer": "semantic_slate_sol"
+    }
+  ],
+  "readiness_scope": "Source semantics, typed canonical witness and exact certificate controls are reviewed. Actual application/literal execution and training admission remain unqualified."
+}

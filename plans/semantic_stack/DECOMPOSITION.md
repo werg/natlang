@@ -13,6 +13,14 @@ Two independent authored slates provide at least 200 distinct, substantial natur
 5. **Build a case (crisp source adapter).** The adapter checks IDs, types, file paths, nonempty evidence, source identity, split and provenance, then emits Program/2 JSONL. It does not decide a semantic answer or fabricate a teacher trajectory.
 6. **Review and generation (existing teacher pipeline).** A generated case goes through source validation, independent exact/semantic checks, held-source decontamination and teacher collection. A passing execution is not automatically admitted as training data.
 
+For the typed ecology variant, an intermediate named stage owns and checks its
+semantic contribution, then calls the next named `.nl` function and returns
+the child's complete typed state in the same final eval action. The source
+adapter renders the actual child name and typed input binding; it does not
+decide the contribution or substitute a case-specific answer. This source
+presentation follows a live staged-result recomputation and remains diagnostic
+until its model-facing measurement is complete.
+
 ## Why the crisp pieces exist
 
 JSONL construction, SHA-256 provenance, deterministic source grouping, type/schema validation, source-decontamination and exact file/oracle comparisons require exactness. They do not choose domain policy or replace the natural-language functions. The builder extends existing `curriculumCase` and collection contracts; it does not add a second runtime or a separate evaluation mechanism.
@@ -129,8 +137,27 @@ The additive high-depth slate is a different source shape: a complete natlang pr
 
 Application decisions and policy remain in the `.nl` call graph. A project may also declare one external verifier for exact properties of its returned value: source identities, quotations, arithmetic, state conservation and allowed effects. The package snapshots the verifier's repository path and SHA-256 outside the model-visible project. The existing teacher collector calls the pinned verifier with the returned value, authored oracle, and visible input/fixture snapshots; it does not ask the verifier to synthesize an answer. A verifier verdict may accept exact invariants while marking semantic entailment for independent review. The canonical reference replay bypasses this verifier only to prove source/type plumbing; separate canonical and mutation probes qualify the verifier itself. A missing or changed verifier is an infrastructure error and must not become a model-negative row. This crisp boundary is justified by exactness and uses the existing collector/oracle outcome, not a second scheduler or training admission path.
 
+Independent review receipts are source facts, not model-visible policy. The
+packager checks declared receipt paths and SHA-256 values exactly before
+reporting a source as reviewed. The semantic judgment itself remains with the
+independent reviewer; the package only records that the named frozen receipt
+matches. Source-reviewed status permits a live diagnostic and never admits a
+teacher trajectory or training row.
+
 ### Typed ecology evidence handoff (opt-in v12)
 
 The folder reducer owns the finite folder frontier and exact source ID/path binding. Its first natural-language stage reads each `EvidenceRecord` and invokes a scoped interpretation literal, producing a typed `InteractionAssertion` for every record, including background or unresolved records. The second stage receives only these typed assertions and exact witness snippets, invokes a scoped relation literal, and returns one `EdgeDecision` per assertion plus established edges. Later natural-language stages assess causal support, edge-specific scope and the global signed graph using the accumulated typed evidence. Only the root appends completed-folder fields and checks quote substrings against the original records. These exact checks are plumbing; relevance, referents, direction, sign, scope and uncertainty stay in natural-language calls. The emitted source variant is separate from the catalog and preserves its fixture, gold and oracle. A source/reference replay proves wiring only; live stage contribution and final semantic correctness remain unqualified.
 
 The first live typed-handoff trace showed that Stage1's global signed-effect rule caused a clear reported reduction to be marked unresolved. Stage2 also borrowed an edge from another assertion, and Stage3's aggregate child failed to return its own assessment. The v13 task boundary narrows Stage1 to extracting reported claims and perturbations, Stage2 to deciding the primary assertion's own directed relation with its own witness, and Stage3 to one edge at a time through a scoped causal-support decision. Every missing assessment is kept as a witnessed repair obligation. This changes natural-language stage policy and call granularity; exact code still only binds IDs, checks quoted evidence and carries returned fields.
+
+### Non-gating live idiomaticity signal
+
+The policy decision about whether a teacher trajectory expresses the authored
+natural-language program remains an independent semantic review. An exact trace
+scanner may count evaluation-code length, natural-language literal call sites,
+and large authored object/array tables by invocation. It reports locations for
+review and never rejects or admits a row. This crisp mechanism is justified by
+exact counting of recorded tool calls; it cannot decide whether a typed object
+literal is legitimate materialization of a natural-language judgment or a
+hard-coded replacement for that judgment. The reviewer must inspect source
+grounding and whether later natural-language stages consume the returned value.

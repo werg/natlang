@@ -346,3 +346,34 @@ V3 live confirmed the repaired conditional binding table, then a passage compari
 Four additional NL functions interpret pairwise source ordering, enumerate finite candidate orders, compare actual downstream projections and bind a submitted choice. The parent invokes the same actual replacement child on isolated state for each candidate, consumes the selected returned preview, and retains all OrderResolutions in the typed certificate. Original Glass Garden outcomes are unchanged; its baseline source remains pinned separately. **Measurement debt:** zero v2 live samples. Native source/type and canonical checks plus35 external exact controls cover mechanism only; independent branch review and consequential Mirror Garden fixtures precede a pinned diagnostic, then approximately48 reviewed samples for adoption. No crisp rule simulator or arbitrary candidate limit was introduced.
 
 Procedure Compiler closure v2 peer correction: the dependency judgment now sees actual defining type-file declaration texts, and resolved type references retain separately verified `targetEvidence`. File paths alone could not establish symbol ownership. Connected control now includes a fabricated defining-quote negative;11exact controls pass. Live debt remains0/48; frozen baseline unchanged.
+
+### 2026-10-14 — Ecology narrow scope and NL graph frontier v15
+
+V14's source-owned extraction/edge/assessment handoffs worked, but the scope child repeatedly delegated and the graph stage attempted an open-ended eval algorithm. V15 captures a short one-edge condition task and requests its ScopeDecision directly. Graph propagation is now a named typed NL child advancing one ready entity through a fixed finite frontier; the parent alone invokes iterateOn and consumes actual returned paths/conflict findings. Exact operations validate provenance/keys, maintain the copied frontier and multiply already selected source signs. No case-specific graph or gold labels are encoded in the program. **Measurement debt:** zero v15 live samples; renderer/source/type review and canonical replay are preparation only. Inspect actual scope return, parent/child ownership, node contributions, uncertainty propagation and final consumption in the next pinned diagnostic, then approximately48 reviewed samples for adoption. Frozen v14 remains diagnostic-only.
+
+### 2026-10-14 — Train-only service-result collision recovery
+
+The new `service_result_recovery` inline-curriculum family gives ordinary
+numbered task instructions in dispatch, catalog and permit worlds, then seeds
+one actual compiler rejection when a local result declaration collides with
+the injected service name. The teacher sees the runtime's corrective error and
+continues; the planted rejected action remains a zero-target prefix. No held
+proof packet wording, inputs or trajectory was copied. The 48-case train shard
+at seed 52054 passes source/reference replay, exact acceptance and zero held
+ID/source-group intersection. **Measurement debt:** 0/48 live teacher
+continuations reviewed; its Luna queue is pending. Review corrected service
+use, exact result, duplicates and idiomatic continuation before training
+admission. This small recovery family supplements the larger deep-NL
+application sources; it does not meet their application-scale target itself.
+
+### Cave survey per-item NL v5 (2026-10-14)
+
+Stopped physical-v4 trace has case-specific eval tables in passage/frame/equipment extraction; the equipment-wide literal still constructs a whole-survey table. Source-v5 adds NL reading-unit inventories and typed per-unit passage/landmark/gear/sensor/convention judgments, parent-bound exact original quotations, and actual FrameSurvey→passage-reader dataflow. Internal passage cost is nullable for unsupported absence/unknown; executable edge projection requires the source cost contract. Existing fixture/oracle/canonical unchanged; conditional binding and physical/directional distinction preserved. Source/type/control peer qualification is not execution. Measurement debt0/48; frozen v4 row remains diagnostic, not a model-negative or admitted trajectory. Inspect next live item calls/actual returned field consumption, source scope and provenance.
+
+### 2026-10-14 — Ecology direct scope literal and final forwarding v15b
+
+The v15 diagnostic localized two execution boundaries: the narrow scope child treated a captured instruction string as a callable before recovery, and a named stage staged its returned child value without finishing, then invoked the chain again. V15b embeds the three numbered scope steps directly in `nl<ScopeDecision>` and shows each continuation as one final eval action returning the actual awaited child with `finish:true`. Its typed graph frontier and source/fixture/oracle remain unchanged. Render review pins source fc3c6f4f5bbf3ca5a282fbf0a2039d0ea7f072f41bfd002ac8339119538e352e;23 reference replays pass. **Measurement debt:**0/48 v15b live samples. Inspect successful direct scope returns, one actual continuation invocation per parent, final-result consumption and unchanged graph findings before adoption. No training admission from this source review.
+
+### 2026-10-14 — Seed Lineage Laboratory initial deep NL source
+
+New independent application source has27 typed NL callables over a closed fictional inheritance bank: original pedigree/theory/scope readings, joint-ticket posterior updates, oriented offspring/readout predictions, finite belief-and-stock closure, bottom-up adaptive policy valuation and residual-goal audits. Its9document/41clause fixture connects maternal tissue, reciprocal parents, invalid assay sensitivity, correlated priors and distinct tissue capacities. Policy is numbered NL; visible TS contains declarations only. Native parser/type check passes. **Measurement debt:**0/48 live samples; full typed reference, external exact controls and independent source review are pending. Require actual scoped child contributions to update posterior, observable partitions and selected policy before adoption. Source preparation is not training admission.

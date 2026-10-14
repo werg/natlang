@@ -1,0 +1,73 @@
+{
+  "schema": "natlang.application-author-source-review/1",
+  "author": "semantic_slate_astra",
+  "application": "seed-lineage-laboratory",
+  "composition": {
+    "nl_files": 27,
+    "physical_lines": 531,
+    "body_lines": 328,
+    "numbered_steps": 159,
+    "type_aliases": 46
+  },
+  "files": {
+    "applications/seed-lineage-laboratory/DECOMPOSITION.md": "4e80295aa751f2e14e746c7867dbbf428792861dc7752ff5ad728ae4b86e8bea",
+    "applications/seed-lineage-laboratory/designExperiments/auditCertificate/challengeCompartment.nl": "6992afb5dfc16c76999880fe0fb5e3e4b9a1e284dd5b12cb1fb371b104470db8",
+    "applications/seed-lineage-laboratory/designExperiments/auditCertificate/checkBranchStock.nl": "339521904d5b4ea5e8e6268fa8ccc6cfc45a1f4a1d6f2b7adc4872892e6a0f82",
+    "applications/seed-lineage-laboratory/designExperiments/auditCertificate/explainResidualUncertainty.nl": "1656c74c487742b4eeff7ef885bbc00e501b53cce2eb3049395874c853e62498",
+    "applications/seed-lineage-laboratory/designExperiments/auditCertificate.nl": "b4885447941a9a713ca4256465cd5b8e263f0d4d95018732b6c739f350e83e8a",
+    "applications/seed-lineage-laboratory/designExperiments/planPolicy/expandBeliefNode/judgeExperimentUse.nl": "51e2b2cf3c14d68e23fcfbb29503627a7b9bf9c6df140fb455a8be93d0355562",
+    "applications/seed-lineage-laboratory/designExperiments/planPolicy/expandBeliefNode.nl": "7b0474ae2b2cf69e74245565e3426d19eae695626c243584806cb135d8b35c40",
+    "applications/seed-lineage-laboratory/designExperiments/planPolicy/valueBeliefNode/compareCandidates.nl": "30f17e6de7b21556336f163d9bee2458cdf52b764f81d33c23b3b373da494490",
+    "applications/seed-lineage-laboratory/designExperiments/planPolicy/valueBeliefNode.nl": "169aa68fffb4efea9744fbdc6ecdbe23c746fa8de72b46e4fb35aa93545bad7e",
+    "applications/seed-lineage-laboratory/designExperiments/planPolicy.nl": "51aecbee2f8b94728bf6f1b119e6c766a73b4657089634f9ab044d6a36fac8da",
+    "applications/seed-lineage-laboratory/designExperiments/predictExperiments/deriveOffspring.nl": "7d31a3ba8a544ee13e8334468a79676996ad4d4207ab5372b41b8f92aa5e7ca6",
+    "applications/seed-lineage-laboratory/designExperiments/predictExperiments/interpretCross.nl": "75b986f255e1aaf7a62bca64925aa030db6d20021c6bde5d7e3c2530bfdd4460",
+    "applications/seed-lineage-laboratory/designExperiments/predictExperiments/partitionAnswers.nl": "8839df639719ec473c5eb9cc6c393444d5b8e1f6dd07ffc6e032f0d47ee9b4bb",
+    "applications/seed-lineage-laboratory/designExperiments/predictExperiments/readOffspring.nl": "4c766916e4480c68d4cd8ed40d06eb1a0344b6bf519cbe40fb0687e00d457de7",
+    "applications/seed-lineage-laboratory/designExperiments/predictExperiments.nl": "d721d62667cf8e0735461ed058f9b29b98e50bd40578f465ffda37e5b8968fb7",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readAssays/judgeObservationScope.nl": "c2dfa12d53e705f13f140b187c7dcae2f10cc07ad5ee6059395079a63abee2a8",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readAssays.nl": "067e6eba69954d9b321ca7644f34db11bd4f54c7fdb6f71aad1312304d5c2b65",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readPedigree/judgeParentage.nl": "f51fb42bc68c254b51523e8591b2b4515884433d8109bed58e572a81db7fa2e1",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readPedigree.nl": "0bb261bcc3781e03aac5068e952a053a81d2cbe4c7f8ceaff6c1a1d5585bafa8",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readStocks.nl": "d9ee8c7f2765bc42dadd14f14840d6cd63d7ccc39606ffe4c438b226ced67f97",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories.nl": "77e5273d6ca00978595af927e40dc0bd9c6a8809c00c2c5fcdcec313478cd0a3",
+    "applications/seed-lineage-laboratory/designExperiments/readBank.nl": "7f442683022ac4b3957492e67a056ec265ee795d0fce65fde26fb28aa79d8397",
+    "applications/seed-lineage-laboratory/designExperiments/reconstructBelief/assessObservation/predictObservedTrait.nl": "b57a9586a3bd09b453e21d76813735b9acef39a5e0e85825d5408d6b8bf7799c",
+    "applications/seed-lineage-laboratory/designExperiments/reconstructBelief/assessObservation.nl": "548a9d9b74a9a66db7c6873fa4702fbe8f049a3454085bc10a65e88f6d8bc788",
+    "applications/seed-lineage-laboratory/designExperiments/reconstructBelief/expandAssignment.nl": "82c0feec57e0fb4777e998f9fb002ba21d60b631ed30ad7469cd9126e272934d",
+    "applications/seed-lineage-laboratory/designExperiments/reconstructBelief/updatePosterior.nl": "a3b1d4755f35e330ec14b675655cc23aa7eacfdbdeea174f7fdeff48606dd286",
+    "applications/seed-lineage-laboratory/designExperiments/reconstructBelief.nl": "9c41d7686a14e0f63ef63cf93708040666444628bde9d17f131b214d0ebd0550",
+    "applications/seed-lineage-laboratory/designExperiments.d.nl.ts": "2674e986ed3f3fa6acb7e0bcc864a26896c531b1ec685a860b06d33ed9694b99",
+    "applications/seed-lineage-laboratory/designExperiments.nl": "bff21fb26bc038b45c442229c4b16d63cab85d084d500ddc92cb8f81f914dc90",
+    "applications/seed-lineage-laboratory/natlang.json": "d1798807b21229ccf51d16ff5e1556886cef56598d4d4eb6a65515ee0952947b",
+    "applications/seed-lineage-laboratory/tsconfig.json": "981047ea77054531da21a1ef2cdce3753edbdbd7195ba8dc31d91e69b7350309",
+    "applications/seed-lineage-laboratory/types.ts": "86773e7a893f52d93ffce5ea40e34ddb962a5e68852ed19a70a1dfc4d3619b25"
+  },
+  "native_check": {
+    "ok": true,
+    "diagnostics": []
+  },
+  "source_policy_audit": {
+    "executable_ts_helpers": 0,
+    "fixture_specific_assertion_tables": 0,
+    "decision_ownership": [
+      "NL parentage and observation scope literals",
+      "NL joint pedigree consistency and theory prediction",
+      "NL oriented cross and offspring readout literals",
+      "NL material feasibility and goal relevance",
+      "NL finite belief expansion and dependency-ready policy valuation",
+      "NL candidate objective comparison and residual uncertainty audits"
+    ],
+    "exact_mechanics": [
+      "Original source reads and quote/domain checks",
+      "Rational arithmetic after actual semantic likelihood/prediction decisions",
+      "Finite identity bookkeeping and already selected stock subtraction"
+    ]
+  },
+  "fixture_documents": 9,
+  "fixture_clauses": 41,
+  "independent_review": false,
+  "full_typed_reference": false,
+  "live_qualified": false,
+  "training_admitted": false
+}

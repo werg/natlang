@@ -1,0 +1,154 @@
+{
+  "schema": "natlang.application-connected-case-independent-review/1",
+  "reviewer": "semantic_slate_sol",
+  "date": "2026-10-14",
+  "application": "turn-window-adjudicator",
+  "source_branch_review": "plans/semantic_stack/TURN_WINDOW_ORDER_EXTENSION_REVIEW_SOL.json",
+  "initial_world_review": "plans/semantic_stack/TURN_WINDOW_APPLICATION_REVIEW_SOL.json",
+  "result": "passed_source_oracle_and_corrected_exact_seam_review",
+  "hashes": {
+    "training/semantic_applications/astra/turn-window-adjudicator/verify-result.mjs": "d17fb21492285f774de68c2e8ab8b3a4cb394737f067c09a23c99ebb2b28ca76",
+    "training/semantic_applications/astra/turn-window-adjudicator/check-ordering-cases.mjs": "ba981ad7e436b32dfa8873c8e471cfc26b67884603232b5c50e67e1dc5ca39ec",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/manifest.json": "4a0745da4785b716c3d7e5c979233941f796deaccfe544300d86aadbd3d42d64",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/responses/submitted.md": "6bedbe35bc3659b1c23a2db3a4f2427157ab75db755ed59ba8f782df0b351e06",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/choices/order.md": "47841f879c0f1f5e3c215bb68f8d987a5cb06d2d7e6855ad17798a72cd68badd",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/board/before.md": "33c865446024a8cda916c5add50f4be2ccfdbb7ddcf89ba051c022668b2702ee",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/rules/windows.md": "73f46fa2af3030428ad6527d97769073b0673610f066ca0ed1c549cad16bdda5",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/rules/identity.md": "f3511e682db70dd45a0066654db150c257cb5dfff87b0dd6a5e798d308489576",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/rules/replacements.md": "23899827e4660ca4aa0a6878f4528c6cba5f2aac00c6b3b6c9ca03ffc95500e8",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/announcements/fork.md": "6eec0f84eff5749f92588df9b83192c9a52658ccd1b1ae8984cc207cba4538bc",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/abilities/scribe.md": "eec0a41893a3c67b347268f1acd63b74c35607ad21a0e1505f476726c39650d7",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/abilities/return.md": "fd31c768e864beb8baef34db300c5255bf2a5b5200e5201dcee62cb3fcef3149",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/abilities/other.md": "39330c23512037029f5b64a430adbc5dc2a0a3ee13fa38784dbd6eba6a74e77b",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/contracts/result.md": "33438606b10ffc33245591ae66f514c3f954a5db7677304d88f7cce0dece51b8",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/oracle.json": "1d2489f0bd57bb68223787557e00c27295c8e503cecf9ed337660533a3015649",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/request.json": "7eb096b6bbb307002aad06847caa721f26dde7038923e8cb04e1ac54a6d28156",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/reference-report.json": "200cce3de94a663cf0e08840d3a6f50ae0bf84bbc4df040f6cc852fac69930b0",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/project.json": "cbd5218af0b77d52cd563cfaac1e4cce697887c37235be6da7d2c94d708761c4",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/manifest.json": "ce37bc61e8ed7213dfa7bd85e0b40d98af88366811a86642f618b1f211e26f19",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/responses/submitted.md": "6bedbe35bc3659b1c23a2db3a4f2427157ab75db755ed59ba8f782df0b351e06",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/choices/order.md": "2d0d01e2f2c0143dc019a0bf47a0b9454550b828a836acd106169f4b8ded66dd",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/board/before.md": "33c865446024a8cda916c5add50f4be2ccfdbb7ddcf89ba051c022668b2702ee",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/rules/windows.md": "73f46fa2af3030428ad6527d97769073b0673610f066ca0ed1c549cad16bdda5",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/rules/identity.md": "f3511e682db70dd45a0066654db150c257cb5dfff87b0dd6a5e798d308489576",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/rules/replacements.md": "23899827e4660ca4aa0a6878f4528c6cba5f2aac00c6b3b6c9ca03ffc95500e8",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/announcements/fork.md": "6eec0f84eff5749f92588df9b83192c9a52658ccd1b1ae8984cc207cba4538bc",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/abilities/scribe.md": "eec0a41893a3c67b347268f1acd63b74c35607ad21a0e1505f476726c39650d7",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/abilities/return.md": "fd31c768e864beb8baef34db300c5255bf2a5b5200e5201dcee62cb3fcef3149",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/abilities/other.md": "39330c23512037029f5b64a430adbc5dc2a0a3ee13fa38784dbd6eba6a74e77b",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/contracts/result.md": "33438606b10ffc33245591ae66f514c3f954a5db7677304d88f7cce0dece51b8",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/oracle.json": "ecca3ab14d700baeca12d4199a7cef84bbc61036cf576356e0ed24a4334ced98",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/request.json": "3ec6940c43c7a17bdf30b2d1a567d4efc8ac011ee79318c7c063fb45fd61da07",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/reference-report.json": "e5d2b25f33111ec694438329c52a92b5327edd6e95a4126466dd8901225b5898",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/project.json": "5372b1bffe615b49f77f09aa4c7fe04ddf00909e777dd76845169264508faeaf"
+  },
+  "worlds": {
+    "mirror-garden": {
+      "source_world_split_key": "astra-turn-window-glass-garden-v1",
+      "result": "passed_independent_connected_source_oracle_reconstruction",
+      "closure": "Same source world as Glass Garden; do not split alternatives acrossheld/train."
+    },
+    "mirror-garden-unsubmitted": {
+      "source_world_split_key": "astra-turn-window-glass-garden-v1",
+      "result": "passed_independent_connected_source_oracle_reconstruction",
+      "closure": "Same source world as Glass Garden; do not split alternatives acrossheld/train."
+    }
+  },
+  "reconstruction": [
+    "PA is processed before PM; Cover applies PA, while Mantle fails attachment condition. Both PM legal alternatives start with original WARD available andsameRowan/RowanbeforeBoard.",
+    "Cover\u2192Mantle onPM yields onegrowth andMirrorineligible; Mantle\u2192Cover yieldstwogrowth andCoverinapplicable onthen-growth. Convertedquantity remainsactualMantlequantitytwo.",
+    "ActualIlexCHO01 selectsonlyPM Mantle\u2192Cover; ReturnlastknownRowan andScribecapturedIlex are unchanged; MirrorcurrentW1controllerIlex adds2, finalIlexink3.",
+    "MissingCHO01submission leavesbothconsequentialpreviews retained,noForkbatchcommit; finalboardisafterMOVE,WARD/RETURN/SCRIBE/MIRRORavailable,onlyREPRISALpreviouslyspent."
+  ],
+  "closed_findings": [
+    {
+      "id": "dangling-uncommitted-comparison-ids",
+      "fix": "Pair endpoints must refer to distinct actual previews."
+    },
+    {
+      "id": "empty-uncommitted-application-universe",
+      "fix": "Candidate order is a permutation of actual original application universe and respects constraints."
+    },
+    {
+      "id": "selected-choice-empty-support",
+      "fix": "Actual submitted choice requires nonempty exact CHO01support."
+    },
+    {
+      "id": "unresolved-choice-id-overconstraint",
+      "fix": "EmptyactualchoiceIDs accepted with original negative CHO01witness; no submission isinvented."
+    }
+  ],
+  "author_controls": {
+    "new_count": 24,
+    "new_passed": true,
+    "baseline_count": 35,
+    "baseline_passed": true
+  },
+  "independent_finding_probes": [
+    {
+      "name": "dangling comparison preview IDs",
+      "ok": false,
+      "issues": [
+        "uncommitted comparison candidate domain"
+      ],
+      "semantic_review_required": true,
+      "training_admission": false,
+      "scope": "Exact uncommitted-choice state and branch-local rewrite replay; source choice entailment and actual NL execution remain reviewed separately."
+    },
+    {
+      "name": "empty actual application universe",
+      "ok": false,
+      "issues": [
+        "complete uncommitted application universe",
+        "uncommitted candidate application permutation",
+        "uncommitted candidate application permutation"
+      ],
+      "semantic_review_required": true,
+      "training_admission": false,
+      "scope": "Exact uncommitted-choice state and branch-local rewrite replay; source choice entailment and actual NL execution remain reviewed separately."
+    },
+    {
+      "name": "no submitted choice IDs but original negative choice witnesses",
+      "ok": true,
+      "issues": [],
+      "semantic_review_required": true,
+      "training_admission": false,
+      "scope": "Exact uncommitted-choice state and branch-local rewrite replay; source choice entailment and actual NL execution remain reviewed separately."
+    },
+    {
+      "name": "selected choice has no direct support witnesses",
+      "ok": false,
+      "issues": [
+        "nonempty submitted choice support"
+      ],
+      "semantic_review_required": true,
+      "training_admission": false,
+      "scope": "Exact source IDs/quotes, source case state invariants, supplied rewrite/delta replay, capacities and reference chronology. NL rule grouping, condition entailment, missing-proposal semantics and actual callable/literal execution remain separately reviewed."
+    }
+  ],
+  "independent_positive_alpha_equivalence": [
+    {
+      "case": "mirror-garden",
+      "ok": true,
+      "issues": [],
+      "semantic_review_required": true,
+      "training_admission": false,
+      "scope": "Exact source IDs/quotes, source case state invariants, supplied rewrite/delta replay, capacities and reference chronology. NL rule grouping, condition entailment, missing-proposal semantics and actual callable/literal execution remain separately reviewed."
+    },
+    {
+      "case": "mirror-garden-unsubmitted",
+      "ok": true,
+      "issues": [],
+      "semantic_review_required": true,
+      "training_admission": false,
+      "scope": "Exact uncommitted-choice state and branch-local rewrite replay; source choice entailment and actual NL execution remain reviewed separately."
+    }
+  ],
+  "limitations": [
+    "Exact certificate controls are not actual replacement reducer execution.",
+    "Source chooser/ordering/trigger entailment and literal/parent consumption require live trace review.",
+    "No independent extra-world breadth credit for paired shared-source cases."
+  ],
+  "live_qualified": false,
+  "training_admission": false
+}
