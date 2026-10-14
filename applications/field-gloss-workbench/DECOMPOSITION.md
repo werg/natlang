@@ -38,10 +38,10 @@ relative to the application. Stages are numbered NL pseudocode; crisp policy is 
 | analyzeCorpus/inferGrammar | GrammarFrontier over finite source-visible segmentation and role candidates. |
 | inferGrammar/seedCandidates | CandidateInventory from permitted candidate domains plus surface compatibility; no final winner. |
 | inferGrammar/advanceHypothesis | One hypothesis interpreted against the next actual evidence unit, then retained or rejected. |
-| advanceHypothesis/interpretSegmentation | SegmentationReading preserving exact surface spans and alternative morpheme boundaries. |
-| interpretSegmentation/judgeBoundary | Scoped NL boundary judgment from actual reuse/correction evidence and current hypothesis. |
-| advanceHypothesis/interpretRoles | RoleAssignment joining stems, case/focus candidates and the depicted participant relation. |
-| interpretRoles/judgeDiscourseRole | Scoped NL literal distinguishing event role from actual contrast/topic scope. |
+| analyzeCorpus/interpretSegmentation | SegmentationReading preserving exact surface spans and alternative morpheme boundaries. |
+| analyzeCorpus/interpretSegmentation/judgeBoundary | Scoped NL boundary judgment from actual reuse/correction evidence and current hypothesis. |
+| analyzeCorpus/interpretRoles | RoleAssignment joining stems, case/focus candidates and the depicted participant relation. |
+| analyzeCorpus/interpretRoles/judgeDiscourseRole | Scoped NL literal distinguishing event role from actual contrast/topic scope. |
 | advanceHypothesis/compareJudgment | One grounded support/contradiction/unknown constraint with actual prior candidate identity. |
 | compareJudgment/judgeCompatibility | Scoped NL literal consumes predicted meaning and consultant judgment without repairing the prediction. |
 | inferGrammar/closeEvidenceRound | Preserve surviving analyses and complete rejected-prefix proofs; never collapse unknown into false. |
@@ -54,6 +54,7 @@ relative to the application. Stages are numbered NL pseudocode; crisp policy is 
 | repairGlossNotes/judgePatch | Scoped NL replacement judgment from actual supported/rejected analyses and note scope. |
 | analyzeCorpus/auditReport | Independent source-coverage, rejection and translation challenge results. |
 | auditReport/challengeReading | Judge whether returned roles/glosses have actual source support, separately from exact certificate validity. |
+| auditReport/challengePatch | Independently challenge actual slot authority, survivor support, uncertainty and untouched text. |
 
 These paths imply multiple call shapes. Grammar inference nests evidence, segmentation and boundary
 judgments; held-out translation instead nests phrase/context interpretation. Correction-version
@@ -99,3 +100,9 @@ Author visible source first, independently reconstruct the finite analysis lands
 full typed certificate and exact positive/negative controls, obtain independent review, then run a
 pinned live diagnostic. All source-only stages are held; live qualification and training admission
 are false. File count is an architecture description, not a quality gate or a reason to add wrappers.
+
+## Initial authored source scope
+
+The32callables now contain substantive numbered NL procedures, not executable grammar classifiers. Shared segmentation/role interpretation lives directly in the root callable folder and is explicitly used by both candidate attempts and held-out phrase interpretation; their boundary/discourse children remain owned nested callables. This lexical placement permits real cross-branch reuse under the existing loader, without ancestor reloading or duplicate implementations. Grammar and translation frontiers each consume one original item and finish actual returned next state. Actual evidence graph travels into both branches, so held-out interpretation retains original correction/reuse context rather than constructing an empty source substitute.
+
+The initial tree is author-only: visible corpus world, full typed witness, exact checker, independent source review and live execution remain pending. No source eligibility or training admission follows from file count.
