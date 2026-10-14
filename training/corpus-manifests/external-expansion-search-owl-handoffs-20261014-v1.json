@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-search-owl-handoffs-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-search-owl-handoffs-20261014-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 591,
+      "sha256": "8031dc95c866ec98500967abf470644dd0b8d68fc49ac28c9a8539bae0a2ee96"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 3010,
+      "sha256": "13d61b329d8e16e8d6870947b44f0baf827bd95a859ee406d85e4bf6035b441f"
+    },
+    {
+      "path": "trajectory_continuation_research.port-records.jsonl",
+      "bytes": 19843676176,
+      "sha256": "8a3322fd20f0bec73080ebb3af8bf25f2b60890512bdf492dc3dc44e7bd0c989",
+      "lines": 170272
+    }
+  ],
+  "bytes": 19843679777
+}
