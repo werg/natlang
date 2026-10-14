@@ -70482,6 +70482,121 @@
         "held_text": {}
       },
       "notes": "Seven valid shallow episodic folder parents,29 approved decisions; disjoint from81-parent curated cohort. Not lambda-depth qualification."
+    },
+    {
+      "id": "external-expansion-first-wave-20261014-v1-render",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-first-wave-20261014-v1-render",
+      "include": [
+        "receipt.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "parts/*/receipt.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+      "admission": "renders of external-expansion-first-wave-20261014-v1 in parts (scripts/neuralese_data/render_parts.py): program-header and whole-trajectory for every program, full only for the 5% warm-up sample (zstd); LFM2.5 and Mellum2.1 twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+      "derived_from": [
+        "external-expansion-first-wave-20261014-v1"
+      ],
+      "license": "facts from the source rows",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "documents": 2200,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2200,
+                "supervised_tokens": 1507690,
+                "tokens": 28077930,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 44371
+          },
+          "mellum21": {
+            "documents": 2200,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2200,
+                "supervised_tokens": 1584502,
+                "tokens": 28882664,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 47011
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "documents": 44220,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 44220,
+                "supervised_tokens": 29728937,
+                "tokens": 388626247,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 46595
+          },
+          "mellum21": {
+            "documents": 44220,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 44220,
+                "supervised_tokens": 31501142,
+                "tokens": 404997033,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 52700
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "documents": 19963,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 32713342,
+                "documents": 19963,
+                "opening_tokens": 2811615,
+                "supervised_tokens": 29901727,
+                "tokens": 208799905,
+                "tool_tokens": 170602108
+              }
+            },
+            "max_document_tokens": 46586
+          },
+          "mellum21": {
+            "documents": 19963,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 35344897,
+                "documents": 19963,
+                "opening_tokens": 3122635,
+                "supervised_tokens": 32222262,
+                "tokens": 218275264,
+                "tool_tokens": 177382002
+              }
+            },
+            "max_document_tokens": 52706
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [
