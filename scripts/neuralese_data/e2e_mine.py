@@ -29,19 +29,48 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 from source_review import pending_unpinned_source_groups, registry_sha256  # noqa: E402
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
+from natlang_neuralese.common.jsonio import open_jsonl_text  # noqa: E402
 
 TS_HOST = Path(os.environ.get('E2E_MINE_TS_HOST', ROOT / 'ts-host'))
 LFM_TOKENIZER = resolve_str('repo', 'models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f')
 
 
 def open_lines(path):
-    if str(path).endswith('.zst'):
-        proc = subprocess.Popen(['zstd', '-dc', str(path)], stdout=subprocess.PIPE)
-        yield from io.TextIOWrapper(proc.stdout, encoding='utf-8')
-        proc.wait()
-    else:
-        with open(path, encoding='utf-8') as f:
-            yield from f
+    with open_jsonl_text(path) as stream:
+        yield from stream
+
+
+def held_union_groups(work, union):
+    """Bind held protection to the selected immutable files, including compressed views."""
+    paths = []
+    for rendering in ('full', 'program-header', 'whole-trajectory'):
+        directory = Path(union) / rendering
+        current = sorted([*directory.glob('*/text-data.jsonl'),
+                          *directory.glob('*/text-data.jsonl.zst')])
+        if not current:
+            raise ValueError(f'held union has no {rendering} text view: {union}')
+        paths.extend(current)
+    bindings = [{'path': str(path.absolute()), 'sha256': sha256_file_hex(path)} for path in paths]
+    cache = Path(work) / 'held-groups.json'
+    if cache.exists():
+        saved = json.loads(cache.read_text())
+        if isinstance(saved, dict) and saved.get('bindings') == bindings:
+            return set(saved['groups']), bindings
+    groups = set()
+    for path in paths:
+        for line in open_lines(path):
+            if '"test"' not in line:
+                continue
+            row = json.loads(line)
+            if row.get('split') == 'test':
+                groups.update(row.get('source_groups') or [])
+    after = [{'path': str(path.absolute()), 'sha256': sha256_file_hex(path)} for path in paths]
+    if after != bindings:
+        raise ValueError('held union changed during protection snapshot')
+    pending = cache.with_suffix('.pending')
+    pending.write_text(json.dumps({'bindings': bindings, 'groups': sorted(groups)}) + '\n')
+    pending.replace(cache)
+    return groups, bindings
 
 
 def read_lines(path):
@@ -318,21 +347,18 @@ def content_key(row):
 def cmd_assemble(a):
     review_groups = pending_unpinned_source_groups()
     review_sha = registry_sha256()
+    quality_groups, quality_bindings = set(), []
+    for path in getattr(a, 'quarantine_reference', []):
+        before = sha256_file_hex(path)
+        for line in open_lines(path):
+            quality_groups.update(json.loads(line)['source_groups'])
+        if sha256_file_hex(path) != before:
+            raise ValueError(f'quality quarantine changed during snapshot: {path}')
+        quality_bindings.append({'path': str(path), 'sha256': before})
     work = Path(a.work)
     out = Path(a.out_dir) / a.id if a.out_dir else Path(resolve_str('data_nvme', 'natlang-corpora', a.id))
     staged = out.with_name(out.name + '.building'); staged.mkdir(parents=True, exist_ok=True)
-    held_cache = work / 'held-groups.json'
-    if held_cache.exists():
-        held_groups = set(json.load(open(held_cache)))
-    else:
-        held_groups = set()
-        for rend in ('full', 'program-header', 'whole-trajectory'):
-            for path in glob.glob(f'{a.held_union}/{rend}/*/text-data.jsonl')[:1]:
-                for line in read_lines(path):
-                    if '"test"' in line:
-                        t = json.loads(line)
-                        if t.get('split') == 'test': held_groups.update(t.get('source_groups') or [])
-        json.dump(sorted(held_groups), open(held_cache, 'w'))
+    held_groups, held_bindings = held_union_groups(work, a.held_union)
     pieces, piece_conflicts = {}, set()
     shard_stems = sorted(Path(p[:-len('.stats.json')]) for p in glob.glob(str(work / '*' / 'shard-*.stats.json')))
     for stem in shard_stems:
@@ -357,9 +383,12 @@ def cmd_assemble(a):
             r = json.loads(line); records[r['id']] = r
         edges = [json.loads(l) for l in read_lines(f'{stem}.edges.jsonl')]
         reviewed = reviewed_trajectories(records.values(), review_groups)
+        quarantined = reviewed_trajectories(records.values(), quality_groups)
         keep_ids, drop = set(), {}
         for rid, r in records.items():
-            if trajectory_of(r) in reviewed:
+            if r.get('split') == 'train' and trajectory_of(r) in quarantined:
+                drop[rid] = 'source_quality_quarantine_chain'; continue
+            if r.get('split') == 'train' and trajectory_of(r) in reviewed:
                 drop[rid] = 'source_review_pending_chain'; continue
             if rid in seen_ids:
                 drop[rid] = 'duplicate_id_of_' + seen_ids[rid]; continue
@@ -383,7 +412,9 @@ def cmd_assemble(a):
         chains = collections.defaultdict(list)
         for e in kept_edges: chains[e['trajectory']].append(e)
         for rid, why in drop.items():
-            detail = {'source_groups': sorted(reviewed[trajectory_of(records[rid])])} if why == 'source_review_pending_chain' else {}
+            groups = (quarantined if why == 'source_quality_quarantine_chain' else
+                      reviewed if why == 'source_review_pending_chain' else None)
+            detail = {'source_groups': sorted(groups[trajectory_of(records[rid])])} if groups is not None else {}
             omissions.write(json.dumps({'id': rid, 'source': source, 'stage': 'assemble', 'reason': why, **detail}) + '\n')
             totals['omitted_assemble_' + why.split('_of_')[0]] += 1
         for traj, ces in chains.items():
@@ -414,8 +445,11 @@ def cmd_assemble(a):
         'format': 'natlang.teacher_training_turn.native/1 records (whole trajectories of every chain) + pieces + edges + chains, consumed by train/trajectories.py --records/--pieces; tokenizer-agnostic',
         'selection': 'every gradient_edge reference of authenticated_recurrence_context_view over every converted native-turn source (conversion /15 with --admit-host-results: host-computed child returns are producers, kind result/host_result marked in conversion receipts); records = whole trajectories of chains',
         'exclusions': 'cross-split edges; train edges sharing a source group with a held document of the held union; duplicate ids (first source wins), exact duplicate content, piece version conflicts, conversion/authentication failures, all registered in omissions.jsonl',
-        'held_union': a.held_union, 'held_groups': len(held_groups), 'piece_conflicts': sorted(piece_conflicts),
+        'held_union': a.held_union, 'held_groups': len(held_groups), 'held_union_bindings': held_bindings,
+        'piece_conflicts': sorted(piece_conflicts),
         'source_review_registry_sha256': review_sha,
+        'source_quality_quarantine_bindings': quality_bindings,
+        'source_quality_quarantine_groups': len(quality_groups),
         'totals': totals, 'by_source': by_source,
         'by_family': {f: {**fam[f], 'edge_kinds': fam_kinds[f], 'supervised_tokens_lfm25_shard_kept': tokens[f]} for f in sorted(fam)},
         'sources': {d.name: {**json.load(open(d / 'sharded.json')), 'shards_done': len(glob.glob(str(d / 'shard-*.stats.json')))}
@@ -688,6 +722,8 @@ def main():
     m = sub.add_parser('assemble'); m.add_argument('--work', required=True); m.add_argument('--id', required=True)
     m.add_argument('--out-dir', help='parent directory of the corpus (default: data_nvme natlang-corpora); bulk corpora go to the HDD')
     m.add_argument('--held-union', default=resolve_str('repo', 'runs/natlang-target-union-20261011-r3'))
+    m.add_argument('--quarantine-reference', action='append', type=Path, default=[],
+                   help='canonical source-quality group witnesses; exclude whole affected train chains')
     a = ap.parse_args()
     {'shard': cmd_shard, 'convert': cmd_convert, 'assemble': cmd_assemble, 'redo-failed': cmd_redo_failed, 'slice': cmd_slice, 'partition': cmd_partition, 'review-filter': cmd_review_filter}[a.cmd](a)
 

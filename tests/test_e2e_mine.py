@@ -111,3 +111,69 @@ def test_unreadable_converter_input_is_accounted_and_empty_conversion_fails(monk
         assert stats['rows'] == 1 and stats['records_without_edges'] == 1
     else:
         assert stats['error'] == 'conversion_produced_no_records_from_nonempty_source'
+
+
+def test_held_union_cache_tracks_compressed_relocated_views_and_exact_bytes(tmp_path):
+    import subprocess
+    path = Path(__file__).resolve().parents[1] / 'scripts/neuralese_data/e2e_mine.py'
+    spec = importlib.util.spec_from_file_location('e2e_held_cache_test', path)
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    work = tmp_path / 'work'; work.mkdir()
+    (work / 'held-groups.json').write_text('["obsolete"]')
+    union = tmp_path / 'union'
+    paths = []
+    for mode in ('full', 'program-header', 'whole-trajectory'):
+        directory = union / mode / 'lfm25'; directory.mkdir(parents=True)
+        physical = tmp_path / (mode + '.zst')
+        payload = json.dumps({'split': 'test', 'source_groups': [mode]}).encode() + b'\n'
+        physical.write_bytes(subprocess.run(['/usr/bin/zstd', '-q', '-c'], input=payload,
+                                           capture_output=True, check=True).stdout)
+        logical = directory / 'text-data.jsonl.zst'; logical.symlink_to(physical); paths.append(physical)
+    expected = {'full', 'program-header', 'whole-trajectory'}
+    groups, bindings = module.held_union_groups(work, union)
+    assert groups == expected and len(bindings) == 3
+    assert module.held_union_groups(work, union) == (groups, bindings)
+    payload = json.dumps({'split': 'test', 'source_groups': ['replacement']}).encode() + b'\n'
+    paths[0].write_bytes(subprocess.run(['/usr/bin/zstd', '-q', '-c'], input=payload,
+                                     capture_output=True, check=True).stdout)
+    refreshed, new_bindings = module.held_union_groups(work, union)
+    assert refreshed == {'replacement', 'program-header', 'whole-trajectory'}
+    assert new_bindings != bindings
+    with pytest.raises(ValueError, match='no full text view'):
+        module.held_union_groups(work, tmp_path / 'missing-union')
+
+
+def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    spec = importlib.util.spec_from_file_location('e2e_assemble_quality_test', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    monkeypatch.setattr(module, 'pending_unpinned_source_groups', lambda: set())
+    monkeypatch.setattr(module, 'registry_sha256', lambda: 'a' * 64)
+    monkeypatch.setattr(module, 'held_union_groups', lambda *args: (set(), [{'sha256': 'b' * 64}]))
+    work = tmp_path / 'work'; source = work / 'fixture'; source.mkdir(parents=True)
+    records, edges = [], []
+    for name, split in [('bad', 'train'), ('good', 'train'), ('held', 'test')]:
+        ids = [name + ':0', name + ':1']
+        for i, rid in enumerate(ids):
+            records.append({'id': rid, 'split': split, 'source_ref': {'trajectory_id': name},
+                            'source_groups': ['quality:bad'] if name != 'good' and i == 0 else [name],
+                            'target': {'role': 'assistant', 'content': rid}, 'family': 'fixture'})
+        edges.append({'trajectory': name, 'split': split, 'writer_split': split,
+                      'writer_record_id': ids[0], 'reader_record_id': ids[1],
+                      'write_name': name, 'body_sha256': 'c' * 64, 'kind': 'result'})
+    stem = source / 'shard-0000'
+    for suffix, rows in [('records', records), ('edges', edges), ('pieces', []), ('omissions', [])]:
+        Path(str(stem) + '.' + suffix + '.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    Path(str(stem) + '.stats.json').write_text('{}')
+    (source / 'sharded.json').write_text('{}')
+    witness = tmp_path / 'quality.jsonl'; witness.write_text('{"source_groups":["quality:bad"]}\n')
+    module.cmd_assemble(SimpleNamespace(work=str(work), out_dir=str(tmp_path), id='assembled',
+                                       held_union='bound-union', quarantine_reference=[witness]))
+    out = tmp_path / 'assembled'
+    assert {json.loads(l)['id'] for l in (out / 'records.jsonl').open()} == {'good:0', 'good:1', 'held:0', 'held:1'}
+    omissions = [json.loads(l) for l in (out / 'omissions.jsonl').open()]
+    assert {r['id'] for r in omissions} == {'bad:0', 'bad:1'}
+    assert all(r['reason'] == 'source_quality_quarantine_chain' for r in omissions)
+    receipt = json.loads((out / 'receipt.json').read_text())
+    assert receipt['totals']['edges'] == 2
+    assert receipt['source_quality_quarantine_bindings'][0]['sha256'] == module.sha256_file_hex(witness)
