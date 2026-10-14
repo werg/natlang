@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-target-union-r8-ph-prefix-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/natlang-target-union-r8-ph-prefix-20261014-v1",
+  "files": [
+    {
+      "path": "prefix-proof.json",
+      "bytes": 5493,
+      "sha256": "4c34bafd0c0d844ba93d9252ff92e538112d9e31763de50da56931b049488467"
+    },
+    {
+      "path": "program-header/lfm25/text-data.jsonl.zst",
+      "bytes": 1426502107,
+      "sha256": "60c69c269ac7cfc6ee26cbc5d5c78c2d72e98d14ed8370027fe9e800b5c3edf8"
+    },
+    {
+      "path": "program-header/mellum21/text-data.jsonl.zst",
+      "bytes": 1442068099,
+      "sha256": "a6e297d75f3b3054843cb05eb3f8319fc22c106d5d6e870ce8d0a3067a7ab331"
+    }
+  ],
+  "bytes": 2868575699
+}
