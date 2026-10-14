@@ -650,31 +650,39 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false,
-    "independent_source_review": false
+    "independent_source_review": true
   },
-  "reference_scope": "One full authored typed witness passes source/reference replay and exact controls; independent current-variant source/checker review pending; no NL execution credit.",
+  "reference_scope": "One full authored typed witness perworld passes canonical source replay and exactcontrols; independentlysource-reviewed, notactualNLexecution",
   "model_facing_debt": "0/48 current variant; actual selected child identity, original owner/adopter joins, one-episode progress and whole-task outcome remain unmeasured.",
   "source_precision": "Actual per-proposition claims and focused speech units; attachment fact-ID preservation; private intention distinct from retraction; audience adoption/issuer effect ownership; terminal retraction preserved.",
   "reference_path": "training/semantic_applications/sol/dialogue-perspective-ledger/portico-packet/reference-report.json",
   "reference_role": "One private authored full typed source certificate; not an NL execution or complete semantic oracle.",
   "external_verifier_path": "training/semantic_applications/sol/dialogue-perspective-ledger/verify-result.mjs",
-  "generation_ready": false,
-  "readiness_scope": "Current30NL source variant held for independent source/checker review; historical first-world527daf5a package remains pinned separately. No live qualification or training admission.",
+  "generation_ready": true,
+  "readiness_scope": "Pinned diagnostic generation preparation only; actualexecution/livequalification andtrainingadmissionfalse. Historical527daf5a packetremainsseparatelyfrozen.",
   "independent_reviews": [
     {
       "path": "plans/semantic_stack/DIALOGUE_FULL_REVIEW_ASTRA.json",
       "sha256": "6178de67564585173365330bcdc4deed7917e39f015d95cc4f4d152acdba7dc1",
       "reviewer": "semantic_slate_astra",
       "scope": "Full first-world29NL source,16observable oracle,fulltyped canonical and51exactcontrols. Four dangling/omitted provenance findings closed; no actual NL execution or training admission."
+    },
+    {
+      "path": "plans/semantic_stack/DIALOGUE_COUNTERMAND_REVIEW_ASTRA.json",
+      "sha256": "c285f95f26cb4a1cde91f26cf6e59a26f493fa30f0b0ed152b270fc2620b9f22",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Final141d9442 source/checker and two full authored witnesses; independent37query derivation,51+33controls; source-only/noactualNLexecution"
     }
   ],
   "source_review_binding": {
-    "reviewed": false,
-    "scope": "Current30NL variant pending independent source/checker review; first-world29NL baseline reviewed separately."
+    "reviewed": true,
+    "receipt": "plans/semantic_stack/DIALOGUE_COUNTERMAND_REVIEW_ASTRA.json",
+    "sha256": "c285f95f26cb4a1cde91f26cf6e59a26f493fa30f0b0ed152b270fc2620b9f22",
+    "scope": "Current30NL original-target lineage variant; source/type/exactcontrols independentlyaccepted, actualtrajectory/admission unmeasured"
   },
   "training_admission": false,
   "composition": {
@@ -687,7 +695,7 @@
   "source_variant": {
     "id": "countermand-target-lineage-v2",
     "meaning": "Actual typed revision target selection and cross-view owner/adopter effect; one-episode finished state; first-world query meanings unchanged.",
-    "status": "author_source_checker_checked_independent_review_pending"
+    "status": "independently_reviewed_diagnostic_preparation_ready"
   },
   "fixture_document_count": 11,
   "fixture_clause_count": 46,

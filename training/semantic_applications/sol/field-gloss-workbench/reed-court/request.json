@@ -1,0 +1,28 @@
+{
+  "caseId": "sol-field-reed-court-v1",
+  "targets": [
+    {
+      "targetId": "T_NEG",
+      "utteranceId": "X1",
+      "contextId": "CTX1",
+      "question": "Interpret original roles/topic/negative event and preserve consequential prospective ambiguity."
+    },
+    {
+      "targetId": "T_STACK",
+      "utteranceId": "X2",
+      "contextId": "CTX2",
+      "question": "Interpret productive stacked name marking, retaining actual agreeing hypothesis identities."
+    },
+    {
+      "targetId": "T_SWAP",
+      "utteranceId": "X3",
+      "contextId": "CTX3",
+      "question": "Interpret source-grounded event/topic roles, independently of nominal position."
+    }
+  ],
+  "repair": {
+    "noteId": "N1",
+    "slotId": "NA_GLOSS",
+    "allowedPath": "notes/draft-gloss.md"
+  }
+}

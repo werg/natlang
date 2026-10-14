@@ -3,6 +3,12 @@
 Source/reference replay establishes type and fixture validity only. These live
 observations do not grant training admission or count as model-negative rows.
 
+## Ecology v18 callable-location diagnostic (2026-10-14)
+
+- Frozen source SHA-256 `0611d96dca02ac273e4d7e2b60d7afc08ef800d1abaa0be355102398d14a0e4a`, runtime manifest SHA-256 `4ccdba896236e1ecbda87386808ba38f3b426fb3c934f3387d0a8e04bd97bc1a`. Case-000 queue SHA-256 `641f675850d98207d39b3c1a5541d1d919536a5128ae16539983024558d06563`; same-source fresh-seed case-001 queue SHA-256 `24db9d1e2b2952d720a7dd4a4cf0e43eeb78c2d7036aa26636dc96d3f53d63c9`.
+- Case-000 blocked in its first model reply before a source read. Case-001 read the named stages through `read_code` (root action ledger seq 30/37/44/51/58/65 and nested invocation seq 8/16), proving the callable source was available. Its nested eval at seq 23 queried `folder.files('**/*')` for `.nl` and got `[]` because that folder held 24 evidence text files. The nested return at seq 31 said no callable `.nl` files were in the supplied folder. Case-001 result SHA-256 `a9b60fdd39bd09685e13c9c9b5f8941f9e5497ee5964e22fb15e288fe934fdd4`.
+- No named semantic stage was invoked, and the new actual-child binding checker reported `unverified_hold` with zero checked steps at both declared sites. The root materialized an all-unresolved answer without the required stage work; it is not admitted. This is a source-presentation/location confusion, not a missing runtime callable or a model-negative label. v18b changes only the case root instruction to distinguish `read_code(name)` callable definitions from folder evidence and ask for the actual typed `readStudyPlots` call. Compare a matched live retry before broader adoption; approximately 48 v18b samples remain model-facing measurement debt.
+
 ## Ecology, typed v14 (2026-10-14)
 
 - Frozen source SHA-256: `18eaa77244e0d94c9ebd96cc17f68c83291183ea79e1b83b5b411877776f7e60`.

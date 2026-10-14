@@ -1,0 +1,112 @@
+{
+  "schema": "natlang.application-independent-semantic-review/1",
+  "reviewer": "semantic_slate_astra",
+  "application": "field-gloss-workbench",
+  "world": "reed-court",
+  "source_world_split_key": "sol-app-world:field-reed-court-v1",
+  "base_source_commits": [
+    "fd095cb3",
+    "1d686490",
+    "f1745458"
+  ],
+  "reviewed_delta": "Prompt-clause typed handoff and explicit returned readingId precision; exact current hashes below bind this review independently of final commit number.",
+  "reviewed_hashes": {
+    "applications/field-gloss-workbench/analyzeCorpus/auditReport/challengePatch.nl": "de5280a2c0f0153867e10159d57cd0650af2078d380b565127a461365b313de0",
+    "applications/field-gloss-workbench/analyzeCorpus/auditReport/challengeReading.nl": "a76f6c9ef198fdf55c6ce92393ffd9491a08c6b6966cff7926791f608b15efc2",
+    "applications/field-gloss-workbench/analyzeCorpus/auditReport.nl": "b308de76c603439d0af7722f0652261867b7f031639ccdfde534390646b8d746",
+    "applications/field-gloss-workbench/analyzeCorpus/buildEvidence/alignElicitation/judgeResponseScope.nl": "3db63f15070dc490148fe7dd1e41b1b586b841415bcf19b6bb97c3fdacbc9408",
+    "applications/field-gloss-workbench/analyzeCorpus/buildEvidence/alignElicitation.nl": "bb44e55ac4cc022aa3e89bdb98462c62277aed8f57e7433437077d7e0820f840",
+    "applications/field-gloss-workbench/analyzeCorpus/buildEvidence/resolveNoteVersion.nl": "09302b9bb7fe0ecb8c423204572c3ae21cd3ce64d5a1ac38e26d0a5a3c98a3f4",
+    "applications/field-gloss-workbench/analyzeCorpus/buildEvidence.nl": "b65d7ca09001e509b09203ac69f3429c14045db8cdba98a4055e9971112a5f7c",
+    "applications/field-gloss-workbench/analyzeCorpus/inferGrammar/advanceHypothesis/compareJudgment/judgeCompatibility.nl": "1173224ca2ebae4f5f24c0c65eca8f31bcbdc52f075dbe5d6573c3983e92cfb5",
+    "applications/field-gloss-workbench/analyzeCorpus/inferGrammar/advanceHypothesis/compareJudgment.nl": "5a43564379aca37419dc77e4e3593bb7243b5c3c31457f9dffd8e0873852c839",
+    "applications/field-gloss-workbench/analyzeCorpus/inferGrammar/advanceHypothesis.nl": "070ebd3cb50f6dd969edbd2f99f73c867252b24378ac8ace25b17d6cd6df5566",
+    "applications/field-gloss-workbench/analyzeCorpus/inferGrammar/closeEvidenceRound.nl": "03bf64fcae49a521e76d0f4608ccb85bee6521d1d76297248abfe16e60d2eddc",
+    "applications/field-gloss-workbench/analyzeCorpus/inferGrammar/seedCandidates.nl": "12974affd44897f00da56cd45d0b623a4363ef36b1ce62191df60656759caeec",
+    "applications/field-gloss-workbench/analyzeCorpus/inferGrammar.nl": "847b88c795485961ff5bffa6636295e4074b17f3a4cd777f85cd11163c831e38",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/inventoryCorpus/advanceClause.nl": "04db156d15ddb6d94cd09fc2fd1262b4b10074e9494d81a0288ad93b8c46fcee",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/inventoryCorpus.nl": "1821b319b4b8928f6602eb8677bd5f2358f41493a25799f5d951c45659426567",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readCorrections/judgeCorrectionScope.nl": "201e3c006b542c24be87ec68698a7fdc099d46ae4b37b5ba4043b5b4dff7acbd",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readCorrections.nl": "08a5775a3aa6cf9a89d48aa22b846228772f57c6d14a15b85dd76e40d6e42e7f",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readSessions/readSituation.nl": "2ff8e76a13639bd3f299ba7f9f925f5b14c4ba1fcc2379d51a179f3fa728fc26",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readSessions.nl": "dda13fa93e90b5305bcd8be84c98526dcfee134a666cf12756100961ea0a06be",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readUtterances/interpretNote.nl": "a34231dff24d3cc2c785c4ed2dced0040a6cc5c03bba0f2837837b53da22f460",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readUtterances.nl": "78cff5724d86e1253773a92926fdbf39ce66f5c396ccc1fc216ab484136fc008",
+    "applications/field-gloss-workbench/analyzeCorpus/intake.nl": "f51b68339e7ad399eb92441449eb3d852c0ee9260f8d36110555264fd8cfd262",
+    "applications/field-gloss-workbench/analyzeCorpus/interpretRoles/judgeDiscourseRole.nl": "25d754553f26c47e1ec25e8e680e4a4dad1cd97ef9201e8afe3901b919959741",
+    "applications/field-gloss-workbench/analyzeCorpus/interpretRoles.nl": "e3f0bc011bd0866c6acab6bec960b2201a6cf310f1e04567d782f3bc9fcb2fec",
+    "applications/field-gloss-workbench/analyzeCorpus/interpretSegmentation/judgeBoundary.nl": "5df4e2c2ef5dae81adbf0cc53d817c74fb38f632e409f450e3843f3512926129",
+    "applications/field-gloss-workbench/analyzeCorpus/interpretSegmentation.nl": "90d34184d1c1186a068c441b76542c992dc28faab7a43aacf5b40f3700312cfd",
+    "applications/field-gloss-workbench/analyzeCorpus/repairGlossNotes/judgePatch.nl": "9c568bef583f8ad1df82c8d3dcf1aca91ce1b61882f8449ca8f5fa0b95ac7c59",
+    "applications/field-gloss-workbench/analyzeCorpus/repairGlossNotes.nl": "71016f2f93c66d8f937d6d5de15c9b74ef335c1a5b52ac1cdf3491eeb1aaa5f5",
+    "applications/field-gloss-workbench/analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase/judgeContext.nl": "42890d955c90d1adc2afb920f3fe2be11beed35748b55f10baa0531ce7ac423c",
+    "applications/field-gloss-workbench/analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase.nl": "276d6d41431479c718dd67ae03bed18b35bc84488255a50f52fa16e56a7dae70",
+    "applications/field-gloss-workbench/analyzeCorpus/translateHeldOut/advanceTranslation.nl": "f96219ee1bd1012584e6d71479639756c9711ec5fab3ca22585b39ed79d8b0f0",
+    "applications/field-gloss-workbench/analyzeCorpus/translateHeldOut/compareReadings.nl": "ca6edfed762b3a390e9292a9fc873efa1ae9e920b45e48878584f351b4421a80",
+    "applications/field-gloss-workbench/analyzeCorpus/translateHeldOut.nl": "f6d59332c151d959768b01893481f39cd69c4e2b7653af341b846d605cb94201",
+    "applications/field-gloss-workbench/analyzeCorpus.nl": "d3f3152431935dbff0e1c6dc247cec4281836e777682e4600817f880e83070d2",
+    "applications/field-gloss-workbench/types.ts": "e829bc8abc41b7506d50f02a9ee7699828c9bfa611e20e0f0e2358d316fdc335",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/controls/grammar.md": "55f86dbfa0de9dfe1061f1e03e1a1ace1adfa4d39cdd0d0634f0c1cdaf7441ef",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/controls/output-and-repair.md": "f96c51931e73eedf243691555ea94b82c212eef40b8ed3095cd6f4eaf1f92702",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/lexicon/candidates.md": "771ebbcf019d54324739a9d88bccc8b62fce265f0059dabb53e2385898ee799e",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/lexicon/stems.md": "ef5efd2b084eced825aa951f064635c025483f21d24977155d3f10d84a412d16",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/notes/correction.md": "404793c28a16d7f6470046b95a209f2ee8b4b4e2380b6fbeec6f61c02c78d3fb",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/notes/draft-gloss.md": "debed51abe3bb28b7cd76644108de15f80e16ef042d496e2982a498590e0c3b5",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/profiles/consultant.md": "3a782785884351ffe56ad4665b515c096cf749323e58fa7215b3be2bbef3b1eb",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/sessions/s1/scene-a.md": "ddca4e9df364a2c1a32aaf10a2836cf858a57a234cadd8793571984dd35de1bd",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/sessions/s1/scene-b.md": "0f202ccbc9fece4c866fba400c0b75d6efcb9598d942a78d1a42c60eb3b25e6a",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/sessions/s2/stacking.md": "ef82a5a25be28bd2c31ed18161368e1a914dbb962c6225358082d61ff38de7c8",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/sessions/s3/negation.md": "953277dc9b21e0b38669cdbde8f692b1d28104075f1cf2bb2c8f630c35155d79",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/sessions/s3/order.md": "2e7b3e8e82270f4ed8f0aacdd524a8142bdf3c061853ff763304a528cd97c3cc",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/sessions/s3/productivity.md": "650c0febe021150848b3a41a8bf1751423da9428e3d8debec86b378cf80f8a2a",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/targets/discourse.md": "7c533c813712ba46787441104c395f06a5d9969f78efa688d779add5520e50a8",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/request.json": "dee1c09fb1c3059878e2a2d4b1ee8d684e18fee10f1ea169bb520e72053b1499",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/snapshot.json": "77723424f95327856d412957b2485b0071f9759ac0d8dabe393c4eaf9b884a8a",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/oracle.json": "db157d1c5da9d04b3cd0abb82a17917c3d7ef0f08948efd315a622e204261740"
+  },
+  "source_oracle_status": "pass",
+  "independent_derivation": {
+    "candidate_universe": "Four independent binary domains produce16 original choice vectors.",
+    "U1": "Accepted Ila agent/Ema patient/topic Ema permits F_NA=topic and F_RA=agent. The opposite RA reverses roles; NA=agent either conflicts or misses the requested topic. Four vectors remain across B_NA and F_MI.",
+    "U2_U3": "U2 corroborates reversed participant/topic configuration. Stacked U3 licenses Ema as both agent and topic, preventing topic=patient shortcut. Both boundary candidates explicitly include the observed stacked Ema form.",
+    "U4_U6": "New accepted narana is absent from the closed frozen lexicon, eliminating its remaining two vectors. Reordered U6 corroborates source-free nominal order rather than first-position agent.",
+    "U5": "Both MI meanings deny the same Ema-to-Ila event. P5 explicitly excludes futureExpected, so event-negative and not-yet remain distinct survivors. Silence about future is not false future evidence.",
+    "survivors": [
+      "B_NA=productive,F_NA=topic,F_RA=agent,F_MI=event-negative",
+      "B_NA=productive,F_NA=topic,F_RA=agent,F_MI=not-yet"
+    ],
+    "X1": "Ema agent, Nara patient/topic, LIFT false; two actual prospective contributions null and true remain.",
+    "X2": "nara-ra-na gives Nara agent/topic, Ila patient, LIFT true, no prospective contribution; both survivors group semantically.",
+    "X3": "Ila agent, Nara patient/topic, LIFT true, no prospective contribution; both survivors group semantically.",
+    "patch": "C1 plus adopted C2/N1R authorize only N1/NA_GLOSS content agent replacement with contrastive-topic meaning. Preserve accepted N2 transcription, copied N3 reminder, original provenance and independent MI uncertainty."
+  },
+  "typed_flow_review": [
+    "Read all34 callable bodies and declared types; grammar prediction, response scope, compatibility, correction authority, target grouping and patch policy remain numbered NL procedures. No visible executable crisp semantic helper was found.",
+    "Corpus clause inventory, grammar pair frontier and translation target frontier consume actual typed one-item returns, retain completed state and use structurally decreasing original pending inventories.",
+    "Candidate predictions remain separate from scene/consultant constraints. Compatibility consumes actual segmentation/role/licensing returns and cannot repair a candidate using source scene truth.",
+    "Held-out targets remain untested evidence units and cannot eliminate grammar choices. Exact spans, original domains, finite enumeration and state copy are bookkeeping seams.",
+    "The correction child receives original primary plus original adoption/authority context; actual rule/slot decisions govern effective versions and later patch authorization."
+  ],
+  "closed_findings": [
+    {
+      "finding": "Prompt IDs did not guarantee original prompt text reached judgeResponseScope and its actual scoped literal.",
+      "closure": "Parent selects prompts:SourceClause[] by actual original promptId and passes it through the named signature into the literal; original exclusions are explicitly read."
+    },
+    {
+      "finding": "Equivalence groups had readingIds while MeaningReading carried no explicit identity, inviting unstated encoding.",
+      "closure": "MeaningReading now declares readingId, interpretPhrase returns a unique actual identity and compareReadings groups those actual IDs."
+    }
+  ],
+  "open_source_findings": [],
+  "validation_scope": "Independent source/fixture/invariant reconstruction and exact delta inspection. Native/type/tree preflight is author-reported; this receipt does not claim a new independently run canonical or checker test.",
+  "remaining_gates": [
+    "Full typed canonical certificate",
+    "External exact comparator and positive/negative controls",
+    "Independent certificate/comparator review",
+    "Actual scoped child consumption and complete live execution",
+    "Approximately48 live samples per model-facing variant before adoption"
+  ],
+  "live_samples": 0,
+  "training_admission": false,
+  "final_precision_commit": "66cb0894"
+}

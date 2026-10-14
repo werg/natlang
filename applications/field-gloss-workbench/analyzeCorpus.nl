@@ -1,4 +1,5 @@
 ---
+kind: directory-reducer
 description: Infer source-grounded grammar alternatives, target meanings and an authorized note repair.
 args:
   request: LinguisticRequest
