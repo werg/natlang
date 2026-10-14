@@ -3,8 +3,11 @@
 The step-15000 QAD LFM2.5 student scored 4/48 on the protected task packet.
 Ordinary-token/cache parity on captured prompts and sampled control-token
 checks narrowed serving explanations. This diagnostic asks whether a correctly
-admitted train-only action is actually supervised, rendered as the executor
-will see it, and learnable under the exact step-15000 weights. It makes no
+admitted train-only action would be supervised and rendered as the executor
+will see it, and how the exact step-15000 weights score it. The selected
+`s52054` recovery rows were generated after the r3 QAD training input froze;
+they were **not** part of that checkpoint's training set. This is a pipeline
+compatibility and generalization probe, not a claim of learned examples. It makes no
 training-data admission or checkpoint decision.
 
 ## Fixed input and mechanisms
@@ -108,8 +111,13 @@ inspector:'zal'})`. On decision 0001, one called `eval` with `return permits;`
 instead of reading the specific site; three wrote
 `const permits = permits.current({"site":"skait quay"}); return permits;`.
 The latter shadows the service binding in JavaScript and refers to it before
-local initialization. Thus finding the right tool name is insufficient here:
-code-argument composition and recovery from a binding error are concrete
-targets. Verify the exact runtime error/recovery feedback before changing any
-model-facing error text or admitting a repaired preference pair. Four samples
-per decision do not establish prevalence across task families.
+local initialization. The native prompt already included the runtime's
+`invalid-binding` feedback for that exact failure seed, including a distinct
+`permitsResult` name as the repair example; the student repeated the bad
+binding in three sampled continuations anyway. Thus finding the right tool
+name is insufficient here: code-argument composition and recovery from an
+observed binding error are concrete targets. This recent recovery cohort was
+not in step-15000 training, so add it to a declared future corpus and remeasure
+before inferring that trained recovery instruction failed. There is no evidence
+here that the error text itself needs changing. Four samples per decision do
+not establish prevalence across task families.
