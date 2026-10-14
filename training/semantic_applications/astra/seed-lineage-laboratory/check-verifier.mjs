@@ -38,4 +38,11 @@ check('free biological compartment wording',true,r=>r.predictions.partitions.fin
 check('carried stock clause body forged',false,r=>r.policy.closure.stockRules[0].text='All material is free.');
 check('node carried masses contradict probabilities',false,r=>r.policy.closure.nodes.find(n=>n.worlds.length>1).worlds[0].mass.numerator+=1);
 check('proportional internal mass representation',true,r=>{for(const n of r.policy.closure.nodes)for(const x of n.worlds)x.mass.numerator*=3;});
+check('zero-likelihood dangling world ID',false,r=>r.predictions.partitions.find(x=>x.experiment.experimentId==='S').branches.find(b=>b.answer==='mixed').worldLikelihoods.find(x=>x.likelihood.numerator===0).worldId='NO_WORLD');
+check('duplicate zero-likelihood world row',false,r=>{const b=r.predictions.partitions.find(x=>x.experiment.experimentId==='S').branches.find(b=>b.answer==='mixed');b.worldLikelihoods.push(structuredClone(b.worldLikelihoods.find(x=>x.likelihood.numerator===0)));});
+check('unknown tied experiment ID',false,r=>root(r).comparison.tiedExperimentIds=['NO_EXPERIMENT']);
+check('duplicate tied experiment ID',false,r=>root(r).comparison.tiedExperimentIds=['S','S']);
+check('nonoptimal candidate named as tie',false,r=>root(r).comparison.tiedExperimentIds=['C']);
+check('solved leaf has synthetic comparison choice',false,r=>r.policy.values.find(x=>x.selectedExperimentId===null).comparison.selectedExperimentId='NO_EXPERIMENT');
+check('unique winner reports no multi-candidate tie',true,r=>root(r).comparison.tiedExperimentIds=[]);
 const result={passed:checks.every(x=>x.passed),positive:checks.filter(x=>x.expected).length,negative:checks.filter(x=>!x.expected).length,checks,scope:'External exact controls; no executing NL call or independent semantic admission'};console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=1;
