@@ -36,6 +36,12 @@ validated against the row's recorded license and preserved in the generated
 source receipts. This adds no licensing admission gate. It permits the fresh
 Gemini CLINC batches to enter static conversion while retaining the exact
 dataset row and label receipts.
+Local catalog rows that lack an upstream revision are accepted only with the
+explicit `unknown_requires_pinned_source_receipt` status, an exact local file
+digest and relative path, a train split, and nonnegative physical row
+coordinates. The adapter records that uncertainty; it never upgrades the
+provenance claim to a pinned upstream revision. This supports source-disjoint
+Boardgame-QA and PubMedQA decision batches from the current local catalog.
 
 Only source `train` rows are candidates. A candidate is retained only when the
 answer payload has exactly the expected probability keys, numeric finite values
