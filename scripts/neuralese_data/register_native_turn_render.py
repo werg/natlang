@@ -58,6 +58,8 @@ def parse(argv=None):
     p.add_argument('--render-dir', type=Path, required=True)
     p.add_argument('--source-corpus', action='append', required=True)
     p.add_argument('--kind', choices=['member', 'union'], default='member')
+    p.add_argument('--machine', choices=['pop', 'dgx'], default='dgx',
+                   help='machine that owns and publishes the render artifacts')
     p.add_argument('--notes', default='')
     p.add_argument('--supersedes', action='append', default=[], help='registered ids this render replaces')
     p.add_argument('--no-publish', action='store_true')
@@ -73,8 +75,15 @@ def parse(argv=None):
 def make_entry(a) -> dict:
     receipt = json.loads((a.render_dir / 'receipt.json').read_text())
     body = member_entry(a, receipt) if a.kind == 'member' else union_entry(a, receipt)
+    sources = {corpus['id']: corpus for corpus in json.loads(REGISTRY.read_text())['corpora']}
+    unadmitted = [source for source in a.source_corpus
+                  if source not in sources or sources[source].get('training_admission') is not True]
+    if unadmitted:
+        raise ValueError(f'render sources lack explicit training admission: {unadmitted}')
+    variants = ', '.join(f'{rendering}/{tokenizer}' for rendering, tokenizers in body['renders'].items()
+                         for tokenizer in tokenizers)
     entry = {
-        'id': a.id, 'owner': 'dgx', 'path': a.path,
+        'id': a.id, 'owner': a.machine, 'path': a.path,
         'include': ['receipt.json', '*/*/text-data.jsonl', '*/*/omissions.jsonl', '*.jsonl', '*.json',
                     'render-omissions/*/omissions.jsonl', '*/omissions.jsonl'],
         'source_class': ('rendered-natlang-native-teacher-turn-text' if a.kind == 'member'
@@ -82,8 +91,7 @@ def make_entry(a) -> dict:
         'split': 'per document, inherited from the source rows; held stays held; train documents sharing a source '
                  'group with any held document (this corpus, the 4962 union, the harness bench) are dropped',
         'admission': 'renders of admitted source corpora: ' + ', '.join(a.source_corpus) +
-                     '; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and '
-                     'Mellum2.1 tokenizer twins; no new example admission',
+                     '; variants: ' + variants + '; no new example admission',
         'training_admission': True,
         'training_admission_reason': 'owner 2026-10-11: maximize data; renders of training-admitted corpora '
                                      '(plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory '
@@ -114,7 +122,7 @@ def main(argv=None):
     REGISTRY.write_text(json.dumps(registry, indent=2, ensure_ascii=False) + '\n')
     print(json.dumps({'registered': a.id, 'replaced': replaced}))
     if not a.no_publish:
-        subprocess.run([sys.executable, str(ROOT / 'scripts/sync_training_corpora.py'), 'publish', '--machine', 'dgx',
+        subprocess.run([sys.executable, str(ROOT / 'scripts/sync_training_corpora.py'), 'publish', '--machine', a.machine,
                         '--id', a.id], check=True)
 
 

@@ -2,7 +2,7 @@
   "schema": "natlang.field-gloss-invariant-oracle-draft/1",
   "caseId": "sol-field-reed-court-v1",
   "source_world_split_key": "sol-app-world:field-reed-court-v1",
-  "scope": "Authored semantic invariant landscape only; full typed reference, exact checker and independent review pending. Not actual application execution.",
+  "scope": "Authored invariant/source-domain tables and one independent typed witness. Exact checker validates returned structure/provenance/declared constraints; linguistic prediction, prompt entailment and patch prose require semantic review. No actual NL execution.",
   "expected": {
     "surviving_choice_vectors": [
       {
@@ -557,7 +557,401 @@
       "X1",
       "X2",
       "X3"
-    ]
+    ],
+    "utterances": [
+      {
+        "utteranceId": "U1",
+        "sessionId": "S1",
+        "surface": "emana ilara taku",
+        "situationId": "SA1",
+        "promptId": "P1",
+        "contextId": null,
+        "sourceClauseId": "U1"
+      },
+      {
+        "utteranceId": "U2",
+        "sessionId": "S1",
+        "surface": "emara ilana taku",
+        "situationId": "SA2",
+        "promptId": "P2",
+        "contextId": null,
+        "sourceClauseId": "U2"
+      },
+      {
+        "utteranceId": "U3",
+        "sessionId": "S2",
+        "surface": "emarana ila taku",
+        "situationId": "SA3",
+        "promptId": "P3",
+        "contextId": null,
+        "sourceClauseId": "U3"
+      },
+      {
+        "utteranceId": "U4",
+        "sessionId": "S3",
+        "surface": "narana emara taku",
+        "situationId": "SA4",
+        "promptId": "P4",
+        "contextId": null,
+        "sourceClauseId": "U4"
+      },
+      {
+        "utteranceId": "U5",
+        "sessionId": "S3",
+        "surface": "emara ilana takumi",
+        "situationId": "SA5",
+        "promptId": "P5",
+        "contextId": null,
+        "sourceClauseId": "U5"
+      },
+      {
+        "utteranceId": "U6",
+        "sessionId": "S3",
+        "surface": "emara narana taku",
+        "situationId": "SA6",
+        "promptId": "P6",
+        "contextId": null,
+        "sourceClauseId": "U6"
+      },
+      {
+        "utteranceId": "X1",
+        "sessionId": null,
+        "surface": "narana emara takumi",
+        "situationId": null,
+        "promptId": null,
+        "contextId": "CTX1",
+        "sourceClauseId": "X1"
+      },
+      {
+        "utteranceId": "X2",
+        "sessionId": null,
+        "surface": "nararana ila taku",
+        "situationId": null,
+        "promptId": null,
+        "contextId": "CTX2",
+        "sourceClauseId": "X2"
+      },
+      {
+        "utteranceId": "X3",
+        "sessionId": null,
+        "surface": "ilara narana taku",
+        "situationId": null,
+        "promptId": null,
+        "contextId": "CTX3",
+        "sourceClauseId": "X3"
+      }
+    ],
+    "situations": [
+      {
+        "situationId": "SA1",
+        "sessionId": "S1",
+        "entityIds": [
+          "Ema",
+          "Ila"
+        ],
+        "agentId": "Ila",
+        "patientId": "Ema",
+        "eventId": "LIFT",
+        "eventOccurs": true,
+        "topicId": "Ema",
+        "contrastSetIds": [
+          "Ema",
+          "Ila"
+        ],
+        "temporalReading": null
+      },
+      {
+        "situationId": "SA2",
+        "sessionId": "S1",
+        "entityIds": [
+          "Ema",
+          "Ila"
+        ],
+        "agentId": "Ema",
+        "patientId": "Ila",
+        "eventId": "LIFT",
+        "eventOccurs": true,
+        "topicId": "Ila",
+        "contrastSetIds": [
+          "Ema",
+          "Ila"
+        ],
+        "temporalReading": null
+      },
+      {
+        "situationId": "SA3",
+        "sessionId": "S2",
+        "entityIds": [
+          "Ema",
+          "Ila"
+        ],
+        "agentId": "Ema",
+        "patientId": "Ila",
+        "eventId": "LIFT",
+        "eventOccurs": true,
+        "topicId": "Ema",
+        "contrastSetIds": [
+          "Ema",
+          "Ila"
+        ],
+        "temporalReading": null
+      },
+      {
+        "situationId": "SA4",
+        "sessionId": "S3",
+        "entityIds": [
+          "Ema",
+          "Nara"
+        ],
+        "agentId": "Ema",
+        "patientId": "Nara",
+        "eventId": "LIFT",
+        "eventOccurs": true,
+        "topicId": "Nara",
+        "contrastSetIds": [
+          "Ema",
+          "Nara"
+        ],
+        "temporalReading": null
+      },
+      {
+        "situationId": "SA5",
+        "sessionId": "S3",
+        "entityIds": [
+          "Ema",
+          "Ila"
+        ],
+        "agentId": "Ema",
+        "patientId": "Ila",
+        "eventId": "LIFT",
+        "eventOccurs": false,
+        "topicId": "Ila",
+        "contrastSetIds": [
+          "Ema",
+          "Ila"
+        ],
+        "temporalReading": null
+      },
+      {
+        "situationId": "SA6",
+        "sessionId": "S3",
+        "entityIds": [
+          "Ema",
+          "Nara"
+        ],
+        "agentId": "Ema",
+        "patientId": "Nara",
+        "eventId": "LIFT",
+        "eventOccurs": true,
+        "topicId": "Nara",
+        "contrastSetIds": [
+          "Ema",
+          "Nara"
+        ],
+        "temporalReading": null
+      }
+    ],
+    "sessions": [
+      {
+        "sessionId": "S1",
+        "consultantId": "Reni",
+        "promptIds": [
+          "P1",
+          "P2"
+        ],
+        "situationIds": [
+          "SA1",
+          "SA2"
+        ],
+        "contextClauseIds": [
+          "A01",
+          "A02"
+        ],
+        "occurredOrder": 1
+      },
+      {
+        "sessionId": "S2",
+        "consultantId": "Reni",
+        "promptIds": [
+          "P3"
+        ],
+        "situationIds": [
+          "SA3"
+        ],
+        "contextClauseIds": [
+          "C1",
+          "N1R",
+          "C2",
+          "A01"
+        ],
+        "occurredOrder": 2
+      },
+      {
+        "sessionId": "S3",
+        "consultantId": "Reni",
+        "promptIds": [
+          "P4",
+          "P5",
+          "P6"
+        ],
+        "situationIds": [
+          "SA4",
+          "SA5",
+          "SA6"
+        ],
+        "contextClauseIds": [
+          "A01"
+        ],
+        "occurredOrder": 3
+      }
+    ],
+    "corrections": [
+      {
+        "correctionId": "C1",
+        "consultantId": "Reni",
+        "scope": "gloss",
+        "adopted": true,
+        "targetNoteIds": ["N1"],
+        "targetSlotIds": ["NA_GLOSS"],
+        "replacementNoteIds": ["N1R"],
+        "excludedSlotIds": ["SURFACE_U1", "REMINDER", "F_MI"]
+      },
+      {
+        "correctionId": "C2",
+        "consultantId": "Reni",
+        "scope": "gloss",
+        "adopted": true,
+        "targetNoteIds": ["N1"],
+        "targetSlotIds": ["NA_GLOSS"],
+        "replacementNoteIds": ["N1R"],
+        "excludedSlotIds": ["SURFACE_U1", "REMINDER", "F_MI"]
+      }
+    ],
+    "notes": [
+      {
+        "noteId": "J1",
+        "utteranceId": "U1",
+        "slotId": null,
+        "kind": "consultant-judgment",
+        "authorId": "Reni",
+        "judgment": "accepted"
+      },
+      {
+        "noteId": "J2",
+        "utteranceId": "U2",
+        "slotId": null,
+        "kind": "consultant-judgment",
+        "authorId": "Reni",
+        "judgment": "accepted"
+      },
+      {
+        "noteId": "J3",
+        "utteranceId": "U3",
+        "slotId": null,
+        "kind": "consultant-judgment",
+        "authorId": "Reni",
+        "judgment": "accepted"
+      },
+      {
+        "noteId": "J4",
+        "utteranceId": "U4",
+        "slotId": null,
+        "kind": "consultant-judgment",
+        "authorId": "Reni",
+        "judgment": "accepted"
+      },
+      {
+        "noteId": "J5",
+        "utteranceId": "U5",
+        "slotId": null,
+        "kind": "consultant-judgment",
+        "authorId": "Reni",
+        "judgment": "accepted"
+      },
+      {
+        "noteId": "J6",
+        "utteranceId": "U6",
+        "slotId": null,
+        "kind": "consultant-judgment",
+        "authorId": "Reni",
+        "judgment": "accepted"
+      },
+      {
+        "noteId": "N1",
+        "utteranceId": "U1",
+        "slotId": "NA_GLOSS",
+        "kind": "proposed-gloss",
+        "authorId": "Belo",
+        "judgment": null
+      },
+      {
+        "noteId": "N2",
+        "utteranceId": "U1",
+        "slotId": "SURFACE_U1",
+        "kind": "transcription",
+        "authorId": "Belo",
+        "judgment": "accepted"
+      },
+      {
+        "noteId": "N3",
+        "utteranceId": "U2",
+        "slotId": "REMINDER",
+        "kind": "proposed-gloss",
+        "authorId": "Belo",
+        "judgment": null
+      },
+      {
+        "noteId": "N1R",
+        "utteranceId": "U1",
+        "slotId": "NA_GLOSS",
+        "kind": "adopted-gloss",
+        "authorId": "Belo",
+        "judgment": null
+      }
+    ],
+    "asserted_fields": [
+      "agentId",
+      "patientId",
+      "eventId",
+      "eventOccurs",
+      "topicId"
+    ],
+    "rule_clause_ids": [
+      "K01",
+      "K02",
+      "K03",
+      "K04",
+      "K05",
+      "K06",
+      "K07",
+      "K08",
+      "K09",
+      "O01",
+      "O02",
+      "O03",
+      "O04",
+      "O05",
+      "O06",
+      "A01",
+      "A02"
+    ],
+    "evidence_prerequisites": {
+      "U1": [],
+      "U2": [],
+      "U3": [
+        "U1",
+        "U2"
+      ],
+      "U4": [
+        "U3"
+      ],
+      "U5": [
+        "U4"
+      ],
+      "U6": [
+        "U5"
+      ]
+    }
   },
   "semantic_review_required": true,
   "independent_review": false,

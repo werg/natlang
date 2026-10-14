@@ -1,0 +1,62 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-held-shapes-closed-backlog-v5-lfm-render-20261014-v1",
+  "owner": "pop",
+  "path": "runs/luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1/lfm25-render-v1",
+  "files": [
+    {
+      "path": "full/lfm25/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "full/lfm25/text-data.jsonl",
+      "bytes": 91876962,
+      "sha256": "de05b3452f9a9194a15bdc779eb7e2314ab216707ba97cc60e85fa0b552d083c",
+      "lines": 1188
+    },
+    {
+      "path": "program-header/lfm25/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "program-header/lfm25/text-data.jsonl",
+      "bytes": 537342175,
+      "sha256": "d95f57b74633d6da3dcca92f77ff3923a39e0b2c9e2aced6557e6f2aa986fe5f",
+      "lines": 23644
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 7693,
+      "sha256": "a04a1da09518d91928c75c31b0f0da296428879bee78bb4135f447e93a280896"
+    },
+    {
+      "path": "render-omissions/lfm25/omissions.jsonl",
+      "bytes": 1493,
+      "sha256": "35e940667210979e732481a70794d3dff98b895d4402ec253aec5134700c7718",
+      "lines": 5
+    },
+    {
+      "path": "selection-omissions.jsonl",
+      "bytes": 1075,
+      "sha256": "ff17a615226fae8b5c1b0768eed2a2ea2630bf3ba429cbb970a4fe6300adf59d",
+      "lines": 5
+    },
+    {
+      "path": "whole-trajectory/lfm25/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "whole-trajectory/lfm25/text-data.jsonl",
+      "bytes": 267512696,
+      "sha256": "db66f0374d07f0d06a9d853659f1161ec81b5851bd1741ae3051b399e32afabb",
+      "lines": 12777
+    }
+  ],
+  "bytes": 896742094
+}

@@ -60,11 +60,54 @@ def main():
         for parent in iter_rows(path):
             previous_ids.add(parent['task']['program_ir']['id'])
             seen_worlds.add(world(parent['task']['program_ir']))
-    chosen = []
     selected_worlds = set()
     source_files = {}
     outcomes = collections.Counter()
     evidence = []
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=args.out.parent,
+                                     prefix=args.out.name + '.', suffix='.building', delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            collect(args, stream, held_groups, previous_ids, seen_worlds, selected_worlds,
+                    source_files, outcomes, evidence)
+            stream.flush()
+            os.fsync(stream.fileno())
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+    candidate_hash = sha256(temporary)
+    if args.out.exists():
+        if sha256(args.out) != candidate_hash:
+            temporary.unlink()
+            raise ValueError(f'existing candidate differs from current exact selection: {args.out}')
+        temporary.unlink()
+    else:
+        os.replace(temporary, args.out)
+    review = {'schema': 'natlang.luna-parent-candidate-review/1', 'training_admission': False,
+              'held_sha256': sha256(args.held),
+              'previous_parent_sha256': {str(p): sha256(p) for p in args.previous_parents},
+              'sources_sha256': {str(p): sha256(p) for p in source_files},
+              'campaign_manifests_sha256': {str(p / 'campaign-manifest.json'): sha256(p / 'campaign-manifest.json')
+                                            for p in args.campaign},
+              'reviewed_exclusions_sha256': {str(p / 'reviewed-exclusions.json'): sha256(p / 'reviewed-exclusions.json')
+                                             for p in args.campaign if (p / 'reviewed-exclusions.json').exists()},
+              'workers': evidence, 'counts': dict(outcomes),
+              'candidate_sha256': candidate_hash,
+              'decision': 'Exact source and outcome checks only; native materialization and semantic review pending.'}
+    review_path = args.out.with_suffix('.review.json')
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=review_path.parent,
+                                     prefix=review_path.name + '.', suffix='.building', delete=False) as stream:
+        temporary_review = Path(stream.name)
+        stream.write(json.dumps(review, indent=2) + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary_review, review_path)
+    print(json.dumps({'out': str(args.out), 'counts': dict(outcomes)}))
+
+
+def collect(args, stream, held_groups, previous_ids, seen_worlds, selected_worlds,
+            source_files, outcomes, evidence):
     for campaign in args.campaign:
         manifest_path = campaign / 'campaign-manifest.json'
         manifest = json.loads(manifest_path.read_text())
@@ -136,46 +179,10 @@ def main():
                 if held_groups.intersection(original.get('source_groups', [])):
                     raise ValueError(f'accepted held source group: {original["id"]}')
                 selected_worlds.add(key)
-                chosen.append(result)
+                stream.write(json.dumps(result, ensure_ascii=False, separators=(',', ':')) + '\n')
                 outcomes['accepted'] += 1
             evidence.append({'campaign': str(campaign), 'worker': worker.name,
                              'queue_sha256': sha256(worker / 'queue.jsonl')})
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=args.out.parent,
-                                     prefix=args.out.name + '.', suffix='.building', delete=False) as stream:
-        temporary = Path(stream.name)
-        for parent in chosen:
-            stream.write(json.dumps(parent, ensure_ascii=False, separators=(',', ':')) + '\n')
-        stream.flush()
-        os.fsync(stream.fileno())
-    candidate_hash = sha256(temporary)
-    if args.out.exists():
-        if sha256(args.out) != candidate_hash:
-            temporary.unlink()
-            raise ValueError(f'existing candidate differs from current exact selection: {args.out}')
-        temporary.unlink()
-    else:
-        os.replace(temporary, args.out)
-    review = {'schema': 'natlang.luna-parent-candidate-review/1', 'training_admission': False,
-              'held_sha256': sha256(args.held),
-              'previous_parent_sha256': {str(p): sha256(p) for p in args.previous_parents},
-              'sources_sha256': {str(p): sha256(p) for p in source_files},
-              'campaign_manifests_sha256': {str(p / 'campaign-manifest.json'): sha256(p / 'campaign-manifest.json')
-                                            for p in args.campaign},
-              'reviewed_exclusions_sha256': {str(p / 'reviewed-exclusions.json'): sha256(p / 'reviewed-exclusions.json')
-                                             for p in args.campaign if (p / 'reviewed-exclusions.json').exists()},
-              'workers': evidence, 'counts': dict(outcomes),
-              'candidate_sha256': candidate_hash,
-              'decision': 'Exact source and outcome checks only; native materialization and semantic review pending.'}
-    review_path = args.out.with_suffix('.review.json')
-    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=review_path.parent,
-                                     prefix=review_path.name + '.', suffix='.building', delete=False) as stream:
-        temporary_review = Path(stream.name)
-        stream.write(json.dumps(review, indent=2) + '\n')
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(temporary_review, review_path)
-    print(json.dumps({'out': str(args.out), 'counts': dict(outcomes)}))
 
 
 if __name__ == '__main__':

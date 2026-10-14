@@ -17,6 +17,9 @@ def layout(tmp_path, monkeypatch):
     out = repo / 'runs' / 'lineage' / 'run-v1' / 'stage'
     out.mkdir(parents=True)
     hdd.mkdir()
+    # The container gate uses HOME=/tmp, which would make every tmp_path an
+    # eligible checkpoint source under the home-root policy.
+    monkeypatch.setenv('HOME', str(tmp_path / 'home'))
     monkeypatch.setenv('NATLANG_REPO', str(repo))
     monkeypatch.setenv('NATLANG_CHECKPOINT_OFFLOAD', '1')
     monkeypatch.setenv('NATLANG_CHECKPOINT_MIRROR', str(hdd / 'natlang-active-lineage'))

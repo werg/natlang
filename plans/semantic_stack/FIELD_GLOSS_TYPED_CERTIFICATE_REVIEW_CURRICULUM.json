@@ -1,0 +1,28 @@
+{
+  "schema": "natlang.semantic-application-independent-typed-certificate-review/1",
+  "case_id": "sol-field-reed-court-v1",
+  "reviewer": "semantic_stack_curriculum",
+  "source_package": "/tmp/field-gloss-independent-final-review-20261014",
+  "source_sha256": "7ce39c5855a578c36c4d0aa466f61f7384ef5d59af9418e683f5d546a57a9dc6",
+  "visible_sha256": "c5c9b99651f2e0dd99437f804734259709e2c4c22a8016149cee3511460892c5",
+  "manifest_sha256": "aeb2f8af43da648db71b26f5c767c0596688c5e6aa1710b98de6487da5f2a435",
+  "oracle_sha256": "2288464fdc909d78f57c9eac9c495463689ad079aa5d81e909c6dc5268e026f7",
+  "reference_sha256": "11680502ee3c5f79832f726240894e2a898e8c1f40a7c50129e26898dc51c1b1",
+  "verifier_sha256": "f45b5378afa33cef8e497cae9066415bdd7a16244141d7be832ab9fd77f07355",
+  "control_sha256": "ab942dc46692f348194755798994e16e5ca82d1f64b2be4f9cbcf87639664a39",
+  "prior_source_constraint_review": "plans/semantic_stack/FIELD_GLOSS_REED_CONSTRAINT_REVIEW_CURRICULUM.json",
+  "independent_findings": {
+    "source_derived_constraints": "The original closed domains yield 16 candidate vectors. U1 fixes F_NA=topic and F_RA=agent; U4 excludes frozen B_NA. P5 leaves F_MI event-negative and not-yet unresolved. These two vectors produce the three target interpretations and the N1-only gloss correction described in the prior independent source receipt.",
+    "canonical_certificate": "The full typed LinguisticReport has 67 original source clauses, 16 original hypotheses, 32 actual attempts, 64 rejection-linked skips, two survivors and six held-out readings. All 4219 inspected witness occurrences matched an original source ID/path/exact quote. All authored attempt and target morpheme and role spans matched original utterance surfaces.",
+    "replay": "Fresh package preflight coerced the authored full report to LinguisticReport and replayed the private exact verifier with reference_ok=true and no reference problems. This is one canonical source/type witness, not application execution.",
+    "controls": "Independently reran 64 authored controls: 10 equivalent positives and 54 negative mutations passed, including a valid U1/U2 swap within S1. Additional independent mutations removing graph links, effective U1 notes, source rules, lexical/domain witnesses, authenticated unchanged notes, role contributions, target child licensing, or prerequisite S1/S2 attempts all rejected after exact checker repair."
+  },
+  "known_limits": [
+    "The exact verifier does not establish that a model's candidate-specific segmentation, role contribution, prompt entailment or free gloss prose follows the original linguistic source. It returns semantic_review_required=true.",
+    "A non-null temporal contribution without direct source support produces a quality observation for independent semantic review; this is not exact proof of such a contribution.",
+    "The authored reference does not execute the named NL application or demonstrate consumption of scoped child results in a live trajectory."
+  ],
+  "source_and_exact_certificate_review_passed": true,
+  "live_qualified": false,
+  "training_admission": false
+}
