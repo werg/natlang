@@ -28,6 +28,32 @@ export function verifyResult(value,{oracle,request,snapshot}){
  const shape=s=>Object.fromEntries(['surface','entityId','eventId'].map(k=>[k,s[k]]));check(same(value.source.stems.map(shape).sort((a,b)=>a.surface.localeCompare(b.surface)),expectedStems.sort((a,b)=>a.surface.localeCompare(b.surface))),'original closed stem identities');
  for(const stem of value.source.stems)check(stem.witnesses.length>0,'nonempty original lexical stem support');
  const slots=exact.candidate_slots,slotIds=Object.keys(slots);check(seteq(value.source.candidateSlots.map(s=>s.slotId),slotIds),'original candidate slots');for(const s of value.source.candidateSlots){check(slots[s.slotId]&&seteq(s.values,slots[s.slotId]),'original closed candidate values '+s.slotId);check(s.witnesses.length>0,'nonempty original candidate-domain support');}
+
+ // Exact retention/projection of actual typed reader outputs; interpreting the
+ // original definition as a linguistic meaning remains independently reviewed.
+ function normalizedReaderMember(member,field){const row=structuredClone(member);if(field==='slots')row.values=[...row.values].sort();row.witnesses=row.witnesses.map(ordered).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));return ordered(row);}
+ function readerIndex(index,field,kind,roleNames,requiredIds,projection,idField){
+  const selected=value.source.inventory.entries.filter(e=>e.actualReading?.roles.some(r=>roleNames.includes(r))).map(e=>e.clause.clauseId);
+  check(requiredIds.every(id=>selected.includes(id)),'original definition selection coverage '+kind);
+  check(seteq(index.entries.map(e=>e.clause.clauseId),selected),'one actual named-reader result per selected original '+kind+' unit');
+  const accepted=[];
+  for(const e of index.entries){check(same(e.clause,raw.get(e.clause.clauseId)),'immutable actual reader original clause');const r=e.actualReading;
+   if(e.status==='failed'){check(r===null&&typeof e.failure==='string'&&e.failure.length>0,'actual reader failure identity');check(index.unresolved.includes(e.failure),'actual reader failure retained in index blockers');continue;}
+   check(r&&r.clauseId===e.clause.clauseId&&r.witnesses.length>0,'actual typed reader identity/support');if(!r)continue;
+   check(r.witnesses.some(w=>w.clauseId===e.clause.clauseId),'actual primary definition support retained');
+   for(const reason of r.unresolved)check(index.unresolved.includes(reason),'actual reader missing premise retained in index blockers');
+   if(e.status==='unresolved'){check(r.kind==='unresolved'&&r.reason.length>0&&index.unresolved.includes(r.reason),'actual unresolved reader reason retained');continue;}
+   check(e.status==='read'&&e.failure===null&&['context',kind].includes(r.kind),'accepted reader status/kind consistency');
+   if(r.kind===kind){check(r[field].length>0,'accepted definition has actual returned meaning');for(const member of r[field]){check(member.witnesses.length>0&&member.witnesses.some(w=>w.clauseId===e.clause.clauseId),'actual member supporting primary definition');accepted.push(member);}}
+   else check(r[field].length===0,'context unit contributes no accepted definition');
+  }
+  for(const reason of index.unresolved)check(value.source.unresolved.includes(reason),'actual typed index blocker reaches CorpusSource');
+  const members=rows=>rows.map(r=>JSON.stringify(normalizedReaderMember(r,field))).sort();
+  check(unique(accepted.map(r=>r[idField]))&&same(members(index[field]),members(accepted)),'exact accepted named-reader projection '+kind);
+  check(same(members(projection),members(index[field])),'intake retains actual named-reader projection '+kind);
+ }
+ readerIndex(value.source.candidateDomains,'slots','domain',['candidate-domain'],['D01','D02','D03','D04'],value.source.candidateSlots,'slotId');
+ readerIndex(value.source.stemDefinitions,'stems','stem',['stem','entity'],['L01','L02','L03','L04'],value.source.stems,'surface');
  const originalUtterances=exact.utterances,utterances=new Map(value.source.utteranceIndex.utterances.map(u=>[u.utteranceId,u]));check(utterances.size===value.source.utteranceIndex.utterances.length&&seteq([...utterances.keys()],originalUtterances.map(u=>u.utteranceId)),'original utterance identity coverage');
  for(const o of originalUtterances){const u=utterances.get(o.utteranceId);check(u&&Object.keys(o).every(k=>same(u[k],o[k])),'original utterance surface/context '+o.utteranceId);check(u?.witnesses.length>0,'nonempty original utterance support');}
  const scenes=new Map(value.source.sessions.situations.map(s=>[s.situationId,s]));check(scenes.size===value.source.sessions.situations.length&&seteq([...scenes.keys()],exact.situations.map(s=>s.situationId)),'original depicted situation coverage');for(const s of exact.situations){const actual=scenes.get(s.situationId);check(actual&&Object.keys(s).every(k=>Array.isArray(s[k])?seteq(actual[k],s[k]):same(actual[k],s[k])),'original constrained scene '+s.situationId);}
@@ -81,7 +107,7 @@ export function verifyResult(value,{oracle,request,snapshot}){
  check(same(value.patch.request,request.repair),'original repair request');const originalDoc=snapshot.documents.find(d=>d.path===request.repair.allowedPath),anchor='NA_GLOSS: "',allowedStart=originalDoc.text.indexOf(anchor)+anchor.length;check(value.patch.patches.length===1,'one actual authorized gloss patch');for(const p of value.patch.patches){check(p.path===request.repair.allowedPath&&p.start===allowedStart&&p.end===allowedStart+5&&p.before==='agent'&&originalDoc.text.slice(p.start,p.end)===p.before,'exact original authorized agent span');check(typeof p.replacement==='string'&&p.replacement.length>0&&p.meaning.replacement===p.replacement,'actual patch judgment replacement retained');check(p.meaning.noteId==='N1'&&p.meaning.slotId==='NA_GLOSS'&&p.meaning.status==='replace'&&p.meaning.witnesses.length>0,'actual original patch slot/judgment');check(seteq(p.meaning.supportedHypothesisIds,survivors)&&unique(p.meaning.rejectedHypothesisIds)&&p.meaning.rejectedHypothesisIds.every(id=>finals.get(id)?.status==='rejected'),'actual patch supporting/rejected hypothesis domain');}
  check(seteq(value.patch.unchangedNoteIds,[...notes.keys()].filter(id=>id!=='N1')),'all untargeted original notes remain unchanged');
  const challengePairs=value.challenges.map(c=>c.targetId+'\u0000'+c.hypothesisId);check(seteq(challengePairs,request.targets.flatMap(q=>survivors.map(h=>q.targetId+'\u0000'+h))),'actual completed reading challenge coverage');for(const c of value.challenges)check(c.status==='grounded'&&c.witnesses.length>0,'source-supported actual reading challenge');
- if(value.unresolved.length||value.grammar.unresolved.length||value.translations.unresolved.length)qualityObservations.push('Reported unresolved premises require semantic/source review.');
+ if(value.unresolved.length||value.source.unresolved.length||value.grammar.unresolved.length||value.translations.unresolved.length)qualityObservations.push('Reported unresolved premises require semantic/source review.');
  }catch(error){issues.push('Malformed Field Gloss certificate: '+error.message);}
  return{ok:issues.length===0,issues,qualityObservations,semantic_review_required:true};
 }

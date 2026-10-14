@@ -3079,6 +3079,516 @@
       ],
       "unresolved": []
     },
+    "candidateDomains": {
+      "entries": [
+        {
+          "clause": {
+            "clauseId": "D01",
+            "sourceId": "DOC03",
+            "path": "lexicon/candidates.md",
+            "text": "[D01] Candidate slot B_NA has exact values productive and frozen. productive segments source-licensed nominal na off a known stem or RA-marked nominal. frozen uses the closed whole-word NA-bearing lexicon emana\u2192Ema with NA category, ilana\u2192Ila with NA category, emarana\u2192Ema with RA and NA categories, ilarana\u2192Ila with RA and NA categories; it has no other NA-bearing forms. Those frozen entries have no internal morpheme boundary even though their lexical categories are interpreted by the F_NA/F_RA choices. Plain stems and RA-only forms remain productive in both candidates."
+          },
+          "actualReading": {
+            "clauseId": "D01",
+            "kind": "domain",
+            "slots": [
+              {
+                "slotId": "B_NA",
+                "values": [
+                  "productive",
+                  "frozen"
+                ],
+                "meaning": "Candidate slot B_NA has exact values productive and frozen. productive segments source-licensed nominal na off a known stem or RA-marked nominal. frozen uses the closed whole-word NA-bearing lexicon emana\u2192Ema with NA category, ilana\u2192Ila with NA category, emarana\u2192Ema with RA and NA categories, ilarana\u2192Ila with RA and NA categories; it has no other NA-bearing forms. Those frozen entries have no internal morpheme boundary even though their lexical categories are interpreted by the F_NA/F_RA choices. Plain stems and RA-only forms remain productive in both candidates.",
+                "witnesses": [
+                  {
+                    "clauseId": "D01",
+                    "sourceId": "DOC03",
+                    "path": "lexicon/candidates.md",
+                    "quote": "[D01] Candidate slot B_NA has exact values productive and frozen. productive segments source-licensed nominal na off a known stem or RA-marked nominal. frozen uses the closed whole-word NA-bearing lexicon emana\u2192Ema with NA category, ilana\u2192Ila with NA category, emarana\u2192Ema with RA and NA categories, ilarana\u2192Ila with RA and NA categories; it has no other NA-bearing forms. Those frozen entries have no internal morpheme boundary even though their lexical categories are interpreted by the F_NA/F_RA choices. Plain stems and RA-only forms remain productive in both candidates."
+                  },
+                  {
+                    "clauseId": "K04",
+                    "sourceId": "DOC01",
+                    "path": "controls/grammar.md",
+                    "quote": "[K04] The candidate domains in D01-D04 are explicitly closed and independent; consider their complete cross-product. These are proposed analyses, not a declaration of the real language. No additional order-based or lexical candidate may be invented to rescue a contradicted combination."
+                  }
+                ]
+              }
+            ],
+            "reason": "This original definition supplies this finite candidate slot.",
+            "witnesses": [
+              {
+                "clauseId": "D01",
+                "sourceId": "DOC03",
+                "path": "lexicon/candidates.md",
+                "quote": "[D01] Candidate slot B_NA has exact values productive and frozen. productive segments source-licensed nominal na off a known stem or RA-marked nominal. frozen uses the closed whole-word NA-bearing lexicon emana\u2192Ema with NA category, ilana\u2192Ila with NA category, emarana\u2192Ema with RA and NA categories, ilarana\u2192Ila with RA and NA categories; it has no other NA-bearing forms. Those frozen entries have no internal morpheme boundary even though their lexical categories are interpreted by the F_NA/F_RA choices. Plain stems and RA-only forms remain productive in both candidates."
+              }
+            ],
+            "unresolved": []
+          },
+          "status": "read",
+          "failure": null
+        },
+        {
+          "clause": {
+            "clauseId": "D02",
+            "sourceId": "DOC03",
+            "path": "lexicon/candidates.md",
+            "text": "[D02] Candidate slot F_NA has exact values agent and topic. agent assigns the NA-bearing entity the event-agent role. topic assigns that entity contrastive discourse topic and by itself supplies no event role. Actual source rules determine whether multiple returned contributions are licensed."
+          },
+          "actualReading": {
+            "clauseId": "D02",
+            "kind": "domain",
+            "slots": [
+              {
+                "slotId": "F_NA",
+                "values": [
+                  "agent",
+                  "topic"
+                ],
+                "meaning": "Candidate slot F_NA has exact values agent and topic. agent assigns the NA-bearing entity the event-agent role. topic assigns that entity contrastive discourse topic and by itself supplies no event role. Actual source rules determine whether multiple returned contributions are licensed.",
+                "witnesses": [
+                  {
+                    "clauseId": "D02",
+                    "sourceId": "DOC03",
+                    "path": "lexicon/candidates.md",
+                    "quote": "[D02] Candidate slot F_NA has exact values agent and topic. agent assigns the NA-bearing entity the event-agent role. topic assigns that entity contrastive discourse topic and by itself supplies no event role. Actual source rules determine whether multiple returned contributions are licensed."
+                  },
+                  {
+                    "clauseId": "K04",
+                    "sourceId": "DOC01",
+                    "path": "controls/grammar.md",
+                    "quote": "[K04] The candidate domains in D01-D04 are explicitly closed and independent; consider their complete cross-product. These are proposed analyses, not a declaration of the real language. No additional order-based or lexical candidate may be invented to rescue a contradicted combination."
+                  }
+                ]
+              }
+            ],
+            "reason": "This original definition supplies this finite candidate slot.",
+            "witnesses": [
+              {
+                "clauseId": "D02",
+                "sourceId": "DOC03",
+                "path": "lexicon/candidates.md",
+                "quote": "[D02] Candidate slot F_NA has exact values agent and topic. agent assigns the NA-bearing entity the event-agent role. topic assigns that entity contrastive discourse topic and by itself supplies no event role. Actual source rules determine whether multiple returned contributions are licensed."
+              }
+            ],
+            "unresolved": []
+          },
+          "status": "read",
+          "failure": null
+        },
+        {
+          "clause": {
+            "clauseId": "D03",
+            "sourceId": "DOC03",
+            "path": "lexicon/candidates.md",
+            "text": "[D03] Candidate slot F_RA has exact values agent and patient. These assign the RA-bearing entity the respective event role. A licensed unmarked complementary core participant obtains the other event role under K02; topic alone is not event marking."
+          },
+          "actualReading": {
+            "clauseId": "D03",
+            "kind": "domain",
+            "slots": [
+              {
+                "slotId": "F_RA",
+                "values": [
+                  "agent",
+                  "patient"
+                ],
+                "meaning": "Candidate slot F_RA has exact values agent and patient. These assign the RA-bearing entity the respective event role. A licensed unmarked complementary core participant obtains the other event role under K02; topic alone is not event marking.",
+                "witnesses": [
+                  {
+                    "clauseId": "D03",
+                    "sourceId": "DOC03",
+                    "path": "lexicon/candidates.md",
+                    "quote": "[D03] Candidate slot F_RA has exact values agent and patient. These assign the RA-bearing entity the respective event role. A licensed unmarked complementary core participant obtains the other event role under K02; topic alone is not event marking."
+                  },
+                  {
+                    "clauseId": "K04",
+                    "sourceId": "DOC01",
+                    "path": "controls/grammar.md",
+                    "quote": "[K04] The candidate domains in D01-D04 are explicitly closed and independent; consider their complete cross-product. These are proposed analyses, not a declaration of the real language. No additional order-based or lexical candidate may be invented to rescue a contradicted combination."
+                  }
+                ]
+              }
+            ],
+            "reason": "This original definition supplies this finite candidate slot.",
+            "witnesses": [
+              {
+                "clauseId": "D03",
+                "sourceId": "DOC03",
+                "path": "lexicon/candidates.md",
+                "quote": "[D03] Candidate slot F_RA has exact values agent and patient. These assign the RA-bearing entity the respective event role. A licensed unmarked complementary core participant obtains the other event role under K02; topic alone is not event marking."
+              }
+            ],
+            "unresolved": []
+          },
+          "status": "read",
+          "failure": null
+        },
+        {
+          "clause": {
+            "clauseId": "D04",
+            "sourceId": "DOC03",
+            "path": "lexicon/candidates.md",
+            "text": "[D04] Candidate slot F_MI has exact values event-negative and not-yet. Both predict eventOccurs=false for a mi verb. event-negative expresses no prospective expectation contribution. not-yet additionally contributes futureExpected=true. Neither changes event participant roles or topic."
+          },
+          "actualReading": {
+            "clauseId": "D04",
+            "kind": "domain",
+            "slots": [
+              {
+                "slotId": "F_MI",
+                "values": [
+                  "event-negative",
+                  "not-yet"
+                ],
+                "meaning": "Candidate slot F_MI has exact values event-negative and not-yet. Both predict eventOccurs=false for a mi verb. event-negative expresses no prospective expectation contribution. not-yet additionally contributes futureExpected=true. Neither changes event participant roles or topic.",
+                "witnesses": [
+                  {
+                    "clauseId": "D04",
+                    "sourceId": "DOC03",
+                    "path": "lexicon/candidates.md",
+                    "quote": "[D04] Candidate slot F_MI has exact values event-negative and not-yet. Both predict eventOccurs=false for a mi verb. event-negative expresses no prospective expectation contribution. not-yet additionally contributes futureExpected=true. Neither changes event participant roles or topic."
+                  },
+                  {
+                    "clauseId": "K04",
+                    "sourceId": "DOC01",
+                    "path": "controls/grammar.md",
+                    "quote": "[K04] The candidate domains in D01-D04 are explicitly closed and independent; consider their complete cross-product. These are proposed analyses, not a declaration of the real language. No additional order-based or lexical candidate may be invented to rescue a contradicted combination."
+                  }
+                ]
+              }
+            ],
+            "reason": "This original definition supplies this finite candidate slot.",
+            "witnesses": [
+              {
+                "clauseId": "D04",
+                "sourceId": "DOC03",
+                "path": "lexicon/candidates.md",
+                "quote": "[D04] Candidate slot F_MI has exact values event-negative and not-yet. Both predict eventOccurs=false for a mi verb. event-negative expresses no prospective expectation contribution. not-yet additionally contributes futureExpected=true. Neither changes event participant roles or topic."
+              }
+            ],
+            "unresolved": []
+          },
+          "status": "read",
+          "failure": null
+        }
+      ],
+      "slots": [
+        {
+          "slotId": "B_NA",
+          "values": [
+            "productive",
+            "frozen"
+          ],
+          "meaning": "Candidate slot B_NA has exact values productive and frozen. productive segments source-licensed nominal na off a known stem or RA-marked nominal. frozen uses the closed whole-word NA-bearing lexicon emana\u2192Ema with NA category, ilana\u2192Ila with NA category, emarana\u2192Ema with RA and NA categories, ilarana\u2192Ila with RA and NA categories; it has no other NA-bearing forms. Those frozen entries have no internal morpheme boundary even though their lexical categories are interpreted by the F_NA/F_RA choices. Plain stems and RA-only forms remain productive in both candidates.",
+          "witnesses": [
+            {
+              "clauseId": "D01",
+              "sourceId": "DOC03",
+              "path": "lexicon/candidates.md",
+              "quote": "[D01] Candidate slot B_NA has exact values productive and frozen. productive segments source-licensed nominal na off a known stem or RA-marked nominal. frozen uses the closed whole-word NA-bearing lexicon emana\u2192Ema with NA category, ilana\u2192Ila with NA category, emarana\u2192Ema with RA and NA categories, ilarana\u2192Ila with RA and NA categories; it has no other NA-bearing forms. Those frozen entries have no internal morpheme boundary even though their lexical categories are interpreted by the F_NA/F_RA choices. Plain stems and RA-only forms remain productive in both candidates."
+            },
+            {
+              "clauseId": "K04",
+              "sourceId": "DOC01",
+              "path": "controls/grammar.md",
+              "quote": "[K04] The candidate domains in D01-D04 are explicitly closed and independent; consider their complete cross-product. These are proposed analyses, not a declaration of the real language. No additional order-based or lexical candidate may be invented to rescue a contradicted combination."
+            }
+          ]
+        },
+        {
+          "slotId": "F_NA",
+          "values": [
+            "agent",
+            "topic"
+          ],
+          "meaning": "Candidate slot F_NA has exact values agent and topic. agent assigns the NA-bearing entity the event-agent role. topic assigns that entity contrastive discourse topic and by itself supplies no event role. Actual source rules determine whether multiple returned contributions are licensed.",
+          "witnesses": [
+            {
+              "clauseId": "D02",
+              "sourceId": "DOC03",
+              "path": "lexicon/candidates.md",
+              "quote": "[D02] Candidate slot F_NA has exact values agent and topic. agent assigns the NA-bearing entity the event-agent role. topic assigns that entity contrastive discourse topic and by itself supplies no event role. Actual source rules determine whether multiple returned contributions are licensed."
+            },
+            {
+              "clauseId": "K04",
+              "sourceId": "DOC01",
+              "path": "controls/grammar.md",
+              "quote": "[K04] The candidate domains in D01-D04 are explicitly closed and independent; consider their complete cross-product. These are proposed analyses, not a declaration of the real language. No additional order-based or lexical candidate may be invented to rescue a contradicted combination."
+            }
+          ]
+        },
+        {
+          "slotId": "F_RA",
+          "values": [
+            "agent",
+            "patient"
+          ],
+          "meaning": "Candidate slot F_RA has exact values agent and patient. These assign the RA-bearing entity the respective event role. A licensed unmarked complementary core participant obtains the other event role under K02; topic alone is not event marking.",
+          "witnesses": [
+            {
+              "clauseId": "D03",
+              "sourceId": "DOC03",
+              "path": "lexicon/candidates.md",
+              "quote": "[D03] Candidate slot F_RA has exact values agent and patient. These assign the RA-bearing entity the respective event role. A licensed unmarked complementary core participant obtains the other event role under K02; topic alone is not event marking."
+            },
+            {
+              "clauseId": "K04",
+              "sourceId": "DOC01",
+              "path": "controls/grammar.md",
+              "quote": "[K04] The candidate domains in D01-D04 are explicitly closed and independent; consider their complete cross-product. These are proposed analyses, not a declaration of the real language. No additional order-based or lexical candidate may be invented to rescue a contradicted combination."
+            }
+          ]
+        },
+        {
+          "slotId": "F_MI",
+          "values": [
+            "event-negative",
+            "not-yet"
+          ],
+          "meaning": "Candidate slot F_MI has exact values event-negative and not-yet. Both predict eventOccurs=false for a mi verb. event-negative expresses no prospective expectation contribution. not-yet additionally contributes futureExpected=true. Neither changes event participant roles or topic.",
+          "witnesses": [
+            {
+              "clauseId": "D04",
+              "sourceId": "DOC03",
+              "path": "lexicon/candidates.md",
+              "quote": "[D04] Candidate slot F_MI has exact values event-negative and not-yet. Both predict eventOccurs=false for a mi verb. event-negative expresses no prospective expectation contribution. not-yet additionally contributes futureExpected=true. Neither changes event participant roles or topic."
+            },
+            {
+              "clauseId": "K04",
+              "sourceId": "DOC01",
+              "path": "controls/grammar.md",
+              "quote": "[K04] The candidate domains in D01-D04 are explicitly closed and independent; consider their complete cross-product. These are proposed analyses, not a declaration of the real language. No additional order-based or lexical candidate may be invented to rescue a contradicted combination."
+            }
+          ]
+        }
+      ],
+      "unresolved": []
+    },
+    "stemDefinitions": {
+      "entries": [
+        {
+          "clause": {
+            "clauseId": "L01",
+            "sourceId": "DOC04",
+            "path": "lexicon/stems.md",
+            "text": "[L01] The exact nominal stem ema denotes entity Ema. It has no inherent event role or discourse-topic feature."
+          },
+          "actualReading": {
+            "clauseId": "L01",
+            "kind": "stem",
+            "stems": [
+              {
+                "surface": "ema",
+                "entityId": "Ema",
+                "eventId": null,
+                "meaning": "The exact nominal stem ema denotes entity Ema. It has no inherent event role or discourse-topic feature.",
+                "witnesses": [
+                  {
+                    "clauseId": "L01",
+                    "sourceId": "DOC04",
+                    "path": "lexicon/stems.md",
+                    "quote": "[L01] The exact nominal stem ema denotes entity Ema. It has no inherent event role or discourse-topic feature."
+                  }
+                ]
+              }
+            ],
+            "reason": "This original definition supplies this source stem identity.",
+            "witnesses": [
+              {
+                "clauseId": "L01",
+                "sourceId": "DOC04",
+                "path": "lexicon/stems.md",
+                "quote": "[L01] The exact nominal stem ema denotes entity Ema. It has no inherent event role or discourse-topic feature."
+              }
+            ],
+            "unresolved": []
+          },
+          "status": "read",
+          "failure": null
+        },
+        {
+          "clause": {
+            "clauseId": "L02",
+            "sourceId": "DOC04",
+            "path": "lexicon/stems.md",
+            "text": "[L02] The exact nominal stem ila denotes entity Ila. It has no inherent event role or discourse-topic feature."
+          },
+          "actualReading": {
+            "clauseId": "L02",
+            "kind": "stem",
+            "stems": [
+              {
+                "surface": "ila",
+                "entityId": "Ila",
+                "eventId": null,
+                "meaning": "The exact nominal stem ila denotes entity Ila. It has no inherent event role or discourse-topic feature.",
+                "witnesses": [
+                  {
+                    "clauseId": "L02",
+                    "sourceId": "DOC04",
+                    "path": "lexicon/stems.md",
+                    "quote": "[L02] The exact nominal stem ila denotes entity Ila. It has no inherent event role or discourse-topic feature."
+                  }
+                ]
+              }
+            ],
+            "reason": "This original definition supplies this source stem identity.",
+            "witnesses": [
+              {
+                "clauseId": "L02",
+                "sourceId": "DOC04",
+                "path": "lexicon/stems.md",
+                "quote": "[L02] The exact nominal stem ila denotes entity Ila. It has no inherent event role or discourse-topic feature."
+              }
+            ],
+            "unresolved": []
+          },
+          "status": "read",
+          "failure": null
+        },
+        {
+          "clause": {
+            "clauseId": "L03",
+            "sourceId": "DOC04",
+            "path": "lexicon/stems.md",
+            "text": "[L03] The exact nominal stem nara denotes entity Nara. The final characters ra of this stem are part of the stem, not an independently asserted marker. An additional RA suffix produces narara; a following productive NA would produce nararana."
+          },
+          "actualReading": {
+            "clauseId": "L03",
+            "kind": "stem",
+            "stems": [
+              {
+                "surface": "nara",
+                "entityId": "Nara",
+                "eventId": null,
+                "meaning": "The exact nominal stem nara denotes entity Nara. The final characters ra of this stem are part of the stem, not an independently asserted marker. An additional RA suffix produces narara; a following productive NA would produce nararana.",
+                "witnesses": [
+                  {
+                    "clauseId": "L03",
+                    "sourceId": "DOC04",
+                    "path": "lexicon/stems.md",
+                    "quote": "[L03] The exact nominal stem nara denotes entity Nara. The final characters ra of this stem are part of the stem, not an independently asserted marker. An additional RA suffix produces narara; a following productive NA would produce nararana."
+                  }
+                ]
+              }
+            ],
+            "reason": "This original definition supplies this source stem identity.",
+            "witnesses": [
+              {
+                "clauseId": "L03",
+                "sourceId": "DOC04",
+                "path": "lexicon/stems.md",
+                "quote": "[L03] The exact nominal stem nara denotes entity Nara. The final characters ra of this stem are part of the stem, not an independently asserted marker. An additional RA suffix produces narara; a following productive NA would produce nararana."
+              }
+            ],
+            "unresolved": []
+          },
+          "status": "read",
+          "failure": null
+        },
+        {
+          "clause": {
+            "clauseId": "L04",
+            "sourceId": "DOC04",
+            "path": "lexicon/stems.md",
+            "text": "[L04] The exact verb stem taku denotes the event relation LIFT. No other entity or verb stem is licensed in this closed exercise."
+          },
+          "actualReading": {
+            "clauseId": "L04",
+            "kind": "stem",
+            "stems": [
+              {
+                "surface": "taku",
+                "entityId": null,
+                "eventId": "LIFT",
+                "meaning": "The exact verb stem taku denotes the event relation LIFT. No other entity or verb stem is licensed in this closed exercise.",
+                "witnesses": [
+                  {
+                    "clauseId": "L04",
+                    "sourceId": "DOC04",
+                    "path": "lexicon/stems.md",
+                    "quote": "[L04] The exact verb stem taku denotes the event relation LIFT. No other entity or verb stem is licensed in this closed exercise."
+                  }
+                ]
+              }
+            ],
+            "reason": "This original definition supplies this source stem identity.",
+            "witnesses": [
+              {
+                "clauseId": "L04",
+                "sourceId": "DOC04",
+                "path": "lexicon/stems.md",
+                "quote": "[L04] The exact verb stem taku denotes the event relation LIFT. No other entity or verb stem is licensed in this closed exercise."
+              }
+            ],
+            "unresolved": []
+          },
+          "status": "read",
+          "failure": null
+        }
+      ],
+      "stems": [
+        {
+          "surface": "ema",
+          "entityId": "Ema",
+          "eventId": null,
+          "meaning": "The exact nominal stem ema denotes entity Ema. It has no inherent event role or discourse-topic feature.",
+          "witnesses": [
+            {
+              "clauseId": "L01",
+              "sourceId": "DOC04",
+              "path": "lexicon/stems.md",
+              "quote": "[L01] The exact nominal stem ema denotes entity Ema. It has no inherent event role or discourse-topic feature."
+            }
+          ]
+        },
+        {
+          "surface": "ila",
+          "entityId": "Ila",
+          "eventId": null,
+          "meaning": "The exact nominal stem ila denotes entity Ila. It has no inherent event role or discourse-topic feature.",
+          "witnesses": [
+            {
+              "clauseId": "L02",
+              "sourceId": "DOC04",
+              "path": "lexicon/stems.md",
+              "quote": "[L02] The exact nominal stem ila denotes entity Ila. It has no inherent event role or discourse-topic feature."
+            }
+          ]
+        },
+        {
+          "surface": "nara",
+          "entityId": "Nara",
+          "eventId": null,
+          "meaning": "The exact nominal stem nara denotes entity Nara. The final characters ra of this stem are part of the stem, not an independently asserted marker. An additional RA suffix produces narara; a following productive NA would produce nararana.",
+          "witnesses": [
+            {
+              "clauseId": "L03",
+              "sourceId": "DOC04",
+              "path": "lexicon/stems.md",
+              "quote": "[L03] The exact nominal stem nara denotes entity Nara. The final characters ra of this stem are part of the stem, not an independently asserted marker. An additional RA suffix produces narara; a following productive NA would produce nararana."
+            }
+          ]
+        },
+        {
+          "surface": "taku",
+          "entityId": null,
+          "eventId": "LIFT",
+          "meaning": "The exact verb stem taku denotes the event relation LIFT. No other entity or verb stem is licensed in this closed exercise.",
+          "witnesses": [
+            {
+              "clauseId": "L04",
+              "sourceId": "DOC04",
+              "path": "lexicon/stems.md",
+              "quote": "[L04] The exact verb stem taku denotes the event relation LIFT. No other entity or verb stem is licensed in this closed exercise."
+            }
+          ]
+        }
+      ],
+      "unresolved": []
+    },
     "candidateSlots": [
       {
         "slotId": "B_NA",

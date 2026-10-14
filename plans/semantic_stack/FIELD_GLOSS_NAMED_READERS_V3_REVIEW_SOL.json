@@ -1,0 +1,64 @@
+{
+  "schema": "natlang.semantic-application-independent-source-review/1",
+  "reviewer": "semantic_slate_sol",
+  "application": "field-gloss-workbench",
+  "variant": "named-domain-stem-readers-v3-retained-indices",
+  "source_commits": [
+    "decf3256",
+    "35edd99f"
+  ],
+  "status": "source_delta_accepted_typed_private_certificate_delta_peer_review_pending",
+  "hashes": {
+    "applications/field-gloss-workbench/analyzeCorpus/intake.nl": "93e737a5a808f13c01d8df45b8b23917608e5c559a9417bb50a6bab14876ec07",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readCandidateDomains.nl": "4eb3b274ea5b0a8863f64e398266a9a5599e85efaa1dc50eebdbc165e4348c80",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readCandidateDomains/advanceDomainClause.nl": "f50cee105e7ad66c92907010676d0951902015d9ad29815712835c864d68e915",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readStemDefinitions.nl": "d9cc0b94ebc5cab4ecea894a40564ceab528e1cc23a15b1a75a4bcb79cb51fc5",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readStemDefinitions/advanceStemClause.nl": "9dafe0e9ae5e1d45598eb0a665d0b74c6bf8d1f3be5ec9054cc7a63e06956830",
+    "applications/field-gloss-workbench/types.ts": "21fbad05e0f6afe29d6177b206bec0c17f736464f1e015f4b7f363f83c9ab934",
+    "applications/field-gloss-workbench/DECOMPOSITION.md": "be2a8d7fa899e1c5c2257dae709d40d1c460734e0f8d9cc22e0849a3bca71de5"
+  },
+  "source_walkthrough": [
+    "Actual CorpusInventory roles select original units only; the awaited DomainClauseReading or StemClauseReading owns the source meaning.",
+    "OriginalD01\u2013D04 define the four independent finite candidate slots; no reader ranks candidates with later elicitation or targets.",
+    "OriginalL01\u2013L04 define ema/ila/nara/taku, preserving nara final ra inside its stem and keeping event role/topic judgments downstream.",
+    "One original pending ID per invocation produces one retained read/unresolved/failed entry and returns next with finish:true; earlier returns remain unchanged.",
+    "Parents project only accepted domain/stem-kind entries, and intake retains both typed indices plus their actual projected meanings.",
+    "Actual missing-premise/failure reasons flow from the unit to frontier to index to CorpusSource.unresolved."
+  ],
+  "closed_findings": [
+    {
+      "finding": "Intake claimed retained coverage without typed fields",
+      "resolution": "CorpusSource.candidateDomains and stemDefinitions retain actual indices; parent projection is separately checked."
+    },
+    {
+      "finding": "Unresolved/failure entries could disappear from intake summary",
+      "resolution": "Numbered leaf/parent steps explicitly append and retain original reasons before accepted projection."
+    }
+  ],
+  "crisp_policy_audit": {
+    "new_executable_crisp_semantic_helpers": 0,
+    "new_public_crisp_code": "Type declarations only; unit-ID removal, quote membership and immediate state return are exact seams.",
+    "new_nl_policy": "Definition selection, source meaning, context versus definition, missing versus failed and compatible versus conflicting meaning remain numbered NL stages."
+  },
+  "checks": {
+    "unchanged_private_verifier_independently_reproduced": {
+      "positive": 10,
+      "negative": 58,
+      "all_passed": true
+    },
+    "current_typed_reference_replay": {
+      "path": "/tmp/sol-field-v3-index-reference/package-report.json",
+      "reference_ok": true,
+      "visible_sha256": "090f7c559fd73693c1ce7638320fa04c504b86f9d901c92b54672e28de7dbe43"
+    },
+    "private_index_delta": "Reviewer authored the private index certificate/checker delta; its90controls are author checks and require separate Curriculum review."
+  },
+  "limits": [
+    "Static pseudocode and typed witness do not prove actual child execution, accepted projection consumption or one-step finish live.",
+    "The private typed witness is human-authored source-validity evidence; it is not an execution of the NL application.",
+    "Quote existence is exact, quote entailment and linguistic meanings require semantic review."
+  ],
+  "source_generation_preparation_only": true,
+  "live_samples": 0,
+  "training_admission": false
+}
