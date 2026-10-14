@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import pytest
 from pathlib import Path
 
 
@@ -69,3 +70,23 @@ def test_close_verified_keeps_request_open_when_verifier_fails(tmp_path, monkeyp
     monkeypatch.setattr(coord.Store, 'deliver', lambda self, message: [])
     coord.main()
     assert request['id'] in coord.resolutions(store.messages())
+
+
+@pytest.mark.parametrize('command', ['reply', 'close', 'close-verified'])
+def test_originator_followup_and_closure_reach_the_requested_peer(tmp_path, monkeypatch, command):
+    monkeypatch.setenv('COORD_MACHINE', 'dgx')
+    store = coord.Store(tmp_path)
+    request = coord.make_message(store, 'dgx-supervisor', ['pop'], 'request', 'Stage verified image', 'please')
+    store.write(request)
+    delivered = []
+    monkeypatch.setattr(coord.Store, 'deliver', lambda self, message: delivered.append(message) or [])
+    monkeypatch.setattr(coord, 'verify_manifests', lambda repo, machine, ids: (True, 'verified'))
+    args = ['coord.py', '--repo', str(tmp_path), '--as', 'dgx-supervisor', command, request['id']]
+    args += ['--manifest', 'image'] if command == 'close-verified' else ['-m', 'Concrete verifier and mount details']
+    if command == 'reply':
+        args.append('--keep-open')
+    monkeypatch.setattr('sys.argv', args)
+    coord.main()
+    assert len(delivered) == 1 and 'pop' in delivered[0]['to']
+    assert delivered[0]['reply_to'] == request['id']
+    assert (request['id'] in coord.resolutions(store.messages())) == (command != 'reply')
