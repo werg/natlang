@@ -7,13 +7,20 @@ held/source proof and tokenizer-twin check pass.
 
 ## Inputs and quality decision
 
-The canonical DGX checkout has all twelve files:
+The canonical checkouts have the following four members in all six views
+(24 files). Pop verifies immutable manifests before the build:
 
 | Member | Base directory | LFM/Mellum full, program-header, whole-trajectory |
 | --- | --- | --- |
 | `clef-20261014` | `runs/natlang-native-turns-clef-pools-20261014-v1-render` | `RENDERING/TOKENIZER/text-data.jsonl` |
 | `backlog-v5` LFM | `runs/luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1/lfm25-render-v1` | `RENDERING/lfm25/text-data.jsonl` |
 | `backlog-v5` Mellum | `runs/luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1/mellum21-render-v1` | `RENDERING/mellum21/text-data.jsonl` |
+| `qad-recovery-v3` | `runs/qad-r8-recovery-v3-v2-twins-20261014` | `RENDERING/TOKENIZER/text-data.jsonl` |
+| `qad-recovery-v4` | `runs/qad-r8-recovery-v4-twins-20261014` | `RENDERING/TOKENIZER/text-data.jsonl` |
+
+The recovery members use only their semantically reviewed v2/v1 sources,
+respectively: v3 has 41 approved turns and v4 has 24. Superseded v1 recovery
+outputs and exact-success parents held for poor action shape are excluded.
 
 The backlog receipt has 1,188 full, 23,644 program-header and 12,777
 whole-trajectory train documents per tokenizer before global protection.
@@ -54,9 +61,10 @@ Use the shared `scripts/neuralese_data/build_native_turn_union.py` once with:
   and `--compress-text`;
 - `--tokenizer lfm25=/home/werg/natlang/models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f`
   and `--tokenizer mellum21=/home/werg/data/models/mellum21-12b-a2.5b-thinking`;
-- twelve `--member NAME:RENDERING:TOKENIZER=PATH` arguments, one for each
-  existing Clef/backlog file above, with member names `clef-20261014` and
-  `backlog-v5` consistent across renderings/twins;
+- 24 `--member NAME:RENDERING:TOKENIZER=PATH` arguments, one for each
+  Clef/backlog/recovery file above, with member names `clef-20261014`,
+  `backlog-v5`, `qad-recovery-v3` and `qad-recovery-v4` consistent across
+  renderings/twins;
 - six `--held-reference` arguments for R8's full/program-header/whole-trajectory
   LFM and Mellum renders; wait for the protected R8 whole files to finish;
 - eight `--quarantine-reference` arguments: the same six
