@@ -152,9 +152,10 @@ class DecisionTests(RegistryCase):
     def test_hold_appends_a_pending_entry_and_writes_a_new_manifest(self):
         built = self.receipt(item_output())
         before = sr.registry_sha256(self.registry)
+        starting_records = len((self.registry / "holds.jsonl").read_text(encoding="utf-8").splitlines())
         decided = self.decide(built, "hold", by="agent:session-1")
         lines = (self.registry / "holds.jsonl").read_text(encoding="utf-8").splitlines()
-        self.assertEqual(len(lines), 185)
+        self.assertEqual(len(lines), starting_records + 1)
         entry = json.loads(lines[-1])
         self.assertEqual((entry["dataset"], entry["id"], entry["status"], entry["aliases"]), ("sst2", "item-1", "pending", []))
         self.assertEqual(entry["annotatedLabel"], "negative")
@@ -163,7 +164,7 @@ class DecisionTests(RegistryCase):
         self.assertNotEqual(decided["registry"]["after_sha256"], before)
         self.assertEqual(decided["registry"]["manifest"], "source-reviews-20261009-v1")
         manifest = json.loads((self.manifests / "source-reviews-20261009-v1.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["record_count"], 185)
+        self.assertEqual(manifest["record_count"], starting_records + 1)
         self.assertIs(decided["training_admission"], False)
         self.assertEqual(decided["decision"]["by"], "agent:session-1")
 
