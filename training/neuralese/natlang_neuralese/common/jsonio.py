@@ -52,6 +52,29 @@ def write_json_durable(path, value) -> None:
 
 
 @contextmanager
+def write_jsonl_text(path: str | Path):
+    """Write exact UTF-8/LF text, compressing zstd incrementally and checking its exit."""
+    path = Path(path)
+    if path.suffix != '.zst':
+        with path.open('w', encoding='utf-8', newline='\n') as stream:
+            yield stream
+        return
+    with path.open('wb') as raw:
+        proc = subprocess.Popen(['zstd', '-q', '-3', '--long=27', '-T1', '-c'],
+                                stdin=subprocess.PIPE, stdout=raw)
+        try:
+            with io.TextIOWrapper(proc.stdin, encoding='utf-8', newline='\n') as stream:
+                yield stream
+        except BaseException:
+            if proc.poll() is None:
+                proc.terminate()
+            proc.wait()
+            raise
+        if proc.wait():
+            raise RuntimeError(f'zstd write failed on {path}')
+
+
+@contextmanager
 def open_jsonl_text(path: str | Path):
     """Exact UTF-8/LF text, plain or zstd; complete reads verify decompressor success."""
     path = Path(path)

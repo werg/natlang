@@ -63,7 +63,7 @@ _G: dict = {}
 
 
 from natlang_neuralese.common.hashing import sha256_file_hex as file_sha, sha256_hex as sha  # noqa: E402
-from natlang_neuralese.common.jsonio import canonical_json_str as canonical  # noqa: E402
+from natlang_neuralese.common.jsonio import canonical_json_str as canonical, open_jsonl_text, write_jsonl_text  # noqa: E402
 
 
 def jsonl_lines(path: Path):
@@ -712,7 +712,8 @@ def whole_trajectory_records(records: list[dict], blocked: dict) -> list[tuple[d
 
 def render_shard(job):
     (shard_path, out_dir, tok_name, blocked, corpus, held_groups, decision_exclude, header_as_full, full_programs,
-     renderings) = job
+     renderings, *storage_options) = job
+    compress_text = bool(storage_options and storage_options[0])
     # Per-decision renderings are rendered only when one of them is requested; the program-header parity check needs
     # both, so with program-header requested the full rendering is rendered too (and kept per --full-sample).
     per_decision = {'full', 'program-header'} & set(renderings)
@@ -858,11 +859,13 @@ def render_shard(job):
     for mode in [m for m in rows if m not in renderings]:  # rendered only for the parity check
         del rows[mode]
     for mode, rs in rows.items():
-        path = Path(out_dir) / mode / tok_name / f'{stem}.jsonl'
+        path = Path(out_dir) / mode / tok_name / (f'{stem}.jsonl.zst' if compress_text else f'{stem}.jsonl')
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, 'w') as f:
+        with write_jsonl_text(path) as f:
             for row in rs:
                 f.write(canonical(row) + '\n')
+        if compress_text:
+            path.with_suffix('').unlink(missing_ok=True)  # superseded unfinished plain output
         result[mode] = len(rs)
     path = Path(out_dir) / 'omissions' / tok_name / f'{stem}.jsonl'
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -928,13 +931,14 @@ def held_groups_from(paths):
     return groups
 
 
-def merge(out: Path, mode: str, tok_name: str, shards: list[str], held_external: set, count_roles):
+def merge(out: Path, mode: str, tok_name: str, shards: list[str], held_external: set, count_roles, *, compress_text=False):
     """Concatenate shard outputs in shard order with the global split and dedup checks of gold_text_rows."""
     src = [out / 'work' / mode / tok_name / f'{s}.jsonl' for s in shards]
+    src = [p if p.exists() else p.with_suffix('.jsonl.zst') for p in src]
     src = [p for p in src if p.exists()]
     train_groups, test_groups, test_texts = set(), set(), set()
     for p in src:
-        with open(p) as f:
+        with open_jsonl_text(p) as f:
             for line in f:
                 row = json.loads(line)
                 (train_groups if row['split'] == 'train' else test_groups).update(row['source_groups'])
@@ -947,9 +951,11 @@ def merge(out: Path, mode: str, tok_name: str, shards: list[str], held_external:
     omissions, seen = [], {}
     stats = {'documents': 0, 'by_split': {}, 'max_document_tokens': 0}
     roles_total = Counter()
-    with open(final / 'text-data.jsonl', 'w') as dst:
+    target = final / ('text-data.jsonl.zst' if compress_text else 'text-data.jsonl')
+    decoded_digest, decoded_bytes = hashlib.sha256(), 0
+    with write_jsonl_text(target) as dst:
         for p in src:
-            with open(p) as f:
+            with open_jsonl_text(p) as f:
                 for line in f:
                     row = json.loads(line)
                     if row['split'] == 'train':
@@ -986,12 +992,18 @@ def merge(out: Path, mode: str, tok_name: str, shards: list[str], held_external:
                         s['supervised_tokens'] += target
                     stats['documents'] += 1
                     stats['max_document_tokens'] = max(stats['max_document_tokens'], n)
-                    dst.write(line if line.endswith('\n') else line + '\n')
+                    text = line if line.endswith('\n') else line + '\n'
+                    dst.write(text)
+                    data = text.encode('utf-8')
+                    decoded_digest.update(data)
+                    decoded_bytes += len(data)
     stats['roles'] = dict(roles_total)
     stats['internal_train_test_group_overlap'] = len(overlap)
     (final / 'omissions.jsonl').write_text(''.join(canonical(o) + '\n' for o in omissions))
     stats['merge_omissions'] = dict(Counter(o['reason'] for o in omissions))
-    stats['text_data_sha256'] = file_sha(final / 'text-data.jsonl')
+    stats['text_data_sha256'] = file_sha(target)
+    if compress_text:
+        stats.update(text_data_file=target.name, decoded_text_data_sha256=decoded_digest.hexdigest(), decoded_text_data_bytes=decoded_bytes)
     return stats
 
 
@@ -1021,6 +1033,7 @@ def main(argv=None):
     p.add_argument('--protected', type=Path)
     p.add_argument('--held-text', type=Path, nargs='*', default=[])
     p.add_argument('--workers', type=int, default=8)
+    p.add_argument('--compress-text', action='store_true', help='compress shard and merged text while writing; exact decoded rows unchanged')
     p.add_argument('--shards', type=int, default=64)
     p.add_argument('--limit', type=int)
     p.add_argument('--keep-work', action='store_true', help='keep the per-shard work files after the merge')
@@ -1096,7 +1109,7 @@ def main(argv=None):
         decision_exclude.update(json.loads(line)['id'] for line in jsonl_lines(path) if line.strip())
     full_set = None if full_programs is None else set(full_programs)
     jobs = [(str(shard_dir / f'{s}.jsonl'), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
-             a.program_header_as_full, full_set, tuple(a.renderings))
+             a.program_header_as_full, full_set, tuple(a.renderings), a.compress_text)
             for s in shards for name in tokenizers]
     results = []
     pending = []
@@ -1124,7 +1137,7 @@ def main(argv=None):
     for mode in a.renderings:
         for name in tokenizers:
             renders[f'{mode}/{name}'] = merge(out, mode, name, shards, held_external,
-                                              role_counter(_G['tok'][name]))
+                                              role_counter(_G['tok'][name]), compress_text=a.compress_text)
             print(json.dumps({mode: name, **{k: v for k, v in renders[f'{mode}/{name}'].items() if k != 'roles'}}), flush=True)
     render_omissions = Counter()
     parity = Counter()
