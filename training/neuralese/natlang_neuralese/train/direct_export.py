@@ -1046,7 +1046,9 @@ def load_direct_artifact(artifact_dir: str | Path, *, base_snapshot: str | Path,
     payload_path = artifact_dir / manifest["payload"]["path"]
     if sha256_file_hex(payload_path) != manifest["payload"]["sha256"]:
         raise ValueError("direct artifact tensor payload hash mismatch")
-    payload = torch.load(payload_path, map_location="cpu", weights_only=True)
+    # The verified artifact is immutable. Map its storages instead of copying
+    # the entire payload into host RAM before allocating the GPU backbone.
+    payload = torch.load(payload_path, map_location="cpu", weights_only=True, mmap=True)
     if payload.get("schema") != ARTIFACT_SCHEMA:
         raise ValueError("direct tensor payload schema mismatch")
 
