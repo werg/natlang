@@ -95,6 +95,24 @@ function validateSourceProvenance(source) {
       return { error: 'invalid_license_provenance' };
   }
   if (!Object.hasOwn(source, 'source_refs')) return {};
+  if (['tasksource/Boardgame-QA', 'qiaojin/PubMedQA'].includes(source.source) &&
+      Array.isArray(source.source_refs) && source.source_refs.length === 1 &&
+      source.source_refs[0]?.upstream_metadata_status === 'unknown_requires_pinned_source_receipt') {
+    const ref = source.source_refs[0];
+    const fields = ['dataset', 'local_file_sha256', 'local_path', 'physical_row',
+      'row_group', 'row_in_group', 'split', 'upstream', 'upstream_metadata_status'];
+    const expected = source.source === 'tasksource/Boardgame-QA' ? [...fields, 'config'] : fields;
+    if (!exactSet(ref, expected) || ref.dataset !== source.source || ref.split !== source.role ||
+        ref.upstream !== null || !sha256Hex(ref.local_file_sha256) ||
+        typeof ref.local_path !== 'string' || !ref.local_path || ref.local_path.startsWith('/') ||
+        ref.local_path.split('/').includes('..') ||
+        !Number.isSafeInteger(ref.physical_row) || ref.physical_row < 0 ||
+        !Number.isSafeInteger(ref.row_group) || ref.row_group < 0 ||
+        !Number.isSafeInteger(ref.row_in_group) || ref.row_in_group < 0 ||
+        (source.source === 'tasksource/Boardgame-QA' && !nonempty(ref.config)))
+      return { error: 'invalid_local_catalog_source_reference_provenance' };
+    return {};
+  }
   if (source.source === 'clinc/clinc_oos') {
     if (!Array.isArray(source.source_refs) || source.source_refs.length !== 1)
       return { error: 'invalid_clinc_source_reference_provenance' };
