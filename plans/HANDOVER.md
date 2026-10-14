@@ -1,5 +1,44 @@
 # Continuation guide — updated 2026-10-14
 
+## 02:22 CEST: source corrections, exact JSONL framing, and QAD prompt evidence
+
+The owner's current source target is connected, application-sized programs
+whose decisive algorithm is deep numbered natural-language pseudocode. Do not
+discard the earlier 220 valid simpler examples. Cave physical-presence v4
+(`f88070f9`, peer `bbc66d29`) separates physical connection existence from
+permitted directional traversal; its same-fixture one-case queue is sealed,
+not launched. Turn Window now has a full typed state-replay verifier with 28
+exact controls (`c3fd2000`), but Sol's independent source/checker review is
+pending, so it has no live/admission credit. Its one-case queue is sealed.
+Procedure Compiler's final source attribution/checker commit is pending.
+
+Ecology v14 (`19b7721b`, source receipt `648d86ce`) repaired plural source-key
+identity and replaced the tempting `verifyResult` name with `auditEffectGraph`.
+Its frozen one-case queue is sealed. Launch order after the Pop GPU A/B and
+full check release memory: ecology v14, Cave v4, then independently reviewed
+Turn Window. Inspect actual literal-child results and parent consumption;
+partial diagnostics are neither training rows nor model-negative evidence.
+The v13 partial showed per-edge typed child consumption but plural
+singularization and a final audit-call detour; it was stopped, not admitted.
+
+The shared exact-LF JSONL reader from DGX is now used by all 16 remaining
+Pop-owned Node script consumers (`7d353d05` on origin/main). This preserves
+valid U+2028/U+2029 inside JSON strings, line numbers, malformed-row handling
+and gzip. Node syntax and quick gate pass; the low-priority full `check-main`
+ledger waiter still needs to execute and its result read.
+
+Pop QAD step15000 matched task A/B: program-header completed both 16-case
+passes at **0/16 success**. Full prompt's first pass found **1/16 accepted**
+(frontier iteration); its repeat is still running. Both arms have many exact
+action repetitions and semantic mismatches; prompt mismatch alone is not a
+supported explanation. The step15600 drift stop remains unqualified, and R5
+continuation remains plan-only. DGX's independent step8000 full/no-marker
+diagnostic was 0/16, with exact chunked-prefill parity. Do not conflate that
+different checkpoint/backend with the Pop A/B. A collector request metadata
+bug that labeled student responses as Bonsai was fixed in `55f8dc72`; it did
+not affect the frozen A/B server's actual model response. Diagnose the final
+repeat before selecting the next training run.
+
 ## 01:46 CEST: deep pseudocode source quality and live typed-handoff findings
 
 The owner reaffirmed that the **new application-scale cohort** should be deep,
