@@ -72877,6 +72877,29 @@
       ],
       "license": "Pinned upstream source-card facts retained in source manifests.",
       "notes": "Upstream teacher correctness unknown; independent task execution not claimed. Native replay/render and recipe bindings are separate steps."
+    },
+    {
+      "id": "qad-r8-student-root-recovery-v3-20261014-v1",
+      "owner": "pop",
+      "path": "runs/qad-r8-student-root-recovery-v3-20261014-v1",
+      "include": [
+        "selected.ir.jsonl",
+        "selected.ir.manifest.json",
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "native-turns.review-candidates.jsonl",
+        "admission-review.json",
+        "approved-turns.jsonl"
+      ],
+      "source_class": "student-root Luna teacher recovery from train-only natlang curriculum",
+      "license": "source-row licenses; mixed project-generated and AG News academic-use",
+      "split": "train only; exact accepted source program, source group and source ID disjoint from protected held48",
+      "admission": "8 of 11 exact accepted parents, 42 native successful teacher decisions; three semantic quality holds and 15 non-target native decisions",
+      "training_admission": true,
+      "training_admission_reason": "Explicit parent-level semantic holds, exact source/outcome checks, successful native teacher decision selection, protected held48 separation; admission-review.json binds immutable source/output hashes. No DPO pairs admitted.",
+      "review_status": "Parent and tool-action semantic review, source-group protection and native decision checks completed",
+      "required_conversion": "render LFM and Mellum twins; include in a later protected target-union delta after global held/source-quality checks",
+      "notes": "Only approved-turns.jsonl is a training input. Three exact-success parents held for process/iteration/ID-specific quality; student prefix and rejected proposals are context only. Pop-owned raw campaign remains on Pop."
     }
   ],
   "coverage_backlog": [
