@@ -14,6 +14,7 @@ exec docker run --rm --name "$unit" --gpus all --network host \
   --volume /srv/storage:/srv/storage \
   --volume /tmp:/tmp \
   --volume /usr/bin/node:/usr/bin/node:ro \
+  --volume /usr/bin/zstd:/usr/bin/zstd:ro \
   --workdir "$repo" \
   --env "PYTHONPATH=$repo/training/neuralese:$repo" \
   --env "HF_HOME=${HF_HOME:-/tmp/natlang-check-hf-empty}" \
