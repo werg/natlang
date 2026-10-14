@@ -1,5 +1,51 @@
 # Continuation guide — updated 2026-10-14
 
+## 11:30 CEST: matched QAD result, Luna backlog admission and Pop gate
+
+The exact matched full-prompt, temperature-0.6, one-worker held48 packet
+(`53526986...`) finished. Clean QAD base and trained step 15000 each solved
+**1/48**. Base: 41 semantic mismatches, three invalid actions, two request
+budget endings, one incomplete, zero repetitions. Trained: 21 repetitions,
+ten invalid actions, nine request budget endings, seven semantic mismatches.
+The base often answers directly without doing the work; the trained model
+more often calls tools and NL children, then repeats a failed action despite
+specific feedback. One observed parent repeated a redeclaration of
+`const cancelTickets`; other cases repeated `read_code(nl)` or an invalid
+`iterateOn` call. This is a recovery failure to diagnose, not evidence that
+the approach itself cannot work. Held cases remain out of training. DGX was
+briefed with exact outcome counts and trace examples.
+
+The overlooked closed Luna campaigns s52018–s52047 and s52049 were collected
+with source and oracle checks. Commit `2ebfe042` streams selected parents so
+the collector fits memory; reviewed zero-result exclusions remain pinned.
+The batch has 3,029 exact accepted parents, 409 rejected and 13 reviewed
+exclusions. The native materializer produced 25,077 decisions; 23,651
+positively approved train targets across 20 families were retained and 1,426
+unapproved context targets removed. Corpus
+`luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1` is registered
+and admitted in `32a15cce`, immutable manifest published, and all four files
+(3.66 GB) hash-verified on DGX. Seed s52048 is still open; its long worker-06
+retry has over 650 turns but is making varied nested child calls, so it was
+excluded from this closed batch rather than labeled stuck. The source corpus
+now needs LFM and Mellum renders and inclusion in the broad train union. The
+LFM render is queued under the Pop ledger to output on the root filesystem;
+`/srv/storage` has about 3.2 GiB free.
+
+The Pop host full gate passed all TypeScript build, layering, 2,044 tests and
+22 conformance cases, but failed Python setup because no compatible host
+Python >=3.11 with modern torch/transformers is installed. The first Python
+container run found missing npm and the diagnostic second run found missing
+`zstd` and an unwritable Triton cache, not model failures. Container diagnostic
+`natlang-pop-full-main-python-container-r4-20261014` now runs with the
+verified npm wrapper, mounted brew `zstd`, writable `/tmp` Triton cache and
+host log `/tmp/natlang-pop-gate/r4.log`. It still needs a green result; the
+semantic v18c runtime freeze is held until then. The Luna replenisher timer
+was temporarily stopped to free host RAM for this gate and **must be
+restarted** afterward. Gemini batch30 remains active (63 labels last count).
+Field Gloss typed source-only certificate/checker `45e6f43a`/`9e5219cb`
+passed 64 peer controls and is pushed, with live execution and training
+admission still held.
+
 ## 10:43 CEST: discrete-GPU admission correction and queued checks
 
 The Pop ledger treated `--cuda-budget-gb` as a trainer hint but admitted jobs
