@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-codeagent-handoffs-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-codeagent-handoffs-20261014-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 653,
+      "sha256": "f31ea580eb97da4dbd92845df0baa4727efb47a968658b50077516d2c5bba584"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 2636,
+      "sha256": "7f7dd6ceb7128dfbd3872ade8262a47efab8708d9759d4c29df3cb3da22b36bc"
+    },
+    {
+      "path": "trajectory_continuation_coding.port-records.jsonl",
+      "bytes": 665923196,
+      "sha256": "5a58edf3999a31d653e642e332f5fac8a787ac9a740385d70f7a305b5dda9da3",
+      "lines": 59939
+    }
+  ],
+  "bytes": 665926485
+}
