@@ -46,6 +46,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('parents', 'selection-review', 'turns', 'semantic-holds', 'protected', 'out', 'review'):
         parser.add_argument('--' + name, required=True, type=Path)
+    parser.add_argument('--decision-holds', type=Path,
+                        help='optional exact-source-bound individual teacher decisions to exclude')
     args = parser.parse_args()
     selection = json.loads(args.selection_review.read_text())
     if selection.get('candidate_sha256') != sha256(args.parents) or selection.get('training_admission') is not False:
@@ -81,8 +83,21 @@ def main():
             families[program['family']] += 1
     if set(holds) - set(parents):
         raise ValueError('semantic holds name unknown trajectory IDs')
+    decision_holds = {}
+    if args.decision_holds is not None:
+        decision_review = json.loads(args.decision_holds.read_text())
+        if (decision_review.get('schema') != 'natlang.teacher-decision-semantic-holds/1' or
+                decision_review.get('source_sha256') != sha256(args.turns)):
+            raise ValueError('decision holds do not bind the exact native turn bytes')
+        for item in decision_review.get('holds', []):
+            if (item.get('id') in decision_holds or not item.get('reason') or
+                    item.get('trajectory_id') not in parents):
+                raise ValueError('decision holds need unique IDs, reasons and known parents')
+            decision_holds[item['id']] = item
     counts = collections.Counter()
     target_tools = collections.Counter()
+    seen_decisions = set()
+    last_action = {}
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=args.out.parent,
                                      prefix=args.out.name + '.', suffix='.building', delete=False) as stream:
@@ -92,21 +107,47 @@ def main():
             trajectory = turn['teacher_trajectory_id']
             if trajectory not in parents:
                 raise ValueError(f'native turn lacks an exact parent: {trajectory}')
+            if turn['id'] in seen_decisions:
+                raise ValueError(f'duplicate native decision ID: {turn["id"]}')
+            seen_decisions.add(turn['id'])
             if trajectory in holds:
                 counts['semantic_parent_hold'] += 1
                 continue
             if turn.get('training_admission', {}).get('approved') is not True:
                 counts['unapproved_decision'] += 1
                 continue
+            held_decision = decision_holds.get(turn['id'])
+            if held_decision is not None:
+                if held_decision['trajectory_id'] != trajectory:
+                    raise ValueError(f'decision hold parent mismatch: {turn["id"]}')
+                counts['semantic_decision_hold'] += 1
+                continue
             if (turn.get('split') != 'train' or turn.get('outcome', {}).get('accepted') is not True or
                     protected_groups.intersection(turn.get('source_groups', []))):
                 raise ValueError(f'native turn has invalid outcome or held overlap: {turn["id"]}')
+            # A repeated action in the same invocation is a quality decision,
+            # even when the final answer passes an exact oracle. Distinct child
+            # invocations may legitimately make the same decision on different
+            # items, so compare within the invocation only.
+            action_key = (trajectory, turn['source_ref']['invocation_id'])
+            calls = turn.get('target', {}).get('tool_calls') or []
+            action = ([(call['function']['name'], call['function']['arguments']) for call in calls]
+                      if calls else turn.get('target', {}).get('content'))
+            if action_key in last_action and last_action[action_key] == action:
+                raise ValueError(f'identical successive action needs an explicit decision hold: {turn["id"]}')
+            last_action[action_key] = action
             stream.write(json.dumps(turn, ensure_ascii=False, separators=(',', ':')) + '\n')
             counts['approved'] += 1
             calls = turn.get('target', {}).get('tool_calls') or []
             target_tools[calls[0]['function']['name'] if calls else '<text>'] += 1
         stream.flush()
         os.fsync(stream.fileno())
+    if set(decision_holds) - seen_decisions:
+        pending.unlink()
+        raise ValueError('decision holds name unknown native decision IDs')
+    if counts['semantic_decision_hold'] != len(decision_holds):
+        pending.unlink()
+        raise ValueError('decision holds must name otherwise approved decisions from admitted parents')
     if args.out.exists():
         if sha256(args.out) != sha256(pending):
             pending.unlink()
@@ -120,6 +161,9 @@ def main():
                          'turns': str(args.turns), 'turns_sha256': sha256(args.turns)},
               'semantic_holds': {'path': str(args.semantic_holds), 'sha256': sha256(args.semantic_holds),
                                  'parents': len(holds)},
+              'decision_holds': (None if args.decision_holds is None else
+                                 {'path': str(args.decision_holds), 'sha256': sha256(args.decision_holds),
+                                  'decisions': len(decision_holds)}),
               'protected': {'path': str(args.protected), 'sha256': sha256(args.protected),
                             'program_overlap': 0, 'source_group_overlap': 0, 'source_id_overlap': 0},
               'parents': {'exact_accepted': len(parents), 'admitted': len(parents) - len(holds),
