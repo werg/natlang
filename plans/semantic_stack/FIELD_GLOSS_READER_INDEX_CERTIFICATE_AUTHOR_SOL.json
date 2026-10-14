@@ -1,0 +1,43 @@
+{
+  "schema": "natlang.semantic-application-certificate-delta-author/1",
+  "author": "semantic_slate_sol",
+  "variant": "field-gloss-named-readers-v3-retained-indices",
+  "source_commits": [
+    "decf3256",
+    "35edd99f"
+  ],
+  "hashes": {
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/author-reference.py": "b7b8bf395d23f4c2fe346393da7bce84eb77ae5b98010bd212508fdfbdbee1a7",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/reference-report.json": "3c17b4cf5fb2c434b33717f2e8fd6fdb02830f8f6f6be02f07ddb2d01a66302c",
+    "training/semantic_applications/sol/field-gloss-workbench/verify-result.mjs": "24b8c0e29605169b0b2cbcd93e6287f5ea43629a03eb6a5a7a4417a904e296af",
+    "training/semantic_applications/sol/field-gloss-workbench/check-verifier.mjs": "ecdba01dce2b6e61eab5624320572f2b1bb556422c38d1577bd41bbc43ab9a77"
+  },
+  "reference_scope": "Human-authored typed source-validity certificate, not NL application execution or an actual call trace",
+  "original_fixture_oracle_unchanged": true,
+  "canonical_fields_unchanged": "All16vectors,32attempts,64skips,two survivors,six target meanings,alloriginalcorrection/patchconstraints; adds only typed source reader-index certificates",
+  "exact_checks": [
+    "Original inventory-selected unit coverage",
+    "Immutable original primary clauses",
+    "Actual returned identity and primary witness support",
+    "Status/kind consistency",
+    "Projection from actual accepted entries only",
+    "Set-normalized identical projections through reader index and intake",
+    "Actual unresolved/failure reasons retained through frontier summary,index and CorpusSource"
+  ],
+  "controls": {
+    "command": "node training/semantic_applications/sol/field-gloss-workbench/check-verifier.mjs",
+    "positive": 13,
+    "negative": 77,
+    "passed": true
+  },
+  "typed_package": {
+    "path": "/tmp/sol-field-v3-index-reference/package-report.json",
+    "reference_ok": true,
+    "visible_sha256": "090f7c559fd73693c1ce7638320fa04c504b86f9d901c92b54672e28de7dbe43",
+    "source_sha256": "ed18183033de3174db12d223b9964a5c8dcecb2a3be252ad218da706b4780f14"
+  },
+  "independent_private_delta_review": "Curriculum7/7independentprobes passed; committed receipt pending frozen private hashes",
+  "semantic_review_required": true,
+  "live_qualified": false,
+  "training_admission": false
+}

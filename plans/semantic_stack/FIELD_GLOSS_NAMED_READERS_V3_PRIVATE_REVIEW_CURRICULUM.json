@@ -1,0 +1,62 @@
+{
+  "schema": "natlang.semantic-application-independent-certificate-review/1",
+  "reviewer": "semantic_stack_curriculum",
+  "application": "field-gloss-workbench",
+  "variant": "named-domain-stem-readers-v3-retained-indices",
+  "author_source_commits": [
+    "decf3256",
+    "35edd99f"
+  ],
+  "private_delta_commit": "56f4d834",
+  "source_review_receipt": {
+    "path": "plans/semantic_stack/FIELD_GLOSS_NAMED_READERS_V3_REVIEW_SOL.json",
+    "sha256": "20fbaf67ca4bf1c2bf76dfb49e09959a98b2a8576e7cf763527436d5839ce8d9"
+  },
+  "private_author_receipt": {
+    "path": "plans/semantic_stack/FIELD_GLOSS_READER_INDEX_CERTIFICATE_AUTHOR_SOL.json",
+    "sha256": "287efd249e15d747dc5cb57eaf4f9af4da2b5de6fd7654b5a6494b5e00d67113"
+  },
+  "private_file_hashes": {
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/author-reference.py": "b7b8bf395d23f4c2fe346393da7bce84eb77ae5b98010bd212508fdfbdbee1a7",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/reference-report.json": "3c17b4cf5fb2c434b33717f2e8fd6fdb02830f8f6f6be02f07ddb2d01a66302c",
+    "training/semantic_applications/sol/field-gloss-workbench/verify-result.mjs": "24b8c0e29605169b0b2cbcd93e6287f5ea43629a03eb6a5a7a4417a904e296af",
+    "training/semantic_applications/sol/field-gloss-workbench/check-verifier.mjs": "ecdba01dce2b6e61eab5624320572f2b1bb556422c38d1577bd41bbc43ab9a77"
+  },
+  "visible_sha256": "090f7c559fd73693c1ce7638320fa04c504b86f9d901c92b54672e28de7dbe43",
+  "reference_sha256": "3c17b4cf5fb2c434b33717f2e8fd6fdb02830f8f6f6be02f07ddb2d01a66302c",
+  "source_fixture_review": [
+    "Original D01-D04 define B_NA productive/frozen, F_NA agent/topic, F_RA agent/patient, and F_MI event-negative/not-yet; their candidate meanings are hypotheses, not preferred answers.",
+    "Original L01-L04 define ema/Ema, ila/Ila, nara/Nara with final ra inside the stem, and taku/LIFT.",
+    "The reference has one domain reading per D01-D04 and one stem reading per L01-L04, with matching original clause identity, primary quote and accepted-only projections retained in CorpusSource."
+  ],
+  "independent_exact_probes": {
+    "passed": 7,
+    "total": 7,
+    "positive": [
+      "canonical typed certificate",
+      "equivalent reader/index collection reorder"
+    ],
+    "negative": [
+      "context child cannot leak a candidate slot",
+      "consistently extended candidate values reject",
+      "child blocker must reach index",
+      "index blocker must reach intake",
+      "failed stem unit cannot project old accepted meaning"
+    ]
+  },
+  "author_controls_reproduced": {
+    "passed": true,
+    "positive": 13,
+    "negative": 77
+  },
+  "canonical_reference_replay_ok": true,
+  "limits": [
+    "The canonical typed report is an authored source-validity witness, not an execution of the NL readers.",
+    "Original quotation presence and exact projection do not establish linguistic entailment.",
+    "No live named-child consumption, 48-sample measurement or training admission follows from these checks."
+  ],
+  "independent_private_delta_review": true,
+  "live_samples": 0,
+  "training_admission": false,
+  "prebinding_source_sha256": "ed18183033de3174db12d223b9964a5c8dcecb2a3be252ad218da706b4780f14"
+}

@@ -554,6 +554,14 @@ continuation): the TCP comes on (identity, `optimizer_added`), P replaces the wr
 `dgx-projection`), and `e2e_mix` is added. Mellum v4 switches as soon as its P is fitted and the dragnet gives a stable
 recipe (planned with the DGX ops agent; no plateau wait). LFM does the same from its running lineage.
 
+**Equal training-time prefixes (supervisor, 2026-10-14).** The ratio policy is: run each arm alone from the same
+weights, optimizer initialization, source data and frozen code; give each the same declared training-time allowance;
+finish its current direct update and the corresponding complete e2e update group, then evaluate and save that exact
+prefix. Initialization, evaluations and checkpoint writes do not count as training. Record the actual time and
+whole-group overshoot, and compare paired-reader/held changes at those measured times. This is diagnostic allocation,
+not a production timeout or a new qualification gate. The trainer's optional `stop_after_training_seconds` is crisp
+accounting over its existing per-kind update durations and exact checkpoint boundary; zero leaves normal runs alone.
+
 **Mixed corpus binding (supervisor, 2026-10-13 evening).** Both mixed launch recipes bind the admitted immutable
 `neuralese-e2e-cohort-20261013-v3` records and pieces: 207,698 records in 26,675 chains, 106,380 authenticated edges
 (96,322 train / 10,058 held), and 103 families. The local manifest verifier checked all six files successfully
