@@ -242,6 +242,20 @@ def spans_for_row(row: dict, writes: list[tuple[str, str, bool]], tokenizer) -> 
 def cohort_writes(cohort: Path) -> dict[str, list[tuple[str, str, bool]]]:
     """Record id -> (write name, value text, has edge) of every record in the cohort whose target writes."""
     from natlang_neuralese.train import trajectories as T
+    from natlang_neuralese.common import row_index
+    from natlang_neuralese.common.hashing import sha256_file_hex, sha256_file_hex_cached
+    # Reuse the shared exact-input cache. The code inventory covers write_sites
+    # and its transitive helpers, not only this caller, so a changed extractor
+    # cannot reuse a previous meaning of the same source records.
+    package = ROOT / 'training/neuralese/natlang_neuralese'
+    code = hashlib.sha256('\n'.join(str(p.relative_to(package)) + ':' + sha256_file_hex(p)
+                                   for p in sorted(package.rglob('*.py'))).encode()).hexdigest()
+    cache = row_index.entry_path('neuralese-cohort-writes-v1', code, sha256_file_hex(Path(__file__)),
+                                 sha256_file_hex_cached(cohort / 'records.jsonl'),
+                                 sha256_file_hex_cached(cohort / 'edges.jsonl'))
+    stored = row_index.load(cache)
+    if stored is not None and isinstance(stored.get('writers'), dict):
+        return stored['writers']
     edged = collections.defaultdict(set)
     for line in open(cohort / 'edges.jsonl'):
         edge = json.loads(line)
@@ -253,6 +267,7 @@ def cohort_writes(cohort: Path) -> dict[str, list[tuple[str, str, bool]]]:
         if names:
             notes = T.handover_notes(record)
             writers[record['id']] = [(n, notes.get(n), n in edged.get(record['id'], ())) for n in sorted(names)]
+    row_index.save(cache, {'writers': writers})
     return writers
 
 

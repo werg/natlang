@@ -141,3 +141,34 @@ def test_mellum_tool_call_unicode_nested_value_and_escaped_string_offsets():
         if isinstance(value, str):
             begin, end = begin + 1, end - 1
         assert missing == 0 and spans == [[begin, end, 'result:a', True]]
+
+
+def test_cohort_write_cache_is_invalidated_by_records_edges_and_extractor_code(tmp_path, monkeypatch):
+    import json
+    from natlang_neuralese.train import trajectories as T
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
+    monkeypatch.setenv('NATLANG_HASH_CACHE', str(tmp_path / 'hashes.jsonl'))
+    monkeypatch.setattr(T, 'target_writes', lambda record: {'answer'})
+    monkeypatch.setattr(T, 'handover_notes', lambda record: {'answer': record['value']})
+    checkout = tmp_path / 'checkout'
+    code = checkout / 'training/neuralese/natlang_neuralese/policy.py'
+    code.parent.mkdir(parents=True)
+    code.write_text('extractor = 1\n')
+    monkeypatch.setattr(spans_module, 'ROOT', checkout)
+    records = tmp_path / 'records.jsonl'
+    edges = tmp_path / 'edges.jsonl'
+    records.write_text(json.dumps({'id': 'r', 'value': 'first'}) + '\n')
+    edges.write_text(json.dumps({'writer_record_id': 'r', 'write_name': 'answer'}) + '\n')
+    expected = {'r': [('answer', 'first', True)]}
+    assert spans_module.cohort_writes(tmp_path) == expected
+    with monkeypatch.context() as patch:
+        patch.setattr(T, 'target_writes', lambda record: (_ for _ in ()).throw(AssertionError('cache missed')))
+        assert spans_module.cohort_writes(tmp_path) == expected
+    records.write_text(json.dumps({'id': 'r', 'value': 'second'}) + '\n')
+    assert spans_module.cohort_writes(tmp_path) == {'r': [('answer', 'second', True)]}
+    edges.write_text('')
+    assert spans_module.cohort_writes(tmp_path) == {'r': [('answer', 'second', False)]}
+    with monkeypatch.context() as patch:
+        code.write_text('extractor = 2\n')
+        patch.setattr(T, 'handover_notes', lambda record: {'answer': 'new extractor'})
+        assert spans_module.cohort_writes(tmp_path) == {'r': [('answer', 'new extractor', False)]}
