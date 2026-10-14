@@ -63,6 +63,17 @@ def token_offsets(token_ids, text, tokenizer):
 
 def return_value_literals(text, start, value_path=('value',), tool='return_result'):
     """Literal value arguments in the native call rendering; None for another dialect."""
+    # The native envelope separates prose from the call expression. Apostrophes
+    # in assistant prose must not become unterminated code-string delimiters.
+    if '<|tool_call_start|>' in text[start:]:
+        values = []
+        pattern = re.compile(re.escape('<|tool_call_start|>') + r'(.*?)' +
+                             re.escape('<|tool_call_end|>'), re.S)
+        for match in pattern.finditer(text, start):
+            literals = return_value_literals(match.group(1), 0, value_path, tool)
+            values.extend((match.start(1) + begin, match.start(1) + end, value)
+                          for begin, end, value in literals or ())
+        return values
     # Mellum renders real tool calls as JSON objects inside explicit tool tags.
     # Read member boundaries with the decoder, never substring-search status/code.
     if '<tool_call>' in text[start:]:
