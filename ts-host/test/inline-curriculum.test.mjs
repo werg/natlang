@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { admitRow, coverage, referenceDriver, renderOpening, replayReference, verifyCases } from '../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { FAMILIES } from '../scripts/inline-curriculum/families.mjs';
@@ -89,6 +93,27 @@ test('admission preserves the declared evidence level of a case oracle', async (
   const described = structuredClone(base);
   described.semantics.oracle = { level: 'span', source: 'checked-excerpt' };
   assert.equal(admitRow({ task: { program_ir: described }, outcome: run.outcome, trajectory }).oracle_level, 'span');
+});
+
+test('unreviewed span overlap cannot turn a rejected answer into admitted training data', async () => {
+  const [record] = FAMILIES.relational_dynamic_snapshot.build(7, 0);
+  const { run, trajectory } = await replayReference(record, TOOLS_PROMPT);
+  const row = { id: 'span-needs-review', task: { program_ir: record }, trajectory,
+    outcome: { ...run.outcome, accepted: false, rejection_reasons: ['answer'],
+      checks: { ...run.outcome.checks, answer: false },
+      oracle: { level: 'span', score: 0.5, accepted: false, needs_review: true,
+        verdict: 'answer equivalence needs independent review' } } };
+  assert.equal(admitRow({ ...row, outcome: run.outcome }).admitted, true);
+  const dir = mkdtempSync(join(tmpdir(), 'natlang-span-admit-'));
+  try {
+    const input = join(dir, 'results.jsonl'), ledger = join(dir, 'ledger.jsonl'), admitted = join(dir, 'admitted.jsonl');
+    writeFileSync(input, JSON.stringify(row) + '\n');
+    const run = spawnSync(process.execPath, ['scripts/inline-curriculum/admit.mjs', input,
+      '--ledger', ledger, '--admitted', admitted], { cwd: new URL('../', import.meta.url), encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(readFileSync(admitted, 'utf8'), '');
+    assert.equal(JSON.parse(readFileSync(ledger, 'utf8')).admitted, false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('reference evidence markers do not impose a hidden contract on correct children', async () => {
