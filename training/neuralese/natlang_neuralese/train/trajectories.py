@@ -844,6 +844,8 @@ def main(argv=None, embed=None):
     parser.add_argument('--max-write-vectors', type=int, default=None,
                         help='explicit port payload bound, distinct from prompt context; constant-stop capacity can extend without changing weights/moments')
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
+    parser.add_argument('--eval-only', action='store_true',
+                        help='remeasure a completed --continue-from checkpoint with zero updates; may widen held evaluation')
     parser.add_argument("--soft-init", help="warm-start matching soft parameters from a prior soft-params or full recurrence checkpoint; new pieces are text-initialized")
     parser.add_argument("--heads", default=None, help="port heads checkpoint (soft parameters are read through them)")
     parser.add_argument("--direct-artifact", default=None,
@@ -1144,6 +1146,9 @@ def main(argv=None, embed=None):
 
     out = Path(args.out)
     checkpoint_path = out / 'checkpoint.pt'
+    if args.eval_only and (embedded or not args.continue_from
+                          or checkpoint_path.resolve() == Path(args.continue_from).resolve()):
+        raise ValueError('evaluation-only requires --continue-from and a distinct output checkpoint path')
     if not embedded and out.exists() and any(out.iterdir()) and not checkpoint_path.exists():
         raise ValueError('existing recurrence output has no resumable checkpoint; use a fresh directory')
     out.mkdir(parents=True, exist_ok=True)
@@ -1175,6 +1180,7 @@ def main(argv=None, embed=None):
     identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'eval_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size', 'direct_parent_proof', 'direct_artifact', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_rows', 'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'gate_held_rows', 'gate_response_kl', 'save_state', 'task_eval', 'task_eval_every', 'record_order'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [*input_files(args.records), *as_list(args.pieces), args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
+    identity['options'].pop('eval_only', None)
     if args.continue_from:
         identity['continuation'] = {'checkpoint_sha256': digest_file(args.continue_from),
                                     'path': str(Path(args.continue_from).resolve()),
@@ -1208,7 +1214,12 @@ def main(argv=None, embed=None):
     if resumed is not None:
         from .trajectory_state import check_latent_optimizer_change
         check_latent_optimizer_change(resumed, args.latent_optimizer, continuation=False)
-        changed_code = validate_resume(resumed, resume_identity_for_saved_parent(resumed), defaults=option_defaults)
+        if args.eval_only:
+            validate_continuation(resumed, resume_identity_for_saved_parent(resumed),
+                                  defaults=option_defaults, evaluation_only=True)
+            changed_code = []
+        else:
+            changed_code = validate_resume(resumed, resume_identity_for_saved_parent(resumed), defaults=option_defaults)
         if changed_code:
             print(json.dumps({'event': 'resumed_on_new_code', 'changed_modules': len(changed_code),
                               'modules': [Path(m).name for m in changed_code][:20]}), flush=True)
@@ -1222,7 +1233,7 @@ def main(argv=None, embed=None):
         validate_continuation(resumed, resume_identity_for_saved_parent(resumed),
                               allowed_changes=list(args.curriculum_change) + (
                                   list(LATENT_OPTIMIZER_OPTIONS) if 'latent_optimizer' in args.curriculum_change
-                                  else []), defaults=option_defaults)
+                                  else []), defaults=option_defaults, evaluation_only=args.eval_only)
     direct_parent_migration_proof = None
     if resumed is not None and args.direct_artifact:
         from .direct_export import verify_direct_parent_binding, verify_recurrence_parent_proof
@@ -2715,6 +2726,14 @@ def main(argv=None, embed=None):
                 'case_successes': successes}
 
     report = dict(resumed['initial_report']) if resumed is not None else {"crisp": evaluate("crisp", {}, soft=False), "soft-init": evaluate("soft-init", leaves)}
+    if args.eval_only:
+        report['evaluation_only'] = {
+            'checkpoint_step': resumed['step'], 'optimizer_updates': 0,
+            'source_checkpoint': identity['continuation']['path'],
+            'source_sha256': identity['continuation']['checkpoint_sha256'],
+            'evaluation_count': args.eval, 'held_chains_per_family': args.stream_held_chains,
+            'held_chain_split': 'test',
+        }
     if resumed is None and task_eval is not None:
         report["task_eval-init"] = task_eval_report(0)  # the parent's weights, before any end-to-end update
     if resumed is None and family and args.member_eval:
@@ -2968,7 +2987,7 @@ def main(argv=None, embed=None):
         # (1-based), breakdown and trace in --out. Each update is finished at the next one's start, so its
         # evaluation and checkpoint are inside its window.
         profiler = UpdateProfiler(out)
-        loop = TrainingLoop(start_step, args.steps, stop, stop_before_step=False)
+        loop = TrainingLoop(start_step, start_step if args.eval_only else args.steps, stop, stop_before_step=False)
         for step in loop:
             profiler.maybe_finish(step)
             profiler.begin(step + 1)
